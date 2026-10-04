@@ -35,6 +35,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal Action? PackageCompleted;
         internal PackageEventSpeech? PackageEvent;
         internal NpcDialogueExchange? NpcExchange;
+        internal FalloutRadioConversation? Radio;
     }
 
     private readonly Dictionary<FalloutFormKey, Voice> _channels = [];
@@ -117,6 +118,7 @@ internal partial class RuntimeNativeSpeech : Node
         var name = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "EDID").Data;
         voice.Command = new(name.IsEmpty ? speaker.ToString() : FalloutDialogueTopic.Text(name.Span), "player", info.Record.FormKey.ToString());
         voice.CommandKind = "conversation";
+        voice.Radio = null; voice.Player.VolumeDb = 0;
         voice.Listener = _stack.RuntimeFormKey(0x14);
         voice.Topic = null;
         BindSpeaker(voice, record, ResidentSpeaker(record));
@@ -172,6 +174,7 @@ internal partial class RuntimeNativeSpeech : Node
                 channels = _channels.Values.Select(ChannelState).ToArray(),
                 deferredRequests = _deferredRequests.Values.Select(request => new
                 { speaker = request.Speaker.ToString(), topic = request.Topic.ToString(), target = request.Target?.ToString() }).ToArray(),
+                radio = RadioState,
                 subtitleCandidates = SubtitleCandidates(),
                 error = Error,
             };
@@ -184,6 +187,7 @@ internal partial class RuntimeNativeSpeech : Node
         listenerReference = voice.Listener?.ToString(),
         info = voice.Info?.Record.FormKey.ToString(),
         command = voice.CommandKind,
+        radioCompletedLines = voice.Radio?.CompletedLines,
         completedCommands = voice.CompletedCommands,
         generation = voice.Generation,
         active = voice.Info is not null,
@@ -322,7 +326,7 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm, FalloutFormKey? target,
         Action? packageCompleted = null, NpcDialogueExchange? exchange = null, FalloutDialogueInfo? selectedInfo = null,
-        bool forceNpcConversation = false, PackageEventSpeech? packageEvent = null)
+        bool forceNpcConversation = false, PackageEventSpeech? packageEvent = null, FalloutRadioConversation? radio = null)
     {
         if (speaker.Signature is not ("ACHR" or "ACRE" or "REFR")) throw new InvalidDataException("Scripted speaker is not a dialogue reference.");
         var npcKey = FalloutDialogueTopic.RequiredForm(speaker, "NAME");
@@ -354,7 +358,7 @@ internal partial class RuntimeNativeSpeech : Node
         }
         if (!_topics.TryGetValue(command.TopicEditorId, out var topic))
             _topics.Add(command.TopicEditorId, topic = FalloutDialogueTopic.Read(_stack, topicForm));
-        var actor = ResidentSpeaker(speaker);
+        var actor = radio is null ? ResidentSpeaker(speaker) : _presentation?.Invoke(speaker.FormKey);
         var npcConversation = forceNpcConversation || exchange is not null || listenerReference is not null && FalloutDialogueTopic.Type(_stack, topicForm) == 1;
         var info = selectedInfo ?? SelectSpeechInfo(topic, speaker.FormKey, target, npcConversation);
         if (info is null)
@@ -370,9 +374,12 @@ internal partial class RuntimeNativeSpeech : Node
             throw new NotSupportedException("Replacing the actor's active speech requires its interruption owner.");
         if (exchange is null && npcConversation && (forceNpcConversation || packageCompleted is not null && info.Choices.Count != 0))
             exchange = BeginNpcExchange(speaker.FormKey, target!.Value, topicForm, command, packageCompleted);
-        BindSpeaker(voice, speaker, actor);
+        if (radio is null) BindSpeaker(voice, speaker, actor!);
+        else BindRadioSpeaker(voice, speaker, actor, radio);
         voice.Command = command;
-        voice.CommandKind = packageEvent is not null ? "package-event-topic" :
+        voice.Radio = radio;
+        if (radio is null) voice.Player.VolumeDb = 0;
+        voice.CommandKind = radio is not null ? "radio-conversation" : packageEvent is not null ? "package-event-topic" :
             packageCompleted is not null ? "dialogue-package" : command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
         voice.PackageCompleted = exchange is null ? packageCompleted : null;
         voice.PackageEvent = packageEvent;
@@ -501,7 +508,10 @@ internal partial class RuntimeNativeSpeech : Node
             if (GetTree().Paused) return;
             foreach (var entry in frame)
                 if (entry.Voice.Info is not null && entry.Voice.Generation == entry.Generation)
+                {
+                    if (entry.Voice.Radio is not null) UpdateRadioListener(entry.Voice);
                     ProcessVoice(entry.Voice);
+                }
             AdvanceDeferredSpeech();
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
@@ -539,7 +549,15 @@ internal partial class RuntimeNativeSpeech : Node
         GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner=audio-finished");
         if ((completed.Flags & 8) == 0) RunResults(completed, voice.DialogueSubject, false);
         InfoCompleted?.Invoke(completed.Record.FormKey);
-        if (voice.NpcExchange is { } exchange)
+        if (voice.Radio is { } radio)
+        {
+            radio.CompleteLine();
+            if (radio.Info is { } next)
+                StartCore(voice.Command!, _stack.GetEffective(voice.Reference), radio.Topic!.Value, null,
+                    selectedInfo: next, radio: radio);
+            else GD.Print($"OPENNV_NATIVE_RADIO_END station={voice.Reference} lines={radio.CompletedLines} owner=source-links-audio-results");
+        }
+        else if (voice.NpcExchange is { } exchange)
         {
             voice.NpcExchange = null;
             AdvanceNpcExchange(exchange, voice, completed);

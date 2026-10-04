@@ -8,8 +8,10 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeActorCombatAnimation? _packageAim, _packageGrip;
     private bool _packageWeaponPrepared;
     private uint _packageWeaponType;
+    private FalloutPluginRecord? _packageWeaponPolicySource;
+    private bool _packageWeaponsVisible = true;
     internal uint WeaponAnimationType => _enemyWeapon?.WeaponAnimationType ?? _packageWeaponType;
-    internal NativeActorWeaponAttachment? AnimationWeapon => OwnsPose ? _enemyObject : _packageWeapon;
+    internal NativeActorWeaponAttachment? AnimationWeapon => OwnsPose ? _enemyObject : _packageWeaponsVisible ? _packageWeapon : null;
 
     internal void PrepareInventoryChange()
     {
@@ -18,11 +20,21 @@ internal sealed partial class RuntimeNativeActorCombat
         _packageWeaponPrepared = false;
     }
 
-    private void PreparePackageWeapon(bool drawn)
+    private void PreparePackageWeapon(FalloutPluginRecord package, bool drawn)
     {
         if (OwnsPose) return;
+        if (_packageWeaponPolicySource != package)
+        {
+            _packageWeaponsVisible = FalloutScriptPackage.Read(package).WeaponsVisible;
+            _packageWeaponPolicySource = package;
+        }
         _enemyObject?.Root.Hide();
-        if (!drawn || _actor is not RuntimeNativeNpc) { Activity.SetWeaponDrawn(false); return; }
+        if (!drawn || !_packageWeaponsVisible || _actor is not RuntimeNativeNpc)
+        {
+            _packageWeapon?.Root.Hide();
+            Activity.SetWeaponDrawn(false);
+            return;
+        }
         if (!_packageWeaponPrepared)
         {
             _packageWeaponPrepared = true;

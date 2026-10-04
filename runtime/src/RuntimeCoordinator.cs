@@ -22,13 +22,6 @@ using OpenNV.Runtime.Gameplay.Settings;
 
 namespace OpenNV.Runtime;
 
-internal static class RuntimeCoordinatorNumericContracts
-{
-    // Immutable format, source-art, geometry, and acceptance contracts.
-    // Runtime-tunable Fallout 1 behavior remains in the versioned runtime recipe.
-    internal const double PresentationDouble1000Point0 = 1000.0;
-}
-
 public partial class RuntimeCoordinator : Node3D
 {
     private const string DefaultNewVegasOpeningSavePath =
@@ -66,24 +59,19 @@ public partial class RuntimeCoordinator : Node3D
     private LoadingScreen? _loadingScreen;
     private string? _acceptedOpeningMenuAction;
     private ulong _loadingStartedMilliseconds;
-    private const double MinimumLoadingScreenSeconds = 0.85;
+    private ulong _loadingPhaseStartedMilliseconds;
+    private string? _loadingPhase;
 
     public override void _Ready()
     {
-        if (DisplayServer.GetName() != "headless" && OS.GetCmdlineUserArgs().Contains("--loading-diagnostics"))
-        {
-            _loadingScreen = new LoadingScreen();
-            _loadingScreen.Configure("STARTING VERIFIED RUNTIME");
-            AddChild(_loadingScreen);
-            _loadingStartedMilliseconds = Time.GetTicksMsec();
-        }
+        BeginLoadingScreen("Starting OpenNV");
         Callable.From(StartRuntimeAfterLoadingFrame).CallDeferred();
     }
 
     private async void StartRuntimeAfterLoadingFrame()
     {
         if (_loadingScreen is not null)
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         StartRuntime();
     }
 
@@ -190,23 +178,52 @@ public partial class RuntimeCoordinator : Node3D
         }
     }
 
+    private void BeginLoadingScreen(string status)
+    {
+        if (_loadingPhase is null)
+            _loadingStartedMilliseconds = _loadingPhaseStartedMilliseconds = Time.GetTicksMsec();
+        if (_loadingScreen is null && DisplayServer.GetName() != "headless")
+        {
+            _loadingScreen = new LoadingScreen();
+            _loadingScreen.Configure(status);
+            AddChild(_loadingScreen);
+        }
+        SetLoadingStatus(status);
+    }
+
     private void SetLoadingStatus(string status)
     {
+        if (_loadingPhase == status) return;
+        CompleteLoadingPhase();
+        _loadingPhase = status;
+        _loadingPhaseStartedMilliseconds = Time.GetTicksMsec();
         GD.Print($"OPENNV_LOAD_STATUS {status}");
         _loadingScreen?.SetStatus(status);
+        _nativeLoadingProgress?.SetStatus(status);
+    }
+
+    private void CompleteLoadingPhase()
+    {
+        if (_loadingPhase is null) return;
+        GD.Print($"OPENNV_LOAD_PHASE phase={_loadingPhase} elapsedMs={Time.GetTicksMsec() - _loadingPhaseStartedMilliseconds}");
     }
 
     private void DismissLoadingScreen()
     {
         var loading = _loadingScreen;
         _loadingScreen = null;
+        if (_loadingPhase is not null)
+        {
+            CompleteLoadingPhase();
+            GD.Print($"OPENNV_LOAD_COMPLETE elapsedMs={Time.GetTicksMsec() - _loadingStartedMilliseconds}");
+            _loadingPhase = null;
+        }
         if (loading is null)
             return;
-        var elapsedSeconds = (Time.GetTicksMsec() - _loadingStartedMilliseconds) / RuntimeCoordinatorNumericContracts.PresentationDouble1000Point0;
         var remainingSeconds = _options.ContainsKey("fo1-gameplay-demo") ||
             _options.ContainsKey("fo1-new-game-demo")
             ? 1.0
-            : MinimumLoadingScreenSeconds - elapsedSeconds;
+            : 0.0;
         if (remainingSeconds <= 0.0 || _options.ContainsKey("capture-root"))
         {
             loading.QueueFree();

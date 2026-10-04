@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.Gameplay.Bots;
 internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Camera, Vector3 Forward,
     Vector3 Target, Vector3 Aim, string? AimedReference, bool Paused, bool MovementEnabled,
     bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false,
-    BotDoorObservation? Door = null);
+    BotDoorObservation? Door = null, long ProgressRevision = 0, string ActiveMenus = "", int ControlMask = 0,
+    bool ModalInput = false, bool Loading = false, string? ExecutionFault = null);
 
 internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
@@ -18,6 +19,7 @@ internal sealed record BotNavigationRoute(IReadOnlyList<Vector3> Waypoints, Vect
 // Navigation and scene queries stay with the engine; steering is reusable C#.
 internal sealed class ReactiveReferenceBot
 {
+    internal const float ControlWaitLimitSeconds = 30;
     private readonly Func<string, BotObservation> _observe;
     private readonly Func<Vector3, Vector3, float, BotNavigationRoute> _route;
     private readonly Func<Vector3, Vector3, Vector3, float, float, BotNavigationRoute?>? _approachRoute;
@@ -38,6 +40,11 @@ internal sealed class ReactiveReferenceBot
     private float _elapsed, _stalled, _waiting, _endpointAiming, _distance = 1.5f, _approachDistance = 1.5f;
     private float _projectionRadius = 2, _arrivalRadius, _bestWaypointDistance, _segmentStartDistance;
     private float _motionlessSeconds;
+    private float _controlWaitSeconds;
+    private string? _controlWaitReason;
+    private readonly record struct GameplayProgress(string Scene, long QuestRevision, string ActiveMenus, int ControlMask,
+        bool MovementEnabled, bool LookingEnabled, bool ModalInput);
+    private GameplayProgress? _progress;
     private sealed record RouteRequest(Vector3 Start, Vector3 Endpoint, Vector3 Target);
     private RouteRequest? _request;
     private string? _routeDoor, _resumeMode;
@@ -58,6 +65,10 @@ internal sealed class ReactiveReferenceBot
         movingTargetReplans = _movingTargetReplans,
         stalledSeconds = _stalled,
         motionlessSeconds = _motionlessSeconds,
+        controlWaitSeconds = _controlWaitSeconds,
+        controlWaitLimitSeconds = ControlWaitLimitSeconds,
+        controlWaitReason = _controlWaitReason,
+        progress = _progress,
         requestedDistanceMeters = _distance,
         approachDistanceMeters = _approachDistance,
         targetDistanceMeters = _observation is { } observed ? Vector3.Distance(observed.Position, observed.Target) : (float?)null,
@@ -98,6 +109,7 @@ internal sealed class ReactiveReferenceBot
         _replans = _obstructionReplans = _endpointReplans = _movingTargetReplans = 0; _error = null;
         _navigation = null; _observation = null; _projectionRadius = 2; _progressWaypoint = -1;
         _motionPosition = null; _motionlessSeconds = 0;
+        _controlWaitSeconds = 0; _controlWaitReason = null; _progress = null;
     }
 
     internal void Stop()
@@ -116,6 +128,23 @@ internal sealed class ReactiveReferenceBot
             if (!float.IsFinite(seconds) || seconds <= 0) throw new ArgumentException("Bot frame duration must be finite and positive.");
             var state = _observation = _observe(_reference);
             if (!Finite(state.Position) || !Finite(state.Target)) throw new ArgumentException("Bot observation has a nonfinite position or target.");
+            if (state.ExecutionFault is { } fault) throw new InvalidOperationException("Gameplay execution stopped: " + fault);
+            var progress = new GameplayProgress(state.Scene, state.ProgressRevision, state.ActiveMenus, state.ControlMask,
+                state.MovementEnabled, state.LookingEnabled, state.ModalInput);
+            if (_progress != progress) { _progress = progress; _controlWaitSeconds = 0; }
+            // A real interaction may open a paused menu. Observe its outcome
+            // before suspending clocks, without treating a delivery as success.
+            if (_phase == "awaiting-interaction" && state.InteractionState != _interactionBefore)
+            { Complete("interaction-observed"); return; }
+            if (state.Paused || state.Loading)
+            {
+                CancelRoute(); _path = null;
+                _input(default, false); _steering.Reset();
+                if (_phase is not ("awaiting-interaction" or "awaiting-route-door"))
+                    _phase = state.Loading ? "loading" : "paused";
+                _motionPosition = state.Position; _motionlessSeconds = 0;
+                return;
+            }
             _elapsed += seconds;
             if (_elapsed > (_mode == "travel" ? 900 : 180)) throw new InvalidOperationException("Goal exceeded its execution bound.");
             if (_routeDoor is not null)
@@ -143,13 +172,19 @@ internal sealed class ReactiveReferenceBot
                 if (_waiting > 3) throw new InvalidOperationException("Activation had no observed gameplay response.");
                 return;
             }
-            if (state.Paused || !state.MovementEnabled || !state.LookingEnabled ||
+            if (state.ModalInput || !state.MovementEnabled || !state.LookingEnabled ||
                 !(state.Resident || _mode == "travel" && state.TravelReady))
             {
                 CancelRoute(); _path = null;
                 _input(default, false); _steering.Reset(); _phase = "waiting-for-player-control";
+                _controlWaitReason = state.ModalInput ? "modal input is held" : !state.MovementEnabled ? "source movement is disabled" :
+                    !state.LookingEnabled ? "source looking is disabled" : "the source target or collision is not resident";
+                _controlWaitSeconds += seconds;
+                if (_controlWaitSeconds > ControlWaitLimitSeconds)
+                    throw new InvalidOperationException($"No quest, objective, menu, scene or control progress for {ControlWaitLimitSeconds} seconds while {_controlWaitReason}.");
                 _motionPosition = state.Position; _motionlessSeconds = 0; return;
             }
+            _controlWaitSeconds = 0; _controlWaitReason = null;
             if (_scene != state.Scene)
             { CancelRoute(); _scene = state.Scene; _path = null; _stalled = _endpointAiming = 0; _projectionRadius = 2; _endpointReplans = 0; }
 
@@ -310,8 +345,11 @@ internal sealed class ReactiveReferenceBot
 
     internal void Fail(string error)
     {
-        CancelRoute();
-        _error = error; _reference = null; _path = null; _steering.Reset(); _phase = "blocked";
+        _error = error;
+        try { CancelRoute(); }
+        catch (Exception cancellation) when (cancellation is IOException or InvalidOperationException or NotSupportedException or ArgumentException)
+        { _error += "; route cancellation failed: " + cancellation.Message; }
+        _reference = null; _path = null; _steering.Reset(); _phase = "blocked";
         try { _input(default, false); }
         catch (Exception release) when (release is IOException or InvalidOperationException or NotSupportedException or System.Text.Json.JsonException)
         { _error += "; input release failed (device lease expires): " + release.Message; }

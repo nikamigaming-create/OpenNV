@@ -31,6 +31,8 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
 
     private readonly Dictionary<FalloutFormKey, State> _states = [];
     internal long Revision { get; private set; }
+    // Bot progress excludes recurring variable/timer writes and stage reentry.
+    internal long ProgressRevision { get; private set; }
     internal event Action<FalloutQuestObjectiveChange>? ObjectiveChanged;
 
     internal object ProgressState => _states.Where(pair => pair.Value.Stages.Count != 0)
@@ -125,6 +127,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         _states.Clear();
         foreach (var (quest, state) in validated._states) _states.Add(quest, state);
         Revision++;
+        ProgressRevision++;
     }
 
     private State Require(FalloutFormKey quest)
@@ -170,7 +173,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     {
         var state = Require(quest);
         state.Stage = Math.Max(state.Stage, stage);
-        state.Stages.Add(stage);
+        if (state.Stages.Add(stage)) ProgressRevision++;
         Revision++;
     }
 
@@ -180,6 +183,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         if (state.Completed) return;
         state.Completed = true;
         Revision++;
+        ProgressRevision++;
     }
 
     internal static IReadOnlyList<FalloutQuestObjectiveCommand> ReadObjectiveCommands(string source)
@@ -227,6 +231,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         if (after == before) return;
         state.Objectives[index] = after;
         Revision++;
+        ProgressRevision++;
         if (!state.Completed && after.Displayed && (!before.Displayed || !before.Completed && after.Completed))
             notifications?.Publish([new(after.Completed ? FalloutHudEventKind.ObjectiveCompleted : FalloutHudEventKind.ObjectiveDisplayed,
                 quest, 0, Quest: quest, ObjectiveIndex: index)]);
@@ -244,6 +249,7 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
         if (selected.Active) return;
         foreach (var state in _states.Values) state.Active = false;
         selected.Active = true; ++Revision;
+        ProgressRevision++;
     }
     internal void SetNextQuest(FalloutFormKey quest, FalloutFormKey next)
     {

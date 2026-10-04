@@ -88,7 +88,93 @@ internal static class ReferenceBotContracts
         var unavailableInput = new ReactiveReferenceBot(_ => observation, (_, end, _) => new([end], end, end, true), (_, _) => throw new IOException("transport lost"));
         unavailableInput.Start("actor", "approach", 1); unavailableInput.Tick(.016f);
         if (Phase(unavailableInput) != "blocked") throw new Exception("Failed input release escaped the failure owner.");
+        CheckControlProgress();
         Console.WriteLine("Reference bot: moving targets, modal stop, standoff tolerance, exact-reference activation, observed completion, obstruction, missing reference and transport failure PASS.");
+    }
+
+    private static void CheckControlProgress()
+    {
+        var observation = new BotObservation("cell", Vector3.Zero, Vector3.UnitY, Vector3.UnitZ,
+            new(0, 0, 6), new(0, 1, 6), null, false, false, false, true, null, "idle");
+        SteeringIntent input = default;
+        var releases = 0;
+        var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) => new([end], end, end, true),
+            (intent, _) => { input = intent; if (!intent.Forward) releases++; });
+        bot.Start("target", "approach", 1);
+        for (var second = 0; second <= ReactiveReferenceBot.ControlWaitLimitSeconds; second++)
+        {
+            // Moving cameras and ambient speech/activity are observations, not
+            // quest or player-control progress in a locked cinematic loop.
+            observation = observation with { Camera = new(0, 1 + second % 3, 0), InteractionState = "radio-" + second };
+            bot.Tick(1);
+        }
+        if (Phase(bot) != "blocked" || input.Forward || releases == 0 || !Error(bot).Contains("source movement is disabled", StringComparison.Ordinal))
+            throw new Exception("A locked camera/audio loop did not stop with a visible reason and released input.");
+
+        observation = observation with { Camera = Vector3.UnitY, InteractionState = "idle" };
+        bot.Start("target", "approach", 1); bot.Tick(25);
+        observation = observation with { Paused = true };
+        bot.Tick(1000);
+        observation = observation with { Paused = false, Loading = true };
+        bot.Tick(1000);
+        using (var state = State(bot))
+            if (state.RootElement.GetProperty("elapsedSeconds").GetSingle() != 25 ||
+                state.RootElement.GetProperty("controlWaitSeconds").GetSingle() != 25)
+                throw new Exception("User pause or loading consumed the bot execution/progress bound.");
+        observation = observation with { Loading = false };
+        bot.Tick(6);
+        if (Phase(bot) != "blocked") throw new Exception("Suspending the clock erased its previous stalled-control interval.");
+
+        bot.Start("target", "approach", 1); bot.Tick(25);
+        foreach (var update in new Func<BotObservation, BotObservation>[]
+        {
+            value => value with { ProgressRevision = value.ProgressRevision + 1 },
+            value => value with { ActiveMenus = "1036" },
+            value => value with { ControlMask = 4 },
+            value => value with { Scene = "other-cell" },
+        })
+        {
+            observation = update(observation);
+            bot.Tick(1); bot.Tick(24);
+            if (Phase(bot) != "waiting-for-player-control")
+                throw new Exception("Actual quest/menu/control/scene progress did not renew the control wait.");
+        }
+        observation = observation with { MovementEnabled = true, LookingEnabled = true };
+        bot.Tick(.016f);
+        if (!input.Forward) throw new Exception("Restored controls did not resume ordinary navigation.");
+        observation = observation with { ModalInput = true };
+        bot.Tick(.016f);
+        if (input.Forward) throw new Exception("Unpaused modal input retained movement.");
+        bot.Tick(ReactiveReferenceBot.ControlWaitLimitSeconds);
+        if (Phase(bot) != "blocked" || !Error(bot).Contains("modal input is held", StringComparison.Ordinal))
+            throw new Exception("An unpaused modal lock was mistaken for an indefinitely suspended user pause.");
+
+        observation = observation with { ModalInput = false, Paused = true, ExecutionFault = "source command failed" };
+        bot.Start("target", "approach", 1); bot.Tick(.016f);
+        if (Phase(bot) != "blocked" || input.Forward || !Error(bot).Contains("source command failed", StringComparison.Ordinal))
+            throw new Exception("An explicit execution fault waited for a timeout or retained input.");
+        var cancellationFault = false;
+        observation = observation with { Paused = false, ExecutionFault = null };
+        var failedCancellation = new ReactiveReferenceBot(_ => observation, (_, end, _) => new([end], end, end, true),
+            (intent, _) => input = intent, cancelRoute: () =>
+            {
+                if (cancellationFault) throw new IOException("route owner retired");
+            });
+        failedCancellation.Start("target", "approach", 1); failedCancellation.Tick(.016f);
+        if (!input.Forward) throw new Exception("Cancellation failure fixture did not own movement input.");
+        observation = observation with { ExecutionFault = "source command failed" };
+        cancellationFault = true;
+        failedCancellation.Tick(.016f);
+        if (Phase(failedCancellation) != "blocked" || input.Forward || !Error(failedCancellation).Contains("route owner retired", StringComparison.Ordinal))
+            throw new Exception("Failed route cancellation prevented known-fault input release.");
+        Console.WriteLine("Reference bot: semantic control progress, camera/audio loop rejection, pause/loading suspension, modal lock and immediate fault release PASS.");
+    }
+
+    private static JsonDocument State(ReactiveReferenceBot bot) => JsonDocument.Parse(JsonSerializer.Serialize(bot.State));
+    private static string Error(ReactiveReferenceBot bot)
+    {
+        using var state = State(bot);
+        return state.RootElement.GetProperty("error").GetString() ?? "";
     }
 
     private static string Phase(ReactiveReferenceBot bot)

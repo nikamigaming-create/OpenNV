@@ -20,6 +20,14 @@ internal static class OwnedEscapeStageProbe
         var wakeEvent = wakePackage.EventPrograms["POBA"];
         var wakeTopic = FalloutDialogueTopic.Find(records, "DIAL", "CG04AmataSpeech");
         var amata = records.GetEffective(new("Fallout3.esm", 0x0230e4));
+        var ambushRecord = records.GetEffective(new("Fallout3.esm", 0x02d4c5));
+        var ambushWait = FalloutScriptPackage.Read(ambushRecord);
+        var ambushDialogue = FalloutDialoguePackage.Read(ambushRecord);
+        if (ambushWait.LocationType != 0 || ambushWait.LocationRadius != 0 ||
+            ambushDialogue.TriggerLocation is not { Type: 0, Radius: 500, Reference: { } triggerReference } ||
+            ambushWait.LocationReference == triggerReference || ambushDialogue.ControlsTargetMovement)
+            throw new InvalidDataException("Original ambush lost its independent speaker wait and player trigger declarations.");
+        var wakeCamera = FalloutScriptPackage.Read(records.GetEffective(new("FalloutNV.esm", 0x09df07)));
         if (wakeEvent.Topic != wakeTopic.FormKey || FalloutDialogueTopic.CodeLines(wakeEvent.Source).Any() ||
             wakePackage.Events["POBA"] is null)
             throw new InvalidDataException("Original wake-up event changed its empty result, speech topic or following idle.");
@@ -27,7 +35,7 @@ internal static class OwnedEscapeStageProbe
         if (world.Get(overseer).Base != deathCondition.FormArgument1 || world.GetDeadCount(deathCondition.FormArgument1) != 0)
             throw new InvalidDataException("Original Amata predicate does not bind its actual living father's base.");
         var hashes = new[] { quest, script, package, records.GetEffective(deathCondition.FormArgument1),
-                wakePackage.EventPrograms["POBA"].Package, wakeTopic, amata }
+                wakePackage.EventPrograms["POBA"].Package, wakeTopic, amata, ambushRecord }
             .Select(record => (Record: record, Hash: SHA256.HashData(record.ReadData()))).ToArray();
         var effects = new List<FalloutReferenceScriptEffect>();
         var results = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false, effects.Add));
@@ -68,11 +76,73 @@ internal static class OwnedEscapeStageProbe
             if (predicates.Count != 1 || admitted.Count != (itemCount == 0 ? 2 : 1) || stages.HasUnfinishedResults)
                 throw new InvalidDataException("Original stage two did not select its optional grant and wake-up entries.");
         }
+        var escapeQuests = new FalloutQuestState(records);
+        using var escapeWorld = new FalloutReferenceWorld(records);
+        var triggerPlacement = escapeWorld.EditorPlacement(triggerReference);
+        var bedPlacement = escapeWorld.EditorPlacement(wakeCamera.LocationReference ??
+            throw new InvalidDataException("Original wake camera has no location reference."));
+        var bedDistanceSquared = Enumerable.Range(0, 3).Sum(index =>
+            Math.Pow((double)bedPlacement.Position[index] - triggerPlacement.Position[index], 2));
+        if (bedPlacement.Cell != triggerPlacement.Cell || bedDistanceSquared <= 500d * 500d)
+            throw new InvalidDataException("Original player bed must be outside the ambush target trigger.");
+        var escapeResults = new FalloutReferenceScripts(records, escapeWorld, escapeQuests, new((_, _) => false, _ => { }));
+        var escapeStages = new FalloutQuestStages(records, escapeQuests, escapeResults.StageSteps,
+            condition => throw new NotSupportedException($"Unexpected stage18 condition {condition.Function}."), evaluateRunOn: true);
+        escapeStages.Enter(quest.FormKey, 18);
+        var ellenFaction = FalloutDialogueTopic.Find(records, "FACT", "CG04EllenFaction").FormKey;
+        var butchFaction = FalloutDialogueTopic.Find(records, "FACT", "CG04ButchFamilyFaction").FormKey;
+        var playerFaction = FalloutDialogueTopic.Find(records, "FACT", "PlayerFaction").FormKey;
+        if (escapeStages.HasUnfinishedResults || escapeWorld.FactionCombatReaction(ellenFaction, playerFaction) != 2 ||
+            escapeWorld.FactionCombatReaction(playerFaction, ellenFaction) != 2 ||
+            escapeWorld.FactionCombatReaction(butchFaction, playerFaction) != 3 ||
+            escapeWorld.FactionCombatReaction(playerFaction, butchFaction) != 3)
+            throw new InvalidDataException("Original stage18 did not complete its two source faction commands.");
+        using var factionCold = new FalloutReferenceWorld(records);
+        factionCold.RestoreFactionRelations(escapeWorld.CaptureFactionRelations());
+        if (factionCold.FactionCombatReaction(butchFaction, playerFaction) != 3)
+            throw new InvalidDataException("Original stage18 lost source directional faction state on cold restoration.");
+        var guardPackage = records.GetEffective(new("Fallout3.esm", 0x0be3d7));
+        var guardQuery = FalloutCondition.Read(guardPackage).First(condition => condition.Function == 14);
+        var guardActor = new FalloutFormKey("Fallout3.esm", 0x064912);
+        if (guardQuery.Argument1 != 63 || escapeWorld.EvaluateActorReferenceCondition(guardActor, guardQuery) != 0)
+            throw new InvalidDataException("Original guard Variable02 query lost its current source user-value owner.");
+        var amataTravel = records.GetEffective(new("FalloutNV.esm", 0x08f7bc));
+        if (FalloutScriptPackage.Read(amataTravel).WeaponsVisible ||
+            FalloutTravelPackage.Read(amataTravel) is not { Running: true, OncePerDay: true, Reference: not null })
+            throw new InvalidDataException("Original Amata Travel lost its movement and weapon visibility selectors.");
+        var station = bindings.Reference("RadioVault101REF");
+        var radioTopic = bindings.Form("CG04EmergencyBroadcast").FormKey;
+        var radioQuest = FalloutDialogueTopic.Read(records, radioTopic).Infos[0].Quest;
+        escapeQuests.SetRunning(radioQuest, true);
+        escapeWorld.SetBroadcastState(station, 0);
+        // This isolated announcement fixture supplies an enabled transmitter;
+        // campaign enable state is owned by the original stage/script path.
+        escapeWorld.Get(station).Enabled = true;
+        var radio = new FalloutRadioConversation(records, escapeWorld, escapeQuests, (reference, condition) =>
+            new FalloutDialogueConditions(records, escapeQuests, reference, escapeWorld.DialogueIdentity(reference)).Evaluate(condition),
+            key => escapeQuests.Stage(key), new HashSet<FalloutFormKey>());
+        var voiceIndex = new FalloutDialogueVoiceIndex(content.ResourcePathsUnder("sound/voice"));
+        radio.Start(station, radioTopic);
+        var lines = new HashSet<FalloutFormKey>();
+        while (radio.Info is { } info)
+        {
+            if (!lines.Add(info.Record.FormKey) || lines.Count > 5)
+                throw new InvalidDataException("Original radio repeated an already completed announcement line.");
+            _ = voiceIndex.Resolve(radio.VoiceIdentity(), info, 0);
+            escapeResults.ExecuteResult(info, station, true);
+            escapeResults.ExecuteResult(info, station, false);
+            radio.CompleteLine();
+        }
+        if (lines.Count != 5 || radio.CompletedLines != 5 || escapeQuests.Variable(quest.FormKey, 26) != 5 ||
+            escapeWorld.GetBroadcastState(station))
+            throw new InvalidDataException("Original radio did not finish all source links/results while retaining scripted mode.");
         if (hashes.Any(pair => !pair.Hash.SequenceEqual(SHA256.HashData(pair.Record.ReadData()))))
             throw new InvalidDataException("Escape audit changed winning source bytes.");
         Console.WriteLine("OPENNV_OWNED_ESCAPE_STAGE_PASS originalStage2Entries=true explicitPlayerCount=true " +
             "optionalGrantGuards=true originalAmataPredicate=true actorBase=true sharedDeath=true coldCount=true " +
-            "corpseNotRepeated=true originalPackageTopic=true actualTopicCaller=true sourceUnchanged=true " +
+            "corpseNotRepeated=true originalPackageTopic=true actualTopicCaller=true originalStage18Factions=true " +
+            "directionalCold=true independentAmbushTrigger=true bedOutsideAmbush=true originalGuardVariable02=true originalAmataTravel=true originalRadioFiveLines=true " +
+            "radioRemoteVoice=true radioSourceResults=true radioModeUnchanged=true sourceUnchanged=true " +
             "fixture=isolated-selection-death-and-topic-request nativeVoice=unverified campaign=false framesRecorded=false");
     }
 }

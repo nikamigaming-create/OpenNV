@@ -25,7 +25,7 @@ public partial class RuntimeCoordinator
         {
             var destination = _nativePluginStack!.RuntimeFormId(move.Destination) == 0x14 ? active.Cell.FormKey : references.Placement(move.Destination).Cell;
             if (destination != active.Cell.FormKey) await ShowNativeLoadingScreens(destination);
-            RuntimeNativePlayerMoves.ApplyNext(references, player, active.Cell.FormKey, StreamNativePlayerMove);
+            await RuntimeNativePlayerMoves.ApplyNextAsync(references, player, active.Cell.FormKey, StreamNativePlayerMove);
             GD.Print($"OPENNV_NATIVE_PLAYER_MOVETO source={move.Source} target={move.Destination} " +
                 $"from={active.Cell.FormKey} to={driver.ActiveCell} owner=queued-source-command parity=unverified");
         }
@@ -43,7 +43,7 @@ public partial class RuntimeCoordinator
         }
     }
 
-    private void StreamNativePlayerMove(FalloutReferencePlacement placement, Transform3D transform)
+    private async Task StreamNativePlayerMove(FalloutReferencePlacement placement, Transform3D transform)
     {
         var current = _nativeCurrentCellRoot ?? throw new InvalidOperationException("Player MoveTo has no resident CELL root.");
         var active = _nativeActiveCell ?? throw new InvalidOperationException("Player MoveTo has no active CELL.");
@@ -57,7 +57,8 @@ public partial class RuntimeCoordinator
         try
         {
             sky.EnterCell(scene.Cell, _nativeGlobals, placement.Position);
-            root = BuildNativeCellRoot(scene, null, sourceSide: false);
+            SetLoadingStatus("Loading the world");
+            root = await BuildNativeCellRootResponsive(scene, null, sourceSide: false);
             root.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) AddExteriorLandscape(root, grid);
             AddChild(root);

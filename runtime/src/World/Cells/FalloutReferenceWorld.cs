@@ -218,6 +218,7 @@ internal sealed class FalloutReferenceInstance
 
     internal Func<FalloutFormKey?>? QueryCurrentPackage { get; set; }
     internal Func<int>? QuerySitting { get; set; }
+    internal Func<FalloutReferencePlacement>? QuerySpatialPlacement { get; set; }
 
     internal void Write(uint index, double value)
     {

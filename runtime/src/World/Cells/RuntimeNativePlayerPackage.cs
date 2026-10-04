@@ -174,8 +174,13 @@ internal sealed class RuntimeNativePlayerPackage
         // semantics remain unverified; explicit references use authoritative poses.
         if (_package!.LocationReference is not { } reference || _stack.RuntimeFormId(reference) == 0x14) return;
         var target = _world.Placement(reference);
-        var position = _player.GlobalPosition / _player.UnitsToMeters;
-        if (!_package.ContainsReferenceLocation(_cell(), [position.X, -position.Z, position.Y], target.Cell, target.Position))
+        // Compare the actual body with the source marker's forward projection.
+        // Dividing the body back into game units loses a float bit even when
+        // an authored MoveTo installed exactly this marker. Zero-radius source
+        // locations retain exact equality; no arrival tolerance is invented.
+        var position = _player.GlobalPosition;
+        var projected = target.Position.Select(value => value * _player.UnitsToMeters).ToArray();
+        if (!_package.ContainsReferenceLocation(_cell(), [position.X, -position.Z, position.Y], target.Cell, projected, _player.UnitsToMeters))
             throw new NotSupportedException($"PACK {_package.Form} has not reached its owned reference location; player package traversal is unbound.");
     }
 

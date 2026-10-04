@@ -26,11 +26,11 @@ internal partial class RuntimeNativeSpeech
         FalloutFormKey topic, FalloutFormKey? target, Action? packageCompleted, bool npcConversation)
     {
         if (!IsDialogueBusy(speaker)) return false;
-        if (packageCompleted is not null || npcConversation || _playerDialogueSpeaker == speaker || _conversationVoice?.Reference == speaker)
+        if (packageCompleted is not null || npcConversation)
             throw new NotSupportedException("Competing package/player dialogue needs its participant arbitration owner.");
         if (!_deferredRequests.TryAdd(speaker, new(command, speaker, topic, target)))
             throw new NotSupportedException("Multiple pending speech commands for one actor need their request arbitration owner.");
-        GD.Print($"OPENNV_NATIVE_SPEECH_DEFERRED speaker={speaker} topic={topic} owner=actor-voice-completion");
+        GD.Print($"OPENNV_NATIVE_SPEECH_DEFERRED speaker={speaker} topic={topic} owner=preceding-dialogue-completion");
         return true;
     }
 

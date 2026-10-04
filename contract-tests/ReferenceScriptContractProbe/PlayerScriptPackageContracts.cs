@@ -37,6 +37,14 @@ internal static class PlayerScriptPackageContracts
                 !exact.ContainsReferenceLocation(Key(0x400), [1, 2, 3.001f], Key(0x400), [1, 2, 3]),
                 "Zero radius admitted an unreached destination.");
             Reject(() => package.ContainsReferenceLocation(Key(0x400), [float.NaN, 0, 0], Key(0x400), [0, 0, 0]));
+            const float nativeUnits = .017f;
+            var projected = new[] { 113.7f, -238.3f, 491.9f }.Select(value => value * nativeUnits).ToArray();
+            Require(exact.ContainsReferenceLocation(Key(0x400), projected, Key(0x400), projected, nativeUnits) &&
+                !exact.ContainsReferenceLocation(Key(0x400), [MathF.BitIncrement(projected[0]), projected[1], projected[2]],
+                    Key(0x400), projected, nativeUnits) &&
+                package.ContainsReferenceLocation(Key(0x400), [3 * nativeUnits, 0, 0], Key(0x400), [0, 0, 0], nativeUnits),
+                "Forward native projection lost exact placement or introduced a zero-radius tolerance.");
+            Reject(() => exact.ContainsReferenceLocation(Key(0x400), projected, Key(0x400), projected, 0));
             var saved = new FalloutPlayerScriptPackageSnapshot(package.Form,
                 Convert.ToHexString(SHA256.HashData(records.GetEffective(package.Form).ReadData())), Key(0x300),
                 new string('A', 64), 1, true, false, .375, 0);

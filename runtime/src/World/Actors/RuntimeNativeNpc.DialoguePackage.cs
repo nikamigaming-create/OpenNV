@@ -116,7 +116,9 @@ internal partial class RuntimeNativeNpc
         var distance = dialogue.ActivationDistance * Skeleton.UnitsToMetres;
         var waitForTarget = dialogue.TriggerLocation is not null && _packageIdleSource!.LocationType is not null &&
             _packageIdleSource.LocationRadius == 0;
-        if (!waitForTarget && dialogue.TriggerLocation is { } trigger && !DialogueTriggerContains(trigger, target)) return;
+        // PLDT controls the speaker's wait position. Its zero radius does not
+        // remove the independent PLD2 condition on the dialogue target.
+        if (dialogue.TriggerLocation is { } trigger && !DialogueTriggerContains(trigger, target)) return;
         if (_dialogueNativeMovement)
         {
             Combat!.AdvancePackageMotion(_aiPackage!, waitForTarget ? _dialogueWaitPosition : approach,

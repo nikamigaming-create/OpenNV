@@ -66,6 +66,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private bool _restoringEnteredStage;
     private Func<RuntimeNativeImageSpace> _imageSpacePresenter = null!;
     internal string? ExecutionError { get; private set; }
+    internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
@@ -186,6 +187,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 .SingleOrDefault(value => value.Quest == quest && value.Stage == stage);
             return () =>
             {
+                GD.Print($"OPENNV_NATIVE_SET_STAGE quest={quest} stage={stage} owner=shared-script-host");
                 if (source is null)
                 {
                     // Background quests may also enter stages. Keep the configured
@@ -336,7 +338,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded, _scripts.References,
             CurrentActorPackage, _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount,
-            reference => ReferencePresentation().Resolve(reference), ReferenceDistance, ReferenceInZone, ActorSitting,
+            reference => ReferencePresentation().TryResolve(reference), ReferenceDistance, ReferenceInZone, ActorSitting,
             _scripts.References!.GetDeadCount);
         AddChild(_speech);
         ConfigureConversation();

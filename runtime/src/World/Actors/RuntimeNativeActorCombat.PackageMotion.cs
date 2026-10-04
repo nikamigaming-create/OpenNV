@@ -132,7 +132,7 @@ internal sealed partial class RuntimeNativeActorCombat
             _packageSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom);
             _actor.AddChild(_packageSounds);
         }
-        PreparePackageWeapon(weaponDrawn);
+        PreparePackageWeapon(package, weaponDrawn);
         if (!_packageHashes.TryGetValue(package.FormKey, out var hash))
             _packageHashes.Add(package.FormKey, hash = Convert.ToHexString(SHA256.HashData(package.ReadData())));
         var offset = target - _actor.GlobalPosition;

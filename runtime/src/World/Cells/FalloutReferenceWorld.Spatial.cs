@@ -89,6 +89,14 @@ internal sealed partial class FalloutReferenceWorld
         }
         var placement = Placement(reference);
         var state = Get(reference);
+        if (state.QuerySpatialPlacement is { } live)
+        {
+            var observed = live();
+            observed.Validate();
+            if (observed.Cell != placement.Cell)
+                throw new InvalidDataException("Native actor spatial query differs from its authoritative cell placement.");
+            return observed;
+        }
         var engagement = state.CaptureEngagement?.Invoke() ?? state.Engagement;
         var motion = engagement?.Position ?? state.PackageMotion?.Position;
         if (motion is null) return placement;

@@ -110,6 +110,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
 
     private float Evaluate(FalloutFormKey caller, FalloutCondition condition)
     {
+        if (world.EvaluateActorReferenceCondition(caller, condition) is { } referenceQuery) return referenceQuery;
         if (condition.Function is 56 or 58 or 59 or 79 or 546) return quests.Evaluate(condition);
         if (condition.Function == 18) return (clock ?? throw new NotSupportedException("Unloaded AI has no simulation clock.")).Hour;
         if (condition.Function == 74) return (globals ?? throw new NotSupportedException("Unloaded AI has no global state.")).Get(condition.FormArgument1);

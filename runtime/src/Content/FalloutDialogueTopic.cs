@@ -118,16 +118,16 @@ internal sealed partial class FalloutDialogueTopic
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context = null,
         Func<FalloutFormKey, bool>? questEligible = null, Func<FalloutFormKey, int>? questPriority = null,
         bool conversation = false, Func<uint, uint>? random = null, bool npcConversation = false,
-        bool immediateResults = false)
+        bool immediateResults = false, bool radio = false)
     {
         IEnumerable<FalloutDialogueInfo> candidates = questPriority is null ? Infos : Infos.OrderByDescending(info => questPriority(info.Quest));
         List<FalloutDialogueInfo>? pool = null;
         foreach (var info in candidates)
         {
-            if (!Eligible(info, speakerBase, said, questStage, context, questEligible)) continue;
+            if (!Eligible(info, speakerBase, said, questStage, context, questEligible, radio)) continue;
             if ((info.Flags & 2) == 0 && pool is not null) return Choose();
             RequireFlags(info, conversation, randomSelection: true, npcConversation: npcConversation,
-                immediateResults: immediateResults);
+                immediateResults: immediateResults, radio: radio);
             if ((info.Flags & 2) == 0) return info;
             (pool ??= []).Add(info);
             if ((info.Flags & 32) != 0) return Choose();
@@ -273,22 +273,22 @@ internal sealed partial class FalloutDialogueTopic
         }, evaluateRunOn: true);
 
     internal static void RequireFlags(FalloutDialogueInfo info, bool conversation, bool randomSelection = false,
-        bool npcConversation = false, bool immediateResults = false)
+        bool npcConversation = false, bool immediateResults = false, bool radio = false)
     {
         if (info.Responses.Count == 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} zero-response result/flow behavior is unbound.");
         var supported = randomSelection ? 39 : 5;
         if (immediateResults) supported |= 8;
-        if (info.Type != (conversation ? 0 : 1) || info.NextSpeaker > 1 || info.NextSpeaker != 0 && !npcConversation ||
+        if (info.Type != (radio ? 7 : conversation ? 0 : 1) || info.NextSpeaker > 1 || info.NextSpeaker != 0 && !npcConversation ||
             (info.Flags & ~supported) != 0 || info.Flags2 != 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} needs its conversation/random/flag owner.");
     }
 
     internal static bool Eligible(FalloutDialogueInfo info, FalloutFormKey speaker, IReadOnlySet<FalloutFormKey> said,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context,
-        Func<FalloutFormKey, bool>? questEligible = null) =>
+        Func<FalloutFormKey, bool>? questEligible = null, bool radio = false) =>
         !((info.Flags & 4) != 0 && said.Contains(info.Record.FormKey)) &&
-        (info.Speaker is null || info.Speaker == speaker) && AdmitsSpeaker(info, speaker, context) &&
+        (radio || info.Speaker is null || info.Speaker == speaker) && AdmitsSpeaker(info, speaker, context) &&
         (questEligible is null || questEligible(info.Quest)) && ConditionsPass(info, speaker, questStage, context);
 
     private static bool AdmitsSpeaker(FalloutDialogueInfo info, FalloutFormKey speaker, Func<FalloutCondition, float>? context)

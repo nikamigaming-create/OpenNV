@@ -15,12 +15,48 @@ internal static class QuestUpdateContracts
         {
             File.WriteAllBytes(Path.Combine(directory, "Updates.esm"), Fixture());
             using var records = FalloutPluginStack.Load(directory, ["Updates.esm"]);
+            CheckProgress(records);
             CheckObjectives(records);
             CheckDispatch(records);
             CheckHud();
             Console.WriteLine("OPENNV_QUEST_UPDATE_CONTRACT_PASS allDeclared=true displayRetained=true questRetained=true sourceOrder=true completedQuestSilent=true deferredCancellation=true ordinaryMessagesRetained=true loadingQueueRetained=true coldRequest=true fallback=true invalidPrefix=true parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
+    }
+
+    private static void CheckProgress(FalloutPluginStack records)
+    {
+        var quests = new FalloutQuestState(records);
+        quests.EnterStage(Key(0x100), 7);
+        var progress = quests.ProgressRevision;
+        var mutation = quests.Revision;
+        for (var tick = 1; tick <= 100; tick++) quests.SetVariable(Key(0x100), 1, tick);
+        quests.EnterStage(Key(0x100), 7);
+        Require(quests.ProgressRevision == progress && quests.Revision > mutation,
+            "Recurring timer writes or a repeated stage counted as bot gameplay progress.");
+        quests.EnterStage(Key(0x100), 3);
+        Require(quests.ProgressRevision == ++progress && quests.Stage(Key(0x100)) == 7 && quests.StageDone(Key(0x100), 3),
+            "A newly entered lower stage lost semantic progress or changed highest-stage behavior.");
+        quests.ApplyObjective(Key(0x100), 30, true, true);
+        Require(quests.ProgressRevision == ++progress, "An objective change did not publish semantic progress.");
+        quests.ApplyObjective(Key(0x100), 30, true, true);
+        Require(quests.ProgressRevision == progress, "An unchanged objective renewed stalled gameplay.");
+        quests.ForceActive(Key(0x100));
+        Require(quests.ProgressRevision == ++progress, "Actual quest selection did not publish progress.");
+        quests.ForceActive(Key(0x100));
+        Require(quests.ProgressRevision == progress, "Repeated quest selection renewed stalled gameplay.");
+        quests.Complete(Key(0x100));
+        Require(quests.ProgressRevision == ++progress, "Quest completion did not publish progress.");
+        quests.Complete(Key(0x100));
+        Require(quests.ProgressRevision == progress, "Repeated quest completion renewed stalled gameplay.");
+        var cold = new FalloutQuestState(records);
+        cold.Restore(quests.Capture());
+        Require(cold.ProgressRevision > 0 && JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(quests.Capture()),
+            "Cold restoration lost semantic quest state or had no fresh progress generation.");
+        var restoredProgress = cold.ProgressRevision;
+        cold.SetVariable(Key(0x100), 1, 101);
+        Require(cold.ProgressRevision == restoredProgress, "A cold timer write counted as gameplay progress.");
+        Console.WriteLine("OPENNV_QUEST_PROGRESS_CONTRACT_PASS enteredStage=true objectives=true timerExcluded=true reentryExcluded=true cold=true");
     }
 
     private static void CheckObjectives(FalloutPluginStack records)

@@ -87,6 +87,9 @@ internal static class BotInteractionContracts
         bot.Tick(.016f);
         Require(stage == 41 && timer == 1 && Phase(bot) == "awaiting-interaction", "Unrelated stage/timer/pause ended activation waiting.");
         bot.Tick(3.1f);
+        Require(Phase(bot) == "awaiting-interaction" && input == default, "User pause consumed the pending activation response bound.");
+        paused = false;
+        bot.Tick(3.1f);
         Require(Phase(bot) == "blocked" && activations == 1 && input == default, "No-op activation did not time out and release input.");
         paused = false; successfulMenu = true;
         bot.Start("book", "interact", 1); bot.Tick(.016f); paused = true; bot.Tick(.016f);

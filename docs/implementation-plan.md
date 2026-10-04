@@ -31,6 +31,17 @@ OpenXR Simulator and is labelled accordingly.
 
 ## Immediate outcome
 
+October4 architectural direction: make original SCDA compiled instructions
+authoritative, including valid scripts with SCTX removed, through the shared
+C# gameplay owners. Retain source interpretation for diagnostics and supported
+uses. Establish the x86 execution/memory and interface design for unchanged
+native plugins with an early real-plugin demonstration covering callbacks,
+object access and a used engine hook. Command registration or a C# replacement
+does not establish original-DLL compatibility. Keep retail behavior as the
+independent reference for state, event order, timing and presentation, alongside
+ordinary saved campaign traversal. These are active architectural requirements,
+not work deferred until after campaign or mod-completion claims.
+
 Implement the authorized targets in [mod compatibility](mod-compatibility.md),
 including the complete TTW/Benny campaign route and dependencies plus complete
 JAM support, exposed as launcher options.

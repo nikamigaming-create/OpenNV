@@ -70,8 +70,17 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _mask = mask,
             _context = context
         };
+        state.QuerySpatialPlacement = owner.CaptureSpatialPlacement;
         actor.AddChild(owner);
         return owner;
+    }
+
+    private FalloutReferencePlacement CaptureSpatialPlacement()
+    {
+        var position = _actor.GlobalPosition / _skeleton.UnitsToMetres;
+        var rotation = GamebryoCoordinate.ReferenceEuler(_actor.GlobalBasis);
+        return new(_world.Placement(_state.Reference).Cell, [position.X, -position.Z, position.Y],
+            [rotation.X, rotation.Y, rotation.Z]);
     }
 
     public override void _Ready()

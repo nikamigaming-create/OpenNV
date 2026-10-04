@@ -348,6 +348,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                     effect.Argument ?? throw new InvalidDataException("Conversation target is absent."), effect.Topic);
                 break;
             case FalloutReferenceEffectKind.SetStage:
+                Godot.GD.Print($"OPENNV_NATIVE_REFERENCE_SET_STAGE source={effect.Source} quest={effect.Target} stage={effect.Stage}");
                 _scriptHost.PrepareSetStage(effect.Target ?? throw new InvalidDataException("SetStage target is absent."), effect.Stage)();
                 break;
             case FalloutReferenceEffectKind.PlayerControls:

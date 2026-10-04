@@ -251,6 +251,7 @@ internal sealed partial class RuntimeNativeActorCombat
     public override void _ExitTree()
     {
         if (_state.StopCombat == StopCombat) _state.StopCombat = null;
+        if (_state.QuerySpatialPlacement == CaptureSpatialPlacement) _state.QuerySpatialPlacement = null;
         _routeSearch?.Dispose(); _routeSearch = null;
         // A door can materialize the same reference in its destination before
         // the previous presentation leaves the tree. Only the current binding

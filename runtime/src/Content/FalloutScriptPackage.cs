@@ -7,8 +7,10 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
     float IdleTimer, IReadOnlyList<FalloutFormKey> Idles, IReadOnlyDictionary<string, FalloutFormKey?> Events)
 {
     internal const uint HeadTrackingOffFlag = 0x100000;
+    internal const uint WeaponsUnequippedFlag = 0x200000;
     internal uint Flags { get; init; }
     internal bool HeadTrackingEnabled => (Flags & HeadTrackingOffFlag) == 0;
+    internal bool WeaponsVisible => (Flags & WeaponsUnequippedFlag) == 0;
     internal bool RunInSequence => (IdleFlags & 1) != 0;
     internal bool DoOnce => (IdleFlags & 4) != 0;
     internal byte Procedure { get; init; }
@@ -16,14 +18,17 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
     internal FalloutFormKey? LocationReference { get; init; }
     internal int LocationRadius { get; init; }
     internal bool ContainsReferenceLocation(FalloutFormKey cell, IReadOnlyList<float> position,
-        FalloutFormKey targetCell, IReadOnlyList<float> targetPosition)
+        FalloutFormKey targetCell, IReadOnlyList<float> targetPosition, float coordinateUnits = 1)
     {
         if (LocationType != 0) throw new NotSupportedException("Package location membership requires an explicit reference.");
         if (position.Count != 3 || targetPosition.Count != 3 || position.Concat(targetPosition).Any(value => !float.IsFinite(value)))
             throw new InvalidDataException("Package location membership has no finite source pose.");
+        if (!float.IsFinite(coordinateUnits) || coordinateUnits <= 0)
+            throw new InvalidDataException("Package location coordinate units must be finite and positive.");
         if (cell != targetCell) return false;
         var squared = Enumerable.Range(0, 3).Sum(index => Math.Pow((double)position[index] - targetPosition[index], 2));
-        return squared <= (double)LocationRadius * LocationRadius;
+        var radius = (double)LocationRadius * coordinateUnits;
+        return squared <= radius * radius;
     }
     internal IReadOnlyDictionary<string, FalloutPackageEvent> EventPrograms { get; init; } =
         new Dictionary<string, FalloutPackageEvent>();

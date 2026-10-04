@@ -86,6 +86,11 @@ public partial class RuntimeCoordinator
         var key = new FalloutFormKey(identity[..separator], objectId);
         var world = _nativeReferences ?? throw new InvalidOperationException("Reference world is not active.");
         var referenceState = world.Get(key);
+        var executionFault = _nativeOpeningStageDriver?.ExecutionFault ?? _nativeQuestScripts?.StartupError ??
+            world.PlayerMoves.Error ?? _nativeReferencePresentation?.Error ?? referenceState.ScriptError ??
+            referenceState.SelectionFailure?.Error ?? referenceState.PackageBindingFailure?.Error;
+        if (executionFault is not null)
+            throw new InvalidOperationException("Gameplay execution stopped: " + executionFault);
         var node = _nativeReferencePresentation?.Nodes.GetValueOrDefault(key);
         var resident = node is not null && GodotObject.IsInstanceValid(node) && node.IsInsideTree() && node.IsVisibleInTree();
         var target = resident ? node!.GlobalPosition : Vector3.Zero;
@@ -148,11 +153,18 @@ public partial class RuntimeCoordinator
             door = new(observedDoor.Open, observedDoor.Moving, observedDoor.Pending, observedDoor.Error);
         }
         static System.Numerics.Vector3 Numeric(Vector3 value) => new(value.X, value.Y, value.Z);
+        var controls = player.SourceControls;
+        var controlMask = (controls.Movement ? 1 : 0) | (controls.PipBoy ? 2 : 0) | (controls.Fighting ? 4 : 0) |
+            (controls.PointOfView ? 8 : 0) | (controls.Looking ? 16 : 0) | (controls.RolloverText ? 32 : 0) | (controls.Sneaking ? 64 : 0);
+        var menus = string.Join(',', (NativeActiveMenus() ?? []).Order());
+        if (_nativeOpeningStageDriver?.PresentedConversationSpeaker is { } speaker) menus += "|conversation:" + speaker;
         return new(_nativeActiveCell!.Cell.FormKey.ToString(), Numeric(player.GlobalPosition), Numeric(player.Camera.GlobalPosition),
-            Numeric(-player.Camera.GlobalBasis.Z), Numeric(target), Numeric(aim), aimed, GetTree().Paused || player.ModalInput || _nativeDoorLoading,
+            Numeric(-player.Camera.GlobalBasis.Z), Numeric(target), Numeric(aim), aimed, GetTree().Paused,
             player.GetMeta("opennv_source_movement_enabled", false).AsBool() && !player.FurnitureActive,
             player.GetMeta("opennv_source_looking_enabled", false).AsBool(), resident && player.CollisionResident,
-            player.BlockingShape, interaction, travelReady, door);
+            player.BlockingShape, interaction, travelReady, door, _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask,
+            player.ModalInput, _nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession ||
+                world.PlayerMoves.Pending || _nativeLoadingLayer is not null || _loadingScreen is not null);
     }
 
     private BotNavigationRoute FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float projectionRadius)

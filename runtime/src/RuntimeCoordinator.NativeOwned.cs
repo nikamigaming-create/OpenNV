@@ -95,6 +95,7 @@ public partial class RuntimeCoordinator
             ui = _nativeUi?.State,
             bootstrap = _nativeBootstrap?.State,
             loading = _nativeLoadingScreens?.State,
+            loadingFeedback = _loadingScreen?.State ?? _nativeLoadingProgress?.State,
             cell = _nativeActiveCell?.Cell.FormKey.ToString(),
             exteriorLod = cellNodes.OfType<RuntimeNativeExteriorLod>().SingleOrDefault()?.State,
             exteriorStreaming = NativeStreamingState,
@@ -249,10 +250,11 @@ public partial class RuntimeCoordinator
     {
         var source = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was not configured.");
-        SetLoadingStatus("INDEXING LIVE PLUGINS");
+        SetLoadingStatus("Reading game data");
         if (DisplayServer.GetName() == "headless" || _options.ContainsKey("new-game"))
         {
-            IndexNativeLiveStack(source.PluginSources);
+            _nativeMenuRead = Task.Run(() => IndexNativeLiveStack(source.PluginSources));
+            await _nativeMenuRead;
             if (_options.ContainsKey("new-game"))
             {
                 if (!NativeUsesOpeningStart)
@@ -260,14 +262,14 @@ public partial class RuntimeCoordinator
                     CreateNativeQuestScripts();
                     await BootstrapNativeNewGame();
                 }
-                LoadNativeInitialCell();
+                _nativeMenuRead = LoadNativeInitialCell();
+                await _nativeMenuRead;
             }
             if (DisplayServer.GetName() == "headless")
                 GetTree().Quit(0);
             return;
         }
         ShowNativeLiveMenu(source.PluginSources);
-        DismissLoadingScreen();
     }
 
     private void IndexNativeLiveStack(IReadOnlyList<FalloutPluginSource> sources)
@@ -359,14 +361,13 @@ public partial class RuntimeCoordinator
             $"archiveWinnerWaitMs={archiveWarmupWait.Elapsed.TotalMilliseconds:F1}");
     }
 
-    private async void IndexNativeLiveStackForMenu(
+    private async Task IndexNativeLiveStackForMenu(
         IReadOnlyList<FalloutPluginSource> sources,
         NativeGamebryoStartMenu menu)
     {
         try
         {
-            _nativeMenuRead = Task.Run(() => IndexNativeLiveStack(sources));
-            await _nativeMenuRead;
+            await Task.Run(() => IndexNativeLiveStack(sources));
             if (_nativeSessionTransitioning) return;
             var initialCell = _nativeInitialCell ??
                 throw new InvalidOperationException("Native initial CELL was not decoded.");
@@ -378,14 +379,15 @@ public partial class RuntimeCoordinator
                 : null;
             // Continue does not need an unused new-game house and actor build.
             if (_nativeOpeningRestore is null && NativeUsesOpeningStart)
-                _nativePrewarmedInitialCellRoot = BuildNativeCellRoot(initialCell, transition, sourceSide: true);
+                _nativePrewarmedInitialCellRoot = await BuildNativeCellRootResponsive(initialCell, transition, sourceSide: true);
             if (_nativeOpeningControls is not null) CreateNativeQuestScripts();
             menu.SetReady(stack, _nativeOpeningRestore is not null);
             if (_continueAfterRestart && _nativeOpeningRestore is not null)
             {
                 _continueAfterRestart = false; _nativeStartingGame = true; _nativeContinueOpening = true;
-                StartNativeGameFromMenu(menu.GetParent<CanvasLayer>(), "sLoad");
+                await StartNativeGameFromMenu(menu.GetParent<CanvasLayer>(), "sLoad");
             }
+            else DismissLoadingScreen();
         }
         catch (Exception exception)
         {
@@ -411,7 +413,7 @@ public partial class RuntimeCoordinator
                 if (_nativeStartingGame) return;
                 _nativeStartingGame = true;
                 _nativeContinueOpening = action != "sNew";
-                StartNativeGameFromMenu(layer, action);
+                _nativeMenuRead = StartNativeGameFromMenu(layer, action);
             }
             else
             {
@@ -421,14 +423,15 @@ public partial class RuntimeCoordinator
         });
         layer.AddChild(menu);
         AddChild(layer);
-        IndexNativeLiveStackForMenu(sources, menu);
+        _nativeMenuRead = IndexNativeLiveStackForMenu(sources, menu);
     }
 
     private bool _nativeStartingGame;
-    private async void StartNativeGameFromMenu(CanvasLayer layer, string action)
+    private async Task StartNativeGameFromMenu(CanvasLayer layer, string action)
     {
         var menu = layer.GetChild<NativeGamebryoStartMenu>(0);
         menu.ShowLoading(_nativeContinueOpening);
+        BeginLoadingScreen(_nativeContinueOpening ? "Loading saved game" : "Starting a new game");
         GD.Print($"OPENNV_NATIVE_MENU_LOAD action={action} save={_nativeContinueOpening}");
         try
         {
@@ -440,17 +443,43 @@ public partial class RuntimeCoordinator
                 InitializeNativePlayerInventory();
                 if (!NativeUsesOpeningStart) await BootstrapNativeNewGame();
             }
-            LoadNativeInitialCell();
+            await LoadNativeInitialCell();
             layer.QueueFree();
         }
         catch (Exception error)
         {
             GD.PushError($"OPENNV_NATIVE_MENU_LOAD_FAIL {error}");
+            DismissLoadingScreen();
             menu.ShowLoadFailure();
         }
     }
 
-    private void LoadNativeInitialCell()
+    private async Task LoadNativeInitialCell()
+    {
+        var wasPaused = GetTree().Paused;
+        GetTree().Paused = true;
+        try
+        {
+            SetLoadingStatus(_nativeContinueOpening ? "Restoring saved game" : "Preparing the world");
+            if (DisplayServer.GetName() != "headless")
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await PopulateNativeInitialCell();
+        }
+        finally
+        {
+            GetTree().Paused = wasPaused || _nativeSessionTransitioning || _retiringNativeSession;
+        }
+        if (_pauseAfterCheckpointLoad)
+        {
+            _pauseAfterCheckpointLoad = false;
+            OpenNativeSessionMenu(showSaves: false);
+        }
+        _restoredNativeCheckpoint = _pendingCheckpointRestore;
+        _pendingCheckpointRestore = null;
+        DismissLoadingScreen();
+    }
+
+    private async Task PopulateNativeInitialCell()
     {
         _ = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was cleared during startup.");
@@ -481,6 +510,7 @@ public partial class RuntimeCoordinator
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
             _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
+            _nativeReferences.RestoreFactionRelations(restore.State.FactionRelations);
         }
         else if (_nativeBootstrap is null)
         {
@@ -547,10 +577,19 @@ public partial class RuntimeCoordinator
         activeScene = _nativeReferences!.ComposeResidency(activeScene, grid?.Cells);
         if (grid is not null) grid = grid with { Scene = activeScene };
         _nativeSkyLighting?.EnterCell(activeScene.Cell, _nativeGlobals, position);
+        SetLoadingStatus("Loading the world");
         var root = sourceSide && _nativePrewarmedInitialCellRoot is not null
             ? _nativePrewarmedInitialCellRoot
-            : BuildNativeCellRoot(activeScene, transition, sourceSide);
+            : await BuildNativeCellRootResponsive(activeScene, transition, sourceSide);
         _nativePrewarmedInitialCellRoot = null;
+        SetLoadingStatus("Preparing characters and controls");
+        if (DisplayServer.GetName() != "headless")
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        if (_nativeSessionTransitioning || _retiringNativeSession)
+        {
+            root.Free();
+            throw new OperationCanceledException("Initial CELL session retired.");
+        }
         if (grid is not null) AddExteriorLandscape(root, grid);
         AddChild(root);
         if (!fallout3 && (restore is null || restore.State.Scripts is not null))
@@ -582,14 +621,6 @@ public partial class RuntimeCoordinator
         GD.Print(
             $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
             $"restored={(restore is not null)} sourceSide={sourceSide}");
-        if (_pauseAfterCheckpointLoad)
-        {
-            _pauseAfterCheckpointLoad = false;
-            OpenNativeSessionMenu(showSaves: false);
-        }
-        _restoredNativeCheckpoint = _pendingCheckpointRestore;
-        _pendingCheckpointRestore = null;
-        DismissLoadingScreen();
     }
 
     private void CreateNativeQuestScripts(FalloutQuestScriptsSnapshot? restore = null)
@@ -635,28 +666,91 @@ public partial class RuntimeCoordinator
     private void PopulateNativeCellRoot(Node3D root, FalloutCellScene cell,
         FalloutDoorTransition? transition, bool sourceSide)
     {
-        var source = RuntimeLiveContentSource.Current ??
+        BeginNativeCellRoot(cell);
+        foreach (var reference in cell.References) PlaceNativeCellReference(root, cell, reference);
+        CompleteNativeCellRoot(root, cell);
+    }
+
+    private async Task<Node3D> BuildNativeCellRootResponsive(FalloutCellScene cell,
+        FalloutDoorTransition? transition, bool sourceSide)
+    {
+        _ = transition;
+        _ = sourceSide;
+        var root = new Node3D { Name = $"NativeCell_{cell.Cell.FormKey}" };
+        var total = Stopwatch.StartNew();
+        var slice = Stopwatch.StartNew();
+        var referenceWatch = new Stopwatch();
+        var yields = 0;
+        double maximumReferenceMilliseconds = 0;
+        FalloutFormKey? maximumReference = null;
+        try
+        {
+            BeginNativeCellRoot(cell);
+            foreach (var reference in cell.References)
+            {
+                if (_nativeSessionTransitioning || _retiringNativeSession)
+                    throw new OperationCanceledException("CELL construction session retired.");
+                referenceWatch.Restart();
+                PlaceNativeCellReference(root, cell, reference);
+                referenceWatch.Stop();
+                if (referenceWatch.Elapsed.TotalMilliseconds > maximumReferenceMilliseconds)
+                {
+                    maximumReferenceMilliseconds = referenceWatch.Elapsed.TotalMilliseconds;
+                    maximumReference = reference.FormKey;
+                }
+                // Each reference remains atomic. Publish the same detached root
+                // only after all references finish, while letting loading UI draw.
+                if (slice.Elapsed.TotalMilliseconds >= 8 && DisplayServer.GetName() != "headless")
+                {
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    slice.Restart();
+                    yields++;
+                }
+            }
+            if (_nativeSessionTransitioning || _retiringNativeSession)
+                throw new OperationCanceledException("CELL construction session retired.");
+            CompleteNativeCellRoot(root, cell);
+            GD.Print($"OPENNV_NATIVE_CELL_BUILD cell={cell.Cell.FormKey} references={cell.References.Count} " +
+                $"elapsedMs={total.Elapsed.TotalMilliseconds:F1} frameYields={yields} " +
+                $"maxReferenceMs={maximumReferenceMilliseconds:F1} maxReference={maximumReference}");
+            return root;
+        }
+        catch
+        {
+            root.Free();
+            throw;
+        }
+    }
+
+    private void BeginNativeCellRoot(FalloutCellScene cell)
+    {
+        _ = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was cleared during CELL streaming.");
-        const string parityScope = "world/active-cell";
         _nativeReferences!.EnterEncounterCell(cell.Cell.FormKey,
             _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1);
         DiscoverNativeCellReferences(cell);
         _nativeActorDivergences.Clear();
         _nativeReferenceDivergences.Clear();
-        foreach (var reference in cell.References)
+    }
+
+    private void PlaceNativeCellReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference)
+    {
+        var previousChildren = root.GetChildCount();
+        try { PlaceNativeReference(root, cell, reference); }
+        catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
         {
-            var previousChildren = root.GetChildCount();
-            try { PlaceNativeReference(root, cell, reference); }
-            catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
-            {
-                // Reject the whole failed reference. Other source references
-                // retain independent ownership; the rejected identity remains
-                // missing in the parity denominator, never a substitute draw.
-                while (root.GetChildCount() > previousChildren) root.GetChild(previousChildren).Free();
-                _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
-                GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey} base={reference.Base}: {error.Message}");
-            }
+            // Reject the whole failed reference. Other source references
+            // retain independent ownership; the rejected identity remains
+            // missing in the parity denominator, never a substitute draw.
+            while (root.GetChildCount() > previousChildren) root.GetChild(previousChildren).Free();
+            _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
+            GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey} base={reference.Base}: {error.Message}");
         }
+    }
+
+    private void CompleteNativeCellRoot(Node3D root, FalloutCellScene cell)
+    {
+        const string parityScope = "world/active-cell";
         var presentation = new RuntimeNativeReferencePresentation(_nativeReferences!, cell.References,
             reference => MaterializeNativeReference(root, cell, reference));
         var identities = cell.References.ToDictionary(reference => reference.FormKey.ToString(), reference => reference.FormKey);
@@ -978,7 +1072,8 @@ public partial class RuntimeCoordinator
             targetScene = _nativeReferences!.ComposeResidency(targetScene, grid?.Cells);
             if (grid is not null) grid = grid with { Scene = targetScene };
             sky.EnterCell(targetScene.Cell, _nativeGlobals, entry.Position);
-            targetRoot = BuildNativeCellRoot(targetScene, null, sourceSide: false);
+            SetLoadingStatus("Loading the world");
+            targetRoot = await BuildNativeCellRootResponsive(targetScene, null, sourceSide: false);
             targetRoot.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) AddExteriorLandscape(targetRoot, grid);
             AddChild(targetRoot);

@@ -1037,6 +1037,16 @@ internal sealed partial class FalloutQuestScripts
                     .SetBroadcastState(parts.Length == 1 ? instance.Quest.FormKey : ReferenceArgument(parts[0]), NumberArgument(arguments[0]));
                 return;
             }
+            if (parts.Length == 1 && operation is "setally" or "setenemy")
+            {
+                if (arguments.Count is < 2 or > 4) throw new InvalidDataException("Faction relationship requires two factions and optional directional flags.");
+                (References ?? throw new NotSupportedException("Faction relationship has no shared world owner."))
+                    .SetFactionRelationship(TryForm(arguments[0])?.FormKey ?? AuxiliaryValueOwner(NumberArgument(arguments[0])),
+                        TryForm(arguments[1])?.FormKey ?? AuxiliaryValueOwner(NumberArgument(arguments[1])), operation == "setally",
+                        arguments.Count > 2 ? NumberArgument(arguments[2]) : 0,
+                        arguments.Count > 3 ? NumberArgument(arguments[3]) : 0);
+                return;
+            }
             if (parts.Length == 1 && operation is "setnthperkentryvalue1" or "setnthperkentryvalue2")
             {
                 if (arguments.Count != 3) throw new InvalidDataException($"{command} has an invalid argument count.");
