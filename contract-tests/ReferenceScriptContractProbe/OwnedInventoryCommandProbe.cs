@@ -20,7 +20,7 @@ internal static class OwnedInventoryCommandProbe
         var end = begin + 1; while (end < fields.Length && fields[end].Signature is not ("INDX" or "QOBJ")) end++;
         bool InventoryCommand(string line) =>
             line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0].Split('.')[^1].ToLowerInvariant() is
-                "removeallitems" or "additem" or "removeitem" or "equipitem" or "equipobject" or "resetinventory";
+                "removeallitems" or "additem" or "removeitem" or "equipitem" or "equipobject" or "unequipitem" or "resetinventory";
         var candidates = new List<FalloutPluginSubrecord[]>();
         for (var index = begin + 1; index < end;)
         {
@@ -46,6 +46,15 @@ internal static class OwnedInventoryCommandProbe
                 .Where(parts => parts[0].Equals("player.EquipItem", StringComparison.OrdinalIgnoreCase)).Select(parts => bindings.Form(parts[1]).FormKey).Distinct().ToArray();
             foreach (var item in equipped)
                 if (player.Item(item) is null) player.Add(records, item, 1, 1, true);
+            var unequipped = commands.Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                .Where(parts => parts[0].Equals("player.UnequipItem", StringComparison.OrdinalIgnoreCase))
+                .Select(parts => bindings.Form(parts[1]).FormKey).Distinct().ToArray();
+            foreach (var item in unequipped)
+            {
+                if (player.Item(item) is null) player.Add(records, item, 1, 1, true);
+                player.Equip(records, item, noUnequip: true);
+            }
+            var unequipCounts = unequipped.Select(item => player.Item(item)!.Count).ToArray();
             var resetTargets = commands.Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0].Split('.'))
                 .Where(parts => parts.Length == 2 && parts[1].Equals("ResetInventory", StringComparison.OrdinalIgnoreCase))
                 .Select(parts => bindings.Reference(parts[0])).Distinct().ToArray();
@@ -81,6 +90,10 @@ internal static class OwnedInventoryCommandProbe
                 executor.ExecuteStage(quest, entry, string.Join('\n', commands));
                 if (equipped.Any(item => !inventory.Equipped.Contains(records.RuntimeFormId(item))))
                     throw new InvalidDataException("Selected source equipment did not become worn.");
+                for (var index = 0; index < unequipped.Length; index++)
+                    if (inventory.Equipped.Contains(records.RuntimeFormId(unequipped[index])) ||
+                        inventory.Item(unequipped[index]) is not { UnequipLocked: false } retained || retained.Count != unequipCounts[index])
+                        throw new InvalidDataException("Selected source UnequipItem lost retained contents or failed to release its lock.");
                 if (owner.EquippedObject(records.RuntimeFormKey(0x14), 5) is not null)
                     throw new InvalidDataException("Selected source leaves an unexpected weapon equipped.");
                 for (var index = 0; index < removals.Length; index++)
@@ -107,6 +120,7 @@ internal static class OwnedInventoryCommandProbe
                 selectedCommands = commands.Length,
                 playerItems = player.Items.Count,
                 playerEquipment = player.Equipped.Count,
+                sourceUnequippedItems = unequipped.Length,
                 resetActors = resetTargets.Length,
                 countTargets = countTargets.Length,
                 sourceRemovalItems = initialRemovalCounts.Sum(),

@@ -1,16 +1,25 @@
 # Product status
 
-Checked PR127 is merged at synchronized main f3221b5 with all five checks
-passing. Shared quest-object flags and savev33 are published. In the actual
-optimized run, the user's roach kill completes all original stage70 and80
-results. Dad and Jonas are ready; the photo trigger stops before its first
-write on the missing GetHeadingAngle query. The active candidate supplies that
-shared query, source BB-gun sight projection/animation exclusions and combat
-ownership before AI initialization. Synthetic heading checks and the unchanged
-original photo-trigger fixture pass. Native advancement and Paul's cold chair
-restoration remain pending; manual saving still refuses his unfinished owner
-in the loaded old CLR. The expanded candidate's required integrated gate and
-diff check pass.
+Checked PR128 is merged at synchronized main e472238 with all five checks
+passing. Shared heading queries, source BB-gun sights and combat ownership
+before AI initialization are published. Actual ordinary input kills the real
+radroach with six ADS contacts; original70/80 results complete and genuine
+v33 saving succeeds. Paul restores his original chair clip with no pending
+procedure captures. Complete shooting, scene, animation and save parity remain
+open.
+
+The active candidate binds PlaySound3D to a real reference and owned SOUN/WAV,
+and resumes the stopped quest instruction/tail while retaining its consumed
+prefix and historical fault. Synthetic and the original TTW stopped-invocation
+native mixer audits pass. Actual optimized3460 cold-Continues the preserved80
+save with the roach dead, no quest fault and the continuation receipt intact.
+Ordinary photo input completes original90/95/98 and enters100. Shared source95
+UnequipItem flags0,1 pass synthetic, owned cold checks and actual stage-result
+completion. Original100 stops at unowned PipBoyRadioOff after four commands.
+An ordinary save succeeds but lacks the nested stage-result frame; it is a
+diagnostic stopped state, while the genuine80 recovery remains immutable. Full radio
+playback, legacy Travel root/clock restoration and later campaign owners remain
+open. Megaton and the train/Mojave route have not been reached.
 
 Checked PR125 publishes reference-owned stopped NPC initialization saves and
 shared Guard marker approach at synchronized main a910a0dc; all five checks

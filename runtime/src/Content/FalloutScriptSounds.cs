@@ -3,10 +3,11 @@ using System.Security.Cryptography;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutScriptSoundRequest(long Id, FalloutFormKey Caller, FalloutSoundRecord Source,
-    FalloutAnimationSoundSelection Selection, bool SystemSound);
-internal sealed record FalloutScriptSoundMedia(string Path, string Source, string Sha256, double Duration);
+    FalloutAnimationSoundSelection Selection, bool SystemSound, FalloutFormKey? Reference = null);
+internal sealed record FalloutScriptSoundMedia(string Path, string Source, string Sha256, double Duration,
+    bool Stereo = false);
 internal sealed record FalloutScriptSoundPlayback(FalloutScriptSoundMedia Media, Action Start,
-    Action<bool> Pause, Action Release);
+    Action<bool> Pause, Action Release, string Routing = "source-2D");
 
 // Script sound requests have world lifetime. A presentation adapter prepares the
 // owned stream before the command commits, then reports actual voice completion.
@@ -32,6 +33,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
     internal string? LastDisposition { get; private set; }
     internal string? LastError { get; private set; }
     internal int ActiveVoices => _voices.Count;
+    internal bool IsBound => _binding is not null;
     internal bool IsActive(long id) => _voices.ContainsKey(id);
     internal static bool SystemFlag(double value) => double.IsFinite(value) && value == Math.Truncate(value) &&
         value >= int.MinValue && value <= int.MaxValue ? value != 0 :
@@ -42,7 +44,7 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
         completed = _completed,
         cancelled = _cancelled,
         bound = _binding is not null,
-        active = _voices.Values.Select(voice => new { request = voice.Request, voice.Phase, media = voice.Playback.Media }).ToArray(),
+        active = _voices.Values.Select(voice => new { request = voice.Request, voice.Phase, media = voice.Playback.Media, voice.Playback.Routing }).ToArray(),
         lastRequest = LastRequest,
         lastMedia = LastMedia,
         lastDisposition = LastDisposition,
@@ -61,6 +63,16 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
     }
 
     internal void Play(FalloutFormKey caller, FalloutFormKey sound, bool systemSound = false)
+        => Play(caller, sound, systemSound, null);
+
+    internal void PlayAtReference(FalloutFormKey reference, FalloutFormKey sound)
+    {
+        if (records.RuntimeFormId(reference) != 0x14 && records.GetEffective(reference).Signature is not ("REFR" or "ACHR" or "ACRE"))
+            throw new InvalidDataException("PlaySound3D caller is not a placed reference.");
+        Play(reference, sound, false, reference);
+    }
+
+    private void Play(FalloutFormKey caller, FalloutFormKey sound, bool systemSound, FalloutFormKey? reference)
     {
         try
         {
@@ -78,11 +90,11 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
             // original flags separately; the shared selector still exposes
             // environmental, submersion and stereo/LFE presentation gaps.
             var random = new FalloutSoundRandomState(_random.State);
-            var selection = FalloutAnimationSound.Select(source with { Flags = source.Flags | FalloutSoundFlags.TwoDimensional },
+            var selection = FalloutAnimationSound.Select(reference is null ? source with { Flags = source.Flags | FalloutSoundFlags.TwoDimensional } : source,
                 binding.Variants(source), random, ownsLoopStop: true, stereoOutput: binding.Stereo);
             if (selection.Play && !Path.GetExtension(selection.Path!).Equals(".wav", StringComparison.OrdinalIgnoreCase))
                 throw FalloutSoundPlaybackContract.Unsupported(source, "PlaySound for a non-WAV ambient effect");
-            var request = new FalloutScriptSoundRequest(checked(_requests + 1), caller, source, selection, systemSound);
+            var request = new FalloutScriptSoundRequest(checked(_requests + 1), caller, source, selection, systemSound, reference);
             FalloutScriptSoundPlayback? playback = null;
             if (selection.Play)
             {
@@ -137,7 +149,8 @@ internal sealed class FalloutScriptSounds(FalloutPluginStack records, FalloutScr
         {
             if (!audible) return;
             voice.Phase = "playing"; LastDisposition = "source-sound-playing";
-            voice.Registration = records.SoundVoices.Register(voice.Request.Source.FormKey, null, "PlaySound",
+            voice.Registration = records.SoundVoices.Register(voice.Request.Source.FormKey, voice.Request.Reference,
+                voice.Request.Reference is null ? "PlaySound" : "PlaySound3D",
                 () => _voices.ContainsKey(voice.Request.Id), () => StopVoice(voice));
             voice.Playback.Start();
         }

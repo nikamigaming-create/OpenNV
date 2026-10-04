@@ -600,6 +600,10 @@ public partial class RuntimeCoordinator
         scripts.EvaluateMessageCondition = condition => (_nativeOpeningStageDriver ??
             throw new InvalidOperationException("Message conditions have no player gameplay owner.")).EvaluateMessageCondition(condition);
         scripts.ActiveMenus = NativeActiveMenus;
+        scripts.SoundUnitsToMetres = _configuration.World.GameUnitsToMeters;
+        scripts.SoundReference = reference => _nativePluginStack!.RuntimeFormId(reference) == 0x14 ? _nativePlayer :
+            (_nativeReferencePresentation ?? throw new NotSupportedException("Script sound world presentation is not resident."))
+                .Nodes.GetValueOrDefault(reference);
         if (restore is not null) scripts.Scripts.Restore(restore);
         if (_nativeQuestScripts is not null)
         {

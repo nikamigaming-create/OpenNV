@@ -22,6 +22,9 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private IDisposable? _vampireQueryDefault;
     internal Func<FalloutCondition, float>? EvaluateMessageCondition { get; set; }
     internal Func<IEnumerable<uint>?>? ActiveMenus { get; set; }
+    internal Func<FalloutFormKey, Node3D?> SoundReference { get; set; } =
+        _ => throw new NotSupportedException("Script sound reference presentation has no world owner.");
+    internal float SoundUnitsToMetres { get; set; }
     internal FalloutNewGameBootstrap? Bootstrap { get; set; }
     internal string? StartupError => _error;
     internal object State => Observe(detailed: true);
@@ -71,7 +74,8 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             _activationSoundDefault = Scripts.NoActivationSound.BindDefault(() => FalloutExecutableStringTable.ReadNoActivationSoundDefault(
                 Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
                     source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
-            AddChild(new NativeOwnedScriptSoundPlayer(Scripts.Sounds, source, Scripts.Menus));
+            AddChild(new NativeOwnedScriptSoundPlayer(Scripts.Sounds, source, Scripts.Menus,
+                reference => SoundReference(reference), SoundUnitsToMetres));
             AddChild(new Rendering.NativeOwnedScreenBlood(Scripts.ScreenBlood, source, Scripts.Menus));
         }
         try

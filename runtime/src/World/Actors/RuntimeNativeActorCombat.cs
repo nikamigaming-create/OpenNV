@@ -35,6 +35,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     {
         dead = Dead,
         health = _state.ActorValues.GetValueOrDefault("health")?.Current,
+        bodyTarget = ObserveBodyTarget(),
         injury = _state.Injury,
         ragdoll = _ragdoll?.Observation,
         gore = _goreEffects?.State,

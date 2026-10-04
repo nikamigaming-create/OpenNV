@@ -78,16 +78,6 @@ internal partial class RuntimeNativeOpeningStageDriver
                     if (GodotObject.IsInstanceValid(splatter)) splatter.QueueFree();
                 _screenSplatters.Clear();
                 break;
-            case "unequipitem" when arguments.Count == 1:
-                var removedEquipment = bindings.Form(arguments[0]).FormKey;
-                if (_pluginStack.RuntimeFormId(target) == 0x14) _inventory.Unequip(_pluginStack, removedEquipment, force: true);
-                else
-                {
-                    if (_scripts.References!.IsResident(target))
-                        throw new NotSupportedException("Resident NPC equipment changes require the actor mesh/animation refresh owner.");
-                    _scripts.References.UnequipItem(target, removedEquipment, SourcePlayerLevel, _globals);
-                }
-                break;
             case "removescriptpackage" when arguments.Count == 0 && _pluginStack.RuntimeFormId(target) == 0x14:
                 _playerPackage!.Apply(null);
                 break;

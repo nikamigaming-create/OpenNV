@@ -30,6 +30,15 @@ The prior one-argument silent behavior remains; visible player equip notices,
 book/ammo/ingestible consumption and equipment changes during a presented NPC
 weapon's lifetime still fail closed.
 
+`UnequipItem` binds the source item, NoEquip and HideEquipMsg operands to this
+same owner. The reached `0 1` flags explicitly release an equipment lock and
+remove the worn identity while preserving the item and its count. Actor
+presentation must admit retirement before mutation; appearance and explicit
+unequipped history share reference persistence. Vanilla script unequip does
+not dispatch an OnUnequip event. Omitted HideEquipMsg is false; an unowned
+visible player notice and NoEquip admission lock fail before equipment changes.
+The source argument contract follows [GECK UnequipItem](https://geckwiki.com/index.php/UnequipItem).
+
 `ResetInventory` rebuilds a nonplayer container from the winning source,
 retained actor templates and the next persisted inventory random state. It
 keeps the existing inventory object so combat and other readers retain their
@@ -50,6 +59,8 @@ typed query results, lazy branches and failed-transfer atomicity.
 It also checks source-dispatched NPC/creature/container counts, variant
 preservation, worn armor removal, unchanged player contents, partial weapon
 stacks, rejected native retirement and cold count/equipment continuation.
+It also checks original three-argument unequip, forced lock release, unchanged
+item counts, rejected admission/notification flags and cold actor overrides.
 `--audit-inventory-commands <mod> <root> <game> <quest> <stage> [dependencies...]`
 executes each inventory-bearing owned result entry as an isolated component.
 It checks source order, cold inventory/random continuation and unchanged source

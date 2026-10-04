@@ -3,6 +3,11 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Reference script sounds and stopped instructions](script-sound-continuation.md)
+bind PlaySound3D to the actual reference, source SOUN and native owned WAV. A
+stopped quest resumes its consumed invocation at a validated source instruction;
+prior writes and guards remain consumed and the historical fault stays saved.
+
 [Actor heading queries](script-heading-query.md) share actual horizontal actor
 facing and reference placement across source events, results and quest owners.
 NPC combat ownership exists before source AI selection and animation restoration.

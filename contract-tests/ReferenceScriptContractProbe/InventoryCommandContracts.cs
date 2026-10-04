@@ -65,6 +65,20 @@ internal static class InventoryCommandContracts
             Reject(() => new FalloutPlayerInventory().Restore(saved.Inventory, [], saved.InventoryRandomState));
             Require(cold.Unequip(records, Key(1), force: true) && !cold.Item(Key(1))!.UnequipLocked,
                 "Explicit script unequip did not release equipment lock.");
+            var equippedCount = inventory.Item(Key(1))!.Count;
+            Script("player.UnequipItem Gun 0 1");
+            Require(inventory.Item(Key(1)) is { UnequipLocked: false } && inventory.Item(Key(1))!.Count == equippedCount &&
+                commands.EquippedObject(Key(0x14), 5) is null,
+                "Original three-argument UnequipItem consumed gear or retained its no-unequip lock.");
+            Script("player.EquipItem Gun 1 1");
+            var unequipBefore = JsonSerializer.Serialize(inventory.Capture());
+            Reject(() => Script("player.UnequipItem Gun 1 1"));
+            Reject(() => Script("player.UnequipItem Gun 0 0"));
+            Reject(() => Script("player.UnequipItem Gun"));
+            Reject(() => Script("player.UnequipItem Gun 2 1"));
+            Reject(() => Script("player.UnequipItem Gun 0 2"));
+            Require(JsonSerializer.Serialize(inventory.Capture()) == unequipBefore,
+                "Unowned admission/notification or invalid UnequipItem flags changed equipment.");
             Script("player.RemoveAllItems\nplayer.AddItem Suit 1 1\nplayer.EquipItem Suit 0 1\nplayer.EquipItem Protected 0 1");
             Require(inventory.Items.Select(item => item.FormKey).ToHashSet().SetEquals(new[] { Key(3), Key(4), Key(5) }) &&
                 inventory.Equipped.Count == 2 && commands.EquippedObject(Key(0x14), 5) is null,
@@ -105,7 +119,7 @@ internal static class InventoryCommandContracts
             Reject(() => inventory.RemoveAll(records, true, overflow, false, false));
             Require(before == JsonSerializer.Serialize(inventory.Capture()) && targetBefore == JsonSerializer.Serialize(overflow.Capture()),
                 "Failed whole-container transfer published a partial transaction.");
-            Console.WriteLine("OPENNV_INVENTORY_COMMAND_CONTRACT_PASS source-dispatch protected-items transfer-variants lock cold-lock reset-identity cold-reset typed-form lazy-branch atomic-failure actor-creature-container-counts worn-removal weapon-retirement cold-counts");
+            Console.WriteLine("OPENNV_INVENTORY_COMMAND_CONTRACT_PASS source-dispatch protected-items transfer-variants lock cold-lock explicit-unequip source-flags cold-unequip reset-identity cold-reset typed-form lazy-branch atomic-failure actor-creature-container-counts worn-removal weapon-retirement cold-counts");
         }
         finally { directory.Delete(true); }
     }
@@ -147,8 +161,11 @@ internal static class InventoryCommandContracts
         Require(contents.Item(Key(1)) is { Count: 1, UnequipLocked: true } && contents.Equipped.Contains(1u) && retirementCalls == 0,
             "Partial weapon removal retired its remaining equipped stack.");
         var before = JsonSerializer.Serialize(world.Capture());
-        Reject(() => Script("Actor.RemoveItem Gun 1 1"));
+        Reject(() => Script("Actor.UnequipItem Gun 0 1"));
         Require(before == JsonSerializer.Serialize(world.Capture()) && retirementCalls == 1,
+            "Rejected native UnequipItem retirement changed equipment before presentation admitted it.");
+        Reject(() => Script("Actor.RemoveItem Gun 1 1"));
+        Require(before == JsonSerializer.Serialize(world.Capture()) && retirementCalls == 2,
             "Rejected native weapon retirement published an inventory prefix.");
         Reject(() => Script("Actor.AddItem Loot 0 1")); Reject(() => Script("Creature.RemoveItem Loot 1.5"));
         Reject(() => Script("Actor.AddItem Loot 1 2")); Reject(() => Script("Activator.AddItem Loot 1"));
@@ -159,6 +176,18 @@ internal static class InventoryCommandContracts
         foreach (var reference in new[] { Key(0x900), Key(0x901), Key(0x902) })
             Require(JsonSerializer.Serialize(cold.Inventory(reference, 1).Capture()) == JsonSerializer.Serialize(world.Inventory(reference, 1).Capture()),
                 "Cold actor/creature/container counts, equipment or random state diverged.");
+        var admitted = new FalloutInventoryCommands(records, world, player, () => 1, prepareActorChange: _ => retirementCalls++);
+        var admittedExecutor = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false,
+            _ => throw new InvalidDataException("Unequip command escaped its owner."), Inventory: admitted));
+        appearance = world.ActorAppearanceRevision(Key(0x900));
+        admittedExecutor.ExecuteStage(quest, quest.ReadSubrecords().ToArray(), "Actor.UnequipItem Gun 0 1");
+        Require(contents.Item(Key(1)) is { Count: 1, UnequipLocked: false } && contents.Equipped.Count == 0 &&
+            actor.Unequipped.Contains(Key(1)) && world.ActorAppearanceRevision(Key(0x900)) > appearance && retirementCalls == 3,
+            "Admitted actor UnequipItem lost its contents, appearance change or explicit unequipped history.");
+        using var unequippedCold = new FalloutReferenceWorld(records);
+        unequippedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
+        Require(JsonSerializer.Serialize(unequippedCold.Inventory(Key(0x900), 1).Capture()) == JsonSerializer.Serialize(actor.Capture()),
+            "Cold actor restore changed source UnequipItem history or contents.");
     }
 
     private static FalloutFormKey Key(uint id) => new("Items.esm", id);

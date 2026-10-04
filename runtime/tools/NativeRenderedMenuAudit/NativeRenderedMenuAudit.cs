@@ -10,6 +10,12 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 6 && args[1] == "--script-sound-continuation")
+            {
+                await ScriptSoundContinuation(args[0], args[2], args[3], args[4], args[5], args[6..]);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 6 && args[1] == "--font-encoding")
             {
                 BitmapFontEncoding(args[0], args[2], args[3], int.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture), args[5], args[6..]);

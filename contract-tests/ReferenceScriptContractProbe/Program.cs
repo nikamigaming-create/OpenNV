@@ -5,6 +5,12 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--script-sound-contracts"])
+{
+    ScriptSoundContracts.Run();
+    ScriptContinuationContracts.Run();
+    return;
+}
 if (args is ["--heading-query-contracts"])
 {
     HeadingQueryContracts.Run();
@@ -577,6 +583,7 @@ ChallengeContracts.Run();
 AgeRaceContracts.Run();
 FaceGeometryContracts.Run();
 ScriptSoundContracts.Run();
+ScriptContinuationContracts.Run();
 NoActivationSoundContracts.Run();
 VampireQueryContracts.Run();
 InventoryQueryContracts.Run();
