@@ -35,7 +35,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutPlayerVitals _vitals = null!;
     private FalloutPlayerSkills _playerSkills = null!;
     private FalloutPlayerIngestibles _ingestibles = null!;
-    private IReadOnlyList<FalloutNativeSkillIdentity> _tagSkills = [];
+    private FalloutPlayerTagSkills _tagSkills = null!;
     private IReadOnlyList<FalloutNativeTraitIdentity> _traits = [];
     private RuntimeNativePlayerNameEntry? _nameEntry;
     private RuntimeNativeRaceSexEntry? _raceSexEntry;
@@ -168,9 +168,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         FalloutNativeRaceSexResolver.Validate(raceSexContract, _character);
         _playerActorValues = new(pluginStack, restore?.State.PlayerActorValues,
             restore?.State.PlayerActorValues is null ? restore?.State.Special : null);
-        _tagSkills = restore?.State.TagSkills ?? [];
-        if (restore is not null)
-            FalloutNativeTagSkillResolver.Validate(tagSkillContract, _tagSkills, allowUnspent: !restore.State.CharacterCreationComplete);
+        _tagSkills = new(pluginStack, tagSkillContract, restore?.State.TagSkillSlots, restore?.State.TagSkills);
         _traits = restore?.State.Traits ?? [];
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, _traits);
         _lipConfiguration = lipConfiguration;
@@ -213,7 +211,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
             ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: _playerActorValues.Change,
             Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
-            Sitting: ActorSitting);
+            Sitting: ActorSitting, TagSkills: _tagSkills);
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
@@ -586,7 +584,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _tagSkillEntry.Failed += error => ExecutionError = error.Message;
         var previousModalInput = _player.ModalInput;
         _tagSkillEntry.Released += () => _player.SetModalInput(previousModalInput);
-        _tagSkillEntry.Configure(_pluginStack, _tagSkillContract, _tagSkills,
+        _tagSkillEntry.Configure(_pluginStack, _tagSkillContract, _tagSkills.Selection,
             skill => _playerSkills.Value(FalloutNativeTagSkillResolver.ActorValueName(_pluginStack, skill)));
         _player.SetModalInput(true);
         GD.Print(
@@ -598,7 +596,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private void AcceptTagSkills(IReadOnlyList<FalloutNativeSkillIdentity> selection)
     {
         FalloutNativeTagSkillResolver.Validate(_tagSkillContract, selection);
-        _tagSkills = selection.ToArray();
+        _tagSkills.AcceptMenu(selection);
         if (_tagSkillEntry is not null)
         {
             _tagSkillEntry.Accepted -= AcceptTagSkills;
@@ -608,7 +606,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         GD.Print(
             $"OPENNV_NATIVE_TAG_SKILLS_ACCEPTED skills=" +
-            $"{string.Join(',', _tagSkills.Select(value => value.EditorId))} " +
+            $"{string.Join(',', _tagSkills.Selection.Select(value => value.EditorId))} " +
             "source=configured-player-input-live-avif-contract");
         CompleteBlocker("settagskills");
     }

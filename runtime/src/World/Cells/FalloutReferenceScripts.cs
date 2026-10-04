@@ -33,7 +33,7 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     FalloutInventoryCommands? Inventory = null, FalloutChallenges? Challenges = null,
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
-    Func<FalloutFormKey, int>? Sitting = null);
+    Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -654,7 +654,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     .Get(FalloutGameTimeBindings.Read(records).Hour))
                 { ReadOnly = true },
                 "isplayertagskill" => new([FalloutScriptArgumentKind.Identifier], arguments =>
-                    (host.IsPlayerTagSkill ?? throw new NotSupportedException("Player tag skills have no owner."))(arguments[0].Identifier!) ? 1 : 0),
+                    (host.TagSkills?.IsTagged(arguments[0].Identifier!) ??
+                        (host.IsPlayerTagSkill ?? throw new NotSupportedException("Player tag skills have no owner."))(arguments[0].Identifier!)) ? 1 : 0)
+                { ReadOnly = true },
                 "getstage" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.Stage(Quest(arguments[0].Identifier!))),
                 "getquestrunning" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.IsRunning(Quest(arguments[0].Identifier!)) ? 1 : 0),
                 "getquestcompleted" => new([FalloutScriptArgumentKind.Identifier], arguments => quests.IsCompleted(Quest(arguments[0].Identifier!)) ? 1 : 0),
@@ -707,6 +709,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return;
             }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
+            if (parts.Length == 1 && operation == "setplayertagskill")
+            {
+                if (arguments.Count != 2) throw new InvalidDataException("SetPlayerTagSkill requires a skill and slot.");
+                (host.TagSkills ?? throw new NotSupportedException("SetPlayerTagSkill has no shared player tag owner."))
+                    .Set(arguments[0], Number(arguments[1]));
+                return;
+            }
             var callerPlugin = bindings.Source.OwnerPlugin;
             if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")
             {

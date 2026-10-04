@@ -1436,6 +1436,31 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    var indexedTags = new FalloutPlayerTagSkills(cellStack, syntheticTagSkills);
+    indexedTags.Set("Science", 3);
+    indexedTags.Set("Guns", 0);
+    var indexedGrant = FalloutNativeTraitFarewellResolver.ResolveGrant(syntheticTraitFarewell, syntheticOpeningGrant, indexedTags.Selection);
+    var indexedSave = referenceSave with
+    {
+        TagSkills = indexedTags.Selection, TagSkillSlots = indexedTags.Capture(),
+        Inventory = indexedGrant.Inventory.Items.Select(item => new FalloutNativeSavedItem(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray(),
+        EquippedRuntimeFormIds = indexedGrant.EquippedRuntimeFormIds
+    };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave);
+    var indexedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(JsonSerializer.Serialize(indexedRestore.State.TagSkillSlots) == JsonSerializer.Serialize(indexedSave.TagSkillSlots) &&
+        new FalloutPlayerTagSkills(cellStack, syntheticTagSkills, indexedRestore.State.TagSkillSlots).IsTagged("Science"),
+        "Campaign cold restore compacted the fourth tag slot or imposed the creation-menu count on script tags.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with { TagSkillSlots = null }), "indexed player tag");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with { TagSkills = [] }), "membership projection");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.UnindexedTagSchema, TagSkillSlots = null });
+    var unindexedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(unindexedRestore.State.TagSkillSlots!.Slots.Take(referenceSave.TagSkills.Count).SequenceEqual(referenceSave.TagSkills) &&
+        FalloutNativeCampaignSave.WithWorldState(unindexedRestore.State, referenceSave.ActiveCell,
+            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The v33 membership checkpoint did not preserve its stored order or upgrade indexed tag saving.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.SignedRaceSchema });
     var v27Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

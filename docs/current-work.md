@@ -12,11 +12,11 @@ stated contracts.
 
 ## Baseline and candidate
 
-Checked PR130 is merged at synchronized origin/main a188659 with all five checks
-passing. The active branch is codex/classroom-furniture. Primary owns live input,
+Checked PR131 is merged at synchronized origin/main 3680d17 with all five checks
+passing. The active branch is codex/player-tag-slots. Primary owns live input,
 implementation and publication; the earlier traversal chats are idle.
 
-The candidate implements source Find (PKDT procedure 0) with near-reference
+The merged runtime implements source Find (PKDT procedure 0) with near-reference
 Furniture targets. C# filters actual enabled/moved furniture by source radius,
 actor/faction ownership and target identity. Actors reserve distinct enabled
 NIF/MNAM seats, use source NAVM and native capsules to reach their authored entry
@@ -38,10 +38,18 @@ cold checks pass. The selected original escape history/link audit and all seven
 source classroom packages/NIF seat markers pass with read-only source bytes.
 These isolated fixtures do not establish escape or campaign progress.
 
-The complete integrated runtime gate passes for the final candidate, including
-the player idle predicate additions. The selected native desk audit also passes.
-Find search,
-reservations and native furniture continuation still refuse cold saving. Existing
+The merged runtime passes the integrated gate and selected native desk audit.
+The active candidate adds shared C# indexed player tag skills to reference/result
+and fallback quest execution. Four slots retain sparse and repeated membership;
+the existing live skill owner applies the source bonus once. Menu acceptance
+retains its authored count. v34 saves retain exact indices and winning AVIFs;
+v33 membership migrates in its stored order. Synthetic script/bonus/invalid-state
+and campaign cold-save checks pass. All thirteen original TTW scoring stages pass
+in isolated owned-data state with unchanged source bytes. The complete integrated
+runtime gate passes for the final candidate. The rebuilt ordinary replay has
+passed the photo, original transition and Dad's classroom conversation again.
+
+Find search, reservations and native furniture continuation still refuse cold saving. Existing
 legacy reference-script faults after consumed initialization remain visible;
 new query support does not replay their already-applied prefix.
 
@@ -59,18 +67,18 @@ approach and source KF entry; two retain their source initial occupied bindings.
 Ordinary desk activation completes its nine-waypoint approach and source entry.
 The player is occupied; original classroom results enter50/55/60 and question1
 opens. Its ordinary first answer reaches the original test scoring result and
-fails on the missing SetPlayerTagSkill owner. G.O.A.T. completion, Vault escape,
-Megaton, Union Station and Mojave remain unverified. No campaign or parity completion is
-claimed. Active conversations/procedures still block saving; obtain a genuine
+fails on the old build's missing SetPlayerTagSkill owner. The rebuilt ordinary
+replay is active and has reached CG03:10 with no stage-result error. G.O.A.T. completion,
+Vault escape, Megaton, Union Station and Mojave remain unverified. No campaign or
+parity completion is claimed. Active conversations/procedures still block saving; obtain a genuine
 settled post-photo checkpoint and verify cold Continue before treating it as
 reusable. The older partial stage-100 diagnostic omitted a nested result frame
 and must not be used as a completed checkpoint.
 
 ## Next executable outcome
 
-Implement the reached indexed SetPlayerTagSkill owner and repair the next source
-test continuation, then complete the original G.O.A.T. questions/results.
-Repair the next actually reached general
+Replay the original first answer with the shared tag owner and complete the
+original G.O.A.T. questions/results. Repair the next actually reached general
 owner, preserve a settled cold-verified checkpoint, then continue Vault escape,
 Megaton and the authored train journey. Complete procedure, conversation and
 nested-result saving remain required. VATS, full JAM and native plugin interfaces

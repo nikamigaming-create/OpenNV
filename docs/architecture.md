@@ -240,6 +240,14 @@ evaluates a valid receiver once before arguments. Inactive branches stay lazy,
 and unsupported methods retain their executed prefix. See
 [typed reference calls](nvse-postfix-reference-calls.md).
 
+FalloutPlayerTagSkills owns four indexed player slots independently of the
+creation menu's required count. SetPlayerTagSkill in reference/result and fallback
+quest execution updates the same owner used by IsPlayerTagSkill and live source
+GMST bonuses. Membership is projected once per skill while exact sparse slot
+indices remain authoritative. v34 campaign saves retain those slots and validate
+their winning AVIF identities and membership projection; v33 membership migrates
+in its stored order. No tag command fabricates a placed player reference.
+
 FalloutTagSkillMenuSelection owns the tag draft. NativeOwnedTagSkillMenu renders
 winning XML, fonts, atlas and AVIF content through the shared tile owner; the
 opening driver accepts identities through existing character state. The wrapper

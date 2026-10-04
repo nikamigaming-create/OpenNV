@@ -203,7 +203,7 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null,
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
-    Func<FalloutFormKey, int>? Sitting = null);
+    Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -822,6 +822,10 @@ internal sealed partial class FalloutQuestScripts
                     .Get(FalloutGameTimeBindings.Read(_records).Hour))
                 { ReadOnly = true },
                 "getbuttonpressed" => new([], _ => MessageResults.Take(instance.Script.FormKey)),
+                "isplayertagskill" => new([FalloutScriptArgumentKind.Identifier], arguments =>
+                    (host?.TagSkills ?? throw new NotSupportedException("Player tag skills have no shared owner."))
+                        .IsTagged(arguments[0].Identifier!) ? 1 : 0)
+                { ReadOnly = true },
                 "abs" => new([FalloutScriptArgumentKind.Number], arguments => Math.Abs(arguments[0].Number)),
                 "getobjectivedisplayed" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
                 {
@@ -1000,6 +1004,13 @@ internal sealed partial class FalloutQuestScripts
             {
                 FalloutInputControlCommands.Execute(operation, Controls ?? throw new NotSupportedException("Control commands have no profile input owner."),
                     arguments.Select(NumberArgument).ToArray());
+                return;
+            }
+            if (parts.Length == 1 && operation == "setplayertagskill")
+            {
+                if (arguments.Count != 2) throw new InvalidDataException("SetPlayerTagSkill requires a skill and slot.");
+                (host?.TagSkills ?? throw new NotSupportedException("SetPlayerTagSkill has no shared player tag owner."))
+                    .Set(arguments[0], NumberArgument(arguments[1]));
                 return;
             }
             if (parts.Length == 1 && operation is "setnthperkentryvalue1" or "setnthperkentryvalue2")

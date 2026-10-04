@@ -1,14 +1,20 @@
 # Product status
 
-Checked PR130 is merged at synchronized main a188659 with all five checks passing.
-The active codex/classroom-furniture candidate reproduces all seven original
+Checked PR131 is merged at synchronized main 3680d17 with all five checks passing.
+The merged classroom runtime reproduces all seven original
 students occupying distinct source seats after the ordinary G.O.A.T. ready choice.
 Find near-reference Furniture searches use enabled/moved placements, source
 ownership, NIF/MNAM reservations, native capsule/NAVM approach and actual KF entry.
 Script and dialogue GetSitting bind the physical player/NPC owner. The selected
 original player desk passes native entry/loop/exit and script-visible phase checks.
 Ordinary desk input completes entry; source50/55/60 opens the first G.O.A.T.
-question. Its scoring result reaches unowned SetPlayerTagSkill. G.O.A.T. completion,
+question. Its scoring result reached unowned SetPlayerTagSkill in the old live build.
+The active codex/player-tag-slots candidate owns four indexed player tags in shared
+C# reference/result and fallback quest execution. Existing source bonuses update
+live membership once; v34 saves retain holes and exact slot order. Synthetic and
+campaign cold-save checks and all thirteen isolated original TTW scoring stages
+pass. The complete runtime gate passes; the rebuilt ordinary replay has reached
+CG03:10 after the original photo/transition and Dad's conversation. G.O.A.T. completion,
 Vault escape, Megaton and the train/Mojave route remain incomplete.
 
 Shared script GetTalkedToPC and typed GetLinkedRef have synthetic self/explicit/
