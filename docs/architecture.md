@@ -9,6 +9,12 @@ arm through the shared deferred expression parser without consuming gameplay
 state; compiled authority, statement effects and state feasibility remain
 independent from syntax/declaration coverage.
 
+[Source cell coverage](cell-graph-audit.md) retains every selected winning
+reference, directed interior portal and source resource failure. Enable-root and
+package-template alternatives remain independent of saved-state and native
+snapshot joins. Collision projections share ordinary placement math without
+claiming native contacts or complete reachable state coverage.
+
 [Escape runtime owners](escape-runtime-owners.md) share directional faction
 overrides/save v38, current actor value/spatial queries, independent package
 weapon visibility and source radio links/voice identity. Native player package

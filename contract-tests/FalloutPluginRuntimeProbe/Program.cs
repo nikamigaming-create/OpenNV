@@ -7,6 +7,11 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-cell-graph"])
+{
+    CellGraphAuditContracts.Run();
+    return;
+}
 if (args is ["--test-light-parents"])
 {
     PlacedLightEnableContracts.Run();
@@ -98,6 +103,7 @@ LoadOrderContracts.Run();
 WeatherMotionProbe.Run();
 CellLightingContracts.Run();
 PlacedLightEnableContracts.Run();
+CellGraphAuditContracts.Run();
 WindForceProbe.Run();
 ContentWorkerProbe.Run();
 

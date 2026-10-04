@@ -33,12 +33,18 @@ binding failure, 3,990 expression declaration/context failures and 84,968
 uninspected legacy statements remain visible. Coverage does not establish reachable
 state permutations or authoritative compiled execution. See [script coverage](quest-graph-audit.md).
 
-The full vault source audit includes 10 interiors and 7,155 references. It retains
-101 reference issues, down from 232, and 33 resource failures in overlapping lanes,
-plus the selected older native actor faults. The remaining 58 light refusals are
+The canonical cell audit includes 10 interiors and all 7,155 references. It retains
+101 reference issues, down from 232, 34 resource failures and nine package error
+bindings in overlapping lanes, plus the selected older native actor faults.
+Expanded inspection includes source LIGH models and their previously omitted
+NiLightColorController. Placement calculations now replace the NIF root just as
+ordinary reference assembly does, with independent synthetic coordinates.
+The remaining 58 light refusals are
 18 source-model/controller owners, 27 scales and 13 flags. Combat/detection script
 queries, NPC procedures, resource failures and whole-cell native coverage remain
 open. Static geometry and source NAVM accounting do not prove supported floors.
+The rerun retains 51 centroid projections without a packed-triangle/box hit,
+separately from native contacts. See [source cell coverage](cell-graph-audit.md).
 
 Ordinary input completes all ten G.O.A.T. questions, scoring, original tag
 acceptance and Brotch's source desk occupation. The genuine complete stage-80

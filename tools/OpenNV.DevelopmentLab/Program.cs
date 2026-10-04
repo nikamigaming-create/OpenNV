@@ -6,6 +6,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInteractionProbe.Run(args[1], args[2], args[3..]);
 if (args is ["cell-review", var reviewSource, var reviewSnapshot]) return CellReview.Run(reviewSource, reviewSnapshot);
 if (args.Length >= 5 && args[0] == "weapon-loadout") return WeaponLoadout.Run(args[1], args[2], args[3], args[4..]);
+if (args.Length >= 1 && args[0] == "cell-graph") return CellGraphAudit.RunCommand(args[1..]);
 if (args.Length >= 6 && args[0] == "quest-graph" && args[3] == "--mod")
 {
     var auditSelection = new FalloutModStackSelection([new(args[4], args[5], args[6..])]).Resolve(args[1]);
@@ -20,6 +21,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "cells <installation-or-source-stack> <CELL editor ID or name fragment> [...]\n" +
         "route <installation-or-source-stack> <request.json: world runtime hex, start/end game units>\n" +
         "cell-review <installation-or-source-stack> <native detailed state.json>\n" +
+        "cell-graph <installation-or-source-stack> <fresh-output-directory> --seed <plugin:hex-object> --runtime-config <path> [--metadata <EDID substring>] [--checkpoint <path>] [--snapshot <path>] [--sample-native <x> <y> <z>] [--mod <id> <root> <dependency-root> ... last]\n" +
         "weapon-loadout <installation-or-source-stack> <checkpoint> <new-private-output> <WEAP runtime hex> [...]\n" +
         "exterior <installation-or-source-stack> <CELL runtime hex ID> [grid diameter]\n" +
         "actors <installation-or-source-stack> <NPC name fragment> [...]\n" +
