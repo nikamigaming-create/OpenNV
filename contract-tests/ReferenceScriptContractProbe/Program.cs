@@ -106,6 +106,16 @@ if (args is ["--furniture-contracts"])
     FurnitureContracts.Run();
     return;
 }
+if (args is ["--player-tag-skill-contracts"])
+{
+    PlayerTagSkillContracts.Run();
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-ttw-player-tag-skills")
+{
+    OwnedPlayerTagSkillsProbe.Ttw(args[1], args[2], args[3..]);
+    return;
+}
 if (args.Length >= 3 && args[0] == "--audit-ttw-furniture")
 {
     OwnedFurnitureProbe.Ttw(args[1], args[2], args[3..]);
@@ -630,6 +640,7 @@ AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 ScriptDeathContracts.Run();
 PlayerSkillContracts.Run();
+PlayerTagSkillContracts.Run();
 PlayerActorValueContracts.Run();
 PerkParameterContracts.Run();
 InputControlContracts.Run();

@@ -38,7 +38,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutIngestiblesSnapshot? Ingestibles = null, IReadOnlyList<FalloutActorOverrides>? ActorOverrides = null,
     IReadOnlyList<FalloutEncounterZoneSnapshot>? EncounterZones = null,
     IReadOnlyList<FalloutExplosionExposure>? ExplosionExposure = null,
-    FalloutPlayerActorValuesSnapshot? PlayerActorValues = null);
+    FalloutPlayerActorValuesSnapshot? PlayerActorValues = null,
+    FalloutPlayerTagSkillsSnapshot? TagSkillSlots = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -46,7 +47,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v33";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v34";
+    internal const string UnindexedTagSchema = "opennv-native-fnv-campaign-save/v33";
     internal const string StoppedPackageSchema = "opennv-native-fnv-campaign-save/v32";
     internal const string CreatureTravelSchema = "opennv-native-fnv-campaign-save/v31";
     internal const string RadioSchema = "opennv-native-fnv-campaign-save/v30";
@@ -106,11 +108,17 @@ internal static class FalloutNativeCampaignSave
         FalloutSkyLightingSnapshot? skyLighting = null,
         IReadOnlyList<FalloutReferenceSnapshot>? references = null, string questEditorId = OpeningQuestEditorId,
         short stage = CompletedOpeningStage, bool characterCreationComplete = true, float playerViewPitchRadians = 0,
-        FalloutPlayerActorValuesSnapshot? playerActorValues = null)
+        FalloutPlayerActorValuesSnapshot? playerActorValues = null,
+        FalloutPlayerTagSkillsSnapshot? tagSkillSlots = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract, special, allowUnspent: !characterCreationComplete);
-        FalloutNativeTagSkillResolver.Validate(tagSkillContract, tagSkills, allowUnspent: !characterCreationComplete);
+        if (tagSkillSlots is null)
+            FalloutNativeTagSkillResolver.Validate(tagSkillContract, tagSkills, allowUnspent: !characterCreationComplete);
+        tagSkillSlots ??= FalloutPlayerTagSkills.FromLegacy(tagSkills);
+        FalloutPlayerTagSkills.Validate(tagSkillSlots, tagSkills);
+        if (tagSkillSlots.Slots.Any(skill => skill is not null && !tagSkillContract.Skills.Contains(skill)))
+            throw new InvalidDataException("Captured player tag slot differs from its winning AVIF identity.");
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, traits);
         var state = new FalloutNativeCampaignState(
             references is not null ? ExpectedSchema : skyLighting is not null ? QuestClockSchema : globals is null ? QuestScriptsSchema : GlobalClockSchema,
@@ -142,7 +150,8 @@ internal static class FalloutNativeCampaignSave
             ],
             playerPosition.ToArray(),
             playerRotation.ToArray(), quests, scripts, globals, gameTime, skyLighting, references, grant.InventoryRandomState, characterCreationComplete,
-            PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : [], PlayerActorValues: playerActorValues);
+            PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : [], PlayerActorValues: playerActorValues,
+            TagSkillSlots: tagSkillSlots);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -209,7 +218,10 @@ internal static class FalloutNativeCampaignSave
             state = state with { PlayerActorValues = new FalloutPlayerActorValues(stack, legacy: state.Special).Capture() };
         }
         else _ = new FalloutPlayerActorValues(stack, state.PlayerActorValues);
-        FalloutNativeTagSkillResolver.Validate(tagSkillContract, state.TagSkills, allowUnspent: !state.CharacterCreationComplete);
+        if (state.TagSkillSlots is null)
+            FalloutNativeTagSkillResolver.Validate(tagSkillContract, state.TagSkills, allowUnspent: !state.CharacterCreationComplete);
+        var tags = new FalloutPlayerTagSkills(stack, tagSkillContract, state.TagSkillSlots, state.TagSkills);
+        state = state with { TagSkillSlots = tags.Capture() };
         FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, state.Traits);
         var expectedGrant = state.Scripts is not null ? null : FalloutNativeTraitFarewellResolver.ResolveGrant(
             traitFarewellContract,
@@ -314,6 +326,7 @@ internal static class FalloutNativeCampaignSave
             PlayerRotation = playerRotation.ToArray(),
             PlayerViewPitchRadians = playerViewPitchRadians ?? RestorePlayerViewPitch(state),
             EncounterZones = state.References is null ? null : state.EncounterZones ?? [],
+            TagSkillSlots = state.TagSkillSlots ?? FalloutPlayerTagSkills.FromLegacy(state.TagSkills),
         };
         Validate(updated, state.SaveCompatibilityId);
         return updated;
@@ -358,6 +371,12 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
+        if (state.Schema == ExpectedSchema && state.TagSkillSlots is null)
+            throw new InvalidDataException("Saved campaign is missing indexed player tag skills.");
+        if (state.TagSkillSlots is { } tags) FalloutPlayerTagSkills.Validate(tags, state.TagSkills);
+        // v33 contained membership only. No indexed script writes were owned in
+        // that schema; its stored selection is the deterministic legacy order.
+        if (state.Schema == UnindexedTagSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.Scripts?.Session?.QuestObjects is { Count: > 0 })
             throw new InvalidDataException("Legacy campaign schema has mutable quest-object flags.");
         if (state.Schema is not (ExpectedSchema or StoppedPackageSchema) && state.References?.Any(reference => reference.PackageBindingFailure is not null || reference.PackageMotion?.Guard is not null) == true)

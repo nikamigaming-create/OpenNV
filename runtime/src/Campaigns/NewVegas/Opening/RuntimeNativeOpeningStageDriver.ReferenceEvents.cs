@@ -25,7 +25,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal OpenNV.Runtime.Gameplay.State.FalloutPipBoyState PipBoy => _pipBoy ?? throw new InvalidOperationException("Pip-Boy state is absent.");
     internal FalloutQuestState Quests => _quests;
     internal IReadOnlyList<FalloutNativeSkillIdentity> Skills => _tagSkillContract.Skills;
-    internal IReadOnlyList<FalloutNativeSkillIdentity> Tags => _tagSkills;
+    internal IReadOnlyList<FalloutNativeSkillIdentity> Tags => _tagSkills.Selection;
+    internal FalloutPlayerTagSkills PlayerTagSkills => _tagSkills;
     internal IReadOnlyList<FalloutNativeTraitIdentity> Traits => _traits;
     internal FalloutRadioStations Radio => _scripts.Radio ?? throw new InvalidOperationException("Radio station owner is absent.");
 
@@ -99,11 +100,11 @@ internal partial class RuntimeNativeOpeningStageDriver
                 reference => ReferencePresentation().GetOpenState(reference),
                 ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue, Inventory: InventoryCommands, Challenges: _scripts.Challenges,
                 HeadingAngle: ReferenceHeadingAngle, ResetPlayerHealth: _vitals.ResetHealth,
-                CurrentPackage: CurrentActorPackage, Sitting: ActorSitting));
+                CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
-        _scriptHost = _scriptHost with { ExecuteProgram = results.ExecuteProgram, InvokeFunction = results.InvokeFunction };
+        _scriptHost = _scriptHost with { ExecuteProgram = results.ExecuteProgram, InvokeFunction = results.InvokeFunction, TagSkills = _tagSkills };
         _scripts.Host = _scriptHost;
         _speech!.ExecuteResults = results.ExecuteResult;
         _conversation = new();
@@ -228,7 +229,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (_pluginStack.RuntimeFormId(actor) == 0x14) _playerActorValues.Change(name, operation, value);
         else _scripts.References!.ChangeActorValue(actor, name, operation, (float)value);
     }
-    internal bool IsPlayerTagSkill(string name) => _tagSkills.Any(skill => FalloutPlayerSkills.SkillName(_pluginStack, skill).Equals(name, StringComparison.OrdinalIgnoreCase));
+    internal bool IsPlayerTagSkill(string name) => _tagSkills.IsTagged(name);
     internal float PlayerSkillValue(string name) => _playerSkills.Value(name);
     internal float PlayerCombatValue(int value) => _playerSkills.Value(value);
     internal IReadOnlyList<FalloutPerkEntry> PlayerPerkEntries => _playerSkills.PerkEntries;
