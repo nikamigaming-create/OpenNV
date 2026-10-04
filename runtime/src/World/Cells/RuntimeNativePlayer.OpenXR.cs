@@ -121,7 +121,11 @@ internal partial class RuntimeNativePlayer
         _xrLeftContact?.Dispose(); _xrRightContact?.Dispose();
         _xrLeftContact = _xrRightContact = null; _xrSupport = null;
     }
-    public override void _ExitTree() => ReleaseXrContacts();
+    public override void _ExitTree()
+    {
+        ReleaseFurnitureReservation();
+        ReleaseXrContacts();
+    }
     internal void AttachXr(NativeXrRig rig)
     {
         if (_xr is not null) throw new InvalidOperationException("Player already owns an XR adapter.");

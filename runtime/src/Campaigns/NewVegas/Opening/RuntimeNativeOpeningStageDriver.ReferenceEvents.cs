@@ -73,6 +73,9 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     internal bool IsInInterior(FalloutFormKey reference) => _scripts.References!.IsInInterior(reference, _activeCell);
 
+    private int ActorSitting(FalloutFormKey reference) => _pluginStack.RuntimeFormId(reference) == 0x14
+        ? _player.SittingState : _scripts.References!.GetSitting(reference);
+
     private void ConfigureConversation()
     {
         _pipBoy = new(_pluginStack, _inventory);
@@ -96,7 +99,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 reference => ReferencePresentation().GetOpenState(reference),
                 ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue, Inventory: InventoryCommands, Challenges: _scripts.Challenges,
                 HeadingAngle: ReferenceHeadingAngle, ResetPlayerHealth: _vitals.ResetHealth,
-                CurrentPackage: CurrentActorPackage));
+                CurrentPackage: CurrentActorPackage, Sitting: ActorSitting));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
@@ -140,7 +143,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.Get(actor).TalkedToPlayer,
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
-            _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone);
+            _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting);
         AddChild(_conversation);
     }
 

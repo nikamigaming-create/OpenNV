@@ -101,6 +101,16 @@ if (args is ["--travel-contracts"])
     TravelContracts.Run();
     return;
 }
+if (args is ["--furniture-contracts"])
+{
+    FurnitureContracts.Run();
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-ttw-furniture")
+{
+    OwnedFurnitureProbe.Ttw(args[1], args[2], args[3..]);
+    return;
+}
 if (args is ["--inventory-query-contracts"])
 {
     InventoryQueryContracts.Run();
@@ -615,6 +625,7 @@ PatrolContracts.Run();
 EscortContracts.Run();
 EditorTravelContracts.Run();
 TravelContracts.Run();
+FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 ScriptDeathContracts.Run();

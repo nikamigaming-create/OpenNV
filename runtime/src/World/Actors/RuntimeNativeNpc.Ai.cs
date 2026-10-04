@@ -21,6 +21,7 @@ internal partial class RuntimeNativeNpc
     private FalloutReferenceWorld? _aiWorld;
     private FalloutReferenceInstance? _aiReferenceState;
     private Func<FalloutFormKey?>? _currentPackageQuery;
+    private Func<int>? _sittingQuery;
     private Func<FalloutActorPackageAssignment?>? _packageAssignmentCapture;
     internal void UpdateResidentScene(FalloutCellScene cell) => _aiCell = cell;
     private Func<FalloutPlacedReference, Transform3D>? _referenceTransform;
@@ -49,7 +50,7 @@ internal partial class RuntimeNativeNpc
     internal string? AiError => _aiError;
     internal int SittingState => _sitting == 1 ? 3 : _sitting;
     internal FalloutFormKey? CurrentFurniture => _sitting is 1 or 2 or 4 ? _furnitureReference : null;
-    internal bool Traveling => _travelActive || (_escortPackage is not null || _editorTravel is not null || _dialogueNativeMovement) && Combat?.PackageMoving == true;
+    internal bool Traveling => _travelActive || (_furnitureApproaching || _escortPackage is not null || _editorTravel is not null || _dialogueNativeMovement) && Combat?.PackageMoving == true;
     internal FalloutFormKey? CurrentPackage => _sourceSelectionKnown ? _selectedSourcePackage : _aiPackage?.FormKey;
 
     // These are script-visible engine procedure codes. The currently owned
@@ -69,6 +70,7 @@ internal partial class RuntimeNativeNpc
         ? throw new NotSupportedException("Current AI package code has no admitted native continuation.")
         : _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
         {
+            0 => 0,
             2 => 2,
             6 => 14, // Source PACK travel type -> script-visible Travel package.
             13 => 37, // Fallout script-visible Patrol code (not the PACK type).
@@ -92,6 +94,7 @@ internal partial class RuntimeNativeNpc
             _ => "none",
         },
         furnitureInitialPlacement = _furnitureInitialPlacement,
+        findFurniture = _findFurniture,
         pendingPackage = _pendingPackage?.FormKey.ToString(),
         packageEvents = _packageEvents is null ? null : new
         {
@@ -176,6 +179,7 @@ internal partial class RuntimeNativeNpc
             _aiReferenceState = world.Get(Appearance.Reference!.Value);
             _baseClock = _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
+            _aiReferenceState.QuerySitting = _sittingQuery = () => SittingState;
         }
         _referenceTransform = referenceTransform;
         _packageEvents = new(DispatchPackageEvent);
@@ -351,6 +355,9 @@ internal partial class RuntimeNativeNpc
                 _packageIdles = null;
                 _travelProgress?.Cancel();
                 ClearFurniture();
+                _findFurniture = null;
+                if (_aiReferenceState?.ProcedureCaptureBlocker == FindFurnitureCaptureBlocker)
+                    _aiReferenceState.ProcedureCaptureBlocker = null;
                 ClearDialoguePackage();
                 _patrol = null; _patrolProgress = null;
                 _guardPackage = null; _guardProgress = null;
@@ -366,6 +373,7 @@ internal partial class RuntimeNativeNpc
             _packageIdleSource = selection.Declaration!;
             _packageIdles = new(_packageIdleSource, _idleReplays,
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
+            if (_packageIdleSource.Procedure == 0) { BeginFindFurniture(selected); return; }
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }

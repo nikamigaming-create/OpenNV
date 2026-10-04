@@ -88,6 +88,7 @@ public partial class NativeReferenceEventsAudit : Node
             AddChild(player);
             player.SetPhysicsProcess(false);
             player.SetProcessUnhandledInput(false);
+            events.Player = player;
             async Task Frames()
             {
                 for (var frame = 0; frame < 5; ++frame)
@@ -242,7 +243,7 @@ public partial class NativeReferenceEventsAudit : Node
         var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
         var source = "array_var shared\narray_var alias\nbegin OnTriggerEnter player\nset entered to entered + 1\nend\n" +
             "begin OnTriggerLeave player\nset departed to departed + 1\nend\n" +
-            "begin OnTrigger player\nset contacts to contacts + 1\nend\n" +
+            "begin OnTrigger player\nif player.GetSitting == 0\nset contacts to contacts + 1\nendif\nend\n" +
             "begin OnActivate\nset activations to activations + 1\nSetNthPerkEntryValue1 NativePerk 0 activations\nif activations == 1\n" +
             "shared = Ar_List 10 \"native\"\nalias = shared\nendif\nalias[0] += 1\nend\nbegin OnLoad\nset loads to loads + 1\nend";
         var script = Record("SCPT", 0x500, Local(1, "entered"), Local(2, "departed"), Local(3, "contacts"), Local(4, "activations"), Local(5, "loads"),

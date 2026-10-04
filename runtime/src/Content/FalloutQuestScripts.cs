@@ -202,7 +202,8 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Func<string, FalloutActorValueRead, double>? ReadPlayerActorValue = null,
     Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null,
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
-    Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null);
+    Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
+    Func<FalloutFormKey, int>? Sitting = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -666,6 +667,21 @@ internal sealed partial class FalloutQuestScripts
                         arguments[0].Value.FormKey(_records), host?.CurrentPackage ?? (References ??
                             throw new NotSupportedException("Current-package query has no reference owner.")).CurrentPackage) ? 1 : 0)
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getsitting")
+                return new([], _ => (References ?? throw new NotSupportedException("GetSitting has no reference owner."))
+                    .GetSitting(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
+                        host?.Sitting))
+                { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "gettalkedtopc")
+                return new([], _ => (References ?? throw new NotSupportedException("Talked-to-player query has no reference owner."))
+                    .GetTalkedToPlayer(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))
+                    ? 1 : 0)
+                { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getlinkedref")
+                return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
+                    (References ?? throw new NotSupportedException("Linked-reference query has no reference owner."))
+                    .GetLinkedRef(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))
+                        is { } linked ? _records.RuntimeFormId(linked) : 0), readOnly: true);
             if (parts.Length <= 2 && operation == "getvampire")
                 return new([], arguments =>
                 {

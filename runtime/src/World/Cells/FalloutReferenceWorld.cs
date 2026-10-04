@@ -176,6 +176,7 @@ internal sealed class FalloutReferenceInstance
         throw new NotSupportedException($"Reference {Reference} has no declared variable {index}.");
 
     internal Func<FalloutFormKey?>? QueryCurrentPackage { get; set; }
+    internal Func<int>? QuerySitting { get; set; }
 
     internal void Write(uint index, double value)
     {

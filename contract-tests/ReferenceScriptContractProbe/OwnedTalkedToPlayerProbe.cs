@@ -58,7 +58,7 @@ internal static class OwnedTalkedToPlayerProbe
                 if (reference != subject.FormKey)
                     throw new InvalidDataException("Source talked-to-player predicate queried the caller or another reference.");
                 queries++;
-                return owner.Get(reference).TalkedToPlayer;
+                return owner.GetTalkedToPlayer(reference);
             }
             var actual = FalloutAiPackages.HasTalkedToPlayer(condition, caller.FormKey, Query);
             var passes = FalloutCondition.AllPass([condition], value =>

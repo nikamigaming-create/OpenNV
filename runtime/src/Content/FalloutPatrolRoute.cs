@@ -73,7 +73,7 @@ internal sealed record FalloutPatrolRoute(FalloutFormKey Package, string SourceS
     {
         var links = record.ReadSubrecords().Where(field => field.Signature == "XLKR").ToArray();
         if (links.Length == 0) return null;
-        if (links.Length != 1 || links[0].Data.Length != 4) throw new InvalidDataException("Patrol linked reference has an invalid extent/count.");
+        if (links.Length != 1 || links[0].Data.Length != 4) throw new InvalidDataException("Source linked reference has an invalid extent/count.");
         return record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(links[0].Data.Span));
     }
 
