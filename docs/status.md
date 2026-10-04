@@ -1,21 +1,25 @@
 # Product status
 
-Checked PR131 is merged at synchronized main 3680d17 with all five checks passing.
+Checked PR132 is merged at synchronized main d57b0b2 with all five checks passing.
 The merged classroom runtime reproduces all seven original
 students occupying distinct source seats after the ordinary G.O.A.T. ready choice.
 Find near-reference Furniture searches use enabled/moved placements, source
 ownership, NIF/MNAM reservations, native capsule/NAVM approach and actual KF entry.
 Script and dialogue GetSitting bind the physical player/NPC owner. The selected
 original player desk passes native entry/loop/exit and script-visible phase checks.
-Ordinary desk input completes entry; source50/55/60 opens the first G.O.A.T.
-question. Its scoring result reached unowned SetPlayerTagSkill in the old live build.
-The active codex/player-tag-slots candidate owns four indexed player tags in shared
+Ordinary desk input completes entry and source50/55/60. All ten original G.O.A.T.
+questions and scoring results complete through observed buttons. Source70 and
+physical chair exit precede Brotch's original hand-in dialogue, which enters80
+and reaches the old build's unsupported one-argument SetTagSkills command.
+The merged runtime owns four indexed player tags in shared
 C# reference/result and fallback quest execution. Existing source bonuses update
 live membership once; v34 saves retain holes and exact slot order. Synthetic and
 campaign cold-save checks and all thirteen isolated original TTW scoring stages
-pass. The complete runtime gate passes; the rebuilt ordinary replay has reached
-CG03:10 after the original photo/transition and Dad's conversation. G.O.A.T. completion,
-Vault escape, Megaton and the train/Mojave route remain incomplete.
+pass. The complete runtime gate passed for that merged runtime. The active
+codex/source-tag-menu-command candidate binds the optional initial-selection
+flag, source total count and independent menu/dialogue input retirement.
+Hand-in menu acceptance, Vault escape, Megaton and the train/Mojave route remain
+incomplete.
 
 Shared script GetTalkedToPC and typed GetLinkedRef have synthetic self/explicit/
 postfix, live and cold checks. Original escape history/link declarations and

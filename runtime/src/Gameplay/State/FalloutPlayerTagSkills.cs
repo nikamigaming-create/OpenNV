@@ -39,9 +39,11 @@ internal sealed class FalloutPlayerTagSkills
         _slots[(int)index] = skill;
     }
 
-    internal void AcceptMenu(IReadOnlyList<FalloutNativeSkillIdentity> selection)
+    internal void AcceptMenu(IReadOnlyList<FalloutNativeSkillIdentity> selection, int? requiredCount = null)
     {
-        FalloutNativeTagSkillResolver.Validate(_contract, selection);
+        var count = requiredCount ?? _contract.RequiredCount;
+        if (count is < 1 or > SlotCount) throw new NotSupportedException("Tag acceptance requires an owned count from one through four.");
+        FalloutNativeTagSkillResolver.Validate(_contract with { RequiredCount = count }, selection);
         var snapshot = FromLegacy(selection);
         Array.Copy(snapshot.Slots.ToArray(), _slots, SlotCount);
     }

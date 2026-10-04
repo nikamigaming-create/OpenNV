@@ -15,6 +15,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     private bool _lookingEnabled = true;
     private bool _activationEnabled = true;
     private bool _modalInput;
+    private bool _requestedModalInput;
+    private int _modalInputLeases;
     private Transform3D? _sourceCamera;
     private float _sourceScale = 1;
     internal void ApplySourceScale(float scale)
@@ -123,6 +125,26 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     }
 
     internal void SetModalInput(bool modal)
+    {
+        _requestedModalInput = modal;
+        ApplyModalInput(modal || _modalInputLeases > 0);
+    }
+
+    internal Action AcquireModalInput()
+    {
+        _modalInputLeases++;
+        ApplyModalInput(true);
+        var released = false;
+        return () =>
+        {
+            if (released) return;
+            released = true;
+            _modalInputLeases--;
+            ApplyModalInput(_requestedModalInput || _modalInputLeases > 0);
+        };
+    }
+
+    private void ApplyModalInput(bool modal)
     {
         _modalInput = modal;
         if (modal)

@@ -5,6 +5,23 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutTagSkillMenuChoice(FalloutNativeSkillIdentity Skill, string Description, string? Icon);
 
+internal sealed record FalloutTagSkillMenuRequest(int TotalCount, bool ShowInitialTaggedSkills)
+{
+    internal static FalloutTagSkillMenuRequest Read(IReadOnlyList<string> arguments)
+    {
+        if (arguments.Count is < 1 or > 2 || !int.TryParse(arguments[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) ||
+            count is < 1 or > OpenNV.Runtime.Gameplay.State.FalloutPlayerTagSkills.SlotCount)
+            throw new NotSupportedException("SetTagSkills requires a total count from one through four.");
+        var initial = arguments.Count == 1 ? "1" : arguments[1];
+        return new(count, initial switch
+        {
+            "0" => false,
+            "1" => true,
+            _ => throw new NotSupportedException("SetTagSkills initial selection flag must be zero or one."),
+        });
+    }
+}
+
 // The menu owns a draft. Only the shared acceptance owner changes player tags.
 internal sealed class FalloutTagSkillMenuSelection
 {
@@ -20,13 +37,15 @@ internal sealed class FalloutTagSkillMenuSelection
     internal bool Complete => Remaining == 0;
 
     internal FalloutTagSkillMenuSelection(FalloutPluginStack records, FalloutNativeTagSkillContract contract,
-        IReadOnlyList<FalloutNativeSkillIdentity> current, Func<FalloutNativeSkillIdentity, float> liveValue)
+        IReadOnlyList<FalloutNativeSkillIdentity> current, Func<FalloutNativeSkillIdentity, float> liveValue,
+        bool showInitialTaggedSkills = true)
     {
-        FalloutNativeTagSkillResolver.Validate(contract, current, allowUnspent: true);
+        FalloutNativeTagSkillResolver.Validate(contract with { RequiredCount = OpenNV.Runtime.Gameplay.State.FalloutPlayerTagSkills.SlotCount }, current, allowUnspent: true);
         if (contract.RequiredCount <= 0 || contract.RequiredCount > contract.Skills.Count ||
             contract.Skills.Select(skill => skill.RuntimeFormId).Distinct().Count() != contract.Skills.Count)
             throw new InvalidDataException("Tag menu count or skill identities are invalid.");
-        _records = records; _contract = contract; _initial = [.. current]; _selected = [.. current]; _liveValue = liveValue;
+        _records = records; _contract = contract; _initial = [.. current];
+        _selected = showInitialTaggedSkills ? [.. current] : []; _liveValue = liveValue;
         Choices = contract.Skills.Select(skill =>
         {
             var record = records.GetEffective(records.RuntimeFormKey(skill.RuntimeFormId));

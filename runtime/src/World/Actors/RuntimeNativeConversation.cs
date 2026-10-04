@@ -143,7 +143,8 @@ internal partial class RuntimeNativeConversation : Node
         {
             ReleaseFacing();
             _layer?.QueueFree(); _layer = null; _menu = null;
-            _player.SetModalInput(false); Input.MouseMode = Input.MouseModeEnum.Captured;
+            _player.SetModalInput(false);
+            Input.MouseMode = _player.ModalInput ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
             var completed = _completed; _completed = null; completed?.Invoke();
             return;
         }
@@ -171,7 +172,7 @@ internal partial class RuntimeNativeConversation : Node
         ReleaseFacing();
         _layer?.QueueFree(); _layer = null; _menu = null;
         _player.SetModalInput(false);
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+        Input.MouseMode = _player.ModalInput ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
         GD.PushError($"OPENNV_NATIVE_CONVERSATION_DIVERGENCE speaker={_speaker}: {error.Message}");
     }
 }
