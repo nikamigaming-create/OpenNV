@@ -7,6 +7,16 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-cell-lighting"])
+{
+    CellLightingContracts.Run();
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-cell-lighting")
+{
+    CellLightingContracts.Owned(args[1], args[2], args[3..]);
+    return;
+}
 if (args.Length >= 7 && args[0] == "--audit-quest-clock")
 {
     QuestScriptClockOwnedProbe.Run(args[1], args[2], args[3], args[4],
@@ -81,6 +91,7 @@ if (args is ["--script-contracts"]) return;
 ExteriorLodProbe.Run();
 LoadOrderContracts.Run();
 WeatherMotionProbe.Run();
+CellLightingContracts.Run();
 WindForceProbe.Run();
 ContentWorkerProbe.Run();
 

@@ -6,8 +6,15 @@ using OpenNV.Runtime.Formats.Gamebryo;
 if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInteractionProbe.Run(args[1], args[2], args[3..]);
 if (args is ["cell-review", var reviewSource, var reviewSnapshot]) return CellReview.Run(reviewSource, reviewSnapshot);
 if (args.Length >= 5 && args[0] == "weapon-loadout") return WeaponLoadout.Run(args[1], args[2], args[3], args[4..]);
+if (args.Length >= 6 && args[0] == "quest-graph" && args[3] == "--mod")
+{
+    var auditSelection = new FalloutModStackSelection([new(args[4], args[5], args[6..])]).Resolve(args[1]);
+    using var auditContent = auditSelection.OpenSource();
+    using var auditRecords = FalloutPluginStack.Load(auditContent.PluginSources);
+    return QuestGraphAudit.Run(auditRecords, auditContent, args[2]);
+}
 
-if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[0] is not ("route" or "classic-items" or "classic-campaign-start" or "classic-script" or "classic-item-systems" or "classic-inventory" or "classic-resource" or "classic-frm" or "classic-assets" or "classic-scenery" or "classic-movement" or "classic-player" or "cells" or "exterior" or "actors" or "script" or "record" or "settings" or "dialogue" or "replay" or "lifecycle" or "corpus" or "resources" or "resource" or "nif" or "menu"))
+if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[0] is not ("route" or "classic-items" or "classic-campaign-start" or "classic-script" or "classic-item-systems" or "classic-inventory" or "classic-resource" or "classic-frm" or "classic-assets" or "classic-scenery" or "classic-movement" or "classic-player" or "cells" or "exterior" or "actors" or "script" or "record" or "settings" or "dialogue" or "replay" or "lifecycle" or "corpus" or "quest-graph" or "resources" or "resource" or "nif" or "menu"))
 {
     Console.Error.WriteLine("Development only; reads owned files in place.\n" +
         "cells <installation-or-source-stack> <CELL editor ID or name fragment> [...]\n" +
@@ -35,6 +42,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "replay <installation-or-source-stack> <scenario.json>\n" +
         "lifecycle <installation-or-source-stack> <CELL editor ID> [...] (or --all)\n" +
         "corpus <installation-or-source-stack> <fresh-output-directory>\n" +
+        "quest-graph <installation-or-source-stack> <fresh-output-directory> [--mod <id> <root> <dependency-root> ...]\n" +
         "resources <installation-or-source-stack> <logical-directory>\n" +
         "resource <installation-or-source-stack> <logical-path> [private-output-file]\n" +
         "nif <installation-or-source-stack> <logical-path>\n" +
@@ -266,6 +274,7 @@ if (args[0] == "record")
 if (args[0] == "actors") return ActorInventory.Run(records, args[2..]);
 if (args[0] == "route") return WorldRoute.Run(records, args[2]);
 if (args[0] == "corpus") return CorpusInventory.Run(records, content, args[2]);
+if (args[0] == "quest-graph") return QuestGraphAudit.Run(records, content, args[2]);
 if (args[0] == "replay") return ReferenceReplay.Run(records, args[2]);
 if (args[0] == "lifecycle") return ReferenceReplay.Lifecycle(records, args[2..]);
 if (args[0] == "script")

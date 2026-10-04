@@ -16,6 +16,11 @@ internal sealed partial class FalloutReferenceWorld
     private AccessSource Access(FalloutFormKey reference)
     {
         _ = Get(reference); // Require the actual placed instance, not its base.
+        return AccessRecord(reference);
+    }
+
+    private AccessSource AccessRecord(FalloutFormKey reference)
+    {
         if (_accessSources.TryGetValue(reference, out var existing)) return existing;
         var source = records.GetEffective(reference);
         var access = ReadAccess(source);
@@ -50,9 +55,18 @@ internal sealed partial class FalloutReferenceWorld
 
     private string LockSourceHash(FalloutFormKey reference, AccessSource source)
     {
-        if (TerminalAccess(reference) is not { } terminal) return source.Sha256;
-        return Convert.ToHexString(SHA256.HashData(Convert.FromHexString(source.Sha256)
-            .Concat(Convert.FromHexString(terminal.Sha256)).ToArray()));
+        if (TerminalAccess(reference) is { } terminal)
+            return Convert.ToHexString(SHA256.HashData(Convert.FromHexString(source.Sha256)
+                .Concat(Convert.FromHexString(terminal.Sha256)).ToArray()));
+        if (!AccessField(source, "XLOC").IsEmpty || AccessField(source, "XTEL").IsEmpty) return source.Sha256;
+        // A source-less teleport lock is admitted by the absence of a lock on
+        // both winning sides. Retain both declarations and master contexts.
+        var linked = ReciprocalDoorSource(source);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        hash.AppendData(Encoding.UTF8.GetBytes("opennv-linked-door-access/v1"));
+        hash.AppendData(Convert.FromHexString(source.Sha256));
+        hash.AppendData(Convert.FromHexString(linked.Sha256));
+        return Convert.ToHexString(hash.GetHashAndReset());
     }
 
     private LockDeclaration TerminalLock(AccessSource terminal, AccessSource reference)
@@ -86,14 +100,58 @@ internal sealed partial class FalloutReferenceWorld
         if (field.IsEmpty)
         {
             if (!AccessField(source, "XTEL").IsEmpty)
-                throw new NotSupportedException("Linked-door lock inheritance requires its effective lock owner.");
+            {
+                var linked = ReciprocalDoorSource(source);
+                var linkedLock = AccessField(linked, "XLOC");
+                if (!linkedLock.IsEmpty)
+                {
+                    _ = ReadReferenceLock(linked, linkedLock);
+                    throw new NotSupportedException("Linked-door source lock inheritance requires its effective lock owner.");
+                }
+                if (_instances.TryGetValue(linked.Record.FormKey, out var opposite) && opposite.LockState is not null)
+                    throw new NotSupportedException("Linked-door dynamic lock inheritance requires its effective lock owner.");
+            }
             return null;
         }
+        return ReadReferenceLock(source, field);
+    }
+
+    private LockDeclaration ReadReferenceLock(AccessSource source, ReadOnlyMemory<byte> field)
+    {
         if (field.Length is not (12 or 20)) throw new InvalidDataException("Reference lock has an invalid extent.");
         var key = source.Record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Span[4..]));
         if (key is { } form && records.GetEffective(form).Signature != "KEYM")
             throw new InvalidDataException("Reference lock key is not a KEYM form.");
         return new(field.Span[0], key, field.Span[8]);
+    }
+
+    private AccessSource ReciprocalDoorSource(AccessSource source)
+    {
+        var destination = AccessDoorLink(source);
+        if (destination == source.Record.FormKey) throw new InvalidDataException("XTEL door links to itself.");
+        // Source inspection must not create a second placed instance. In
+        // particular, cold restoration may not have reached that snapshot yet.
+        var linked = AccessRecord(destination);
+        if (AccessDoorLink(linked) != source.Record.FormKey)
+            throw new NotSupportedException("Nonreciprocal linked-door access requires its effective lock owner.");
+        return linked;
+    }
+
+    private FalloutFormKey AccessDoorLink(AccessSource source)
+    {
+        if (source.Record.Signature != "REFR" || FalloutCellSceneReader.ParentCell(source.Record) is not { } cell ||
+            records.GetEffective(cell).Signature != "CELL" ||
+            OptionalAccessForm(source, "NAME") is not { } basis || records.GetEffective(basis).Signature != "DOOR")
+            throw new InvalidDataException("XTEL access owner is not a placed DOOR in a source CELL.");
+        var field = AccessField(source, "XTEL");
+        if (field.Length != 32) throw new InvalidDataException("XTEL access link has an invalid extent.");
+        for (var offset = 4; offset < 28; offset += sizeof(float))
+            if (!float.IsFinite(BinaryPrimitives.ReadSingleLittleEndian(field.Span[offset..])))
+                throw new InvalidDataException("XTEL access link has a non-finite transform.");
+        if (BinaryPrimitives.ReadUInt32LittleEndian(field.Span[28..]) != 0)
+            throw new NotSupportedException("XTEL access flags require their transition owner.");
+        return source.Record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Span)) ??
+            throw new InvalidDataException("XTEL access link has a null destination.");
     }
 
     private (FalloutReferenceLockState? State, LockDeclaration? Source) EffectiveLock(FalloutFormKey reference)

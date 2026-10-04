@@ -1,65 +1,48 @@
 # Product status
 
-The active Escape candidate owns directional faction relations/save v38, reached
-actor-value/spatial AI queries, Travel weapon visibility and scripted radio links
-with independent station predicates/remote voice identity. Focused contracts and
-the original five-line PA audit pass. Ordinary native input now completes the
-wake-up/control handoff, Amata's conversation and Escape stage 18. The independent
-dialogue target trigger prevents premature guard speech from the player bed.
-Loading has an animated phase/elapsed indicator and frame-budgeted cell assembly;
-the bot bounds stalled control waits and releases input. The updated full delivery
-gate and selected owned audit pass. Source door lock inheritance, actor-script/procedure failures and
-missing presentation remain active blockers; vault exit and Megaton are unreached.
-Compiled SCDA execution and real x86 native-plugin compatibility are explicit
-architectural requirements. See [current work](current-work.md).
+Ordinary TTW input reaches Escape stage 18 inside Vault 101. Directional faction
+relations/save v38, reached actor-value/spatial queries, Travel weapon visibility,
+scripted radio links and the independent dialogue target trigger are merged in
+checked PR 141. Loading displays an animated phase/elapsed indicator and yields
+during cell assembly; the bot releases input after a bounded stalled-control wait.
+Vault exit, Megaton and the train/Mojave route remain unreached.
 
-Checked PR 140 is merged at synchronized main 3604f8e with all five checks passing.
-Main retains winning terminal access, queued actor package events
-and source-owned Furniture/failed-selection/idle/settled-Dialogue continuations in
-schema v36. Synthetic checks, original terminal locking/cold validation and four
-isolated owned native cold/resumed procedure checks pass. The reached-save native
-audit verifies exact state through product attachment order for three stopped
-NPCs, a retained creature assignment and the occupied teacher. See
-[actor procedure checkpoints](actor-procedure-checkpoints.md).
+The current source block fixes reciprocal no-XLOC door access with cold validation,
+legacy NIF field gates and mixed-axis texture addressing, and 36-byte CELL lighting
+without inventing absent fog power. The unchanged rack model builds in native
+Godot; source shaped-phantom contact publication remains unbound. The complete
+Release/Debug, analyzer/format, contract, launcher and native Godot gate passes.
+Selected owned door, NIF and lighting checks pass. Actual door traversal and
+matched retail presentation remain independent verification lanes.
 
-Ordinary input completes all ten G.O.A.T. questions, scoring, original hand-in/tag
-acceptance and Brotch's source desk occupation. A genuine complete stage80
-checkpoint is written; a separate cold load reaches that state without replaying
-the exam. Quests, inventory, tags and new procedure owners match. The merged runtime
-corrects the older native pose/pre-selection assignment differences found by that
-comparison. Menu clock timing remains a separate evidence lane. The checkpoint
-block's complete gate and diff check pass. [Current work](current-work.md) owns the
-exact native continuation.
+The read-only whole-stack audit discovers embedded programs across every winning
+record signature, visits inactive source arms and retains condition/stage edges.
+The selected stack includes 918 quests, 27,827 source programs and 157,055 conditions.
+It accounts for 221,586 statements and both outcomes of 41,357 predicates without
+creating world instances or consuming gameplay. Ten parser failures, one local
+binding failure, 3,990 expression declaration/context failures and 84,968
+uninspected legacy statements remain visible. Coverage does not establish reachable
+state permutations or authoritative compiled execution. See [script coverage](quest-graph-audit.md).
 
-Earlier ordinary hallway departure completed CG03:100 and all32 CG04:0 setup
-commands, including radio state, terminal locking and the bed transition. Escape
-GameMode stops at missing GetInCell after consumed timer writes. The genuine
-post-hand-in checkpoint allows fresh execution after query support. The active
-merged runtime shares GetInCell across scripts, dialogue and recipe conditions;
-synthetic and unchanged owned Escape GameMode checks pass. The full gate passes;
-ordinary saved input completes the classroom departure, CG03:100 and all32
-CG04:0 commands. Escape GameMode completes27 invocations and enters stage2,
-where the generic result-condition flags/run-on guard refuses its first entry.
-No stage2 result command executes in that prior build. The active candidate binds
-result scope to the existing inventory owner and retains cumulative death counts
-in v37 with v36 read compatibility. Focused full-reader and unchanged owned
-stage2/Amata predicate/cold-count checks pass. The full gate passes; ordinary
-saved input completes all seven stage2 commands and reaches stage3. Its first
-two commands ran before Amata's source package POBA topic was refused. The new
-package-topic candidate passes synthetic, selected owned and complete runtime
-gates. Its ordinary cold-loaded run binds the original wake-up audio/LIP and
-completes the topic once, completes stages3,4,10 and8 and reaches 18. SetAlly and
-a later StartRadioConversation call remain unowned. Clearing a consumed-prefix
-fault is not recovery. Vault escape, Megaton and the authored
-train/Mojave route remain open.
+The full vault source audit includes 10 interiors and 7,155 references. It retains
+232 reference issues and 33 resource failures in overlapping lanes, plus the
+selected native actor faults. Parent-controlled lights, source light models,
+wall-screen controllers, script commands and NPC procedures need their general
+owners. Static geometry and source NAVM accounting do not prove supported floors.
 
-The merged runtime shares indexed tags/menu input retirement, physical furniture
-activation/GetSitting, station broadcast mode and ordinary source NAVM/capsule
-travel. Complete furniture approach/conversation saves, projector composition,
-full radio playback and NPC idle behavior remain incomplete. Retail recording/
-playback, matched comparisons, VATS, all JAM/MCM modules, native plugin interfaces
-and physical headset acceptance remain required. No campaign or parity completion
-is claimed. All 36 broad requirements remain open at their full scope.
+Ordinary input completes all ten G.O.A.T. questions, scoring, original tag
+acceptance and Brotch's source desk occupation. The genuine complete stage-80
+checkpoint cold-loads without replaying the exam. A separate genuine post-Amata
+checkpoint is retained; its cold continuation still needs verification.
+A headless genuine FNV-save XR check passes 27 independent grip/aim poses and
+held-weapon muzzle alignment. No guards were shot in that check. Physical headset
+and final-eye acceptance remain separate requirements.
+
+Compiled SCDA execution, real x86 native-plugin compatibility, VATS, all JAM/MCM
+modules, original mod outcomes and retail recording/playback comparisons remain
+active requirements. All 36 broad requirements remain open at their full scope.
+No campaign, whole-level or matched-retail parity completion is claimed.
+[Current work](current-work.md) owns exact blockers and continuation.
 
 Older component evidence below is bounded by its stated build and fixture; it
 is not the current campaign continuation.

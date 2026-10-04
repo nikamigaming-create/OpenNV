@@ -12,6 +12,11 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--owned-models", var modelGame, var modelMod, var modelRoot, .. var modelArguments])
+            {
+                ExerciseTextureAddressing(); ExerciseOwnedModels(modelGame, modelMod, modelRoot, modelArguments);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--model-textures"])
             {
                 ExerciseModelTextures(); GetTree().Quit(); return;
@@ -104,6 +109,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseManagedMorph();
             ExerciseParticleChannels();
             ExerciseDdsImages();
+            ExerciseTextureAddressing();
             ExerciseHeadTracking();
             ExerciseAuthoredDecalSurfaces();
             ExerciseDormantEnvironmentMask();

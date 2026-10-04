@@ -41,6 +41,7 @@ internal static class NativeNifEffectMaterial
         {{ColorFallbackShader}}
         {{NativeNifTextureTransform.ShaderSource}}
         {{NativeNifBillboard.ShaderSource}}
+        __ADDRESSING__
         void vertex() {
             if (source_billboard_mode >= 0)
                 MODELVIEW_MATRIX = VIEW_MATRIX * owned_billboard(MODEL_MATRIX, INV_VIEW_MATRIX);
@@ -66,7 +67,7 @@ internal static class NativeNifEffectMaterial
             return false;
         }
         void fragment() {
-            vec4 sampled = source_has_texture ? texture(source_texture, UV) : vec4(1.0);
+            vec4 sampled = source_has_texture ? __SAMPLE__ : vec4(1.0);
             float alpha = sampled.a * source_color_multiplier.a;
             if (vertex_alpha_enabled) alpha *= COLOR.a;
             alpha *= source_view_opacity;
@@ -88,6 +89,8 @@ internal static class NativeNifEffectMaterial
         bool doubleSided)
     {
         var state = FalloutNifAlphaState.ForNoLighting(source, alpha);
+        var axes = FalloutNifTextureAddressing.WrapAxes(source.TextureClampMode);
+        var mixedAddressing = axes.U != axes.V;
         var fog = FalloutNifFogBlend.Read(alpha?.Flags);
         var useFalloff = (source.ShaderFlags & (1u << 6)) != 0;
         var falloff = useFalloff ? FalloutNifAngleFalloff.Read(source) : new(1, 0, 1, 1);
@@ -109,7 +112,10 @@ internal static class NativeNifEffectMaterial
                 .Replace("__CULL__", doubleSided ? "cull_disabled" : "cull_back")
                 .Replace("__ALPHA_WRITE__", state.Blend == FalloutNifBlendMode.Opaque ? "" :
                     state.Blend is FalloutNifBlendMode.AddOne or FalloutNifBlendMode.Replace ? "ALPHA = 1.0;" : "ALPHA *= alpha;")
-                .Replace("__REPEAT__", FalloutNifTextureAddressing.RepeatForGodot(source.TextureClampMode) ? "repeat_enable" : "repeat_disable")
+                .Replace("__REPEAT__", axes.U || axes.V ? "repeat_enable" : "repeat_disable")
+                .Replace("__ADDRESSING__", mixedAddressing ? FalloutNifTextureAddressing.MixedTrilinearShaderSource : "")
+                .Replace("__SAMPLE__", mixedAddressing ?
+                    $"owned_mixed_trilinear(source_texture, UV, {source.TextureClampMode})" : "texture(source_texture, UV)")
             },
         };
         if (texture is not null) result.SetShaderParameter("source_texture", texture);
@@ -135,6 +141,9 @@ internal static class NativeNifEffectMaterial
         result.SetMeta("opennv_nif_alpha_owner", state.Blend == FalloutNifBlendMode.SourceAlpha &&
             (alpha is null || (alpha.Flags & 1) == 0) ? "no-lighting-falloff-pass" : "source-alpha-property");
         result.SetMeta("opennv_nif_angle_falloff", useFalloff);
+        result.SetMeta("opennv_nif_texture_clamp_mode", source.TextureClampMode);
+        result.SetMeta("opennv_nif_sampler_owner", mixedAddressing ?
+            "independent-axis-bilinear-wrap;per-mip-clamp;source-derivative-trilinear" : "native-uniform-axis-trilinear");
         if (useFalloff) result.SetMeta("opennv_nif_falloff_owner", "vertex-view-normal-and-position;smooth-cosine-opacity");
         return result;
     }

@@ -333,6 +333,13 @@ if (args.Length >= 4 && args[0] == "--audit-terminal-access")
     OwnedTerminalAccessProbe.Run(args[1], args[2], args[3], args[4..]);
     return;
 }
+if (args.Length >= 8 && args[0] == "--audit-linked-door-access")
+{
+    OwnedLinkedDoorAccessProbe.Run(args[1], args[2], args[3], args[4],
+        uint.Parse(args[5], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture),
+        args[6], uint.Parse(args[7], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture), args[8..]);
+    return;
+}
 if (args is ["--reference-access-contracts"])
 {
     ReferenceAccessContracts.Run();
