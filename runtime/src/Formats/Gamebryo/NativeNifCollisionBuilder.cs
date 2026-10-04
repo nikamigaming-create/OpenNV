@@ -253,7 +253,7 @@ internal static class NativeNifCollisionBuilder
         throw new NotSupportedException("Hit shape has no source Havok material binding.");
     }
 
-    private static Transform3D BodyTransform(FalloutNifRigidBody body, float unitsToMetres)
+    internal static Transform3D BodyTransform(FalloutNifRigidBody body, float unitsToMetres)
     {
         if (body.Block.TypeName == "bhkRigidBody")
             return Transform3D.Identity;
@@ -272,7 +272,7 @@ internal static class NativeNifCollisionBuilder
             Convert(body.Translation, unitsToMetres));
     }
 
-    private static Transform3D MatrixTransform(FalloutNifConvexTransformShape shape, float unitsToMetres)
+    internal static Transform3D MatrixTransform(FalloutNifConvexTransformShape shape, float unitsToMetres)
     {
         var value = shape.MatrixRowMajor;
         var rotation = new[]

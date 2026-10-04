@@ -9,5 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../runtime/OpenNV.csproj" />
+    <Compile Include="../../tools/OpenNV.DevelopmentLab/CellGraphAudit*.cs" Link="CellGraphAudit/%(Filename)%(Extension)" />
+    <Compile Include="../../tools/OpenNV.DevelopmentLab/CellReview.cs" Link="CellGraphAudit/CellReview.cs" />
   </ItemGroup>
 </Project>

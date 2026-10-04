@@ -28,11 +28,15 @@ do not prove a missing live command owner. Seven compiled-only programs and all
 Numeric/loop state and reachable combinations are not exhaustively certified.
 
 The whole-vault source audit includes all 10 interiors and 7,155 references,
-including the empty legacy-lighting cell. It resolves 22 directed portals,
-116 actors, 623 unique NIFs, 16 KFs, 795 DDSs and 19 NAVMs. All source cell reports
-complete. The latest same-build source rerun retains 101 reference
-admission/presentation issues, down from 232, and 33 resource failures; these
-lanes overlap. Whole-cell native presentation and supported-floor coverage remain
+including the empty legacy-lighting cell. The canonical `cell-graph` command
+resolves 22 directed portals, 116 actors, 625 unique NIFs, 16 KFs, 795 DDSs and
+19 NAVMs. All source cell reports complete and retain every effective reference.
+The latest source rerun retains 101 reference admission/presentation issues,
+down from 232, 34 resource failures and nine package error bindings; these lanes
+overlap. Expanded LIGH model inspection exposes the previously omitted
+NiLightColorController. Corrected placed-root math leaves 51 NAVM centroid
+projections without a packed-triangle/box hit; this is not a native floor-hole
+claim. Whole-cell native presentation and supported-floor coverage remain
 incomplete. The retained campaign snapshot is older than this source audit.
 
 The unchanged rack model now decodes and builds in native Godot with independent
@@ -61,8 +65,8 @@ reported unsupported lanes rather than claiming campaign or retail parity.
 ## Next owners and outcome
 
 Use the completed audit to fix the complete reached level before further ordinary
-play. Promote the ten-cell source audit into the canonical lab so the remaining
-denominator is repeatable. Its 58 light refusals comprise 18 source-model/controller
+play. Use the canonical source audit's repeatable denominator and ordinary saved
+continuation to select the next repair. Its 58 light refusals comprise 18 source-model/controller
 owners, 27 scales and 13 flags. Source LIGH model nodes and controllers need their
 general owner; model-bearing lights now refuse explicitly instead of silently
 dropping those inputs.
@@ -97,8 +101,9 @@ Amata's conversation. Its cold continuation is not yet verified; retain both slo
 Never run the exam-driving helper. Private source readers, saves and diagnostics
 stay outside public Git; owned inputs are read-only.
 
-Current source audit: tmp/development-lab/vault101-cell-audit-light-screen.
+Current source audit: tmp/development-lab/vault101-cell-graph-canonical.
 Selected native proofs: vault101-light-parents-native.private.json and
 owned-vault-wall-screen-20261004.private.log under tmp/development-lab; their
-runtime build identity matches the source rerun. Combat ownership contracts remain
-private there and do not become runtime inputs.
+runtime build identity 992bf778 predates the current source audit e0451cda.
+The retained campaign snapshot remains the separate 5eda3093 build/time lane.
+Combat ownership contracts remain private there and do not become runtime inputs.
