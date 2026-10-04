@@ -12,8 +12,8 @@ their stated contracts.
 
 ## Baseline and candidate
 
-Checked PR132 is merged at synchronized origin/main d57b0b2 with all five checks
-passing. The active branch is codex/source-tag-menu-command. Primary owns live
+Checked PR133 is merged at synchronized origin/main 2fa0e10 with all five checks
+passing. The active branch is codex/radio-broadcast-state. Primary owns live
 input, implementation and publication. Recording is off.
 
 The merged runtime shares four indexed player tag slots across C# reference,
@@ -22,7 +22,7 @@ v34 saves retain holes and exact indices. v33 membership migrates in stored orde
 All thirteen original TTW scoring stages, synthetic script/bonus checks and cold
 save contracts pass. The integrated gate passed for the merged runtime.
 
-The active candidate accepts SetTagSkills with its optional initial-selection
+The merged runtime accepts SetTagSkills with its optional initial-selection
 flag and authored total count. Hiding initial markers retains accepted tags for
 correct live bonus subtraction. The source-requested menu pauses gameplay and
 owns a player modal lease independently of the dialogue that opened it. Closing
@@ -31,7 +31,14 @@ its own lease. Selected menu contracts and the original thirteen scoring stages
 and hand-in declaration pass. The native menu audit passes requested counts,
 optional markers, overlapping leases and nested dialogue retirement with unchanged
 source XML. Its inspected temporary PNG has been deleted. The complete runtime
-gate passes. A rebuilt ordinary replay is active from the unchanged checkpoint.
+gate passes. Ordinary replay has passed the reached hand-in and classroom exit.
+
+The active candidate owns SetBroadcastState/GetBroadcastState through shared
+per-reference continuous/scripted radio state. Synthetic source, fallback,
+independence and atomic cold checks pass. The original CG04 stage-zero station
+command passes an isolated owned-data audit with unchanged source bytes. v35
+retains the override while v34/v33 remain readable. The complete runtime gate
+passes. Ordinary replay through the previously failed Escape opening is active.
 
 Find Furniture shares enabled/moved placements, source ownership, exclusive
 NIF/MNAM reservations, source NAVM/native capsule approach and KF entry. All
@@ -54,11 +61,15 @@ activation complete physical entry and original stages50/55/60.
 All ten original G.O.A.T. questions have been answered through their observed
 buttons. The original scoring scripts complete, source70 is reached, and
 ordinary chair exit returns the player to the floor. Brotch's original hand-in
-dialogue enters80, then the old live build fails on the one-argument SetTagSkills
-command. That process was quit through the ordinary menu. The current candidate
-must replay and pass this reached menu transition before continuing escape.
+dialogue enters80 and its original tag-menu acceptance closes both menu and
+dialogue with player input restored. Source NAVM/native capsule movement toward
+the observed hallway door crosses the original classroom exit trigger. CG03:90
+completes;100 enters the original Escape quest CG04:0 and retains a nested failure
+at RadioVault101REF.SetBroadcastState0. Its consumed enable/quest effects cannot
+be replayed in that process. The radio candidate requires a fresh ordinary replay.
 
-Vault escape, Megaton, Union Station and Mojave remain unreached. No campaign or
+The classroom is exited; Vault escape, Megaton, Union Station and Mojave remain
+unreached. No campaign or
 parity completion is claimed. Active conversations/procedures and pending nested
 results still block saving. A settled post-photo cold checkpoint is not verified;
 the older partial stage-100 diagnostic omitted a nested frame and must not be
@@ -66,13 +77,21 @@ used as a completed checkpoint.
 
 ## Next executable outcome
 
-Verify the source tag-menu command and modal retirement, replay the ten original
-answers and hand-in, then continue Vault escape, Megaton and the authored train
+Verify the radio state/save gate, replay the original hand-in and physical
+classroom departure, then continue Vault escape, Megaton and the authored train
 journey. Repair the next actually reached general owner and obtain a genuine
 settled checkpoint with cold Continue proof. Complete procedure, conversation
 and nested-result saving remain required. VATS, full JAM and native plugin
 interfaces remain incomplete. Run selected owned audits, the complete runtime
 gate and diff check before a checked PR and synchronized main.
+
+The user's reported projector darkness, teacher desk return and NPC fidgeting
+remain active presentation/AI fixes. Brotch selects the original desk package,
+but its native capsule search stops about a metre short of the entry root.
+An earlier source Travel rejects Head-Tracking Off. The slide NIF declares four
+flat no-lighting planes with multiplicative alpha blending; its wall composition
+must be traced through actual source transforms/materials, without brightness
+substitutions or location-specific decals. No visual parity claim is established.
 
 ## Private continuation
 

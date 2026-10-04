@@ -9,6 +9,7 @@ internal static class RadioContracts
 {
     internal static void Run()
     {
+        RadioBroadcastContracts.Run();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-radio-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try

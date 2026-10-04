@@ -183,6 +183,11 @@ if (args.Length >= 6 && args[0] == "--audit-radio-off")
     OwnedRadioOffProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);
     return;
 }
+if (args.Length >= 6 && args[0] == "--audit-radio-broadcast")
+{
+    OwnedRadioBroadcastProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);
+    return;
+}
 if (args.Length >= 6 && args[0] == "--audit-player-reset")
 {
     OwnedPlayerResetProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);

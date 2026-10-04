@@ -1454,6 +1454,20 @@ try
         "Campaign cold restore compacted the fourth tag slot or imposed the creation-menu count on script tags.");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with { TagSkillSlots = null }), "indexed player tag");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with { TagSkills = [] }), "membership projection");
+    FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with { Schema = FalloutNativeCampaignSave.IndexedTagSchema });
+    var v34Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(JsonSerializer.Serialize(v34Restore.State.TagSkillSlots) == JsonSerializer.Serialize(indexedSave.TagSkillSlots) &&
+        FalloutNativeCampaignSave.WithWorldState(v34Restore.State, referenceSave.ActiveCell,
+            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The v34 checkpoint lost indexed tags or failed to upgrade broadcast-state saving.");
+    var v34Bytes = File.ReadAllBytes(syntheticSavePath);
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with
+    {
+        Schema = FalloutNativeCampaignSave.IndexedTagSchema,
+        References = [new(new("Cell.esm", 1), referenceSave.ActiveCell, new("Cell.esm", 2), null, null, new Dictionary<uint, double>(), null, BroadcastState: false)]
+    }), "Legacy campaign schema has mutable radio broadcast state");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(v34Bytes), "Rejected legacy broadcast state replaced a valid save.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.UnindexedTagSchema, TagSkillSlots = null });
     var unindexedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

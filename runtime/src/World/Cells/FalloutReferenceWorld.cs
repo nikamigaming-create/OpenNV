@@ -22,7 +22,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutReferenceOwnershipOverride? OwnershipOverride = null,
     IReadOnlyList<FalloutPackageStart>? PackageStarts = null, FalloutPackageEventIdle? PackageIdle = null,
     FalloutFormKey? TalkingActivatorActor = null, FalloutActorPackageAssignment? PackageAssignment = null,
-    FalloutActorPackageBindingFailure? PackageBindingFailure = null)
+    FalloutActorPackageBindingFailure? PackageBindingFailure = null, bool? BroadcastState = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -112,6 +112,7 @@ internal sealed class FalloutReferenceInstance
     internal bool Restrained { get; set; }
     internal bool PlayerTeammate { get; set; }
     internal bool TalkedToPlayer { get; set; }
+    internal bool? BroadcastState { get; set; }
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
     internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
@@ -210,7 +211,7 @@ internal sealed class FalloutReferenceInstance
             TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
             CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
             PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor,
-            CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure);
+            CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure, BroadcastState);
     }
 }
 
@@ -444,6 +445,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.DoorOpen = snapshot.DoorOpen;
             instance.DoorMotion = snapshot.DoorMotion;
             validated.RestoreAccess(instance, snapshot);
+            if (snapshot.BroadcastState is { } broadcast)
+                validated.SetBroadcastState(snapshot.Reference, broadcast ? 1 : 0);
             if (snapshot.Placement is { } placement)
             {
                 if (records.GetEffective(placement.Cell).Signature != "CELL") throw new InvalidDataException("Saved placement has no winning CELL.");
