@@ -171,6 +171,7 @@ internal static class ActorSourceContracts
             }
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
             DialoguePackageQueryContracts.Run(directory, records, world, speaker);
+            CombatAlarmContracts.Run(records);
             UnloadedActorPackageContracts.Run(records);
             var choices = new HashSet<FalloutFormKey>();
             for (ulong seed = 0; seed < 32; seed++)

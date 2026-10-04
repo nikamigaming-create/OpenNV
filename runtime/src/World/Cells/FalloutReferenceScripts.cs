@@ -31,7 +31,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, string, FalloutActorValueRead, double>? ReadActorValue = null,
     Action<FalloutFormKey, string, string, double>? ChangeActorValue = null,
     FalloutInventoryCommands? Inventory = null, FalloutChallenges? Challenges = null,
-    Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null);
+    Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
+    Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -556,6 +557,15 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                     FalloutReferenceIdentity.Matches(records, Target(), Reference(arguments[0].Identifier!)) ? 1 : 0)
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getiscurrentpackage")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    FalloutAiPackages.IsCurrentPackage(records, Target(), arguments[0].Value.FormKey(records),
+                        host.CurrentPackage ?? world.CurrentPackage) ? 1 : 0)
+                { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "isinlist")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    FalloutReferenceIdentity.IsInList(records, Target(), arguments[0].Value.FormKey(records)) ? 1 : 0)
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getvampire")
                 return new([], arguments =>
                 {
@@ -892,7 +902,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                         arguments.Count == 4 ? checked((int)Index(Number(arguments[3]))) : 0);
                     break;
                 case "resethealth" when arguments.Count == 0:
-                    world.ResetHealth(target);
+                    if (records.RuntimeFormId(target) == 0x14)
+                        (host.ResetPlayerHealth ?? throw new NotSupportedException("Player ResetHealth has no shared vitals owner."))();
+                    else world.ResetHealth(target);
+                    break;
+                case "stopcombatalarmonactor" or "scaonactor" when arguments.Count == 0:
+                    world.StopCombatAlarmOnActor(target);
                     break;
                 case "matchrace" when arguments.Count == 1:
                     world.MatchRace(target, Reference(arguments[0]));
@@ -966,6 +981,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "resetpipboymanager" when parts.Length == 1 && arguments.Count == 0:
                     host.Apply(new(FalloutReferenceEffectKind.PipBoyReset, source));
+                    break;
+                case "pipboyradiooff" when parts.Length == 1 && arguments.Count == 0:
+                    world.PipBoyRadio.Off();
                     break;
                 case "sethardcore" when parts.Length == 1 && arguments.Count == 1:
                     host.Apply(new(FalloutReferenceEffectKind.Hardcore, source, Enable: Boolean(arguments[0])));

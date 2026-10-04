@@ -4,13 +4,15 @@ using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal sealed record FalloutRadioStationsSnapshot(IReadOnlyList<FalloutFormKey> Discovered)
+internal sealed record FalloutRadioStationsSnapshot(IReadOnlyList<FalloutFormKey> Discovered,
+    FalloutPipBoyRadioSnapshot? PipBoy = null)
 {
     internal void Validate()
     {
         if (Discovered is null || Discovered.Distinct().Count() != Discovered.Count ||
             Discovered.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin)))
             throw new InvalidDataException("Saved radio discovery is absent, invalid or duplicated.");
+        PipBoy?.Validate();
     }
 }
 internal sealed record FalloutRadioReception(FalloutRadioStation Station, bool Enabled, bool Available,
@@ -55,6 +57,7 @@ internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutRe
         }),
         unbound = _sourceErrors.Select(value => new { reference = value.Key.ToString(), error = value.Value }),
         discovered = _discovered.Select(value => value.ToString()).ToArray(),
+        pipBoy = world.PipBoyRadio.State,
         playback = "unbound-radio-conversations-static-and-physical-listeners",
         scheduling = "shared-frame-refresh;matched-retail-update-cadence-unverified"
     };
@@ -193,18 +196,26 @@ internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutRe
         if (force) ++ForcedUpdates;
     }
 
-    internal FalloutRadioStationsSnapshot Capture() => new(_discovered.OrderBy(value => records.RuntimeFormId(value)).ToArray());
+    internal void SelectPipBoy(FalloutFormKey reference)
+    {
+        var station = Available.SingleOrDefault(value => value.Reference == reference) ??
+            throw new InvalidOperationException("Pip-Boy station is disabled, unavailable or not a source receiver station.");
+        world.PipBoyRadio.Select(station);
+    }
+
+    internal FalloutRadioStationsSnapshot Capture() => new(_discovered.OrderBy(value => records.RuntimeFormId(value)).ToArray(),
+        world.PipBoyRadio.Capture());
     internal void Restore(FalloutRadioStationsSnapshot? snapshot)
     {
         if (_discovered.Count != 0 || _reception.Count != 0 || ForcedUpdates != 0)
             throw new InvalidOperationException("Radio restoration requires a fresh owner.");
         if (snapshot is null) return;
         snapshot.Validate();
-        if (snapshot.Discovered.Count == 0) return;
         Index();
         if (snapshot.Discovered is null || snapshot.Discovered.Distinct().Count() != snapshot.Discovered.Count ||
             snapshot.Discovered.Any(key => !_stations.TryGetValue(key, out var station) || !station.PipBoy))
             throw new InvalidDataException("Saved radio discovery has no unique winning station owner.");
+        world.PipBoyRadio.Restore(snapshot.PipBoy);
         foreach (var key in snapshot.Discovered) _discovered.Add(key);
     }
 }

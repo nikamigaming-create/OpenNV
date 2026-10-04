@@ -66,6 +66,15 @@ public partial class NativeActorPerformanceAudit : Node
                     short.Parse(editorStage, System.Globalization.CultureInfo.InvariantCulture), editorDependencies);
                 GetTree().Quit(); return;
             }
+            if (args is [var markerMode, var markerRoot, var markerMod, var markerModRoot, var markerActor,
+                var markerQuest, var markerStage, .. var markerDependencies] &&
+                markerMode is "--marker-travel-cold" or "--marker-travel-failure-cold")
+            {
+                await MarkerTravelCold(markerRoot, markerMod, markerModRoot, markerActor, markerQuest,
+                    short.Parse(markerStage, System.Globalization.CultureInfo.InvariantCulture), markerDependencies,
+                    failedRoute: markerMode == "--marker-travel-failure-cold");
+                GetTree().Quit(); return;
+            }
             if (args is ["--appearance-stack", var appearanceGame, var appearanceMod, var appearanceModRoot,
                 var appearanceReferences, .. var appearanceDependencies])
             {

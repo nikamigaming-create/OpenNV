@@ -18,14 +18,18 @@ internal static class InventoryQueryContracts
             File.WriteAllBytes(Path.Combine(directory.FullName, "Items.esm"), Join(Header(),
                 Item("MISC", 1, "Loot", 8), Item("WEAP", 2, "Gun", 15), Record("NOTE", 3),
                 Record("FLST", 0x120, Field("LNAM", U32(1))),
+                Record("FLST", 0x125, Field("EDID", Text("ActorList")), Field("LNAM", U32(0x100))),
+                Record("FLST", 0x126, Field("EDID", Text("ReferenceList")), Field("LNAM", U32(0x900))),
+                Record("FLST", 0x127, Field("EDID", Text("PlayerList")), Field("LNAM", U32(7))), Record("NPC_", 7),
                 Record("NPC_", 0x100, Field("ACBS", new byte[24]), Field("CNTO", Join(U32(1), U32(3)))),
-                Record("CONT", 0x110), Record("CELL", 0x800, Field("DATA", [1])),
+                Record("PERK", 0x130), Record("CONT", 0x110), Record("CELL", 0x800, Field("DATA", [1])),
                 Group(0x800, Join(Reference("ACHR", 0x900, 0x100, "Actor"), Reference("REFR", 0x901, 0x110, "Chest"))),
                 Record("SCPT", 0x601, Field("SCHR", scriptHeader), Local(1, "done"), Local(2, "result"),
                     Field("SCRO", U32(0x14)), Field("SCRO", U32(1)), Field("SCRO", U32(2)), Field("SCTX", Text(script))),
                 Record("QUST", 0x600, Field("DATA", [1, 0]), Field("SCRI", U32(0x601)),
                     Field("SCRO", U32(0x14)), Field("SCRO", U32(1)), Field("SCRO", U32(2)),
-                    Field("SCRO", U32(0x900)), Field("SCRO", U32(0x901)))));
+                    Field("SCRO", U32(0x900)), Field("SCRO", U32(0x901)),
+                    Field("SCRO", U32(0x125)), Field("SCRO", U32(0x126)), Field("SCRO", U32(0x127)))));
             File.WriteAllBytes(Path.Combine(directory.FullName, "Other.esm"), Header());
             var conditionBytes = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(conditionBytes.AsSpan(8), 47);
             BinaryPrimitives.WriteUInt32LittleEndian(conditionBytes.AsSpan(12), 0x01000001);
@@ -58,6 +62,22 @@ internal static class InventoryQueryContracts
                 commands.ItemCount(Key(0x14), Key(3)) == 0 && before == JsonSerializer.Serialize(player.Capture()),
                 "Direct list totals, repeated entries, nested-list exclusion or read-only state changed.");
             Check(FalloutInventoryConditions.Evaluate(records, player, _ => false, condition) == 2, "Recipe item count escaped shared ownership.");
+            var perk = condition with { Function = 449, Argument1 = 0x01000130, Argument2 = 0 };
+            var granted = false;
+            bool HasPerk(FalloutFormKey form)
+            {
+                Check(form == Key(0x130), "Dialogue perk lost declaring source masters.");
+                return granted;
+            }
+            float? Perk(FalloutCondition query) => FalloutInventoryConditions.EvaluateDialoguePlayer(records, player, HasPerk, query);
+            Check(Perk(perk) is null && Perk(perk with { RunOn = 2, Reference = 0x01000900 }) is null &&
+                Perk(perk with { RunOn = 1 }) == 0 && Perk(perk with { RunOn = 2, Reference = 0x01000014 }) == 0,
+                "Dialogue player perk scope confused speaker, target or explicit player.");
+            granted = true;
+            Check(Perk(perk with { RunOn = 1 }) == 1 && Perk(perk with { RunOn = 2, Reference = 0x01000014 }) == 1 &&
+                Perk(perk with { RunOn = 2 }) is null && Perk(perk with { RunOn = 3 }) is null &&
+                Perk(perk with { RunOn = 1, Argument2 = 1 }) is null,
+                "Dialogue perk retained stale state or admitted an unowned subject/rank query.");
             Reject(() => context.Evaluate(condition with { RunOn = 2 })); Reject(() => context.Evaluate(condition with { RunOn = 3 }));
             Reject(() => new FalloutDialogueConditions(records, new(records), Key(0x900), identity).Evaluate(condition));
             Reject(() => commands.ItemCount(Key(0x100), Key(1))); Reject(() => commands.ItemCount(Key(0x14), new("Queries.esp", 0x122)));
@@ -66,6 +86,12 @@ internal static class InventoryQueryContracts
             executor.ExecuteStage(quest, fields, "if Actor.GetItemCount Loot != 3\nUnexpectedCount\nendif\n" +
                 "if (player).GetItemCount (Loot) != 2\nUnexpectedCount\nendif\nif Chest.GetItemCount Loot != 4\nUnexpectedCount\nendif");
             Reject(() => executor.ExecuteStage(quest, fields, "player.GetItemCount Loot 1"));
+            var referencesBefore = JsonSerializer.Serialize(world.Capture());
+            executor.ExecuteStage(quest, fields, "if Actor.IsInList ActorList != 1 || (Actor).IsInList (ReferenceList) != 0\nUnexpectedMembership\nendif\n" +
+                "if player.IsInList PlayerList != 1 || player.IsInList ActorList != 0\nUnexpectedMembership\nendif");
+            Check(referencesBefore == JsonSerializer.Serialize(world.Capture()), "IsInList changed authoritative reference state.");
+            Reject(() => executor.ExecuteStage(quest, fields, "Actor.IsInList ActorList 1"));
+            Reject(() => executor.ExecuteStage(quest, fields, "Actor.IsInList Loot"));
             var quests = new FalloutQuestState(records);
             var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), player, defaultProcessingDelay: 0, references: world);
             scripts.Advance(0);

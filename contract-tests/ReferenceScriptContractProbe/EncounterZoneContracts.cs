@@ -25,6 +25,7 @@ internal static class EncounterZoneContracts
                 Cell(0x840, 0x810, Reference(0x850), Reference(0x851, Field("XLCM", BitConverter.GetBytes(3)))),
                 Cell(0x841, 0x810, Reference(0x852)),
                 Cell(0x842, 0x811, Reference(0x853), Reference(0x854, Field("XEZN", BitConverter.GetBytes(0x810u)))),
+                Record("CELL", 0x865, Field("DATA", [1])),
                 Record("WRLD", 0x860, Field("XEZN", BitConverter.GetBytes(0x811u))),
                 Group(0x860, 1, Join(
                     WithFlags(Record("CELL", 0x861, Field("DATA", [0])), 0x400),
@@ -43,6 +44,18 @@ internal static class EncounterZoneContracts
             Check(world.InitializeActorTemplates(Key(0x855), 1).Level == 10, "Persistent exterior actor ignored its spatial CELL zone.");
             world.SetPlacement(Key(0x856), new(Key(0x861), [5000, 0, 0], [0, 0, 0]));
             Check(world.InitializeActorTemplates(Key(0x856), 1).Level == 1, "Moved exterior actor ignored spatial residency or WRLD inheritance.");
+            var querySnapshot = JsonSerializer.Serialize(world.CaptureEncounterZones());
+            Check(world.IsInZone(Key(0x850), Key(0x810), null, 1) && !world.IsInZone(Key(0x850), Key(0x811), null, 1) &&
+                world.IsInZone(Key(0x854), Key(0x811), null, 1) && !world.IsInZone(Key(0x854), Key(0x810), null, 1) &&
+                world.IsInZone(Key(0x855), Key(0x810), null, 1) && world.IsInZone(Key(0x856), Key(0x811), null, 1),
+                "Current-cell zone query confused encounter-spawn overrides, spatial residency or inherited world assignment.");
+            var player = new FalloutReferencePlacement(Key(0x840), [0, 0, 0], [0, 0, 0]);
+            Check(world.IsInZone(records.RuntimeFormKey(0x14), Key(0x810), player, 1) &&
+                !world.IsInZone(records.RuntimeFormKey(0x14), Key(0x810), player with { Cell = Key(0x865) }, 1) &&
+                querySnapshot == JsonSerializer.Serialize(world.CaptureEncounterZones()),
+                "Zone query lost the current player cell, invented a missing zone or initialized encounter levels.");
+            Reject(() => world.IsInZone(records.RuntimeFormKey(0x14), Key(0x810), null, 1));
+            Reject(() => world.IsInZone(Key(0x850), Key(0x840), null, 1));
             Check(FalloutEncounterZone.Read(records.GetEffective(Key(0x812))).InitialLevel(20, .75f) == 20, "Automatic zone level changed the player level.");
             Check(FalloutEncounterZone.Read(records.GetEffective(Key(0x810))).InitialLevel(20, .75f) == 15, "Zone scaling setting was ignored.");
             Reject(() => FalloutEncounterZone.Read(records.GetEffective(Key(0x813))));
@@ -51,6 +64,8 @@ internal static class EncounterZoneContracts
             using var cold = new FalloutReferenceWorld(records);
             cold.RestoreEncounterZones(JsonSerializer.Deserialize<FalloutEncounterZoneSnapshot[]>(saved));
             cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
+            Check(cold.IsInZone(Key(0x854), Key(0x811), null, 1) && cold.IsInZone(Key(0x856), Key(0x811), null, 1),
+                "Cold zone query lost the retained current spatial cell.");
             Check(cold.EnterEncounterCell(Key(0x841), 50) == 10 && JsonSerializer.Serialize(cold.CaptureEncounterZones()) == saved,
                 "Cold continuation recalculated encounter levels.");
             Check(JsonSerializer.Serialize(cold.Get(Key(0x851)).Templates!.Capture()) == JsonSerializer.Serialize(world.Get(Key(0x851)).Templates!.Capture()),

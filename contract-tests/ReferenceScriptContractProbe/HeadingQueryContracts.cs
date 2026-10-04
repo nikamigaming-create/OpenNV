@@ -30,6 +30,12 @@ internal static class HeadingQueryContracts
                 Record("SCPT", 0x51, Field("SCHR", questHeader), Field("SLSD", local), Field("SCVR", Text("angle")),
                     Field("SCRO", U32(0x91)), Field("SCRO", U32(0x14)),
                     Field("SCTX", Text("float angle\nbegin GameMode\nset angle to (player).GetHeadingAngle Goal\nset angle to GetHeadingAngle Goal\nend"))),
+                Record("CELL", 0x81, Field("DATA", [1])),
+                Record("WRLD", 0x82), WorldGroup(0x82,
+                    Record("CELL", 0x83, Field("DATA", [0]), Field("XCLC", new byte[8])),
+                    Record("CELL", 0x86, Field("DATA", [0]), Field("XCLC", new byte[8]))),
+                Record("WRLD", 0x84), WorldGroup(0x84,
+                    Record("CELL", 0x85, Field("DATA", [0]), Field("XCLC", new byte[8]))),
                 Record("CELL", 0x80, Field("DATA", [1])), Group(0x80,
                     Record("REFR", 0x90, Field("NAME", U32(1)), Field("DATA", new byte[24])),
                     Record("ACHR", 0x91, Field("EDID", Text("Goal")), Field("NAME", U32(2)), Field("DATA", new byte[24])))));
@@ -87,11 +93,26 @@ internal static class HeadingQueryContracts
             Check(MathF.Abs(MathF.Abs(world.HeadingAngle(goal, player, pose, 1)) - 180) < .001f,
                 "Shared heading ignored the current engagement rotation or source axes.");
             world.Get(goal).CaptureEngagement = null;
+            world.SetPlacement(goal, new(new("Headings.esm", 0x81), [0, 0, 0], [0, 0, 0]));
+            Check(world.Distance(player, goal, pose, 1) == float.MaxValue,
+                "Different interiors invented a shared coordinate distance.");
+            world.SetPlacement(goal, new(new("Headings.esm", 0x83), [3, 4, 12], [0, 0, 0]));
+            Check(world.Distance(player, goal, pose, 1) == float.MaxValue,
+                "Interior/exterior distance invented a shared coordinate space.");
+            pose = pose with { Cell = new("Headings.esm", 0x86), Position = [0, 0, 0] };
+            Check(world.Distance(player, goal, pose, 1) == 13,
+                "Adjacent exterior cells lost their common world coordinates.");
+            pose = pose with { Cell = new("Headings.esm", 0x85) };
+            Check(world.Distance(player, goal, pose, 1) == float.MaxValue,
+                "Different worldspaces invented a coordinate distance.");
+            Reject(() => world.Distance(player, goal, null, 1));
+            world.SetPlacement(goal, new(cell, [10, 0, 100], [0, 0, 0]));
+            pose = pose with { Cell = cell };
             var missing = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false, _ => { }));
             result = missing.DispatchFrame(trigger, [new("OnTrigger", TriggerReferences: new HashSet<FalloutFormKey> { player })], 0).Single();
             Check(result.Error?.Contains("spatial owner", StringComparison.Ordinal) == true && MathF.Abs((float)world.Get(trigger).Read(1)) < .0001f,
                 "Missing heading owner supplied a value or consumed its local write.");
-            Console.WriteLine("OPENNV_HEADING_QUERY_PASS sign=true actorFacing=true horizontal=true wrap=true sourceTrigger=true liveChanges=true sharedAndFallback=true typedReference=true engagementFacing=true partialFacingRefused=true nonActorZero=true missingOwnerRefused=true prefixRetained=true");
+            Console.WriteLine("OPENNV_HEADING_QUERY_PASS sign=true actorFacing=true horizontal=true wrap=true sourceTrigger=true liveChanges=true sharedAndFallback=true typedReference=true engagementFacing=true partialFacingRefused=true nonActorZero=true missingOwnerRefused=true prefixRetained=true distanceDifferentSpacesMax=true distanceSameWorld3D=true");
         }
         finally { directory.Delete(true); }
     }
@@ -115,9 +136,11 @@ internal static class HeadingQueryContracts
         var data = Join(fields); var bytes = new byte[24 + data.Length]; Encoding.ASCII.GetBytes(name).CopyTo(bytes, 0);
         U32((uint)data.Length).CopyTo(bytes, 4); U32(id).CopyTo(bytes, 12); data.CopyTo(bytes, 24); return bytes;
     }
-    private static byte[] Group(uint cell, params byte[][] rows)
+    private static byte[] Group(uint cell, params byte[][] rows) => GeneralGroup(cell, 6, rows);
+    private static byte[] WorldGroup(uint world, params byte[][] rows) => GeneralGroup(world, 1, rows);
+    private static byte[] GeneralGroup(uint label, int kind, params byte[][] rows)
     {
         var data = Join(rows); var bytes = new byte[24 + data.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(bytes, 0);
-        U32((uint)bytes.Length).CopyTo(bytes, 4); U32(cell).CopyTo(bytes, 8); U32(6).CopyTo(bytes, 12); data.CopyTo(bytes, 24); return bytes;
+        U32((uint)bytes.Length).CopyTo(bytes, 4); U32(label).CopyTo(bytes, 8); U32((uint)kind).CopyTo(bytes, 12); data.CopyTo(bytes, 24); return bytes;
     }
 }

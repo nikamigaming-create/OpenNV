@@ -77,6 +77,9 @@ internal static class PlayerActorValueContracts
         foreach (var shared in new[] { false, true })
         {
             var owner = new FalloutPlayerActorValues(records); owner.BindConstantModifiers((_, _) => []);
+            var vitals = FalloutPlayerVitals.FromActorValues(records, owner);
+            vitals.Damage(23.75f, 6, 1);
+            vitals.Publish(vitals.State with { ActionPoints = 3, ExperiencePoints = 17, RadiationRads = 75 });
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
             var executor = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ => throw new InvalidDataException("Unexpected player effect."),
@@ -85,17 +88,31 @@ internal static class PlayerActorValueContracts
                 ChangeActorValue: (actor, name, operation, value) =>
                 {
                     Require(actor == Key(0x14), "Source player write had a different receiver."); owner.Change(name, operation, value);
-                }));
+                }, ResetPlayerHealth: vitals.ResetHealth));
             var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0);
             scripts.Host = new((_, _) => throw new InvalidOperationException("Unexpected player stage."), name => owner.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)),
                 shared ? executor.ExecuteProgram : null,
-                ReadPlayerActorValue: (name, kind) => owner.Read(FalloutPlayerActorValues.SpecialValue(name), kind), ChangePlayerActorValue: owner.Change);
+                ReadPlayerActorValue: (name, kind) => owner.Read(FalloutPlayerActorValues.SpecialValue(name), kind), ChangePlayerActorValue: owner.Change,
+                ResetPlayerHealth: vitals.ResetHealth);
             scripts.Advance(0);
             Require(scripts.Capture().Instances.Single() is { Error: null } && quests.Variable(Key(0x501), 1) == 14 &&
                 quests.Variable(Key(0x501), 2) == 10 && quests.Variable(Key(0x501), 3) == 20 && owner.ReadBase(5) == 14 &&
                 owner.ReadCurrent(5) == 20 && owner.ReadPermanent(5) == 10 && world.InstanceCount == 0,
                 "Shared/fallback scripts did not preserve raw current, bounded permanent or BASE/ModAV/ForceAV authority.");
+            Require(vitals.State.ExactHitPoints == vitals.State.MaximumHitPoints && vitals.State.LimbDamage is null &&
+                vitals.State.ActionPoints == 3 && vitals.State.ExperiencePoints == 17 && vitals.State.RadiationRads == 75,
+                "Shared/fallback ResetHealth failed to cure HP and limbs or altered AP, XP or radiation.");
             var script = records.GetEffective(Key(0x500)); var quest = records.GetEffective(Key(0x501));
+            var reset = FalloutGameModeProgram.Read("begin GameMode\nplayer.ResetHealth\nend");
+            var unbound = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ => throw new InvalidDataException("Unbound reset fabricated a player.")));
+            var retained = JsonSerializer.Serialize(vitals.State);
+            Reject(() => unbound.ExecuteProgram(quest, script, reset, 0));
+            Require(retained == JsonSerializer.Serialize(vitals.State) && world.InstanceCount == 0,
+                "Unbound ResetHealth mutated vitals or created a placed player reference.");
+            vitals.Damage(vitals.State.MaximumHitPoints);
+            var dead = JsonSerializer.Serialize(vitals.State);
+            Reject(vitals.ResetHealth);
+            Require(dead == JsonSerializer.Serialize(vitals.State), "ResetHealth substituted for player resurrection.");
             var failing = FalloutGameModeProgram.Read("begin GameMode\nplayer.SetAV Strength 6\nplayer.ModAV Strength .25\nplayer.SetAV Strength 9\nend");
             Reject(() => executor.ExecuteProgram(quest, script, failing, 0));
             Require(owner.ReadBase(5) == 6 && owner.Capture().Values[5].Permanent == 6,
@@ -166,7 +183,7 @@ internal static class PlayerActorValueContracts
         var header = new byte[20]; UInt(header, 12, 3); header[16] = 1;
         var script = "short first\nshort second\nshort third\nbegin GameMode\nplayer.SetAV Strength 14\nplayer.ModAV Strength 2\n" +
             "set first to player.GetBaseAV Strength\nset second to player.GetPermanentActorValue Strength\n" +
-            "player.ForceAV Strength 20\nset third to player.GetAV Strength\nend";
+            "player.ForceAV Strength 20\nset third to player.GetAV Strength\nplayer.ResetHealth\nend";
         return Join(Header(), Record("NPC_", 7, Field("ACBS", Actor()), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5]),
                 Field("SPLO", BitConverter.GetBytes(21u)), Field("SPLO", BitConverter.GetBytes(24u))), Record("RACE", 10),
             Record("NPC_", 28, Field("ACBS", Actor()), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5])),

@@ -9,7 +9,8 @@ internal partial class RuntimeNativeSpeech
 
     private readonly Dictionary<FalloutFormKey, NpcDialogueExchange> _npcDialogueParticipants = [];
     internal bool IsNpcDialogueActive(FalloutFormKey actor) => _npcDialogueParticipants.ContainsKey(actor);
-    internal bool IsDialogueBusy(FalloutFormKey actor) => IsTalking(actor) || IsNpcDialogueActive(actor);
+    internal bool IsDialogueBusy(FalloutFormKey actor) => IsTalking(actor) || IsNpcDialogueActive(actor) ||
+        _playerDialogueSpeaker == actor || _deferredRequests.ContainsKey(actor);
 
     internal void StartNpcConversation(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey topic, Action completed) =>
         ExecuteCommand(new(speaker.ToString(), target.ToString(), topic.ToString()), speaker, topic, target, completed, npcConversation: true);
@@ -37,9 +38,11 @@ internal partial class RuntimeNativeSpeech
             _conditionContext, actorValue: _actorValue, playerFemale: _playerFemale, actorRace: _actorRace,
             listener: listenerReference is null ? target : DialogueSubject(listenerReference.Value),
             listenerIdentity: listenerReference is { } reference ? SpeakerIdentity(reference) : null,
-            currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance);
+            currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance,
+            referenceInZone: _referenceInZone);
         return (_selection ?? throw new NotSupportedException("Scripted speech has no shared dialogue quest selection owner."))
-            .Select(topic, identity.Actor, _said, _questStage, conditions.Evaluate, _dialogueRandom, npcConversation: npcConversation);
+            .Select(topic, identity.Actor, _said, _questStage, conditions.Evaluate, _dialogueRandom,
+                npcConversation: npcConversation, immediateResults: true);
     }
 
     private void AdvanceNpcExchange(NpcDialogueExchange exchange, Voice voice, FalloutDialogueInfo completed)

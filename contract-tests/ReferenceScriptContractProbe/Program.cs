@@ -5,6 +5,29 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args.Length >= 6 && args[0] == "--inspect-owned-stage")
+{
+    var setup = new FalloutModStackSelection([new(args[1], args[2], args[6..])]).Resolve(args[3]);
+    RuntimeLiveContentSource.Configure(args[3], RuntimeLiveContentSource.FalloutNewVegasGame,
+        setup.ContentRoots.Skip(1).ToArray(), setup.ActivePlugins, setup.Settings);
+    try
+    {
+        using var records = FalloutPluginStack.Load(RuntimeLiveContentSource.Current!.PluginSources);
+        var quest = FalloutDialogueTopic.Find(records, "QUST", args[4]);
+        var stage = short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture);
+        var fields = quest.ReadSubrecords().ToArray();
+        var begin = Array.FindIndex(fields, field => field.Signature == "INDX" && field.Data.Length == 2 &&
+            BinaryPrimitives.ReadInt16LittleEndian(field.Data.Span) == stage);
+        if (begin < 0) throw new InvalidDataException("Requested source stage is absent.");
+        var end = begin + 1;
+        while (end < fields.Length && fields[end].Signature is not ("INDX" or "QOBJ")) ++end;
+        Console.WriteLine(JsonSerializer.Serialize(new { quest = quest.FormKey, winner = quest.Plugin.Name, stage,
+            sources = fields[(begin + 1)..end].Where(field => field.Signature == "SCTX")
+                .Select(field => FalloutDialogueTopic.ScriptText(field.Data.Span)).ToArray() }));
+    }
+    finally { RuntimeLiveContentSource.Clear(); }
+    return;
+}
 if (args is ["--script-sound-contracts"])
 {
     ScriptSoundContracts.Run();
@@ -14,6 +37,11 @@ if (args is ["--script-sound-contracts"])
 if (args is ["--heading-query-contracts"])
 {
     HeadingQueryContracts.Run();
+    return;
+}
+if (args is ["--encounter-zone-contracts"])
+{
+    EncounterZoneContracts.Run();
     return;
 }
 if (args.Length >= 3 && args[0] == "--audit-ttw-photo-heading")
@@ -56,6 +84,11 @@ if (args is ["--dialogue-spatial-contracts"])
     DialogueSpatialContracts.Run();
     return;
 }
+if (args.Length >= 3 && args[0] == "--audit-ttw-dialogue-form-list")
+{
+    OwnedDialogueFormListProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
 if (args.Length >= 8 && args[0] == "--audit-reference-door")
 {
     OwnedReferenceDoorProbe.Run(args[1], args[2], args[3], args[4], args[5],
@@ -93,6 +126,11 @@ if (args is ["--conversation-contracts"])
     ConversationContracts.Run();
     return;
 }
+if (args.Length >= 3 && args[0] == "--audit-ttw-immediate-dialogue")
+{
+    OwnedScriptedTopicSelectionProbe.ImmediateTtw(args[1], args[2], args[3..]);
+    return;
+}
 if (args.Length >= 10 && args[0] == "--audit-scripted-topic")
 {
     OwnedScriptedTopicSelectionProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6],
@@ -120,6 +158,16 @@ if (args.Length >= 5 && args[0] == "--audit-radio-refresh")
     OwnedRadioProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
     return;
 }
+if (args.Length >= 6 && args[0] == "--audit-radio-off")
+{
+    OwnedRadioOffProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);
+    return;
+}
+if (args.Length >= 6 && args[0] == "--audit-player-reset")
+{
+    OwnedPlayerResetProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);
+    return;
+}
 if (args is ["--reference-identity-contracts"])
 {
     ActorSourceContracts.Run();
@@ -133,6 +181,11 @@ if (args.Length >= 6 && args[0] == "--audit-dialogue-identity")
 if (args.Length >= 6 && args[0] == "--audit-dialogue-packages")
 {
     OwnedDialoguePackageQueryProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6..]);
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-ttw-package-activation")
+{
+    OwnedDialoguePackageQueryProbe.TtwActivation(args[1], args[2], args[3..]);
     return;
 }
 if (args is ["--challenge-contracts"])
@@ -352,7 +405,8 @@ try
         queryWorld.Get(Key(0x900)).CaptureEngagement = () => new(Key(0x14), Position: [1.5f, 6, -2]);
         Query();
         Require(queryWorld.Get(Key(0x900)).Read(1) == 0, "Distance ignored live actor motion or converted the source axes twice.");
-        Reject(() => queryWorld.Distance(Key(0x900), Key(0x902), null, .5f));
+        Require(queryWorld.Distance(Key(0x900), Key(0x902), null, .5f) == float.MaxValue,
+            "Unrelated interior distance lost its finite no-distance result.");
         InteriorQueryContracts.Verify(records, queryWorld);
     }
     using var world = new FalloutReferenceWorld(records);

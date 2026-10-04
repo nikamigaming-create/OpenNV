@@ -454,7 +454,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             _radioRevision = radio.Revision;
             Hide("MM_LocalMap_ClipWindow", "MM_NotesList", "MM_DataRect", "MM_WaveformRect");
             ListRows(Tile("MM_RadioStationList"), "MM_ListTemplate", radio.Available.Select(station =>
-                (NameOf(station.Base), (Action)(() => throw new NotSupportedException("Radio tuning requires the station conversation/static playback owner.")), false)).ToArray());
+                (NameOf(station.Base), (Action)(() => { radio.SelectPipBoy(station.Reference); Refresh(); }),
+                    _references.PipBoyRadio.CurrentStation == station.Reference)).ToArray());
         }
         else
         {

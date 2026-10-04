@@ -117,7 +117,8 @@ internal sealed partial class FalloutDialogueTopic
     internal FalloutDialogueInfo? Select(FalloutFormKey speakerBase, IReadOnlySet<FalloutFormKey> said,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context = null,
         Func<FalloutFormKey, bool>? questEligible = null, Func<FalloutFormKey, int>? questPriority = null,
-        bool conversation = false, Func<uint, uint>? random = null, bool npcConversation = false)
+        bool conversation = false, Func<uint, uint>? random = null, bool npcConversation = false,
+        bool immediateResults = false)
     {
         IEnumerable<FalloutDialogueInfo> candidates = questPriority is null ? Infos : Infos.OrderByDescending(info => questPriority(info.Quest));
         List<FalloutDialogueInfo>? pool = null;
@@ -125,7 +126,8 @@ internal sealed partial class FalloutDialogueTopic
         {
             if (!Eligible(info, speakerBase, said, questStage, context, questEligible)) continue;
             if ((info.Flags & 2) == 0 && pool is not null) return Choose();
-            RequireFlags(info, conversation, randomSelection: true, npcConversation: npcConversation);
+            RequireFlags(info, conversation, randomSelection: true, npcConversation: npcConversation,
+                immediateResults: immediateResults);
             if ((info.Flags & 2) == 0) return info;
             (pool ??= []).Add(info);
             if ((info.Flags & 32) != 0) return Choose();
@@ -270,11 +272,13 @@ internal sealed partial class FalloutDialogueTopic
                 $"INFO {info.Record.FormKey} condition {condition.Function} RunOn {condition.RunOn} is unbound.");
         }, evaluateRunOn: true);
 
-    internal static void RequireFlags(FalloutDialogueInfo info, bool conversation, bool randomSelection = false, bool npcConversation = false)
+    internal static void RequireFlags(FalloutDialogueInfo info, bool conversation, bool randomSelection = false,
+        bool npcConversation = false, bool immediateResults = false)
     {
         if (info.Responses.Count == 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} zero-response result/flow behavior is unbound.");
         var supported = randomSelection ? 39 : 5;
+        if (immediateResults) supported |= 8;
         if (info.Type != (conversation ? 0 : 1) || info.NextSpeaker > 1 || info.NextSpeaker != 0 && !npcConversation ||
             (info.Flags & ~supported) != 0 || info.Flags2 != 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} needs its conversation/random/flag owner.");

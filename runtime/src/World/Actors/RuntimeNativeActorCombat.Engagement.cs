@@ -184,12 +184,15 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void PrepareCombatPresentation()
     {
-        if (_engagementPrepared || _engagementError is not null) return;
-        _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
-        if (_threat.Confidence == 0) PrepareFlee();
-        else PrepareEngagement();
-        _engagementPrepared = true;
-        _state.CaptureEngagement = CaptureEngagement;
+        if (_engagementError is not null) return;
+        if (!_engagementPrepared)
+        {
+            _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+            if (_threat.Confidence == 0) PrepareFlee();
+            else PrepareEngagement();
+            _engagementPrepared = true;
+            _state.CaptureEngagement = CaptureEngagement;
+        }
         Activity.SetAlerted(true); Activity.SetCombat(true);
         Activity.SetWeaponDrawn(_enemyWeapon is not null);
     }
@@ -247,6 +250,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _ExitTree()
     {
+        if (_state.StopCombat == StopCombat) _state.StopCombat = null;
         _routeSearch?.Dispose(); _routeSearch = null;
         // A door can materialize the same reference in its destination before
         // the previous presentation leaves the tree. Only the current binding

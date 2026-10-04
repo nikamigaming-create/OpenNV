@@ -22,6 +22,13 @@ internal sealed class FalloutPlayerVitals
     }
     internal void Damage(float amount) => _state = State.Damage(amount);
     internal void Damage(float amount, byte part, float limbMultiplier) => _state = State.Damage(amount, part, limbMultiplier);
+    internal void ResetHealth()
+    {
+        var current = State;
+        if (current.ExactHitPoints == 0)
+            throw new NotSupportedException("ResetHealth cannot substitute for the player resurrection owner.");
+        Publish(current with { HitPoints = current.MaximumHitPoints, HitPointFraction = 0, LimbDamage = null });
+    }
     internal void Publish(GameplayVitals state) { state.Validate(); _state = state; }
     internal void RequireLevelUpOwner()
     {

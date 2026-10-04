@@ -48,7 +48,10 @@ an empty entry still exposes its unowned result/flow behavior before effects.
 TACT/REFR/XRDO data, applied world enable state, the source portal graph and the
 actual player. Persistent discovery feeds the shared HUD/sound owners and the
 original Pip-Boy radio list. Cross-portal radius and station playback remain
-visible unbound behavior.
+visible unbound behavior. PipBoyRadioOff retires a receiver-owned playback lease
+independently of world radios, dialogue and SOUN voices. Off state and the last
+station validate against winning records during cold restoration. Tuning without
+a broadcast scheduler and saving an active broadcast timeline refuse visibly.
 
 [Owned bitmap fonts](owned-font-byte-encoding.md) reverse the record string's
 byte encoding and apply the source quote normalization before shared glyph
@@ -65,6 +68,14 @@ source wait/trigger selection and INFO/audio/LIP completion.
 self, target or explicit reference owner in AI, conversations and scripted
 speech. NPC/creature callbacks retire with their body; player queries share the
 existing assignment lifecycle.
+
+Script GetIsCurrentPackage expressions use those same actor owners. Scripted
+speech retains a pending actor request through actual voice completion before
+selecting its next source response. Player dialogue reserves its own participant.
+Combat-alarm commands clear shared incoming engagements and let each resident
+native owner retire motion and dispatch its combat-end event. See
+[scripted dialogue](scripted-topic-and-talking-activator-dialogue.md) for proof and
+remaining arbitration, event delivery and persistence boundaries.
 
 [GetVampire](owned-vampire-query.md) shares one lazy owned-executable declaration
 between dialogue and script queries. The selected New Vegas profile admits the

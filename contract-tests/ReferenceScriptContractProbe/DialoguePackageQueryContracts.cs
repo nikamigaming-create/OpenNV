@@ -14,7 +14,9 @@ internal static class DialoguePackageQueryContracts
         File.WriteAllBytes(Path.Combine(directory, "PackageQuery.esp"), Join(Header("OtherMaster.esm", "Actors.esm"),
             Record("INFO", 0x02000800, Field("CTDA", Condition())),
             Record("PACK", 0x02000801, Field("PTDT", Join(BitConverter.GetBytes(0),
-                BitConverter.GetBytes(0x01000901u), new byte[8])))));
+                BitConverter.GetBytes(0x01000901u), new byte[8]))),
+            Record("SCPT", 0x02000802, Join(new uint[] { 0x01000900, 0x01000901, 0x010008f3, 0x010008f4, 0x01000014 }
+                .Select(id => Field("SCRO", BitConverter.GetBytes(id))).ToArray()))));
         using var declarations = FalloutPluginStack.Load(directory, ["Actors.esm", "OtherMaster.esm", "PackageQuery.esp"]);
         var source = declarations.GetEffective(new("PackageQuery.esp", 0x800));
         var condition = FalloutCondition.Read(source).Single();
@@ -32,6 +34,36 @@ internal static class DialoguePackageQueryContracts
                 queried = reference;
                 return reference == player ? playerPackage : world.CurrentPackage(reference);
             }
+            var script = declarations.GetEffective(new("PackageQuery.esp", 0x802));
+            void ScriptQuery(string expression, bool expected)
+            {
+                var effects = 0;
+                var scripts = new FalloutReferenceScripts(declarations, world, new(declarations), new((_, _) => false,
+                    effect =>
+                    {
+                        if (effect.Kind != FalloutReferenceEffectKind.DefaultActivate || effect.Target != speaker)
+                            throw new InvalidDataException("Package query changed the calling actor.");
+                        effects++;
+                    }, CurrentPackage: Query));
+                scripts.ExecuteProgram(declarations.GetEffective(speaker), script,
+                    FalloutGameModeProgram.Read($"begin GameMode\nif {expression}\nActivate\nendif\nend"), 0);
+                Check(effects == (expected ? 1 : 0), "Script current-package query lost its subject or live assignment.");
+            }
+            ScriptQuery("GetIsCurrentPackage FirstActorPackage", true);
+            ScriptQuery("BoundCreature.GetIsCurrentPackage OtherActorPackage", false);
+            ScriptQuery("( GetSelf ).GetIsCurrentPackage FirstActorPackage", true);
+            ScriptQuery("player.GetIsCurrentPackage OtherActorPackage", true);
+            ScriptQuery("player.GetIsCurrentPackage FirstActorPackage || GetIsCurrentPackage FirstActorPackage", true);
+            speakerPackage = other;
+            ScriptQuery("GetIsCurrentPackage FirstActorPackage", false);
+            ScriptQuery("GetIsCurrentPackage OtherActorPackage", true);
+            speakerPackage = null;
+            ScriptQuery("GetIsCurrentPackage FirstActorPackage", false);
+            queried = null;
+            Reject(() => ScriptQuery("GetIsCurrentPackage BoundCreature", false));
+            Check(queried is null, "An invalid package argument queried an actor owner.");
+            speakerPackage = first;
+            Console.WriteLine("OPENNV_SCRIPT_PACKAGE_QUERY_CONTRACT_PASS caller=true explicit=true player=true postfix=true sourceMasters=true liveReplacement=true invalidArgumentRefused=true");
             float Fallback(FalloutCondition value) => throw new InvalidOperationException($"Package query used fallback {value.Function}.");
             var context = new FalloutDialogueConditions(records, new(records), speaker, identity, Fallback, currentPackage: Query);
             Check(condition.FormArgument1 == first && context.Evaluate(condition) == 1 && queried == speaker,
@@ -65,18 +97,23 @@ internal static class DialoguePackageQueryContracts
             bool Combat(FalloutCondition value) => combat.IsInCombat(FalloutAiPackages.ConditionSubject(value, speaker));
             Check(!Combat(combatCondition) && !Combat(combatCondition with { RunOn = 1 }), "Idle actors acquired an invented engagement.");
             combat.Get(listener).Engagement = new(player);
+            Check(!combat.PlayerInCombat(), "An unloaded actor acquired the resident player combat owner.");
+            combat.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
+            Check(combat.PlayerInCombat(), "Player combat required a Godot body instead of the resident engagement.");
             Check(!Combat(combatCondition) && Combat(combatCondition with { RunOn = 1 }) &&
                 Combat(combatCondition with { RunOn = 2, Reference = 0x01000901 }),
                 "Combat query borrowed self state or lost source target/master identity.");
             using var combatCold = new FalloutReferenceWorld(records); combatCold.Restore(combat.Capture());
+            combatCold.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
+            Check(combatCold.PlayerInCombat(), "Cold player combat lost the resident authoritative engagement.");
             Check(combatCold.IsInCombat(listener), "Cold combat query lost retained engagement state.");
             combat.Get(listener).Engagement = new(player, "idle");
-            Check(!Combat(combatCondition with { RunOn = 1 }), "Idle engagement remained in combat.");
+            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat(), "Idle engagement remained in combat.");
             combat.Get(listener).Engagement = new(player); combat.Get(listener).Enabled = false;
-            Check(!Combat(combatCondition with { RunOn = 1 }), "Disabled actor remained in combat.");
+            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat(), "Disabled actor remained in combat.");
             combat.Get(listener).Enabled = true;
             combat.Get(listener).Injury = new(true, null, new Dictionary<byte, float>());
-            Check(!Combat(combatCondition with { RunOn = 1 }), "Dead actor remained in combat.");
+            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat(), "Dead actor remained in combat.");
             var playerCombat = false;
             Check(!combat.IsInCombat(player, () => playerCombat), "Idle player acquired combat state.");
             playerCombat = true;

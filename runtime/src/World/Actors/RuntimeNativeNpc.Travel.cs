@@ -1,15 +1,21 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
 internal partial class RuntimeNativeNpc
 {
+    private const string MarkerTravelCaptureBlocker = "Marker Travel has started but its native capsule route snapshot is not initialized.";
     private CellNavigationGraph? _navigation;
     private GamebryoRootMotionTravel? _travelProgress;
-    private bool _travelActive => _travelProgress?.Active == true;
+    private FalloutTravelPackage? _nativeMarkerTravel;
+    private FalloutTravelProgress? _nativeMarkerTravelProgress;
+    private Vector3? _nativeMarkerTravelDestination;
+    private bool _nativeMarkerTravelRestored;
+    private bool _travelActive => _travelProgress?.Active == true || _nativeMarkerTravelProgress is { Complete: false };
     private Transform3D _travelDestination;
     private double _baseElapsedSeconds;
     private float _travelPublishedDistance;
@@ -35,6 +41,14 @@ internal partial class RuntimeNativeNpc
         target = new[] { _travelDestination.Origin.X, _travelDestination.Origin.Y, _travelDestination.Origin.Z },
         location = new[] { _travelLocationPosition.X, _travelLocationPosition.Y, _travelLocationPosition.Z },
         locationRadiusGameUnits = _travelLocationRadiusGameUnits,
+        markerTravel = _nativeMarkerTravel is null ? null : new
+        {
+            package = _nativeMarkerTravel.Form.ToString(),
+            progress = _nativeMarkerTravelProgress,
+            projectedEndpoint = _nativeMarkerTravelDestination is { } endpoint ? new[] { endpoint.X, endpoint.Y, endpoint.Z } : null,
+            restored = _nativeMarkerTravelRestored,
+            owner = "source-navm-native-capsule-and-package-kf",
+        },
         rootCycleDistance = _travelCycleDistance,
         source = "winning-navm-and-kf-accumulation",
         unbound = new[] { "dynamic-obstacle-avoidance", "turn-blending", "retail-path-costs" },
@@ -48,6 +62,135 @@ internal partial class RuntimeNativeNpc
         StartTravelTo(package, target.FormKey, destination,
             furnitureApproach is null ? "reference-marker" : "furniture-approach", furnitureApproach is not null,
             destinationRadiusGameUnits);
+    }
+
+    private void BeginMarkerTravel(FalloutPluginRecord package, bool initializing)
+    {
+        var world = _aiWorld ?? throw new NotSupportedException("Marker Travel has no shared reference owner.");
+        var source = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
+        if (source.LocationType != 0)
+            throw new NotSupportedException("Legacy marker Travel requires its reference-location owner.");
+        var actor = Appearance.Reference!.Value;
+        var state = world.Get(actor);
+        var retainedMotion = state.PackageMotion is { } motion && motion.Package == package.FormKey ? motion : null;
+        var restored = initializing ? retainedMotion?.Travel : null;
+        var retainedAssignment = state.PackageAssignment is { } assignment && assignment.Package == package.FormKey
+            ? assignment : null;
+        if (initializing && retainedAssignment is { Done: false } && restored is null)
+            throw new NotSupportedException("Saved active marker Travel lacks its native route cursor and source animation continuation.");
+        if (restored is not null && retainedAssignment is not null && restored.Complete != retainedAssignment.Done)
+            throw new InvalidDataException("Saved marker Travel arrival differs from its package event lifecycle.");
+
+        var progress = restored ?? source.Start(_aiStack!, world, actor);
+        var completedFromLifecycle = initializing && restored is null && retainedAssignment is { Done: true } &&
+            _packageEvents is { Done: true, Active: { Form: var activeForm } } && activeForm == package.FormKey;
+        if (completedFromLifecycle)
+        {
+            if (retainedMotion is null)
+            {
+                if (source.Radius != 0)
+                    throw new NotSupportedException("Saved completed marker Travel region lacks its actual retained endpoint.");
+                var marker = _aiCell!.References.SingleOrDefault(value => value.FormKey == source.Reference) ??
+                    throw new NotSupportedException("Saved completed marker Travel requires its resident source marker.");
+                // Older completed exact-marker procedures retained their
+                // lifecycle but no native motion snapshot. Preserve that
+                // source-derived cold placement contract without replaying
+                // walking, package start, or arrival effects.
+                Transform = _referenceTransform!(marker);
+            }
+            progress = progress with { Complete = true };
+        }
+        if (restored is not null) source.Validate(_aiStack!, world, actor, restored);
+        if (progress.Cell != _aiCell!.Cell.FormKey)
+            throw new NotSupportedException("Marker Travel destination requires its other-cell route owner.");
+        _navigation = CellNavigationGraph.LoadOwned(_aiStack!, progress.Cell);
+        if (restored is not null && (restored.NavigationSha256 is not { } navigationSha256 ||
+            !navigationSha256.Equals(_navigation.SourceSha256, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("Saved marker Travel route differs from its winning NAVM source.");
+        if (restored is null)
+            progress = progress with { NavigationSha256 = _navigation.SourceSha256 };
+
+        _nativeMarkerTravel = source;
+        _nativeMarkerTravelProgress = progress;
+        _nativeMarkerTravelDestination = null;
+        _nativeMarkerTravelRestored = restored is not null;
+        _aiPackage = package;
+        _travelProgress?.Cancel();
+        if (_packageEvents!.Active is null)
+        {
+            if ((retainedAssignment is not null && retainedMotion is not null) || restored is not null)
+                _packageEvents!.Restore(_packageIdleSource!, retainedAssignment?.Done ?? restored!.Complete);
+            else
+                _packageEvents.Change(_packageIdleSource);
+        }
+        else if (_packageEvents.Active.Form != package.FormKey)
+            throw new InvalidOperationException("Marker Travel lifecycle differs from its selected package.");
+        else if (initializing && restored is null && !_packageEvents.Done)
+            throw new NotSupportedException("Saved active marker Travel lifecycle has no native route continuation.");
+
+        state.ProcedureCaptureBlocker = restored is null && !completedFromLifecycle
+            ? MarkerTravelCaptureBlocker : null;
+        GD.Print($"OPENNV_NATIVE_MARKER_TRAVEL_READY reference={actor} package={package.FormKey} " +
+            $"navigation={_navigation.SourceSha256} restored={restored is not null} complete={progress.Complete}");
+    }
+
+    private void AdvanceMarkerTravel(double delta)
+    {
+        if (_nativeMarkerTravel is not { } source || Combat is null || _aiError is not null || Combat.OwnsPose ||
+            !Combat.PackageMovementReady || _conversationTarget is not null) return;
+        try
+        {
+            var progress = _nativeMarkerTravelProgress!;
+            var authored = GetParent<Node3D>().ToGlobal(new Vector3(progress.Location[0], progress.Location[2], -progress.Location[1]) * Skeleton.UnitsToMetres);
+            var destination = _nativeMarkerTravelDestination ??= Combat.ProjectPackageDestination(authored);
+            if (progress.RouteTarget is { } retainedTarget)
+            {
+                var retained = new Vector3(retainedTarget[0], retainedTarget[1], retainedTarget[2]);
+                if (retained.DistanceTo(destination) > Math.Max(source.Radius * Skeleton.UnitsToMetres, .25f) + .1f)
+                    throw new InvalidDataException("Saved marker Travel endpoint differs from its projected source destination.");
+            }
+            var radius = Math.Max(source.Radius * Skeleton.UnitsToMetres, .25f);
+            var reached = IsOnFloor() && GlobalPosition.DistanceTo(destination) <= radius + .1f;
+            var completedNow = reached && !progress.Complete;
+            progress = progress with
+            {
+                NavigationSha256 = _navigation!.SourceSha256,
+                RouteTarget = [destination.X, destination.Y, destination.Z],
+            };
+            Combat.AdvancePackageMotion(_aiPackage!, progress.Complete ? GlobalPosition : destination,
+                progress.Complete ? 0 : radius, source.Running, delta, requireArrivalHeight: true);
+            if (Combat.PackageRouteRestorable || Combat.PackageRouteFailure is not null || reached)
+                Combat.SetTravelProgress(progress);
+            if (completedNow)
+            {
+                progress = progress with { Complete = true, RouteFailure = null };
+                _nativeMarkerTravelProgress = progress;
+                Combat.SetTravelProgress(progress);
+                _packageEvents!.Complete();
+            }
+            else _nativeMarkerTravelProgress = Combat.PackageMotion?.Travel ?? progress;
+
+            var state = _aiWorld!.Get(Appearance.Reference!.Value);
+            if (progress.Complete || Combat.PackageRouteRestorable || Combat.PackageRouteFailure is not null)
+                state.ProcedureCaptureBlocker = null;
+            else state.ProcedureCaptureBlocker = MarkerTravelCaptureBlocker;
+            _nativeMarkerTravelRestored = true;
+            if (progress.Complete)
+            {
+                // Keep the package KF clock and final physical pose in the same
+                // shared snapshot after the source completion event is consumed.
+                Combat.AdvancePackageMotion(_aiPackage!, GlobalPosition, 0, source.Running, 0, requireArrivalHeight: true);
+                Combat.SetTravelProgress(progress);
+            }
+            if (completedNow) GD.Print($"OPENNV_NATIVE_MARKER_TRAVEL_ARRIVAL reference={Appearance.Reference} package={source.Form} " +
+                $"position={GlobalPosition} routeCursor={progress.RouteCursor} arrivalReplayed=false");
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
+        {
+            Combat.StopPackageMotion(); _aiError = error.Message; _failedPackage = _aiPackage?.FormKey;
+            BlockSelectionCapture($"Marker Travel continuation is unbound: {error.Message}");
+            GD.PushError($"OPENNV_NATIVE_MARKER_TRAVEL_DIVERGENCE reference={Appearance.Reference}: {_aiError}");
+        }
     }
 
     private void RequireTravelMarker(FalloutPluginRecord package, FalloutPlacedReference target)

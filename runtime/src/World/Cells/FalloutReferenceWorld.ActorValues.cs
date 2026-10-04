@@ -39,7 +39,9 @@ internal sealed partial class FalloutReferenceWorld
     {
         var health = Health(reference);
         if (IsDead(reference)) throw new NotSupportedException("ResetHealth cannot substitute for resurrection.");
-        Actor(reference).ActorValues["health"] = health with { Damage = 0 };
+        var actor = Actor(reference);
+        actor.ActorValues["health"] = health with { Damage = 0 };
+        if (actor.Injury is { } injury) actor.Injury = injury with { LimbDamage = new Dictionary<byte, float>() };
     }
 
     internal void RestoreActorValue(FalloutFormKey reference, string name, float value)

@@ -201,7 +201,8 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     FalloutUserFunctionInvoker? InvokeFunction = null, Action? RequireLevelUpOwner = null,
     Func<string, FalloutActorValueRead, double>? ReadPlayerActorValue = null,
     Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null,
-    Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null);
+    Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
+    Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -658,6 +659,13 @@ internal sealed partial class FalloutQuestScripts
                     (caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
                         arguments[0].Value.FormKey(_records)))
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getiscurrentpackage")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    FalloutAiPackages.IsCurrentPackage(_records,
+                        caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
+                        arguments[0].Value.FormKey(_records), host?.CurrentPackage ?? (References ??
+                            throw new NotSupportedException("Current-package query has no reference owner.")).CurrentPackage) ? 1 : 0)
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getvampire")
                 return new([], arguments =>
                 {
@@ -864,6 +872,20 @@ internal sealed partial class FalloutQuestScripts
                     .AgeRace(ReferenceArgument(parts[0]), FalloutReferenceWorld.RaceAgeSteps(NumberArgument(arguments[0])));
                 return;
             }
+            if (parts.Length == 2 && operation == "resethealth" && FalloutScriptBindings.IsPlayer(parts[0]))
+            {
+                if (ReferenceArgument(parts[0]) != _records.RuntimeFormKey(0x14) || arguments.Count != 0)
+                    throw new InvalidDataException("Player ResetHealth requires its compiled reference and no arguments.");
+                (host?.ResetPlayerHealth ?? throw new NotSupportedException("Player ResetHealth has no shared vitals owner."))();
+                return;
+            }
+            if (parts.Length <= 2 && operation is "stopcombatalarmonactor" or "scaonactor")
+            {
+                if (arguments.Count != 0) throw new InvalidDataException("StopCombatAlarmOnActor takes no arguments.");
+                (References ?? throw new NotSupportedException("Combat alarm has no shared reference owner."))
+                    .StopCombatAlarmOnActor(parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0]));
+                return;
+            }
             if (parts.Length == 2 && parts[0].Equals("player", StringComparison.OrdinalIgnoreCase) &&
                 operation is "setav" or "setactorvalue" or "modav" or "modactorvalue" or "forceav" or "forceactorvalue")
             {
@@ -1044,6 +1066,9 @@ internal sealed partial class FalloutQuestScripts
             }
             switch (command.ToLowerInvariant())
             {
+                case "pipboyradiooff" when arguments.Count == 0:
+                    (References ?? throw new NotSupportedException("Pip-Boy radio has no shared reference world.")).PipBoyRadio.Off();
+                    break;
                 case "sv_destruct" when arguments.Count > 0:
                     foreach (var argument in arguments) DestroyString(argument);
                     break;

@@ -1,5 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -18,6 +20,10 @@ internal sealed partial class CellNavigationGraph
                 value.Edges.Select(index => (int)index).ToArray(), value.Flags)).ToArray(),
             source.Edges.Select(value => new NavigationExternalConnection(value.Mesh.ToString(), value.Triangle)).ToArray())).ToArray();
         foreach (var mesh in meshes) mesh.ValidateAdjacency();
-        return new(meshes);
+        var graph = new CellNavigationGraph(meshes);
+        var sourceIdentity = string.Join("\n", sources.OrderBy(value => value.Form.ToString(), StringComparer.OrdinalIgnoreCase)
+            .Select(source => source.Form + ":" + Convert.ToHexString(SHA256.HashData(stack.GetEffective(source.Form).ReadData()))));
+        graph.SourceSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourceIdentity)));
+        return graph;
     }
 }

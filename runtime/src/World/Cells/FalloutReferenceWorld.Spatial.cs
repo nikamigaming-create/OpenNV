@@ -59,7 +59,7 @@ internal sealed partial class FalloutReferenceWorld
         var fromCell = FalloutCellSceneReader.ReadDefinition(records, from.Cell);
         var toCell = FalloutCellSceneReader.ReadDefinition(records, to.Cell);
         if (from.Cell != to.Cell && (fromCell.Worldspace is null || fromCell.Worldspace != toCell.Worldspace))
-            throw new NotSupportedException("GetDistance between unrelated interior/world spaces is unbound.");
+            return float.MaxValue;
         var dx = (double)from.Position[0] - to.Position[0];
         var dy = (double)from.Position[1] - to.Position[1];
         var dz = (double)from.Position[2] - to.Position[2];

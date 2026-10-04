@@ -371,7 +371,13 @@ public partial class RuntimeCoordinator
         if (Find() is { } existing) return existing;
         var before = root.GetChildCount();
         try { PlaceNativeReference(root, cell, reference, materializeDisabled: true); return Find(); }
-        catch { while (root.GetChildCount() > before) root.GetChild(before).Free(); throw; }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
+        {
+            while (root.GetChildCount() > before) root.GetChild(before).Free();
+            _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
+            GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey} base={reference.Base}: {error.Message}");
+            return null;
+        }
     }
     private FalloutExteriorGridScene ResolveExterior(FalloutFormKey world, float[] position)
     {

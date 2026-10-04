@@ -7,6 +7,7 @@ internal static class FalloutNifSurfaceInputs
 {
     internal const uint ParallaxFlag = 1U << 11;
     internal const uint SinglePassDecalFlags = (1U << 26) | (1U << 27);
+    internal const uint LocalMapHideSecretFlag = 1U << 20;
 
     // PAR programs sample height red at the original UV. Only diffuse RGB and
     // the normal use the shifted coordinates; coverage and glow retain their UV.

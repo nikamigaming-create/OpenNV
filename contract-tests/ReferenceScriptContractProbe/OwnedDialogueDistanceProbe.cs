@@ -52,6 +52,13 @@ internal static class OwnedDialogueDistanceProbe
         using var cold = new FalloutReferenceWorld(records);
         cold.Restore(saved);
         Check(cold, 13);
+        var unrelated = records.GetEffective(new("Fallout3.esm", 0x02b89e));
+        var unrelatedCell = world.Placement(unrelated.FormKey).Cell;
+        var unrelatedDefinition = FalloutCellSceneReader.ReadDefinition(records, unrelatedCell);
+        if (unrelatedCell == sourceMarker.Cell || unrelatedDefinition.Worldspace is not null ||
+            world.Distance(actor.FormKey, unrelated.FormKey, null, 1) != float.MaxValue ||
+            cold.Distance(actor.FormKey, unrelated.FormKey, null, 1) != float.MaxValue)
+            throw new InvalidDataException("Owned unrelated interiors did not retain the finite no-distance sentinel.");
         if (!Passes(cold) || !cold.Placement(actor.FormKey).Position.SequenceEqual(world.Placement(actor.FormKey).Position) ||
             !cold.EditorPlacement(actor.FormKey).Position.SequenceEqual(sourceActor.Position) ||
             questState != JsonSerializer.Serialize(quests.Capture()) ||
@@ -59,7 +66,7 @@ internal static class OwnedDialogueDistanceProbe
             throw new InvalidDataException("Cold distance placement, campaign state or winning source bytes changed.");
         Console.WriteLine($"OPENNV_OWNED_DIALOGUE_DISTANCE_PASS info={info.FormKey} actor={actor.FormKey} marker={marker.FormKey} " +
             $"queries={queries} sourceDistanceGameUnits={sourceDistance:R} masterAdjusted=true finite=true boundary=true cold=true " +
-            "sourceReadonly=true queryReadonly=true referenceState=isolated-placement-fixture ordinaryInput=separate campaignProgress=unverified parity=unverified");
+            "sourceReadonly=true queryReadonly=true unrelatedInteriorMax=true unrelatedInteriorCold=true referenceState=isolated-placement-fixture ordinaryInput=separate campaignProgress=unverified parity=unverified");
 
         FalloutReferencePlacement Offset(float x, float y, float z) => new(sourceMarker.Cell,
             [sourceMarker.Position[0] + x, sourceMarker.Position[1] + y, sourceMarker.Position[2] + z],

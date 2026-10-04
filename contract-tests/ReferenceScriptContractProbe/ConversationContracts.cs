@@ -51,7 +51,9 @@ internal static class ConversationContracts
                     Field("TRDT", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]), Field("NAM1", Text("duplicate")))),
                 Topic(0x816, "Scripted topic", InfoOfType(1, 0x9a0, 0x703, 128, 1),
                     Info(0x9a1, 0x702, 0, 1), Info(0x9a2, 0x700, 0, 1)),
-                Topic(0x817, "Scripted conversation", 0, 50, [InfoOfType(1, 0x9a3, 0x700, 0, 1)], type: 1));
+                Topic(0x817, "Scripted conversation", 0, 50, [InfoOfType(1, 0x9a3, 0x700, 0, 1)], type: 1),
+                Topic(0x818, "Immediate results", Info(0x9a4, 0x700, 9, 2)),
+                Topic(0x819, "Immediate choice", Info(0x9a5, 0x700, 0, 1, Field("TCLT", U32(0x818)))));
             File.WriteAllBytes(file, data);
             using var records = FalloutPluginStack.Load(directory, ["Dialogue.esm"]);
             var quests = new FalloutQuestState(records);
@@ -71,6 +73,23 @@ internal static class ConversationContracts
             float Unknown(FalloutCondition condition) => throw new NotSupportedException($"Unbound synthetic query {condition.Function}.");
             FalloutConversation Create(Action<FalloutDialogueInfo, bool>? result = null) => new(records, quests, Unknown,
                 result ?? ((info, begin) => calls.Add((info.Record.FormKey.ObjectId, begin))));
+            var immediate = Create(); immediate.Start(Key(0x900), Key(0x818));
+            Require(calls.SequenceEqual([(0x9a4u, true), (0x9a4u, false)]) && immediate.Phase == "speaking",
+                "Run Immediately did not consume both result blocks at selected conversation generation.");
+            immediate.CompleteResponse(); immediate.CompleteResponse();
+            Require(calls.Count == 2 && immediate.Phase == "closed", "Immediate results repeated at response or audio completion.");
+            calls.Clear();
+            var immediateChoice = Create(); immediateChoice.Start(Key(0x900), Key(0x819)); immediateChoice.CompleteResponse();
+            Require(immediateChoice.Choices.Single().Topic == Key(0x818) && calls.All(call => call.Info == 0x9a5),
+                "Offering an immediate topic executed its unselected result blocks.");
+            immediateChoice.Choose(Key(0x818));
+            Require(calls.TakeLast(2).SequenceEqual([(0x9a4u, true), (0x9a4u, false)]),
+                "Selecting an immediate topic lost ordered exactly-once result blocks.");
+            var failedImmediate = Create((_, begin) => { if (!begin) throw new NotSupportedException("Stopped immediate end."); });
+            Reject(() => failedImmediate.Start(Key(0x900), Key(0x818)));
+            Require(failedImmediate.Phase == "failed" && failedImmediate.Response is null,
+                "A failed immediate result published successful speech.");
+            calls.Clear();
             var conversation = Create();
             var filteredEmpty = Create(); filteredEmpty.Start(Key(0x900), Key(0x812));
             Require(filteredEmpty.Info!.Record.FormKey == Key(0x999) && calls.SequenceEqual([(0x999u, true)]),

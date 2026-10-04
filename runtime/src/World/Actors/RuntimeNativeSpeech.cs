@@ -51,6 +51,7 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<int>? _vampireQuery;
     private Func<FalloutFormKey, FalloutFormKey, double>? _itemCount;
     private Func<FalloutFormKey, FalloutFormKey, float>? _referenceDistance;
+    private Func<FalloutFormKey, FalloutFormKey, bool>? _referenceInZone;
     private Func<uint, uint>? _dialogueRandom;
     private FalloutReferenceWorld? _references;
     private Func<FalloutCondition, float>? _conditionContext;
@@ -87,7 +88,7 @@ internal partial class RuntimeNativeSpeech : Node
         new(voice.Reference, voice.Info.Record.FormKey, topic, voice.Info.Responses[voice.ResponseIndex].Text,
             voice.Command!.ForceSubtitles) : null;
     internal string? Error { get; private set; }
-    internal bool Active => Error is not null || _npcDialogueParticipants.Count != 0 || _channels.Values.Any(voice => voice.Info is not null) || _emptyCompletions.Active;
+    internal bool Active => Error is not null || _deferredRequests.Count != 0 || _npcDialogueParticipants.Count != 0 || _channels.Values.Any(voice => voice.Info is not null) || _emptyCompletions.Active;
     internal bool IsTalking(FalloutFormKey reference)
     {
         return _channels.TryGetValue(reference, out var voice) && voice.Info is not null;
@@ -161,6 +162,8 @@ internal partial class RuntimeNativeSpeech : Node
                 sayToTopic = voice?.Topic?.ToString(),
                 said = _said.Select(key => key.ToString()).ToArray(),
                 channels = _channels.Values.Select(ChannelState).ToArray(),
+                deferredRequests = _deferredRequests.Values.Select(request => new
+                { speaker = request.Speaker.ToString(), topic = request.Topic.ToString(), target = request.Target?.ToString() }).ToArray(),
                 subtitleCandidates = SubtitleCandidates(),
                 error = Error,
             };
@@ -200,7 +203,8 @@ internal partial class RuntimeNativeSpeech : Node
         FalloutReferenceWorld? references = null, Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null,
         Func<int>? vampireQuery = null, Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
         Func<FalloutFormKey, Node3D?>? presentation = null,
-        Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null)
+        Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
+        Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
@@ -214,6 +218,7 @@ internal partial class RuntimeNativeSpeech : Node
         _vampireQuery = vampireQuery;
         _itemCount = itemCount;
         _referenceDistance = referenceDistance;
+        _referenceInZone = referenceInZone;
         _dialogueRandom = dialogueRandom;
         _references = references;
         _conditionContext = conditionContext;
@@ -273,7 +278,11 @@ internal partial class RuntimeNativeSpeech : Node
         Action? packageCompleted = null, bool npcConversation = false)
     {
         if (Error is not null) throw new InvalidOperationException(Error);
-        try { StartCore(command, _stack.GetEffective(speaker), topic, target, packageCompleted, forceNpcConversation: npcConversation); }
+        try
+        {
+            if (!DeferScriptedSpeech(command, speaker, topic, target, packageCompleted, npcConversation))
+                StartCore(command, _stack.GetEffective(speaker), topic, target, packageCompleted, forceNpcConversation: npcConversation);
+        }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
             Fail(error); throw;
@@ -328,7 +337,7 @@ internal partial class RuntimeNativeSpeech : Node
         var voice = Channel(speaker.FormKey);
         if (voice.Info is not null || voice.Player.Playing)
             throw new NotSupportedException("Replacing the actor's active speech requires its interruption owner.");
-        if (exchange is null && npcConversation && (forceNpcConversation || info.Choices.Count != 0))
+        if (exchange is null && npcConversation && (forceNpcConversation || packageCompleted is not null && info.Choices.Count != 0))
             exchange = BeginNpcExchange(speaker.FormKey, target!.Value, topicForm, command, packageCompleted);
         BindSpeaker(voice, speaker, actor);
         voice.Command = command;
@@ -344,6 +353,7 @@ internal partial class RuntimeNativeSpeech : Node
         ++voice.Generation; _lastVoice = voice;
         if ((info.Flags & 4) != 0) _said.Add(info.Record.FormKey);
         RunResults(info, voice.DialogueSubject, true);
+        if ((info.Flags & 8) != 0) RunResults(info, voice.DialogueSubject, false);
         PlayResponse(voice);
     }
 
@@ -459,6 +469,7 @@ internal partial class RuntimeNativeSpeech : Node
             foreach (var entry in frame)
                 if (entry.Voice.Info is not null && entry.Voice.Generation == entry.Generation)
                     ProcessVoice(entry.Voice);
+            AdvanceDeferredSpeech();
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
@@ -493,7 +504,7 @@ internal partial class RuntimeNativeSpeech : Node
         voice.Info = null; voice.Lip = null; voice.LipWeights = [];
         voice.Speaker?.ClearSpeechFace();
         GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner=audio-finished");
-        RunResults(completed, voice.DialogueSubject, false);
+        if ((completed.Flags & 8) == 0) RunResults(completed, voice.DialogueSubject, false);
         InfoCompleted?.Invoke(completed.Record.FormKey);
         if (voice.NpcExchange is { } exchange)
         {

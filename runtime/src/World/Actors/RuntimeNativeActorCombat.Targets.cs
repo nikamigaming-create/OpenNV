@@ -76,6 +76,15 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_actor is RuntimeNativeCreature creature) creature.EvaluatePackages(false);
     }
 
+    private void StopCombat()
+    {
+        _routeSearch?.Dispose(); _routeSearch = null;
+        _pursuitPath = []; _pursuitCursor = 0; _routeDoor = null;
+        _routeClock = 0; _routeFailures = 0; _routeError = null;
+        _opponent = null;
+        EndEngagement();
+    }
+
     private bool TryCompanionCombat()
     {
         if (!_state.PlayerTeammate) return false;

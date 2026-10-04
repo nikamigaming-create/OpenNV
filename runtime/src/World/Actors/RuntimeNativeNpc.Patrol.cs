@@ -26,6 +26,7 @@ internal partial class RuntimeNativeNpc
         Combat?.StopPackageMotion();
         if (_guardPackage is not null) { AdvanceGuard(delta); return; }
         if (_dialogueNativeMovement) { AdvanceDialogueTarget(delta); return; }
+        if (_nativeMarkerTravel is not null) { AdvanceMarkerTravel(delta); return; }
         if (_editorTravel is not null) { AdvanceEditorTravel(delta); return; }
         if (_escortPackage is not null) { AdvanceEscort(delta); return; }
         if (_patrol is not { } route || Combat is null || _aiError is not null || Combat.OwnsPose ||
