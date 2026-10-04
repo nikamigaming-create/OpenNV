@@ -666,6 +666,9 @@ try
             Subrecord("PKDT", Combine(UInt32(0x1006), [6, 0, 0, 0], new byte[4])),
             Subrecord("PLDT", Combine(UInt32(3), new byte[8])))),
         Record("CELL", 0x7fff22, 0, Combine(Subrecord("EDID", ZString("SyntheticEditorCell")), Subrecord("DATA", [1]))),
+        Record("TACT", 0x7fff23, 0x40020000, Subrecord("EDID", ZString("SyntheticRadio"))),
+        GroupFormId(0x7fff22, 6, Record("REFR", 0x7fff24, 0, Combine(
+            Subrecord("NAME", UInt32(0x7fff23)), Subrecord("DATA", new byte[24]), Subrecord("XRDO", new byte[16])))),
         GroupFormId(0x7fff22, 6, Record("ACHR", 0x7fff21, 0, Combine(
             Subrecord("NAME", UInt32(7)),
             Subrecord("DATA", new float[] { 1, 2, 3, 0, 0, 0 }.SelectMany(BitConverter.GetBytes).ToArray())))),
@@ -1468,6 +1471,35 @@ try
         References = [new(new("Cell.esm", 1), referenceSave.ActiveCell, new("Cell.esm", 2), null, null, new Dictionary<uint, double>(), null, BroadcastState: false)]
     }), "Legacy campaign schema has mutable radio broadcast state");
     Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(v34Bytes), "Rejected legacy broadcast state replaced a valid save.");
+    var broadcastSave = referenceSave with
+    {
+        Schema = FalloutNativeCampaignSave.BroadcastSchema,
+        References = [new(new("Cell.esm", 0x7fff24), new("Cell.esm", 0x7fff22), new("Cell.esm", 0x7fff23), null, null,
+            new Dictionary<uint, double>(), null, BroadcastState: false)]
+    };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, broadcastSave);
+    var v35Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(v35Restore.State.References!.Single().BroadcastState == false &&
+        FalloutNativeCampaignSave.WithWorldState(v35Restore.State, referenceSave.ActiveCell,
+            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+        "The v35 checkpoint lost broadcast state or failed to upgrade queued event saving.");
+    using var eventWorld = new FalloutReferenceWorld(cellStack);
+    eventWorld.PackageEvents.Mark(new("Cell.esm", 0x7fff21), new("Cell.esm", 0x7fff20), FalloutReferencePackageEventKind.Done);
+    var pendingEventSave = referenceSave with
+    {
+        Schema = FalloutNativeCampaignSave.ExpectedSchema,
+        References = eventWorld.Capture()
+    };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, pendingEventSave);
+    var pendingEventRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(JsonSerializer.Serialize(pendingEventRestore.State.References) == JsonSerializer.Serialize(pendingEventSave.References),
+        "Campaign cold state lost pending source event identity, kind or revision.");
+    var pendingEventBytes = File.ReadAllBytes(syntheticSavePath);
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, pendingEventSave with
+        { Schema = FalloutNativeCampaignSave.BroadcastSchema }), "Legacy campaign schema has pending actor package events");
+    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(pendingEventBytes), "Rejected legacy package events replaced a valid save.");
     FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.UnindexedTagSchema, TagSkillSlots = null });
     var unindexedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

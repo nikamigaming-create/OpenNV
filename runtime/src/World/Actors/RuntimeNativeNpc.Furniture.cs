@@ -13,8 +13,11 @@ internal partial class RuntimeNativeNpc
     private Vector3? _furnitureApproachFloor;
     private FurnitureClip? _furnitureEntry;
     private FalloutFormKey? _reservedFurniture;
+    private FurnitureClip? _furnitureClip;
+    private string? _furnitureModel, _furnitureModelHash;
 
-    private sealed record FurnitureClip(FalloutNifFile Nif, FalloutNifControllerSequence Sequence, string Identity, string Path);
+    private sealed record FurnitureClip(FalloutNifFile Nif, FalloutNifControllerSequence Sequence, string Identity,
+        string Path, FalloutFormKey Idle, string IdleHash);
 
     private void BeginFurniturePackage(FalloutPluginRecord package, FalloutPlacedReference reference,
         FalloutPluginRecord furniture, bool initializing)
@@ -29,13 +32,16 @@ internal partial class RuntimeNativeNpc
         var path = _aiCell!.BaseObjects[reference.Base].ModelPath ?? throw new InvalidDataException("Furniture has no model.");
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned files are absent.");
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Furniture model is absent.", path);
-        var seats = FalloutFurnitureSource.ReadSeats(_aiStack!, furniture, FalloutNifFile.Read(bytes));
+        var nif = FalloutNifFile.Read(bytes);
+        var seats = FalloutFurnitureSource.ReadSeats(_aiStack!, furniture, nif);
         var candidates = seats.Select(value => (Seat: value, Occupied: Occupied(value)))
             .OrderBy(value => value.Occupied.Origin.DistanceSquaredTo(Position));
         var chosen = candidates.FirstOrDefault(value => _aiWorld?.ReserveFurnitureSeat(reference.FormKey,
             value.Seat.Index, Appearance.Reference!.Value) ?? seats.Count == 1);
         if (chosen.Seat is not { } seat) return false;
         _reservedFurniture = reference.FormKey;
+        _furnitureModel = path; _furnitureModelHash = nif.Sha256;
+        if (_aiReferenceState is { } state) state.ProcedureCaptureBlocker = FindFurnitureCaptureBlocker;
         _furnitureIdles ??= new(_aiStack!, Appearance.SkeletonPath);
         _seat = seat;
         _furnitureOccupied = chosen.Occupied;
@@ -112,12 +118,18 @@ internal partial class RuntimeNativeNpc
 
     private FurnitureClip ReadFurnitureClip(int sitting)
     {
-        var source = FalloutActorIdleSource.Resolve(_aiStack!, _furnitureIdles!.Select(condition => condition.Function switch
+        var idle = _furnitureIdles!.Select(condition => condition.Function switch
         {
             159 => sitting,
             143 when sitting == 2 => throw new NotSupportedException("Furniture entry condition needs its native script-visible procedure code."),
             _ => EvaluateAiCondition(condition),
-        }));
+        });
+        return ReadFurnitureClip(idle, sitting);
+    }
+
+    private FurnitureClip ReadFurnitureClip(FalloutPluginRecord idle, int sitting)
+    {
+        var source = FalloutActorIdleSource.Resolve(_aiStack!, idle);
         if (source.Objects.Count != 0) throw new NotSupportedException("Furniture base ANIO requires object ownership.");
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned files are absent.");
         if (!content.TryRead(source.AnimationPath, null, out var bytes, out var identity))
@@ -129,7 +141,8 @@ internal partial class RuntimeNativeNpc
         if (sequence.Frequency <= 0 || sequence.StopTime <= sequence.StartTime ||
             sequence.CycleType != (sitting is 2 or 4 ? 2 : 0))
             throw new NotSupportedException("Furniture procedure has an unsupported source clock.");
-        return new(nif, sequence, identity, source.AnimationPath);
+        return new(nif, sequence, identity, source.AnimationPath, idle.FormKey,
+            OpenNV.Runtime.World.Cells.FalloutActorFurnitureContinuation.RecordHash(idle));
     }
 
     private (Vector3 Start, Vector3 End) FurnitureRootEndpoints(FurnitureClip clip)
@@ -144,10 +157,11 @@ internal partial class RuntimeNativeNpc
         return (SourceTranslation(start), SourceTranslation(end));
     }
 
-    private void StartFurnitureAnimation()
+    private void StartFurnitureAnimation(FurnitureClip? retained = null)
     {
-        var clip = _sitting == 2 ? _furnitureEntry ?? throw new InvalidOperationException("Furniture entry source is absent.")
-            : ReadFurnitureClip(_sitting);
+        var clip = retained ?? (_sitting == 2 ? _furnitureEntry ?? throw new InvalidOperationException("Furniture entry source is absent.")
+            : ReadFurnitureClip(_sitting));
+        _furnitureClip = clip;
         Action<FalloutNifAnimationSample>? rootOwner = null;
         if (_sitting is 2 or 4)
         {
@@ -218,6 +232,10 @@ internal partial class RuntimeNativeNpc
         ClearFurniture();
         _packageEvents!.Change(null);
         _aiPackage = null;
+        _findFurniture = null;
+        _packageIdleSource = null;
+        _packageIdles = null;
+        ClearDialoguePackage();
         _baseAnimation = null;
         _aiQuestRevision = -1;
         _pendingPackage = null;
@@ -225,14 +243,21 @@ internal partial class RuntimeNativeNpc
         AdvanceAi();
     }
 
-    private void ClearFurniture()
+    private void ClearFurniture(bool retire = true)
     {
-        if (_reservedFurniture is { } furniture && _seat is { } seat)
+        if (retire && _reservedFurniture is { } furniture && _seat is { } seat)
             _aiWorld?.ReleaseFurnitureSeat(furniture, seat.Index, Appearance.Reference!.Value);
+        if (retire && _aiReferenceState is { } state)
+        {
+            state.FurnitureContinuation = null;
+            if (state.ProcedureCaptureBlocker == FindFurnitureCaptureBlocker) state.ProcedureCaptureBlocker = null;
+        }
         _reservedFurniture = null;
         _seat = null;
         _furnitureReference = null;
         _furnitureEntry = null;
+        _furnitureClip = null;
+        _furnitureModel = null; _furnitureModelHash = null;
         _furnitureApproaching = false;
         _furnitureApproachFloor = null;
         _furnitureInitialPlacement = false;
@@ -255,6 +280,7 @@ internal partial class RuntimeNativeNpc
         // Its change/end events do not require leaving and re-entering the
         // same seat, and its existing animation keeps its observed phase.
         CancelIdle();
+        ClearDialoguePackage();
         _aiPackage = selected; _packageIdleSource = source;
         _findFurniture = find;
         _packageIdles = new(source, _idleReplays, idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
@@ -266,7 +292,10 @@ internal partial class RuntimeNativeNpc
     public override void _ExitTree()
     {
         RetainBindingFailure();
-        ClearFurniture();
+        RetainSelectionFailure();
+        RetainDialogueContinuation();
+        var retainedFurniture = RetainFurnitureContinuation();
+        ClearFurniture(retire: !retainedFurniture);
         if (_aiReferenceState is { } furnitureState && ReferenceEquals(furnitureState.QuerySitting, _sittingQuery))
             furnitureState.QuerySitting = null;
         if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))

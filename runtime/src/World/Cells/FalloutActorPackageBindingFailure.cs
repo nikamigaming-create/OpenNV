@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed record FalloutActorPackageBindingFailure(FalloutFormKey Package, string PackageSha256,
     string Error, float[] Position, float[] Basis, bool MovingBasePose, ulong AiRandomState,
     double PollRemaining, FalloutScheduleTime? ScheduleTime, FalloutPackageRetirement Retirement,
-    FalloutFaceBlinkSnapshot? Blink = null)
+    FalloutFaceBlinkSnapshot? Blink = null, FalloutActorPackageIdleState? IdleState = null)
 {
     internal void Validate()
     {
@@ -44,12 +44,20 @@ internal sealed record FalloutActorPackageBindingFailure(FalloutFormKey Package,
         if (package.Signature != "PACK" || !Convert.ToHexString(SHA256.HashData(package.ReadData()))
             .Equals(PackageSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Saved failed package differs from its winning source.");
-        _ = FalloutScriptPackage.Read(package);
+        var source = FalloutScriptPackage.Read(package);
+        if (IdleState is { } idles)
+        {
+            idles.Validate(records, Package);
+            if (idles.Collection != new FalloutIdleCollectionPlaybackSnapshot(0, 0, 0, false))
+                throw new InvalidDataException("Stopped initialization has already consumed its idle collection.");
+        }
+        else if (source.Idles.Count != 0)
+            throw new NotSupportedException("Stopped initialization requires its declared idle collection state.");
         Retirement.Validate(records);
         if (Blink is not null && Blink.Settings != FalloutFaceBlinkSettings.Read(records))
             throw new NotSupportedException("Saved stopped actor blink settings differ from the winning source.");
     }
 
     internal FalloutActorPackageBindingFailure Copy() => this with
-    { Position = (float[])Position.Clone(), Basis = (float[])Basis.Clone(), Blink = Blink?.Copy() };
+    { Position = (float[])Position.Clone(), Basis = (float[])Basis.Clone(), Blink = Blink?.Copy(), IdleState = IdleState?.Copy() };
 }

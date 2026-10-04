@@ -191,13 +191,30 @@ internal partial class RuntimeNativeNpc
         if (_aiReferenceState is { } packageState)
             packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents);
         BindFailureCapture();
+        BindSelectionFailureCapture();
+        BindFurnitureCapture();
+        BindDialogueCapture();
         var bindingFailure = _aiReferenceState?.PackageBindingFailure;
         if (bindingFailure is not null) RestoreBindingFailure(bindingFailure);
         // A stationary, unarmed actor owns its source movement-group idle
         // independently of package selection. An unsupported package must not
         // erase that motion owner and leave the skeleton in its bind pose.
-        PlayLocomotion(moving: bindingFailure?.MovingBasePose == true);
-        AdvanceAi(initializing: true);
+        if (_aiReferenceState?.SelectionFailure is { } selectionFailure)
+        {
+            PlayLocomotion(false);
+            RestoreSelectionFailure(selectionFailure);
+        }
+        else if (_aiReferenceState?.FurnitureContinuation is { } furniture) RestoreFurnitureContinuation(furniture);
+        else if (_aiReferenceState?.DialogueContinuation is { } dialogue)
+        {
+            PlayLocomotion(false);
+            RestoreDialogueContinuation(dialogue);
+        }
+        else
+        {
+            PlayLocomotion(moving: bindingFailure?.MovingBasePose == true);
+            AdvanceAi(initializing: true);
+        }
         if (bindingFailure is not null && _aiError is not null)
         {
             _aiPollRemaining = bindingFailure.PollRemaining;

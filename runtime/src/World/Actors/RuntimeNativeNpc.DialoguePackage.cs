@@ -41,7 +41,7 @@ internal partial class RuntimeNativeNpc
         if (_aiWorld is { } world)
         {
             var state = world.Get(Appearance.Reference!.Value);
-            state.ProcedureCaptureBlocker = restored ? null : "Dialogue package continuation has no cold restoration owner.";
+            state.ProcedureCaptureBlocker = restored ? null : FalloutActorDialogueContinuation.CaptureBlocker;
             if (!restored && motion?.Package == package.FormKey) state.PackageMotion = motion with { DialogueCompleted = false };
         }
         if (wait is not null) StartTravel(package, wait);
@@ -53,7 +53,11 @@ internal partial class RuntimeNativeNpc
     private void ClearDialoguePackage()
     {
         if (_dialoguePackage is not null && _aiWorld is { } world)
-            world.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
+        {
+            var state = world.Get(Appearance.Reference!.Value);
+            state.DialogueContinuation = null;
+            if (state.ProcedureCaptureBlocker == FalloutActorDialogueContinuation.CaptureBlocker) state.ProcedureCaptureBlocker = null;
+        }
         _dialoguePackage = null; _dialoguePackageRequested = false; _dialogueNativeMovement = false;
         _dialogueTargetDestination = null;
     }

@@ -10,6 +10,19 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--saved-actor-checkpoint", var savedGame, var savedMod, var savedRoot,
+                var savedPath, var savedActors, .. var savedDependencies])
+            {
+                SavedActorCheckpoint(savedGame, savedMod, savedRoot, savedPath, savedActors.Split(','), savedDependencies);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--npc-checkpoint", var checkpointGame, var checkpointMod, var checkpointRoot,
+                var checkpointActor, var checkpointQuest, var checkpointStage, var checkpointOwner, .. var checkpointDependencies])
+            {
+                NpcCheckpoint(checkpointGame, checkpointMod, checkpointRoot, checkpointActor, checkpointQuest,
+                    short.Parse(checkpointStage, System.Globalization.CultureInfo.InvariantCulture), checkpointOwner, checkpointDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is ["--package-binding-cold", var bindingGame, var bindingMod, var bindingRoot,
                 var bindingActor, var bindingQuest, var bindingStages, var bindingPackages, .. var bindingDependencies])
             {

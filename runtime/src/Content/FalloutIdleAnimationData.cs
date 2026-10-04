@@ -48,6 +48,15 @@ internal sealed class FalloutIdleReplayState
     internal IReadOnlyDictionary<FalloutFormKey, float> Remaining => _remaining;
     internal bool CanSelect(FalloutFormKey idle) => !_remaining.ContainsKey(idle);
 
+    internal void Restore(IReadOnlyDictionary<FalloutFormKey, float> saved)
+    {
+        if (_remaining.Count != 0) throw new InvalidOperationException("Idle replay restoration requires a fresh owner.");
+        if (saved.Any(value => !float.IsFinite(value.Value) || value.Value <= 0 ||
+            value.Key.ObjectId == 0 || string.IsNullOrWhiteSpace(value.Key.OwnerPlugin)))
+            throw new InvalidDataException("Saved idle replay cooldown is invalid.");
+        foreach (var (idle, seconds) in saved) _remaining.Add(idle, seconds);
+    }
+
     internal void Started(FalloutFormKey idle, ushort delaySeconds)
     {
         if (delaySeconds == 0) return;

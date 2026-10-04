@@ -207,6 +207,16 @@ internal sealed class FalloutPackageEvents(Action<FalloutScriptPackage, string> 
         Done = done;
     }
 
+    internal void RestoreHistory(long revision, string? lastEvent, FalloutFormKey? lastPackage)
+    {
+        RequireHealthy();
+        if (Revision != 0 || LastEvent is not null || LastPackage is not null || revision < 0 || revision == long.MaxValue ||
+            (revision == 0 ? lastEvent is not null || lastPackage is not null :
+                lastEvent is not ("POBA" or "POCA" or "POEA") || lastPackage is not { ObjectId: > 0 }))
+            throw new InvalidDataException("Package history restoration requires a fresh, valid lifecycle.");
+        Revision = revision; LastEvent = lastEvent; LastPackage = lastPackage;
+    }
+
     internal void RestoreRetirement(FalloutPackageRetirement retirement)
     {
         RequireHealthy();

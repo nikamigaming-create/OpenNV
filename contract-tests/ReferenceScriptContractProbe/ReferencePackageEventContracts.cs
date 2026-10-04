@@ -43,7 +43,7 @@ internal static class ReferencePackageEventContracts
             using var records = FalloutPluginStack.Load(directory, ["Events.esm", "EventPatch.esp"]);
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
-            var queue = new FalloutReferencePackageEvents(records);
+            var queue = world.PackageEvents;
             var effects = new List<FalloutReferenceScriptEffect>();
             var requeueOnEffect = false;
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, effect =>
@@ -63,7 +63,65 @@ internal static class ReferencePackageEventContracts
             Require(world.InstanceCount == 0 && effects.Count == 0 && queue.PendingCount == 5 && queue.PendingActors.Count == 2 &&
                 queue.HasPending(actor) && queue.HasPending(Key(0x91)) && !queue.HasPending(Key(0x97)),
                 "Prebinding package marks executed source, failed to coalesce or borrowed another actor's event list.");
+            var pendingSave = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+            Require(effects.Count == 0 && world.Get(actor).Read(1) == 0 && queue.PendingCount == 5,
+                "Capturing prebinding marks executed or consumed their source events.");
             var cell = FalloutCellSceneReader.Read(records, Key(0x80));
+            using (var pendingCold = new FalloutReferenceWorld(records))
+            {
+                pendingCold.Restore(pendingSave);
+                Require(pendingCold.PendingPackageEventCount == 5 && pendingCold.Get(actor).Read(1) == 0 &&
+                    JsonSerializer.Serialize(pendingCold.Capture()) == JsonSerializer.Serialize(pendingSave),
+                    "Cold restoration lost queued marks, source revisions or performed their effects.");
+                pendingCold.LoadCell(cell);
+                var coldEffects = new List<FalloutReferenceScriptEffect>();
+                var restoredScripts = new FalloutReferenceScripts(records, pendingCold, new(records),
+                    new((_, _) => false, effect => coldEffects.Add(effect)));
+                var restoredBatch = pendingCold.PackageEvents.SnapshotPending(actor);
+                Require(restoredScripts.DispatchFrame(actor, [new("GameMode"), .. restoredBatch.Events], .25)
+                    .All(result => result.Error is null) && pendingCold.Get(actor).Read(1) == 123456 && coldEffects.Count == 1,
+                    "A cold event frame changed source declaration order, caller or effects.");
+                pendingCold.PackageEvents.Mark(actor, PackageB(), FalloutReferencePackageEventKind.Start);
+                pendingCold.PackageEvents.Consume(restoredBatch);
+                Require(pendingCold.PendingPackageEventCount == 2 && pendingCold.PackageEvents.HasPending(actor),
+                    "Cold receipt consumption discarded a newer identical transition or another actor's event.");
+                Reject(() => queue.Consume(restoredBatch));
+                Reject(() => pendingCold.PackageEvents.Consume(restoredBatch));
+            }
+            var marked = pendingSave.Single(snapshot => snapshot.Reference == actor);
+            var savedMarks = marked.PackageEvents!;
+            foreach (var invalidMarks in new IReadOnlyList<FalloutReferencePackageEventSnapshot>[]
+            {
+                [.. savedMarks, savedMarks[0]],
+                [savedMarks[0] with { Revision = 0 }],
+                [savedMarks[0] with { Kind = (FalloutReferencePackageEventKind)99 }],
+                [savedMarks[0] with { Package = Key(0x71) }],
+                [savedMarks[0] with { SourceSha256 = new string('0', 64) }],
+                [savedMarks[0], savedMarks[1] with { Revision = savedMarks[0].Revision }],
+                [null!],
+            })
+            {
+                using var rejectedWorld = new FalloutReferenceWorld(records);
+                Reject(() => rejectedWorld.Restore(pendingSave.Select(snapshot => snapshot.Reference == actor
+                    ? snapshot with { PackageEvents = invalidMarks } : snapshot).ToArray()));
+                Require(rejectedWorld.InstanceCount == 0 && rejectedWorld.PendingPackageEventCount == 0,
+                    "Invalid package-event continuation partially restored live state.");
+            }
+            // Identical PACK bytes in a different winning master context must
+            // fail before any actor or event reaches the cold world.
+            File.WriteAllBytes(Path.Combine(directory, "EventDrift.esp"), Join(
+                Record("TES4", 0, Field("HEDR", new byte[12]), Field("MAST", Text("Events.esm")), Field("DATA", new byte[8]),
+                    Field("MAST", Text("EventPatch.esp")), Field("DATA", new byte[8])),
+                Package(0x01000101, "PackageB")));
+            using (var driftRecords = FalloutPluginStack.Load(directory, ["Events.esm", "EventPatch.esp", "EventDrift.esp"]))
+            using (var driftWorld = new FalloutReferenceWorld(driftRecords))
+            {
+                Require(records.GetEffective(PackageB()).ReadData().SequenceEqual(driftRecords.GetEffective(PackageB()).ReadData()),
+                    "The package-context drift fixture unexpectedly changed its source bytes.");
+                Reject(() => driftWorld.Restore(pendingSave));
+                Require(driftWorld.InstanceCount == 0 && driftWorld.PendingPackageEventCount == 0,
+                    "Changed winning package master context partially restored pending events.");
+            }
             world.LoadCell(cell);
             var batch = queue.SnapshotPending(actor);
             Require(batch.Actor == actor && batch.Count == 4 && batch.Events.Count == 3 &&
@@ -163,13 +221,13 @@ internal static class ReferencePackageEventContracts
             var coldScripts = new FalloutReferenceScripts(records, cold, quests, new((_, _) => false,
                 _ => throw new InvalidOperationException("A cold retained fault unexpectedly emitted source effects.")));
             Require(cold.Get(failed.Actor).Read(1) == 1 && coldScripts.Dispatch(failed.Actor, "GameMode").Error == failure[0].Error &&
-                cold.Get(failed.Actor).Read(1) == 1 && new FalloutReferencePackageEvents(records).PendingCount == 0,
+                cold.Get(failed.Actor).Read(1) == 1 && cold.PendingPackageEventCount == 0,
                 "Cold reference restoration lost committed locals, source fault or replayed transient event marks.");
             using var invalidCold = new FalloutReferenceWorld(records);
             Reject(() => invalidCold.Restore(saved.Select(snapshot => snapshot.Reference == failed.Actor
                 ? snapshot with { ScriptSha256 = new string('0', 64) } : snapshot).ToArray()));
             Require(invalidCold.InstanceCount == 0, "Changed source identity partially restored package-event state.");
-            Console.WriteLine("OPENNV_REFERENCE_PACKAGE_EVENTS_PASS typedPack=true actorCaller=true queued=true coalesced=true declarationOrder=true endAlias=true prebinding=true residency=true receipt=true invalidAtomic=true faultPrefix=true coldLocals=true coldLifecycle=unverified");
+            Console.WriteLine("OPENNV_REFERENCE_PACKAGE_EVENTS_PASS typedPack=true actorCaller=true queued=true coalesced=true declarationOrder=true endAlias=true prebinding=true residency=true receipt=true invalidAtomic=true faultPrefix=true coldLocals=true coldPending=true coldRequeue=true sourceContext=true");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
     }

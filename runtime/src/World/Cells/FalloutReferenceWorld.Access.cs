@@ -9,14 +9,22 @@ internal sealed partial class FalloutReferenceWorld
 {
     private sealed record AccessSource(FalloutPluginRecord Record, string Sha256,
         IReadOnlyList<FalloutPluginSubrecord> Fields);
-    private sealed record LockDeclaration(int Level, FalloutFormKey? Key, byte Flags);
+    private sealed record LockDeclaration(int Level, FalloutFormKey? Key, byte Flags, bool InitiallyLocked = true);
     private readonly Dictionary<FalloutFormKey, AccessSource> _accessSources = [];
+    private readonly Dictionary<FalloutFormKey, AccessSource> _terminalAccessSources = [];
 
     private AccessSource Access(FalloutFormKey reference)
     {
         _ = Get(reference); // Require the actual placed instance, not its base.
         if (_accessSources.TryGetValue(reference, out var existing)) return existing;
         var source = records.GetEffective(reference);
+        var access = ReadAccess(source);
+        _accessSources.Add(reference, access);
+        return access;
+    }
+
+    private static AccessSource ReadAccess(FalloutPluginRecord source)
+    {
         // Identical record bytes can name different keys after a winning
         // plugin's master table changes. Pin that adjustment context as well.
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -26,10 +34,40 @@ internal sealed partial class FalloutReferenceWorld
             hash.AppendData(Encoding.UTF8.GetBytes(name.ToUpperInvariant()));
             hash.AppendData([0]);
         }
-        var access = new AccessSource(source, Convert.ToHexString(hash.GetHashAndReset()),
+        return new AccessSource(source, Convert.ToHexString(hash.GetHashAndReset()),
             source.ReadSubrecords().ToArray());
-        _accessSources.Add(reference, access);
-        return access;
+    }
+
+    private AccessSource? TerminalAccess(FalloutFormKey reference)
+    {
+        var basis = Get(reference).Base;
+        var record = records.GetEffective(basis);
+        if (record.Signature != "TERM") return null;
+        if (!_terminalAccessSources.TryGetValue(basis, out var source))
+            _terminalAccessSources.Add(basis, source = ReadAccess(record));
+        return source;
+    }
+
+    private string LockSourceHash(FalloutFormKey reference, AccessSource source)
+    {
+        if (TerminalAccess(reference) is not { } terminal) return source.Sha256;
+        return Convert.ToHexString(SHA256.HashData(Convert.FromHexString(source.Sha256)
+            .Concat(Convert.FromHexString(terminal.Sha256)).ToArray()));
+    }
+
+    private LockDeclaration TerminalLock(AccessSource terminal, AccessSource reference)
+    {
+        if (!AccessField(reference, "XLOC").IsEmpty)
+            throw new NotSupportedException("Placed terminal XLOC overrides need their effective declaration owner.");
+        var data = AccessField(terminal, "DNAM");
+        if (data.Length != 4 || data.Span[0] > 5 || (data.Span[1] & ~15) != 0)
+            throw new InvalidDataException("Terminal lock declaration has an invalid difficulty, flags or extent.");
+        var password = OptionalAccessForm(terminal, "PNAM");
+        if (password is { } key && records.GetEffective(key).Signature != "NOTE")
+            throw new InvalidDataException("Terminal password is not a NOTE form.");
+        int[] levels = [0, 25, 50, 75, 100, 255];
+        return new(levels[data.Span[0]], password, (byte)((data.Span[1] & 1) != 0 ? 4 : 0),
+            (data.Span[1] & 2) == 0);
     }
 
     private static ReadOnlyMemory<byte> AccessField(AccessSource source, string name)
@@ -43,8 +81,7 @@ internal sealed partial class FalloutReferenceWorld
 
     private LockDeclaration? LockSource(FalloutFormKey reference, AccessSource source)
     {
-        if (records.GetEffective(Get(reference).Base).Signature == "TERM")
-            throw new NotSupportedException("Terminal lock/access requires its terminal-state owner.");
+        if (TerminalAccess(reference) is { } terminal) return TerminalLock(terminal, source);
         var field = AccessField(source, "XLOC");
         if (field.IsEmpty)
         {
@@ -65,7 +102,8 @@ internal sealed partial class FalloutReferenceWorld
         var source = Access(reference);
         var declaration = LockSource(reference, source);
         var state = instance.LockState ?? (declaration is null ? null :
-            new FalloutReferenceLockState(source.Sha256, declaration.Level, !instance.Unlocked));
+            new FalloutReferenceLockState(LockSourceHash(reference, source), declaration.Level,
+                declaration.InitiallyLocked && !instance.Unlocked));
         return (state, declaration);
     }
 
@@ -85,7 +123,7 @@ internal sealed partial class FalloutReferenceWorld
         RequireCellAccess(cellAccess);
         var (state, _) = EffectiveLock(reference);
         var instance = Get(reference);
-        instance.LockState = new(Access(reference).Sha256,
+        instance.LockState = new(LockSourceHash(reference, Access(reference)),
             difficulty == 0 ? state?.Level ?? 0 : unchecked((byte)difficulty), true);
         instance.Unlocked = false;
     }
@@ -149,8 +187,8 @@ internal sealed partial class FalloutReferenceWorld
         var source = Access(instance.Reference);
         if (snapshot.LockState is { } state)
         {
-            if (!state.ReferenceSha256.Equals(source.Sha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Saved lock differs from its winning reference declaration.");
+            if (!state.ReferenceSha256.Equals(LockSourceHash(instance.Reference, source), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Saved lock differs from its winning reference or terminal declaration.");
             _ = LockSource(instance.Reference, source);
             if (state.Locked && snapshot.Unlocked)
                 throw new InvalidDataException("Saved lock contradicts the legacy unlocked flag.");
@@ -162,7 +200,7 @@ internal sealed partial class FalloutReferenceWorld
             // Legacy saves retained only access. Preserve the winning difficulty
             // and key; an absent source lock does not become a new lock.
             var declaration = LockSource(instance.Reference, source);
-            if (declaration is not null) instance.LockState = new(source.Sha256, declaration.Level, false);
+            if (declaration is not null) instance.LockState = new(LockSourceHash(instance.Reference, source), declaration.Level, false);
             instance.Unlocked = true;
         }
         if (snapshot.OwnershipOverride is { } ownership)

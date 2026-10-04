@@ -22,11 +22,15 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutReferenceOwnershipOverride? OwnershipOverride = null,
     IReadOnlyList<FalloutPackageStart>? PackageStarts = null, FalloutPackageEventIdle? PackageIdle = null,
     FalloutFormKey? TalkingActivatorActor = null, FalloutActorPackageAssignment? PackageAssignment = null,
-    FalloutActorPackageBindingFailure? PackageBindingFailure = null, bool? BroadcastState = null)
+    FalloutActorPackageBindingFailure? PackageBindingFailure = null, bool? BroadcastState = null,
+    IReadOnlyList<FalloutReferencePackageEventSnapshot>? PackageEvents = null,
+    FalloutActorFurnitureContinuation? FurnitureContinuation = null, FalloutActorSelectionFailure? SelectionFailure = null,
+    FalloutActorDialogueContinuation? DialogueContinuation = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
         var seen = new HashSet<FalloutFormKey>();
+        var eventRevisions = new HashSet<long>();
         static bool ValidKey(FalloutFormKey key) => !string.IsNullOrWhiteSpace(key.OwnerPlugin) && key.ObjectId is > 0 and <= FalloutFormKey.ObjectIdMask;
         foreach (var snapshot in snapshots)
         {
@@ -63,6 +67,26 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.PackageMotion?.Validate();
             snapshot.PackageAssignment?.Validate();
             snapshot.PackageBindingFailure?.Validate();
+            snapshot.SelectionFailure?.Validate();
+            snapshot.DialogueContinuation?.Validate();
+            if (snapshot.DialogueContinuation is { } dialogue && (snapshot.Animation is null ||
+                snapshot.PackageAssignment != dialogue.Assignment || snapshot.SelectionFailure is not null ||
+                snapshot.FurnitureContinuation is not null || snapshot.PackageBindingFailure is not null))
+                throw new InvalidDataException("Dialogue wait requires its base clock and matching exclusive procedure.");
+            if (snapshot.SelectionFailure is not null && (snapshot.Animation is null || snapshot.PackageAssignment is not null ||
+                snapshot.PackageBindingFailure is not null || snapshot.FurnitureContinuation is not null))
+                throw new InvalidDataException("Failed selection requires its base clock and no active procedure.");
+            snapshot.FurnitureContinuation?.Validate();
+            if (snapshot.FurnitureContinuation is { } furniture && (snapshot.Animation is null ||
+                snapshot.PackageBindingFailure is not null || snapshot.PackageAssignment != furniture.Assignment))
+                throw new InvalidDataException("Saved furniture requires its base clock and matching package assignment.");
+            var packageEvents = new HashSet<(FalloutFormKey, FalloutReferencePackageEventKind)>();
+            foreach (var mark in snapshot.PackageEvents ?? [])
+            {
+                (mark ?? throw new InvalidDataException("Saved actor package event is absent.")).Validate();
+                if (!packageEvents.Add((mark.Package, mark.Kind)) || !eventRevisions.Add(mark.Revision))
+                    throw new InvalidDataException("Saved actor package event or revision is duplicated.");
+            }
             if (snapshot.PackageBindingFailure is not null && (snapshot.PackageAssignment is not null || snapshot.Animation is null))
                 throw new InvalidDataException("Saved stopped package binding requires its base clock and no running assignment.");
             foreach (var start in snapshot.PackageStarts ?? [])
@@ -120,6 +144,21 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
     internal Func<bool>? CanCapturePackageBindingFailure { get; set; }
     internal Func<FalloutActorPackageBindingFailure>? CapturePackageBindingFailure { get; set; }
+    internal FalloutActorFurnitureContinuation? FurnitureContinuation { get; set; }
+    internal FalloutActorSelectionFailure? SelectionFailure { get; set; }
+    internal FalloutActorDialogueContinuation? DialogueContinuation { get; set; }
+    internal Func<bool>? CanCaptureDialogue { get; set; }
+    internal Func<FalloutActorDialogueContinuation?>? CaptureDialogue { get; set; }
+    internal bool DialogueCaptureReady => CanCaptureDialogue?.Invoke() ??
+        DialogueContinuation is not null && ProcedureCaptureBlocker == FalloutActorDialogueContinuation.CaptureBlocker;
+    internal Func<bool>? CanCaptureSelectionFailure { get; set; }
+    internal Func<FalloutActorSelectionFailure>? CaptureSelectionFailure { get; set; }
+    internal bool SelectionFailureCaptureReady => CanCaptureSelectionFailure?.Invoke() ??
+        SelectionFailure is { } failure && ProcedureCaptureBlocker == failure.Error;
+    internal Func<bool>? CanCaptureFurniture { get; set; }
+    internal Func<FalloutActorFurnitureContinuation?>? CaptureFurniture { get; set; }
+    internal bool FurnitureCaptureReady => CanCaptureFurniture?.Invoke() ??
+        FurnitureContinuation is not null && ProcedureCaptureBlocker == FalloutActorFurnitureContinuation.CaptureBlocker;
     internal bool PackageBindingFailureCaptureReady => CanCapturePackageBindingFailure?.Invoke() ??
         PackageBindingFailure is { } failure && ProcedureCaptureBlocker == failure.Error;
     internal List<FalloutPackageStart> PackageStarts { get; } = [];
@@ -198,7 +237,7 @@ internal sealed class FalloutReferenceInstance
     internal FalloutReferenceSnapshot Capture()
     {
         var failureReady = PackageBindingFailureCaptureReady;
-        if (ProcedureCaptureBlocker is { } blocker && !failureReady)
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !SelectionFailureCaptureReady && !DialogueCaptureReady)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
         var bindingFailure = failureReady ? CapturePackageBindingFailure is { } captureFailure
             ? captureFailure() : PackageBindingFailure?.Copy() : null;
@@ -211,7 +250,11 @@ internal sealed class FalloutReferenceInstance
             TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
             CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
             PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor,
-            CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure, BroadcastState);
+            CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure, BroadcastState,
+            FurnitureContinuation: CaptureFurniture is { } captureFurniture ? captureFurniture() : FurnitureContinuation?.Copy(),
+            SelectionFailure: SelectionFailureCaptureReady ? CaptureSelectionFailure is { } captureSelection
+                ? captureSelection() : SelectionFailure?.Copy() : null,
+            DialogueContinuation: CaptureDialogue is { } captureDialogue ? captureDialogue() : DialogueContinuation?.Copy());
     }
 }
 
@@ -368,10 +411,10 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     }
 
     internal int PendingProcedureCaptureCount => _instances.Values.Count(instance =>
-        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady);
+        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
     internal object PendingProcedureCaptures => _instances.Values.Where(instance =>
-        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady)
+        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady)
         .Select(instance => new
         {
             reference = instance.Reference.ToString(),
@@ -384,18 +427,20 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         PlayerMoves.RequireSettled();
-        if (PendingPackageEventCount != 0)
-            throw new NotSupportedException("Saving pending actor package events requires their continuation state.");
         if (PendingHitEventCount != 0)
             throw new NotSupportedException("Saving pending reference hit events requires their continuation state.");
+        foreach (var actor in _packageEvents?.PendingActors ?? []) _ = Get(actor);
         return _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
-            .Select(instance => instance.Capture()).ToArray();
+            .Select(instance => instance.Capture() with
+            {
+                PackageEvents = _packageEvents?.Capture(instance.Reference) is { Count: > 0 } events ? events : null
+            }).ToArray();
     }
 
     internal void Restore(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_instances.Count != 0) throw new InvalidOperationException("Reference restoration requires a fresh world.");
+        if (_instances.Count != 0 || PendingPackageEventCount != 0) throw new InvalidOperationException("Reference restoration requires a fresh world.");
         FalloutReferenceSnapshot.Validate(snapshots);
         using var validated = new FalloutReferenceWorld(records);
         foreach (var snapshot in snapshots)
@@ -553,6 +598,30 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         // placements must be restored before validating their Travel anchors.
         foreach (var snapshot in snapshots)
         {
+            if (snapshot.DialogueContinuation is { } dialogue)
+            {
+                var actor = validated.Get(snapshot.Reference);
+                dialogue.Validate(records, actor);
+                actor.DialogueContinuation = dialogue.Copy();
+                actor.ProcedureCaptureBlocker = FalloutActorDialogueContinuation.CaptureBlocker;
+            }
+            if (snapshot.SelectionFailure is { } selectionFailure)
+            {
+                var actor = validated.Get(snapshot.Reference);
+                selectionFailure.Validate(records, actor);
+                actor.SelectionFailure = selectionFailure.Copy();
+                actor.ProcedureCaptureBlocker = selectionFailure.Error;
+            }
+            if (snapshot.FurnitureContinuation is { } furniture)
+            {
+                var actor = validated.Get(snapshot.Reference);
+                furniture.Validate(records, validated, actor);
+                actor.FurnitureContinuation = furniture.Copy();
+                actor.ProcedureCaptureBlocker = FalloutActorFurnitureContinuation.CaptureBlocker;
+                if (furniture.Furniture is { } seatReference &&
+                    !validated._furnitureSeats.TryAdd((seatReference, furniture.Seat!.Index), snapshot.Reference))
+                    throw new InvalidDataException("Saved furniture reservation is shared by competing actors.");
+            }
             if (snapshot.PackageMotion is { } staleMotion && snapshot.PackageAssignment is { } assignment &&
                 assignment.Package != staleMotion.Package) continue;
             if (snapshot.PackageMotion?.Travel is { } travel)
@@ -563,8 +632,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
                     .Validate(records, validated, snapshot.Reference, guard);
         }
+        validated.PackageEvents.Restore(snapshots);
+        _packageEvents = validated._packageEvents;
+        validated._packageEvents = null;
         foreach (var (key, instance) in validated._instances) _instances.Add(key, instance);
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
+        foreach (var (seat, actor) in validated._furnitureSeats) _furnitureSeats.Add(seat, actor);
     }
 
     public void Dispose()

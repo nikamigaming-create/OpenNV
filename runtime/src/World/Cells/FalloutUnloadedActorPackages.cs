@@ -52,6 +52,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         FalloutReferencePackageEvents.RequireActor(records, actor);
         if (state.ScriptError is { } failure) throw new NotSupportedException(failure);
         if (state.PackageBindingFailure is { } stopped) return stopped.Package;
+        if (state.SelectionFailure is not null) return null;
         var templates = state.Templates ?? world.InitializeActorTemplates(actor, playerLevel(), globals);
         if (!_actors.TryGetValue(actor, out var events))
         {
@@ -67,7 +68,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
                 eligible: package => world.PackageEligible(actor, package, clock, events.Active?.Form, events.Done));
             events.Change(selected is null ? null : FalloutScriptPackage.Read(selected));
             Remember(actor, events);
-            if (events.Active is { } active && state.PackageMotion?.Package != active.Form)
+            if (events.Active is { } active && state.PackageMotion?.Package != active.Form && state.FurnitureContinuation?.Assignment.Package != active.Form && state.DialogueContinuation?.Assignment.Package != active.Form)
                 state.ProcedureCaptureBlocker = ContinuationBlocker;
             else if (state.ProcedureCaptureBlocker == ContinuationBlocker) state.ProcedureCaptureBlocker = null;
             return events.Active?.Form;
@@ -102,7 +103,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         }
         // Existing retained motion restores its lifecycle in the native
         // procedure owner. A newly selected assignment has no motion yet.
-        if (active is not null && state.PackageMotion?.Package != active.Form)
+        if (active is not null && state.PackageMotion?.Package != active.Form && state.FurnitureContinuation?.Assignment.Package != active.Form && state.DialogueContinuation?.Assignment.Package != active.Form)
             events.Restore(active, done);
         if (state.ProcedureCaptureBlocker == ContinuationBlocker) state.ProcedureCaptureBlocker = null;
     }

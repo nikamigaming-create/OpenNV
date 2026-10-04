@@ -12,10 +12,12 @@ internal partial class RuntimeNativeNpc
 
     private PackageSelection SelectSourcePackage()
     {
-        var selected = FalloutAiPackages.Select(_aiStack!, Appearance.Npc, EvaluateAiCondition, _templates, _aiClock,
-            evaluateRunOn: true, eligible: package => _aiWorld?.PackageEligible(Appearance.Reference!.Value, package,
-                _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true) ??
-                throw new NotSupportedException("NPC package eligibility has no reference state owner."));
+        _failedSelectionCondition = null;
+        var selected = FalloutAiPackages.Select(_aiStack!, Appearance.Npc, EvaluateSelectionCondition, _templates, _aiClock,
+                evaluateRunOn: true, eligible: package => _aiWorld?.PackageEligible(Appearance.Reference!.Value, package,
+                    _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true) ??
+                    throw new NotSupportedException("NPC package eligibility has no reference state owner."));
+        if (_aiReferenceState is not null) _aiReferenceState.SelectionFailure = null;
         return new(selected, selected is null ? null : FalloutScriptPackage.Read(selected));
     }
 
