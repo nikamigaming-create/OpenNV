@@ -216,7 +216,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         AdvanceMuzzle(delta);
         try
         {
-            var group = _drawn && Weapon is { } weapon ? weapon.AnimationGroup + (aiming ? "aimis" : "aim") : _first ? "mtidle" : "locomotion/mtidle";
+            var group = _drawn && Weapon is { } weapon ? weapon.AimGroup(_first, aiming) : _first ? "mtidle" : "locomotion/mtidle";
             if (group != _group) { _active = Clip(group); _group = group; _seconds = 0; }
             _seconds += delta * (Weapon?.AnimationMultiplier ?? 1);
             SelectMovement(delta, movement, grounded);

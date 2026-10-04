@@ -3,6 +3,14 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Actor heading queries](script-heading-query.md) share actual horizontal actor
+facing and reference placement across source events, results and quest owners.
+NPC combat ownership exists before source AI selection and animation restoration.
+
+[Weapon sight projection](weapon-sight-projection.md) binds independent source
+animation exclusions, the weapon's flat sight angle and its shared setting clock.
+Camera publication and shot telemetry keep central aim distinct from spread.
+
 [Quest-object flags](quest-object-flags.md) retain shared source-bound form
 changes independently of immutable record headers. Script dispatch, inventory
 protection, carried weight and session persistence use the same C# owner.

@@ -1,5 +1,17 @@
 # Product status
 
+Checked PR127 is merged at synchronized main f3221b5 with all five checks
+passing. Shared quest-object flags and savev33 are published. In the actual
+optimized run, the user's roach kill completes all original stage70 and80
+results. Dad and Jonas are ready; the photo trigger stops before its first
+write on the missing GetHeadingAngle query. The active candidate supplies that
+shared query, source BB-gun sight projection/animation exclusions and combat
+ownership before AI initialization. Synthetic heading checks and the unchanged
+original photo-trigger fixture pass. Native advancement and Paul's cold chair
+restoration remain pending; manual saving still refuses his unfinished owner
+in the loaded old CLR. The expanded candidate's required integrated gate and
+diff check pass.
+
 Checked PR125 publishes reference-owned stopped NPC initialization saves and
 shared Guard marker approach at synchronized main a910a0dc; all five checks
 pass. Synthetic continuation checks, Beatrice's native cold/resumed-advancement

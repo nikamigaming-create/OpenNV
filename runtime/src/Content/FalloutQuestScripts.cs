@@ -196,7 +196,8 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Action<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, double>? ExecuteProgram = null,
     FalloutUserFunctionInvoker? InvokeFunction = null, Action? RequireLevelUpOwner = null,
     Func<string, FalloutActorValueRead, double>? ReadPlayerActorValue = null,
-    Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null);
+    Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null,
+    Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null);
 
 internal sealed class FalloutQuestScripts
 {
@@ -618,6 +619,12 @@ internal sealed class FalloutQuestScripts
                 return new([], _ => Session.LocationSpecificLoadScreensOnly ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getinchargen")
                 return new([], _ => Session.InCharGen ? 1 : 0) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getheadingangle")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    (host?.HeadingAngle ?? throw new NotSupportedException("GetHeadingAngle has no spatial owner."))
+                    (caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
+                        arguments[0].Value.FormKey(_records)))
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getvampire")
                 return new([], arguments =>
                 {

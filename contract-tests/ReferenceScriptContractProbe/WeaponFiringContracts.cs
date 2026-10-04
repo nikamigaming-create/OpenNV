@@ -14,6 +14,7 @@ internal static class WeaponFiringContracts
         {
             var header = new byte[12]; Float(header, 0, 1.34f);
             var weaponData = new byte[204]; UInt(weaponData, 0, 3); Float(weaponData, 4, 1); weaponData[14] = 2;
+            Float(weaponData, 28, 55); weaponData[12] = 0x40;
             UInt(weaponData, 104, 41); Float(weaponData, 116, 1.5f); Float(weaponData, 124, .4f);
             weaponData[41] = 32; weaponData[42] = 1; UInt(weaponData, 36, 3); Float(weaponData, 60, 1.25f);
             var economics = new byte[15]; BinaryPrimitives.WriteInt32LittleEndian(economics.AsSpan(4), 100); economics[12] = 16; economics[14] = 5;
@@ -54,6 +55,7 @@ internal static class WeaponFiringContracts
             var shortDnamWeaponRecords = new[] { 164, 172, 180, 196 }.Select((extent, index) =>
             {
                 var dnam = weaponData[..extent];
+                if (index == 1) { dnam[12] = 0; UInt(dnam, 56, 0x100); Float(dnam, 28, 37); }
                 if (extent >= 172) UInt(dnam, 168, 7);
                 return Record("WEAP", checked((uint)(30 + index)), Field("EDID", Text("TestWeaponDnam" + extent)),
                     Field("MODL", Text("test-layout-weapon.nif")), Field("DATA", economics),
@@ -101,16 +103,23 @@ internal static class WeaponFiringContracts
                 .Concat(Record("GMST", 11, Field("EDID", Text("fDamageSkillMult")), Field("DATA", BitConverter.GetBytes(.75f))))
                 .Concat(Record("GMST", 52, Field("EDID", Text("fCombatDistance")), Field("DATA", BitConverter.GetBytes(128.0f))))
                 .Concat(Record("GMST", 53, Field("EDID", Text("fCombatHitConeAngle")), Field("DATA", BitConverter.GetBytes(35.0f))))
+                .Concat(Record("GMST", 54, Field("EDID", Text("fIronSightsFOVTimeChange")), Field("DATA", BitConverter.GetBytes(.25f))))
                 .Concat(shortDnamWeaponRecords.SelectMany(record => record)).ToArray());
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
             var weapon = FalloutWeaponPresentation.Read(records, Key(1));
+            Require(weapon.SightFieldOfViewDegrees == 55 && weapon.AimGroup(true, true) == "1hpaim" &&
+                weapon.AimGroup(false, true) == "1hpaimis", "First-person sight exclusion also changed third-person or lost the source angle.");
+            CheckSight(records, weapon);
             var shot = FalloutWeaponShot.Read(records, Key(1), Key(2));
             shot.RequireInstantRay();
             foreach (var (extent, index) in new[] { 164, 172, 180, 196 }.Select((extent, index) => (extent, index)))
             {
                 var key = Key(checked((uint)(30 + index)));
                 var sourceWeapon = FalloutWeaponPresentation.Read(records, key, firstPerson: false);
+                Require(sourceWeapon.SightFieldOfViewDegrees == (index == 1 ? 37 : 55) &&
+                    sourceWeapon.FirstPersonIronSightsAnimation == (index == 1) &&
+                    sourceWeapon.ThirdPersonIronSightsAnimation == (index != 1), "Short WEAP lost independent sight fields.");
                 var sourceShot = FalloutWeaponShot.Read(records, key, Key(2));
                 sourceShot.RequireRuntimeAttackOwner();
                 var inventoryForCondition = new FalloutPlayerInventory();
@@ -287,6 +296,36 @@ internal static class WeaponFiringContracts
         var beam = FalloutProjectile.Read(records, key);
         return beam.HitscanImpactDelaySeconds(5, .01f);
     }
+    private static void CheckSight(FalloutPluginStack records, FalloutWeaponPresentation weapon)
+    {
+        var sight = new FalloutWeaponSight(records, 75);
+        Require(sight.Advance(0, weapon, true) == 75 && sight.Advance(.125, weapon, true) == 65 &&
+            sight.Advance(.125, weapon, true) == 55, "Source sight angle or transition duration was not applied.");
+        Require(sight.Advance(.125, weapon, false) == 65 && sight.Advance(.125, weapon, true) == 60 &&
+            sight.Advance(.125, weapon, true) == 55, "A reversed sight transition jumped or kept the old target.");
+        Require(records.NumericSettings.Set("fIronSightsFOVTimeChange", 0) && sight.Advance(0, weapon, false) == 75,
+            "Live zero-duration sight setting did not release zoom.");
+        foreach (var sentinel in new[] { 0f, 1, 5, 75 })
+            Require(sight.Advance(0, weapon with { SightFieldOfViewDegrees = sentinel }, true) == 75,
+                "Disabled or no-zoom source sight value narrowed the camera.");
+        Require(!FalloutWeaponSight.CanAim(weapon with { SightFieldOfViewDegrees = 0 }) &&
+            !FalloutWeaponSight.CanAim(weapon with { EquipmentType = 3, WeaponAnimationType = 1 }),
+            "Disabled sights or melee received flat firearm aiming.");
+        Require(sight.Advance(0, weapon with { SightFieldOfViewDegrees = 100 }, true) == 100,
+            "A valid widening sight field of view was artificially restricted.");
+        var projection = FalloutCameraProjection.FromReferenceFov(55, 2.5f);
+        Require(MathF.Abs(projection.ReferenceHorizontalFovDegrees - 55) < .0001f &&
+            projection.VerticalFovDegrees < 55, "Horizontal sight FOV was used as the vertical camera angle.");
+        Reject(() => sight.Advance(-1, weapon, true));
+        Reject(() => sight.Advance(0, weapon with { SightFieldOfViewDegrees = float.NaN }, true));
+        Require(records.NumericSettings.Set("fIronSightsFOVTimeChange", -1), "Invalid fixture setting could not be supplied.");
+        var previous = sight.HorizontalDegrees;
+        Reject(() => sight.Advance(0, weapon, true));
+        Require(sight.HorizontalDegrees == previous, "Invalid sight setting changed published projection.");
+        Require(records.NumericSettings.Set("fIronSightsFOVTimeChange", .25), "Fixture setting did not restore.");
+        Console.WriteLine("OPENNV_WEAPON_SIGHT_PASS sourceAngle=true independentAnimationFlags=true clock=true reversal=true liveSetting=true sentinels=true projection=true invalidAtomic=true retailTransition=unverified");
+    }
+
     private static void Reject(Action action)
     {
         try { action(); } catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }
