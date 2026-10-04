@@ -5,6 +5,17 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--death-count-contracts"])
+{
+    ScriptDeathContracts.Run();
+    StageConditionScopeContracts.Run();
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-ttw-escape-stage")
+{
+    OwnedEscapeStageProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
 if (args is ["--reference-package-event-contracts"])
 {
     ReferencePackageEventContracts.Run();
@@ -670,6 +681,7 @@ FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 ScriptDeathContracts.Run();
+StageConditionScopeContracts.Run();
 PlayerSkillContracts.Run();
 PlayerTagSkillContracts.Run();
 PlayerActorValueContracts.Run();

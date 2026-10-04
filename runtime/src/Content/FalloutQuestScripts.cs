@@ -651,6 +651,11 @@ internal sealed partial class FalloutQuestScripts
                 return soundFunction;
             if (parts.Length == 1 && operation == "menumode")
                 return new([FalloutScriptArgumentKind.OptionalNumber], arguments => Menus.Query(arguments.Count == 0 ? null : arguments[0].Number)) { ReadOnly = true };
+            if (parts.Length == 1 && operation == "getdeadcount")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    (References ?? throw new NotSupportedException("GetDeadCount has no shared death history."))
+                    .GetDeadCount(arguments[0].Value.FormKey(_records)))
+                { ReadOnly = true };
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => Session.LocationSpecificLoadScreensOnly ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getinchargen")

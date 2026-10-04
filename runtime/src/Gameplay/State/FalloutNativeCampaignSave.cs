@@ -47,7 +47,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v36";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v37";
+    internal const string ProcedureSchema = "opennv-native-fnv-campaign-save/v36";
     internal const string BroadcastSchema = "opennv-native-fnv-campaign-save/v35";
     internal const string IndexedTagSchema = "opennv-native-fnv-campaign-save/v34";
     internal const string UnindexedTagSchema = "opennv-native-fnv-campaign-save/v33";
@@ -292,8 +293,18 @@ internal static class FalloutNativeCampaignSave
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
             if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
+        if (state.Schema != ExpectedSchema && state.References is not null)
+            state = state with
+            {
+                Schema = state.Schema == ProcedureSchema ? ExpectedSchema : state.Schema,
+                References = RestoreLegacyDeathCounts(state)
+            };
         return new FalloutNativeCampaignRestore(state, inventory);
     }
+
+    private static IReadOnlyList<FalloutReferenceSnapshot>? RestoreLegacyDeathCounts(FalloutNativeCampaignState state) =>
+        state.Schema == ExpectedSchema ? state.References : state.References?.Select(reference => reference with
+        { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray();
 
     private static void ValidateQuestValueHandles(FalloutPluginStack stack,
         IReadOnlyList<FalloutQuestSnapshot> snapshots, FalloutScriptValueStore values)
@@ -320,6 +331,7 @@ internal static class FalloutNativeCampaignSave
         IReadOnlyList<float> playerRotation, float? playerViewPitchRadians = null)
     {
         ArgumentNullException.ThrowIfNull(state);
+        Validate(state, state.SaveCompatibilityId);
         var updated = state with
         {
             Schema = state.References is not null ? ExpectedSchema : state.SkyLighting is not null ? QuestClockSchema : state.Globals is null ? QuestScriptsSchema : GlobalClockSchema,
@@ -329,6 +341,7 @@ internal static class FalloutNativeCampaignSave
             PlayerViewPitchRadians = playerViewPitchRadians ?? RestorePlayerViewPitch(state),
             EncounterZones = state.References is null ? null : state.EncounterZones ?? [],
             TagSkillSlots = state.TagSkillSlots ?? FalloutPlayerTagSkills.FromLegacy(state.TagSkills),
+            References = RestoreLegacyDeathCounts(state),
         };
         Validate(updated, state.SaveCompatibilityId);
         return updated;
@@ -373,6 +386,14 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.DeathCount is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema has cumulative actor death history.");
+        if (state.Schema == ExpectedSchema && state.References?.Any(reference =>
+            reference.Injury?.DeathInventoryGranted == true && reference.DeathCount is not > 0) == true)
+            throw new InvalidDataException("Saved killed actor has no cumulative death history.");
+        // v36 owned no resurrection/respawn command. Its once-only granted
+        // death inventory proves one consumed death; source corpses prove none.
+        if (state.Schema == ProcedureSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema is ExpectedSchema or BroadcastSchema or IndexedTagSchema && state.TagSkillSlots is null)
             throw new InvalidDataException("Saved campaign is missing indexed player tag skills.");
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageEvents is { Count: > 0 }) == true)

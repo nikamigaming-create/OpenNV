@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Content;
 // result retain the reached prefix rather than replaying rewards on retry.
 internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQuestState quests,
     Func<FalloutPluginRecord, IReadOnlyList<FalloutPluginSubrecord>, string, IEnumerable<bool>> execute,
-    Func<FalloutCondition, float> evaluate, Func<bool>? canContinue = null)
+    Func<FalloutCondition, float> evaluate, Func<bool>? canContinue = null, bool evaluateRunOn = false)
 {
     private readonly Dictionary<(FalloutFormKey, short), string> _errors = [];
     private readonly List<(FalloutFormKey Quest, short Stage, IEnumerator<bool> Steps)> _pending = [];
@@ -59,7 +59,7 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
                 var flags = entry[0].Data;
                 if (flags.Length != 1 || (flags.Span[0] & ~3) != 0) throw new NotSupportedException("Quest stage flags are unbound.");
                 var conditions = entry.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(quest, field.Data.Span)).ToArray();
-                if (FalloutCondition.AllPass(conditions, evaluate))
+                if (FalloutCondition.AllPass(conditions, evaluate, evaluateRunOn))
                 {
                     if ((flags.Span[0] & 2) != 0) throw new NotSupportedException("Failed quest presentation and state are unbound.");
                     if ((flags.Span[0] & 1) != 0) quests.Complete(key);

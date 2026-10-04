@@ -92,7 +92,7 @@ internal sealed partial class RuntimeNativeCreature
         }
     }
 
-    internal float PackageCondition(FalloutCondition condition) => condition.RunOn != 0 && condition.Function is not (50 or 161 or 289)
+    internal float PackageCondition(FalloutCondition condition) => condition.RunOn != 0 && condition.Function is not (50 or 84 or 161 or 289)
         ? throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.")
         : condition.Function switch
         {
@@ -101,6 +101,8 @@ internal sealed partial class RuntimeNativeCreature
                 reference => _aiWorld!.CurrentPackage(reference)) ? 1 : 0,
             18 => (_aiClock ?? throw new NotSupportedException("Creature time query has no simulation clock.")).Hour,
             74 => (_aiGlobals ?? throw new NotSupportedException("Creature global query has no state owner.")).Get(condition.FormArgument1),
+            84 => (_aiWorld ?? throw new NotSupportedException("Creature death count has no shared death history."))
+                .GetDeadCount(condition.FormArgument1),
             71 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
             73 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
             58 or 59 or 79 or 546 => _aiQuests!.Evaluate(condition),
