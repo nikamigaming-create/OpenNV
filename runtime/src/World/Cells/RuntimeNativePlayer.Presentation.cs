@@ -22,6 +22,8 @@ internal partial class RuntimeNativePlayer
     private long _presentationInventoryRevision = -1;
     private string? _presentationError;
     private bool _thirdPersonMode, _aiming;
+    private FalloutWeaponSight? _weaponSight;
+    private bool WeaponAiming => _aiming && _weaponHandling is { Drawn: true } && FalloutWeaponSight.CanAim(_firstPerson?.Weapon);
     private readonly Godot.Collections.Array<Rid> _selfQueryBodies = [];
     private float _thirdPersonDistance = 2;
     internal object PresentationState => new
@@ -31,6 +33,17 @@ internal partial class RuntimeNativePlayer
         appearanceRevision = _presentationAppearanceRevision,
         sourceScale = _sourceScale,
         toddler = _playerPolicy?.Invoke().PlayerToddler ?? false,
+        aiming = WeaponAiming,
+        sight = _weaponSight is null ? null : new
+        {
+            horizontalDegrees = _weaponSight.HorizontalDegrees,
+            targetDegrees = _weaponSight.TargetDegrees,
+            transitionSeconds = _weaponSight.TransitionSeconds,
+            worldVerticalDegrees = _camera.Fov,
+            firstPersonVerticalDegrees = _firstPersonCamera?.Fov,
+            projection = _xr is null ? "flat-source-weapon" : "OpenXR-runtime",
+            retailTransition = "unverified"
+        },
         first = _firstPerson?.State,
         third = _thirdPerson?.State,
         error = _presentationError,
@@ -147,8 +160,8 @@ internal partial class RuntimeNativePlayer
         var simulationDelta = GetTree().Paused ? 0 : delta;
         AdvanceWeaponHandling(simulationDelta);
         var movement = GlobalBasis.Inverse() * Velocity;
-        _firstPerson?.Advance(simulationDelta, movement, IsOnFloor(), _aiming);
-        _thirdPerson?.Advance(simulationDelta, movement, IsOnFloor(), _aiming);
+        _firstPerson?.Advance(simulationDelta, movement, IsOnFloor(), WeaponAiming);
+        _thirdPerson?.Advance(simulationDelta, movement, IsOnFloor(), WeaponAiming);
         try { PublishXrHands(delta); }
         catch (Exception error)
         {
@@ -156,13 +169,31 @@ internal partial class RuntimeNativePlayer
             GD.PushError("OPENNV_TRACKED_BODY_UNBOUND " + error.Message);
             return;
         }
-        PublishPendingShot();
         if (_firstPersonCamera is not null && _firstPerson is not null)
         {
             _firstPersonCamera.Transform = _firstPerson.SourceCamera;
             _firstPersonView!.Size = (Vector2I)GetViewport().GetVisibleRect().Size;
         }
+        PublishWeaponSight(simulationDelta);
+        if (_presentationError is not null) return;
         PublishThirdPersonCamera();
+        PublishPendingShot();
+    }
+
+    private void PublishWeaponSight(double seconds)
+    {
+        if (_xr is not null) return;
+        try
+        {
+            _weaponSight ??= new(_presentationRecords!, new FalloutCameraProjection(_camera.Fov, _camera.Near / UnitsToMeters).ReferenceHorizontalFovDegrees);
+            var horizontal = _weaponSight.Advance(seconds, _firstPerson?.Weapon, WeaponAiming);
+            _camera.Fov = FalloutCameraProjection.FromReferenceFov(horizontal, _camera.Near / UnitsToMeters).VerticalFovDegrees;
+        }
+        catch (Exception error)
+        {
+            _presentationError = error.Message;
+            GD.PushError("OPENNV_WEAPON_SIGHT_UNBOUND " + error.Message);
+        }
     }
 
     private void RebuildPresentation(uint[] equipped)

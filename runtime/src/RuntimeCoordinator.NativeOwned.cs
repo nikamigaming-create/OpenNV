@@ -776,12 +776,12 @@ public partial class RuntimeCoordinator
                     actor.NpcDialogueActive = () => _nativeOpeningStageDriver.IsNpcDialogueActive(reference.FormKey);
                     actor.ExecutePackageEvent = (program, caller) => _nativeOpeningStageDriver.ExecutePackageEvent(program, caller);
                 }
-                actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
-                    () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences);
-                root.AddChild(actor);
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
                     _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
+                actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
+                    () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences);
+                root.AddChild(actor);
                 AddNativeReferenceEmittance(actor, reference);
                 _nativeActorDivergences[reference.FormKey.ToString()] =
                     "animation-selection-blending, face-pose, gameplay, material-lighting-output parity unbound";

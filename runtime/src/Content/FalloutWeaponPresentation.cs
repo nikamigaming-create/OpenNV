@@ -14,6 +14,11 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal bool Automatic { get; init; }
     internal float AttackShotsPerSecond { get; init; }
     internal bool NpcsUseAmmo { get; init; }
+    internal float SightFieldOfViewDegrees { get; init; }
+    internal bool FirstPersonIronSightsAnimation { get; init; } = true;
+    internal bool ThirdPersonIronSightsAnimation { get; init; } = true;
+    internal string AimGroup(bool firstPerson, bool aiming) => AnimationGroup +
+        (aiming && (firstPerson ? FirstPersonIronSightsAnimation : ThirdPersonIronSightsAnimation) ? "aimis" : "aim");
     internal int EquipmentType { get; init; }
     internal uint WeaponAnimationType { get; init; }
     internal uint OnHitBehavior { get; init; }
@@ -87,6 +92,9 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
         };
         var multiplier = BinaryPrimitives.ReadSingleLittleEndian(data[4..]);
         if (!float.IsFinite(multiplier) || multiplier <= 0) throw new InvalidDataException("WEAP animation multiplier is invalid.");
+        var sightFov = BinaryPrimitives.ReadSingleLittleEndian(data[28..]);
+        if (!float.IsFinite(sightFov) || sightFov < 0 || sightFov >= 180)
+            throw new InvalidDataException("WEAP sight field of view is invalid.");
         var model = fields.SingleOrDefault(field => field.Signature == "WNAM").Data;
         var owner = weapon;
         if (firstPerson && !model.IsEmpty)
@@ -164,6 +172,9 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
             Embedded = (data[12] & 0x20) != 0,
             AttackShotsPerSecond = BinaryPrimitives.ReadSingleLittleEndian(data[88..]),
             NpcsUseAmmo = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 2) != 0,
+            SightFieldOfViewDegrees = sightFov,
+            FirstPersonIronSightsAnimation = (data[12] & 0x40) == 0,
+            ThirdPersonIronSightsAnimation = (BinaryPrimitives.ReadUInt32LittleEndian(data[56..]) & 0x100) == 0,
             EquipmentType = equipmentType,
             WeaponAnimationType = type,
             OnHitBehavior = BinaryPrimitives.ReadUInt32LittleEndian(data[52..]),

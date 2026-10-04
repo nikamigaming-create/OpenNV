@@ -30,7 +30,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, int>? GetOpenState = null,
     Func<FalloutFormKey, string, FalloutActorValueRead, double>? ReadActorValue = null,
     Action<FalloutFormKey, string, string, double>? ChangeActorValue = null,
-    FalloutInventoryCommands? Inventory = null, FalloutChallenges? Challenges = null);
+    FalloutInventoryCommands? Inventory = null, FalloutChallenges? Challenges = null,
+    Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -531,6 +532,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([FalloutScriptArgumentKind.Identifier], arguments =>
                     (host.Distance ?? throw new NotSupportedException("GetDistance has no spatial owner."))
                     (Target(), Reference(arguments[0].Identifier!)));
+            if (parts.Length <= 2 && operation == "getheadingangle")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    (host.HeadingAngle ?? throw new NotSupportedException("GetHeadingAngle has no spatial owner."))
+                    (Target(), arguments[0].Value.FormKey(records)))
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getisid")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                 {

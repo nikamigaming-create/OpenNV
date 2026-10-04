@@ -62,14 +62,14 @@ internal partial class RuntimeNativePlayer
         lastExplosion = _lastExplosion,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
-        unbound = "encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-audio,supersonic-projectile-audio-and-retail-parity,continuous-beam,tracers,beam-visuals-and-retail-parity,explosion-distance-attenuation,force,radiation-and-retail-parity"
+        unbound = "auto-aim-screen-percentage-target-ranking-and-retail-correction,encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-audio,supersonic-projectile-audio-and-retail-parity,continuous-beam,tracers,beam-visuals-and-retail-parity,explosion-distance-attenuation,force,radiation-and-retail-parity"
     };
 
     private float ResolvePlayerShotSpread(FalloutWeaponShot shot)
     {
         var vitals = _limbVitals?.Invoke() ?? throw new InvalidOperationException("Player limb state is absent from weapon spread.");
         var arms = CrippledArms(vitals);
-        var aiming = _xr is null ? _aiming : _xr.RightAim.GetHasTrackingData();
+        var aiming = _xr is null ? WeaponAiming : _xr.RightAim.GetHasTrackingData();
         var moving = new Vector2(Velocity.X, Velocity.Z).LengthSquared() > .0001f;
         var actorValue = _combatActorValue ?? throw new InvalidOperationException("Player actor-value owner is absent.");
         return (_weaponSpread ??= new(_presentationRecords ?? throw new InvalidOperationException("Weapon source records are absent.")))
@@ -193,20 +193,12 @@ internal partial class RuntimeNativePlayer
                 var from = muzzle.Origin;
                 var direction = -muzzle.Basis.Z.Normalized();
                 var shotRange = _shot.Projectile.Range * UnitsToMeters;
-                var autoAimMaxDist = 1800f * UnitsToMeters;
-                var autoAimMaxDeg = 3.0f;
-                if (_presentationRecords is not null)
-                {
-                    try
-                    {
-                        autoAimMaxDist = FalloutGameSettingFloats.Read(_presentationRecords, "fAutoAimMaxDistance") * UnitsToMeters;
-                        autoAimMaxDeg = FalloutGameSettingFloats.Read(_presentationRecords, "fAutoAimMaxDegrees");
-                    }
-                    catch
-                    {
-                        // Fall back to default auto-aim parameters if GMST records are absent
-                    }
-                }
+                var sourceRecords = _presentationRecords ?? throw new InvalidOperationException("Shot settings have no source owner.");
+                var autoAimMaxDist = FalloutGameSettingFloats.Read(sourceRecords, "fAutoAimMaxDistance") * UnitsToMeters;
+                var autoAimMaxDeg = FalloutGameSettingFloats.Read(sourceRecords,
+                    _xr is null && _thirdPersonMode ? "fAutoAimMaxDegrees3rdPerson" : "fAutoAimMaxDegrees");
+                if (!float.IsFinite(autoAimMaxDist) || autoAimMaxDist < 0 || !float.IsFinite(autoAimMaxDeg) || autoAimMaxDeg < 0 || autoAimMaxDeg >= 90)
+                    throw new InvalidDataException("Shot auto-aim settings are invalid.");
                 var autoAimRange = MathF.Min(shotRange, autoAimMaxDist);
 
                 if (_xr is null)
@@ -309,6 +301,11 @@ internal partial class RuntimeNativePlayer
                     projectileDamageEventsPending = damage.PendingEvents,
                     projectileImpactRequests = impactCount,
                     origin = new[] { from.X, from.Y, from.Z },
+                    cameraOrigin = new[] { _camera.GlobalPosition.X, _camera.GlobalPosition.Y, _camera.GlobalPosition.Z },
+                    cameraForward = new[] { -_camera.GlobalBasis.Z.X, -_camera.GlobalBasis.Z.Y, -_camera.GlobalBasis.Z.Z },
+                    aiming = WeaponAiming,
+                    worldVerticalFov = _camera.Fov,
+                    centerDirection = new[] { direction.X, direction.Y, direction.Z },
                     direction = lastTrace is null
                         ? new[] { direction.X, direction.Y, direction.Z }
                         : new[] { lastTrace.Direction.X, lastTrace.Direction.Y, lastTrace.Direction.Z },
@@ -390,7 +387,7 @@ internal partial class RuntimeNativePlayer
     private Vector3? ResolveAutoAimTarget(Vector3 origin, Vector3 direction, float maxRange, float maxDegrees)
     {
         if (maxDegrees <= 0f || maxRange <= 0f) return null;
-        var halfAngleRad = Mathf.DegToRad(Math.Clamp(maxDegrees, 0.5f, 45f));
+        var halfAngleRad = Mathf.DegToRad(maxDegrees);
         const int sides = 16;
         var startRadius = 0.2f;
         var tanHalf = MathF.Tan(halfAngleRad);
@@ -437,6 +434,7 @@ internal partial class RuntimeNativePlayer
             if (candidateDist <= 0.001f || candidateDist > maxRange) continue;
             var candidateDir = toCandidate / candidateDist;
             var dot = direction.Dot(candidateDir);
+            if (dot < MathF.Cos(halfAngleRad)) continue;
             var forwardDist = candidateDist * dot;
             if (forwardDist <= 0f) continue;
             var lateralDist = MathF.Sqrt(MathF.Max(0f, candidateDist * candidateDist - forwardDist * forwardDist));
@@ -446,7 +444,7 @@ internal partial class RuntimeNativePlayer
             if (sightCheck.TryGetValue("collider", out var sightObj) && sightObj.AsGodotObject() is Node sightCollider)
             {
                 var sightCombat = RuntimeNativeActorCombat.Find(sightCollider);
-                if (sightCombat != combat && sightCombat is null)
+                if (sightCombat != combat)
                 {
                     if (sightCheck.TryGetValue("position", out var sightPos) && origin.DistanceTo(sightPos.AsVector3()) < candidateDist - 0.05f)
                         continue;

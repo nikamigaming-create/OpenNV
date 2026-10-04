@@ -2,6 +2,9 @@ namespace OpenNV.Runtime.Content;
 
 internal readonly record struct FalloutCameraProjection(float VerticalFovDegrees, float NearGameUnits)
 {
+    internal float ReferenceHorizontalFovDegrees =>
+        2 * MathF.Atan(MathF.Tan(VerticalFovDegrees * MathF.PI / 360) * (4f / 3f)) * 180 / MathF.PI;
+
     internal static FalloutCameraProjection Read(FalloutInstallationSettings settings) => FromReferenceFov(
         settings.Number("Display", settings.Contains("Display", "fDefaultWorldFOV") ? "fDefaultWorldFOV" : "fDefaultFOV"),
         settings.Number("Display", "fNearDistance"));
