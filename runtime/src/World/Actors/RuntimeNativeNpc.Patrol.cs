@@ -24,6 +24,8 @@ internal partial class RuntimeNativeNpc
     public override void _PhysicsProcess(double delta)
     {
         Combat?.StopPackageMotion();
+        if (_findFurniture is not null) AdvanceFindFurniture(delta);
+        if (_furnitureApproaching) { AdvanceFurnitureApproach(delta); return; }
         if (_guardPackage is not null) { AdvanceGuard(delta); return; }
         if (_dialogueNativeMovement) { AdvanceDialogueTarget(delta); return; }
         if (_nativeMarkerTravel is not null) { AdvanceMarkerTravel(delta); return; }

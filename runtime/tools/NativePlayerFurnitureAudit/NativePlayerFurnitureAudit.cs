@@ -18,24 +18,38 @@ public partial class NativePlayerFurnitureAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            var modAt = Array.IndexOf(args, "--mod");
+            if (modAt >= 0)
+            {
+                if (args.Length < modAt + 3) throw new ArgumentException("Furniture mod audit needs its selected mod identity and root.");
+                var installation = new FalloutModStackSelection([new(args[modAt + 1], args[modAt + 2], args[(modAt + 3)..])]).Resolve(args[0]);
+                RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame,
+                    installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
+                args = args[..modAt];
+            }
             if (args.Length is not (3 or 4 or 8) || args.Length >= 4 && args[3] is not ("--collision" or "--room-collision") ||
                 args.Length == 8 && args[4] != "--start")
                 throw new ArgumentException("Furniture audit needs owned root, CELL editor ID, furniture reference editor ID and optional --collision/--room-collision.");
-            RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
+            if (modAt < 0) RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
             using var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var configuration = RuntimeConfiguration.Load();
-            var cell = FalloutCellSceneReader.Read(records, FalloutDialogueTopic.Find(records, "CELL", args[1]).FormKey);
-            var reference = uint.TryParse(args[2], System.Globalization.NumberStyles.HexNumber, null, out var referenceId)
+            FalloutFormKey? SourceKey(string value) => value.Split(':') is [var plugin, var hex]
+                ? new(plugin, Convert.ToUInt32(hex, 16)) : null;
+            var cell = FalloutCellSceneReader.Read(records, SourceKey(args[1]) ?? FalloutDialogueTopic.Find(records, "CELL", args[1]).FormKey);
+            var reference = SourceKey(args[2]) is { } sourceReference ? cell.References.Single(value => value.FormKey == sourceReference) :
+                uint.TryParse(args[2], System.Globalization.NumberStyles.HexNumber, null, out var referenceId)
                 ? cell.References.Single(value => records.RuntimeFormId(value.FormKey) == referenceId)
                 : cell.References.Single(value => value.EditorId == args[2]);
+            using var world = new FalloutReferenceWorld(records); world.LoadCell(cell);
+            var enable = reference.FormKey; var enabled = true;
+            while (world.Get(enable).EnableParent is { } parent) { enabled ^= parent.Opposite; enable = parent.Reference; }
+            world.SetEnabled(enable, enabled); world.AdvanceEnableChanges(0, new(1, 1), _ => false);
             var units = configuration.World.GameUnitsToMeters;
             var position = GamebryoCoordinate.ConvertVector(new(reference.Position[0], reference.Position[1], reference.Position[2])) * units;
             var placement = new Transform3D(new Basis(Vector3.Up, -reference.RotationRadians[2]), position);
             if (args.Length >= 4 && args[3] == "--room-collision")
             {
-                using var world = new FalloutReferenceWorld(records);
-                world.LoadCell(cell);
                 room = new Node3D(); AddChild(room);
                 var prototypes = new Dictionary<string, RuntimeNativeNifPrototype>(StringComparer.OrdinalIgnoreCase);
                 foreach (var placed in cell.References.Where(value => world.IsEnabled(value.FormKey)))
@@ -68,7 +82,7 @@ public partial class NativePlayerFurnitureAudit : Node3D
                 try { body.ConfigureContactShapes(configuration.Player.CollisionLayer); return body; }
                 catch { body.Free(); throw; }
             };
-            player.ActivateFurniture(records, new(records), reference, placement, cell.Cell.FormKey);
+            player.ActivateFurniture(records, new(records), reference, placement, cell.Cell.FormKey, world);
             if (args.Length >= 4)
             {
                 var model = cell.BaseObjects[reference.Base].ModelPath!;
@@ -92,25 +106,32 @@ public partial class NativePlayerFurnitureAudit : Node3D
             var phases = new HashSet<string>();
             bool occupied = false;
             var occupiedFrames = 0;
+            int? occupiedIndex = null;
             for (var frame = 0; frame < 60 * 60; frame++)
             {
                 player._PhysicsProcess(1.0 / 60);
                 var state = JsonSerializer.SerializeToElement(player.FurnitureState);
                 if (state.GetProperty("error").ValueKind != JsonValueKind.Null) throw new InvalidOperationException(state.ToString());
                 var phase = state.GetProperty("phase").GetString()!;
+                var expectedSitting = phase switch { "none" or "approaching" => 0, "entering" => 2, "occupied" => 3, "exiting" => 4, _ => -1 };
+                if (world.GetSitting(records.RuntimeFormKey(0x14), _ => player.SittingState) != expectedSitting)
+                    throw new InvalidOperationException("Player script-visible sitting phase differs from its actual native furniture clock.");
                 phases.Add(phase);
                 if (phase == "occupied" && ++occupiedFrames >= 180 && !occupied)
                 {
                     if (player.CurrentFurniture != reference.FormKey || player.GetChildren().OfType<RuntimeNativeNpc>().Count() != 1)
                         throw new InvalidOperationException("Furniture lost its actual player state/body.");
                     occupied = true;
+                    occupiedIndex = state.GetProperty("marker").GetInt32();
                     if (!player.RequestFurnitureExit()) throw new InvalidOperationException("Occupied furniture did not accept exit.");
                 }
                 if (phase == "none" && occupied) break;
             }
             if (!phases.IsSupersetOf(["entering", "occupied", "exiting", "none"]) || player.CurrentFurniture is not null)
                 throw new InvalidOperationException("Furniture phase or reference lifetime is incomplete.");
-            GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_AUDIT_PASS reference={reference.FormKey} entry=true body=true loop=true exit=true sourceCollision={args.Length >= 4} recording=off ordinary-input-and-pixels=unverified");
+            if (occupiedIndex is not { } releasedIndex || !world.ReserveFurnitureSeat(reference.FormKey, releasedIndex, records.RuntimeFormKey(0x14)))
+                throw new InvalidOperationException("Completed player furniture did not release its source reservation.");
+            GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_AUDIT_PASS reference={reference.FormKey} entry=true body=true loop=true exit=true sittingQuery=true sourceCollision={args.Length >= 4} recording=off ordinary-input-and-pixels=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }

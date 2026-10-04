@@ -12,7 +12,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null,
     Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
     Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
-    Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null)
+    Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -23,6 +23,14 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 159)
+        {
+            var subject = FalloutAiPackages.ConditionSubject(condition, speaker, Listener);
+            if (records.RuntimeFormId(subject) != 0x14 && records.GetEffective(subject).Signature is not ("ACHR" or "ACRE"))
+                throw new InvalidDataException("Dialogue GetSitting subject is not an actor.");
+            var state = (sitting ?? throw new NotSupportedException("Dialogue GetSitting has no physical furniture owner."))(subject);
+            return state is >= 0 and <= 4 ? state : throw new InvalidDataException("Dialogue sitting owner returned an invalid phase.");
+        }
         // The command's reference/quest and declaration index are explicit
         // arguments. They do not become the speaker or listener's locals.
         if (condition.Function == 53)

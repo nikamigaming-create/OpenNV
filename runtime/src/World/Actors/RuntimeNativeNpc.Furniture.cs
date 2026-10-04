@@ -9,12 +9,21 @@ internal partial class RuntimeNativeNpc
     private Transform3D _furnitureOccupied;
     private bool _furnitureApproaching;
     private bool _furnitureInitialPlacement;
+    private Transform3D _furnitureApproach;
+    private Vector3? _furnitureApproachFloor;
     private FurnitureClip? _furnitureEntry;
     private FalloutFormKey? _reservedFurniture;
 
     private sealed record FurnitureClip(FalloutNifFile Nif, FalloutNifControllerSequence Sequence, string Identity, string Path);
 
     private void BeginFurniturePackage(FalloutPluginRecord package, FalloutPlacedReference reference,
+        FalloutPluginRecord furniture, bool initializing)
+    {
+        if (!TryBeginFurniturePackage(package, reference, furniture, initializing))
+            throw new NotSupportedException("Furniture has no unreserved source seat.");
+    }
+
+    private bool TryBeginFurniturePackage(FalloutPluginRecord package, FalloutPlacedReference reference,
         FalloutPluginRecord furniture, bool initializing)
     {
         var path = _aiCell!.BaseObjects[reference.Base].ModelPath ?? throw new InvalidDataException("Furniture has no model.");
@@ -25,7 +34,7 @@ internal partial class RuntimeNativeNpc
             .OrderBy(value => value.Occupied.Origin.DistanceSquaredTo(Position));
         var chosen = candidates.FirstOrDefault(value => _aiWorld?.ReserveFurnitureSeat(reference.FormKey,
             value.Seat.Index, Appearance.Reference!.Value) ?? seats.Count == 1);
-        var seat = chosen.Seat ?? throw new NotSupportedException("Furniture has no unreserved source seat.");
+        if (chosen.Seat is not { } seat) return false;
         _reservedFurniture = reference.FormKey;
         _furnitureIdles ??= new(_aiStack!, Appearance.SkeletonPath);
         _seat = seat;
@@ -51,15 +60,54 @@ internal partial class RuntimeNativeNpc
             Transform = _furnitureOccupied;
             _furnitureReference = reference.FormKey;
             OccupyFurniture();
-            return;
+            return true;
         }
         _furnitureEntry = ReadFurnitureClip(2);
         var (start, end) = FurnitureRootEndpoints(_furnitureEntry);
         var motion = NativeFurnitureRootMotion.Enter(_furnitureOccupied, seat.HeadingDelta, end);
         _furnitureApproaching = true;
+        _furnitureApproach = motion.Sample(start);
+        _furnitureApproachFloor = null;
         _sitting = 0;
-        StartTravel(package, reference, motion.Sample(start));
-        CompletePendingTravel();
+        _travelProgress?.Cancel();
+        _travelTarget = reference.FormKey;
+        _travelPackage = package.FormKey;
+        _travelPurpose = "furniture-approach";
+        _travelDestination = _furnitureApproach;
+        PlayLocomotion(false);
+        return true;
+    }
+
+    private void AdvanceFurnitureApproach(double delta)
+    {
+        if (Combat is null || _aiError is not null || Combat.OwnsPose || !Combat.PackageMovementReady ||
+            _conversationTarget is not null) return;
+        try
+        {
+            var parent = GetParent<Node3D>();
+            var authored = parent.ToGlobal(_furnitureApproach.Origin);
+            var destination = _furnitureApproachFloor ??= Combat.ProjectPackageDestination(authored);
+            if (destination.DistanceTo(authored) > .15f)
+                throw new NotSupportedException("Furniture entry root has no matching supported native floor.");
+            Combat.AdvancePackageMotion(_aiPackage!, destination, .08f, _findFurniture?.Running == true, delta, requireArrivalHeight: true);
+            if (!IsOnFloor() || GlobalPosition.DistanceTo(destination) > .1f) return;
+            var direction = -(parent.GlobalBasis * _furnitureApproach.Basis.Z).Normalized();
+            Combat.FacePackageDirection(direction, delta);
+            if (GlobalBasis.Orthonormalized().Z.AngleTo(-direction) > .04f) return;
+            Combat.StopPackageMotion();
+            Transform = _furnitureApproach;
+            _furnitureApproaching = false;
+            _furnitureReference = _reservedFurniture;
+            _sitting = 2;
+            StartFurnitureAnimation();
+            GD.Print($"OPENNV_NATIVE_FURNITURE_ENTRY reference={Appearance.Reference} target={_furnitureReference} sourceIndex={_seat!.Index} owner=native-capsule-arrival");
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or IOException)
+        {
+            Combat.StopPackageMotion(); _aiError = error.Message; _failedPackage = _aiPackage?.FormKey;
+            BlockSelectionCapture($"Furniture approach continuation is unbound: {error.Message}");
+            GD.PushError($"OPENNV_NATIVE_FURNITURE_APPROACH_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
+        }
     }
 
     private FurnitureClip ReadFurnitureClip(int sitting)
@@ -186,6 +234,7 @@ internal partial class RuntimeNativeNpc
         _furnitureReference = null;
         _furnitureEntry = null;
         _furnitureApproaching = false;
+        _furnitureApproachFloor = null;
         _furnitureInitialPlacement = false;
         _sitting = 0;
     }
@@ -193,13 +242,21 @@ internal partial class RuntimeNativeNpc
     private bool RetainFurniturePackage(FalloutPluginRecord selected)
     {
         var source = FalloutScriptPackage.Read(selected);
-        if (source.Procedure != 6 || source.LocationType != 0 || source.LocationRadius != 0 ||
+        FalloutFindFurniturePackage? find = null;
+        if (source.Procedure == 0)
+        {
+            find = FalloutFindFurniturePackage.Read(selected);
+            if (!find.Candidates(_aiStack!, _aiWorld!, Appearance.Reference!.Value, _aiCell!)
+                .Any(reference => reference.FormKey == _furnitureReference)) return false;
+        }
+        else if (source.Procedure != 6 || source.LocationType != 0 || source.LocationRadius != 0 ||
             source.LocationReference != _furnitureReference) return false;
         // A source package can enable seated conversation after occupation.
         // Its change/end events do not require leaving and re-entering the
         // same seat, and its existing animation keeps its observed phase.
         CancelIdle();
         _aiPackage = selected; _packageIdleSource = source;
+        _findFurniture = find;
         _packageIdles = new(source, _idleReplays, idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
         _packageEvents!.Change(source);
         _packageEvents.Complete();
@@ -210,6 +267,8 @@ internal partial class RuntimeNativeNpc
     {
         RetainBindingFailure();
         ClearFurniture();
+        if (_aiReferenceState is { } furnitureState && ReferenceEquals(furnitureState.QuerySitting, _sittingQuery))
+            furnitureState.QuerySitting = null;
         if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
         {
             if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);

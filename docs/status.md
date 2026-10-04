@@ -1,36 +1,35 @@
 # Product status
 
-Checked PR129 is merged at synchronized main 14e610f with all five checks passing.
-The active codex/radio-stage-continuation candidate completes original CG02:100
-and CG03:5 through receiver Off and shared player ResetHealth. Ordinary immutable
-stage-80 Load, photo input, the original six-years-later sequence and Dad's G.O.A.T.
-conversation reach CG03:10 with movement released. The source bullying exchange
-reaches25 while original Mr. Brotch activation opens his dialogue. The ready choice
-completes all16 results of40 and the original42 objective result with closed
-dialogue and no stage error. Student Wander/furniture targeting and script
-GetSitting are the next missing classroom owners. G.O.A.T.,
+Checked PR130 is merged at synchronized main a188659 with all five checks passing.
+The active codex/classroom-furniture candidate reproduces all seven original
+students occupying distinct source seats after the ordinary G.O.A.T. ready choice.
+Find near-reference Furniture searches use enabled/moved placements, source
+ownership, NIF/MNAM reservations, native capsule/NAVM approach and actual KF entry.
+Script and dialogue GetSitting bind the physical player/NPC owner. The selected
+original player desk passes native entry/loop/exit and script-visible phase checks.
+Ordinary desk input completes entry; source50/55/60 opens the first G.O.A.T.
+question. Its scoring result reaches unowned SetPlayerTagSkill. G.O.A.T. completion,
 Vault escape, Megaton and the train/Mojave route remain incomplete.
 
-Source NPC marker Travel has native capsule/KF route, pose/clock and winning NAVM
-persistence. Selected moving/cold/resumed arrival and source failed-search/cold
-fixtures pass without replaying package results. The failed route remains visibly
-unfinished; authored NPC teleport-door travel is not implemented. Dialogue direct
-FormList membership, unrelated-space distance, explicit player perks, current
-encounter-zone and shared script-variable queries bind their authoritative owners.
-Selected synthetic and owned query checks pass. Run Immediately result timing has
-synthetic exactly-once/failure checks and an original source-result/cold audit.
-The original black-plane material builds with its geometry and local-map selector
-retained independently of ordinary world lighting. Local-map rendering remains
-unverified. Missing models remain explicit per-reference divergences.
+Shared script GetTalkedToPC and typed GetLinkedRef have synthetic self/explicit/
+postfix, live and cold checks. Original escape history/link declarations and
+all seven classroom source package/seat declarations pass owned-data audits.
+Legacy scripts stopped after consumed initialization remain faults until their
+instruction continuation has an owner. Furniture search/reservation/clock saving
+also remains unowned; a settled post-photo cold checkpoint is not verified.
 
-The required integrated runtime gate passes for the final candidate revision.
-Original command/query/result and queued native speech audits pass. Genuine post-photo
-settled saving and cold Continue still require verification. Pending nested stage
-results refuse saving; complete result/conversation/procedure continuation remains
-open. Full radio broadcast playback, VATS, all JAM/MCM modules and native plugin
-interfaces remain incomplete. No campaign or matched retail/physical-headset parity
-claim is made. [Current work](current-work.md) holds the live continuation and next
-owner; older component notes below describe bounded evidence.
+Original CG02 photo input completes90/95/98/100, the source six-years-later
+sequence and all41 commands of CG03:5. Dad, bullying and Mr. Brotch dialogue
+complete40/42 through ordinary choices without stage-result errors. Marker Travel,
+radio Off, shared player ResetHealth, direct winning FormList/spatial/script-variable
+queries and immediate INFO results have bounded synthetic/owned proofs. Active
+broadcasts and pending nested stage results still refuse saving. The integrated
+runtime gate passes for the final candidate, including the player idle predicates.
+
+Full radio playback, VATS, all JAM/MCM modules and native plugin interfaces remain
+incomplete. No campaign, matched retail or physical-headset parity claim is made.
+[Current work](current-work.md) owns the exact live continuation and next action.
+Older component notes below describe bounded evidence.
 Checked PR125 publishes reference-owned stopped NPC initialization saves and
 shared Guard marker approach at synchronized main a910a0dc; all five checks
 pass. Synthetic continuation checks, Beatrice's native cold/resumed-advancement

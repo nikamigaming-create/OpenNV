@@ -72,8 +72,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         _records = records;
         _world = world;
         _quests = quests;
-        _scripts = new(records, world, quests, host);
-        _host = host;
+        _host = host with { Sitting = host.Sitting ?? GetSitting };
+        _scripts = new(records, world, quests, _host);
         _transform = transform; _unitsToMeters = unitsToMeters; _collisionMask = collisionMask;
         SetResidency(cell, root);
     }
@@ -243,7 +243,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (Player is null || binding.Node is null) throw new NotSupportedException("Furniture activation has no resident player/presentation.");
             if (_bindings.Values.Any(value => value.Node is RuntimeNativeNpc npc && npc.CurrentFurniture == reference))
                 return;
-            Player.ActivateFurniture(_records, _quests, binding.Reference, binding.Node.GlobalTransform, binding.Instance.Cell);
+            Player.ActivateFurniture(_records, _quests, binding.Reference, binding.Node.GlobalTransform, binding.Instance.Cell, _world);
             return;
         }
         if (type == "ACTI") return; // Activators have no engine default action.
@@ -266,6 +266,10 @@ internal partial class RuntimeNativeReferenceEvents : Node
             return npc.CurrentFurniture == furniture;
         throw new NotSupportedException($"Furniture query actor {actor} has no resident runtime owner.");
     }
+
+    private int GetSitting(FalloutFormKey actor) => _records.RuntimeFormId(actor) == 0x14
+        ? (Player ?? throw new NotSupportedException("Player GetSitting has no resident native owner.")).SittingState
+        : _world.GetSitting(actor);
 
     private FalloutFormKey? Contact(Node body)
     {

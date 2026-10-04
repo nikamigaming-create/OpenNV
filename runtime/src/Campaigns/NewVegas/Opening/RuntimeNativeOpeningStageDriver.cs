@@ -212,7 +212,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             return IsSpecial(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)) : _playerSkills.Value(name);
         }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
             ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: _playerActorValues.Change,
-            Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage);
+            Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
+            Sitting: ActorSitting);
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
@@ -335,7 +336,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             actor => _scripts.References!.Get(actor).SoundRandom, _player.UnitsToMeters, _quests, () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded, _scripts.References,
             CurrentActorPackage, _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount,
-            reference => ReferencePresentation().Resolve(reference), ReferenceDistance, ReferenceInZone);
+            reference => ReferencePresentation().Resolve(reference), ReferenceDistance, ReferenceInZone, ActorSitting);
         AddChild(_speech);
         ConfigureConversation();
         ApplyEnteredActorCommands();

@@ -10,6 +10,8 @@ internal partial class RuntimeNativePlayer
     private RuntimeNativeNpc? _furnitureBody;
     private FalloutFurnitureSeat? _furnitureSeat;
     private FalloutFormKey? _furnitureReference;
+    private FalloutReferenceWorld? _furnitureWorld;
+    private FalloutFormKey? _furnitureReservationActor;
     private readonly Dictionary<int, PlayerFurnitureClip> _furnitureClips = [];
     private PlayerFurnitureClip? _furnitureClip;
     private Transform3D _occupied, _approach;
@@ -27,6 +29,9 @@ internal partial class RuntimeNativePlayer
     internal Func<RuntimeNativeNpc>? CreateFurnitureBody { get; set; }
     internal FalloutFormKey? CurrentFurniture => _furniturePhase >= 2 ? _furnitureReference : null;
     internal bool FurnitureActive => _furniturePhase != 0;
+    internal int SittingState => _furnitureError is not null
+        ? throw new NotSupportedException($"Player furniture continuation failed: {_furnitureError}")
+        : _furniturePhase == 1 ? 0 : _furniturePhase;
     internal Transform3D FurnitureApproach => _furniturePhase != 0 ? _approach : throw new InvalidOperationException("No furniture approach is active.");
     internal bool RequestFurnitureExit()
     {
@@ -52,7 +57,7 @@ internal partial class RuntimeNativePlayer
         string Identity, Vector3 Start, Vector3 End, FalloutNifAnimatedNodePath? Camera);
 
     internal void ActivateFurniture(FalloutPluginStack records, FalloutQuestState quests,
-        FalloutPlacedReference reference, Transform3D placement, FalloutFormKey cell)
+        FalloutPlacedReference reference, Transform3D placement, FalloutFormKey cell, FalloutReferenceWorld? world = null)
     {
         if (_furniturePhase != 0 || _furnitureError is not null)
             throw new InvalidOperationException("Player already owns a furniture interaction or failure.");
@@ -71,9 +76,14 @@ internal partial class RuntimeNativePlayer
                 float Evaluate(FalloutCondition condition) => condition.Function switch
                 {
                     159 => state,
+                    143 => state == 4 ? 21 : 48, // Get Up or Sitting in this physical furniture procedure.
                     160 => seat.MarkerId,
                     163 => condition.FormArgument1 == furniture.FormKey ? 1 : 0,
                     70 => condition.Argument1 == (body.Appearance.Female ? 1u : 0u) ? 1 : 0,
+                    71 => (world ?? throw new NotSupportedException("Player furniture faction predicate has no reference-world owner."))
+                        .ActorFactions(records.RuntimeFormKey(0x14)).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
+                    73 => (world ?? throw new NotSupportedException("Player furniture faction predicate has no reference-world owner."))
+                        .ActorFactions(records.RuntimeFormKey(0x14)).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
                     69 => condition.FormArgument1 == body.Appearance.Race ? 1 : 0,
                     365 => FalloutRaceProperties.IsChild(records.GetEffective(body.Appearance.Race)) ? 1 : 0,
                     77 => _furnitureRandom.NextBounded(100),
@@ -82,6 +92,8 @@ internal partial class RuntimeNativePlayer
                     63 => Activity.Attacked ? 1 : 0,
                     91 => Activity.Alerted ? 1 : 0,
                     101 => Activity.WeaponDrawn ? 1 : 0,
+                    289 => (world ?? throw new NotSupportedException("Player furniture combat predicate has no reference-world owner."))
+                        .PlayerInCombat() ? 1 : 0,
                     182 => body.Appearance.EquippedArmor.Contains(condition.FormArgument1) ? 1 : 0,
                     247 => 0, // This furniture activation has no acquired/used item.
                     392 => firstPerson ? 1 : 0,
@@ -128,6 +140,10 @@ internal partial class RuntimeNativePlayer
             if (!_furnitureNavigation.TryGetValue(cell, out _furnitureGraph))
                 _furnitureNavigation.Add(cell, _furnitureGraph = CellNavigationGraph.LoadOwned(records, cell));
             _furniturePath = null; _furnitureWaypoint = 0;
+            if (world is not null && !world.ReserveFurnitureSeat(reference.FormKey, seat.Index, records.RuntimeFormKey(0x14)))
+                throw new InvalidOperationException("Player furniture source seat is reserved by another actor.");
+            _furnitureWorld = world;
+            _furnitureReservationActor = records.RuntimeFormKey(0x14);
             // Resource/clock preparation precedes publication of the interaction.
             _furnitureSeat = seat; _furnitureReference = reference.FormKey; _furniturePhase = 1;
             _furnitureLookYaw = 0;
@@ -138,6 +154,7 @@ internal partial class RuntimeNativePlayer
         }
         catch
         {
+            ReleaseFurnitureReservation();
             _furnitureBody = null; _furnitureClips.Clear(); _furnitureSeat = null; _furnitureReference = null;
             _furniturePhase = 0; _furnitureMotion = null; body.Free();
             throw;
@@ -250,8 +267,18 @@ internal partial class RuntimeNativePlayer
     private void ReleaseFurniture()
     {
         GlobalBasis = _occupied.Basis;
+        ReleaseFurnitureReservation();
         _furnitureBody!.QueueFree(); _furnitureBody = null; _furnitureClip = null;
         _furnitureClips.Clear(); _furnitureSeat = null; _furnitureReference = null; _furniturePhase = 0;
         ReleaseSourceCamera();
     }
+
+    private void ReleaseFurnitureReservation()
+    {
+        if (_furnitureWorld is { } world && _furnitureReference is { } reference && _furnitureSeat is { } seat)
+            world.ReleaseFurnitureSeat(reference, seat.Index, _furnitureReservationActor ?? throw new InvalidOperationException("Player furniture reservation has no player identity."));
+        _furnitureWorld = null;
+        _furnitureReservationActor = null;
+    }
+
 }

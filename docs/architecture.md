@@ -25,6 +25,19 @@ initialization and Guard approach separately from active procedures. Shared
 reference state preserves source selection, consumed retirement and actual
 motion without supplying missing procedure behavior or replaying results.
 
+Find Furniture reads source near-reference searches, reference/base/object-type
+targets, enabled placements and ownership. Shared seat reservations bind actual
+NIF/MNAM markers to one player or NPC. Native capsule/NAVM arrival precedes the
+source KF entry; occupation follows its clock. Player and NPC GetSitting expose
+those physical phases to scripts and dialogue through the same reference world.
+Missing physical owners fail visibly. Search, reservation and furniture clock
+persistence remain required before an active procedure can be saved.
+
+Script GetTalkedToPC reads retained conversation history. GetLinkedRef uses the
+winning placed reference's XLKR and declaring master table, retaining typed
+form/null values through postfix expressions. Query support cannot replay a
+legacy initialization prefix that already changed reference state.
+
 [Reference weapon-hit events](reference-weapon-hit-events.md) join actual
 projectile/melee contacts to source scripts after damage. Typed weapon/attacker
 membership, authored block order and revision-preserving receipts share the

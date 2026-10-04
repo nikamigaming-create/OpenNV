@@ -32,7 +32,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action<FalloutFormKey, string, string, double>? ChangeActorValue = null,
     FalloutInventoryCommands? Inventory = null, FalloutChallenges? Challenges = null,
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
-    Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null);
+    Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
+    Func<FalloutFormKey, int>? Sitting = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -562,6 +563,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     FalloutAiPackages.IsCurrentPackage(records, Target(), arguments[0].Value.FormKey(records),
                         host.CurrentPackage ?? world.CurrentPackage) ? 1 : 0)
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getsitting")
+                return new([], _ => world.GetSitting(Target(), host.Sitting)) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "gettalkedtopc")
+                return new([], _ => world.GetTalkedToPlayer(Target()) ? 1 : 0) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getlinkedref")
+                return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
+                    world.GetLinkedRef(Target()) is { } linked ? records.RuntimeFormId(linked) : 0), readOnly: true);
             if (parts.Length <= 2 && operation == "isinlist")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                     FalloutReferenceIdentity.IsInList(records, Target(), arguments[0].Value.FormKey(records)) ? 1 : 0)
