@@ -6,6 +6,7 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal partial class RuntimeNativeSpeech : Node
 {
+    private sealed record PackageEventSpeech(FalloutFormKey Package, string Event);
     private sealed class Voice(FalloutFormKey reference, AudioStreamPlayer player)
     {
         internal readonly FalloutFormKey Reference = reference;
@@ -32,6 +33,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal FalloutFormKey DialogueSubject;
         internal Action? ResponseCompleted;
         internal Action? PackageCompleted;
+        internal PackageEventSpeech? PackageEvent;
         internal NpcDialogueExchange? NpcExchange;
     }
 
@@ -62,6 +64,7 @@ internal partial class RuntimeNativeSpeech : Node
     private Func<FalloutFormKey, Node3D?>? _presentation;
     private float _unitsToMetres;
     private long _completedCommands, _completedPackages;
+    private long _requestedPackageEventTopics, _completedPackageEventTopics;
     private readonly FalloutSpeechCompletionEvents _emptyCompletions = new();
     private FalloutDialogueVoiceIndex? _voiceIndex;
     private long _disabledCommands;
@@ -120,7 +123,7 @@ internal partial class RuntimeNativeSpeech : Node
         if (dialogueSubject is { } subject) voice.DialogueSubject = subject;
         if (identity is not null) voice.Identity = identity;
         voice.Info = info; voice.ResponseIndex = response; voice.ResponseCompleted = completed;
-        voice.PackageCompleted = null;
+        voice.PackageCompleted = null; voice.PackageEvent = null;
         ++voice.Generation; _lastVoice = _conversationVoice = voice;
         try { PlayResponse(voice); }
         catch (Exception error) { Fail(error); throw; }
@@ -140,6 +143,9 @@ internal partial class RuntimeNativeSpeech : Node
                 listenerLookOwner = voice?.CommandKind == "SayTo" ? "unbound" : "not-requested",
                 completedCommands = _completedCommands,
                 completedPackages = _completedPackages,
+                requestedPackageEventTopics = _requestedPackageEventTopics,
+                completedPackageEventTopics = _completedPackageEventTopics,
+                packageEvent = voice?.PackageEvent,
                 disabledCommands = _disabledCommands,
                 lastDisabledParticipant = _lastDisabledParticipant?.ToString(),
                 emptyCompletions = _emptyCompletions.State,
@@ -173,6 +179,7 @@ internal partial class RuntimeNativeSpeech : Node
     }
     private static object ChannelState(Voice voice) => new
     {
+        packageEvent = voice.PackageEvent,
         speakerReference = voice.Reference.ToString(),
         listenerReference = voice.Listener?.ToString(),
         info = voice.Info?.Record.FormKey.ToString(),
@@ -279,14 +286,33 @@ internal partial class RuntimeNativeSpeech : Node
         ExecuteCommand(new(speaker.ToString(), "", topic.ToString(), forceSubtitles), speaker, topic, null);
     internal void StartPackageSpeech(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey topic, Action completed) =>
         ExecuteCommand(new(speaker.ToString(), target.ToString(), topic.ToString()), speaker, topic, target, completed);
+
+    internal void StartPackageEventTopic(FalloutFormKey speaker, FalloutFormKey package, string kind, FalloutFormKey topic)
+    {
+        var source = FalloutScriptPackage.Read(_stack.GetEffective(package));
+        if (!source.EventPrograms.TryGetValue(kind, out var program) || program.Topic != topic)
+            throw new InvalidDataException("Package speech differs from its reached source event topic.");
+        // A declarative event topic has no invented listener or scripted
+        // SayToDone. Its audio/results finish independently of the event IDLE.
+        ExecuteCommand(new(speaker.ToString(), "", topic.ToString()), speaker, topic, null,
+            () =>
+            {
+                ++_completedPackageEventTopics;
+                GD.Print($"OPENNV_NATIVE_PACKAGE_TOPIC_END speaker={speaker} package={package} event={kind} topic={topic} owner=audio-results-completion");
+            }, packageEvent: new(package, kind));
+        ++_requestedPackageEventTopics;
+        GD.Print($"OPENNV_NATIVE_PACKAGE_TOPIC_REQUEST speaker={speaker} package={package} event={kind} topic={topic} owner=source-package-event");
+    }
+
     private void ExecuteCommand(FalloutSayToCommand command, FalloutFormKey speaker, FalloutFormKey topic, FalloutFormKey? target,
-        Action? packageCompleted = null, bool npcConversation = false)
+        Action? packageCompleted = null, bool npcConversation = false, PackageEventSpeech? packageEvent = null)
     {
         if (Error is not null) throw new InvalidOperationException(Error);
         try
         {
             if (!DeferScriptedSpeech(command, speaker, topic, target, packageCompleted, npcConversation))
-                StartCore(command, _stack.GetEffective(speaker), topic, target, packageCompleted, forceNpcConversation: npcConversation);
+                StartCore(command, _stack.GetEffective(speaker), topic, target, packageCompleted,
+                    forceNpcConversation: npcConversation, packageEvent: packageEvent);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {
@@ -296,7 +322,7 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void StartCore(FalloutSayToCommand command, FalloutPluginRecord speaker, FalloutFormKey topicForm, FalloutFormKey? target,
         Action? packageCompleted = null, NpcDialogueExchange? exchange = null, FalloutDialogueInfo? selectedInfo = null,
-        bool forceNpcConversation = false)
+        bool forceNpcConversation = false, PackageEventSpeech? packageEvent = null)
     {
         if (speaker.Signature is not ("ACHR" or "ACRE" or "REFR")) throw new InvalidDataException("Scripted speaker is not a dialogue reference.");
         var npcKey = FalloutDialogueTopic.RequiredForm(speaker, "NAME");
@@ -346,8 +372,10 @@ internal partial class RuntimeNativeSpeech : Node
             exchange = BeginNpcExchange(speaker.FormKey, target!.Value, topicForm, command, packageCompleted);
         BindSpeaker(voice, speaker, actor);
         voice.Command = command;
-        voice.CommandKind = packageCompleted is not null ? "dialogue-package" : command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
+        voice.CommandKind = packageEvent is not null ? "package-event-topic" :
+            packageCompleted is not null ? "dialogue-package" : command.TargetEditorId.Length == 0 ? "Say" : "SayTo";
         voice.PackageCompleted = exchange is null ? packageCompleted : null;
+        voice.PackageEvent = packageEvent;
         voice.NpcExchange = exchange;
         voice.Listener = target;
         voice.Topic = topicForm;
@@ -516,7 +544,11 @@ internal partial class RuntimeNativeSpeech : Node
             voice.NpcExchange = null;
             AdvanceNpcExchange(exchange, voice, completed);
         }
-        else if (packageCompleted is not null) { packageCompleted(); ++_completedPackages; }
+        else if (packageCompleted is not null)
+        {
+            packageCompleted();
+            if (voice.PackageEvent is null) ++_completedPackages;
+        }
         else if (completedTopic is { } topic)
         {
             (SayToCompleted ?? throw new NotSupportedException("SayTo has no completion-event owner."))(voice.Reference, new HashSet<FalloutFormKey> { topic });

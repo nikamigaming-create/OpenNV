@@ -124,6 +124,18 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
 internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string Kind,
     IReadOnlyList<FalloutPluginSubrecord> Fields)
 {
+    internal FalloutFormKey? Topic
+    {
+        get
+        {
+            var topics = Fields.Where(field => field.Signature == "TNAM").ToArray();
+            if (topics.Length > 1 || topics.Length == 1 && topics[0].Data.Length != 4)
+                throw new InvalidDataException("Package event has an invalid topic identity.");
+            return topics.Length == 0 ? null : Package.Plugin.AdjustOptionalFormId(
+                BinaryPrimitives.ReadUInt32LittleEndian(topics[0].Data.Span));
+        }
+    }
+
     internal string Source
     {
         get
@@ -146,6 +158,8 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
 
     internal void ValidateScript()
     {
+        if (Package.Signature != "PACK" || Kind is not ("POBA" or "POEA" or "POCA"))
+            throw new InvalidDataException("Package event has no typed source lifecycle owner.");
         var compiled = Fields.Where(field => field.Signature == "SCDA").ToArray();
         if (compiled.Length > 1) throw new InvalidDataException("Package event repeats its compiled program.");
         var headers = Fields.Where(field => field.Signature == "SCHR").ToArray();
@@ -164,9 +178,8 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
 
     internal void RequireEmptyTopic()
     {
-        foreach (var topic in Fields.Where(field => field.Signature == "TNAM"))
-            if (topic.Data.Length != 4 || BinaryPrimitives.ReadUInt32LittleEndian(topic.Data.Span) != 0)
-                throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event topic execution is unbound.");
+        if (Topic is not null)
+            throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event topic execution is unbound.");
     }
 }
 

@@ -16,11 +16,26 @@ internal static class OwnedEscapeStageProbe
         var package = records.GetEffective(new("Fallout3.esm", 0x067781));
         var deathCondition = FalloutCondition.Read(package).Single(condition => condition.Function == 84);
         var overseer = bindings.Reference("CG04OverseerREF");
+        var wakePackage = FalloutScriptPackage.Read(records.GetEffective(new("FalloutNV.esm", 0x09df06)));
+        var wakeEvent = wakePackage.EventPrograms["POBA"];
+        var wakeTopic = FalloutDialogueTopic.Find(records, "DIAL", "CG04AmataSpeech");
+        var amata = records.GetEffective(new("Fallout3.esm", 0x0230e4));
+        if (wakeEvent.Topic != wakeTopic.FormKey || FalloutDialogueTopic.CodeLines(wakeEvent.Source).Any() ||
+            wakePackage.Events["POBA"] is null)
+            throw new InvalidDataException("Original wake-up event changed its empty result, speech topic or following idle.");
         using var world = new FalloutReferenceWorld(records);
         if (world.Get(overseer).Base != deathCondition.FormArgument1 || world.GetDeadCount(deathCondition.FormArgument1) != 0)
             throw new InvalidDataException("Original Amata predicate does not bind its actual living father's base.");
-        var hashes = new[] { quest, script, package, records.GetEffective(deathCondition.FormArgument1) }
+        var hashes = new[] { quest, script, package, records.GetEffective(deathCondition.FormArgument1),
+                wakePackage.EventPrograms["POBA"].Package, wakeTopic, amata }
             .Select(record => (Record: record, Hash: SHA256.HashData(record.ReadData()))).ToArray();
+        var effects = new List<FalloutReferenceScriptEffect>();
+        var results = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false, effects.Add));
+        results.ExecutePackageEvent(wakeEvent, amata.FormKey);
+        if (effects.Count != 1 || effects[0].Kind != FalloutReferenceEffectKind.PackageEventTopic ||
+            effects[0].Source != amata.FormKey || effects[0].Target != amata.FormKey ||
+            effects[0].Argument != wakePackage.Form || effects[0].Topic != wakeTopic.FormKey || effects[0].PackageEvent != "POBA")
+            throw new InvalidDataException("Original package topic lost the actual actor and source event identity.");
         if (FalloutCondition.AllPass([deathCondition], condition => world.GetDeadCount(condition.FormArgument1), true))
             throw new InvalidDataException("Original mourning predicate selected a living actor.");
         if (!world.KillActor(overseer, null, 1) || world.GetDeadCount(deathCondition.FormArgument1) != 1 ||
@@ -57,6 +72,7 @@ internal static class OwnedEscapeStageProbe
             throw new InvalidDataException("Escape audit changed winning source bytes.");
         Console.WriteLine("OPENNV_OWNED_ESCAPE_STAGE_PASS originalStage2Entries=true explicitPlayerCount=true " +
             "optionalGrantGuards=true originalAmataPredicate=true actorBase=true sharedDeath=true coldCount=true " +
-            "corpseNotRepeated=true sourceUnchanged=true fixture=isolated-selection-and-death campaign=false framesRecorded=false");
+            "corpseNotRepeated=true originalPackageTopic=true actualTopicCaller=true sourceUnchanged=true " +
+            "fixture=isolated-selection-death-and-topic-request nativeVoice=unverified campaign=false framesRecorded=false");
     }
 }
