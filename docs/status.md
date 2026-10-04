@@ -1,6 +1,6 @@
 # Product status
 
-Checked PR138 is merged at synchronized main cc9d2a1 with all five checks passing.
+Checked PR139 is merged at synchronized main c30b881 with all five checks passing.
 Main retains winning terminal access, queued actor package events
 and source-owned Furniture/failed-selection/idle/settled-Dialogue continuations in
 schema v36. Synthetic checks, original terminal locking/cold validation and four
@@ -32,8 +32,12 @@ result scope to the existing inventory owner and retains cumulative death counts
 in v37 with v36 read compatibility. Focused full-reader and unchanged owned
 stage2/Amata predicate/cold-count checks pass. The full gate passes; ordinary
 saved input completes all seven stage2 commands and reaches stage3. Its first
-two commands run before Amata's source package POBA topic is refused. Clearing a
-consumed-prefix fault is not recovery. Vault escape, Megaton and the authored
+two commands ran before Amata's source package POBA topic was refused. The new
+package-topic candidate passes synthetic, selected owned and complete runtime
+gates. Its ordinary cold-loaded run binds the original wake-up audio/LIP and
+completes the topic once, completes stages3,4,10 and8 and reaches18. SetAlly and
+a later StartRadioConversation call remain unowned. Clearing a consumed-prefix
+fault is not recovery. Vault escape, Megaton and the authored
 train/Mojave route remain open.
 
 The merged runtime shares indexed tags/menu input retirement, physical furniture

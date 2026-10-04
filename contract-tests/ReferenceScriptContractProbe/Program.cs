@@ -5,6 +5,11 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--package-topic-contracts"])
+{
+    PackageEventContracts.Run();
+    return;
+}
 if (args is ["--death-count-contracts"])
 {
     ScriptDeathContracts.Run();

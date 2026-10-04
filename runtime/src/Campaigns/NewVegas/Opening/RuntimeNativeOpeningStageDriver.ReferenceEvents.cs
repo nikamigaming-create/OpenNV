@@ -310,6 +310,11 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _speechStage = $"{QuestEditorId}:{Stage}";
                 _speech!.Say(effect.Target!.Value, effect.Topic!.Value, effect.ForceSubtitles);
                 break;
+            case FalloutReferenceEffectKind.PackageEventTopic:
+                _speechStage = $"{QuestEditorId}:{Stage}";
+                _speech!.StartPackageEventTopic(effect.Target!.Value, effect.Argument!.Value,
+                    effect.PackageEvent!, effect.Topic!.Value);
+                break;
             case FalloutReferenceEffectKind.HeadTracking:
                 ApplyLookCommand(new(0, effect.Target!.Value, effect.Argument));
                 break;

@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Package event topics](package-event-topics.md) bind declared speech to the actual
+actor and winning PACK event, after its result script and before its event IDLE.
+Voice, dialogue results and completion use the shared speech owner.
+
 [Actor death history](actor-death-counts.md) retains cumulative source-base counts
 through successful shared death transitions and cold saves. Source result-entry
 conditions use explicit host scope admission with the existing inventory owner.

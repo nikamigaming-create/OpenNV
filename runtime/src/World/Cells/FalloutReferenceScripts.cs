@@ -9,12 +9,13 @@ internal enum FalloutReferenceEffectKind
     Conversation, PlayerControls, Message, DefaultActivate, SetStage, SpecialMenu, ReferenceEnable, Texture,
     SayTo, HeadTracking, EvaluatePackages, ScriptPackage, ImageSpace, AddItem, EquipItem, AddNote, RemoveItem,
     ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy, CharacterGeneration, Say, PlayerYouth,
-    PlayerToddler, PlayerScale, DoorOpenState
+    PlayerToddler, PlayerScale, DoorOpenState, PackageEventTopic
 }
 internal sealed record FalloutReferenceScriptEffect(FalloutReferenceEffectKind Kind, FalloutFormKey Source,
     FalloutFormKey? Target = null, FalloutFormKey? Argument = null, IReadOnlyList<bool>? Controls = null,
     bool Enable = false, short Stage = 0, int Value = 0, FalloutFormKey? Topic = null,
-    bool Fade = false, string? NodeName = null, string? TexturePath = null, bool ForceSubtitles = false, float Scale = 1);
+    bool Fade = false, string? NodeName = null, string? TexturePath = null, bool ForceSubtitles = false, float Scale = 1,
+    string? PackageEvent = null);
 internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFormKey, bool> IsCurrentFurniture,
     Action<FalloutReferenceScriptEffect> Apply, Func<FalloutFormKey, int>? GetButtonPressed = null,
     Func<FalloutFormKey, bool>? IsTalking = null, Func<FalloutFormKey, string, double>? ActorValue = null,
@@ -248,9 +249,16 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             throw new InvalidDataException("Package results require a placed actor as their calling reference.");
         Execute(actor, Bindings(reference, program.Package, program.Fields),
             FalloutGameModeProgram.Read("begin Result\n" + program.Source + "\nend", "Result"), null, 0);
-        // A reached unsupported topic retains the script prefix. The package
-        // lifecycle latches that failure before admitting another event.
-        program.RequireEmptyTopic();
+        // Topic selection observes the committed script result. Native speech
+        // owns its voice/results; the following event IDLE stays with the actor.
+        // A failed owner retains this prefix in the package lifecycle latch.
+        if (program.Topic is { } topic)
+        {
+            if (records.GetEffective(topic).Signature != "DIAL")
+                throw new InvalidDataException("Package event topic is not DIAL.");
+            host.Apply(new(FalloutReferenceEffectKind.PackageEventTopic, actor, actor,
+                program.Package.FormKey, Topic: topic, PackageEvent: program.Kind));
+        }
     }
 
     internal void ExecuteStage(FalloutPluginRecord quest, IReadOnlyList<FalloutPluginSubrecord> fields, string source) =>

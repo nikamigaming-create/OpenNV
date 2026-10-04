@@ -21,23 +21,41 @@ internal static class PackageEventContracts
                 Record("SCPT", 0x50, Local(1, "counter"), Local(2, "caller", true),
                     Field("SCTX", Text("short counter\nref caller\nbegin GameMode\nend"))),
                 Record("QUST", 0x60, Field("EDID", Text("PackageQuest"))),
+                Record("DIAL", 0x61, Field("EDID", Text("MasterTopic"))),
+                Record("IDLE", 0x70, Field("EDID", Text("EventIdle"))),
                 Record("CELL", 0x80, Field("DATA", [1])), group));
             File.WriteAllBytes(Path.Combine(directory, "Override.esp"), Join(Header("Results.esm"),
                 Package(0x01000100, Event("POBA", "set counter to counter + 1\nset caller to GetSelf\nSetAV Variable05 7\nSetStage PackageQuest 16", 0x60),
                     Event("POEA", "if counter == 1\nset counter to counter + 1\nendif\nSetStage PackageQuest 20", 0x60)),
                 Package(0x01000101, Event("POBA", "SetStage PackageQuest 20", 0x60),
                     Event("POEA", "set counter to counter + 1\nSetStage PackageQuest 30")),
-                Package(0x01000102, Event("POEA", "set counter to counter + 1", topic: 0x60))));
+                Package(0x01000102, Event("POEA", "set counter to counter + 1", topic: 0x60)),
+                Record("DIAL", 0x61, Field("EDID", Text("WinningMasterTopic"))),
+                Record("DIAL", 0x01000103, Field("EDID", Text("PatchTopic"))),
+                Package(0x01000110,
+                    Event("POBA", "set counter to counter + 1\nSetStage PackageQuest 40", 0x60, 0x61, 0x70),
+                    Event("POEA", "set counter to counter + 1\nSetStage PackageQuest 42", 0x60, 0x01000103),
+                    Event("POCA", "set counter to counter + 1")),
+                Package(0x01000111, Event("POBA", "set counter to counter + 1", topic: 0x61))));
             using var records = FalloutPluginStack.Load(directory, ["Results.esm", "Override.esp"]);
             var cell = FalloutCellSceneReader.Read(records, Key(0x80));
             using var world = new FalloutReferenceWorld(records); world.LoadCell(cell);
             var quests = new FalloutQuestState(records);
             var effects = new List<FalloutReferenceScriptEffect>();
+            var topicStages = new List<short>();
+            var order = new List<string>();
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, effect =>
             {
                 effects.Add(effect);
+                if (effect.Kind == FalloutReferenceEffectKind.PackageEventTopic)
+                {
+                    topicStages.Add(quests.Stage(Key(0x60)));
+                    order.Add("topic");
+                    return;
+                }
                 if (effect.Kind != FalloutReferenceEffectKind.SetStage) throw new InvalidOperationException("Unexpected package result effect.");
                 quests.EnterStage(effect.Target!.Value, effect.Stage);
+                order.Add("script");
             }));
             FalloutScriptPackage Source(uint id) => FalloutScriptPackage.Read(records.GetEffective(new("Override.esp", id)));
             var lifecycle = new FalloutPackageEvents((package, kind) =>
@@ -68,7 +86,50 @@ internal static class PackageEventContracts
             Reject(() => scripts.ExecutePackageEvent(malformed, Key(0x90)));
             Reject(() => scripts.ExecutePackageEvent(topic, Key(0x80)));
             Require(world.Get(Key(0x90)).Read(1) == 4, "Malformed metadata or a nonactor caller mutated package result state.");
-            Console.WriteLine("OPENNV_PACKAGE_EVENT_RESULTS_PASS actorScope=true ownCompiledScope=true conditional=true stage=true prefixLatch=true coldValues=true invalidAtomic=true topics=unbound actorColdLifecycle=unverified");
+            var topicSource = Source(0x110);
+            var topicLifecycle = new FalloutPackageEvents((package, kind) =>
+            {
+                if (package.EventPrograms.GetValueOrDefault(kind) is { } program) scripts.ExecutePackageEvent(program, Key(0x90));
+                if (package.Events.GetValueOrDefault(kind) is not null) order.Add("idle");
+            });
+            var beforeTopics = effects.Count;
+            order.Clear();
+            Require(topicSource.EventPrograms["POBA"].Topic == Key(0x61) && effects.Count == beforeTopics,
+                "A declared topic ran early or lost its declaring master.");
+            topicLifecycle.Change(topicSource); topicLifecycle.Change(topicSource);
+            var request = effects.Last();
+            Require(world.Get(Key(0x90)).Read(1) == 5 && topicStages.SequenceEqual([(short)40]) &&
+                order.SequenceEqual(["script", "topic", "idle"]) && request.Kind == FalloutReferenceEffectKind.PackageEventTopic &&
+                request.Source == Key(0x90) && request.Target == Key(0x90) && request.Argument == topicSource.Form &&
+                request.Topic == Key(0x61) && request.PackageEvent == "POBA" && records.GetEffective(request.Topic.Value).Plugin.Name == "Override.esp",
+                "Package topic lost committed results, actual caller, source identity, winning topic or event/idle order.");
+            topicLifecycle.Complete(); topicLifecycle.Complete();
+            Require(world.Get(Key(0x90)).Read(1) == 6 && topicStages.SequenceEqual([(short)40, (short)42]) &&
+                effects.Last().Topic == new FalloutFormKey("Override.esp", 0x103) && effects.Last().PackageEvent == "POEA",
+                "End topic lost its separate event scope or repeated its result/request.");
+            topicLifecycle.Change(null);
+            Require(world.Get(Key(0x90)).Read(1) == 7 && topicStages.Count == 2, "A zero change-topic started speech.");
+            var restoredEvents = new FalloutPackageEvents((package, kind) => scripts.ExecutePackageEvent(package.EventPrograms[kind], Key(0x90)));
+            restoredEvents.Restore(topicSource, false);
+            Require(world.Get(Key(0x90)).Read(1) == 7 && topicStages.Count == 2, "Restoration replayed the begin topic.");
+            restoredEvents.Complete();
+            Require(world.Get(Key(0x90)).Read(1) == 8 && topicStages.Count == 3 && topicStages.Last() == 42,
+                "Restored package failed its next genuine end topic.");
+            var unbound = new FalloutReferenceScripts(records, world, quests,
+                new((_, _) => false, _ => throw new NotSupportedException("Fixture has no speech owner.")));
+            var failedTopic = new FalloutPackageEvents((package, kind) => unbound.ExecutePackageEvent(package.EventPrograms[kind], Key(0x90)));
+            Reject(() => failedTopic.Change(Source(0x111)));
+            Reject(() => failedTopic.Change(null));
+            Require(failedTopic.Error is not null && world.Get(Key(0x90)).Read(1) == 9,
+                "Failed speech owner discarded or replayed the committed result prefix.");
+            var duplicate = topicSource.EventPrograms["POBA"] with
+            { Fields = topicSource.EventPrograms["POBA"].Fields.Append(new("TNAM", BitConverter.GetBytes(0u))).ToArray() };
+            Reject(() => scripts.ExecutePackageEvent(duplicate, Key(0x90)));
+            Require(world.Get(Key(0x90)).Read(1) == 10 && topicStages.Count == 3,
+                "Duplicate topic metadata admitted speech or skipped its preceding script.");
+            Reject(() => scripts.ExecutePackageEvent(duplicate with { Kind = "Unknown" }, Key(0x90)));
+            Require(world.Get(Key(0x90)).Read(1) == 10, "An untyped event mutated its source result.");
+            Console.WriteLine("OPENNV_PACKAGE_EVENT_RESULTS_PASS actorScope=true ownCompiledScope=true conditional=true stage=true prefixLatch=true coldValues=true invalidAtomic=true topics=source-bound eventOrder=true winner=true actorColdLifecycle=unverified nativeVoice=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
     }
@@ -79,11 +140,12 @@ internal static class PackageEventContracts
         var data = new byte[12]; data[4] = 6;
         return Record("PACK", id, Field("EDID", Text("Fixture" + id)), Field("PKDT", data), Join(events));
     }
-    private static byte[] Event(string kind, string source, uint? reference = null, uint topic = 0)
+    private static byte[] Event(string kind, string source, uint? reference = null, uint topic = 0, uint idle = 0)
     {
         var header = new byte[20]; UInt(header, 4, reference is null ? 0u : 1u); UInt(header, 8, 1);
         return Join(Field(kind, []), Field("SCHR", header), Field("SCDA", [0]), Field("SCTX", Text(source)),
-            reference is { } form ? Field("SCRO", BitConverter.GetBytes(form)) : [], Field("TNAM", BitConverter.GetBytes(topic)));
+            reference is { } form ? Field("SCRO", BitConverter.GetBytes(form)) : [], Field("TNAM", BitConverter.GetBytes(topic)),
+            idle == 0 ? [] : Field("INAM", BitConverter.GetBytes(idle)));
     }
     private static byte[] Local(uint id, string name, bool reference = false)
     {
