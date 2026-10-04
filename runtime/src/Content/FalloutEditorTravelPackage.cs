@@ -17,7 +17,7 @@ internal sealed record FalloutEditorTravelPackage(FalloutFormKey Form, uint Flag
             throw new InvalidDataException("Package is not Travel to editor location.");
         var data = record.ReadSubrecords().Single(field => field.Signature == "PKDT").Data.Span;
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(data);
-        const uint supported = 2 | 4 | 0x1000 | 0x2000 | 0x800000;
+        const uint supported = 2 | 4 | 0x1000 | 0x2000 | 0x800000 | FalloutScriptPackage.HeadTrackingOffFlag;
         if ((flags & ~supported) != 0 || BinaryPrimitives.ReadUInt16LittleEndian(data[6..]) != 0 ||
             BinaryPrimitives.ReadUInt16LittleEndian(data[8..]) != 0 ||
             record.ReadSubrecords().Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2"))

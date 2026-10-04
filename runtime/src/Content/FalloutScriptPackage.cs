@@ -6,6 +6,9 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId, byte IdleFlags,
     float IdleTimer, IReadOnlyList<FalloutFormKey> Idles, IReadOnlyDictionary<string, FalloutFormKey?> Events)
 {
+    internal const uint HeadTrackingOffFlag = 0x100000;
+    internal uint Flags { get; init; }
+    internal bool HeadTrackingEnabled => (Flags & HeadTrackingOffFlag) == 0;
     internal bool RunInSequence => (IdleFlags & 1) != 0;
     internal bool DoOnce => (IdleFlags & 4) != 0;
     internal byte Procedure { get; init; }
@@ -106,6 +109,7 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         return new(record.FormKey, FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "EDID").Data.Span),
             idleFlags, timer, idles, events)
         {
+            Flags = BinaryPrimitives.ReadUInt32LittleEndian(data),
             Procedure = procedure,
             LocationType = locationType,
             LocationReference = locationReference,

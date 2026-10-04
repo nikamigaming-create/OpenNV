@@ -19,6 +19,7 @@ internal partial class RuntimeNativeNpc
     private bool _conversationWasTraveling;
     private FalloutActorAnimationSnapshot? _conversationTravelClock;
     private GamebryoRootMotionTravel? _conversationTravelProgress;
+    private bool PackageHeadTrackingEnabled => _aiPackage is null || _packageIdleSource?.HeadTrackingEnabled != false;
 
     internal void BeginConversationFacing(Func<Vector3> targetPoint, float turnDegreesPerSecond)
     {
@@ -82,6 +83,7 @@ internal partial class RuntimeNativeNpc
         targetRevision = _headTargets?.TargetRevision,
         animationOverride = _headOverrideName,
         conversationFacing = _conversationTarget is not null,
+        packageHeadTrackingEnabled = PackageHeadTrackingEnabled,
         pose = _headPose?.State,
         error = _headError,
         unbound = new[] { "automatic-default-acquisition", "combat-targets", "eye-aiming", "full-body-look", "target-save-restoration", "matched-native-pose-and-frame" },
@@ -152,8 +154,10 @@ internal partial class RuntimeNativeNpc
         try
         {
             _headTargets.Advance(delta, target => _headTargetPoint!(target) is not null);
-            var point = _conversationTarget is not null ? _conversationTarget() :
-                _headTargets.SelectedTarget is { } target ? _headTargetPoint!(target) : null;
+            var point = PackageHeadTrackingEnabled
+                ? _conversationTarget is not null ? _conversationTarget() :
+                    _headTargets.SelectedTarget is { } target ? _headTargetPoint!(target) : null
+                : null;
             var animationOverride = _headOverrideName is null ? 0 :
                 Skeleton.FloatExtraData.Get(_headPart!.TargetNode, _headOverrideName);
             _headPose?.Publish(point, animationOverride);

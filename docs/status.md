@@ -1,6 +1,6 @@
 # Product status
 
-Checked PR133 is merged at synchronized main 2fa0e10 with all five checks passing.
+Checked PR134 is merged at synchronized main 4473293 with all five checks passing.
 The merged classroom runtime reproduces all seven original
 students occupying distinct source seats after the ordinary G.O.A.T. ready choice.
 Find near-reference Furniture searches use enabled/moved placements, source
@@ -12,20 +12,28 @@ questions and scoring results complete through observed buttons. Source70 and
 physical chair exit precede Brotch's original hand-in dialogue, which enters80
 and accepts the original tag menu with both menu and dialogue closed and player
 input restored. Physical hallway movement crosses the original exit trigger,
-completes90 and enters100/CG04:0. The reached Escape opening fails at its radio
-SetBroadcastState command, retaining the consumed nested prefix.
+completes90 and enters100/CG04:0. Fresh candidate replay passes the radio command
+and stops at the original terminal Lock255 command, retaining the consumed nested
+prefix. Vault escape and the authored train journey remain open.
 The merged runtime owns four indexed player tags in shared
 C# reference/result and fallback quest execution. Existing source bonuses update
 live membership once; v34 saves retain holes and exact slot order. Synthetic and
 campaign cold-save checks and all thirteen isolated original TTW scoring stages
 pass. The complete runtime gate passed for that merged runtime. It binds the optional initial-selection
 flag, source total count and independent menu/dialogue input retirement.
-The active codex/radio-broadcast-state candidate owns per-reference scripted/
+The merged runtime owns per-reference scripted/
 continuous station mode, source commands/queries and cold restoration in v35.
 Synthetic and original isolated CG04 command audits and the complete runtime gate
-pass, including v34/v33 loading. Vault escape, Megaton and the train/Mojave route remain
-incomplete. Projector composition, Brotch's blocked desk entry and NPC fidgeting
-remain active user-reported issues. No presentation parity is claimed.
+pass, including v34/v33 loading. The active codex/package-head-tracking-off
+candidate retains native filters
+through enable/fade changes, preserves scale/capsule identity during body turning,
+retains reachable source arrival regions and binds package head suppression.
+Selected source contracts and isolated/static owned-room warm/cold movement,
+filter and physical head checks and the complete runtime gate pass. Fresh ordinary
+replay retains the teacher's supported body through classroom departure. Vault escape,
+Megaton and the train/Mojave route remain incomplete. Projector composition,
+Brotch's desk entry and NPC fidgeting remain active user-reported issues.
+No presentation parity is claimed.
 
 Shared script GetTalkedToPC and typed GetLinkedRef have synthetic self/explicit/
 postfix, live and cold checks. Original escape history/link declarations and

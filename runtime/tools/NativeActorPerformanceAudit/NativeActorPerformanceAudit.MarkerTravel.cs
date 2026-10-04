@@ -11,11 +11,12 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private async Task MarkerTravelCold(string game, string mod, string root, string actorId, string questId,
-        short stage, string[] dependencies, bool failedRoute = false)
+        short stage, string[] dependencies, bool failedRoute = false, bool ownedRoom = false)
     {
         var fixture = new Node3D(); AddChild(fixture);
         FalloutReferenceWorld? world = null;
         RuntimeNativeNpc? actor = null;
+        var roomPrototypes = new Dictionary<string, RuntimeNativeNifPrototype>(StringComparer.OrdinalIgnoreCase);
         try
         {
             var installation = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
@@ -53,6 +54,7 @@ public partial class NativeActorPerformanceAudit
             var navigation = CellNavigationGraph.LoadOwned(records, cell.Cell.FormKey);
             var packageEvents = new List<(string Event, FalloutFormKey Package)>();
             var effects = new List<FalloutReferenceScriptEffect>();
+            Rid movementShape = default;
 
             Vector3 Source(Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
             Vector3 Native(Vector3 point) => GamebryoCoordinate.ConvertVector(point) * units;
@@ -79,6 +81,32 @@ public partial class NativeActorPerformanceAudit
                 (from, to) => navigation.FindPath(Source(from), Source(to)).Select(Native).ToArray(),
                 _ => true, () => 1, globals, .4f, 9.81f, PlayerCell: () => cell.Cell.FormKey);
 
+            if (ownedRoom)
+            {
+                foreach (var reference in cell.References.Where(value => world.IsEnabled(value.FormKey)))
+                {
+                    var source = cell.BaseObjects[reference.Base];
+                    if (source.Signature is not ("STAT" or "FURN") || source.ModelPath is null ||
+                        FalloutNewVegasBuiltinForms.IsInternalStatic(source.Signature, records.RuntimeFormId(source.FormKey))) continue;
+                    if (Placement(world, reference).Origin.DistanceTo(Placement(world, placed).Origin) > 20) continue;
+                    if (!roomPrototypes.TryGetValue(source.ModelPath, out var prototype))
+                    {
+                        if (!content.TryRead(source.ModelPath, null, out var bytes, out _)) throw new FileNotFoundException(source.ModelPath);
+                        var nif = FalloutNifFile.Read(bytes);
+                        if (!nif.Blocks.Any(block => block.TypeName is "bhkCollisionObject" or "bhkBlendCollisionObject")) continue;
+                        if (nif.Blocks.Any(block => block.TypeName == "NiControllerManager"))
+                        {
+                            GD.Print($"OPENNV_MARKER_ROOM_EXCLUDED reference={reference.FormKey} model={source.ModelPath} reason=static-collision-fixture-has-no-controller-owner");
+                            continue;
+                        }
+                        GD.Print($"OPENNV_MARKER_ROOM_SOURCE reference={reference.FormKey} model={source.ModelPath}");
+                        prototype = new(nif, units); roomPrototypes.Add(source.ModelPath, prototype);
+                    }
+                    var instance = prototype.InstantiatePlaced(Placement(world, reference));
+                    instance.Name = $"Reference_{reference.FormKey}"; fixture.AddChild(instance);
+                }
+            }
+
             RuntimeNativeNpc CreateActor(FalloutReferenceWorld owner)
             {
                 var selectedTemplates = owner.InitializeActorTemplates(caller, 1, globals);
@@ -86,9 +114,23 @@ public partial class NativeActorPerformanceAudit
                     (_, _, _, _) => new StandardMaterial3D(), owner.EquippedArmor(caller, 1, globals), selectedTemplates);
                 created.Transform = Placement(owner, placed);
                 created.ConfigureContactShapes(configuration.Player.CollisionLayer);
+                // Reference registration can precede the movement envelope.
+                // Preparing that envelope must update the retained filters,
+                // including when an enable/fade owner applies them later.
+                GamebryoReferenceEnableRuntime.Apply(created, true);
+                var movementMask = configuration.Player.CollisionMask | configuration.Player.CollisionLayer;
                 created.Combat = RuntimeNativeActorCombat.Attach(created, created.Skeleton, created.Appearance.SkeletonPath,
                     owner, owner.Get(caller), records, content, configuration.Player.CollisionLayer,
-                    configuration.Player.CollisionMask | configuration.Player.CollisionLayer, context);
+                    movementMask, context);
+                created.Combat.PreparePortalArrival();
+                movementShape = created.GetChildren().OfType<CollisionShape3D>()
+                    .Single(value => value.Name == "SourceActorMovementEnvelope").Shape.GetRid();
+                GamebryoReferenceEnableRuntime.Apply(created, false);
+                if (created.CollisionMask != 0) throw new InvalidDataException("Disabled movement envelope retained live collision.");
+                created.Combat.RefreshAppearanceMovement();
+                GamebryoReferenceEnableRuntime.Apply(created, true);
+                if (created.CollisionMask != movementMask)
+                    throw new InvalidDataException("Reference re-enable lost the late movement envelope's intended collision mask.");
                 created.SetProcess(false); created.SetPhysicsProcess(false); created.Combat.SetPhysicsProcess(false);
                 created.ExecutePackageEvent = scripts.ExecutePackageEvent;
                 // Match the runtime bootstrap ordering: Combat owns the saved
@@ -96,6 +138,11 @@ public partial class NativeActorPerformanceAudit
                 created.ConfigureAi(records, quests, cell, reference => Placement(owner, reference),
                     () => owner.ActorFactions(caller), clock, globals, owner);
                 fixture.AddChild(created);
+                created.ConfigureHeadTracking(records, content,
+                    reference => reference == caller ? created.HeadTargetPoint : null);
+                // A retained Look reference is independent of package suppression.
+                // Bind the actual actor's own loaded head for this component check.
+                created.ApplyHeadTrackingCommand(caller);
                 return created;
             }
 
@@ -147,12 +194,15 @@ public partial class NativeActorPerformanceAudit
             var nativeCorridor = corridor.Select(Native).ToArray();
             if (!failedRoute && nativeCorridor.Any(point => Math.Abs(point.Y - target.Y) > .05f))
                 throw new NotSupportedException("Isolated marker Travel floor requires a level source NAVM corridor.");
-            var floorPosition = start.Lerp(target, .5f);
-            floorPosition.Y = (failedRoute ? start.Y : target.Y) - .05f;
-            var floor = new StaticBody3D { Position = floorPosition };
-            floor.AddChild(new CollisionShape3D
-            { Shape = new BoxShape3D { Size = new(Math.Max(100, corridorLength + 20), .1f, Math.Max(100, corridorLength + 20)) } });
-            fixture.AddChild(floor);
+            if (!ownedRoom)
+            {
+                var floorPosition = start.Lerp(target, .5f);
+                floorPosition.Y = (failedRoute ? start.Y : target.Y) - .05f;
+                var floor = new StaticBody3D { Position = floorPosition };
+                floor.AddChild(new CollisionShape3D
+                { Shape = new BoxShape3D { Size = new(Math.Max(100, corridorLength + 20), .1f, Math.Max(100, corridorLength + 20)) } });
+                fixture.AddChild(floor);
+            }
             var packageHash = SHA256.HashData(package.ReadData());
             var navigationHash = navigation.SourceSha256;
 
@@ -162,10 +212,25 @@ public partial class NativeActorPerformanceAudit
                 var current = actor ?? throw new InvalidOperationException("Marker Travel actor was released.");
                 current._PhysicsProcess(1d / 60);
                 current._Process(1d / 60);
+                if (current.GetChildren().OfType<CollisionShape3D>()
+                    .Single(value => value.Name == "SourceActorMovementEnvelope").Shape.GetRid() != movementShape)
+                    throw new InvalidDataException("Source body turning rebuilt its unchanged movement envelope and invalidated its route: " +
+                        JsonSerializer.Serialize(current.Combat!.Observation));
                 DrainPackageEvents(world!, scripts);
                 if (current.AiError is not null || current.AnimationError is not null)
                     throw new InvalidDataException("Native marker Travel diverged: " + JsonSerializer.Serialize(current.AiState) +
                         " " + JsonSerializer.Serialize(current.Combat!.Observation));
+                if (current.CurrentPackage is { } activePackage)
+                {
+                    var head = JsonSerializer.SerializeToElement(current.HeadTrackingState);
+                    var tracking = FalloutScriptPackage.Read(records.GetEffective(activePackage)).HeadTrackingEnabled;
+                    var targetIsNull = head.GetProperty("pose").GetProperty("target").ValueKind == JsonValueKind.Null;
+                    if (head.GetProperty("packageHeadTrackingEnabled").GetBoolean() != tracking ||
+                        head.GetProperty("selected").GetString() != caller.ToString() ||
+                        head.GetProperty("error").ValueKind != JsonValueKind.Null ||
+                        targetIsNull == tracking)
+                        throw new InvalidDataException("Package head suppression lost its source flag, retained Look target or physical publication.");
+                }
             }
 
             for (var frame = 0; frame < 1800; frame++)
@@ -266,11 +331,13 @@ public partial class NativeActorPerformanceAudit
             GD.Print($"OPENNV_NATIVE_MARKER_TRAVEL_COLD_PASS actor={caller} package={packageKey} quest={quest} initialStage={stage} " +
                 $"arrivalRadius={travel.Radius} routeCursor={restoredProgress.RouteCursor} nativeWaypoints={restoredNativeWaypoints} " +
                 "sourceNavm=true sourceKf=true capsule=true actualSourcePose=true coldRootClockRoute=true resumedArrival=true " +
-                "packageStartOnce=true packageDoneOnce=true sourceUnchanged=true fixture=isolated-floor campaignCollisionAndParity=unverified recording=false");
+                "packageStartOnce=true packageDoneOnce=true retainedCollisionFilter=true packageHeadTracking=true retainedLookTarget=true " +
+                $"sourceUnchanged=true fixture={(ownedRoom ? "owned-room" : "isolated-floor")} campaignCollisionAndParity=unverified recording=false");
         }
         finally
         {
             actor?.Free(); world?.Dispose(); RuntimeLiveContentSource.Clear(); fixture.Free();
+            foreach (var prototype in roomPrototypes.Values) prototype.Scene.Root.Free();
         }
     }
 }

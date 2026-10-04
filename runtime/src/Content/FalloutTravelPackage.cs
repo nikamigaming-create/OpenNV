@@ -17,7 +17,7 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
         if (source.Procedure != 6 || source.LocationType is not (0 or 3))
             throw new NotSupportedException("Travel requires its reference-marker or editor-location owner.");
         var data = record.ReadSubrecords().Single(field => field.Signature == "PKDT").Data.Span;
-        const uint supported = 2 | 4 | 0x400 | 0x1000 | 0x2000;
+        const uint supported = 2 | 4 | 0x400 | 0x1000 | 0x2000 | FalloutScriptPackage.HeadTrackingOffFlag;
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(data);
         // Skip Fallout Behavior disables the optional behavior lane. Retained
         // declarations in that lane do not add a second travel procedure.

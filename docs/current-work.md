@@ -12,8 +12,8 @@ their stated contracts.
 
 ## Baseline and candidate
 
-Checked PR133 is merged at synchronized origin/main 2fa0e10 with all five checks
-passing. The active branch is codex/radio-broadcast-state. Primary owns live
+Checked PR134 is merged at synchronized origin/main 4473293 with all five checks
+passing. The active branch is codex/package-head-tracking-off. Primary owns live
 input, implementation and publication. Recording is off.
 
 The merged runtime shares four indexed player tag slots across C# reference,
@@ -33,12 +33,29 @@ optional markers, overlapping leases and nested dialogue retirement with unchang
 source XML. Its inspected temporary PNG has been deleted. The complete runtime
 gate passes. Ordinary replay has passed the reached hand-in and classroom exit.
 
-The active candidate owns SetBroadcastState/GetBroadcastState through shared
+The merged runtime owns SetBroadcastState/GetBroadcastState through shared
 per-reference continuous/scripted radio state. Synthetic source, fallback,
 independence and atomic cold checks pass. The original CG04 stage-zero station
 command passes an isolated owned-data audit with unchanged source bytes. v35
 retains the override while v34/v33 remain readable. The complete runtime gate
-passes. Ordinary replay through the previously failed Escape opening is active.
+passes. Fresh ordinary Escape replay passes its original station command.
+
+The active candidate retains movement collision filters through reference
+enable/fade changes. Registration before capsule preparation previously cached
+a zero mask; the shared filter setter now preserves the intended movement mask
+while disabled bodies remain noncolliding. Ordinary replay still exposed Brotch
+falling with a nonzero mask. A native regression then reproduced capsule recreation
+and route invalidation from scale roundoff during body turning. Normalized bounded
+turning now retains its source world scale and unchanged collision shape. Local
+segments retain reachable source arrival regions across the segment boundary.
+The original marker package passes warm/cold native motion and filter restoration
+on both an isolated floor and the nearby static owned room collision fixture.
+Travel and editor Travel admit the source Head-Tracking Off flag, and the active
+package suppresses physical head publication independently of retained Look
+targets. Selected synthetic package and physical head checks and the complete
+runtime gate pass for the final candidate. Fresh ordinary replay keeps Brotch
+on the room floor through the exam, hand-in and hallway departure. His subsequent
+desk approach remains incomplete; this does not establish desk return.
 
 Find Furniture shares enabled/moved placements, source ownership, exclusive
 NIF/MNAM reservations, source NAVM/native capsule approach and KF entry. All
@@ -64,9 +81,11 @@ ordinary chair exit returns the player to the floor. Brotch's original hand-in
 dialogue enters80 and its original tag-menu acceptance closes both menu and
 dialogue with player input restored. Source NAVM/native capsule movement toward
 the observed hallway door crosses the original classroom exit trigger. CG03:90
-completes;100 enters the original Escape quest CG04:0 and retains a nested failure
-at RadioVault101REF.SetBroadcastState0. Its consumed enable/quest effects cannot
-be replayed in that process. The radio candidate requires a fresh ordinary replay.
+completes;100 enters the original Escape quest CG04:0. Fresh candidate replay
+passes RadioVault101REF.SetBroadcastState0 and stops at the original terminal
+Lock255 command. CG04:0 retains thirteen consumed steps and its caller CG03:100
+retains six. These nested prefixes must resume at the stopped instruction,
+without replaying consumed enable, quest or control effects.
 
 The classroom is exited; Vault escape, Megaton, Union Station and Mojave remain
 unreached. No campaign or
@@ -77,18 +96,23 @@ used as a completed checkpoint.
 
 ## Next executable outcome
 
-Verify the radio state/save gate, replay the original hand-in and physical
-classroom departure, then continue Vault escape, Megaton and the authored train
-journey. Repair the next actually reached general owner and obtain a genuine
-settled checkpoint with cold Continue proof. Complete procedure, conversation
-and nested-result saving remain required. VATS, full JAM and native plugin
+Publish the gated actor collision/head correction. Complete shared terminal
+access and suspended nested-result continuation, obtain a genuine checkpoint
+with cold Continue proof, and continue Vault escape, Megaton and the authored
+train journey. The user requires a game-wide retail record/replay comparison
+loop with reusable checkpoints, grouped owner failures and explicit tolerances.
+Reuse the existing private retail input bridge and public telemetry owners,
+keeping retail measurements separate from gameplay authority. Complete procedure,
+conversation and nested-result saving remain required. VATS, full JAM and native plugin
 interfaces remain incomplete. Run selected owned audits, the complete runtime
 gate and diff check before a checked PR and synchronized main.
 
-The user's reported projector darkness, teacher desk return and NPC fidgeting
-remain active presentation/AI fixes. Brotch selects the original desk package,
-but its native capsule search stops about a metre short of the entry root.
-An earlier source Travel rejects Head-Tracking Off. The slide NIF declares four
+The user's reported repeating first seconds of audio, projector darkness,
+teacher desk return and NPC fidgeting
+remain active presentation/AI fixes. Verify Brotch's actual floor support before
+diagnosing any remaining desk approach; an earlier capsule search also stopped
+about a metre short of its entry root. Source Head-Tracking Off is now admitted
+by the active candidate. The slide NIF declares four
 flat no-lighting planes with multiplicative alpha blending; its wall composition
 must be traced through actual source transforms/materials, without brightness
 substitutions or location-specific decals. No visual parity claim is established.
