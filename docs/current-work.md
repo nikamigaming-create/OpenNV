@@ -12,8 +12,8 @@ their stated contracts.
 
 ## Baseline and candidate
 
-Checked PR134 is merged at synchronized origin/main 4473293 with all five checks
-passing. The active branch is codex/package-head-tracking-off. Primary owns live
+Checked PR135 is merged at synchronized origin/main ca9f0ba with all five checks
+passing. The active branch is codex/recorded-input-replay. Primary owns live
 input, implementation and publication. Recording is off.
 
 The merged runtime shares four indexed player tag slots across C# reference,
@@ -40,7 +40,7 @@ command passes an isolated owned-data audit with unchanged source bytes. v35
 retains the override while v34/v33 remain readable. The complete runtime gate
 passes. Fresh ordinary Escape replay passes its original station command.
 
-The active candidate retains movement collision filters through reference
+The merged runtime retains movement collision filters through reference
 enable/fade changes. Registration before capsule preparation previously cached
 a zero mask; the shared filter setter now preserves the intended movement mask
 while disabled bodies remain noncolliding. Ordinary replay still exposed Brotch
@@ -96,7 +96,14 @@ used as a completed checkpoint.
 
 ## Next executable outcome
 
-Publish the gated actor collision/head correction. Complete shared terminal
+Finish and publish the repeatable native input runner. Its synthetic timing,
+integrity, binding and tolerance contracts pass; native record/playback checks
+pass with physical keys, lease renewals, original button input and owner retirement.
+The selected TTW-source native audit and integrated runtime gate pass. A reached
+range save still refuses pending actor-package events before creating a tape.
+The runner
+does not implement missing procedure saves or establish retail playback/parity.
+Complete shared terminal
 access and suspended nested-result continuation, obtain a genuine checkpoint
 with cold Continue proof, and continue Vault escape, Megaton and the authored
 train journey. The user requires a game-wide retail record/replay comparison
@@ -119,12 +126,18 @@ substitutions or location-specific decals. No visual parity claim is established
 
 ## Private continuation
 
-Live run: tmp/development-lab/ttw-pipboy-20261003. Read fresh state with
+The native input check is paused at the immutable range checkpoint, CG02:80.
+The earlier classroom/escape run was ordinarily quit; that state is historical.
+Run directory: tmp/development-lab/ttw-pipboy-20261003. Read fresh state with
 Read-NativeXrState.ps1 -Run and verify its recorded process before input.
 Resume-TtwClassroom.ps1 and Answer-TtwGoat.ps1 use ordinary input receipts and
 source-driven bot travel/activation. The reusable immutable checkpoint is
 local/ttw-bot-resume-20261002/source-range-stage80-roach-dead-20261003.save.json,
 SHA256 1F98915FBF80145C610EA8AD0BF0464558595E8D118BA225AC215066B14C73C3.
+Its hash remains unchanged after the selected input audits. Repeated Dad speech
+is actual INFO Fallout3.esm:01f951 finishing and being requested again; the source
+package's repeat conditions and retirement require investigation separately from
+the reported radio loop.
 Ordinary Load uses catalog slot 7a80c8ae306a4e848ce927d8a75a7979.
 Private source readers, command logs, audits and receipts remain outside public
 Git. Owned files and this checkpoint stay unchanged. Matched retail, physical

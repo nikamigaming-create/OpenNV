@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 
 NativeReferenceObservationProbe.Run();
+RecordedInputProbe.Run();
 
 var traceDirectory = Path.Combine(Path.GetTempPath(), "opennv-trace-contract-" + Guid.NewGuid().ToString("N"));
 try
