@@ -39,11 +39,11 @@ internal sealed partial class NativeOwnedTagSkillMenu : Control
 
     internal NativeOwnedTagSkillMenu(FalloutPluginStack records, FalloutNativeTagSkillContract contract,
         IReadOnlyList<FalloutNativeSkillIdentity> current, Func<FalloutNativeSkillIdentity, float> liveValue,
-        Action<IReadOnlyList<FalloutNativeSkillIdentity>> accepted, Action<Exception> failed)
+        Action<IReadOnlyList<FalloutNativeSkillIdentity>> accepted, Action<Exception> failed, bool showInitialTaggedSkills = true)
     {
         Name = "CharGenMenu"; ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Ignore;
         _records = records; _accepted = accepted; _failed = failed;
-        _selection = new(records, contract, current, liveValue); _declarations = FalloutTagMenuDefaults.Read();
+        _selection = new(records, contract, current, liveValue, showInitialTaggedSkills); _declarations = FalloutTagMenuDefaults.Read();
         var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/chargen/char_gen_menu.xml")).Elements("menu").Single();
         _tiles = new(menu, name => FalloutGameSettingStrings.Read(records, name));
         XElement Named(string name) => menu.DescendantsAndSelf().Single(tile => (string?)tile.Attribute("name") == name);

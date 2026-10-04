@@ -11,6 +11,12 @@ description panel, icon, count panel, Reset and Done artwork, and PC shortcuts.
 Winning AVIF records supply identity, display name, description and optional
 icon. No retail UI art, text or transformed resources are repository inputs.
 
+The reached source command supplies a total selection count and optionally
+whether to show current tags, defaulting to showing them. Counts from one through
+four share the indexed tag owner. A hidden initial selection starts an empty
+draft while retaining accepted membership for live bonus subtraction. An initial
+draft larger than the requested total requires deselection before Done enables.
+
 The skill-page declarations observed in the owned executable establish these
 implementation-neutral contracts:
 
@@ -43,8 +49,11 @@ failing player-value query.
 
 The wrapper pauses gameplay while accepting menu input, remembers the prior
 pause and mouse mode, and restores them once on accepted closure, cancellation
-or tree exit. The opening driver acquires player modal input separately and
-restores its prior value through the wrapper's release event. Failure leaves
+or tree exit. The opening driver acquires a player modal lease separately.
+The player aggregates active leases with its other requested modal input, so
+closing a source dialogue cannot release its nested menu and the menu cannot
+restore an already-closed dialogue. Its release event retires that lease once
+and captures the mouse when no modal owner remains. Failure leaves
 the menu blocked and visible to telemetry until its owner closes it. The
 opening driver releases the wrapper before freeing it.
 
@@ -62,8 +71,10 @@ focus Reset pixels, observes a paused gameplay clock, exercises acceptance,
 prior pause, cancellation and visible failure. An isolated inherited driver
 suppresses campaign startup, binds owned menu/player data, and executes the
 production sync, acceptance and retirement paths for acceptance, cancellation,
-failure cancellation and tree exit. Each path restores both prior-modal cases,
-mouse mode and pause once while preserving the source control mask. It does
+failure cancellation and tree exit. These paths cover optional initial markers,
+authored total counts, overlapping modal leases and a dialogue closing while its
+menu remains open. They restore both prior-modal cases, mouse mode and pause once
+while preserving the source control mask. It does
 not exercise campaign initialization or progression. The audit verifies the owned XML is
 unchanged. Recording is off. Its one private PNG is a temporary visual
 diagnostic; the caller inspects it and deletes it in a cleanup path. Failed runs

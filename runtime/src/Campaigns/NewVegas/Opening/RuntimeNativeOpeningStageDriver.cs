@@ -44,6 +44,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private string _raceMenuCommand = "showracemenu";
     private RuntimeNativeVigorEntry? _vigorEntry;
     private RuntimeNativeTagSkillEntry? _tagSkillEntry;
+    private FalloutTagSkillMenuRequest? _tagMenuRequest;
+    private FalloutNativeTagSkillContract? _activeTagSkillContract;
     private RuntimeNativeTraitEntry? _traitEntry;
     private bool _stage200Saved;
     private FalloutOpeningControlGraph _controls = null!;
@@ -574,6 +576,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 _tagSkillEntry.QueueFree();
                 _tagSkillEntry = null;
             }
+            _tagMenuRequest = null;
+            _activeTagSkillContract = null;
             return;
         }
         if (_tagSkillEntry is not null)
@@ -582,21 +586,27 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         AddChild(_tagSkillEntry);
         _tagSkillEntry.Accepted += AcceptTagSkills;
         _tagSkillEntry.Failed += error => ExecutionError = error.Message;
-        var previousModalInput = _player.ModalInput;
-        _tagSkillEntry.Released += () => _player.SetModalInput(previousModalInput);
-        _tagSkillEntry.Configure(_pluginStack, _tagSkillContract, _tagSkills.Selection,
-            skill => _playerSkills.Value(FalloutNativeTagSkillResolver.ActorValueName(_pluginStack, skill)));
-        _player.SetModalInput(true);
+        var request = _tagMenuRequest ?? new(_tagSkillContract.RequiredCount, true);
+        _activeTagSkillContract = _tagSkillContract with { RequiredCount = request.TotalCount };
+        _tagSkillEntry.Configure(_pluginStack, _activeTagSkillContract, _tagSkills.Selection,
+            skill => _playerSkills.Value(FalloutNativeTagSkillResolver.ActorValueName(_pluginStack, skill)), request.ShowInitialTaggedSkills);
+        var releaseModalInput = _player.AcquireModalInput();
+        _tagSkillEntry.Released += () =>
+        {
+            releaseModalInput();
+            if (!_player.ModalInput && DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Captured;
+        };
         GD.Print(
             $"OPENNV_NATIVE_TAG_SKILLS_OPEN stage={Stage} " +
-            $"choices={_tagSkillContract.Skills.Count} required={_tagSkillContract.RequiredCount} " +
+            $"choices={_tagSkillContract.Skills.Count} required={request.TotalCount} initial={request.ShowInitialTaggedSkills} " +
             "source=live-settagskills-avif presentation=menus/chargen/char_gen_menu.xml");
     }
 
     private void AcceptTagSkills(IReadOnlyList<FalloutNativeSkillIdentity> selection)
     {
-        FalloutNativeTagSkillResolver.Validate(_tagSkillContract, selection);
-        _tagSkills.AcceptMenu(selection);
+        var contract = _activeTagSkillContract ?? throw new InvalidOperationException("Tag acceptance has no source menu contract.");
+        FalloutNativeTagSkillResolver.Validate(contract, selection);
+        _tagSkills.AcceptMenu(selection, contract.RequiredCount);
         if (_tagSkillEntry is not null)
         {
             _tagSkillEntry.Accepted -= AcceptTagSkills;
@@ -604,6 +614,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _tagSkillEntry.QueueFree();
             _tagSkillEntry = null;
         }
+        _tagMenuRequest = null;
+        _activeTagSkillContract = null;
         GD.Print(
             $"OPENNV_NATIVE_TAG_SKILLS_ACCEPTED skills=" +
             $"{string.Join(',', _tagSkills.Selection.Select(value => value.EditorId))} " +

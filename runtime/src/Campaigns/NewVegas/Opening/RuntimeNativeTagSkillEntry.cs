@@ -16,11 +16,12 @@ internal partial class RuntimeNativeTagSkillEntry : CanvasLayer
     internal event Action? Released;
 
     internal void Configure(FalloutPluginStack records, FalloutNativeTagSkillContract contract,
-        IReadOnlyList<FalloutNativeSkillIdentity> current, Func<FalloutNativeSkillIdentity, float> liveValue)
+        IReadOnlyList<FalloutNativeSkillIdentity> current, Func<FalloutNativeSkillIdentity, float> liveValue,
+        bool showInitialTaggedSkills = true)
     {
         if (_menu is not null) throw new InvalidOperationException("Tag entry already has a menu owner.");
         Name = "NativeTagSkillEntry"; Layer = 120; ProcessMode = ProcessModeEnum.Always;
-        _menu = new(records, contract, current, liveValue, selection => Accepted?.Invoke(selection), error => Failed?.Invoke(error));
+        _menu = new(records, contract, current, liveValue, selection => Accepted?.Invoke(selection), error => Failed?.Invoke(error), showInitialTaggedSkills);
         _previousMouseMode = Input.MouseMode;
         _pausedTree = GetTree(); _previousPause = _pausedTree.Paused; _pausedTree.Paused = true;
         Input.MouseMode = Input.MouseModeEnum.Visible; AddChild(_menu);

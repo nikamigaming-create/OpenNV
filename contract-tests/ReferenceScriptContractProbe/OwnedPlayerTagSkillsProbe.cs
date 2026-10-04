@@ -34,7 +34,15 @@ internal static class OwnedPlayerTagSkillsProbe
         }
         if (reached.Count != contract.Skills.Count || !sourceHash.AsSpan().SequenceEqual(SHA256.HashData(test.ReadData())))
             throw new InvalidDataException("Original scoring stages missed a skill or changed owned source bytes.");
+        var handIn = records.GetEffective(new("Fallout3.esm", 0x035efb));
+        var handInHash = SHA256.HashData(handIn.ReadData());
+        var command = handIn.ReadSubrecords().Where(field => field.Signature == "SCTX")
+            .SelectMany(field => FalloutDialogueTopic.CodeLines(FalloutDialogueTopic.ScriptText(field.Data.Span)))
+            .Single(line => line.StartsWith("SetTagSkills ", StringComparison.OrdinalIgnoreCase));
+        var request = FalloutTagSkillMenuRequest.Read(command.Split(' ', StringSplitOptions.RemoveEmptyEntries)[1..]);
+        if (request != new FalloutTagSkillMenuRequest(3, true) || !handInHash.AsSpan().SequenceEqual(SHA256.HashData(handIn.ReadData())))
+            throw new InvalidDataException("Original hand-in menu lost its optional default or changed owned source bytes.");
         Console.WriteLine("OPENNV_OWNED_TTW_TAG_SLOTS_PASS originalScoringStages=13 skills=13 sourceAssignments=true " +
-            "cold=true sourceReadonly=true enginePlayerRecordAbsent=true boundary=isolated-scoring-not-campaign-progress");
+            "cold=true sourceHandInOptionalMenu=true sourceReadonly=true enginePlayerRecordAbsent=true boundary=isolated-scoring-not-campaign-progress");
     }
 }

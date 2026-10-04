@@ -49,7 +49,18 @@ internal static class TagSkillMenuContracts
             live[2] = -5; Check(draft.Value(second) == 4, "Tag display changed the source clamp order.");
             Reject(() => draft.Toggle(first with { EditorId = "Foreign" }));
             Reject(() => new FalloutTagSkillMenuSelection(records, contract, [first, first], _ => 0));
-            Reject(() => new FalloutTagSkillMenuSelection(records, contract, [first, second, third], _ => 0));
+            var reducing = new FalloutTagSkillMenuSelection(records, contract, [first, second, third], _ => 0);
+            Reject(() => reducing.Submit());
+            Check(reducing.Toggle(third) && reducing.Submit().Count == 2, "A smaller source menu count could not reduce existing tags.");
+            var replacing = new FalloutTagSkillMenuSelection(records, contract, [first], skill => skill == first ? 30 : 10, false);
+            Check(replacing.Selected.Count == 0 && replacing.Value(first) == 21 && replacing.Toggle(second) && replacing.Value(second) == 19,
+                "Hidden initial tags retained their draft marker or doubled the accepted bonus.");
+            Check(FalloutTagSkillMenuRequest.Read(["3"]) == new FalloutTagSkillMenuRequest(3, true) &&
+                FalloutTagSkillMenuRequest.Read(["4", "1"]) == new FalloutTagSkillMenuRequest(4, true) &&
+                FalloutTagSkillMenuRequest.Read(["2", "0"]) == new FalloutTagSkillMenuRequest(2, false),
+                "Source total count or optional initial-selection default changed.");
+            foreach (var command in new string[][] { [], ["0"], ["5"], ["3.5"], ["3", "2"], ["3", "1", "0"] })
+                Reject(() => FalloutTagSkillMenuRequest.Read(command));
             Reject(() => new FalloutTagSkillMenuSelection(records, contract with { RequiredCount = 0 }, [], _ => 0));
             Reject(() => new FalloutTagSkillMenuSelection(records, contract with { Skills = [first with { DisplayName = "Stale" }, second, third] }, [], _ => 0));
             Reject(() => new FalloutTagSkillMenuSelection(records, contract with { Skills = [new(5, "Bad", "Bad"), second, third] }, [], _ => 0));

@@ -101,9 +101,10 @@ internal partial class RuntimeNativeOpeningStageDriver
                 SynchronizeRaceSexEntry(sourceRequested: true, sourceCommand: operation);
                 if (_raceSexEntry is null) throw new NotSupportedException("Race input has no active menu owner.");
                 break;
-            case "settagskills" when parts.Length == 1 && arguments.Count == 2:
-                if (arguments[0] != _tagSkillContract.RequiredCount.ToString(System.Globalization.CultureInfo.InvariantCulture) || arguments[1] != "1")
-                    throw new NotSupportedException("Tag menu parameters have no owned creation contract.");
+            case "settagskills" when parts.Length == 1:
+                var tagMenuRequest = FalloutTagSkillMenuRequest.Read(arguments);
+                if (_tagSkillEntry is not null) throw new InvalidOperationException("A tag menu already owns player input.");
+                _tagMenuRequest = tagMenuRequest;
                 SynchronizeTagSkillEntry(sourceRequested: true);
                 if (_tagSkillEntry is null) throw new NotSupportedException("Tag input has no active menu owner.");
                 break;
