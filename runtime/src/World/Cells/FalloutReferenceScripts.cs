@@ -1023,6 +1023,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "setbroadcaststate" when arguments.Count == 1:
                     world.SetBroadcastState(target, Number(arguments[0]));
                     break;
+                case "setally" or "setenemy" when parts.Length == 1 && arguments.Count is >= 2 and <= 4:
+                    world.SetFactionRelationship(bindings.Form(arguments[0]).FormKey, bindings.Form(arguments[1]).FormKey,
+                        operation == "setally", arguments.Count > 2 ? Number(arguments[2]) : 0,
+                        arguments.Count > 3 ? Number(arguments[3]) : 0);
+                    break;
                 case "sethardcore" when parts.Length == 1 && arguments.Count == 1:
                     host.Apply(new(FalloutReferenceEffectKind.Hardcore, source, Enable: Boolean(arguments[0])));
                     break;

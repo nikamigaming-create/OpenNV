@@ -451,6 +451,17 @@ internal partial class RuntimeNativeNpc
 
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
+        if (condition.Function is 1 or 14)
+        {
+            FalloutReferencePlacement? playerPlacement = null;
+            if (Combat?.PackagePlayer is { } player && Combat.PackagePlayerCell is { } playerCell)
+            {
+                var position = player.GlobalPosition / player.UnitsToMeters;
+                playerPlacement = new(playerCell, [position.X, -position.Z, position.Y], [0, 0, 0]);
+            }
+            return (_aiWorld ?? throw new NotSupportedException("AI reference condition has no shared world owner."))
+                .EvaluateActorReferenceCondition(Appearance.Reference!.Value, condition, playerPlacement, Skeleton.UnitsToMetres)!.Value;
+        }
         if (condition.Function == 84)
             return (_aiWorld ?? throw new NotSupportedException("AI death count has no shared death history."))
                 .GetDeadCount(condition.FormArgument1);

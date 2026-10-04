@@ -45,6 +45,9 @@ internal partial class RuntimeNativeOpeningStageDriver
             .Single(actor => actor.Appearance.Reference == target);
         switch (operation)
         {
+            case "startradioconversation" when arguments.Count <= 1:
+                _speech!.StartRadioConversation(target, arguments.Count == 0 ? null : bindings.Form(arguments[0]).FormKey);
+                break;
             case "stopcombatalarmonactor" or "scaonactor" when arguments.Count == 0:
                 _scripts.References!.StopCombatAlarmOnActor(target);
                 break;
@@ -190,6 +193,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             WeaponHandling = _player.CaptureWeaponHandling(),
             Ingestibles = _ingestibles.Capture(),
             ActorOverrides = _scripts.References!.CaptureActorOverrides(),
+            FactionRelations = _scripts.References.CaptureFactionRelations(),
             EncounterZones = _scripts.References.CaptureEncounterZones(),
             ExplosionExposure = _player.CaptureExplosionExposure()
         };

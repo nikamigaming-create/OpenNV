@@ -23,6 +23,7 @@ internal static class TravelContracts
                 Package(0x400, 0, 0x1404), Package(0x401, 3, 0x1002), Package(0x402, 0, 0x140c), Package(0x403, 2, 0x1002),
                 Package(0x406, 0, 0x1002, behavior: 0x20, idle: true), Package(0x407, 0, 2, behavior: 0x20),
                 Package(0x408, 0, 0x101002), Package(0x409, 3, 0x101002),
+                Package(0x40a, 0, 0x203404),
                 GuardPackage(0x404, 0, 0x14001000, 180, 240), GuardPackage(0x405, 3, 0x10001000, 0, 0),
                 Record("IDLE", 0x500, Field("MODL", Text("actor/event.kf")), Field("DATA", [0x54, 0, 0, 0, 0, 0]))));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Base.esm"), Package(0x400, 0, 0x1404, radius: 3)));
@@ -73,6 +74,10 @@ internal static class TravelContracts
                     "Editor Travel did not retain the shared head-tracking selector.");
             }
             Require(FalloutScriptPackage.Read(record).HeadTrackingEnabled, "Ordinary Travel disabled head tracking without its source flag.");
+            var hiddenWeaponTravel = records.GetEffective(Key(0x40a));
+            Require(!FalloutScriptPackage.Read(hiddenWeaponTravel).WeaponsVisible &&
+                FalloutScriptPackage.Read(record).WeaponsVisible && FalloutTravelPackage.Read(hiddenWeaponTravel) is { Running: true, OncePerDay: true, MustReach: true },
+                "Weapon visibility selector was rejected, conflated with inventory or lost independent Travel flags.");
             Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x402))));
             Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x403))));
             Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x406))));

@@ -39,7 +39,8 @@ internal sealed record FalloutNativeCampaignState(
     IReadOnlyList<FalloutEncounterZoneSnapshot>? EncounterZones = null,
     IReadOnlyList<FalloutExplosionExposure>? ExplosionExposure = null,
     FalloutPlayerActorValuesSnapshot? PlayerActorValues = null,
-    FalloutPlayerTagSkillsSnapshot? TagSkillSlots = null);
+    FalloutPlayerTagSkillsSnapshot? TagSkillSlots = null,
+    IReadOnlyList<FalloutFactionRelationSnapshot>? FactionRelations = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -47,7 +48,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v37";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v38";
+    internal const string DeathHistorySchema = "opennv-native-fnv-campaign-save/v37";
     internal const string ProcedureSchema = "opennv-native-fnv-campaign-save/v36";
     internal const string BroadcastSchema = "opennv-native-fnv-campaign-save/v35";
     internal const string IndexedTagSchema = "opennv-native-fnv-campaign-save/v34";
@@ -154,7 +156,7 @@ internal static class FalloutNativeCampaignSave
             playerPosition.ToArray(),
             playerRotation.ToArray(), quests, scripts, globals, gameTime, skyLighting, references, grant.InventoryRandomState, characterCreationComplete,
             PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : [], PlayerActorValues: playerActorValues,
-            TagSkillSlots: tagSkillSlots);
+            TagSkillSlots: tagSkillSlots, FactionRelations: []);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -289,6 +291,7 @@ internal static class FalloutNativeCampaignSave
             references.Restore(state.References);
             references.ValidateValueHandles();
             references.RestoreActorOverrides(state.ActorOverrides);
+            references.RestoreFactionRelations(state.FactionRelations);
         }
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
@@ -296,14 +299,15 @@ internal static class FalloutNativeCampaignSave
         if (state.Schema != ExpectedSchema && state.References is not null)
             state = state with
             {
-                Schema = state.Schema == ProcedureSchema ? ExpectedSchema : state.Schema,
-                References = RestoreLegacyDeathCounts(state)
+                Schema = state.Schema is DeathHistorySchema or ProcedureSchema ? ExpectedSchema : state.Schema,
+                References = RestoreLegacyDeathCounts(state),
+                FactionRelations = []
             };
         return new FalloutNativeCampaignRestore(state, inventory);
     }
 
     private static IReadOnlyList<FalloutReferenceSnapshot>? RestoreLegacyDeathCounts(FalloutNativeCampaignState state) =>
-        state.Schema == ExpectedSchema ? state.References : state.References?.Select(reference => reference with
+        state.Schema is ExpectedSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
         { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray();
 
     private static void ValidateQuestValueHandles(FalloutPluginStack stack,
@@ -386,14 +390,20 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
-        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.DeathCount is not null) == true)
+        if (state.Schema != ExpectedSchema && state.FactionRelations is { Count: > 0 })
+            throw new InvalidDataException("Legacy campaign schema has mutable faction reactions.");
+        if (state.Schema == ExpectedSchema && state.FactionRelations is null)
+            throw new InvalidDataException("Saved campaign is missing its faction reaction state.");
+        if (state.FactionRelations is { Count: > 0 } && state.References is null)
+            throw new InvalidDataException("Saved faction reactions have no reference world.");
+        if (state.Schema is not (ExpectedSchema or DeathHistorySchema) && state.References?.Any(reference => reference.DeathCount is not null) == true)
             throw new InvalidDataException("Legacy campaign schema has cumulative actor death history.");
-        if (state.Schema == ExpectedSchema && state.References?.Any(reference =>
+        if (state.Schema is ExpectedSchema or DeathHistorySchema && state.References?.Any(reference =>
             reference.Injury?.DeathInventoryGranted == true && reference.DeathCount is not > 0) == true)
             throw new InvalidDataException("Saved killed actor has no cumulative death history.");
         // v36 owned no resurrection/respawn command. Its once-only granted
         // death inventory proves one consumed death; source corpses prove none.
-        if (state.Schema == ProcedureSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema is DeathHistorySchema or ProcedureSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema is ExpectedSchema or BroadcastSchema or IndexedTagSchema && state.TagSkillSlots is null)
             throw new InvalidDataException("Saved campaign is missing indexed player tag skills.");
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageEvents is { Count: > 0 }) == true)

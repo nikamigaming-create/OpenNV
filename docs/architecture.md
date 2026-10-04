@@ -3,6 +3,15 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Escape runtime owners](escape-runtime-owners.md) share directional faction
+overrides/save v38, current actor value/spatial queries, independent package
+weapon visibility and source radio links/voice identity. Native player package
+membership compares forward projection without a zero-radius tolerance.
+Dialogue target trigger membership is independent of the speaker wait location.
+Ordinary loading yields during detached cell assembly and publishes the completed
+tree in the existing source order. Loading feedback and bot control waits observe
+that same lifecycle; semantic quest progress is separate from timer-variable writes.
+
 [Package event topics](package-event-topics.md) bind declared speech to the actual
 actor and winning PACK event, after its result script and before its event IDLE.
 Voice, dialogue results and completion use the shared speech owner.

@@ -174,6 +174,8 @@ public partial class RuntimeCoordinator
         _nativeSessionTransitioning = true;
         try
         {
+            BeginLoadingScreen(continueSave ? "Preparing saved game" : "Returning to the main menu");
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             await DrainNativeSourceReaders();
             _nextSessionOptions = new(_options, StringComparer.OrdinalIgnoreCase);
             _nextSessionOptions.Remove("launcher"); _nextSessionOptions.Remove("new-game");
@@ -195,6 +197,7 @@ public partial class RuntimeCoordinator
             _retiringNativeSession = false;
             _nativeSessionTransitioning = false;
             GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {error}");
+            DismissLoadingScreen();
             GetTree().Paused = true;
             _nativeSessionMenu?.ShowFailure(error.Message);
         }

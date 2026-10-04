@@ -96,6 +96,8 @@ internal partial class RuntimeNativeReferencePresentation : Node
         PublishOpacity(key);
     }
 
+    internal Node3D? TryResolve(FalloutFormKey key) => _enabled.ContainsKey(key) ? Resolve(key) : null;
+
     internal Node3D? Resolve(FalloutFormKey key)
     {
         if (_nodes.TryGetValue(key, out var node)) return node;

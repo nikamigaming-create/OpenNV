@@ -1,6 +1,19 @@
 # Product status
 
-Checked PR139 is merged at synchronized main c30b881 with all five checks passing.
+The active Escape candidate owns directional faction relations/save v38, reached
+actor-value/spatial AI queries, Travel weapon visibility and scripted radio links
+with independent station predicates/remote voice identity. Focused contracts and
+the original five-line PA audit pass. Ordinary native input now completes the
+wake-up/control handoff, Amata's conversation and Escape stage 18. The independent
+dialogue target trigger prevents premature guard speech from the player bed.
+Loading has an animated phase/elapsed indicator and frame-budgeted cell assembly;
+the bot bounds stalled control waits and releases input. The updated full delivery
+gate and selected owned audit pass. Source door lock inheritance, actor-script/procedure failures and
+missing presentation remain active blockers; vault exit and Megaton are unreached.
+Compiled SCDA execution and real x86 native-plugin compatibility are explicit
+architectural requirements. See [current work](current-work.md).
+
+Checked PR 140 is merged at synchronized main 3604f8e with all five checks passing.
 Main retains winning terminal access, queued actor package events
 and source-owned Furniture/failed-selection/idle/settled-Dialogue continuations in
 schema v36. Synthetic checks, original terminal locking/cold validation and four
@@ -35,7 +48,7 @@ saved input completes all seven stage2 commands and reaches stage3. Its first
 two commands ran before Amata's source package POBA topic was refused. The new
 package-topic candidate passes synthetic, selected owned and complete runtime
 gates. Its ordinary cold-loaded run binds the original wake-up audio/LIP and
-completes the topic once, completes stages3,4,10 and8 and reaches18. SetAlly and
+completes the topic once, completes stages3,4,10 and8 and reaches 18. SetAlly and
 a later StartRadioConversation call remain unowned. Clearing a consumed-prefix
 fault is not recovery. Vault escape, Megaton and the authored
 train/Mojave route remain open.
@@ -257,7 +270,7 @@ synthetic/native bootstrap, pause, suspended admission, typed filters, source
 order, once-only results and failure quarantine. Actual attached OnPackageDone
 advances the owned fixture to 18. A separate ordinary cold Continue from the
 reached stage-16 checkpoint executes source Lock100 with the recovered
-[reference-access owner](reference-lock-ownership.md) and reaches18/20/30.
+[reference-access owner](reference-lock-ownership.md) and reaches 18/20/30.
 The genuine pre-book stage40 autosave now cold-loads into the repaired
 [bot navigation](bot-navigation.md). Ordinary bot approach/ray activation enters50
 and opens the source [SPECIAL book](native-special-book-menu.md); source pointer

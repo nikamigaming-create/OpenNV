@@ -130,7 +130,7 @@ internal sealed partial class FalloutReferenceWorld
     }
 
     internal uint ActorRelation(FalloutFormKey actor, FalloutFormKey target) =>
-        FalloutActorThreat.Relation(records, ActorFactions(actor), ActorFactions(target));
+        FalloutActorThreat.Relation(records, ActorFactions(actor), ActorFactions(target), FactionCombatReaction);
 
     internal void SetActorFlag(FalloutFormKey reference, bool value, bool friendlyHits)
     {

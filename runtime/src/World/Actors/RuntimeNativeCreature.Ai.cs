@@ -92,7 +92,9 @@ internal sealed partial class RuntimeNativeCreature
         }
     }
 
-    internal float PackageCondition(FalloutCondition condition) => condition.RunOn != 0 && condition.Function is not (50 or 84 or 161 or 289)
+    internal float PackageCondition(FalloutCondition condition) => condition.Function is 1 or 14
+        ? ReferenceCondition(condition)
+        : condition.RunOn != 0 && condition.Function is not (50 or 84 or 161 or 289)
         ? throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.")
         : condition.Function switch
         {
@@ -125,6 +127,17 @@ internal sealed partial class RuntimeNativeCreature
             300 when condition.RunOn == 0 => _aiWorld!.IsInInterior(Appearance.Reference!.Value) ? 1 : 0,
             _ => throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
         };
+
+    private float ReferenceCondition(FalloutCondition condition)
+    {
+        FalloutReferencePlacement? placement = null;
+        if (Combat?.PackagePlayer is { } player && Combat.PackagePlayerCell is { } cell)
+        {
+            var position = player.GlobalPosition / Skeleton.UnitsToMetres;
+            placement = new(cell, [position.X, -position.Z, position.Y], [0, 0, 0]);
+        }
+        return _aiWorld!.EvaluateActorReferenceCondition(Appearance.Reference!.Value, condition, placement, Skeleton.UnitsToMetres)!.Value;
+    }
 
     private bool InSameCell(FalloutFormKey target)
     {

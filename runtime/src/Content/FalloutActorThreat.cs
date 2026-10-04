@@ -34,7 +34,8 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
     }
 
     internal static uint Relation(FalloutPluginStack records, IReadOnlyDictionary<FalloutFormKey, sbyte> actor,
-        IReadOnlyDictionary<FalloutFormKey, sbyte> target)
+        IReadOnlyDictionary<FalloutFormKey, sbyte> target,
+        Func<FalloutFormKey, FalloutFormKey, uint>? query = null)
     {
         var from = actor.Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToArray();
         var to = target.Where(pair => pair.Value >= 0).Select(pair => pair.Key).ToHashSet();
@@ -42,6 +43,16 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
         if (from.Any(to.Contains)) reactions.Add(2);
         foreach (var faction in from)
         {
+            if (query is not null)
+            {
+                foreach (var other in to)
+                {
+                    var reaction = query(faction, other);
+                    if (reaction > 3) throw new InvalidDataException("Faction combat relation is invalid.");
+                    if (reaction != 0) reactions.Add(reaction);
+                }
+                continue;
+            }
             var source = records.GetEffective(faction);
             foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "XNAM"))
             {

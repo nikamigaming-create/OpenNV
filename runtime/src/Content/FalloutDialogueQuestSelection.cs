@@ -14,10 +14,10 @@ internal sealed class FalloutDialogueQuestSelection(FalloutPluginStack records, 
 
     internal FalloutDialogueInfo? Select(FalloutDialogueTopic topic, FalloutFormKey speakerBase,
         IReadOnlySet<FalloutFormKey> said, Func<FalloutFormKey, float> stage, Func<FalloutCondition, float> evaluate,
-        Func<uint, uint>? random = null, bool npcConversation = false, bool immediateResults = false) => topic.Select(speakerBase, said, stage, evaluate,
+        Func<uint, uint>? random = null, bool npcConversation = false, bool immediateResults = false, bool radio = false) => topic.Select(speakerBase, said, stage, evaluate,
             quest => Eligible(quest, evaluate), Priority,
             conversation: FalloutDialogueTopic.Type(records, topic.Topic.FormKey) == 0, random: random,
-            npcConversation: npcConversation, immediateResults: immediateResults);
+            npcConversation: npcConversation, immediateResults: immediateResults, radio: radio);
 
     private (int Priority, IReadOnlyList<FalloutCondition> Conditions) Header(FalloutFormKey quest)
     {

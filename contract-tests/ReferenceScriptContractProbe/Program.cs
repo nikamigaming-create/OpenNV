@@ -5,6 +5,14 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--escape-runtime-contracts"])
+{
+    FactionRelationContracts.Run();
+    TravelContracts.Run();
+    RadioConversationContracts.Run();
+    PlayerScriptPackageContracts.Run();
+    return;
+}
 if (args is ["--package-topic-contracts"])
 {
     PackageEventContracts.Run();
@@ -670,6 +678,7 @@ finally
 
 ConversationContracts.Run();
 ActorSourceContracts.Run();
+FactionRelationContracts.Run();
 EncounterZoneContracts.Run();
 FollowPackageContracts.Run();
 DialoguePackageContracts.Run();
@@ -712,6 +721,7 @@ NoActivationSoundContracts.Run();
 VampireQueryContracts.Run();
 InventoryQueryContracts.Run();
 SayToContracts.Run();
+RadioConversationContracts.Run();
 ScreenBloodContracts.Run();
 QuestMenuContracts.Run();
 QuestUpdateContracts.Run();
