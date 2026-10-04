@@ -682,6 +682,11 @@ internal sealed partial class FalloutQuestScripts
                     (References ?? throw new NotSupportedException("Linked-reference query has no reference owner."))
                     .GetLinkedRef(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))
                         is { } linked ? _records.RuntimeFormId(linked) : 0), readOnly: true);
+            if (parts.Length <= 2 && operation == "getbroadcaststate")
+                return new([], _ => (References ?? throw new NotSupportedException("Broadcast query has no reference owner."))
+                    .GetBroadcastState(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))
+                    ? 1 : 0)
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getvampire")
                 return new([], arguments =>
                 {
@@ -1011,6 +1016,13 @@ internal sealed partial class FalloutQuestScripts
                 if (arguments.Count != 2) throw new InvalidDataException("SetPlayerTagSkill requires a skill and slot.");
                 (host?.TagSkills ?? throw new NotSupportedException("SetPlayerTagSkill has no shared player tag owner."))
                     .Set(arguments[0], NumberArgument(arguments[1]));
+                return;
+            }
+            if (parts.Length <= 2 && operation == "setbroadcaststate")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("SetBroadcastState requires one state.");
+                (References ?? throw new NotSupportedException("Broadcast command has no reference owner."))
+                    .SetBroadcastState(parts.Length == 1 ? instance.Quest.FormKey : ReferenceArgument(parts[0]), NumberArgument(arguments[0]));
                 return;
             }
             if (parts.Length == 1 && operation is "setnthperkentryvalue1" or "setnthperkentryvalue2")

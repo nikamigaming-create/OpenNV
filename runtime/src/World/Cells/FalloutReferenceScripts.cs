@@ -570,6 +570,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length <= 2 && operation == "getlinkedref")
                 return FalloutScriptFunction.Typed([], _ => FalloutScriptValue.Form(
                     world.GetLinkedRef(Target()) is { } linked ? records.RuntimeFormId(linked) : 0), readOnly: true);
+            if (parts.Length <= 2 && operation == "getbroadcaststate")
+                return new([], _ => world.GetBroadcastState(Target()) ? 1 : 0) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "isinlist")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                     FalloutReferenceIdentity.IsInList(records, Target(), arguments[0].Value.FormKey(records)) ? 1 : 0)
@@ -1001,6 +1003,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "pipboyradiooff" when parts.Length == 1 && arguments.Count == 0:
                     world.PipBoyRadio.Off();
+                    break;
+                case "setbroadcaststate" when arguments.Count == 1:
+                    world.SetBroadcastState(target, Number(arguments[0]));
                     break;
                 case "sethardcore" when parts.Length == 1 && arguments.Count == 1:
                     host.Apply(new(FalloutReferenceEffectKind.Hardcore, source, Enable: Boolean(arguments[0])));

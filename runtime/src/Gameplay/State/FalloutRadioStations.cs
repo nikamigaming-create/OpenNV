@@ -50,6 +50,7 @@ internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutRe
             value.Station.StaticPercent,
             value.Station.PipBoy,
             value.Station.Continuous,
+            continuousBroadcast = world.GetBroadcastState(value.Station.Reference),
             value.Enabled,
             value.Available,
             value.Distance,

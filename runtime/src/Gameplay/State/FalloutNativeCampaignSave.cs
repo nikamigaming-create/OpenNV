@@ -47,7 +47,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v34";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v35";
+    internal const string IndexedTagSchema = "opennv-native-fnv-campaign-save/v34";
     internal const string UnindexedTagSchema = "opennv-native-fnv-campaign-save/v33";
     internal const string StoppedPackageSchema = "opennv-native-fnv-campaign-save/v32";
     internal const string CreatureTravelSchema = "opennv-native-fnv-campaign-save/v31";
@@ -371,12 +372,14 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
-        if (state.Schema == ExpectedSchema && state.TagSkillSlots is null)
+        if (state.Schema is ExpectedSchema or IndexedTagSchema && state.TagSkillSlots is null)
             throw new InvalidDataException("Saved campaign is missing indexed player tag skills.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.BroadcastState is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema has mutable radio broadcast state.");
         if (state.TagSkillSlots is { } tags) FalloutPlayerTagSkills.Validate(tags, state.TagSkills);
         // v33 contained membership only. No indexed script writes were owned in
         // that schema; its stored selection is the deterministic legacy order.
-        if (state.Schema == UnindexedTagSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema is UnindexedTagSchema or IndexedTagSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.Scripts?.Session?.QuestObjects is { Count: > 0 })
             throw new InvalidDataException("Legacy campaign schema has mutable quest-object flags.");
         if (state.Schema is not (ExpectedSchema or StoppedPackageSchema) && state.References?.Any(reference => reference.PackageBindingFailure is not null || reference.PackageMotion?.Guard is not null) == true)

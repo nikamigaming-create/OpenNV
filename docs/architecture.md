@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Radio broadcast state](source-radio-broadcast-state.md) retains per-reference
+continuous/scripted mode across source commands, queries and cold restoration.
+Station mode remains independent of reception, the receiver and audio timelines.
+
 [Reference script sounds and stopped instructions](script-sound-continuation.md)
 bind PlaySound3D to the actual reference, source SOUN and native owned WAV. A
 stopped quest resumes its consumed invocation at a validated source instruction;
