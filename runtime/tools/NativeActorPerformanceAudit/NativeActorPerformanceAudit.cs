@@ -10,6 +10,14 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--package-binding-cold", var bindingGame, var bindingMod, var bindingRoot,
+                var bindingActor, var bindingQuest, var bindingStages, var bindingPackages, .. var bindingDependencies])
+            {
+                PackageEvaluation(bindingGame, bindingMod, bindingRoot, bindingActor, bindingQuest,
+                    bindingStages.Split(',').Select(value => short.Parse(value, System.Globalization.CultureInfo.InvariantCulture)).ToArray(),
+                    bindingDependencies, stoppedFailure: true, expectedPackageId: bindingPackages);
+                GetTree().Quit(); return;
+            }
             if (args is ["--guard-approach", var guardGame, var guardMod, var guardRoot, var guardActor,
                 var guardQuest, var guardStage, .. var guardDependencies])
             {

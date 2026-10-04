@@ -26,6 +26,10 @@ internal partial class RuntimeNativeNpc
         var restored = initializing && motion?.Package == package.FormKey && motion.DialogueCompleted;
         if (restored && (dialogue.Type != 1 || wait is not null))
             throw new InvalidDataException("Saved dialogue completion differs from its supported source procedure.");
+        // An unowned furniture/object waiting location cannot publish a running
+        // dialogue procedure before its movement owner is admitted. The failed
+        // source selection still retains its explicit pre-begin continuation.
+        if (wait is not null) RequireTravelMarker(package, wait);
         _dialoguePackage = dialogue; _dialoguePackageRequested = restored;
         _dialogueNativeMovement = wait is null;
         _dialogueWaitReached = wait is null;

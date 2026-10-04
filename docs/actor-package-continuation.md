@@ -22,6 +22,15 @@ selected identity without beginning it. Starting a new selection clears the old
 stopped state. Telemetry counts stopped bindings separately from procedures that
 still lack capture owners.
 
+Dialogue initialization validates its source waiting-location movement owner
+before publishing the active dialogue procedure. An unowned furniture/object
+wait stays an explicit stopped pre-begin binding instead of becoming a partially
+initialized active procedure that cannot be captured. This does not supply the
+missing furniture-waiting dialogue behavior. An isolated native check admits
+Butch's actual source conditions and random selection, retains the original
+unsupported diner-booth fault through cold restoration and verifies matching
+resumed clocks, pose, random state and consumed results.
+
 Guard approach reads the winning procedure14, location, distinct intrusion
 target/radius and admitted flags. Reference-marker and editor locations use the
 existing shared placement reader. NPCs and creatures share the native NAVM,
