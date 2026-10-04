@@ -13,7 +13,10 @@ internal sealed partial class RuntimeLiveHarness
 
     internal void ConfigureCheckpoints(Func<Guid, RuntimeSaveSlotMetadata> save, Func<Guid, bool, RuntimeSaveSlotMetadata> load,
         Func<bool> transitioning, Func<RuntimeSaveSlotMetadata?> restored)
-        => (_saveCheckpoint, _loadCheckpoint, _checkpointTransitioning, _restoredCheckpoint) = (save, load, transitioning, restored);
+    {
+        (_saveCheckpoint, _loadCheckpoint, _checkpointTransitioning, _restoredCheckpoint) = (save, load, transitioning, restored);
+        _replayCheckpointPrepared = restored() is not null;
+    }
 
     private bool DispatchCheckpoint(JsonElement command, ulong request)
     {
@@ -27,6 +30,7 @@ internal sealed partial class RuntimeLiveHarness
         var slot = operation == "checkpoint.save"
             ? (_saveCheckpoint ?? throw new NotSupportedException("The native campaign checkpoint owner is unavailable."))(id)
             : (_loadCheckpoint ?? throw new NotSupportedException("The native campaign checkpoint owner is unavailable."))(id, pauseAfterLoad);
+        _replayCheckpointPrepared = operation == "checkpoint.load";
         // These requests restore reached campaign state. They are explicit
         // diagnostic preparation, never ordinary-input traversal evidence.
         _lastCheckpoint = new { request, operation, slot, pauseAfterLoad, ordinaryInput = false, owner = "shared-campaign-save" };

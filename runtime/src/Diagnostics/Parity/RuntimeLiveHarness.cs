@@ -52,11 +52,14 @@ internal sealed partial class RuntimeLiveHarness : Node
         _pumpBotInput = pumpInput;
         _bot = new(observe, route, (intent, activation) =>
         {
-            if (inputOverride?.Invoke(intent, activation) == true) return;
+            if (inputOverride?.Invoke(intent, activation) == true)
+            {
+                if (_inputRecording is not null) FailInputRecording("Simulator steering has no recorded physical input adapter.");
+                return;
+            }
             SetKey(_botForward, intent.Forward, 200);
             if (intent.YawRadians != 0 || intent.PitchRadians != 0)
-                Input.ParseInputEvent(new InputEventMouseMotion
-                { Relative = new Vector2(-intent.YawRadians / _botSensitivity, -intent.PitchRadians / _botSensitivity) });
+                DeliverLook(-intent.YawRadians / _botSensitivity, -intent.PitchRadians / _botSensitivity);
             SetKey(_botActivate, activation, 50);
         }, approachRoute, cancelRoute);
     }
@@ -98,6 +101,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             .Select(path => ulong.TryParse(Path.GetFileName(path).Split('.')[0], out var value) ? value : 0)
             .DefaultIfEmpty().Max() + 1);
         _captureState = captureState;
+        _inputSource = stack;
         _captureGameplay = captureGameplay;
         _captureSummary = captureSummary ?? captureGameplay;
         _captureIdentity = captureIdentity ?? (() => { var frame = captureState(0); return (frame.StateKey, frame.EventOrdinal); });
@@ -122,6 +126,8 @@ internal sealed partial class RuntimeLiveHarness : Node
             {
                 _lastStopWrite = stamp;
                 _bot?.Stop();
+                _inputPlayback?.Stop("Playback interrupted by the stop request.", ReleaseAll);
+                FinishInputRecording("Recording interrupted by the stop request.");
                 ReleaseAll();
                 // Stop cancels commands already queued, including stale key-down events.
                 _nextRequest = checked(Directory.EnumerateFiles(_directory, "*.command")
@@ -132,6 +138,8 @@ internal sealed partial class RuntimeLiveHarness : Node
         }
         foreach (var key in _held.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
             SetKey(key, false, 0);
+        RenewRecordedHumanKeys(now);
+        AdvanceInputPlayback();
         for (var index = 0; index < 32 && _checkpointTransitioning?.Invoke() != true; ++index)
         {
             var path = Path.Combine(_directory, $"{_nextRequest:D10}.command");
@@ -153,6 +161,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or InvalidOperationException or KeyNotFoundException or NotSupportedException or IOException or UnauthorizedAccessException)
             {
+                if (_inputRecording is not null) FailInputRecording("Rejected recorded command: " + exception.Message);
                 Receipt(request, false, exception.Message);
             }
         }
@@ -169,7 +178,15 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     private void Dispatch(JsonElement command, ulong request)
     {
+        if (DispatchRecordedInput(command, request)) return;
+        if (!_deliveringReplay && _inputPlayback?.Active == true &&
+            command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text" or "bot" or "checkpoint.load")
+            _inputPlayback.Stop("Playback yielded to external input.", ReleaseAll);
+        if (_inputRecording is not null && command.GetProperty("op").GetString() is "checkpoint.load" or "checkpoint.save" or "physics.sever")
+            throw new InvalidOperationException("Finish the input segment before changing authoritative state through diagnostics.");
         if (DispatchCheckpoint(command, request)) return;
+        if (!_deliveringReplay && command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text" or "bot" or "physics.sever")
+            _replayCheckpointPrepared = false;
         if (command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text")
             _bot?.Stop();
         switch (command.GetProperty("op").GetString())
@@ -215,45 +232,51 @@ internal sealed partial class RuntimeLiveHarness : Node
                 var button = GetTree().Root.GetNodeOrNull<BaseButton>(path);
                 if (button is null || !button.IsVisibleInTree() || button.Disabled)
                     throw new InvalidOperationException("Observed button is no longer visible and enabled.");
+                var caption = ButtonText(button);
+                if (_deliveringReplay && caption != command.GetProperty("text").GetString())
+                    throw new InvalidOperationException("Recorded button caption differs from the currently observed action.");
+                var buttonStateKey = _captureIdentity().StateKey;
                 var center = button.GetGlobalTransformWithCanvas() * (button.Size / 2);
-                button.GetViewport().PushInput(new InputEventMouseButton { Position = center, GlobalPosition = center, ButtonIndex = MouseButton.Left, Pressed = true }, true);
-                button.GetViewport().PushInput(new InputEventMouseButton { Position = center, GlobalPosition = center, ButtonIndex = MouseButton.Left, Pressed = false }, true);
+                if (!button.GetViewport().GetVisibleRect().HasPoint(center))
+                    throw new InvalidOperationException("Observed button has no clickable center inside its viewport.");
+                PushHarnessInput(button.GetViewport(), new InputEventMouseButton { Position = center, GlobalPosition = center, ButtonIndex = MouseButton.Left, Pressed = true });
+                PushHarnessInput(button.GetViewport(), new InputEventMouseButton { Position = center, GlobalPosition = center, ButtonIndex = MouseButton.Left, Pressed = false });
+                RecordInput(JsonSerializer.SerializeToElement(new { op = "button", path, text = caption }, Json), buttonStateKey);
                 break;
             case "look":
                 var dx = command.GetProperty("dx").GetSingle();
                 var dy = command.GetProperty("dy").GetSingle();
                 if (!float.IsFinite(dx) || !float.IsFinite(dy))
                     throw new ArgumentException("Mouse displacement must be finite.");
-                Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(dx, dy) });
+                DeliverLook(dx, dy);
                 break;
             case "pointer":
+                var pointerStateKey = _captureIdentity().StateKey;
                 var position = new Vector2(command.GetProperty("x").GetSingle(), command.GetProperty("y").GetSingle());
                 if (!position.IsFinite() || !GetViewport().GetVisibleRect().HasPoint(position))
                     throw new ArgumentException("Pointer input must lie inside the observed viewport.");
                 if (command.TryGetProperty("button", out var requestedButton))
                 {
-                    if (!Enum.TryParse<MouseButton>(requestedButton.GetString(), true, out var mouseButton) || mouseButton == MouseButton.None)
+                    if (!Enum.TryParse<MouseButton>(requestedButton.GetString(), true, out var mouseButton) ||
+                        mouseButton is not (MouseButton.Left or MouseButton.Right or MouseButton.Middle or MouseButton.WheelUp or MouseButton.WheelDown))
                         throw new ArgumentException("Unknown pointer button.");
                     var explicitPress = command.TryGetProperty("pressed", out var requestedPress);
-                    GetViewport().PushInput(new InputEventMouseButton
-                    {
-                        Position = position,
-                        GlobalPosition = position,
-                        ButtonIndex = mouseButton,
-                        Pressed = !explicitPress || requestedPress.GetBoolean()
-                    }, true);
-                    if (!explicitPress) GetViewport().PushInput(new InputEventMouseButton
-                    {
-                        Position = position,
-                        GlobalPosition = position,
-                        ButtonIndex = mouseButton,
-                        Pressed = false
-                    }, true);
+                    DeliverPointerButton(position, mouseButton, !explicitPress || requestedPress.GetBoolean(), pointerStateKey);
+                    if (!explicitPress) DeliverPointerButton(position, mouseButton, false, pointerStateKey);
                 }
                 else
-                    GetViewport().PushInput(new InputEventMouseMotion { Position = position, GlobalPosition = position }, true);
+                {
+                    PushHarnessInput(GetViewport(), new InputEventMouseMotion { Position = position, GlobalPosition = position });
+                    RecordInput(JsonSerializer.SerializeToElement(new
+                    {
+                        op = "pointer",
+                        x = position.X,
+                        y = position.Y,
+                    }, Json), pointerStateKey);
+                }
                 break;
             case "text":
+                var textStateKey = _captureIdentity().StateKey;
                 if (GetViewport().GuiGetFocusOwner() is not LineEdit entry || !entry.IsVisibleInTree() || !entry.Editable)
                     throw new InvalidOperationException("Text input requires a focused editable field.");
                 var text = command.GetProperty("text").GetString() ?? throw new ArgumentException("Missing input text.");
@@ -264,9 +287,10 @@ internal sealed partial class RuntimeLiveHarness : Node
                 }
                 foreach (var rune in text.EnumerateRunes())
                 {
-                    GetViewport().PushInput(new InputEventKey { Unicode = (uint)rune.Value, Pressed = true }, true);
-                    GetViewport().PushInput(new InputEventKey { Unicode = (uint)rune.Value, Pressed = false }, true);
+                    PushHarnessInput(GetViewport(), new InputEventKey { Unicode = (uint)rune.Value, Pressed = true });
+                    PushHarnessInput(GetViewport(), new InputEventKey { Unicode = (uint)rune.Value, Pressed = false });
                 }
+                RecordInput(JsonSerializer.SerializeToElement(new { op = "text", text }, Json), textStateKey);
                 break;
             case "frames":
                 _liveFrames?.Dispose(); _liveFrames = null;
@@ -295,21 +319,46 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     private void SetKey(Key key, bool pressed, ulong lease)
     {
+        var stateKey = _inputRecording is null ? null : _captureIdentity().StateKey;
         if (pressed)
         {
             var existing = _held.ContainsKey(key);
             _held[key] = Time.GetTicksMsec() + lease;
             if (existing)
+            {
+                RecordInput(JsonSerializer.SerializeToElement(new { op = "key", key = key.ToString(), pressed, leaseMilliseconds = (int)lease }, Json), stateKey);
                 return;
+            }
         }
         else if (!_held.Remove(key)) return;
-        Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = key, Keycode = key, Pressed = pressed, Echo = false });
+        ParseHarnessInput(new InputEventKey { PhysicalKeycode = key, Keycode = key, Pressed = pressed, Echo = false });
+        RecordInput(JsonSerializer.SerializeToElement(new
+        {
+            op = "key",
+            key = key.ToString(),
+            pressed,
+            leaseMilliseconds = pressed ? (int)lease : 20
+        }, Json), stateKey);
     }
 
     private void ReleaseAll()
     {
+        foreach (var key in _recordedHumanKeys.Keys.ToArray())
+        {
+            _recordedHumanKeys.Remove(key);
+            ParseHarnessInput(new InputEventKey { PhysicalKeycode = key, Keycode = key, Pressed = false });
+            RecordInput(JsonSerializer.SerializeToElement(new
+            {
+                op = "key",
+                key = key.ToString(),
+                pressed = false,
+                leaseMilliseconds = 20
+            }, Json));
+        }
         foreach (var key in _held.Keys.ToArray())
             SetKey(key, false, 0);
+        foreach (var (button, position) in _heldPointerButtons.ToArray())
+            DeliverPointerButton(position, button, false);
     }
 
     private void PublishState()
@@ -386,6 +435,16 @@ internal sealed partial class RuntimeLiveHarness : Node
             physicsTest = _lastPhysicsTest,
             checkpoint = _lastCheckpoint,
             checkpointRestored = _restoredCheckpoint?.Invoke(),
+            checkpointTransitioning = _checkpointTransitioning?.Invoke() == true,
+            recordedInput = new
+            {
+                path = _inputTapePath,
+                replayRequest = _inputReplayRequest,
+                recording = _inputRecording is not null,
+                error = _inputRecordingError,
+                playback = _inputPlayback?.State,
+                gameplayParity = "unverified"
+            },
             performance = new
             {
                 jitOptimizationDisabled = JitOptimizationDisabled,
@@ -496,6 +555,8 @@ internal sealed partial class RuntimeLiveHarness : Node
     public override void _ExitTree()
     {
         _bot?.Stop();
+        _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
+        FinishInputRecording("Recording ended with its runtime owner.");
         try { CompleteStateWrite(); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }
         GetTree().NodeAdded -= TrackNode;

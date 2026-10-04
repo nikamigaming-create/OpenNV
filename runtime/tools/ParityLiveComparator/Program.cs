@@ -15,6 +15,15 @@ var pairCount = PositiveInteger(options, "pairs", 1, 100000);
 var timeoutSeconds = PositiveInteger(options, "timeout-seconds", 15, 3600);
 var maximumPending = PositiveInteger(options, "maximum-pending", 256, 65536);
 var outputRoot = options.GetValueOrDefault("output");
+var toleranceRules = options.TryGetValue("tolerances", out var tolerancePath)
+    ? JsonSerializer.Deserialize<ParityNumericTolerance[]>(File.ReadAllText(tolerancePath), new JsonSerializerOptions
+    {
+        PropertyNameCaseInsensitive = true,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        Converters = { new JsonStringEnumConverter() },
+    }) ?? throw new InvalidDataException("Parity tolerance policy is absent.")
+    : [];
+var tolerancePolicy = new ParityTolerancePolicy(toleranceRules);
 
 ParityTraceWriter? retailTrace = null;
 ParityTraceWriter? openNvTrace = null;
@@ -48,7 +57,8 @@ try
             retailTrace,
             joiner,
             rows,
-            pairCount);
+            pairCount,
+            tolerancePolicy);
         progressed |= Drain(
             openNvRing,
             ParityEngine.OpenNv,
@@ -56,7 +66,8 @@ try
             openNvTrace,
             joiner,
             rows,
-            pairCount);
+            pairCount,
+            tolerancePolicy);
         if (!progressed)
             Thread.Sleep(2);
     }
@@ -81,13 +92,14 @@ finally
         JsonSerializer.Serialize(
             new
             {
-                schema = "opennv-parity-live-join-report/v2",
+                schema = "opennv-parity-live-join-report/v3",
                 retailChannel,
                 openNvChannel,
                 failure,
                 pendingRetail = joiner.PendingRetailFrames,
                 pendingOpenNv = joiner.PendingOpenNvFrames,
                 finalFrames = "unobserved",
+                toleranceRules,
                 pairs = rows,
             },
             new JsonSerializerOptions
@@ -109,7 +121,8 @@ static bool Drain(
     ParityTraceWriter? trace,
     ParityLiveJoiner joiner,
     ICollection<JoinReport> rows,
-    int requestedPairs)
+    int requestedPairs,
+    ParityTolerancePolicy tolerancePolicy)
 {
     var progressed = false;
     while (rows.Count < requestedPairs && ring.TryRead(nextRingSequence, out var packet))
@@ -136,7 +149,8 @@ static bool Drain(
                 comparison.SimulationTickDelta,
                 comparison.MonotonicNanosecondsDelta,
                 comparison.EventOrdinalDelta,
-                comparison.Deltas);
+                comparison.Deltas,
+                tolerancePolicy.Assess(comparison));
             rows.Add(report);
             Console.WriteLine(
                 $"OPENNV_PARITY_CANDIDATE pair={rows.Count} state={report.StateKey} " +
@@ -155,7 +169,7 @@ static Dictionary<string, string> ParseOptions(string[] arguments)
         throw new ArgumentException(
             "Usage: OpenNV.ParityLiveComparator --retail-channel <name> " +
             "--opennv-channel <name> [--pairs <count>] [--timeout-seconds <seconds>] " +
-            "[--maximum-pending <count>] [--output <new-directory>]");
+            "[--maximum-pending <count>] [--output <new-directory>] [--tolerances <private-json>]");
     var result = new Dictionary<string, string>(StringComparer.Ordinal);
     for (var index = 0; index < arguments.Length; index += 2)
     {
@@ -165,7 +179,7 @@ static Dictionary<string, string> ParseOptions(string[] arguments)
             throw new ArgumentException("Parity live comparator options are invalid or duplicated.");
     }
     var allowed = new HashSet<string>(
-        ["retail-channel", "opennv-channel", "pairs", "timeout-seconds", "maximum-pending", "output"],
+        ["retail-channel", "opennv-channel", "pairs", "timeout-seconds", "maximum-pending", "output", "tolerances"],
         StringComparer.Ordinal);
     if (result.Keys.Any(key => !allowed.Contains(key)))
         throw new ArgumentException("Parity live comparator received an unknown option.");
@@ -200,4 +214,5 @@ internal sealed record JoinReport(
     long SimulationTickDelta,
     long MonotonicNanosecondsDelta,
     long EventOrdinalDelta,
-    IReadOnlyList<ParityFieldDelta> FieldDeltas);
+    IReadOnlyList<ParityFieldDelta> FieldDeltas,
+    ParityAssessment Assessment);

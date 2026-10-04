@@ -3,6 +3,11 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Recorded input](recorded-input-replay.md) binds private ordinary-input segments
+to complete shared checkpoints and ordered source hashes. Native playback checks
+scene, clock and observed controls, releases input on failure and retains raw
+parity deltas independently of explicit floating-point tolerances.
+
 [Actor collision and package head tracking](actor-collision-and-package-head-tracking.md)
 retain movement filters through enable/fade changes, preserve source scale during
 turning and bind package head suppression independently of script Look targets.

@@ -140,4 +140,12 @@ if ($LASTEXITCODE -ne 0 -or $traceText -match "(?m)^ERROR:" -or
 }
 Write-Output "OPENNV_NATIVE_RENDER_TRACE_AUDIT_PASS nearPlane=clipped coverage=bounding-box-candidates exactPixels=unverified"
 
+$inputOutput = & $Godot --headless --path $runtime res://tools/NativeRecordedInputAudit/NativeRecordedInputAudit.tscn 2>&1
+$inputText = $inputOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $inputText -match "(?m)^ERROR:" -or
+    $inputText -notmatch "OPENNV_NATIVE_RECORDED_INPUT_PASS") {
+    throw "OpenNV native recorded input failed:`n$inputText"
+}
+Write-Output "OPENNV_NATIVE_RECORDED_INPUT_PASS saveGuard=true sourceBound=true playback=true framesRecorded=false fixture=true campaign=false"
+
 Write-Output "OPENNV_CSHARP_GODOT_GATE_PASS"

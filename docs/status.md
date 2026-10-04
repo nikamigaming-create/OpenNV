@@ -1,6 +1,10 @@
 # Product status
 
-Checked PR134 is merged at synchronized main 4473293 with all five checks passing.
+Checked PR135 is merged at synchronized main ca9f0ba with all five checks passing.
+The active recorded-input runner has passing synthetic and native input
+contracts. Complete shared saves, delivered retail recording and campaign
+checkpoint/outcome proof remain separate required owners; see
+[recorded input](recorded-input-replay.md).
 The merged classroom runtime reproduces all seven original
 students occupying distinct source seats after the ordinary G.O.A.T. ready choice.
 Find near-reference Furniture searches use enabled/moved placements, source
@@ -24,8 +28,7 @@ flag, source total count and independent menu/dialogue input retirement.
 The merged runtime owns per-reference scripted/
 continuous station mode, source commands/queries and cold restoration in v35.
 Synthetic and original isolated CG04 command audits and the complete runtime gate
-pass, including v34/v33 loading. The active codex/package-head-tracking-off
-candidate retains native filters
+pass, including v34/v33 loading. The merged runtime retains native filters
 through enable/fade changes, preserves scale/capsule identity during body turning,
 retains reachable source arrival regions and binds package head suppression.
 Selected source contracts and isolated/static owned-room warm/cold movement,
