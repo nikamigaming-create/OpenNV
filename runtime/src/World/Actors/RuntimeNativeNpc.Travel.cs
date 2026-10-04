@@ -43,13 +43,18 @@ internal partial class RuntimeNativeNpc
     private void StartTravel(FalloutPluginRecord package, FalloutPlacedReference target, Transform3D? furnitureApproach = null,
         int destinationRadiusGameUnits = 0)
     {
-        if (furnitureApproach is null && !FalloutNewVegasBuiltinForms.IsInternalStatic(_aiCell!.BaseObjects[target.Base].Signature,
-            _aiStack!.RuntimeFormId(target.Base)))
-            throw new NotSupportedException($"PACK {package.FormKey} requires its non-marker interaction owner.");
+        if (furnitureApproach is null) RequireTravelMarker(package, target);
         var destination = furnitureApproach ?? _referenceTransform!(target);
         StartTravelTo(package, target.FormKey, destination,
             furnitureApproach is null ? "reference-marker" : "furniture-approach", furnitureApproach is not null,
             destinationRadiusGameUnits);
+    }
+
+    private void RequireTravelMarker(FalloutPluginRecord package, FalloutPlacedReference target)
+    {
+        if (!FalloutNewVegasBuiltinForms.IsInternalStatic(_aiCell!.BaseObjects[target.Base].Signature,
+            _aiStack!.RuntimeFormId(target.Base)))
+            throw new NotSupportedException($"PACK {package.FormKey} requires its non-marker interaction owner.");
     }
 
     private void StartTravelTo(FalloutPluginRecord package, FalloutFormKey target, Transform3D destination,

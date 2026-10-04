@@ -12,7 +12,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private void PackageEvaluation(string baseRoot, string mod, string root, string actorId,
-        string questId, short[] stages, string[] dependencies, bool stoppedFailure = false)
+        string questId, short[] stages, string[] dependencies, bool stoppedFailure = false, string? expectedPackageId = null)
     {
         Node3D? presentation = null;
         try
@@ -40,11 +40,17 @@ public partial class NativeActorPerformanceAudit
             var placed = cell.References.Single(value => value.FormKey == caller);
             var units = RuntimeConfiguration.Load().World.GameUnitsToMeters;
             var templates = world.InitializeActorTemplates(caller, 1);
-            // This fixture represents a later selection in the same day. Supply
-            // actual source once-per-day start history without running their
-            // prior conversations, results or presentation.
+            // Same-day start history is explicit fixture input, not an executed
+            // campaign prefix. Stopped initialization checks leave it empty;
+            // ordinary source conditions still select the named expected result.
             var npc = FalloutDialogueTopic.RequiredForm(records.GetEffective(caller), "NAME");
             var packageOwner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(npc), 32, templates);
+            var expectedPackages = expectedPackageId?.Split(',').Select(value =>
+            {
+                var parts = value.Split(':');
+                return parts is { Length: 2 } ? new FalloutFormKey(parts[0], Convert.ToUInt32(parts[1], 16)) :
+                    throw new InvalidDataException("Expected package needs a source owner and object identity.");
+            }).ToArray();
             foreach (var field in packageOwner.ReadSubrecords().Where(field => !stoppedFailure && field.Signature == "PKID"))
             {
                 if (field.Data.Length != 4) throw new InvalidDataException("Fixture package identity has an invalid extent.");
@@ -63,23 +69,34 @@ public partial class NativeActorPerformanceAudit
             actor.ConfigureAi(records, quests, cell, Placement, clock: clock, globals: globals, world: world);
             if (actor.AiError is null || actor.CurrentPackage is not { } selected)
                 throw new InvalidDataException("Evaluation fixture needs a selected source package with an unowned native procedure.");
+            if (expectedPackages is not null && !expectedPackages.Contains(selected))
+                throw new InvalidDataException("Source conditions selected a different package than the named fixture.");
             var package = records.GetEffective(selected); var hash = SHA256.HashData(package.ReadData());
             var before = actor.Transform;
-            actor.EvaluatePackages(false);
-            var pending = JsonSerializer.SerializeToElement(actor.AiState);
-            if (!pending.GetProperty("evaluationPending").GetBoolean() || actor.CurrentPackage != selected ||
-                actor.Transform != before || world.Get(caller).ProcedureCaptureBlocker is null ||
-                pending.GetProperty("currentProcedure").ValueKind != JsonValueKind.Null)
-                throw new InvalidDataException("EVP did not retain source selection independently of native procedure execution.");
-            try { _ = world.Get(caller).Capture(); throw new InvalidDataException("Pending package selection became saveable."); }
-            catch (NotSupportedException) { }
-            actor._Process(0);
-            if (JsonSerializer.SerializeToElement(actor.AiState).GetProperty("evaluationPending").GetBoolean() ||
-                actor.AiError is null || actor.CurrentPackage != selected || actor.Transform != before ||
-                world.Get(caller).ProcedureCaptureBlocker is null ||
-                JsonSerializer.SerializeToElement(actor.AiState).GetProperty("currentProcedure").ValueKind != JsonValueKind.Null)
-                throw new InvalidDataException("Native continuation lost its retained procedure fault or invented movement/completion.");
+            // EVP legitimately draws new random conditions. A named cold-binding
+            // fixture keeps the already selected result; the separate command
+            // fixture checks queued evaluation on its deterministic source case.
+            var evaluationCommand = expectedPackages is null;
+            if (evaluationCommand)
+            {
+                actor.EvaluatePackages(false);
+                var pending = JsonSerializer.SerializeToElement(actor.AiState);
+                if (!pending.GetProperty("evaluationPending").GetBoolean() || actor.CurrentPackage != selected ||
+                    actor.Transform != before || world.Get(caller).ProcedureCaptureBlocker is null ||
+                    pending.GetProperty("currentProcedure").ValueKind != JsonValueKind.Null)
+                    throw new InvalidDataException("EVP did not retain source selection independently of native procedure execution.");
+                try { _ = world.Get(caller).Capture(); throw new InvalidDataException("Pending package selection became saveable."); }
+                catch (NotSupportedException) { }
+                actor._Process(0);
+                if (JsonSerializer.SerializeToElement(actor.AiState).GetProperty("evaluationPending").GetBoolean() ||
+                    actor.AiError is null || actor.CurrentPackage != selected || actor.Transform != before ||
+                    world.Get(caller).ProcedureCaptureBlocker is null ||
+                    JsonSerializer.SerializeToElement(actor.AiState).GetProperty("currentProcedure").ValueKind != JsonValueKind.Null)
+                    throw new InvalidDataException("Native continuation lost its retained procedure fault or invented movement/completion.");
+            }
             var stoppedCold = world.Get(caller).PackageBindingFailureCaptureReady;
+            if (stoppedFailure && !stoppedCold)
+                throw new InvalidDataException("Stopped initialization still published an active or pending procedure owner.");
             if (stoppedCold)
             {
                 actor._Process(.25);
@@ -135,7 +152,7 @@ public partial class NativeActorPerformanceAudit
                 !hash.AsSpan().SequenceEqual(SHA256.HashData(package.ReadData())))
                 throw new InvalidDataException("Package evaluation changed source bytes, pose or its retained result failure.");
             GD.Print($"OPENNV_NATIVE_PACKAGE_EVALUATION_PASS actor={caller} package={selected} sourceSelection=true " +
-                $"voidCommand=true queuedContinuation=true nativeFaultVisible=true pendingSaveRefused=true stoppedCold={stoppedCold} retainedResults=true " +
+                $"evaluationCommand={evaluationCommand} queuedPendingSaveRefused={evaluationCommand} nativeFaultVisible=true stoppedCold={stoppedCold} retainedResults=true " +
                 "sourceReadonly=true fixture=isolated-owned-command campaignAndParity=unverified recording=false");
         }
         finally { if (GodotObject.IsInstanceValid(presentation)) presentation!.Free(); }
