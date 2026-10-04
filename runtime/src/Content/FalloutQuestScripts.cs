@@ -77,6 +77,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
         Challenges?.Validate();
         Radio?.Validate();
         Session?.NoActivationSound?.Validate();
+        FalloutQuestObjectFlags.ValidateSnapshot(Session?.QuestObjects);
         if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
             throw new InvalidDataException("Saved dialogue history is invalid or duplicated.");
         if (Messages.Count != 0 && MessageResults is null ||
@@ -105,8 +106,10 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
 internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisplayObjectives, IReadOnlyList<int> Achievements,
     bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false,
     FalloutPlayerScriptPackageSnapshot? PlayerPackage = null, FalloutNoActivationSoundSnapshot? NoActivationSound = null,
-    bool PlayerYoung = false, bool PlayerToddler = false, float PlayerScale = 1);
-internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivationSound = null)
+    bool PlayerYoung = false, bool PlayerToddler = false, float PlayerScale = 1,
+    IReadOnlyList<FalloutQuestObjectFlagSnapshot>? QuestObjects = null);
+internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivationSound = null,
+    FalloutQuestObjectFlags? questObjects = null)
 {
     internal bool Hardcore { get; set; }
     internal bool AutoDisplayObjectives { get; set; }
@@ -164,7 +167,7 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung, PlayerToddler, PlayerScale);
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung, PlayerToddler, PlayerScale, questObjects?.Capture());
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
@@ -173,6 +176,9 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         if (PlayerScaleValue(state.PlayerScale) != state.PlayerScale) throw new InvalidDataException("Saved player scale is outside the source reference range or precision.");
         if (state.NoActivationSound is not null && noActivationSound is null)
             throw new NotSupportedException("Saved no-activation sound has no shared source owner.");
+        if (state.QuestObjects is { Count: > 0 } && questObjects is null)
+            throw new NotSupportedException("Saved quest-object changes have no shared form owner.");
+        questObjects?.Restore(state.QuestObjects);
         noActivationSound?.Restore(state.NoActivationSound);
         Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
         LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
@@ -381,7 +387,7 @@ internal sealed class FalloutQuestScripts
         Menus = references?.Menus ?? new();
         Sounds = references?.Sounds ?? new(records, Menus);
         NoActivationSound = references?.NoActivationSound ?? new(records, Sounds);
-        Session = new(NoActivationSound);
+        Session = new(NoActivationSound, records.QuestObjects);
         Challenges = new(records, inventory.Notifications);
         Radio = references is null ? null : new(records, references, inventory.Notifications);
         ScreenBlood = references?.ScreenBlood ?? new(records);
@@ -692,6 +698,8 @@ internal sealed class FalloutQuestScripts
                             arguments.Count >= 2 ? AuxiliaryIndexValue(arguments[1].Number) : 0))),
                 };
             }
+            if (parts.Length == 1 && FalloutQuestObjectCommands.Function(_records, operation) is { } questObjectFunction)
+                return questObjectFunction;
             if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(_records, operation) is { } settingFunction)
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(_records, operation) is { } iniSettingFunction)
@@ -762,7 +770,7 @@ internal sealed class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
-            if (parts.Length == 1 && operation == "setnumericgamesetting")
+            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
                 return;

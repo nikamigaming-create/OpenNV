@@ -350,7 +350,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         Text("IM_Headline_PlayerDRInfo", ""); Text("IM_Headline_PlayerDTInfo", "");
         var caps = _state.Items.Where(item => item.EditorId.Equals("Caps001", StringComparison.OrdinalIgnoreCase)).Sum(item => item.Count);
         _tiles.BindText(Tile("IM_Headline_PlayerCapsInfo"), "_Value", caps.ToString(CultureInfo.InvariantCulture));
-        var items = _state.Items.Where(item => FalloutInventoryAccess.CanTransfer(_records.GetEffective(item.FormKey), false))
+        var items = _state.Items.Where(item => FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), false))
             .Where(item => _state.Selection switch
             {
                 0 => item.RecordType == "WEAP",

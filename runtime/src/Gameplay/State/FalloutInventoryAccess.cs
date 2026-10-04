@@ -4,9 +4,9 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal static class FalloutInventoryAccess
 {
-    internal static bool CanTransfer(FalloutPluginRecord item, bool fromPlayer)
+    internal static bool CanTransfer(FalloutPluginStack records, FalloutPluginRecord item, bool fromPlayer)
     {
-        if (fromPlayer && (item.Flags & 0x400) != 0) return false;
+        if (fromPlayer && records.QuestObjects.IsQuestObject(item.FormKey)) return false;
         var (field, offset, mask) = item.Signature switch
         {
             "ARMO" => ("BMDT", 4, 0x40),

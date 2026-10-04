@@ -145,6 +145,16 @@ if (args.Length == 1 && args[0] == "--quest-update-contracts")
     QuestUpdateContracts.Run();
     return;
 }
+if (args is ["--quest-object-contracts"])
+{
+    QuestObjectContracts.Run();
+    return;
+}
+if (args.Length >= 7 && args[0] == "--audit-quest-object")
+{
+    OwnedQuestObjectProbe.Run(args[1], args[2], args[3], args[4], short.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture), args[6..]);
+    return;
+}
 if (args is ["--inventory-command-contracts"])
 {
     InventoryCommandContracts.Run();
@@ -564,6 +574,7 @@ else if (args is [var patrolRoot, "--patrols", var patrolOutput]) OwnedPatrolPro
 else if (args is [var recoveryRoot, "--script-recovery", var recoverySave, var recoveryOutput])
     OwnedScriptRecoveryProbe.Run(recoveryRoot, recoverySave, recoveryOutput);
 StageAndInventoryContracts.Run();
+QuestObjectContracts.Run();
 InventoryCommandContracts.Run();
 AnimationResourceContracts.Run();
 WeaponHandlingContracts.Run();

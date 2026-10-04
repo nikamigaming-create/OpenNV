@@ -6,13 +6,25 @@ pass. Synthetic continuation checks, Beatrice's native cold/resumed-advancement
 check and the original TTW roach's isolated native moving/cold/arrival fixture
 pass. Stopped actors retain exact world basis and blink queues without a
 replacement random draw. Ordinary TTW input writes a genuine v32 checkpoint at
-CG02:50; its cold Continue is next. An earlier run reached60 through original
+CG02:50; ordinary cold Continue restores player/inventory and three stopped actor
+roots/faults/retirement identities. The save retains a stale Dad range-Travel
+pose, and new manual saving refuses an initialization continuation. Fresh ordinary
+target contacts and step-back toward Dad complete60. The source Guard now reaches
+its authored marker in actual range gameplay. Real skeletal contacts apply
+damage; the user kills the source radroach. Original OnDeath enters70 and speech
+enters80. The old live build retains the unowned SetQuestObject suffix at70;
+the active candidate implements that command. Photo advancement remains blocked.
+An earlier run reached60 through original
 target contacts, but roach death and onward campaign remain unverified.
 
-The active dialogue-initialization candidate validates an unsupported source
+Checked PR126 validates an unsupported source
 waiting location before publishing an active procedure. Its selected native
 Butch warm/cold/resumed audit and integrated gate pass with the original furniture
-fault visible. Complete furniture-waiting dialogue and VATS
+fault visible; all five publication checks pass at synchronized main88f1654.
+The active quest-item candidate shares SetQuestObject flag changes with transfer,
+RemoveAllItems, weight and source-validated persistent session state. Synthetic
+and original stage70 command/cold audits and the integrated gate pass.
+Complete furniture-waiting dialogue, actor save state and VATS
 runtime implementation remain open.
 
 Updated October 3, 2026 from current code and fresh tests. OpenNV is

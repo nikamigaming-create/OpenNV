@@ -365,6 +365,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal int PendingProcedureCaptureCount => _instances.Values.Count(instance =>
         instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
+    internal object PendingProcedureCaptures => _instances.Values.Where(instance =>
+        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady)
+        .Select(instance => new
+        {
+            reference = instance.Reference.ToString(),
+            assignment = instance.PackageAssignment?.Package.ToString(),
+            motion = instance.PackageMotion?.Package.ToString(),
+            blocker = instance.ProcedureCaptureBlocker,
+        }).ToArray();
 
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
