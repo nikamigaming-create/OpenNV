@@ -131,7 +131,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
         if (condition.Function == 67 && (condition.RunOn is 0 or 1 or 2) && currentCell is not null)
         {
             var currentCellKey = currentCell(condition);
-            return InInteriorCell(records, currentCellKey, condition.FormArgument1);
+            return FalloutCellQueries.InCell(records, currentCellKey, condition.FormArgument1) ? 1 : 0;
         }
         if (condition.RunOn == 0) return EvaluateActor(condition, speaker, identity);
         return Unbound(condition);
@@ -169,18 +169,4 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
             throw new NotSupportedException($"Dialogue actor {speaker} condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
     }
 
-    internal static float InInteriorCell(FalloutPluginStack records, FalloutFormKey? current, FalloutFormKey requestedForm)
-    {
-        if (current is null) return 0;
-        var requested = FalloutCellSceneReader.ReadDefinition(records, requestedForm);
-        if ((requested.Flags & FalloutCellSceneReader.InteriorCellFlag) == 0) return 0;
-        if (requested.EditorId.Length == 0)
-            throw new InvalidDataException($"GetInCell argument {requested.FormKey} has no CELL EDID.");
-        var actorCell = FalloutCellSceneReader.ReadDefinition(records, current.Value);
-        if ((actorCell.Flags & FalloutCellSceneReader.InteriorCellFlag) == 0) return 0;
-        if (actorCell.EditorId.Length == 0)
-            throw new InvalidDataException($"GetInCell actor cell {actorCell.FormKey} has no CELL EDID.");
-        // GECK GetInCell matches a valid interior cell name as a prefix.
-        return actorCell.EditorId.StartsWith(requested.EditorId, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-    }
 }

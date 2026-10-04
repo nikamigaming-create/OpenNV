@@ -1,7 +1,7 @@
 # Product status
 
-Checked PR136 is merged at synchronized main 9f67cfb with all five checks passing.
-The active candidate retains winning terminal access, queued actor package events
+Checked PR137 is merged at synchronized main 99bc539 with all five checks passing.
+Main retains winning terminal access, queued actor package events
 and source-owned Furniture/failed-selection/idle/settled-Dialogue continuations in
 schema v36. Synthetic checks, original terminal locking/cold validation and four
 isolated owned native cold/resumed procedure checks pass. The reached-save native
@@ -12,15 +12,22 @@ NPCs, a retained creature assignment and the occupied teacher. See
 Ordinary input completes all ten G.O.A.T. questions, scoring, original hand-in/tag
 acceptance and Brotch's source desk occupation. A genuine complete stage80
 checkpoint is written; a separate cold load reaches that state without replaying
-the exam. Quests, inventory, tags and new procedure owners match. The final candidate
+the exam. Quests, inventory, tags and new procedure owners match. The merged runtime
 corrects the older native pose/pre-selection assignment differences found by that
-comparison. Menu clock timing remains a separate evidence lane. The final complete gate and diff check pass; checked publication is pending. [Current work](current-work.md) owns the
+comparison. Menu clock timing remains a separate evidence lane. The checkpoint
+block's complete gate and diff check pass. [Current work](current-work.md) owns the
 exact native continuation.
 
 Earlier ordinary hallway departure completed CG03:100 and all32 CG04:0 setup
 commands, including radio state, terminal locking and the bed transition. Escape
 GameMode stops at missing GetInCell after consumed timer writes. The genuine
-post-hand-in checkpoint allows fresh execution after query support; clearing a
+post-hand-in checkpoint allows fresh execution after query support. The active
+candidate shares GetInCell across scripts, dialogue and recipe conditions;
+synthetic and unchanged owned Escape GameMode checks pass. The full gate passes;
+ordinary saved input completes the classroom departure, CG03:100 and all32
+CG04:0 commands. Escape GameMode completes27 invocations and enters stage2,
+where the generic result-condition flags/run-on guard refuses its first entry.
+No stage2 result command executes. Clearing a
 consumed-prefix fault is not recovery. Vault escape, Megaton and the authored
 train/Mojave route remain open.
 

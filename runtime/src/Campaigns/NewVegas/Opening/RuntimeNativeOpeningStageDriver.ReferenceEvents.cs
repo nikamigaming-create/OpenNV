@@ -74,6 +74,8 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     internal bool IsInInterior(FalloutFormKey reference) => _scripts.References!.IsInInterior(reference, _activeCell);
 
+    internal bool IsInCell(FalloutFormKey reference, FalloutFormKey cell) => _scripts.References!.IsInCell(reference, cell, _activeCell);
+
     private int ActorSitting(FalloutFormKey reference) => _pluginStack.RuntimeFormId(reference) == 0x14
         ? _player.SittingState : _scripts.References!.GetSitting(reference);
 
@@ -100,11 +102,17 @@ internal partial class RuntimeNativeOpeningStageDriver
                 reference => ReferencePresentation().GetOpenState(reference),
                 ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue, Inventory: InventoryCommands, Challenges: _scripts.Challenges,
                 HeadingAngle: ReferenceHeadingAngle, ResetPlayerHealth: _vitals.ResetHealth,
-                CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills));
+                CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills, IsInCell: IsInCell));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
-        _scriptHost = _scriptHost with { ExecuteProgram = results.ExecuteProgram, InvokeFunction = results.InvokeFunction, TagSkills = _tagSkills };
+        _scriptHost = _scriptHost with
+        {
+            ExecuteProgram = results.ExecuteProgram,
+            InvokeFunction = results.InvokeFunction,
+            TagSkills = _tagSkills,
+            IsInCell = IsInCell
+        };
         _scripts.Host = _scriptHost;
         _speech!.ExecuteResults = results.ExecuteResult;
         _conversation = new();

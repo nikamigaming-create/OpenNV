@@ -44,6 +44,16 @@ if (args is ["--heading-query-contracts"])
     HeadingQueryContracts.Run();
     return;
 }
+if (args is ["--cell-query-contracts"])
+{
+    CellQueryContracts.Run();
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-ttw-cell-query")
+{
+    OwnedCellQueryProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
 if (args is ["--encounter-zone-contracts"])
 {
     EncounterZoneContracts.Run();
@@ -649,6 +659,7 @@ FollowPackageContracts.Run();
 DialoguePackageContracts.Run();
 DialogueSpatialContracts.Run();
 HeadingQueryContracts.Run();
+CellQueryContracts.Run();
 NpcDialogueLinkContracts.Run();
 RadioContracts.Run();
 PatrolContracts.Run();

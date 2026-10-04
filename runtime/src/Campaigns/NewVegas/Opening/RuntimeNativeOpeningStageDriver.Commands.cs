@@ -232,7 +232,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         return condition.Function switch
         {
             14 => _playerSkills.Value(checked((int)condition.Argument1)),
-            67 => FalloutDialogueConditions.InInteriorCell(_pluginStack, _activeCell, condition.FormArgument1),
+            67 => FalloutCellQueries.InCell(_pluginStack, _activeCell, condition.FormArgument1) ? 1 : 0,
             69 => condition.FormArgument1 == _scripts.References!.ActorRace(_pluginStack.RuntimeFormKey(0x14)) ? 1 : 0,
             70 when condition.Argument1 <= 1 => _character.Female == (condition.Argument1 == 1) ? 1 : 0,
             72 => condition.FormArgument1 == _raceSexContract.Player ? 1 : 0,

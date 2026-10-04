@@ -51,6 +51,16 @@ internal sealed partial class FalloutReferenceWorld
         return (FalloutCellSceneReader.ReadDefinition(records, cell).Flags & FalloutCellSceneReader.InteriorCellFlag) != 0;
     }
 
+    internal bool IsInCell(FalloutFormKey reference, FalloutFormKey requested) => IsInCell(reference, requested, null);
+
+    internal bool IsInCell(FalloutFormKey reference, FalloutFormKey requested, FalloutFormKey? playerCell)
+    {
+        var cell = reference == records.RuntimeFormKey(0x14)
+            ? playerCell ?? throw new NotSupportedException("Player GetInCell has no live cell owner.")
+            : Placement(reference).Cell;
+        return FalloutCellQueries.InCell(records, cell, requested);
+    }
+
     internal float Distance(FalloutFormKey first, FalloutFormKey second,
         FalloutReferencePlacement? player, float unitsToMetres)
     {
