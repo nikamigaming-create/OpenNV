@@ -30,9 +30,10 @@ Numeric/loop state and reachable combinations are not exhaustively certified.
 The whole-vault source audit includes all 10 interiors and 7,155 references,
 including the empty legacy-lighting cell. It resolves 22 directed portals,
 116 actors, 623 unique NIFs, 16 KFs, 795 DDSs and 19 NAVMs. All source cell reports
-complete. It retains 232 reference admission/presentation issues and 33 resource
-failures; these lanes overlap. Nine interiors have no current native presentation
-snapshot. Source geometry and NAVM counts do not establish supported floors.
+complete. The latest same-build source rerun retains 101 reference
+admission/presentation issues, down from 232, and 33 resource failures; these
+lanes overlap. Whole-cell native presentation and supported-floor coverage remain
+incomplete. The retained campaign snapshot is older than this source audit.
 
 The unchanged rack model now decodes and builds in native Godot with independent
 texture axes and source filtering. Legacy NIF field gates consume the selected
@@ -43,7 +44,13 @@ locks remain guarded. No player traversal of that pair is claimed yet.
 
 Legacy 36-byte CELL lighting retains absent fog power explicitly, with no guessed
 default; all 16 owned declarations and strict synthetic extent/inheritance checks
-pass. A headless genuine-save XR check passes 27 independent hand/grip poses and
+pass. Parent-controlled static point lights now use the shared reference enable
+owner. A native check covers 139 lights across all 2,048 assignments of their 11
+independent enable roots, queued transitions, late construction, instance reuse
+and cold restoration. A separate unchanged wall-screen model builds all four
+surfaces and its authored zero-channel sequence with independent clocks and
+source text keys. These checks do not establish ordinary pixels or retail parity.
+A headless genuine-save XR check passes 27 independent hand/grip poses and
 the held weapon's source muzzle alignment. No guards were shot, and physical
 headset or final-eye acceptance is not established by that check.
 
@@ -54,14 +61,19 @@ reported unsupported lanes rather than claiming campaign or retail parity.
 ## Next owners and outcome
 
 Use the completed audit to fix the complete reached level before further ordinary
-play. The next presentation owner is parent-controlled source lights: 149 current
-failures are static point lights; LIGH-owned model geometry is a separate missing
-lane. Another 27 lights retain unowned scale and 13 retain unowned flags. Trace the
-wall-screen controller sequence from its source NIF rather than tuning brightness.
+play. Promote the ten-cell source audit into the canonical lab so the remaining
+denominator is repeatable. Its 58 light refusals comprise 18 source-model/controller
+owners, 27 scales and 13 flags. Source LIGH model nodes and controllers need their
+general owner; model-bearing lights now refuse explicitly instead of silently
+dropping those inputs.
 
-Reference scripts still stop at StartCombat, two NVSE expression faults and legacy
-linked-reference expressions. Inspect their real source bindings and consumed
-prefixes. Do not clear a fault or replay earlier effects to recover an owner.
+Reference scripts still stop at StartCombat and missing combat/detection queries.
+The two reached expression faults are IsCombatTarget and GetDetected owner
+failures. Their source requires actual actor combat groups, published target
+membership and detection state, independently of selected-target queries.
+GetLinkedRef is already owned, but two legacy spawners retain initialization
+writes before their historical fault. Preserve that prefix and recover only a
+source-proven stopped instruction; do not clear and replay an invocation.
 NPC procedure, source Havok constraint/water, literal missing KF and unsupported
 vertex-channel failures remain in the full audit denominator. Player-wall volumes
 are source triggers, not architectural floors; authored XPRM contacts already have
@@ -84,3 +96,9 @@ A distinct genuine v37 slot 55647be524e54e9297a22ff12bcfaeec contains CG04:10 af
 Amata's conversation. Its cold continuation is not yet verified; retain both slots.
 Never run the exam-driving helper. Private source readers, saves and diagnostics
 stay outside public Git; owned inputs are read-only.
+
+Current source audit: tmp/development-lab/vault101-cell-audit-light-screen.
+Selected native proofs: vault101-light-parents-native.private.json and
+owned-vault-wall-screen-20261004.private.log under tmp/development-lab; their
+runtime build identity matches the source rerun. Combat ownership contracts remain
+private there and do not become runtime inputs.

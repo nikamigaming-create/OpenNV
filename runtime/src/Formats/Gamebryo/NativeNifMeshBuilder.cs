@@ -846,8 +846,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     $"NIF controller manager {manager.Block.Index} has an unsupported object palette.");
             foreach (var sequenceReference in manager.Sequences)
             {
+                // An authored sequence can carry a clock and text keys without
+                // any pose/material channels. Keep its manager and event owner.
                 if (_source.ReadObject(sequenceReference) is not FalloutNifControllerSequence sequence ||
-                    sequence.Manager != manager.Block.Index || sequence.ControlledBlocks.Length == 0 ||
+                    sequence.Manager != manager.Block.Index ||
                     sequence.TextKeys == -1 ||
                     _source.ReadObject(sequence.TextKeys) is not FalloutNifTextKeyExtraData ||
                     sequence.CycleType is not (0U or 2U) ||
@@ -1145,10 +1147,11 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     SourceController = manager.Block.Index,
                     SourceSha256 = _source.Sha256,
                 };
+                // Own the node before source validation can reject its configuration.
+                root.AddChild(player);
                 player.Configure(sequences);
                 player.SetMeta("opennv_nif_controller_manager", manager.Block.Index);
                 player.SetMeta("opennv_nif_source_sequences", sequences.Select(value => value.Name).ToArray());
-                root.AddChild(player);
             }
             foreach (var sequence in _directControllerSequences)
             {
@@ -1156,10 +1159,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 {
                     Name = sequence.Name,
                 };
+                root.AddChild(player);
                 player.Configure([sequence]);
                 if (sequence.DirectClock is { } clock && (clock.Flags & 8) != 0 && player.ActiveSequence is null) player.PlaySourceSequence(sequence.Name);
                 player.SetMeta("opennv_nif_direct_controller", true);
-                root.AddChild(player);
             }
         }
 

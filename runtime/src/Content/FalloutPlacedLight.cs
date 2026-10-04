@@ -34,10 +34,12 @@ internal static class FalloutPlacedLightResolver
         if (reference.Scale != 1.0f)
             throw new NotSupportedException(
                 $"Native light reference {reference.FormKey} has unsupported XSCL {reference.Scale:R}.");
-        if (reference.EnableParent is not null)
-            throw new NotSupportedException(
-                $"Native light reference {reference.FormKey} has an unresolved enable parent.");
         RequireStaticPoint(source, baseObject.FormKey);
+        if (baseObject.ModelPath is not null)
+            throw new NotSupportedException(
+                $"Native LIGH {baseObject.FormKey} source model {baseObject.ModelPath} requires a light/model/controller owner.");
+        // XESP belongs to the shared reference world and native presentation.
+        // Resolving immutable light parameters must not replace that authority.
         var adjustment = reference.RadiusAdjustmentGameUnits ?? 0.0f;
         // The source reference radius adjustment is additive, including signed values.
         var radius = source.RadiusGameUnits + adjustment;

@@ -185,6 +185,13 @@ order before the remaining position update. Instance-owned meshes, clocks and
 particle fields prevent shared prototype state from synchronizing references;
 unsupported inputs and unmatched retail collision behavior remain visible.
 
+[Source light and sequence owners](source-light-sequence-owners.md) leave XESP
+enable authority in the reference world and ordinary native presentation. Immutable
+static-light resolution preserves source radius, color and intensity. Managed NIF
+sequences can carry a clock and source text keys without pose/material channels;
+their instance-owned clocks and cold consumption still apply. LIGH-owned models,
+light-node controllers, scales and flags remain explicit unsupported lanes.
+
 Player camera packages share the C# IDLE playback clock with source intro,
 repeat and outro intervals. Assignment handoff retains identical event poses;
 source text-key crossings feed the existing native player sound owner. Saved
