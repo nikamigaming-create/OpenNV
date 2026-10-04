@@ -1,26 +1,36 @@
 # Product status
 
-Checked PR128 is merged at synchronized main e472238 with all five checks
-passing. Shared heading queries, source BB-gun sights and combat ownership
-before AI initialization are published. Actual ordinary input kills the real
-radroach with six ADS contacts; original70/80 results complete and genuine
-v33 saving succeeds. Paul restores his original chair clip with no pending
-procedure captures. Complete shooting, scene, animation and save parity remain
-open.
+Checked PR129 is merged at synchronized main 14e610f with all five checks passing.
+The active codex/radio-stage-continuation candidate completes original CG02:100
+and CG03:5 through receiver Off and shared player ResetHealth. Ordinary immutable
+stage-80 Load, photo input, the original six-years-later sequence and Dad's G.O.A.T.
+conversation reach CG03:10 with movement released. The source bullying exchange
+reaches25 while original Mr. Brotch activation opens his dialogue. The ready choice
+completes all16 results of40 and the original42 objective result with closed
+dialogue and no stage error. Student Wander/furniture targeting and script
+GetSitting are the next missing classroom owners. G.O.A.T.,
+Vault escape, Megaton and the train/Mojave route remain incomplete.
 
-The active candidate binds PlaySound3D to a real reference and owned SOUN/WAV,
-and resumes the stopped quest instruction/tail while retaining its consumed
-prefix and historical fault. Synthetic and the original TTW stopped-invocation
-native mixer audits pass. Actual optimized3460 cold-Continues the preserved80
-save with the roach dead, no quest fault and the continuation receipt intact.
-Ordinary photo input completes original90/95/98 and enters100. Shared source95
-UnequipItem flags0,1 pass synthetic, owned cold checks and actual stage-result
-completion. Original100 stops at unowned PipBoyRadioOff after four commands.
-An ordinary save succeeds but lacks the nested stage-result frame; it is a
-diagnostic stopped state, while the genuine80 recovery remains immutable. Full radio
-playback, legacy Travel root/clock restoration and later campaign owners remain
-open. Megaton and the train/Mojave route have not been reached.
+Source NPC marker Travel has native capsule/KF route, pose/clock and winning NAVM
+persistence. Selected moving/cold/resumed arrival and source failed-search/cold
+fixtures pass without replaying package results. The failed route remains visibly
+unfinished; authored NPC teleport-door travel is not implemented. Dialogue direct
+FormList membership, unrelated-space distance, explicit player perks, current
+encounter-zone and shared script-variable queries bind their authoritative owners.
+Selected synthetic and owned query checks pass. Run Immediately result timing has
+synthetic exactly-once/failure checks and an original source-result/cold audit.
+The original black-plane material builds with its geometry and local-map selector
+retained independently of ordinary world lighting. Local-map rendering remains
+unverified. Missing models remain explicit per-reference divergences.
 
+The required integrated runtime gate passes for the final candidate revision.
+Original command/query/result and queued native speech audits pass. Genuine post-photo
+settled saving and cold Continue still require verification. Pending nested stage
+results refuse saving; complete result/conversation/procedure continuation remains
+open. Full radio broadcast playback, VATS, all JAM/MCM modules and native plugin
+interfaces remain incomplete. No campaign or matched retail/physical-headset parity
+claim is made. [Current work](current-work.md) holds the live continuation and next
+owner; older component notes below describe bounded evidence.
 Checked PR125 publishes reference-owned stopped NPC initialization saves and
 shared Guard marker approach at synchronized main a910a0dc; all five checks
 pass. Synthetic continuation checks, Beatrice's native cold/resumed-advancement

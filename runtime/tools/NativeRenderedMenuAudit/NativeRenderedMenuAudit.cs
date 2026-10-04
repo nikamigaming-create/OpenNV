@@ -34,9 +34,9 @@ public partial class NativeRenderedMenuAudit : Control
                 GetTree().Quit();
                 return;
             }
-            if (args.Length >= 8 && args[1] == "--speech-actor-values")
+            if (args.Length >= 8 && args[1] is "--speech-actor-values" or "--speech-queued")
             {
-                await SpeechActorValues(args[0], args[2], args[3], args[4], args[5], args[6], short.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture), args[8..]);
+                await SpeechActorValues(args[0], args[2], args[3], args[4], args[5], args[6], short.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture), args[8..], queued: args[1] == "--speech-queued");
                 GetTree().Quit();
                 return;
             }

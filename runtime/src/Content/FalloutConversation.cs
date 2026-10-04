@@ -38,14 +38,14 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
         {
             if (++ResponseIndex < Info!.Responses.Count) return;
             Phase = "results";
-            results(Info, false);
+            if ((Info.Flags & 8) == 0) results(Info, false);
             foreach (var topic in Info.AddedTopics) _added.Add(topic);
             if (_ending) { Phase = "closed"; Choices = []; return; }
             foreach (var follow in Info.FollowUps)
             {
                 var next = FalloutDialogueTopic.Decode(records.GetEffective(follow));
                 if (!FalloutDialogueTopic.Eligible(next, _speaker, _said, quest => quests.Stage(quest), evaluate, QuestEligible)) continue;
-                FalloutDialogueTopic.RequireFlags(next, conversation: true);
+                FalloutDialogueTopic.RequireFlags(next, conversation: true, immediateResults: true);
                 Begin(next);
                 return;
             }
@@ -84,6 +84,7 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
         Info = info; Choices = []; ResponseIndex = 0; Phase = "results";
         if ((info.Flags & 4) != 0) _said.Add(info.Record.FormKey);
         results(info, true);
+        if ((info.Flags & 8) != 0) results(info, false);
         Phase = "speaking";
     }
 
@@ -94,7 +95,7 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
     }
 
     private FalloutDialogueInfo? Select(FalloutFormKey topic) => _selection.Select(Topic(topic), _speaker, _said,
-        quest => quests.Stage(quest), evaluate, random);
+        quest => quests.Stage(quest), evaluate, random, immediateResults: true);
 
     private bool QuestEligible(FalloutFormKey quest) => _selection.Eligible(quest, evaluate);
 

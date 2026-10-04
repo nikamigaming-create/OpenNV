@@ -35,6 +35,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
         ShaderFlagEnvironmentMapping | ShaderFlagAlphaTexture |
         ShaderFlagEyeEnvironmentMapping |
         ShaderFlagWindowEnvironmentMapping | ShaderFlagRemappableTextures |
+        FalloutNifSurfaceInputs.LocalMapHideSecretFlag |
         FalloutNifSurfaceInputs.SinglePassDecalFlags | FalloutNifSurfaceInputs.ParallaxFlag |
         ShaderFlagExternalEmittance |
         ShaderFlagZBufferTest;

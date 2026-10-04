@@ -15,12 +15,13 @@ internal static class RadioContracts
         {
             var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
             var bytes = Join(Record("TES4", 0, 0, Field("HEDR", header)),
-                Record("TACT", 10, 0x40020000), Record("TACT", 11, 0x10020000), Record("DOOR", 20, 0),
+                Record("TACT", 10, 0x40020000), Record("TACT", 11, 0x10020000), Record("DOOR", 20, 0), Record("SOUN", 500, 0),
                 Cell(800, true), Group(800, 6, Reference(900, 10, 0, Radio(0, 100, 901)), Reference(901, 20, 0, Field("DATA", Position(50))),
                     Reference(903, 10, 0, Radio(1)), Reference(904, 10, 0, Radio(3)), Reference(905, 10, 0, Field("XRDO", new byte[15])),
                     Reference(907, 10, 0, Radio(4)), Reference(908, 11, 0, Radio(1)), Reference(909, 10, 0x800, Radio(1)),
                     Door(910, 911), Door(912, 913)),
                 Cell(801, true), Group(801, 6, Door(911, 910)), Cell(802, true),
+                Record("QUST", 1000, 0, Field("EDID", Encoding.ASCII.GetBytes("ReceiverQuest\0"))),
                 Group(700, 1, Cell(804, false), Group(804, 6, Reference(902, 10, 0, Radio(2)),
                     Reference(906, 10, 0, Radio(4), Field("DATA", Position(4200))), Door(913, 912)), Cell(805, false)));
             var path = Path.Combine(directory, "Radio.esm"); File.WriteAllBytes(path, bytes);
@@ -62,15 +63,55 @@ internal static class RadioContracts
                 Require(fresh.Capture().Discovered.Count == 0, "Failed radio restore partially mutated discovery.");
                 Reject(() => FalloutRadioStation.Read(records, records.GetEffective(Key(905))));
                 Declaration();
+                Receiver(records, world, radio);
             }
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Record("TES4", 0, 0, Field("HEDR", header), Field("MAST", Encoding.ASCII.GetBytes("Radio.esm\0")), Field("DATA", new byte[8])),
                 Group(800, 6, Reference(900, 10, 0, Radio(1)))));
             using var patched = FalloutPluginStack.Load(directory, ["Radio.esm", "Patch.esp"]);
             Require(FalloutRadioStation.Read(patched, patched.GetEffective(Key(900))).Range == FalloutRadioRange.Everywhere,
                 "Radio reader ignored the winning override or its master-relative base.");
-            Console.WriteLine("OPENNV_RADIO_CONTRACT_PASS winning-master range anchor enable non-pipboy discovery once-only cold malformed retained-portal-divergence hud-declarations");
+            Console.WriteLine("OPENNV_RADIO_CONTRACT_PASS winning-master range anchor enable non-pipboy discovery once-only cold malformed retained-portal-divergence hud-declarations receiver-source-off lease-retirement independent-voices last-station-cold active-save-refused unbound-tuning-atomic");
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static void Receiver(FalloutPluginStack records, FalloutReferenceWorld world, FalloutRadioStations radio)
+    {
+        var before = JsonSerializer.Serialize(world.PipBoyRadio.Capture());
+        Reject(() => radio.SelectPipBoy(Key(902)));
+        Require(before == JsonSerializer.Serialize(world.PipBoyRadio.Capture()) && world.PipBoyRadio.CurrentStation is null,
+            "Unowned tuning published a station without a broadcast lease.");
+        var stops = 0;
+        var unrelatedStops = 0;
+        using var unrelated = records.SoundVoices.Register(Key(500), null, "synthetic-world-radio", () => true, () => ++unrelatedStops);
+        using var playback = world.PipBoyRadio.Bind(_ => new RadioLease(() => ++stops));
+        radio.SelectPipBoy(Key(902));
+        Require(world.PipBoyRadio.CurrentStation == Key(902), "Prepared receiver did not own the selected source station.");
+        Reject(() => world.PipBoyRadio.Capture());
+        var quest = records.GetEffective(Key(1000));
+        var scripts = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false,
+            _ => throw new InvalidDataException("Source radio off escaped its receiver owner.")));
+        scripts.ExecuteStage(quest, quest.ReadSubrecords().ToArray(), "PipBoyRadioOff");
+        Require(stops == 1 && world.PipBoyRadio.CurrentStation is null && world.PipBoyRadio.LastStation == Key(902) &&
+            world.PipBoyRadio.OffRequests == 1 && records.SoundVoices.ActiveVoices == 1 && unrelatedStops == 0,
+            "Source radio off lost the last station, repeated retirement or touched unrelated sound voices.");
+        scripts.ExecuteStage(quest, quest.ReadSubrecords().ToArray(), "PipBoyRadioOff");
+        Require(stops == 1 && world.PipBoyRadio.OffRequests == 2, "Repeated radio off repeated playback retirement.");
+        var saved = JsonSerializer.Deserialize<FalloutPipBoyRadioSnapshot>(JsonSerializer.Serialize(world.PipBoyRadio.Capture()))!;
+        using var cold = new FalloutReferenceWorld(records);
+        cold.PipBoyRadio.Restore(saved);
+        Require(cold.PipBoyRadio.CurrentStation is null && cold.PipBoyRadio.LastStation == Key(902) &&
+            JsonSerializer.Serialize(cold.PipBoyRadio.Capture()) == JsonSerializer.Serialize(saved),
+            "Cold receiver lost its last station or replayed radio audio.");
+        using var changed = new FalloutReferenceWorld(records);
+        Reject(() => changed.PipBoyRadio.Restore(saved with { SourceSha256 = new string('0', 64) }));
+        Require(changed.PipBoyRadio.LastStation is null, "Source mismatch changed the receiver before validation.");
+    }
+
+    private sealed class RadioLease(Action stop) : IDisposable
+    {
+        private Action? _stop = stop;
+        public void Dispose() { var callback = _stop; _stop = null; callback?.Invoke(); }
     }
 
     private static void Declaration()

@@ -35,6 +35,7 @@ internal partial class RuntimeNativeConversation : Node
     private Func<int>? _vampireQuery;
     private Func<FalloutFormKey, FalloutFormKey, double>? _itemCount;
     private Func<FalloutFormKey, FalloutFormKey, float>? _referenceDistance;
+    private Func<FalloutFormKey, FalloutFormKey, bool>? _referenceInZone;
     private FalloutQuestState _quests = null!;
     private CanvasLayer? _layer;
     private NativeOwnedDialogueMenu? _menu;
@@ -67,7 +68,8 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, FalloutFormKey>? actorRace = null, Func<uint, uint>? dialogueRandom = null,
         Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null,
         Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
-        Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null)
+        Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
+        Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null)
     {
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
         _resolveRunOnCell = resolveRunOnCell;
@@ -83,6 +85,7 @@ internal partial class RuntimeNativeConversation : Node
         _vampireQuery = vampireQuery;
         _itemCount = itemCount;
         _referenceDistance = referenceDistance;
+        _referenceInZone = referenceInZone;
         _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom);
     }
 
@@ -99,8 +102,8 @@ internal partial class RuntimeNativeConversation : Node
         if (Error is not null) return;
         try
         {
-            if (_speech.Error is { } error && _conversation.Phase != "closed") throw new InvalidOperationException(error);
-            if (_speech.Active || _pending.Count == 0) return;
+            if (_speech.Error is { } error && (_conversation.Phase != "closed" || _pending.Count != 0)) throw new InvalidOperationException(error);
+            if (_pending.Count == 0 || _speech.IsDialogueBusy(_pending.Peek().Speaker)) return;
             var request = _pending.Dequeue(); _speaker = request.Speaker; _completed = request.Completed;
             var actor = _records.GetEffective(_speaker);
             var npc = _records.GetEffective(FalloutDialogueTopic.RequiredForm(actor, "NAME"));
@@ -112,8 +115,10 @@ internal partial class RuntimeNativeConversation : Node
                 condition => resolveRunOnCell(_dialogueSubject, condition);
             _conditions = new(_records, _quests, _dialogueSubject, identity,
                 _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer, _factions, _playerFemale, _actorRace,
-                currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance);
+                currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance,
+                referenceInZone: _referenceInZone);
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
+            _speech.BeginPlayerDialogue(_speaker);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
             _menu = new(() => _speech.SkipResponse(), Fail); _layer.AddChild(_menu);
             _player.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -148,6 +153,7 @@ internal partial class RuntimeNativeConversation : Node
     private void Guard(Action action) { try { action(); } catch (Exception error) { Fail(error); } }
     private void ReleaseFacing()
     {
+        _speech.EndPlayerDialogue(_speaker);
         if (IsInstanceValid(_facingSpeaker))
         {
             if (_facingSpeaker is RuntimeNativeNpc npc) npc.EndConversationFacing();

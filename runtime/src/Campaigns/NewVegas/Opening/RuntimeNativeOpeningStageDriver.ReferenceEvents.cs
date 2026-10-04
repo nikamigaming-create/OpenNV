@@ -49,6 +49,13 @@ internal partial class RuntimeNativeOpeningStageDriver
             new(_activeCell, [position.X, -position.Z, position.Y], [0, 0, 0]), _player.UnitsToMeters);
     }
 
+    internal bool ReferenceInZone(FalloutFormKey caller, FalloutFormKey zone)
+    {
+        var position = _player.GlobalPosition / _player.UnitsToMeters;
+        return _scripts.References!.IsInZone(caller, zone,
+            new(_activeCell, [position.X, -position.Z, position.Y], [0, 0, 0]), _player.UnitsToMeters);
+    }
+
     internal float ReferenceHeadingAngle(FalloutFormKey caller, FalloutFormKey target)
     {
         FalloutReferencePlacement? Live(FalloutFormKey reference)
@@ -88,7 +95,8 @@ internal partial class RuntimeNativeOpeningStageDriver
                 () => _scripts.Session.LocationSpecificLoadScreensOnly, () => _scripts.Session.InCharGen,
                 reference => ReferencePresentation().GetOpenState(reference),
                 ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue, Inventory: InventoryCommands, Challenges: _scripts.Challenges,
-                HeadingAngle: ReferenceHeadingAngle));
+                HeadingAngle: ReferenceHeadingAngle, ResetPlayerHealth: _vitals.ResetHealth,
+                CurrentPackage: CurrentActorPackage));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition), () => !_moviePlaying);
@@ -101,12 +109,14 @@ internal partial class RuntimeNativeOpeningStageDriver
             if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
             if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return _quests.Evaluate(condition);
             if (condition.Function == 74) return (_globals ?? throw new InvalidOperationException("Dialogue has no global state owner.")).Get(condition.FormArgument1);
-            if (condition.Function == 53) return (float)_scripts.References!.Get(condition.FormArgument1).Read(condition.Argument2);
+            if (condition.Function == 53) return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
             if (condition.Function == 492 && condition.RunOn == 2)
                 return _scripts.References!.MapMarkerVisibility(condition.Owner.Plugin.AdjustFormId(condition.Reference));
             if (condition.Function == 612) return FalloutExteriorClimate.ContainsRegion(_pluginStack, condition.FormArgument1,
                 FalloutCellSceneReader.ParentWorldspace(_pluginStack.GetEffective(_activeCell)),
                 _player.GlobalPosition.X / _player.UnitsToMeters, -_player.GlobalPosition.Z / _player.UnitsToMeters) ? 1 : 0;
+            if (FalloutInventoryConditions.EvaluateDialoguePlayer(_pluginStack, _inventory, _playerSkills.HasPerk, condition) is { } inventory)
+                return inventory;
             if (condition.RunOn == 1 && condition.Function == 70 && condition.Argument1 <= 1)
                 return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
             throw new NotSupportedException($"Conversation condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
@@ -130,7 +140,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.Get(actor).TalkedToPlayer,
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
-            _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance);
+            _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone);
         AddChild(_conversation);
     }
 
@@ -189,7 +199,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal bool IsNpcDialogueActive(FalloutFormKey actor) => _speech?.IsNpcDialogueActive(actor) ??
         throw new InvalidOperationException("Actor speech owner is absent.");
     internal bool IsInCombat(FalloutFormKey actor) => _scripts.References!.IsInCombat(actor,
-        () => GetTree().GetNodesInGroup("OpenNVNativeCombatActors").OfType<RuntimeNativeActorCombat>().Any(owner => owner.EngagedWith(actor)));
+        _scripts.References.PlayerInCombat);
     internal void RequestPackageDialogue(FalloutFormKey speaker, FalloutDialoguePackage package, Action completed)
     {
         if (package.Type == 1)

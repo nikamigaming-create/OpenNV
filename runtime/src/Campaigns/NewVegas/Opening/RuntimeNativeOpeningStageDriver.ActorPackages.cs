@@ -18,10 +18,13 @@ internal partial class RuntimeNativeOpeningStageDriver
             throw new InvalidDataException("Package evaluation target is not an actor.");
         if (!world.IsEnabled(reference)) return;
         if (!world.IsResident(reference)) { _ = world.CurrentPackage(reference); return; }
-        var nodes = GetTree().Root.FindChildren("*", "", true, false);
-        if (nodes.OfType<RuntimeNativeNpc>().SingleOrDefault(actor => actor.Appearance.Reference == reference) is { } npc)
+        // Enable-parent changes can make a source actor resident before its
+        // next presentation update. Use the same source factory as that update
+        // instead of treating the missing node as a missing gameplay actor.
+        var actor = ReferencePresentation().Resolve(reference);
+        if (actor is RuntimeNativeNpc npc)
             npc.EvaluatePackages(reset);
-        else if (nodes.OfType<RuntimeNativeCreature>().SingleOrDefault(actor => actor.Appearance.Reference == reference) is { } creature)
+        else if (actor is RuntimeNativeCreature creature)
             creature.EvaluatePackages(reset);
         else throw new NotSupportedException($"Resident actor {reference} has no package presentation owner.");
     }

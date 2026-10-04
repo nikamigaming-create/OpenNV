@@ -6,6 +6,14 @@ actual listener, including a non-player actor. Explicit references and PACK
 arguments use the declaring plugin's master order. A query reads only its
 selected subject; it cannot substitute the speaker or player for another actor.
 
+Reference and quest script expressions also bind GetIsCurrentPackage to that
+same live owner. Compiled and typed receivers keep their own actor identity;
+the argument must be a winning PACK. Synthetic checks cover live replacement,
+empty assignments, player and postfix receivers, declaring-plugin master order
+and invalid arguments. The original TTW classroom activation script passes its
+package alternatives, short-circuit branches and changed stage gates in an
+owned-data fixture. Ordinary Mr. Brotch activation opens his original dialogue.
+
 The reference world reads an NPC or creature's active native package owner.
 Player queries read the existing player package lifecycle, including its current
 assignment while a replacement waits. An active owner with no package answers

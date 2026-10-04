@@ -11,7 +11,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     FalloutFormKey? listener = null, FalloutDialogueSpeaker? listenerIdentity = null,
     Func<FalloutFormKey, FalloutFormKey?>? currentPackage = null, Func<int>? vampireQuery = null,
     Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
-    Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null)
+    Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
+    Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -22,6 +23,26 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        // The command's reference/quest and declaration index are explicit
+        // arguments. They do not become the speaker or listener's locals.
+        if (condition.Function == 53)
+        {
+            if (condition.RunOn > 2) throw new NotSupportedException("Dialogue script-variable scope is unbound.");
+            return (runtime ?? throw new NotSupportedException("Dialogue has no shared script-variable owner."))(condition);
+        }
+        if (condition.Function == 446)
+        {
+            var subject = condition.RunOn switch
+            {
+                0 => speaker,
+                1 => Listener,
+                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
+                    ?? throw new InvalidDataException("Dialogue zone query has no explicit reference."),
+                _ => throw new NotSupportedException("Dialogue zone query scope is unbound."),
+            };
+            return (referenceInZone ?? throw new NotSupportedException("Dialogue has no shared encounter-zone query owner."))
+                (subject, condition.FormArgument1) ? 1 : 0;
+        }
         if (condition.Function == 1)
         {
             var subject = condition.RunOn switch
@@ -62,7 +83,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
         if (condition.Function == 161)
             return FalloutAiPackages.IsCurrentPackage(condition, speaker, currentPackage ??
                 throw new NotSupportedException("Dialogue current-package query has no active actor package owner."), Listener) ? 1 : 0;
-        if (condition.Function == 72)
+        if (condition.Function is 72 or 372)
         {
             var subject = condition.RunOn switch
             {
@@ -72,7 +93,8 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
                     ?? throw new InvalidDataException("Dialogue identity query has no explicit reference."),
                 _ => throw new NotSupportedException($"Dialogue identity query run-on {condition.RunOn} is unbound."),
             };
-            return FalloutReferenceIdentity.Base(records, subject) == condition.FormArgument1 ? 1 : 0;
+            return (condition.Function == 372 ? FalloutReferenceIdentity.IsInList(records, subject, condition.FormArgument1) :
+                FalloutReferenceIdentity.Base(records, subject) == condition.FormArgument1) ? 1 : 0;
         }
         if (condition.Function == 131 && playerFemale is not null)
         {

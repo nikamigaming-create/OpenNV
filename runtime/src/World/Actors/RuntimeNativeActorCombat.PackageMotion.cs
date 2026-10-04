@@ -16,6 +16,10 @@ internal sealed partial class RuntimeNativeActorCombat
     internal bool PackageMovementReady => _context is not null &&
         _context.Resident(_actor.GlobalPosition) && _world.IsEnabled(_state.Reference) &&
         !Dead && !_state.Unconscious && !_state.Restrained;
+    internal bool PackageRouteRestorable => _routeSearch is null && _pursuitPath.Length > 0;
+    internal FalloutTravelRouteFailure? PackageRouteFailure => _routeSearch is null && _routeDoor is null &&
+        _pursuitPath.Length == 0 && _routeError is { } error && _routeFailures > 0
+            ? new(error, _routeFailures, Math.Max(0, _routeClock)) : null;
     internal RuntimeNativePlayer? PackagePlayer => _context?.Player();
     internal FalloutFormKey? PackagePlayerCell => _context?.PlayerCell?.Invoke();
     internal FalloutActorPackageMotion? PackageMotion => _state.PackageMotion;
@@ -35,6 +39,13 @@ internal sealed partial class RuntimeNativeActorCombat
     internal void SetTravelProgress(FalloutTravelProgress progress)
     {
         if (_state.PackageMotion is not { } motion) throw new NotSupportedException("Travel has no observed package motion.");
+        if (progress.NavigationSha256 is not null)
+            progress = progress with
+            {
+                RouteWaypoints = _pursuitPath.Select(point => new[] { point.X, point.Y, point.Z }).ToArray(),
+                RouteCursor = _pursuitCursor,
+                RouteFailure = progress.Complete ? null : PackageRouteFailure
+            };
         _state.PackageMotion = motion with { Travel = progress };
     }
     internal void CompleteDialoguePackage()
@@ -73,8 +84,25 @@ internal sealed partial class RuntimeNativeActorCombat
             return;
         }
         if (_state.PackageMotion is not { } motion) return;
+        if (_state.PackageAssignment is { } assignment && assignment.Package != motion.Package)
+        {
+            GD.Print($"OPENNV_NATIVE_PACKAGE_MOTION_STALE reference={_state.Reference} saved={motion.Package} current={assignment.Package} restored=false");
+            _state.PackageMotion = null;
+            return;
+        }
         if (_actor is RuntimeNativeNpc { CurrentFurniture: not null }) return;
         motion.Validate();
+        if (motion.Travel is { NavigationSha256: not null } travel)
+        {
+            _pursuitPath = travel.RouteWaypoints!.Select(point => new Vector3(point[0], point[1], point[2])).ToArray();
+            _pursuitCursor = travel.RouteCursor;
+            _routeTarget = new(travel.RouteTarget![0], travel.RouteTarget[1], travel.RouteTarget[2]);
+            _routeClock = travel.RouteFailure?.RetrySeconds ?? 0;
+            _routeError = travel.RouteFailure?.Error;
+            _routeFailures = travel.RouteFailure?.Failures ?? 0;
+            _routeStall = 0;
+            _waypointDistance = float.PositiveInfinity;
+        }
         _actor.GlobalTransform = new(new Basis(new Quaternion(motion.Rotation[0], motion.Rotation[1],
             motion.Rotation[2], motion.Rotation[3])).Scaled(_actor.Scale),
             new(motion.Position[0], motion.Position[1], motion.Position[2]));

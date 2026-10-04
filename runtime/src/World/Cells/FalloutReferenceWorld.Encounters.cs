@@ -12,6 +12,18 @@ internal sealed partial class FalloutReferenceWorld
     internal int EnterEncounterCell(FalloutFormKey cell, int playerLevel) =>
         CellEncounterZone(cell) is { } zone ? EncounterLevel(zone, playerLevel) : playerLevel;
 
+    internal bool IsInZone(FalloutFormKey reference, FalloutFormKey zone,
+        FalloutReferencePlacement? player, float unitsToMetres)
+    {
+        if (records.GetEffective(zone).Signature != "ECZN")
+            throw new InvalidDataException("GetInZone requires an ECZN argument.");
+        var placement = SpatialPlacement(reference, player, unitsToMetres);
+        var cell = records.GetEffective(placement.Cell);
+        if ((cell.Flags & 0x400) != 0 && FalloutCellSceneReader.ParentWorldspace(cell) is { } world)
+            cell = records.GetEffective((_encounterGrid ??= new(records)).SpatialCell(world, placement.Position[0], placement.Position[1]));
+        return CellEncounterZone(cell.FormKey) == zone;
+    }
+
     private FalloutFormKey? CellEncounterZone(FalloutFormKey cell)
     {
         if (_cellEncounterZones.TryGetValue(cell, out var retained)) return retained;

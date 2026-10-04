@@ -183,6 +183,7 @@ internal partial class RuntimeNativeNpc
             unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
         else if (_aiReferenceState?.PackageAssignment is { } retained && _aiReferenceState.PackageMotion?.Package != retained.Package)
             retained.Bind(stack, _packageEvents);
+        RestoreMarkerTravelLifecycleBeforeSelection();
         if (_aiReferenceState is { } packageState)
             packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents);
         BindFailureCapture();
@@ -202,6 +203,20 @@ internal partial class RuntimeNativeNpc
         _baseClock.Bind(_baseResource, _baseHash);
         ResumeBaseClock();
         if (bindingFailure is not null) PublishFace();
+    }
+
+    private void RestoreMarkerTravelLifecycleBeforeSelection()
+    {
+        var state = _aiReferenceState;
+        if (state is null || state.PackageAssignment is not { } assignment ||
+            state.PackageMotion?.Package != assignment.Package || _packageEvents is not { Active: null }) return;
+        var package = _aiStack!.GetEffective(assignment.Package);
+        if (package.Signature != "PACK") return;
+        var declaration = FalloutScriptPackage.Read(package);
+        if (declaration.Procedure != 6 || declaration.LocationType != 0 ||
+            _aiStack.GetEffective(_aiWorld!.Get(declaration.LocationReference!.Value).Base).Signature == "FURN") return;
+        _ = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
+        assignment.Bind(_aiStack!, _packageEvents!);
     }
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
@@ -308,6 +323,12 @@ internal partial class RuntimeNativeNpc
             // errors retain their separate exactly-once failure latch.
             _aiError = null; _failedPackage = null;
             if (_aiPackage?.FormKey == selected?.FormKey) return;
+            if (!forced && _nativeMarkerTravel is { } markerTravel && _nativeMarkerTravelProgress is { Complete: false } &&
+                markerTravel.MustReach && selected?.FormKey != markerTravel.Form)
+            {
+                _selectedSourcePackage = markerTravel.Form;
+                return;
+            }
             if (!forced && _editorTravel is { MustComplete: true } && _editorTravelProgress?.Complete != true)
                 throw new NotSupportedException("Incomplete editor travel needs its must-complete package reevaluation owner.");
             if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
@@ -337,6 +358,9 @@ internal partial class RuntimeNativeNpc
                     escortWorld.Get(Appearance.Reference!.Value).ProcedureCaptureBlocker = null;
                 _escortPackage = null; _escortProgress = null; _escortDestination = null; _escortStatus = null;
                 _editorTravel = null; _editorTravelProgress = null; _editorTravelDestination = null; _editorTravelStatus = null;
+                _nativeMarkerTravel = null; _nativeMarkerTravelProgress = null; _nativeMarkerTravelDestination = null; _nativeMarkerTravelRestored = false;
+                if (_aiReferenceState?.ProcedureCaptureBlocker == MarkerTravelCaptureBlocker)
+                    _aiReferenceState.ProcedureCaptureBlocker = null;
             }
             if (selected is null) return;
             _packageIdleSource = selection.Declaration!;
@@ -346,6 +370,9 @@ internal partial class RuntimeNativeNpc
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }
+            if (_packageIdleSource is { Procedure: 6, LocationType: 0, LocationReference: { } marker } &&
+                _aiStack.GetEffective(_aiWorld!.Get(marker).Base).Signature != "FURN")
+            { BeginMarkerTravel(selected, initializing); return; }
             if (_packageIdleSource.Procedure == 15)
             {
                 FalloutPlacedReference? wait = null;

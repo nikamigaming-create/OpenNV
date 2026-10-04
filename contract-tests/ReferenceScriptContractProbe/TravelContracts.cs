@@ -16,17 +16,19 @@ internal static class TravelContracts
         {
             File.WriteAllBytes(Path.Combine(directory, "Base.esm"), Join(Header(),
                 Record("CREA", 0x700, Field("ACBS", new byte[24]), Field("PKID", BitConverter.GetBytes(0x400u)), Field("PKID", BitConverter.GetBytes(0x401u))),
+                Record("NPC_", 0x702, Field("ACBS", new byte[24])),
                 Record("STAT", 0x3b), Record("STAT", 0x701),
                 Global(0x35, 2277), Global(0x36, 0), Global(0x37, 1), Global(0x38, 23), Global(0x39, 4.95f), Global(0x3a, 1),
-                Record("CELL", 0x800, Field("DATA", [1])), References(),
+                Record("CELL", 0x800, Field("DATA", [1])), References(), NavigationMesh(0x600, 0x800),
                 Package(0x400, 0, 0x1404), Package(0x401, 3, 0x1002), Package(0x402, 0, 0x140c), Package(0x403, 2, 0x1002),
+                Package(0x406, 0, 0x1002, behavior: 0x20, idle: true), Package(0x407, 0, 2, behavior: 0x20),
                 GuardPackage(0x404, 0, 0x14001000, 180, 240), GuardPackage(0x405, 3, 0x10001000, 0, 0),
                 Record("IDLE", 0x500, Field("MODL", Text("actor/event.kf")), Field("DATA", [0x54, 0, 0, 0, 0, 0]))));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Base.esm"), Package(0x400, 0, 0x1404, radius: 3)));
             using var records = FalloutPluginStack.Load(directory, ["Base.esm", "Patch.esp"]);
             using var world = new FalloutReferenceWorld(records);
             FalloutFormKey Key(uint id) => new("Base.esm", id);
-            var actor = Key(0x900); var marker = Key(0x902); var record = records.GetEffective(Key(0x400));
+            var actor = Key(0x900); var npcActor = Key(0x901); var marker = Key(0x902); var record = records.GetEffective(Key(0x400));
             var guard = FalloutGuardPackage.Read(records.GetEffective(Key(0x404)));
             Require(guard.Reference == marker && guard.Target == marker && guard.Radius == 180 && guard.TargetRadius == 240 &&
                 !guard.WarnAndAttack && guard.ContinueCombat && !guard.Running,
@@ -61,11 +63,76 @@ internal static class TravelContracts
                 "Travel lost winning fields, adjusted marker or movement flags.");
             Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x402))));
             Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x403))));
+            Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x406))));
+            var idleTravel = FalloutTravelPackage.Read(records.GetEffective(Key(0x406)), ownsIdleCollection: true);
+            Require(idleTravel.Reference == marker && idleTravel.MustReach,
+                "Owned NPC idle collection or skipped behavior prevented marker Travel admission.");
+            Reject(() => FalloutTravelPackage.Read(records.GetEffective(Key(0x407)), ownsIdleCollection: true));
             var start = travel.Start(records, world, actor);
             Require(start.Location.SequenceEqual([10f, 20f, 30f]) && !start.Complete, "Travel did not resolve its actual marker.");
             world.SetPlacement(marker, new(Key(0x800), [40, 50, 60], [0, 0, 0]));
             start = travel.Start(records, world, actor);
             Require(start.Location.SequenceEqual([40f, 50f, 60f]), "Travel ignored an authoritative moved marker.");
+            var npcStart = travel.Start(records, world, npcActor);
+            var navigation = CellNavigationGraph.LoadOwned(records, Key(0x800));
+            npcStart = npcStart with
+            {
+                NavigationSha256 = navigation.SourceSha256,
+                RouteTarget = [12, 0, 18],
+                RouteWaypoints = [[2, 0, 3], [12, 0, 18]],
+                RouteCursor = 1,
+            };
+            travel.Validate(records, world, npcActor, npcStart);
+            var npcMotion = new FalloutActorPackageMotion(record.FormKey, Hash(record.ReadData()),
+                "meshes/npc/mtforward.kf", new string('d', 64), 2.75, false, [11, 12, 13], [0, 0, 0, 1], Travel: npcStart);
+            world.Get(npcActor).PackageMotion = npcMotion;
+            world.Get(npcActor).PackageAssignment = new(record.FormKey, Hash(record.ReadData()), false);
+            var npcSaved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+            using (var npcCold = new FalloutReferenceWorld(records))
+            {
+                npcCold.Restore(npcSaved);
+                var restored = npcCold.Get(npcActor).PackageMotion!;
+                var restoredTravel = restored.Travel ?? throw new InvalidDataException("Cold NPC marker Travel is absent.");
+                Require(restored.Seconds == 2.75 && restored.Package == record.FormKey &&
+                    restoredTravel.RouteCursor == 1 && restoredTravel.NavigationSha256 == navigation.SourceSha256 &&
+                    restoredTravel.RouteWaypoints is { } restoredWaypoints && restoredWaypoints.Length == npcStart.RouteWaypoints!.Length &&
+                    restoredWaypoints.Zip(npcStart.RouteWaypoints).All(pair => pair.First.SequenceEqual(pair.Second)),
+                    "Cold marker Travel lost its native route cursor, winning NAVM identity or package KF clock.");
+            }
+            var failedRoute = npcStart with
+            {
+                RouteWaypoints = [], RouteCursor = 0,
+                RouteFailure = new("No supported source corridor.", 3, 1.25)
+            };
+            var failedSaved = npcSaved.Select(value => value.Reference == npcActor ? value with
+                { PackageMotion = npcMotion with { Travel = failedRoute } } : value).ToArray();
+            using (var failedCold = new FalloutReferenceWorld(records))
+            {
+                failedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(failedSaved))!);
+                var retainedFailure = failedCold.Get(npcActor).PackageMotion!;
+                Require(retainedFailure.Travel!.RouteFailure == failedRoute.RouteFailure &&
+                    !retainedFailure.Travel.Complete && retainedFailure.Seconds == npcMotion.Seconds &&
+                    failedCold.Get(npcActor).PackageAssignment!.Done == false,
+                    "Cold failed Travel dropped its refusal, retry countdown, actual clock or unfinished lifecycle.");
+            }
+            foreach (var invalidTravel in new[]
+            {
+                npcStart with { NavigationSha256 = new string('0', 64) },
+                npcStart with { NavigationSha256 = null, RouteTarget = null, RouteWaypoints = null },
+                npcStart with { RouteWaypoints = [], RouteCursor = 0 },
+                npcStart with { RouteCursor = 3 },
+                failedRoute with { Complete = true },
+                failedRoute with { RouteWaypoints = [[1, 2, 3]] },
+                failedRoute with { RouteFailure = new("", 1, .5) },
+                failedRoute with { RouteFailure = new("Unbound route", 5, .5) },
+                failedRoute with { RouteFailure = new("Unbound route", 1, double.NaN) },
+            })
+            {
+                using var refused = new FalloutReferenceWorld(records);
+                Reject(() => refused.Restore(npcSaved.Select(value => value.Reference == npcActor ? value with
+                { PackageMotion = npcMotion with { Travel = invalidTravel } } : value).ToArray()));
+                Require(refused.Capture().Count == 0, "Invalid NPC marker Travel partially restored its reference world.");
+            }
             var editor = FalloutTravelPackage.Read(records.GetEffective(Key(0x401)));
             world.SetPlacement(actor, new(Key(0x800), [70, 80, 90], [0, 0, 0]));
             var editorGuard = FalloutGuardPackage.Read(records.GetEffective(Key(0x405)));
@@ -129,20 +196,49 @@ internal static class TravelContracts
     {
         byte[] Reference(string type, uint id, uint baseId, float[] position) => Record(type, id, Field("NAME", BitConverter.GetBytes(baseId)),
             Field("DATA", position.Concat(new float[3]).SelectMany(BitConverter.GetBytes).ToArray()));
-        var body = Join(Reference("ACRE", 0x900, 0x700, [1, 2, 3]), Reference("REFR", 0x902, 0x3b, [10, 20, 30]));
+        var body = Join(Reference("ACRE", 0x900, 0x700, [1, 2, 3]), Reference("ACHR", 0x901, 0x702, [4, 5, 6]),
+            Reference("REFR", 0x902, 0x3b, [10, 20, 30]));
         var group = new byte[24 + body.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800); BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6);
         body.CopyTo(group, 24); return group;
     }
-    private static byte[] Package(uint id, int locationType, uint flags, int radius = 1)
+    private static byte[] NavigationMesh(uint id, uint cell)
+    {
+        var header = new byte[24];
+        BinaryPrimitives.WriteUInt32LittleEndian(header, cell);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), 3);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(8), 1);
+        var vertices = new byte[36];
+        var points = new[] { (0f, 0f, 0f), (100f, 0f, 0f), (0f, 100f, 0f) };
+        for (var index = 0; index < points.Length; index++)
+        {
+            var offset = index * 12;
+            BinaryPrimitives.WriteSingleLittleEndian(vertices.AsSpan(offset), points[index].Item1);
+            BinaryPrimitives.WriteSingleLittleEndian(vertices.AsSpan(offset + 4), points[index].Item2);
+            BinaryPrimitives.WriteSingleLittleEndian(vertices.AsSpan(offset + 8), points[index].Item3);
+        }
+        var triangle = new byte[16];
+        BinaryPrimitives.WriteUInt16LittleEndian(triangle, 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(triangle.AsSpan(2), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(triangle.AsSpan(4), 2);
+        BinaryPrimitives.WriteInt16LittleEndian(triangle.AsSpan(6), -1);
+        BinaryPrimitives.WriteInt16LittleEndian(triangle.AsSpan(8), -1);
+        BinaryPrimitives.WriteInt16LittleEndian(triangle.AsSpan(10), -1);
+        return Record("NAVM", id, Field("DATA", header), Field("NVER", BitConverter.GetBytes(11u)),
+            Field("NVVX", vertices), Field("NVTR", triangle), Field("NVEX", []), Field("NVCA", []), Field("NVDP", []));
+    }
+    private static byte[] Package(uint id, int locationType, uint flags, int radius = 1, ushort behavior = 0, bool idle = false)
     {
         var data = new byte[12]; BinaryPrimitives.WriteUInt32LittleEndian(data, flags); data[4] = 6;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(6), behavior);
         var location = new byte[12]; BinaryPrimitives.WriteInt32LittleEndian(location, locationType);
         BinaryPrimitives.WriteUInt32LittleEndian(location.AsSpan(4), locationType == 0 ? 0x902u : 0);
         BinaryPrimitives.WriteInt32LittleEndian(location.AsSpan(8), radius);
         return Record("PACK", id, Field("EDID", Text("Travel" + id)), Field("PKDT", data), Field("PLDT", location),
-            Field("PSDT", [255, 255, 0, 255, 0, 0, 0, 0]), Field("POEA", []), Field("INAM", BitConverter.GetBytes(0x500u)));
+            Field("PSDT", [255, 255, 0, 255, 0, 0, 0, 0]),
+            idle ? Join(Field("IDLC", [1]), Field("IDLA", BitConverter.GetBytes(0x500u))) : [],
+            Field("POEA", []), Field("INAM", BitConverter.GetBytes(0x500u)));
     }
     private static byte[] GuardPackage(uint id, int locationType, uint flags, int radius, int targetRadius)
     {

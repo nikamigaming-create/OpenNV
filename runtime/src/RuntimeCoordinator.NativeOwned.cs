@@ -657,20 +657,8 @@ public partial class RuntimeCoordinator
                 GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey} base={reference.Base}: {error.Message}");
             }
         }
-        var presentation = new RuntimeNativeReferencePresentation(_nativeReferences!, cell.References, reference =>
-        {
-            Node3D? Find() => root.GetChildren().OfType<Node3D>().SingleOrDefault(node =>
-                node is RuntimeNativeNpc actor ? actor.Appearance.Reference == reference.FormKey :
-                node.GetMeta("opennv_reference_form_key", "").AsString() == reference.FormKey.ToString());
-            if (Find() is { } existing) return existing;
-            var previousChildren = root.GetChildCount();
-            try { PlaceNativeReference(root, cell, reference, materializeDisabled: true); return Find(); }
-            catch
-            {
-                while (root.GetChildCount() > previousChildren) root.GetChild(previousChildren).Free();
-                throw;
-            }
-        });
+        var presentation = new RuntimeNativeReferencePresentation(_nativeReferences!, cell.References,
+            reference => MaterializeNativeReference(root, cell, reference));
         var identities = cell.References.ToDictionary(reference => reference.FormKey.ToString(), reference => reference.FormKey);
         foreach (var node in root.GetChildren().OfType<Node3D>())
         {
@@ -774,6 +762,9 @@ public partial class RuntimeCoordinator
                 });
                 actor.ResolveDialogueTarget = target => _nativePluginStack!.RuntimeFormId(target) == 0x14 ?
                     _nativePlayer : _nativeReferencePresentation?.Nodes.GetValueOrDefault(target);
+                actor.BeginPackageDialogue = (package, completed) => (_nativeOpeningStageDriver ??
+                    throw new InvalidOperationException("Package dialogue has no gameplay owner."))
+                    .RequestPackageDialogue(reference.FormKey, package, completed);
                 if (_nativeOpeningStageDriver is not null)
                 {
                     actor.PackageSpeechBusy = () => _nativeOpeningStageDriver.IsDialogueBusy(reference.FormKey);

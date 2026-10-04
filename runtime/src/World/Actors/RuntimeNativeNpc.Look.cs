@@ -30,7 +30,7 @@ internal partial class RuntimeNativeNpc
         _conversationScale = GlobalBasis.Scale;
         if (entering)
         {
-            _conversationWasTraveling = _travelActive;
+            _conversationWasTraveling = _travelProgress?.Active == true;
             _conversationTravelProgress = _conversationWasTraveling ? _travelProgress : null;
             _conversationTravelClock = _conversationWasTraveling ? _baseClock.Capture() ??
                 throw new InvalidOperationException("Suspended travel has no source walking clock.") : null;

@@ -24,7 +24,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     internal bool EngagedWith(FalloutFormKey target) => !Dead && _state.Enabled &&
         _state.Engagement is { Action: not "idle" } engagement && engagement.Target == target;
     internal bool IsInCombat(FalloutFormKey reference) => _world.IsInCombat(reference,
-        () => CombatActors.Any(actor => actor.EngagedWith(_records.RuntimeFormKey(0x14))));
+        _world.PlayerInCombat);
     internal bool CanReceiveExplosionDamage => _state.Enabled && !Dead;
     internal IEnumerable<Vector3> CorpseAimPoints => _ragdoll?.Active == true ? _ragdoll.AimPoints : [];
     internal IEnumerable<Rid> CollisionRids => _actor.FindChildren("*", "", true, false)
@@ -77,6 +77,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     public override void _Ready()
     {
         AddToGroup(CombatActorsGroup);
+        _state.StopCombat = StopCombat;
         RestorePackageMotion();
         RestoreEngagementPose();
         // A cold cell enters the tree with this owner already attached. Its

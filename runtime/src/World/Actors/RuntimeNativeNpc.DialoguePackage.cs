@@ -11,6 +11,7 @@ internal partial class RuntimeNativeNpc
     private bool _dialogueWaitReached;
     private bool _dialogueNativeMovement;
     private Vector3 _dialogueWaitPosition;
+    private bool _dialogueWaitPositionPending;
     private (Vector3 Authored, Vector3 Floor)? _dialogueTargetDestination;
     internal Action<FalloutDialoguePackage, Action>? BeginPackageDialogue { get; set; }
     internal Func<FalloutFormKey, Node3D?>? ResolveDialogueTarget { get; set; }
@@ -33,7 +34,8 @@ internal partial class RuntimeNativeNpc
         _dialoguePackage = dialogue; _dialoguePackageRequested = restored;
         _dialogueNativeMovement = wait is null;
         _dialogueWaitReached = wait is null;
-        _dialogueWaitPosition = GlobalPosition;
+        _dialogueWaitPositionPending = !IsInsideTree();
+        if (!_dialogueWaitPositionPending) _dialogueWaitPosition = GlobalPosition;
         _dialogueTargetDestination = null;
         _aiPackage = package;
         if (_aiWorld is { } world)
@@ -69,6 +71,11 @@ internal partial class RuntimeNativeNpc
     private void AdvanceDialoguePackage(double delta = 0)
     {
         if (_dialoguePackage is not { } dialogue || _dialoguePackageRequested || _aiError is not null) return;
+        if (_dialogueWaitPositionPending)
+        {
+            _dialogueWaitPosition = GlobalPosition;
+            _dialogueWaitPositionPending = false;
+        }
         if (PackageSpeechBusy?.Invoke() == true) { Combat?.StopPackageMotion(); return; }
         if (!_dialogueWaitReached)
         {

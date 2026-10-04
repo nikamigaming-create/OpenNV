@@ -28,3 +28,23 @@ timing remain unverified. These fixtures explicitly prepare their initial quest
 state and are component evidence, not ordinary campaign progression.
 
 Owned input stays read-only and frame recording remains off during the checks.
+
+Reference-marker NPC Travel now uses the shared native capsule/KF owner, retaining
+its physical root, source clock, route cursor, projected target and winning NAVM
+identity in the C# reference snapshot. Cold restoration validates that source
+before resuming movement and consumes package arrival only once. Older completed
+exact-marker lifecycles preserve their source-derived cold placement without
+replaying travel or results; incomplete lifecycles require their actual route.
+
+A settled failed search retains its error, bounded retry countdown and failure
+count with empty waypoints and an unfinished assignment. A search still being
+computed refuses capture until its continuation is owned. Cold failed searches
+do not substitute a route, teleport the actor or execute arrival effects. The
+selected original birthday Overseer package crosses disconnected NAVM components
+through an authored teleport door. Its isolated native cold audit preserves the
+failure and retries; that actor's portal travel remains unimplemented.
+
+Synthetic route/source validation, selected original Jonas moving/cold/resumed
+arrival, and the original Overseer failure/cold fixture pass. Native fixtures use
+an isolated support floor; actual campaign collision, broader AI travel and
+matched retail motion remain separate acceptance requirements.

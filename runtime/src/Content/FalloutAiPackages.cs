@@ -5,6 +5,16 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutAiPackages
 {
+    internal static bool IsCurrentPackage(FalloutPluginStack records, FalloutFormKey actor,
+        FalloutFormKey package, Func<FalloutFormKey, FalloutFormKey?> query)
+    {
+        if (records.GetEffective(package).Signature != "PACK")
+            throw new InvalidDataException("Current-package argument is not PACK.");
+        if (records.RuntimeFormId(actor) != 0x14 && records.GetEffective(actor).Signature is not ("ACHR" or "ACRE"))
+            throw new InvalidDataException("Current-package subject is not an actor.");
+        return query(actor) == package;
+    }
+
     internal static bool HasTalkedToPlayer(FalloutCondition condition, FalloutFormKey caller,
         Func<FalloutFormKey, bool> query, FalloutFormKey? target = null)
     {

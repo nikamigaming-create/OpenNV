@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Godot;
 
@@ -15,6 +17,7 @@ internal sealed partial class CellNavigationGraph
 
     private readonly IReadOnlyList<NavigationMeshRecord> _navmeshes;
     private readonly IReadOnlyDictionary<string, NavigationMeshRecord> _navmeshesByFormId;
+    internal string SourceSha256 { get; private set; } = "";
 
     private CellNavigationGraph(IReadOnlyList<NavigationMeshRecord> navmeshes)
     {
@@ -46,7 +49,9 @@ internal sealed partial class CellNavigationGraph
         if (navmeshes.Any(value => !acceptedCellFormIds.Contains(value.CellFormId)))
             throw new InvalidOperationException(
                 "Owned navigation graph belongs to another CELL.");
-        return new CellNavigationGraph(navmeshes);
+        var graph = new CellNavigationGraph(navmeshes);
+        graph.SourceSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source.GetRawText())));
+        return graph;
     }
 
     internal IReadOnlyList<Vector3> FindPath(

@@ -13,6 +13,7 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
     private readonly List<(FalloutFormKey Quest, short Stage, IEnumerator<bool> Steps)> _pending = [];
     private readonly Dictionary<(FalloutFormKey Quest, short Stage), (int Steps, bool Completed)> _progress = [];
     private int _depth;
+    internal bool HasUnfinishedResults => _pending.Count != 0 || _errors.Count != 0;
     internal object Errors => _errors.Select(value => new { quest = value.Key.Item1.ToString(), stage = value.Key.Item2, error = value.Value }).ToArray();
     internal object State => new
     {

@@ -4,6 +4,14 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal static class FalloutInventoryConditions
 {
+    internal static float? EvaluateDialoguePlayer(FalloutPluginStack records, FalloutPlayerInventory inventory,
+        Func<FalloutFormKey, bool> hasPerk, FalloutCondition condition)
+    {
+        if (condition.RunOn != 1 && !(condition.RunOn == 2 &&
+            condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) == records.RuntimeFormKey(0x14))) return null;
+        return Evaluate(records, inventory, hasPerk, condition with { RunOn = 0 });
+    }
+
     internal static bool TargetsPlayer(FalloutPluginStack records, FalloutCondition condition) =>
         condition.RunOn == 0 || condition.RunOn == 2 &&
         condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference) == records.RuntimeFormKey(0x14);

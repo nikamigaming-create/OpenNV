@@ -142,6 +142,7 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorRagdollState? Ragdoll { get; set; }
     internal Func<FalloutActorRagdollState>? CaptureRagdoll { get; set; }
     internal FalloutActorEngagement? Engagement { get; set; }
+    internal Action? StopCombat { get; set; }
     internal Func<FalloutActorEngagement?>? CaptureEngagement { get; set; }
     internal IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations { get; set; }
     private readonly List<Func<IReadOnlyList<FalloutObjectAnimationSnapshot>>> _objectAnimationCaptures = [];
@@ -244,6 +245,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal int PendingHitEventCount => _hitEvents?.PendingCount ?? 0;
     private FalloutScriptSounds? _sounds;
     internal FalloutScriptSounds Sounds => _sounds ??= new(records, Menus);
+    private FalloutPipBoyRadio? _pipBoyRadio;
+    internal FalloutPipBoyRadio PipBoyRadio => _pipBoyRadio ??= new(records);
     private FalloutNoActivationSound? _noActivationSound;
     internal FalloutNoActivationSound NoActivationSound => _noActivationSound ??= new(records, Sounds);
     private FalloutScreenBlood? _screenBlood;
@@ -471,25 +474,35 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 validated.SetTalkingActivatorActor(snapshot.Reference, dialogueActor);
             if (snapshot.PackageMotion is { } motion)
             {
-                var package = records.GetEffective(motion.Package);
-                if (package.Signature != "PACK" || !Convert.ToHexString(SHA256.HashData(package.ReadData()))
-                    .Equals(motion.PackageSha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Saved package motion differs from the winning package.");
-                if (motion.Patrol is { } patrol) FalloutPatrolRoute.Read(records, package, snapshot.Reference).Validate(patrol);
-                if (motion.Escort is { } escort) { _ = FalloutEscortPackage.Read(package); escort.Validate(); }
-                if (motion.EditorTravel is { } editorTravel)
-                    FalloutEditorTravelPackage.Read(package).Validate(validated, snapshot.Reference, editorTravel);
-                if (motion.DialogueCompleted)
+                var stale = snapshot.PackageAssignment is { } currentAssignment && currentAssignment.Package != motion.Package;
+                if (!stale)
                 {
-                    var dialogue = FalloutDialoguePackage.Read(package);
-                    var declaration = FalloutScriptPackage.Read(package);
-                    if (dialogue.Type != 1 || declaration.LocationType is not (null or 2) || declaration.LocationRadius != 0)
-                        throw new InvalidDataException("Saved dialogue completion has no supported source procedure.");
+                    var package = records.GetEffective(motion.Package);
+                    if (package.Signature != "PACK" || !Convert.ToHexString(SHA256.HashData(package.ReadData()))
+                        .Equals(motion.PackageSha256, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("Saved package motion differs from the winning package.");
+                    if (motion.Patrol is { } patrol) FalloutPatrolRoute.Read(records, package, snapshot.Reference).Validate(patrol);
+                    if (motion.Escort is { } escort) { _ = FalloutEscortPackage.Read(package); escort.Validate(); }
+                    if (motion.EditorTravel is { } editorTravel)
+                        FalloutEditorTravelPackage.Read(package).Validate(validated, snapshot.Reference, editorTravel);
+                    if (motion.DialogueCompleted)
+                    {
+                        var dialogue = FalloutDialoguePackage.Read(package);
+                        var declaration = FalloutScriptPackage.Read(package);
+                        if (dialogue.Type != 1 || declaration.LocationType is not (null or 2) || declaration.LocationRadius != 0)
+                            throw new InvalidDataException("Saved dialogue completion has no supported source procedure.");
+                    }
                 }
                 instance.PackageMotion = motion with
                 {
                     Position = (float[])motion.Position.Clone(),
                     Rotation = (float[])motion.Rotation.Clone(),
+                    Travel = motion.Travel is { } travel ? travel with
+                    {
+                        Location = (float[])travel.Location.Clone(),
+                        RouteTarget = travel.RouteTarget is null ? null : (float[])travel.RouteTarget.Clone(),
+                        RouteWaypoints = travel.RouteWaypoints?.Select(point => (float[])point.Clone()).ToArray()
+                    } : null,
                     Guard = motion.Guard is { } guard ? guard with { Location = (float[])guard.Location.Clone() } : null
                 };
             }
@@ -536,8 +549,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         // placements must be restored before validating their Travel anchors.
         foreach (var snapshot in snapshots)
         {
+            if (snapshot.PackageMotion is { } staleMotion && snapshot.PackageAssignment is { } assignment &&
+                assignment.Package != staleMotion.Package) continue;
             if (snapshot.PackageMotion?.Travel is { } travel)
-                FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
+                FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package),
+                    ownsIdleCollection: records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_")
                     .Validate(records, validated, snapshot.Reference, travel);
             if (snapshot.PackageMotion?.Guard is { } guard)
                 FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
@@ -551,6 +567,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     {
         UnloadedPackages = null;
         _sounds?.Clear();
+        _pipBoyRadio?.Off();
         _screenBlood?.Clear();
         PlayerMoves.Clear();
         _packageEvents?.Clear();

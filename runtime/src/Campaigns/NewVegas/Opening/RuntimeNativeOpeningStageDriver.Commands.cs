@@ -28,7 +28,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         _traitEntry is not null ? "trait-menu" : _recipeMenu is not null ? "recipe-menu" :
         _barterMenu is not null ? "barter-menu" :
         _scripts.References?.PendingPackageEventCount > 0 ? "actor-package-events" :
-        _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" : null;
+        _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" :
+        _stageResults?.HasUnfinishedResults == true ? "quest-stage-results" : null;
     internal object SaveRequestState => new
     {
         requested = _saveRequested,
@@ -45,6 +46,9 @@ internal partial class RuntimeNativeOpeningStageDriver
             .Single(actor => actor.Appearance.Reference == target);
         switch (operation)
         {
+            case "stopcombatalarmonactor" or "scaonactor" when arguments.Count == 0:
+                _scripts.References!.StopCombatAlarmOnActor(target);
+                break;
             case "forceradiostationupdate" or "frsu" when parts.Length == 1 && arguments.Count == 0:
                 RefreshRadioStations(force: true);
                 break;
@@ -237,7 +241,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     }
 
     internal float EvaluateMessageCondition(FalloutCondition condition) => condition.Function == 53 && condition.RunOn == 0
-        ? (float)_scripts.References!.Get(condition.FormArgument1).Read(condition.Argument2)
+        ? (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2)
         : EvaluateRecipeCondition(condition);
 
     private void CloseRecipeMenu()

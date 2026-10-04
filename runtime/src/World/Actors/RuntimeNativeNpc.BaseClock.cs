@@ -22,7 +22,7 @@ internal partial class RuntimeNativeNpc
 
     private void ResumeBaseClock(bool retainedTravel = false)
     {
-        if (_travelActive && !_baseAmbient && !_baseClock.StartPending && !retainedTravel)
+        if (_travelActive && _nativeMarkerTravel is null && !_baseAmbient && !_baseClock.StartPending && !retainedTravel)
             throw new NotSupportedException("Saved actor travel requires its controller pose, route cursor and consumed root-motion continuation owner.");
         var sequence = _baseAnimation!.Sequence;
         if (_baseAmbient && Appearance.Reference is { } reference)

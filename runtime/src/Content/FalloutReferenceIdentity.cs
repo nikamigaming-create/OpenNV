@@ -1,7 +1,27 @@
+using System.Buffers.Binary;
+
 namespace OpenNV.Runtime.Content;
 
 internal static class FalloutReferenceIdentity
 {
+    internal static bool IsInList(FalloutPluginStack records, FalloutFormKey reference, FalloutFormKey listKey)
+    {
+        var list = records.GetEffective(listKey);
+        if (list.Signature != "FLST") throw new InvalidDataException("IsInList requires a winning FLST argument.");
+        var baseForm = Base(records, reference);
+        var matches = false;
+        foreach (var field in list.ReadSubrecords().Where(field => field.Signature == "LNAM"))
+        {
+            if (field.Data.Length != 4) throw new InvalidDataException("IsInList has an invalid source member extent.");
+            var member = list.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+            _ = records.GetEffective(member);
+            // GECK IsInList compares the reference's base object. A placed
+            // reference entry or a nested list is not that base object.
+            matches |= member == baseForm;
+        }
+        return matches;
+    }
+
     internal static bool Matches(FalloutPluginStack records, FalloutFormKey reference, FalloutFormKey requested)
     {
         foreach (var key in new[] { reference, requested })

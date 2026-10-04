@@ -46,6 +46,10 @@ internal sealed partial class FalloutReferenceWorld
 
     internal bool IsDead(FalloutFormKey reference) => Actor(reference).Injury?.Dead == true;
 
+    internal bool PlayerInCombat() => ResidentInstances.Any(actor =>
+        actor.Engagement is { Action: not "idle" } engagement && engagement.Target == _enginePlayer &&
+        IsEnabled(actor.Reference) && actor.Injury?.Dead != true);
+
     internal bool IsInCombat(FalloutFormKey reference, Func<bool>? playerCombat = null)
     {
         if (reference == records.RuntimeFormKey(0x14))

@@ -1,8 +1,61 @@
 using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedDialoguePackageQueryProbe
 {
+    internal static void TtwActivation(string game, string root, string[] dependencies)
+    {
+        using var content = new FalloutModStackSelection([new("ttw", root, dependencies)]).Resolve(game).OpenSource();
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        using var world = new FalloutReferenceWorld(records);
+        var actor = records.GetEffective(new("Fallout3.esm", 0x01cfb8));
+        world.LoadCell(FalloutCellSceneReader.Read(records, world.Get(actor.FormKey).Cell));
+        var body = records.GetEffective(FalloutDialogueTopic.RequiredForm(actor, "NAME"));
+        var script = records.GetEffective(FalloutDialogueTopic.RequiredForm(body, "SCRI"));
+        var before = SHA256.HashData(script.ReadData());
+        var packages = script.ReadSubrecords().Where(field => field.Signature == "SCRO")
+            .Select(field => script.Plugin.AdjustFormId(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)))
+            .Where(key => records.RuntimeFormId(key) != 0x14 && records.GetEffective(key).Signature == "PACK").ToArray();
+        if (packages.Length < 2) throw new InvalidDataException("Selected activation has no source package alternatives.");
+        var quests = new FalloutQuestState(records);
+        var quest = records.GetEffective(new("Fallout3.esm", 0x014e85)).FormKey;
+        quests.SetRunning(quest, true); quests.EnterStage(quest, 20);
+        FalloutFormKey? assignment = null;
+        var activations = 0; var queries = 0;
+        var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
+            effect =>
+            {
+                if (effect.Kind != FalloutReferenceEffectKind.DefaultActivate || effect.Target != actor.FormKey)
+                    throw new InvalidDataException("Source activation acquired an unrelated effect.");
+                activations++;
+            }, CurrentPackage: reference =>
+            {
+                if (records.GetEffective(reference).Signature != "ACHR")
+                    throw new InvalidDataException("Source activation package query lost its actor.");
+                queries++; return assignment;
+            }));
+        void Activate()
+        {
+            var result = scripts.Activate(actor.FormKey, records.RuntimeFormKey(0x14));
+            if (result.Blocks != 1 || result.Error is not null)
+                throw new InvalidDataException(result.Error ?? "Source OnActivate was not dispatched.");
+        }
+        Activate();
+        if (activations != 1 || queries != packages.Length)
+            throw new InvalidDataException("Source activation did not inspect the live package alternatives.");
+        assignment = packages[0]; activations = 0; queries = 0;
+        Activate();
+        if (activations != 0 || queries != 1)
+            throw new InvalidDataException("Source activation ignored a matching assignment or lost short-circuit evaluation.");
+        quests.EnterStage(quest, 60); queries = 0;
+        Activate();
+        if (activations != 1 || queries != 0 || !before.SequenceEqual(SHA256.HashData(script.ReadData())))
+            throw new InvalidDataException("Source activation retained stale stage/assignment state or modified source bytes.");
+        Console.WriteLine($"OPENNV_OWNED_TTW_PACKAGE_ACTIVATION_PASS actor={actor.FormKey} sourceScript=true " +
+            "livePackage=true shortCircuit=true stageGates=true sourceReadonly=true campaign=unverified");
+    }
+
     internal static void Run(string game, string mod, string root, string actorId, string topicId, string[] dependencies)
     {
         using var content = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game).OpenSource();

@@ -163,6 +163,9 @@ internal static class NativeNifLightingMaterial
         result.SetMeta("opennv_nif_shader_flags", source.ShaderFlags);
         result.SetMeta("opennv_nif_shader_flags2", source.ShaderFlags2);
         result.SetMeta("opennv_nif_effective_shader_flags2", vertexColors.EffectiveFlags2);
+        // This source selector belongs to local-map rendering. The ordinary
+        // world pass retains its geometry and lighting independently.
+        result.SetMeta("opennv_nif_local_map_hide_secret", (source.ShaderFlags & FalloutNifSurfaceInputs.LocalMapHideSecretFlag) != 0);
         result.SetMeta("opennv_nif_vertex_color_owner", "bound-geometry-colour-buffer");
         result.SetMeta("opennv_nif_alpha_flags", alpha?.Flags ?? 0);
         result.SetMeta("opennv_source_lighting_domain", "encoded");

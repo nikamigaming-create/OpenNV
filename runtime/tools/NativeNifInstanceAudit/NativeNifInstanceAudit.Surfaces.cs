@@ -107,6 +107,29 @@ public partial class NativeNifInstanceAudit
         }
     }
 
+    private static void ExerciseLocalMapHideSecret()
+    {
+        string? shaderCode = null;
+        foreach (var hidden in new[] { false, true })
+        {
+            var flags = 0x82000101U | (hidden ? FalloutNifSurfaceInputs.LocalMapHideSecretFlag : 0);
+            var scene = RuntimeNativeNifMeshBuilder.Build(FalloutNifFile.Read(SurfaceFixture(flags)), .02f);
+            try
+            {
+                var mesh = scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Single();
+                if (scene.Surfaces != 1 || scene.Vertices != 3 || !mesh.Visible ||
+                    mesh.Mesh.SurfaceGetMaterial(0) is not ShaderMaterial material ||
+                    material.GetMeta("opennv_nif_shader_flags").AsUInt32() != flags ||
+                    material.GetMeta("opennv_nif_local_map_hide_secret").AsBool() != hidden ||
+                    shaderCode is not null && material.Shader.Code != shaderCode)
+                    throw new InvalidDataException("Local-map visibility changed the ordinary source world draw or lost its selector.");
+                shaderCode = material.Shader.Code;
+            }
+            finally { scene.Root.Free(); }
+        }
+        GD.Print("OPENNV_LOCAL_MAP_HIDE_SECRET_SURFACE_PASS sourceBitsRetained=true worldGeometryAndShader=true localMapSelector=true localMapPixels=unverified");
+    }
+
     private static byte[] SurfaceFixture(uint flags, string environmentMask = "", uint flags2 = 1, string environmentTexture = "",
         ushort? refractionFlags = null, int refractionTarget = 3)
     {
