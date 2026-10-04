@@ -57,7 +57,9 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
 }
 
 internal sealed record FalloutQuestScriptSnapshot(FalloutFormKey Quest, FalloutFormKey Script,
-    double Remaining, long Executions, string? Error, FalloutQuestScriptClockSnapshot? Clock = null);
+    double Remaining, long Executions, string? Error, FalloutQuestScriptClockSnapshot? Clock = null,
+    FalloutQuestScriptPendingCommand? PendingCommand = null,
+    IReadOnlyList<FalloutQuestScriptContinuationReceipt>? Continuations = null);
 internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScriptSnapshot> Instances,
     IReadOnlyList<FalloutMessageRequest> Messages, FalloutHudNotificationsSnapshot? Notifications = null,
     FalloutMessageResultsSnapshot? MessageResults = null, FalloutScriptSessionSnapshot? Session = null,
@@ -99,6 +101,8 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
             if (instance.Remaining != instance.Clock.Remaining || instance.Executions < 0 ||
                 instance.Executions > instance.Clock.Invocations)
                 throw new InvalidDataException("Saved quest script scheduling is invalid.");
+            instance.PendingCommand?.Validate(instance.Error);
+            foreach (var receipt in instance.Continuations ?? []) receipt.Validate(instance.Clock.Invocations);
         }
     }
 }
@@ -199,7 +203,7 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null,
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null);
 
-internal sealed class FalloutQuestScripts
+internal sealed partial class FalloutQuestScripts
 {
     // Engine-created player reference; it is not a placed record in an ESM.
     private sealed class Instance(FalloutPluginRecord quest, FalloutPluginRecord script, FalloutGameModeProgram program, FalloutGameModeProgram menuProgram,
@@ -214,6 +218,9 @@ internal sealed class FalloutQuestScripts
         internal readonly bool Claimed = claimed;
         internal string? Error;
         internal long Executions;
+        internal FalloutQuestScriptPendingCommand? PendingCommand;
+        internal readonly List<FalloutQuestScriptContinuationReceipt> Continuations = [];
+        internal string? ContinuationError;
     }
 
     private readonly FalloutPluginStack _records;
@@ -255,7 +262,20 @@ internal sealed class FalloutQuestScripts
     internal object Observe(bool detailed) => new
     {
         detail = detailed ? "complete-script-observation" : "live-summary;request-state-for-quest-variables-and-objective-details",
-        quests = _instances.Select(instance => new { quest = instance.Quest.FormKey.ToString(), script = instance.Script.FormKey.ToString(), instance.Claimed, instance.Executions, instance.Clock.Remaining, clock = instance.Clock.Capture(), instance.Clock.Interval, instance.Error }).ToArray(),
+        quests = _instances.Select(instance => new
+        {
+            quest = instance.Quest.FormKey.ToString(),
+            script = instance.Script.FormKey.ToString(),
+            instance.Claimed,
+            instance.Executions,
+            instance.Clock.Remaining,
+            clock = instance.Clock.Capture(),
+            instance.Clock.Interval,
+            instance.Error,
+            pendingCommand = instance.PendingCommand,
+            continuations = instance.Continuations.ToArray(),
+            continuationError = instance.ContinuationError
+        }).ToArray(),
         unbound = _unbound.Select(pair => new { quest = pair.Key.ToString(), error = pair.Value }).ToArray(),
         newlyParsedOnRestore = _newlyParsed.Select(key => key.ToString()).ToArray(),
         inventory = _inventory.Items,
@@ -300,7 +320,8 @@ internal sealed class FalloutQuestScripts
 
     internal FalloutQuestScriptsSnapshot Capture(FalloutSourceMessage? displayed = null) => new(
         _instances.Select(instance => new FalloutQuestScriptSnapshot(instance.Quest.FormKey, instance.Script.FormKey,
-            instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture())).ToArray(),
+            instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture(), instance.PendingCommand,
+            instance.Continuations.ToArray())).ToArray(),
         (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
             .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
@@ -331,6 +352,8 @@ internal sealed class FalloutQuestScripts
             instance.Clock.Validate(state.Clock!);
             if (state.Script != instance.Script.FormKey)
                 throw new InvalidDataException("Saved quest script scheduling is invalid.");
+            if (state.PendingCommand is { } pending && pending.SourceSha256 != ScriptHash(instance))
+                throw new InvalidDataException("Saved command continuation differs from its winning script source.");
         }
         var messages = snapshot.Messages.Select(request => FalloutSourceMessage.Read(_records.GetEffective(request.Form)) with { Request = request }).ToArray();
         if (messages.Any(message => !message.Modal)) throw new NotSupportedException("Saved message needs a timed HUD owner.");
@@ -348,6 +371,8 @@ internal sealed class FalloutQuestScripts
             instance.Clock.Restore(state.Clock!);
             instance.Executions = state.Executions;
             instance.Error = state.Error;
+            instance.PendingCommand = state.PendingCommand;
+            instance.Continuations.AddRange(state.Continuations ?? []);
             if (state.Error is not null) _unbound[instance.Quest.FormKey] = state.Error;
         }
         // Newly supported programs had no prior invocation. Their original
@@ -431,16 +456,21 @@ internal sealed class FalloutQuestScripts
         Menus.Publish(gameMode, menus);
         foreach (var instance in _instances)
         {
-            if (instance.Claimed || instance.Error is not null) continue;
+            if (instance.Claimed) continue;
+            if (instance.Error is not null)
+            {
+                if (gameMode && execute && _quests.IsRunning(instance.Quest.FormKey)) ContinueMissingCommand(instance, Host);
+                continue;
+            }
+            var program = gameMode ? instance.Program : instance.MenuProgram;
             try
             {
                 if (!_quests.IsRunning(instance.Quest.FormKey) || !instance.Clock.Advance((float)seconds)) continue;
-                var program = gameMode ? instance.Program : instance.MenuProgram;
                 if (execute && (gameMode || program.HasStatements)) { Execute(instance, Host, program); ++instance.Executions; }
                 instance.Clock.CompleteInvocation();
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
-            { instance.Error = error.Message; _unbound[instance.Quest.FormKey] = error.Message; }
+            { RetainFailure(instance, error, program, gameMode); }
         }
     }
 
@@ -454,8 +484,13 @@ internal sealed class FalloutQuestScripts
         if (!double.IsFinite(seconds) || seconds < 0 || seconds > float.MaxValue) throw new ArgumentOutOfRangeException(nameof(seconds));
         var instance = _instances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) ??
             throw new NotSupportedException($"Claimed quest {quest} has no source program: {_unbound.GetValueOrDefault(quest)}");
-        if (instance.Error is not null) throw new NotSupportedException(instance.Error);
         if (!_quests.IsRunning(quest)) return;
+        if (instance.Error is not null)
+        {
+            ContinueMissingCommand(instance, host);
+            if (instance.Error is not null) throw new NotSupportedException(instance.Error);
+            return;
+        }
         if (!instance.Clock.Advance((float)seconds)) return;
         try
         {
@@ -465,8 +500,7 @@ internal sealed class FalloutQuestScripts
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
         {
-            instance.Error = error.Message;
-            _unbound[quest] = error.Message;
+            RetainFailure(instance, error, instance.Program, true);
             throw;
         }
     }
@@ -481,8 +515,7 @@ internal sealed class FalloutQuestScripts
         try { Execute(instance, host, instance.MenuProgram); }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
         {
-            instance.Error = error.Message;
-            _unbound[quest] = error.Message;
+            RetainFailure(instance, error, instance.MenuProgram, false);
             throw;
         }
     }
@@ -633,6 +666,13 @@ internal sealed class FalloutQuestScripts
                 })
                 { ReadOnly = true };
             if (parts.Length == 1 && ScriptValues.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
+            if (parts.Length <= 2 && operation == "playsound3d")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                {
+                    Sounds.PlayAtReference(caller?.FormKey(_records) ?? (parts.Length == 2
+                        ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey), arguments[0].Value.FormKey(_records));
+                    return 0;
+                });
             if (parts.Length <= 2 && operation == "getitemcount")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                 {
@@ -744,6 +784,13 @@ internal sealed class FalloutQuestScripts
                     var quest = Quest(arguments[0].Identifier!).FormKey;
                     return _quests.Stage(quest);
                 }),
+                "getstagedone" => new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.Number], arguments =>
+                {
+                    var stage = arguments[1].Number;
+                    if (stage < 0 || stage > short.MaxValue || stage != Math.Truncate(stage))
+                        throw new InvalidDataException("Quest stage index is invalid.");
+                    return _quests.StageDone(Quest(arguments[0].Identifier!).FormKey, (short)stage) ? 1 : 0;
+                }),
                 "getsecondspassed" => new([], _ => instance.Clock.Elapsed),
                 "getrandompercent" => new([], _ => ScriptValues.RandomPercent()),
                 "getcurrenttime" => new([], _ => (_globals ??
@@ -784,7 +831,7 @@ internal sealed class FalloutQuestScripts
             }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
             var caller = instance.Script.FormKey.OwnerPlugin;
-            if (parts.Length <= 2 && operation is "equipitem" or "equipobject" or "removeallitems" or "resetinventory")
+            if (parts.Length <= 2 && operation is "equipitem" or "equipobject" or "unequipitem" or "removeallitems" or "resetinventory")
             {
                 var target = parts.Length == 2 ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey;
                 bool Flag(string token) => NumberArgument(token) switch
@@ -797,6 +844,9 @@ internal sealed class FalloutQuestScripts
                     "equipitem" or "equipobject" when arguments.Count is >= 1 and <= 3 => new FalloutInventoryCommand(
                         FalloutInventoryCommandKind.Equip, target, Item: Form(arguments[0]).FormKey,
                         NoUnequip: arguments.Count >= 2 && Flag(arguments[1]), Silent: arguments.Count < 3 || Flag(arguments[2])),
+                    "unequipitem" when arguments.Count is >= 1 and <= 3 => new FalloutInventoryCommand(
+                        FalloutInventoryCommandKind.Unequip, target, Item: Form(arguments[0]).FormKey,
+                        NoEquip: arguments.Count >= 2 && Flag(arguments[1]), Silent: arguments.Count >= 3 && Flag(arguments[2])),
                     "removeallitems" when arguments.Count <= 3 => new FalloutInventoryCommand(
                         FalloutInventoryCommandKind.RemoveAll, target,
                         Destination: arguments.Count == 0 || arguments[0] == "0" ? null : instance.Bindings.Reference(arguments[0]),
@@ -827,6 +877,15 @@ internal sealed class FalloutQuestScripts
             {
                 if (arguments.Count != 1) throw new InvalidDataException("TriggerScreenBlood requires one count.");
                 ScreenBlood.Trigger(instance.Quest.FormKey, FalloutScreenBlood.Count(NumberArgument(arguments[0])));
+                return;
+            }
+            if (parts.Length <= 2 && operation == "playsound3d")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("PlaySound3D requires one SOUN form.");
+                var sound = FalloutNvseNumericExpression.EvaluateValue([arguments[0]], values, Function);
+                if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
+                Sounds.PlayAtReference(parts.Length == 2 ? ReferenceArgument(parts[0]) : instance.Quest.FormKey,
+                    sound.FormKey(_records));
                 return;
             }
             if (parts.Length == 1 && operation == "playsound")
@@ -1038,6 +1097,7 @@ internal sealed class FalloutQuestScripts
         (program ?? instance.Program).Execute(Read, Write, Call, Function, values: values);
         // Each reached operation publishes in source order. A later failure
         // retains the executed prefix, including consumptive message results
-        // and nested SetStage scripts. Retrying a failed instance is forbidden.
+        // and nested SetStage scripts. A bound missing command may continue
+        // from its stopped instruction; the invocation prefix never retries.
     }
 }

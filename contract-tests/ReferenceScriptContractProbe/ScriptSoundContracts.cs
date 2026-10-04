@@ -5,7 +5,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class ScriptSoundContracts
+internal static partial class ScriptSoundContracts
 {
     private sealed class Voice
     {
@@ -91,6 +91,18 @@ internal static class ScriptSoundContracts
             Execute("StopSound LoopSound\nset done to 8");
             Require(!sounds.IsActive(loopId) && voices[loopId].Releases == 1 && quests.Variable(caller, 1) == 8,
                 "Source loop did not stop or its command suffix failed.");
+            Execute("EmitterA.PlaySound3D SourceSound"); var spatialId = sounds.LastRequest!.Id;
+            Require(sounds.LastRequest.Reference == Key(0x200) && !sounds.LastRequest.Selection.Source.IsTwoDimensional &&
+                sounds.LastRequest.Source.FormKey == Key(0x100), "PlaySound3D lost its source reference or forced non-locational routing.");
+            Execute("StopSound SourceSound EmitterA");
+            Require(!sounds.IsActive(spatialId) && voices[spatialId].Releases == 1, "Reference StopSound did not retire its script-owned spatial voice.");
+            Execute("let sound := EmitterB\neval (sound).PlaySound3D SourceSound");
+            Require(sounds.LastRequest.Reference == Key(0x201), "Typed postfix sound receiver lost its once-evaluated reference.");
+            sounds.Complete(sounds.LastRequest.Id);
+            Reject(() => Execute("PlaySound3D SourceSound\nset done to 99"));
+            Reject(() => Execute("EmitterA.PlaySound3D SourceSound 1\nset done to 99"));
+            Reject(() => sounds.PlayAtReference(caller, Key(0x100)));
+            Require(quests.Variable(caller, 1) == 8, "Invalid spatial caller or arity executed its suffix.");
             var stoppedA = 0; var stoppedB = 0; var stoppedFlat = 0; var stoppedAlias = 0;
             using var a = records.SoundVoices.Register(Key(0x100), Key(0x200), "animation", () => true, () => ++stoppedA);
             using var b = records.SoundVoices.Register(Key(0x100), Key(0x201), "reference-node", () => true, () => ++stoppedB);
@@ -141,7 +153,8 @@ internal static class ScriptSoundContracts
             Reject(() => sounds.Play(caller, Key(0x104)));
             Require(FalloutSoundRecordReader.Read(records, Key(0x100)).Flags == 0, "Playback mutated the owned sound declaration.");
             StopFailure(records);
-            Console.WriteLine("OPENNV_SCRIPT_SOUND_CONTRACT_PASS winning=true typedSourceCommands=true fallback=true queue=true systemSound=true concurrent=true prefixFailure=true randomAtomic=true completion=true retirement=true coldNoReplay=true audioDivergenceVisible=true loops=true stopSound=true referenceFilter=true crossOwner=true zeroResult=true sourcePaths=true cachedPlaybackRefresh=true activeMediaRetained=true graphScope=true parity=unverified");
+            QuestContinuations(directory);
+            Console.WriteLine("OPENNV_SCRIPT_SOUND_CONTRACT_PASS winning=true typedSourceCommands=true positionedReference=true typedPositionedReceiver=true fallback=true queue=true systemSound=true concurrent=true prefixFailure=true randomAtomic=true completion=true retirement=true coldNoReplay=true audioDivergenceVisible=true loops=true stopSound=true referenceFilter=true crossOwner=true zeroResult=true sourcePaths=true cachedPlaybackRefresh=true activeMediaRetained=true graphScope=true parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
     }
@@ -212,7 +225,8 @@ internal static class ScriptSoundContracts
     private static byte[] Sound(uint id, string name, string path, uint flags, short attenuation = 0,
         sbyte frequency = 0, byte start = 0, byte stop = 0, short reverb = 100)
     {
-        var data = new byte[36]; data[2] = unchecked((byte)frequency);
+        var data = new byte[36]; data[0] = 1; data[1] = 20; data[2] = unchecked((byte)frequency);
+        for (var point = 0; point < 5; ++point) BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(12 + point * 2), (short)(100 - point * 25));
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), flags); BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(8), attenuation);
         data[10] = stop; data[11] = start; BinaryPrimitives.WriteInt16LittleEndian(data.AsSpan(22), reverb);
         return Record("SOUN", id, Field("EDID", Text(name)), Field("FNAM", Text(path)), Field("SNDD", data));

@@ -3,10 +3,10 @@ using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal enum FalloutInventoryCommandKind { RemoveAll, Equip, Reset, Add, Remove }
+internal enum FalloutInventoryCommandKind { RemoveAll, Equip, Reset, Add, Remove, Unequip }
 internal sealed record FalloutInventoryCommand(FalloutInventoryCommandKind Kind, FalloutFormKey Target,
     FalloutFormKey? Item = null, FalloutFormKey? Destination = null, bool RetainOwnership = false,
-    bool NoUnequip = false, bool Silent = true, int Count = 1);
+    bool NoUnequip = false, bool Silent = true, int Count = 1, bool NoEquip = false);
 
 // Shared state owner for result/object/quest commands and both player views.
 internal sealed class FalloutInventoryCommands(FalloutPluginStack records, FalloutReferenceWorld world,
@@ -66,6 +66,21 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 {
                     prepareActorChange?.Invoke(command.Target);
                     world.EquipItem(command.Target, item, command.NoUnequip, level(), globals);
+                }
+                break;
+            case FalloutInventoryCommandKind.Unequip:
+                var removedEquipment = command.Item ?? throw new InvalidDataException("UnequipItem has no item.");
+                if (records.GetEffective(removedEquipment).Signature is not ("ARMO" or "WEAP"))
+                    throw new InvalidDataException("UnequipItem requires armor or a weapon.");
+                if (command.NoEquip) throw new NotSupportedException("UnequipItem NoEquip requires a persistent equipment-admission lock owner.");
+                if (!command.Silent && isPlayer)
+                    throw new NotSupportedException("UnequipItem visible equipment notification requires its source HUD message owner.");
+                if (!inventory.Equipped.Contains(records.RuntimeFormId(removedEquipment))) return;
+                if (isPlayer) inventory.Unequip(records, removedEquipment, force: true);
+                else
+                {
+                    prepareActorChange?.Invoke(command.Target);
+                    world.UnequipItem(command.Target, removedEquipment, level(), globals);
                 }
                 break;
             case FalloutInventoryCommandKind.Reset:

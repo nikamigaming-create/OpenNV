@@ -425,6 +425,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 { ReadOnly = true };
             if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
+            if (parts.Length <= 2 && operation == "playsound3d")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                {
+                    world.Sounds.PlayAtReference(Target(), arguments[0].Value.FormKey(records));
+                    return 0;
+                });
             if (parts.Length <= 2 && operation == "getitemcount")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                     (host.Inventory ?? throw new NotSupportedException("Item count has no shared inventory owner."))
@@ -688,6 +694,14 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             {
                 if (arguments.Count != 1) throw new InvalidDataException("TriggerScreenBlood requires one count.");
                 world.ScreenBlood.Trigger(source, FalloutScreenBlood.Count(Number(arguments[0])));
+                return;
+            }
+            if (parts.Length <= 2 && operation == "playsound3d")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("PlaySound3D requires one SOUN form.");
+                var sound = FalloutNvseNumericExpression.EvaluateValue([arguments[0]], values, Function, UserFunction);
+                if (sound.Kind == FalloutScriptValueKind.Number) sound = FalloutScriptValue.Form(sound.Number);
+                world.Sounds.PlayAtReference(target, sound.FormKey(records));
                 return;
             }
             if (parts.Length == 1 && operation == "playsound")
@@ -1009,6 +1023,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     else if (arguments.Count == 1)
                         host.Apply(new(FalloutReferenceEffectKind.EquipItem, source, target, equipItem));
                     else throw new NotSupportedException("EquipItem flags have no shared inventory owner.");
+                    break;
+                case "unequipitem" when arguments.Count is >= 1 and <= 3:
+                    (host.Inventory ?? throw new NotSupportedException("UnequipItem has no shared inventory owner."))
+                        .Execute(new(FalloutInventoryCommandKind.Unequip, target, Item: bindings.Form(arguments[0]).FormKey,
+                            NoEquip: arguments.Count >= 2 && Boolean(arguments[1]), Silent: arguments.Count >= 3 && Boolean(arguments[2])));
                     break;
                 case "removeallitems" when arguments.Count <= 3:
                     var destination = arguments.Count == 0 || arguments[0] == "0" ? (FalloutFormKey?)null : Reference(arguments[0]);

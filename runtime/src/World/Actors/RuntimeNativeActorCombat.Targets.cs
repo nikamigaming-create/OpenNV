@@ -27,6 +27,28 @@ internal sealed partial class RuntimeNativeActorCombat
         return (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(bone)).Origin;
     }
 
+    private object ObserveBodyTarget()
+    {
+        try
+        {
+            var part = _world.BodyParts(_state.Reference).Parts.Single(value => value.Type == 0);
+            var position = BodyTargetPoint();
+            return new
+            {
+                reference = _state.Reference.ToString(),
+                partType = part.Type,
+                node = string.IsNullOrEmpty(part.Target) ? part.Node : part.Target,
+                position = new[] { position.X, position.Y, position.Z },
+                owner = "source-BPNT-current-skeleton-pose",
+                error = (string?)null
+            };
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
+        {
+            return new { reference = _state.Reference.ToString(), owner = "source-BPNT-current-skeleton-pose", error = error.Message };
+        }
+    }
+
     private bool ResolveTarget(RuntimeNativePlayer? player)
     {
         var target = _state.Engagement!.Target;

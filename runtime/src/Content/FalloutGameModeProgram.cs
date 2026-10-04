@@ -100,6 +100,9 @@ internal sealed partial class FalloutGameModeProgram
 {
     internal const int ParserVersion = 9;
     private readonly IReadOnlyList<string[]> _lines;
+    private int _startLine = 0;
+    private IReadOnlyList<bool> _enteredBranches = [];
+    internal int LastStatement { get; private set; } = -1;
     internal bool HasStatements => _lines.Count != 0;
     private readonly Dictionary<int, int> _loopEnds = [];
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines)
@@ -255,16 +258,18 @@ internal sealed partial class FalloutGameModeProgram
         FalloutScriptValue Expression(IReadOnlyList<string> tokens, bool nvseLogical = true) =>
             FalloutNvseNumericExpression.EvaluateValue(tokens, values, function, userFunction, nvseLogical);
         var branches = new Stack<(bool Parent, bool Taken, bool Else)>();
+        foreach (var enteredElse in _enteredBranches) branches.Push((true, true, enteredElse));
         var loops = new Stack<(int Start, int End, int Branches)>();
         var active = true;
         bool Condition(string[] tokens) => tokens.Length > 1 && tokens[1].Equals("eval", StringComparison.OrdinalIgnoreCase)
             ? Expression(tokens[2..]).Truth
             : typed ? Expression(tokens[1..], nvseLogical: false).Truth :
                 Evaluate(tokens[1..], variable, function) != 0;
-        for (var line = 0; line < _lines.Count; ++line)
+        for (var line = _startLine; line < _lines.Count; ++line)
         {
             budget.Spend();
             var tokens = _lines[line];
+            if (active) LastStatement = line;
             switch (tokens[0].ToLowerInvariant())
             {
                 case "if":
