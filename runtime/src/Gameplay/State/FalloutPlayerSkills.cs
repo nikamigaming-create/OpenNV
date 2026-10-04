@@ -26,6 +26,7 @@ internal sealed class FalloutPlayerSkills
     private readonly Dictionary<(FalloutFormKey Form, string Field), FalloutFormKey[]> _links = [];
     private readonly HashSet<int> _evaluating = [];
     private long _weightRevision = -1;
+    private long _weightQuestObjectRevision = -1;
     private bool _weightHardcore;
     private float _carriedWeight;
     private static readonly (int Value, string Name, string Setting, int Attribute)[] Skills =
@@ -64,11 +65,12 @@ internal sealed class FalloutPlayerSkills
         {
             if (value == 46)
             {
-                if (_weightRevision != _inventory.Revision || _weightHardcore != _hardcore())
+                if (_weightRevision != _inventory.Revision || _weightQuestObjectRevision != _records.QuestObjects.Revision || _weightHardcore != _hardcore())
                 {
                     _carriedWeight = _inventory.Items.Sum(item => Weight(item) * item.Count);
                     if (!float.IsFinite(_carriedWeight)) throw new InvalidDataException("Carried weight exceeds finite storage.");
                     _weightRevision = _inventory.Revision; _weightHardcore = _hardcore();
+                    _weightQuestObjectRevision = _records.QuestObjects.Revision;
                 }
                 return _carriedWeight;
             }
@@ -126,6 +128,7 @@ internal sealed class FalloutPlayerSkills
 
     private float Weight(FalloutCampaignItem item)
     {
+        if (_records.QuestObjects.IsQuestObject(item.FormKey)) return 0;
         if (item.RecordType != "AMMO") return item.Weight ??
             (item.RecordType == "NOTE" ? 0 : throw new NotSupportedException($"Inventory weight is unbound for {item.FormKey}."));
         if (!_hardcore()) return 0;

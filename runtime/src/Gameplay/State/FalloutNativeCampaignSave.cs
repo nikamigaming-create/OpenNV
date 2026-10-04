@@ -46,7 +46,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v32";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v33";
+    internal const string StoppedPackageSchema = "opennv-native-fnv-campaign-save/v32";
     internal const string CreatureTravelSchema = "opennv-native-fnv-campaign-save/v31";
     internal const string RadioSchema = "opennv-native-fnv-campaign-save/v30";
     internal const string DialoguePackageSchema = "opennv-native-fnv-campaign-save/v29";
@@ -255,6 +256,7 @@ internal static class FalloutNativeCampaignSave
         }
         if (state.Scripts is { } savedScripts)
         {
+            new FalloutQuestObjectFlags(stack).Restore(savedScripts.Session?.QuestObjects);
             new FalloutChallenges(stack, new()).Restore(savedScripts.Challenges);
             using var radioWorld = new FalloutReferenceWorld(stack);
             new FalloutRadioStations(stack, radioWorld, new()).Restore(savedScripts.Radio);
@@ -356,11 +358,13 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
-        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageBindingFailure is not null || reference.PackageMotion?.Guard is not null) == true)
+        if (state.Schema != ExpectedSchema && state.Scripts?.Session?.QuestObjects is { Count: > 0 })
+            throw new InvalidDataException("Legacy campaign schema has mutable quest-object flags.");
+        if (state.Schema is not (ExpectedSchema or StoppedPackageSchema) && state.References?.Any(reference => reference.PackageBindingFailure is not null || reference.PackageMotion?.Guard is not null) == true)
             throw new InvalidDataException("Legacy campaign schema has actor package binding-failure continuation.");
-        // v31 has the same established owners; it cannot carry the new optional
-        // failed-binding lane. This local normalization never rewrites its file.
-        if (state.Schema == CreatureTravelSchema) state = state with { Schema = ExpectedSchema };
+        // Established v31/v32 lanes remain readable. Local validation never
+        // rewrites a legacy file or supplies a missing mutable-form change.
+        if (state.Schema is StoppedPackageSchema or CreatureTravelSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.PackageMotion?.Travel is not null ||
             reference.PackageIdle is not null || reference.PackageStarts is { Count: > 0 }) == true)
             throw new InvalidDataException("Legacy campaign schema has Travel, package timing or event-idle state.");

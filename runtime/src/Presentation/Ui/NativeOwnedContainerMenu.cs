@@ -64,7 +64,7 @@ internal partial class NativeOwnedContainerMenu : Control
     private void Move(int side, FalloutCampaignItem item)
     {
         if (_closed || _quantity is not null) return;
-        if (!FalloutInventoryAccess.CanTransfer(_records.GetEffective(item.FormKey), side == 0)) return;
+        if (!FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), side == 0)) return;
         var available = _inventories[side].Item(item.FormKey)?.Count ?? 0;
         if (available == 0) { Refresh(); return; }
         if (available < _askQuantityAt || available == 1) { Transfer(side, item.FormKey, 1); return; }
@@ -96,7 +96,7 @@ internal partial class NativeOwnedContainerMenu : Control
         _changed(); Refresh();
     }
     private FalloutCampaignItem[] TransferableItems(int side) => _inventories[side].Items
-        .Where(item => FalloutInventoryAccess.CanTransfer(_records.GetEffective(item.FormKey), side == 0)).ToArray();
+        .Where(item => FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), side == 0)).ToArray();
     private void Refresh()
     {
         foreach (var (tile, button) in _rows) { _tiles.Forget(tile); tile.Remove(); RemoveChild(button); button.QueueFree(); }

@@ -96,6 +96,7 @@ internal sealed class FalloutPluginStack : IDisposable
                     StringComparer.Ordinal));
         _effectiveRecordCount = _winnerKeysBySignature.Values.Sum(keys => keys.Count);
         PerkParameters = new(this);
+        QuestObjects = new(this);
         NumericSettings = new(this, ownedSource);
         _iniSettings = new(() => (installationSettings ?? (ownedSource is { } content
             ? FalloutInstallationSettings.Read(content)
@@ -108,6 +109,7 @@ internal sealed class FalloutPluginStack : IDisposable
     internal int WinnerRecordCount => _winners.Count;
     internal int EffectiveRecordCount => _effectiveRecordCount;
     internal FalloutPerkParameters PerkParameters { get; }
+    internal FalloutQuestObjectFlags QuestObjects { get; }
     internal FalloutNumericGameSettings NumericSettings { get; }
     private readonly Lazy<FalloutNumericIniSettings> _iniSettings;
     internal FalloutNumericIniSettings IniSettings => _iniSettings.Value;

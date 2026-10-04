@@ -36,6 +36,7 @@ internal sealed partial class RuntimeNativeCreature
     internal object AiState => new
     {
         package = _aiPackage?.FormKey.ToString(),
+        failedSelection = _failedPackage?.ToString(),
         follow = _followPackage,
         dialogue = _dialoguePackage,
         dialogueRequested = _dialogueRequested,

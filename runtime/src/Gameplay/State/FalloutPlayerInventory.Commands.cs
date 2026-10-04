@@ -28,7 +28,7 @@ internal sealed partial class FalloutPlayerInventory
         // Prepare the whole transaction before publishing either inventory.
         var source = Copy();
         var target = destination?.Copy();
-        var removed = Items.Where(item => Removable(records.GetEffective(item.FormKey), player)).ToArray();
+        var removed = Items.Where(item => Removable(records, records.GetEffective(item.FormKey), player)).ToArray();
         foreach (var item in removed)
         {
             if (target is not null)
@@ -62,9 +62,9 @@ internal sealed partial class FalloutPlayerInventory
         }
     }
 
-    private static bool Removable(FalloutPluginRecord item, bool player)
+    private static bool Removable(FalloutPluginStack records, FalloutPluginRecord item, bool player)
     {
-        if (player && (item.Flags & 0x400) != 0) return false;
+        if (player && records.QuestObjects.IsQuestObject(item.FormKey)) return false;
         if (item.Signature != "ARMO") return true;
         var data = item.ReadSubrecords().Single(field => field.Signature == "BMDT").Data;
         if (data.Length != 8) throw new InvalidDataException("Removed armor has invalid biped flags.");

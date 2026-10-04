@@ -151,7 +151,7 @@ internal sealed partial class NativeOwnedBarterMenu : Control
     private bool CanOffer(FalloutCampaignItem item, bool fromPlayer, out int? price, out string reason)
     {
         price = null; reason = "";
-        if (!FalloutInventoryAccess.CanTransfer(_records.GetEffective(item.FormKey), fromPlayer))
+        if (!FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), fromPlayer))
         { reason = "source flags"; return false; }
         try
         {

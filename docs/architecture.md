@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Quest-object flags](quest-object-flags.md) retain shared source-bound form
+changes independently of immutable record headers. Script dispatch, inventory
+protection, carried weight and session persistence use the same C# owner.
+
 [Actor package continuation](actor-package-continuation.md) retains stopped NPC
 initialization and Guard approach separately from active procedures. Shared
 reference state preserves source selection, consumed retirement and actual

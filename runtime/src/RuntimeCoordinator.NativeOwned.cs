@@ -83,6 +83,7 @@ public partial class RuntimeCoordinator
                 _nativeReferences.ScriptDefinitionCount,
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
+                pendingProcedureCaptureOwners = _nativeReferences.PendingProcedureCaptures,
                 stoppedPackageBindings = _nativeReferences.StoppedPackageBindingCount,
                 talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
                 unloadedActorPackages = _nativeReferences.UnloadedPackages?.State,

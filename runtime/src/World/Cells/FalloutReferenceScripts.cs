@@ -404,6 +404,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             if (parts.Length == 1 && FalloutSoundCommands.Function(records, operation) is { } soundFunction)
                 return soundFunction;
+            if (parts.Length == 1 && FalloutQuestObjectCommands.Function(records, operation) is { } questObjectFunction)
+                return questObjectFunction;
             if (parts.Length == 1 && FalloutNumericGameSettingCommands.Function(records, operation) is { } settingFunction)
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(records, operation) is { } iniSettingFunction)
@@ -668,7 +670,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     Function, UserFunction);
                 return;
             }
-            if (parts.Length == 1 && operation == "setnumericgamesetting")
+            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values,
                     Function, UserFunction);
