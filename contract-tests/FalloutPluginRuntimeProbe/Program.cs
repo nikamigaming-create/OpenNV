@@ -7,6 +7,11 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-light-parents"])
+{
+    PlacedLightEnableContracts.Run();
+    return;
+}
 if (args is ["--test-cell-lighting"])
 {
     CellLightingContracts.Run();
@@ -92,6 +97,7 @@ ExteriorLodProbe.Run();
 LoadOrderContracts.Run();
 WeatherMotionProbe.Run();
 CellLightingContracts.Run();
+PlacedLightEnableContracts.Run();
 WindForceProbe.Run();
 ContentWorkerProbe.Run();
 
@@ -1958,14 +1964,14 @@ try
                 Light = syntheticLightBase.Light! with { Flags = 0x0000_0008 },
             }),
         "outside the evidenced static point-light contract");
-    ExpectFailure(
-        () => FalloutPlacedLightResolver.Resolve(
-            cell.References[1] with
-            {
-                EnableParent = new FalloutFormKey("Cell.esm", 0x130),
-            },
-            syntheticLightBase),
-        "unresolved enable parent");
+    var parentedLight = FalloutPlacedLightResolver.Resolve(cell.References[1] with
+    {
+        EnableParent = new FalloutFormKey("Cell.esm", 0x130),
+    }, syntheticLightBase, cellStack);
+    Require(parentedLight.RadiusGameUnits == syntheticLight.RadiusGameUnits &&
+        parentedLight.Intensity == syntheticLight.Intensity &&
+        parentedLight.ShaderColorRgb.SequenceEqual(syntheticLight.ShaderColorRgb),
+        "Enable parenting must not change immutable source light parameters.");
 
     Require(stack.WinnerRecordCount == 9 && stack.EffectiveRecordCount == 8, "Winner/deletion counts differ.");
     Console.WriteLine($"OPENNV_FALLOUT_PLUGIN_RUNTIME_PROBE_PASS plugins={stack.Plugins.Count} effective={stack.EffectiveRecordCount} winner={stack.GetEffective(masterKey).Plugin.Name}");

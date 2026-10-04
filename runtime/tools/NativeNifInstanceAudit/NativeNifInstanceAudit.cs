@@ -12,6 +12,22 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--empty-managed-sequences"])
+            {
+                ExerciseEmptyManagedSequences(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-wall-screen", var screenGame, var screenMod, var screenRoot,
+                var screenCell, var screenReference, .. var screenDependencies])
+            {
+                ExerciseEmptyManagedSequences();
+                ExerciseOwnedWallScreen(screenGame, screenMod, screenRoot, screenCell, screenReference, screenDependencies);
+                GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-light-parents", var lightGame, var lightMod, var lightRoot, var lightOutput, .. var lightArguments])
+            {
+                ExerciseOwnedLightParents(lightGame, lightMod, lightRoot, lightOutput, lightArguments);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--owned-models", var modelGame, var modelMod, var modelRoot, .. var modelArguments])
             {
                 ExerciseTextureAddressing(); ExerciseOwnedModels(modelGame, modelMod, modelRoot, modelArguments);
@@ -102,6 +118,7 @@ public partial class NativeNifInstanceAudit : Node
             await ExerciseFaceGenAttachment();
             await ExerciseHeadEquipmentAttachment();
             ExerciseObjectAnimation();
+            ExerciseEmptyManagedSequences();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
             ExercisePlacedLights();

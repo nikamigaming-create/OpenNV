@@ -7,13 +7,22 @@ checked PR 141. Loading displays an animated phase/elapsed indicator and yields
 during cell assembly; the bot releases input after a bounded stalled-control wait.
 Vault exit, Megaton and the train/Mojave route remain unreached.
 
-The current source block fixes reciprocal no-XLOC door access with cold validation,
+Checked PR142 fixes reciprocal no-XLOC door access with cold validation,
 legacy NIF field gates and mixed-axis texture addressing, and 36-byte CELL lighting
 without inventing absent fog power. The unchanged rack model builds in native
 Godot; source shaped-phantom contact publication remains unbound. The complete
 Release/Debug, analyzer/format, contract, launcher and native Godot gate passes.
 Selected owned door, NIF and lighting checks pass. Actual door traversal and
 matched retail presentation remain independent verification lanes.
+
+Parent-controlled static point lights now share ordinary enable state rather than
+refusing all XESP declarations. The selected native proof covers 139 lights, all
+2,048 assignments of 11 source roots, queued transitions and cold restoration.
+Valid managed NIF sequences with zero controlled channels retain their clocks and
+text keys. The unchanged wall-screen model builds its four surfaces, original
+projector texture, emissive material and collision. Malformed controller rejection
+also cleans up the allocated native nodes. See [light and sequence owners](source-light-sequence-owners.md).
+Ordinary wall-screen pixels and matched retail presentation remain unverified.
 
 The read-only whole-stack audit discovers embedded programs across every winning
 record signature, visits inactive source arms and retains condition/stage edges.
@@ -25,10 +34,11 @@ uninspected legacy statements remain visible. Coverage does not establish reacha
 state permutations or authoritative compiled execution. See [script coverage](quest-graph-audit.md).
 
 The full vault source audit includes 10 interiors and 7,155 references. It retains
-232 reference issues and 33 resource failures in overlapping lanes, plus the
-selected native actor faults. Parent-controlled lights, source light models,
-wall-screen controllers, script commands and NPC procedures need their general
-owners. Static geometry and source NAVM accounting do not prove supported floors.
+101 reference issues, down from 232, and 33 resource failures in overlapping lanes,
+plus the selected older native actor faults. The remaining 58 light refusals are
+18 source-model/controller owners, 27 scales and 13 flags. Combat/detection script
+queries, NPC procedures, resource failures and whole-cell native coverage remain
+open. Static geometry and source NAVM accounting do not prove supported floors.
 
 Ordinary input completes all ten G.O.A.T. questions, scoring, original tag
 acceptance and Brotch's source desk occupation. The genuine complete stage-80
