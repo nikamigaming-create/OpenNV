@@ -16,6 +16,10 @@ public partial class NativeLocomotionAudit : Node3D
             {
                 NativeNavigationContracts.Run(); GetTree().Quit(); return;
             }
+            if (arguments is ["--navigation-scheduling"])
+            {
+                await CheckNavigationScheduling(); GetTree().Quit(); return;
+            }
             if (arguments is ["--route-motion"])
             {
                 await CheckRouteAccumulation(); GetTree().Quit(); return;
@@ -67,6 +71,7 @@ public partial class NativeLocomotionAudit : Node3D
                 GetTree().Quit(); return;
             }
             NativeNavigationContracts.Run();
+            await CheckNavigationScheduling();
             await CheckRouteAccumulation();
             await CheckRouteSmoothing();
             await CheckNavigation();

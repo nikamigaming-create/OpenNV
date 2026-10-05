@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using Godot;
+using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Content;
 
@@ -34,6 +35,7 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
             _host = host; Voice = voice; _emitter = followEmitter ? emitter : null; _cancel = cancel; _update = update;
             FollowEmitter = followEmitter;
             EmitterNativeOwner = emitter.GetInstanceId(); EmitterPath = emitter.GetPath().ToString();
+            RuntimeNativeNifSoundEmitters.Refresh(emitter);
             LastRealPosition = emitter.GlobalPosition;
             if (followEmitter) emitter.TreeExiting += RetireEmitter;
         }
@@ -43,7 +45,11 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
             if (_disposed || !GodotObject.IsInstanceValid(Voice)) return;
             if (_emitter is { } emitter)
             {
-                if (GodotObject.IsInstanceValid(emitter) && emitter.IsInsideTree()) LastRealPosition = emitter.GlobalPosition;
+                if (GodotObject.IsInstanceValid(emitter) && emitter.IsInsideTree())
+                {
+                    RuntimeNativeNifSoundEmitters.Refresh(emitter);
+                    LastRealPosition = emitter.GlobalPosition;
+                }
                 else RetireEmitter();
             }
             if (Voice is AudioStreamPlayer3D spatial) spatial.GlobalPosition = LastRealPosition;
@@ -56,7 +62,11 @@ internal sealed partial class NativeOwnedFiniteSoundHost : Node3D
             if (GodotObject.IsInstanceValid(emitter))
             {
                 // TreeExiting runs before the last actual transform is lost.
-                if (emitter.IsInsideTree()) LastRealPosition = emitter.GlobalPosition;
+                if (emitter.IsInsideTree())
+                {
+                    RuntimeNativeNifSoundEmitters.Refresh(emitter);
+                    LastRealPosition = emitter.GlobalPosition;
+                }
                 emitter.TreeExiting -= RetireEmitter;
             }
             _emitter = null;

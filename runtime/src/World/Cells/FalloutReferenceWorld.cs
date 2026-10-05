@@ -174,6 +174,7 @@ internal sealed class FalloutReferenceInstance
     internal Func<IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>?>? PendingPackageBindingFiniteVoices { get; set; }
     internal FalloutActorFurnitureContinuation? FurnitureContinuation { get; set; }
     internal FalloutActorSelectionFailure? SelectionFailure { get; set; }
+    internal FalloutActorRetirementCandidate? StoppedRetirement { get; set; }
     internal FalloutActorPendingPackageSelection? PendingPackageSelection { get; set; }
     internal Func<bool>? CanCapturePendingPackageSelection { get; set; }
     internal Func<FalloutActorPendingPackageSelection>? CapturePendingPackageSelection { get; set; }
@@ -288,19 +289,34 @@ internal sealed class FalloutReferenceInstance
         foreach (var index in script?.Locals.Values ?? []) Variables.Add(index, 0);
     }
 
-    internal FalloutReferenceSnapshot Capture()
+    internal FalloutReferenceSnapshot Capture() => CaptureCore(null, null, false);
+
+    // Only the retirement candidate owner calls this before teardown, after
+    // validating exact live finite receipts. This copy cannot be written as a save.
+    internal FalloutReferenceSnapshot CaptureStoppedRetirementSnapshot(FalloutPluginStack records, ulong nativeOwner,
+        FalloutActorSelectionFailure? selection, FalloutActorPackageBindingFailure? binding)
+    {
+        if ((selection is null) == (binding is null) ||
+            FalloutActorRetirementCandidate.ReadLiveFiniteReceipts(records, this, nativeOwner) is null)
+            throw new NotSupportedException("Stopped retirement lacks its exact actual finite source/native receipts.");
+        return CaptureCore(selection, binding, true);
+    }
+
+    private FalloutReferenceSnapshot CaptureCore(FalloutActorSelectionFailure? selectionOverride,
+        FalloutActorPackageBindingFailure? bindingOverride, bool nonaudioRetirement)
     {
         if (HeadTrackingCaptureBlocker is not null || HeadTrackingRequired && CaptureHeadTracking is null && HeadTracking is null)
             throw new NotSupportedException($"Reference {Reference} cannot save head tracking: {HeadTrackingCaptureBlocker ?? "required owner is missing"}");
         if (HitReactionFaultCaptureBlocker is { } hitFault)
             throw new NotSupportedException($"Reference {Reference} cannot save its hit reaction: {hitFault}");
-        var soundEvents = _animationSoundEvents?.Capture();
+        var soundEvents = nonaudioRetirement ? null : _animationSoundEvents?.Capture();
         var hitReactionFaults = _hitReactionFaults?.Capture();
-        var failureReady = PackageBindingFailureCaptureReady;
-        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !SelectionFailureCaptureReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady)
+        var failureReady = bindingOverride is not null || PackageBindingFailureCaptureReady;
+        var selectionReady = selectionOverride is not null || SelectionFailureCaptureReady;
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
-        var bindingFailure = failureReady ? CapturePackageBindingFailure is { } captureFailure
-            ? captureFailure() : PackageBindingFailure?.Copy() : null;
+        var bindingFailure = bindingOverride?.Copy() ?? (failureReady ? CapturePackageBindingFailure is { } captureFailure
+            ? captureFailure() : PackageBindingFailure?.Copy() : null);
         return new(Reference, Cell, Base, Script?.Record.FormKey,
             Script?.Sha256, new Dictionary<uint, double>(Variables), ScriptError, Enabled, EnableRequest, Opacity, NoFade,
             new Dictionary<string, FalloutActorValue>(ActorValues), Destroyed, DeletePending, Deleted, Inventory?.Capture(), Taken, DoorOpen, Unlocked,
@@ -312,8 +328,8 @@ internal sealed class FalloutReferenceInstance
             PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor,
             CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure, BroadcastState,
             FurnitureContinuation: CaptureFurniture is { } captureFurniture ? captureFurniture() : FurnitureContinuation?.Copy(),
-            SelectionFailure: SelectionFailureCaptureReady ? CaptureSelectionFailure is { } captureSelection
-                ? captureSelection() : SelectionFailure?.Copy() : null,
+            SelectionFailure: selectionOverride?.Copy() ?? (selectionReady ? CaptureSelectionFailure is { } captureSelection
+                ? captureSelection() : SelectionFailure?.Copy() : null),
             DialogueContinuation: CaptureDialogue is { } captureDialogue ? captureDialogue() : DialogueContinuation?.Copy(),
             DeathCount: DeathCount == 0 ? null : DeathCount, AttackRandomState: _attackRandom?.State,
             ScriptStoppedFrame: ScriptStoppedFrame?.Copy(), CompletedScriptContinuation: CompletedScriptContinuation?.Copy(),
@@ -503,6 +519,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             motion = instance.PackageMotion?.Package.ToString(),
             blocker = instance.ProcedureCaptureBlocker,
             selectionCapture = instance.SelectionCaptureDiagnostic,
+            stoppedRetirement = instance.StoppedRetirement?.State,
         }).ToArray();
 
     private FalloutScriptManualSaveRequests? _scriptManualSaves;

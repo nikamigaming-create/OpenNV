@@ -241,6 +241,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             .Count(block => source.ReadGeometry(block.Index).Name.Equals(selectedGeometryName, StringComparison.OrdinalIgnoreCase)) != 1)
             throw new InvalidDataException($"Source model has no unique equipped geometry named {selectedGeometryName}.");
         var result = new Node3D { Name = $"NativePart{skeleton.Node.GetChildCount()}" };
+        result.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
         try
         {
             foreach (var rootIndex in source.Roots)

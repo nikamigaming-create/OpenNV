@@ -30,6 +30,8 @@ internal sealed class RuntimeNativeNifSkeleton
             BuildAttachments();
             Node.SetMeta("opennv_nif_source_bones", _boneIndices.Count);
             Node.SetMeta("opennv_nif_controller_owner", "external-gameplay-animation");
+            Node.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
+            Node.SetMeta("opennv_nif_source_root_blocks", source.Roots.ToArray());
             Node.SetMeta("opennv_nif_geometry_attachments",
                 _geometryAttachments.Select(value => value.Geometry.Block.Index).ToArray());
         }
@@ -46,6 +48,16 @@ internal sealed class RuntimeNativeNifSkeleton
     internal FalloutNifFloatExtraDataState FloatExtraData { get; } = new();
     internal RuntimeNativeNifMaterialChannels MaterialChannels { get; } = new();
     internal IReadOnlyList<(int ParentBone, FalloutNifGeometry Geometry)> GeometryAttachments => _geometryAttachments;
+
+    internal void BindSoundSource(Node3D actor)
+    {
+        if (Node.GetParent() != actor)
+            throw new InvalidDataException("Actor sound scene is not owned by its actual source skeleton.");
+        // Called only after all selected body parts have assembled successfully.
+        // Each part keeps its own catalog as it enters/leaves this scene.
+        actor.SetMeta("opennv_nif_fixed_strings", Source.Strings.ToArray());
+        actor.SetMeta("opennv_nif_actor_skeleton", actor.GetPathTo(Node));
+    }
 
     private void PublishRetainedPoses()
     {

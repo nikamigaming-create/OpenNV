@@ -13,7 +13,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private async Task OwnedEndedSounds(string game, string mod, string root, string checkpoint,
-        string actorId, string soundId, string[] dependencies, bool finiteRetirement = false)
+        string actorId, string soundId, string[] dependencies, bool finiteRetirement = false, bool actorRetirement = false)
     {
         var original = File.ReadAllBytes(checkpoint);
         var fixture = new Node3D(); AddChild(fixture);
@@ -73,6 +73,12 @@ public partial class NativeActorPerformanceAudit
             var events = world.Get(caller).AnimationSoundEvents;
             var sounds = new NativeOwnedAnimationSoundPlayer(records, content, warm, units, world.Get(caller).SoundRandom, events);
             warm.AddChild(sounds);
+            if (actorRetirement)
+            {
+                await OwnedActorFiniteRetirement(records, content, world, warm, sounds, events, cell, caller, sound, original,
+                    saved.Vitals?.Level ?? 1, globals, Assemble);
+                return;
+            }
             if (finiteRetirement)
             {
                 await OwnedFiniteSoundRetirement(records, content, world, warm, sounds, events, cell, caller, sound, original);

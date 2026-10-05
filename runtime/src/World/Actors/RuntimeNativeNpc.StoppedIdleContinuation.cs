@@ -11,11 +11,11 @@ internal partial class RuntimeNativeNpc
         _idlePlayback is { Complete: false } && _idleData is not null &&
         _idleRevision is > 0 and < long.MaxValue && _idleAnimationResource is not null && _idleAnimationSha256 is not null &&
         _animationObjects.Count == 0 && Combat?.AnimationWeapon is null &&
-        (_animationSounds?.CanCaptureSilent != false || allowFiniteSoundWait && _animationSounds?.PendingFiniteVoices is { Count: > 0 });
+        (_animationSounds?.CanCaptureSilent != false || allowFiniteSoundWait && _animationSounds?.CanAwaitFiniteCompletion == true);
 
-    private FalloutActorStoppedIdleAnimation CaptureStoppedIndependentIdle()
+    private FalloutActorStoppedIdleAnimation CaptureStoppedIndependentIdle(bool allowFiniteSoundWait = false)
     {
-        if (!CanCaptureStoppedIndependentIdle())
+        if (!CanCaptureStoppedIndependentIdle(allowFiniteSoundWait))
             throw new NotSupportedException("Stopped source IDLE still has an unowned response, object, attachment or sound.");
         var animation = new FalloutActorPackageIdleAnimation(_idleForm!.Value,
             FalloutActorFurnitureContinuation.RecordHash(_aiStack!.GetEffective(_idleForm.Value)),

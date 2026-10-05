@@ -261,7 +261,7 @@ internal sealed partial class RuntimeNativeActorCombat
         RetainStoppedPoseReadiness();
         if (_state.StopCombat == StopCombat) _state.StopCombat = null;
         if (_state.QuerySpatialPlacement == CaptureSpatialPlacement) _state.QuerySpatialPlacement = null;
-        _routeSearch?.Dispose(); _routeSearch = null;
+        DisposeRouteSearch();
         // A door can materialize the same reference in its destination before
         // the previous presentation leaves the tree. Only the current binding
         // may capture a pose or release the shared save callback.

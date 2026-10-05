@@ -38,6 +38,7 @@ internal sealed partial class RuntimeNativeActorCombat
     }
 
     private bool? _retiredStoppedPoseReady;
+    private bool? _retiredStoppedPoseFiniteCandidateReady;
     private FalloutActorStoppedPoseCaptureDiagnostic? _retiredStoppedPoseDiagnostic;
     internal FalloutActorStoppedPoseCaptureDiagnostic StoppedAiPoseCaptureDiagnostic =>
         _retiredStoppedPoseDiagnostic ?? ReadStoppedPoseDiagnostic(LiveStoppedAiPoseCaptureReady, false);
@@ -99,32 +100,35 @@ internal sealed partial class RuntimeNativeActorCombat
     // corpse capture or a stationary, source-bound combat idle composes here.
     // Preserve a refusal before ExitTree disposes searches and sound voices.
     internal bool StoppedAiPoseCaptureReady => _retiredStoppedPoseReady ?? LiveStoppedAiPoseCaptureReady;
+    internal bool StoppedAiPoseFiniteCandidateReady => _retiredStoppedPoseFiniteCandidateReady ??
+        ReadLiveStoppedAiPoseCaptureReady(allowFiniteSoundWait: true);
 
-    private bool LiveStoppedAiPoseCaptureReady
+    private bool LiveStoppedAiPoseCaptureReady => ReadLiveStoppedAiPoseCaptureReady(allowFiniteSoundWait: false);
+
+    private bool ReadLiveStoppedAiPoseCaptureReady(bool allowFiniteSoundWait)
     {
-        get
-        {
-            if (PackageOwnsPose || PackageMoving || _state.KnockedDown || _state.Unconscious ||
-                ReactingToHit || Error is not null || _engagementError is not null || _assistanceError is not null ||
-                _pendingHitscanImpacts != 0 || _routeSearch is not null || _routeDoor is not null ||
-                _enemySounds?.CanCaptureSilent == false) return false;
-            if (Dead)
-                return _ragdoll?.CaptureReady == true && _state.HitReaction is null &&
-                    _enemyObject is null && _packageWeapon is null && _enemyWeaponHandling is null &&
-                    _state.Engagement?.WeaponHandling is null;
-            if (!OwnsPose) return true;
-            return _engagementPrepared && _state.CaptureEngagement == CaptureEngagement &&
-                _state.Engagement is { Action: "idle", Animation: { } path, AnimationHash: { } hash, StartPending: false } &&
-                _combatClips.TryGetValue(path, out var clip) && clip.Hash.Equals(hash, StringComparison.OrdinalIgnoreCase) &&
-                _mover is { } mover && mover.Velocity.IsZeroApprox();
-        }
+        if (PackageOwnsPose || PackageMoving || _state.KnockedDown || _state.Unconscious ||
+            ReactingToHit || Error is not null || _engagementError is not null || _assistanceError is not null ||
+            _pendingHitscanImpacts != 0 || _routeSearch is not null || _routeDoor is not null ||
+            _enemySounds?.CanCaptureSilent == false &&
+                !(allowFiniteSoundWait && _enemySounds.CanAwaitFiniteCompletion)) return false;
+        if (Dead)
+            return _ragdoll?.CaptureReady == true && _state.HitReaction is null &&
+                _enemyObject is null && _packageWeapon is null && _enemyWeaponHandling is null &&
+                _state.Engagement?.WeaponHandling is null;
+        if (!OwnsPose) return true;
+        return _engagementPrepared && _state.CaptureEngagement == CaptureEngagement &&
+            _state.Engagement is { Action: "idle", Animation: { } path, AnimationHash: { } hash, StartPending: false } &&
+            _combatClips.TryGetValue(path, out var clip) && clip.Hash.Equals(hash, StringComparison.OrdinalIgnoreCase) &&
+            _mover is { } mover && mover.Velocity.IsZeroApprox();
     }
 
     private void RetainStoppedPoseReadiness()
     {
         _retiredStoppedPoseReady = LiveStoppedAiPoseCaptureReady;
+        _retiredStoppedPoseFiniteCandidateReady = ReadLiveStoppedAiPoseCaptureReady(allowFiniteSoundWait: true);
         if (_state.CaptureEngagement != CaptureEngagement && _state.Engagement is not null)
-            _retiredStoppedPoseReady = false;
+            _retiredStoppedPoseReady = _retiredStoppedPoseFiniteCandidateReady = false;
         _retiredStoppedPoseDiagnostic ??= ReadStoppedPoseDiagnostic(_retiredStoppedPoseReady.Value, true);
     }
 }

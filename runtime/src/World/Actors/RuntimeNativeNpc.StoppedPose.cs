@@ -7,7 +7,8 @@ internal partial class RuntimeNativeNpc
     private bool HasIndependentStoppedPose => _aiReferenceState?.Injury?.Dead == true ||
         _aiReferenceState?.Engagement is not null;
 
-    private bool CanCaptureStoppedAiPose() => Combat is { } combat ? combat.StoppedAiPoseCaptureReady :
+    private bool CanCaptureStoppedAiPose(bool allowFiniteSoundWait = false) => Combat is { } combat ?
+        allowFiniteSoundWait ? combat.StoppedAiPoseFiniteCandidateReady : combat.StoppedAiPoseCaptureReady :
         !HasIndependentStoppedPose && _aiReferenceState?.KnockedDown != true && _aiReferenceState?.HitReaction is null;
 
     private FalloutActorStoppedPoseCaptureDiagnostic ReadStoppedPoseCaptureDiagnostic()

@@ -14,8 +14,11 @@ finite lifetime and all-retained finite-audio wait are integrated; the combined
 Debug runtime compiles without warnings/errors. Focused pure checks pass source
 failure isolation and all-retained finite wait. Actual owned gear/camera sounds
 finish after model retirement and cold-restore without replay. Full actor
-retirement capture has a selected finite-voice component pass. Ordinary F5,
-stopped nonaudio pose retirement and source cell-stop policy remain independent.
+retirement capture has selected finite-voice and stopped nonaudio pose components
+passing actual native completion and cold restoration. Assembled skeleton/current
+part source-name domains and posed bone/root sound adapters are integrated;
+both original radroach h2hequip sound keys pass native retirement/cold checks.
+Fresh ordinary F5 and source cell-stop policy remain independent.
 Sound and F5 input
 diagnostics build and their focused contracts pass. The complete armed stage-18 v43 checkpoint
 remains preserved and verified through cold Continue and ordinary in-process
@@ -53,7 +56,11 @@ invocation or replay its consumed prefix. Ordinary corpse ray/loot and visible
 skin collapse still require direct verification. The combined candidate's final
 required runtime gate now passes Release/Debug builds, formatting/analyzers,
 contracts, launcher tests and native Godot checks. Selected actual finite-actor
-and stopped-IDLE delayed-write/cold components also pass; no campaign or parity
+and stopped-IDLE delayed-write/cold components also pass. Capsule searches now
+retain round-robin cursors under the same global 2 ms/16-step slice bounds;
+synthetic starvation/lifetime, native scheduling and both unchanged owned stair
+directions pass. Ordinary route latency still needs measured budget/progress
+telemetry. No campaign or parity
 completion is claimed.
 
 Previously merged ACTI/shader/XRGB, speech retirement, source default loot and

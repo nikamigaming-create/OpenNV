@@ -22,12 +22,13 @@ internal partial class RuntimeNativeNpc
         _sitting == 0 && !_furnitureApproaching && !_travelActive && _travelProgress?.ArrivalPending != true &&
         _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _patrol is null &&
         (_animation is null || CanCaptureStoppedIndependentIdle(allowFiniteSoundWait)) && !_responseIdleActive && AnimationError is null &&
-        _conversationTarget is null && CanCaptureStoppedAiPose() &&
+        _conversationTarget is null && CanCaptureStoppedAiPose(allowFiniteSoundWait) &&
         _baseClock.Resource.Length != 0;
 
-    private FalloutActorPackageBindingFailure CaptureBindingFailure()
+    private FalloutActorPackageBindingFailure CaptureBindingFailure() => CaptureBindingFailure(allowFiniteSoundWait: false);
+    private FalloutActorPackageBindingFailure CaptureBindingFailure(bool allowFiniteSoundWait)
     {
-        if (!CanCaptureBindingFailure())
+        if (!CanCaptureBindingFailure(allowFiniteSoundWait))
             throw new NotSupportedException("Actor package failure still has an active continuation owner.");
         var package = _aiStack!.GetEffective(_failedPackage!.Value);
         var position = GlobalPosition;
@@ -38,17 +39,19 @@ internal partial class RuntimeNativeNpc
                 basis.Y.X, basis.Y.Y, basis.Y.Z, basis.Z.X, basis.Z.Y, basis.Z.Z],
             _baseLocomotionMoving, _aiRandom.State, Math.Max(0, _aiPollRemaining), _aiScheduleTime,
             FalloutPackageRetirement.Capture(_aiStack, _packageEvents!), _blink?.Capture(), CapturePackageIdleState(),
-            _animation is null ? null : CaptureStoppedIndependentIdle());
+            _animation is null ? null : CaptureStoppedIndependentIdle(allowFiniteSoundWait));
         failure.Validate(_aiStack, _aiReferenceState!);
         return failure;
     }
 
     private IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>? BindingFailureFiniteSoundWait() =>
-        CanCaptureBindingFailure(allowFiniteSoundWait: true) ? _animationSounds?.PendingFiniteVoices : null;
+        CanCaptureBindingFailure(allowFiniteSoundWait: true) && _aiReferenceState is { } state
+            ? FalloutActorRetirementCandidate.ReadLiveFiniteReceipts(_aiStack!, state, GetInstanceId()) : null;
 
     private void BindFailureCapture()
     {
         if (_aiReferenceState is not { } state) return;
+        state.StoppedRetirement = null;
         state.CanCapturePackageBindingFailure = _bindingFailureReady = CanCaptureBindingFailure;
         state.CapturePackageBindingFailure = _bindingFailureCapture = CaptureBindingFailure;
         state.PendingPackageBindingFiniteVoices = _bindingFailureWait = BindingFailureFiniteSoundWait;
@@ -98,10 +101,17 @@ internal partial class RuntimeNativeNpc
     private void RetainBindingFailure()
     {
         if (_aiReferenceState is not { } state) return;
-        if (CanCaptureBindingFailure())
+        var authoritative = ReferenceEquals(state.CanCapturePackageBindingFailure, _bindingFailureReady) &&
+            ReferenceEquals(state.CapturePackageBindingFailure, _bindingFailureCapture);
+        if (authoritative && CanCaptureBindingFailure())
         {
             state.PackageBindingFailure = CaptureBindingFailure();
             state.ProcedureCaptureBlocker = state.PackageBindingFailure.Error;
+        }
+        else if (authoritative && CanCaptureBindingFailure(allowFiniteSoundWait: true))
+        {
+            FalloutActorRetirementCandidate.Prepare(_aiStack!, state, GetInstanceId(), null,
+                CaptureBindingFailure(allowFiniteSoundWait: true))?.Bind();
         }
         if (ReferenceEquals(state.CanCapturePackageBindingFailure, _bindingFailureReady))
             state.CanCapturePackageBindingFailure = null;

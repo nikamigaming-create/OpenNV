@@ -29,12 +29,11 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
 
     // This owner-scoped observation remains useful for procedure admission.
     // The global registry composes individual receipts across all sound owners.
-    internal IReadOnlyList<FalloutFiniteSoundVoice>? PendingFiniteVoices
+    private IReadOnlyList<FalloutFiniteSoundVoice>? PendingOwnFiniteVoices
     {
         get
         {
             if (_events?.CanAwaitNativeCompletion != true || _voices.Count == 0 ||
-                _events.Events.Count(entry => entry.End == FalloutAnimationSoundEnd.Active) != _voices.Count ||
                 _spatial.Keys.Any(node => !_voices.ContainsKey(node))) return null;
             var voices = new List<FalloutFiniteSoundVoice>();
             foreach (var (node, voice) in _voices)
@@ -45,4 +44,17 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             return voices.AsReadOnly();
         }
     }
+
+    internal IReadOnlyList<FalloutFiniteSoundVoice>? PendingFiniteVoices =>
+        _events?.Events.Count(entry => entry.End == FalloutAnimationSoundEnd.Active) == _voices.Count
+            ? PendingOwnFiniteVoices : null;
+
+    // Empty local voices do not mean completion. This only allows a parent to
+    // prepare a nonaudio copy when the entire shared ledger still has proven
+    // finite media; its source/native registry must prove every active generation.
+    internal bool CanAwaitFiniteCompletion => _events?.CanAwaitNativeCompletion == true &&
+        !_lostCaptureAtRetirement && _retiredCaptureDiagnostic is null &&
+        !_unbound.Except(_events.PartialLanes, StringComparer.Ordinal).Any() &&
+        !_spatial.Keys.Any(node => !_voices.ContainsKey(node)) &&
+        (_voices.Count == 0 || PendingOwnFiniteVoices?.Count == _voices.Count);
 }

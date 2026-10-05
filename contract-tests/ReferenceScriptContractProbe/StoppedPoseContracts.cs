@@ -27,6 +27,8 @@ internal static class StoppedPoseContracts
             var soundData = new byte[36]; soundData[0] = 1; soundData[1] = 10;
             UInt(soundData, 4, (uint)FalloutSoundFlags.MuteWhenSubmerged);
             for (var point = 0; point < 5; point++) BinaryPrimitives.WriteInt16LittleEndian(soundData.AsSpan(12 + point * 2), 100);
+            var loopSoundData = (byte[])soundData.Clone();
+            UInt(loopSoundData, 4, (uint)FalloutSoundFlags.Loop);
             var stoppedRead = (byte[])predicate.Clone();
             BinaryPrimitives.WriteUInt16LittleEndian(stoppedRead.AsSpan(8), 143); UInt(stoppedRead, 12, 0);
             var refs = Join(Reference("ACHR", 0x900, 0x10), Reference("ACHR", 0x902, 0x11),
@@ -39,6 +41,7 @@ internal static class StoppedPoseContracts
                 Setting(0x63, "fAVDNPCHealthLevelMult", 5),
                 Record("MISC", 0x12, Field("DATA", new byte[8])),
                 Record("SOUN", 0x68, Field("EDID", Text("FixturePartial")), Field("FNAM", Text("fixture/punch.wav")), Field("SNDD", soundData)),
+                Record("SOUN", 0x6a, Field("EDID", Text("FixtureLoop")), Field("FNAM", Text("fixture/loop.wav")), Field("SNDD", loopSoundData)),
                 Record("IDLE", 0x69, Field("CTDA", stoppedRead)),
                 Record("PACK", 0x20, Field("PKDT", pkdt)), Record("PACK", 0x22, Field("PKDT", pkdt)),
                 Record("PACK", 0x25, Field("PKDT", pkdt), Field("CTDA", predicate)),
@@ -57,6 +60,7 @@ internal static class StoppedPoseContracts
             using var records = FalloutPluginStack.Load(directory, ["Pose.esm"]);
             CaptureDiagnosticContracts.Run(records);
             NativeEventHistoryContracts.Run(records);
+            ActorRetirementContracts.Run(records);
             SoundCaptureDiagnosticContracts.Run(records);
             ManualSaveQueueContracts.Run();
             ManualSaveFiniteVoiceContracts.Run(records);

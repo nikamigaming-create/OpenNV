@@ -21,6 +21,13 @@ internal sealed partial class RuntimeNativeActorCombat
     private string? _coarseRouteError;
     private NativeNavigationIntent? _routeIntent;
     private int _retiredPursuitSearches;
+    private NativeNavigationWorkSnapshot? _routeWork;
+    private void DisposeRouteSearch()
+    {
+        _routeSearch?.Dispose();
+        _routeWork = NativeCapsuleNavigation.Work(_routeSearch) ?? _routeWork;
+        _routeSearch = null;
+    }
 
     private Vector3? PursuitTarget(Vector3 target, double delta, float stoppingDistance)
     {
@@ -31,7 +38,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_routeDoor is not null && target.DistanceTo(_routeTarget) > _radius) ResetDoorNavigation();
         if (_routeSearch is not null && target.DistanceTo(_routeTarget) > _radius)
         {
-            _routeSearch.Dispose(); _routeSearch = null; _routeClock = 0;
+            DisposeRouteSearch(); _routeClock = 0;
         }
         while (_pursuitCursor < _pursuitPath.Length)
         {
@@ -57,6 +64,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             var started = Stopwatch.GetTimestamp();
             _routeRequests++;
+            _routeWork = null;
             _pursuitPath = [];
             _pursuitCursor = 0;
             _routeTarget = target;
@@ -103,7 +111,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private void RetireUnusedPursuitSearch()
     {
         if (_routeSearch is null) return;
-        _routeSearch.Dispose(); _routeSearch = null;
+        DisposeRouteSearch();
         _retiredPursuitSearches++;
     }
     private void AdvanceRouteSearch()
@@ -116,14 +124,14 @@ internal sealed partial class RuntimeNativeActorCombat
             _routeError = null;
             _routeFailures = 0;
             _routeClock = .5;
-            _routeSearch!.Dispose(); _routeSearch = null;
+            DisposeRouteSearch();
         }
         catch (InvalidOperationException error)
         {
             _routeError = error.Message;
             _routeFailures = Math.Min(4, _routeFailures + 1);
             _routeClock = .5 * _routeFailures;
-            _routeSearch!.Dispose(); _routeSearch = null;
+            DisposeRouteSearch();
             var refinedSpacing = Math.Max(.15f, _radius);
             if (_routeRefinements == 0 && refinedSpacing < _routeSpacing)
             {
@@ -146,6 +154,7 @@ internal sealed partial class RuntimeNativeActorCombat
             var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             _routeMilliseconds += elapsed;
             _routeMaximumSliceMilliseconds = Math.Max(_routeMaximumSliceMilliseconds, elapsed);
+            _routeWork = NativeCapsuleNavigation.Work(_routeSearch) ?? _routeWork;
         }
     }
 }

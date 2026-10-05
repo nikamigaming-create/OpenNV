@@ -12,6 +12,11 @@ Finite source sounds keep their native lifetime outside model retirement;
 all-retained source/native/media receipts admit live save waiting without
 admitting active audio into a checkpoint. Source writer failures retain their
 own historical/capture boundary while later unrelated script frames continue.
+Assembled actor skeletons and parts retain complete source string domains.
+Named sound bones use the actual posed skeleton; a proven absent name uses the
+actual source root frame with the original finite/Loop attachment distinction.
+Pre-teardown copies retain already admitted stopped nonaudio actor state until
+every original finite generation finishes, without calling retired native owners.
 
 [Whole-stack script coverage](quest-graph-audit.md) discovers all winning
 standalone/embedded programs and condition owners. It inspects every authored

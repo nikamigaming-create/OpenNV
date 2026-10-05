@@ -9,8 +9,19 @@ namespace OpenNV.Runtime.World.Cells;
 internal static partial class NativeCapsuleNavigation
 {
     internal const float SourceHeightTolerance = .6f;
-    private static ulong _workFrame;
-    private static double _workMilliseconds;
+    private static NativeNavigationWorkSchedule? _workSchedule;
+    private static NativeNavigationWorkSchedule WorkSchedule
+    {
+        get
+        {
+            if (OS.GetThreadCallerId() != OS.GetMainThreadId())
+                throw new InvalidOperationException("Native capsule navigation requires the Godot main thread.");
+            return _workSchedule ??= new();
+        }
+    }
+    internal static int RegisteredSearches => WorkSchedule.Count;
+    internal static NativeNavigationWorkSnapshot? Work(IEnumerator<IReadOnlyList<Vector3>?>? search) =>
+        (search as NativeNavigationScheduledSearch<IReadOnlyList<Vector3>?>)?.State;
 
     internal static float RefinementSpacing(float coarse, float capsuleRadius, float horizontalScale)
     {
@@ -30,28 +41,30 @@ internal static partial class NativeCapsuleNavigation
         return distance == 0 ? Vector3.Zero : direction / distance * Math.Min(distance, accumulatedMotion.Length());
     }
 
-    // All runtime actor searches share this physics-thread budget. Queries
-    // stay with their native owner and yield between node expansions; source
-    // reads can use content workers, but physics is not safe worker-pool work.
+    // Actor and player searches share the original global time/node budget.
+    // Round-robin leases reserve progress for late Process callers even when
+    // earlier PhysicsProcess callbacks overrun an indivisible collision query.
     internal static bool Advance(IEnumerator<IReadOnlyList<Vector3>?> search, out IReadOnlyList<Vector3>? result)
     {
-        var frame = Engine.GetPhysicsFrames();
-        if (_workFrame != frame) { _workFrame = frame; _workMilliseconds = 0; }
+        var schedule = WorkSchedule;
+        if (search is not NativeNavigationScheduledSearch<IReadOnlyList<Vector3>?> owned)
+            throw new InvalidOperationException("Capsule search lacks its native work registration.");
         result = null;
-        if (_workMilliseconds >= 2) return false;
+        if (!owned.TryBegin(Engine.GetPhysicsFrames(), Engine.GetProcessFrames())) return false;
         var started = Stopwatch.GetTimestamp();
         try
         {
-            for (var nodes = 0; nodes < 16 && _workMilliseconds + Stopwatch.GetElapsedTime(started).TotalMilliseconds < 2; nodes++)
+            for (var steps = 0; steps < NativeNavigationWorkSchedule.MaximumIteratorSteps &&
+                schedule.UsedMilliseconds + Stopwatch.GetElapsedTime(started).TotalMilliseconds < NativeNavigationWorkSchedule.BudgetMilliseconds; steps++)
             {
-                if (!search.MoveNext()) throw new InvalidOperationException("Capsule search ended without a route.");
-                if (search.Current is not { } path) continue;
+                if (!owned.MoveNext()) throw new InvalidOperationException("Capsule search ended without a route.");
+                if (owned.Current is not { } path) continue;
                 result = path;
                 return true;
             }
             return false;
         }
-        finally { _workMilliseconds += Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
+        finally { owned.Finish(Stopwatch.GetElapsedTime(started).TotalMilliseconds); }
     }
 
     internal static (Vector3 Target, int Resume) CorridorPrefix(Vector3 start, IReadOnlyList<Vector3> path, float length)
@@ -110,6 +123,27 @@ internal static partial class NativeCapsuleNavigation
     internal static IEnumerable<IReadOnlyList<Vector3>?> Search(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200,
         NativeNavigationProbe? probe = null, float targetRadius = 0, IReadOnlyList<Vector3>? corridor = null, Func<Vector3, bool>? arrival = null)
+    {
+        var schedule = WorkSchedule;
+        if (!GodotObject.IsInstanceValid(body) || !body.IsInsideTree() || body.IsQueuedForDeletion())
+            throw new InvalidOperationException("Capsule search requires its actual resident native body.");
+        var identity = body.GetInstanceId(); var rid = body.GetRid(); var world = body.GetWorld3D().GetInstanceId();
+        bool OwnerValid() => GodotObject.IsInstanceValid(body) && body.IsInsideTree() && !body.IsQueuedForDeletion() &&
+            body.GetInstanceId() == identity && body.GetRid().Equals(rid) && body.GetWorld3D().GetInstanceId() == world;
+        Action BindRetirement(Action retired)
+        {
+            body.TreeExiting += retired;
+            return () => { if (GodotObject.IsInstanceValid(body)) body.TreeExiting -= retired; };
+        }
+        return new NativeNavigationScheduledEnumerable<IReadOnlyList<Vector3>?>(schedule,
+            work => SearchCore(body, start, target, stepHeight, spacing, resident, maximumNodes, probe,
+                targetRadius, corridor, arrival, work).GetEnumerator(), OwnerValid, result => result is not null, BindRetirement);
+    }
+
+    private static IEnumerable<IReadOnlyList<Vector3>?> SearchCore(CharacterBody3D body, Vector3 start, Vector3 target,
+        float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes,
+        NativeNavigationProbe? probe, float targetRadius, IReadOnlyList<Vector3>? corridor, Func<Vector3, bool>? arrival,
+        NativeNavigationWorkSchedule.Registration work)
     {
         if (!start.IsFinite() || !target.IsFinite() || !float.IsFinite(stepHeight) || !float.IsFinite(spacing) ||
             stepHeight <= 0 || spacing <= 0 || maximumNodes <= 0 ||
@@ -248,6 +282,7 @@ internal static partial class NativeCapsuleNavigation
                 for (var index = 1; index <= samples; index++)
                 {
                     var desired = origin.Lerp(destination, (float)index / samples);
+                    work.GuidedSamples++;
                     if (guided.Count >= maximumNodes)
                     {
                         probe?.Reject("source-corridor-node-bound", from, desired, null); probe?.RejectGuide(); clear = false;
@@ -271,7 +306,8 @@ internal static partial class NativeCapsuleNavigation
             if (clear && (arrival?.Invoke(from) ?? (targetRadius > 0 ? from.DistanceTo(target) <= targetRadius :
                 Flat(from, target) <= body.SafeMargin * 8 && Math.Abs(from.Y - target.Y) < SourceHeightTolerance)))
             {
-                foreach (var result in SmoothRoute(guided, start, spacing, body.SafeMargin * 8, FlatEdge)) yield return result;
+                foreach (var result in SmoothRoute(guided, start, spacing, body.SafeMargin * 8, FlatEdge))
+                { if (result is null) work.SmoothingSteps++; yield return result; }
                 yield break;
             }
         }
@@ -302,6 +338,7 @@ internal static partial class NativeCapsuleNavigation
             var from = positions[current];
             rejected = null;
             nearest = Math.Min(nearest, from.DistanceTo(target));
+            work.ObserveNode(from.DistanceTo(target));
             // A source approach radius describes a reachable region. Every
             // discovered point already passed the complete capsule sweep and
             // support query; it need not enter the target's collision body.
@@ -309,7 +346,7 @@ internal static partial class NativeCapsuleNavigation
             if (current != first && (arrival?.Invoke(from) ?? (targetRadius > 0 && from.DistanceTo(target) <= targetRadius)))
             {
                 foreach (var result in SmoothRoute(Approach(current), start, spacing, body.SafeMargin * 8, FlatEdge))
-                    yield return result;
+                { if (result is null) work.SmoothingSteps++; yield return result; }
                 yield break;
             }
             if (Flat(from, target) <= spacing * 1.5f && Edge(from, target, out var goal) &&
@@ -319,7 +356,7 @@ internal static partial class NativeCapsuleNavigation
                 while (current != first) { path.Add(positions[current]); current = parents[current]; }
                 path.Reverse();
                 foreach (var result in SmoothRoute(path, start, spacing, body.SafeMargin * 8, FlatEdge))
-                    yield return result;
+                { if (result is null) work.SmoothingSteps++; yield return result; }
                 yield break;
             }
             Record(current);

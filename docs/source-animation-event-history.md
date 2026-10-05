@@ -22,6 +22,12 @@ An exact source name absent from the complete NIF string domain uses the origina
 root-position fallback; finite missing-name voices do not follow later movement.
 Declared names with missing native adapters still refuse. The default lookup is
 AttachSound. Loops retain their separate attachment and stop owner.
+Actor skeletons and each current assembled part expose their complete source
+domains. Real source bones bind one posed BoneAttachment3D shared by sound
+players; each dispatch and following update reads the current skeleton pose.
+Absent names use the actual source-root bone frame. Current equipment removal
+retires its names/adapters, while unknown domains, duplicates and declared
+unadapted nodes remain refusals. Binding consumes no selection RNG or source key.
 
 Live save admission validates every retained reference ledger, including
 nonactors and off-cell voices, against the matching native generation and owned
@@ -45,6 +51,15 @@ random state and retirement remain retained. Cold native binding restores the
 selected phase after the source base clock without replaying selection or result
 effects. A live response, attached animation object, weapon, active sound or
 independent physical/combat pose is not admitted by this stationary owner.
+
+Before teardown, an already admitted stopped NPC selection/package fault can
+prepare an immutable nonaudio pose/procedure copy. Exact original finite
+source/media generations and the native binding lease must remain unchanged.
+The normal writer commits the copy only after every generation reports native
+Finished; it never invokes the retired model's capture callbacks. Current script
+locals/inventory remain current. Replacement bindings, new generations, changed
+poses/clocks/faults, cancellation and SourceStopped after preparation refuse.
+The transient lease is not saved; cold state retains genuine completed history.
 
 Pure contracts cover source drift, missing completion, cancellation, mixed pose,
 atomic rejection and future repeat/text-key suffixes. Owned native components

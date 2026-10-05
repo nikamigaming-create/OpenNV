@@ -20,6 +20,15 @@ both its coarse and refined complete-capsule queries. A nearby endpoint cannot
 discard an authored detour. The actual actor's source bounding box, native slope,
 residency and support rules remain authoritative for clearance.
 
+Native search cursors share a round-robin work queue with the existing global
+2 ms budget and 16 iterator-step slice bound. A late Process caller keeps its
+turn across PhysicsProcess callbacks; an owner absent for a complete process
+phase yields its turn. Actual body/RID/world/thread identity remains mandatory.
+Completion, fault, cancellation and body retirement release registrations.
+Bot/actor telemetry separates budget/turn denials from iterator steps, expanded
+lattice nodes, guide samples and smoothing work. This grants bounded work
+opportunities; it does not guarantee route success or retail navigation timing.
+
 An attack or ended engagement retires an unused pending pursuit iterator exactly
 once. A requested pursuit that is still waiting keeps its iterator. Retirement
 preserves completed query failures, retry clocks, stopped source AI faults and

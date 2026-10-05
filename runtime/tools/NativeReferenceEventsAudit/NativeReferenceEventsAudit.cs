@@ -23,6 +23,14 @@ public partial class NativeReferenceEventsAudit : Node
             {
                 HitEvents(); GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--creature-sound-emitters", var creatureSoundRoot, var creatureSoundMod,
+                var creatureSoundModRoot, var firstCreatureSound, var secondCreatureSound, var creatureSoundKf,
+                .. var creatureSoundDependencies])
+            {
+                await ExerciseOwnedCreatureSoundEmitters(creatureSoundRoot, creatureSoundMod, creatureSoundModRoot,
+                    firstCreatureSound, secondCreatureSound, creatureSoundKf, creatureSoundDependencies);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--sound-emitters", var soundRoot, var soundMod, var soundModRoot,
                 var firstSoundReference, var secondSoundReference, .. var soundDependencies])
             {

@@ -17,6 +17,13 @@ public partial class NativeActorPerformanceAudit : Node
                     short.Parse(stoppedStage, System.Globalization.CultureInfo.InvariantCulture), stoppedPackage, stoppedForm, stoppedSounds.Split(','), stoppedDependencies);
                 GetTree().Quit(); return;
             }
+            if (args is ["--owned-actor-finite-retirement", var retireGame, var retireMod, var retireRoot,
+                var retireSave, var retireActor, var retireSound, .. var retireDependencies])
+            {
+                await OwnedEndedSounds(retireGame, retireMod, retireRoot, retireSave, retireActor, retireSound, retireDependencies,
+                    actorRetirement: true);
+                GetTree().Quit(); return;
+            }
             if (args is ["--owned-finite-sound-retirement", var finiteGame, var finiteMod, var finiteRoot,
                 var finiteSave, var finiteActor, var finiteSound, .. var finiteDependencies])
             {

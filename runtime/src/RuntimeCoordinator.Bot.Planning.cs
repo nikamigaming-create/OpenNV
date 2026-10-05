@@ -34,14 +34,45 @@ public partial class RuntimeCoordinator
         internal float ArrivalRadius, Spacing, RefinedSpacing;
         internal int Resume;
         internal string? CoarseError;
+        internal NativeNavigationWorkSnapshot? Work;
         internal double SourceMilliseconds, MaximumSliceMilliseconds;
     }
 
     private NativeBotRouteRequest? _botRouteRequest;
-
-    private void CancelNativeBotRoute()
+    private object? _botLastRoutePlanning;
+    private object? NativeBotPlanningState => _botRouteRequest is { } current ?
+        NativeBotPlanningObservation(current, current.Search is null ? current.Work?.State ?? "source-pending" : "pending") : _botLastRoutePlanning;
+    private object NativeBotPlanningObservation(NativeBotRouteRequest request, string status) => new
     {
-        _botRouteRequest?.Search?.Dispose();
+        status,
+        nativeOwner = GodotObject.IsInstanceValid(request.Player) ? request.Player.GetInstanceId() : (ulong?)null,
+        ownerBuild = typeof(NativeCapsuleNavigation).Module.ModuleVersionId,
+        source = request.Identity,
+        sourceSha256 = _botNavigation?.SourceSha256,
+        requestedStart = new[] { request.Start.X, request.Start.Y, request.Start.Z },
+        requestedEnd = new[] { request.End.X, request.End.Y, request.End.Z },
+        referenceTarget = new[] { request.Target.X, request.Target.Y, request.Target.Z },
+        localTarget = new[] { request.LocalTarget.X, request.LocalTarget.Y, request.LocalTarget.Z },
+        sourcePoints = request.WorldPath.Length,
+        request.Resume,
+        request.Spacing,
+        request.ArrivalRadius,
+        request.SourceMilliseconds,
+        request.MaximumSliceMilliseconds,
+        request.CoarseError,
+        work = NativeCapsuleNavigation.Work(request.Search) ?? request.Work
+    };
+
+    private void CancelNativeBotRoute() => CancelNativeBotRoute("cancelled");
+
+    private void CancelNativeBotRoute(string reason)
+    {
+        if (_botRouteRequest is { } request)
+        {
+            request.Search?.Dispose();
+            request.Work = NativeCapsuleNavigation.Work(request.Search) ?? request.Work;
+            _botLastRoutePlanning = NativeBotPlanningObservation(request, reason);
+        }
         _botRouteRequest = null;
     }
 
@@ -55,10 +86,11 @@ public partial class RuntimeCoordinator
         var events = _nativeReferenceEvents ?? throw new InvalidOperationException("No reference event owner for navigation.");
         if (_botRouteRequest is { } old && (old.Player != player || old.Scene != scene || old.Events != events ||
             !old.BodyBasis.IsEqualApprox(player.GlobalBasis) || old.Start != start || old.End != end || old.Target != target ||
-            old.Projection != projectionRadius || old.Distance != distance)) CancelNativeBotRoute();
+            old.Projection != projectionRadius || old.Distance != distance)) CancelNativeBotRoute("request-or-native-owner-changed");
         if (_botRouteRequest is null)
         {
             var started = Stopwatch.GetTimestamp();
+            _botLastRoutePlanning = null;
             var request = _botRouteRequest = new(player, scene, events, start, end, target, projectionRadius, distance, EnsureNativeBotNavigation());
             BeginNativeBotRouteSearch(request);
             request.SourceMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
@@ -69,7 +101,7 @@ public partial class RuntimeCoordinator
         try
         {
             if (!NativeCapsuleNavigation.Advance(current.Search!, out var path)) return null;
-            current.Search!.Dispose(); current.Search = null;
+            current.Search!.Dispose(); current.Work = NativeCapsuleNavigation.Work(current.Search); current.Search = null;
             GD.Print($"OPENNV_BOT_CAPSULE_ROUTE source={current.Identity} requested={current.End} projected={current.WorldPath[^1]} projectionRadius={current.Projection} accepted={path![^1]} " +
                 $"scope={Scope(current)} target={current.LocalTarget} sourceSha256={_botNavigation!.SourceSha256} " +
                 $"spacing={current.Spacing} arrivalRadius={current.ArrivalRadius} sourceExclusions=0 " +
@@ -78,7 +110,7 @@ public partial class RuntimeCoordinator
         }
         catch (InvalidOperationException error)
         {
-            current.Search?.Dispose(); current.Search = null;
+            current.Search?.Dispose(); current.Work = NativeCapsuleNavigation.Work(current.Search) ?? current.Work; current.Search = null;
             GD.Print($"OPENNV_BOT_CAPSULE_REJECT ownerBuild={typeof(NativeCapsuleNavigation).Module.ModuleVersionId} " +
                 $"source={current.Identity} sourceSha256={_botNavigation!.SourceSha256} start={current.Start} " +
                 $"requested={current.End} projected={current.WorldPath[^1]} projectionRadius={current.Projection} referenceTarget={current.Target} " +
@@ -115,6 +147,8 @@ public partial class RuntimeCoordinator
         finally
         {
             current.MaximumSliceMilliseconds = Math.Max(current.MaximumSliceMilliseconds, Stopwatch.GetElapsedTime(slice).TotalMilliseconds);
+            current.Work = NativeCapsuleNavigation.Work(current.Search) ?? current.Work;
+            _botLastRoutePlanning = NativeBotPlanningObservation(current, current.Search is null ? "settled" : "pending");
         }
     }
 

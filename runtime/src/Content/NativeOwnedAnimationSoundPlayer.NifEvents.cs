@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Content;
 
@@ -50,23 +51,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     }
 
     internal (Node3D Emitter, bool FollowEmitter) ResolveEmitter(string name, bool sourceLoop = false)
-    {
-        if (name.Length == 0) name = "AttachSound";
-        if (_emitters.TryGetValue(name, out var cached) && GodotObject.IsInstanceValid(cached)) return (cached, true);
-        var nodes = _actor.FindChildren("*", "", true, false).OfType<Node3D>().Prepend(_actor)
-            .Where(node => node.GetMeta("opennv_nif_source_name", "").AsString() == name).ToArray();
-        if (nodes.Length == 1) return (_emitters[name] = nodes[0], true);
-        if (nodes.Length != 0) throw new NotSupportedException($"Source sound emitter {name} has {nodes.Length} native node owners.");
-        // Every encoded NiObjectNET name belongs to this file's fixed-string
-        // domain. A missing native adapter is distinct from a source-null lookup.
-        if (!_actor.HasMeta("opennv_nif_fixed_strings") || _actor.FindChildren("*", "", true, false).OfType<Node3D>().Prepend(_actor)
-            .Where(node => node.HasMeta("opennv_nif_fixed_strings"))
-            .Any(node => node.GetMeta("opennv_nif_fixed_strings").AsStringArray().Contains(name, StringComparer.Ordinal)))
-            throw new NotSupportedException($"Source sound emitter {name} has no complete native source-name binding.");
-        // The original keeps a finite missing-name sound at the Get3D root's
-        // initial position. Only its authored Loop flag attaches it to that root.
-        return (_actor, sourceLoop);
-    }
+        => RuntimeNativeNifSoundEmitters.Resolve(_actor, name, sourceLoop, _emitters);
 
     private void TrackVoice(Node voice, Node3D emitter, FalloutSoundLoop loop, FalloutFormKey sound, Action? completed, long? generation, bool followEmitter)
     {

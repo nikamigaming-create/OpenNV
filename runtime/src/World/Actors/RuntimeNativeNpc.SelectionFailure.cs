@@ -72,7 +72,8 @@ internal partial class RuntimeNativeNpc
         }
     }
 
-    private bool CanCaptureSelectionFailure() => _failedSelectionCondition is not null && _aiError is not null &&
+    private bool CanCaptureSelectionFailure() => CanCaptureSelectionFailure(allowFiniteSoundWait: false);
+    private bool CanCaptureSelectionFailure(bool allowFiniteSoundWait) => _failedSelectionCondition is not null && _aiError is not null &&
         _aiReferenceState is { } state && state.ProcedureCaptureBlocker == _selectionCaptureBlocker &&
         _selectionCaptureBlocker is not null && !_bindingInitialBase && _requestedSelection is null && _pendingPackage is null &&
         _selectedSourcePackage is null && _failedPackage is null && _aiPackage is null &&
@@ -80,12 +81,13 @@ internal partial class RuntimeNativeNpc
         _findFurniture is null && _seat is null && _sitting == 0 && !_furnitureApproaching && !_travelActive &&
         _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _guardPackage is null && _patrol is null &&
         _animation is null && !_responseIdleActive && _packageIdleError is null && AnimationError is null &&
-        _idleReplays.Remaining.Count == 0 && _conversationTarget is null && CanCaptureStoppedAiPose() &&
+        _idleReplays.Remaining.Count == 0 && _conversationTarget is null && CanCaptureStoppedAiPose(allowFiniteSoundWait) &&
         !_baseLocomotionMoving && _baseClock.Resource.Length != 0;
 
-    private FalloutActorSelectionFailure CaptureSelectionFailure()
+    private FalloutActorSelectionFailure CaptureSelectionFailure() => CaptureSelectionFailure(allowFiniteSoundWait: false);
+    private FalloutActorSelectionFailure CaptureSelectionFailure(bool allowFiniteSoundWait)
     {
-        if (!CanCaptureSelectionFailure()) throw new NotSupportedException("Failed selection has an active procedure or pose continuation.");
+        if (!CanCaptureSelectionFailure(allowFiniteSoundWait)) throw new NotSupportedException("Failed selection has an active procedure or pose continuation.");
         var condition = _failedSelectionCondition!;
         var sourceConditions = FalloutCondition.Read(condition.Owner);
         var ordinal = sourceConditions.Select((value, index) => (value, index)).Where(value => value.value == condition)
@@ -101,6 +103,7 @@ internal partial class RuntimeNativeNpc
     private void BindSelectionFailureCapture()
     {
         if (_aiReferenceState is not { } state) return;
+        state.StoppedRetirement = null;
         state.CanCaptureSelectionFailure = _selectionFailureReady = CanCaptureSelectionFailure;
         state.CaptureSelectionFailure = _selectionFailureCapture = CaptureSelectionFailure;
         _selectionCaptureNativeOwner = GetInstanceId();
@@ -136,10 +139,17 @@ internal partial class RuntimeNativeNpc
                 state.RetiredSelectionCaptureDiagnostic = ReadSelectionCaptureDiagnostic(true);
             state.ObserveSelectionCapture = null;
         }
-        if (CanCaptureSelectionFailure())
+        var authoritative = ReferenceEquals(state.CanCaptureSelectionFailure, _selectionFailureReady) &&
+            ReferenceEquals(state.CaptureSelectionFailure, _selectionFailureCapture);
+        if (authoritative && CanCaptureSelectionFailure())
         {
             state.SelectionFailure = CaptureSelectionFailure();
             state.ProcedureCaptureBlocker = state.SelectionFailure.Error;
+        }
+        else if (authoritative && CanCaptureSelectionFailure(allowFiniteSoundWait: true))
+        {
+            FalloutActorRetirementCandidate.Prepare(_aiStack!, state, _selectionCaptureNativeOwner,
+                CaptureSelectionFailure(allowFiniteSoundWait: true), null)?.Bind();
         }
         if (ReferenceEquals(state.CanCaptureSelectionFailure, _selectionFailureReady)) state.CanCaptureSelectionFailure = null;
         if (ReferenceEquals(state.CaptureSelectionFailure, _selectionFailureCapture)) state.CaptureSelectionFailure = null;

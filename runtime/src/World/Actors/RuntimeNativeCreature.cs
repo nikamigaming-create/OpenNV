@@ -131,6 +131,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
                 actor._clock.StartAmbientLoop(reference.FormKey, (sequence.StopTime - sequence.StartTime) / sequence.Frequency);
             actor.Skeleton.Node.SetBonePose(actor.Skeleton.BoneIndex(sequence.TargetName), Transform3D.Identity);
             actor._animation.ApplySourceTime(actor.SourceSeconds);
+            actor.Skeleton.BindSoundSource(actor);
             actor._sounds = new(stack, content, actor, unitsToMetres, state.SoundRandom, state.AnimationSoundEvents);
             actor.AddChild(actor._sounds);
             actor._unbound.UnionWith(["creature-package-procedures-and-special-idle-selection", "combat-and-actor-controller-dynamics",

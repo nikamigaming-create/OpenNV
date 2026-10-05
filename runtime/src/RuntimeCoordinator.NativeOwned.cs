@@ -65,6 +65,7 @@ public partial class RuntimeCoordinator
         return new
         {
             paused = GetTree().Paused,
+            botPlanning = NativeBotPlanningState,
             manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },
             combatWheel = _nativeCombatWheel?.State,
             xr = _nativeXr?.State,
