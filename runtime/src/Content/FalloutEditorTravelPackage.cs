@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
@@ -15,11 +14,10 @@ internal sealed record FalloutEditorTravelPackage(FalloutFormKey Form, uint Flag
         var declaration = FalloutScriptPackage.Read(record);
         if (declaration.Procedure != 6 || declaration.LocationType != 3)
             throw new InvalidDataException("Package is not Travel to editor location.");
-        var data = record.ReadSubrecords().Single(field => field.Signature == "PKDT").Data.Span;
-        var flags = BinaryPrimitives.ReadUInt32LittleEndian(data);
+        var data = FalloutPackageData.Read(record);
+        var flags = data.Flags;
         const uint supported = 2 | 4 | 0x1000 | 0x2000 | 0x800000 | FalloutScriptPackage.HeadTrackingOffFlag;
-        if ((flags & ~supported) != 0 || BinaryPrimitives.ReadUInt16LittleEndian(data[6..]) != 0 ||
-            BinaryPrimitives.ReadUInt16LittleEndian(data[8..]) != 0 ||
+        if ((flags & ~supported) != 0 || data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0) ||
             record.ReadSubrecords().Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2"))
             throw new NotSupportedException("Editor travel needs its additional behavior, search or target owner.");
         return new(record.FormKey, flags, declaration.LocationRadius);

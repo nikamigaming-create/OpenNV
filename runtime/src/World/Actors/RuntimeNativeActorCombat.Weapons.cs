@@ -86,7 +86,7 @@ internal sealed partial class RuntimeNativeActorCombat
             }
         }
         var attack = group + _enemyWeapon.AttackGroup;
-        _attackPath = SelectPath(directory, attack, attack + "_a", attack + "_b");
+        _attackPaths = SelectAttackPaths(directory, attack);
     }
 
     private Transform3D MuzzlePose() => _enemyObject is not null ?

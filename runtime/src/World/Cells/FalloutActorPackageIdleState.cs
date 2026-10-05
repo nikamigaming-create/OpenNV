@@ -5,9 +5,10 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed record FalloutIdleReplayCooldown(FalloutFormKey Idle, string Sha256, float Remaining);
 
 // Collection and replay delays continue independently of its currently selected
-// pose. Active overlay animation still requires its own resource/phase owner.
+// pose. An optional selected animation retains its independent resource/phase.
 internal sealed record FalloutActorPackageIdleState(FalloutFormKey Package, string Sha256,
-    FalloutIdleCollectionPlaybackSnapshot Collection, IReadOnlyList<FalloutIdleReplayCooldown> Cooldowns, string? Error)
+    FalloutIdleCollectionPlaybackSnapshot Collection, IReadOnlyList<FalloutIdleReplayCooldown> Cooldowns, string? Error,
+    FalloutActorPackageIdleAnimation? ActiveAnimation = null)
 {
     internal void Validate(FalloutPluginStack records, FalloutFormKey package)
     {
@@ -21,6 +22,13 @@ internal sealed record FalloutActorPackageIdleState(FalloutFormKey Package, stri
         var playback = new FalloutIdleCollectionPlayback(FalloutScriptPackage.Read(source), replay, _ =>
             throw new InvalidOperationException("Restore must not evaluate idle predicates."));
         playback.Restore(Collection);
+        if (ActiveAnimation is { } animation)
+        {
+            if (Error is not null || Collection.Cursor == 0 || Collection.SelectionCount == 0 ||
+                Collection.WaitSeconds != 0 || Collection.Complete)
+                throw new InvalidDataException("Active collection animation has no consumed selection or still has a wait/fault.");
+            animation.Validate(records, package);
+        }
         var seen = new HashSet<FalloutFormKey>();
         foreach (var cooldown in Cooldowns)
         {
@@ -34,5 +42,6 @@ internal sealed record FalloutActorPackageIdleState(FalloutFormKey Package, stri
         }
     }
 
-    internal FalloutActorPackageIdleState Copy() => this with { Cooldowns = Cooldowns.ToArray() };
+    internal FalloutActorPackageIdleState Copy() => this with
+    { Cooldowns = Cooldowns.ToArray(), ActiveAnimation = ActiveAnimation?.Copy() };
 }

@@ -20,7 +20,7 @@ internal partial class RuntimeNativeNpc
         _sitting == 0 && !_furnitureApproaching && !_travelActive && _travelProgress?.ArrivalPending != true &&
         _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _patrol is null &&
         _animation is null && !_responseIdleActive && AnimationError is null &&
-        _conversationTarget is null && Combat?.OwnsPose != true && Combat?.PackageOwnsPose != true &&
+        _conversationTarget is null && CanCaptureStoppedAiPose() &&
         _baseClock.Resource.Length != 0;
 
     private FalloutActorPackageBindingFailure CaptureBindingFailure()
@@ -64,7 +64,17 @@ internal partial class RuntimeNativeNpc
         }
         // Retry only the retained pre-begin binding. Source selection and its
         // random predicates were already consumed before this save.
-        _requestedSelection = new(package, FalloutScriptPackage.Read(package));
+        var declaration = FalloutScriptPackage.Read(package);
+        if (HasIndependentStoppedPose)
+        {
+            _packageIdleSource = declaration;
+            _packageIdles = new(declaration, _idleReplays, idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
+            if (failure.IdleState is { } state) _packageIdles.Restore(state.Collection);
+            _aiError = failure.Error; _failedPackage = failure.Package;
+            _aiPollRemaining = failure.PollRemaining; _aiScheduleTime = failure.ScheduleTime;
+            _aiQuestRevision = _questState!.Revision; _aiActivityRevision = Activity.Revision;
+        }
+        else _requestedSelection = new(package, declaration);
         _selectedSourcePackage = package.FormKey; _sourceSelectionKnown = true;
         _selectionCaptureBlocker = _aiReferenceState!.ProcedureCaptureBlocker;
         RestoreBindingFailurePose(failure);

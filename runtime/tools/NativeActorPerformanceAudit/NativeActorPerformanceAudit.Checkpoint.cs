@@ -74,6 +74,15 @@ public partial class NativeActorPerformanceAudit
                 return;
             }
             warm._Process(.125);
+            if (expected == "furniture-idle")
+            {
+                for (var frame = 0; frame < 7200; ++frame)
+                {
+                    if (world.Get(caller).FurnitureCaptureReady &&
+                        world.Get(caller).Capture().FurnitureContinuation?.IdleState?.ActiveAnimation?.Clock.CompletedRepeats >= 2) break;
+                    warm._Process(1d / 60);
+                }
+            }
             if (expected == "dialogue")
             {
                 for (var frame = 0; frame < 7200 && !world.Get(caller).DialogueCaptureReady; ++frame)
@@ -83,6 +92,7 @@ public partial class NativeActorPerformanceAudit
             bool HasOwner(FalloutReferenceSnapshot state) => expected switch
             {
                 "furniture" => state.FurnitureContinuation is not null,
+                "furniture-idle" => state.FurnitureContinuation?.IdleState?.ActiveAnimation is not null,
                 "selection" => state.SelectionFailure is not null,
                 "dialogue" => state.DialogueContinuation is not null,
                 "binding" => state.PackageBindingFailure is not null,
@@ -99,6 +109,8 @@ public partial class NativeActorPerformanceAudit
                 resumed.SittingState != warm.SittingState || resumed.CurrentPackage != warm.CurrentPackage ||
                 JsonSerializer.Serialize(cold.Get(caller).Capture()) != JsonSerializer.Serialize(world.Get(caller).Capture()))
                 throw new InvalidDataException("Native cold NPC assembly changed its pose, source fault, random queue or procedure state.");
+            if (expected == "furniture-idle")
+                FurnitureIdleSuffix(warm, resumed, world, cold, caller, actorState);
             foreach (var delta in new[] { 0d, .01, .125, .25 })
             {
                 warm._Process(delta); resumed._Process(delta);
@@ -143,6 +155,68 @@ public partial class NativeActorPerformanceAudit
                     throw new InvalidDataException("Cold native attachment changed the unloaded failed selection.");
                 GD.Print($"OPENNV_NATIVE_SELECTION_UNLOAD_CHECKPOINT_PASS actor={caller} delegateRetired=true " +
                     "unloadedCapture=true exactSourcePoseClockFaultRandom=true nativeCold=true sourceDriftAtomic=true packageResultsNotReplayed=true");
+            }
+            if (expected == "furniture-idle")
+            {
+                var beforeUnload = world.Capture();
+                var occupied = beforeUnload.Single(value => value.Reference == caller).FurnitureContinuation!;
+                if (occupied.IdleState?.ActiveAnimation is null)
+                    throw new InvalidDataException("Native suffix fixture finished its selected overlay before unload.");
+                fixture.RemoveChild(warm); world.UnloadCell(cell.Cell.FormKey);
+                var retained = world.Get(caller);
+                var afterUnload = world.PendingProcedureCaptureCount == 0 ? world.Capture() : null;
+                if (retained.CaptureFurniture is not null || retained.CanCaptureFurniture is not null ||
+                    !retained.FurnitureCaptureReady || world.PendingProcedureCaptureCount != 0 || world.IsResident(caller) ||
+                    JsonSerializer.Serialize(afterUnload) != JsonSerializer.Serialize(beforeUnload))
+                {
+                    GD.Print("OPENNV_NATIVE_OCCUPIED_IDLE_RETIREMENT_DIFF " + JsonSerializer.Serialize(new
+                    {
+                        captureDelegate = retained.CaptureFurniture is not null,
+                        readinessDelegate = retained.CanCaptureFurniture is not null,
+                        ready = retained.FurnitureCaptureReady,
+                        pending = world.PendingProcedureCaptureCount,
+                        resident = world.IsResident(caller),
+                        assignment = retained.PackageAssignment,
+                        blocker = retained.ProcedureCaptureBlocker,
+                        fields = afterUnload is null ? null : CorpseFieldDiff(JsonSerializer.SerializeToElement(beforeUnload.Single(value => value.Reference == caller)),
+                            JsonSerializer.SerializeToElement(afterUnload.Single(value => value.Reference == caller))),
+                    }));
+                    throw new InvalidDataException("Occupied collection idle lost its selected clock/seat after child-first retirement.");
+                }
+                using var unloadedCold = new FalloutReferenceWorld(records);
+                unloadedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(beforeUnload))!);
+                unloadedCold.LoadCell(cell);
+                var afterUnloadActor = Assemble(unloadedCold);
+                using var afterUnloadLifetime = new PackageFixtureLifetime(afterUnloadActor);
+                if (!unloadedCold.OwnsFurnitureSeat(occupied.Furniture!.Value, occupied.Seat!.Index, caller) ||
+                    JsonSerializer.Serialize(unloadedCold.Capture()) != JsonSerializer.Serialize(beforeUnload))
+                    throw new InvalidDataException("Cold native idle assembly changed its occupied seat, phase or consumed selection.");
+                FurnitureIdleSuffix(resumed, afterUnloadActor, cold, unloadedCold, caller,
+                    beforeUnload.Single(value => value.Reference == caller));
+                FurnitureResidualBindingRefusals(records, beforeUnload, caller, Assemble);
+                foreach (var invalid in new[]
+                {
+                    occupied.IdleState with { ActiveAnimation = occupied.IdleState.ActiveAnimation with { IdleSha256 = new string('0', 64) } },
+                    occupied.IdleState with { ActiveAnimation = occupied.IdleState.ActiveAnimation with { Resource = "meshes/unbound-source.kf" } },
+                    occupied.IdleState with { Collection = new(0, 0, 0, false) }
+                })
+                {
+                    using var rejected = new FalloutReferenceWorld(records);
+                    var refused = false;
+                    try
+                    {
+                        rejected.Restore(beforeUnload.Select(value => value.Reference == caller ? value with
+                        { FurnitureContinuation = occupied with { IdleState = invalid } } : value).ToArray());
+                    }
+                    catch (InvalidDataException) { refused = true; }
+                    if (!refused || rejected.InstanceCount != 0)
+                        throw new InvalidDataException("Occupied source idle/selection drift was not refused atomically.");
+                }
+                GD.Print($"OPENNV_NATIVE_OCCUPIED_IDLE_CHECKPOINT_PASS actor={caller} idle={occupied.IdleState.ActiveAnimation.Idle} " +
+                    $"runtimeMvid={typeof(RuntimeConfiguration).Assembly.ManifestModule.ModuleVersionId} " +
+                    "selectedLoops=true separateBaseClock=true textKeySuffix=true occupiedSeat=true nativeCold=true " +
+                    "residualComponents=true nativeSkeletonAndCoverageDrift=true childFirstRetirement=true " +
+                    "sourceDriftAtomic=true sourceEffectsNotReplayed=true recording=false");
             }
             GD.Print($"OPENNV_NATIVE_NPC_CHECKPOINT_PASS actor={caller} owner={expected} phase={warm.SittingState} " +
                 "nativeCold=true exactPose=true clock=true randomAndBlink=true sourceEffectsNotReplayed=true " +

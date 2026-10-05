@@ -52,10 +52,22 @@ internal sealed class FalloutNifPoint3Animation
     }
 }
 
+[Flags]
+internal enum FalloutNifTransformComponents : byte
+{
+    None = 0, Translation = 1, Rotation = 2, Scale = 4, All = Translation | Rotation | Scale
+}
+
 internal readonly record struct FalloutNifAnimationSample(
     FalloutNifVector3? Translation,
     FalloutNifQuaternion? Rotation,
-    float? Scale);
+    float? Scale)
+{
+    internal FalloutNifTransformComponents Components =>
+        (Translation is null ? FalloutNifTransformComponents.None : FalloutNifTransformComponents.Translation) |
+        (Rotation is null ? FalloutNifTransformComponents.None : FalloutNifTransformComponents.Rotation) |
+        (Scale is null ? FalloutNifTransformComponents.None : FalloutNifTransformComponents.Scale);
+}
 
 // Samples source-local channels. A missing component remains missing: selecting
 // a clip, blending, root motion, text events and the current pose belong to the

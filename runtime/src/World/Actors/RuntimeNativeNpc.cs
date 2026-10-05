@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -98,7 +99,8 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
 
     internal void EndResponseAnimation() => _responseIdleActive = false;
 
-    private void PlayIdle(FalloutPluginStack stack, FalloutFormKey form, string owner)
+    private void PlayIdle(FalloutPluginStack stack, FalloutFormKey form, string owner,
+        FalloutActorPackageIdleAnimation? saved = null)
     {
         RestoreAuthoredHeadPose();
         var record = stack.GetEffective(form);
@@ -109,6 +111,9 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         if (!content.TryRead(path, null, out var bytes, out var identity))
             throw new FileNotFoundException($"Source IDLE animation is absent: {path}");
         var source = FalloutNifFile.Read(bytes);
+        if (saved is not null && (!source.Sha256.Equals(saved.Sha256, StringComparison.OrdinalIgnoreCase) ||
+            !path.Equals(saved.Resource, StringComparison.OrdinalIgnoreCase) || !timing.AdmitsAdditionalLoops(saved.Clock.SelectedAdditionalLoops)))
+            throw new InvalidDataException("Saved collection KF or chosen repetitions differ from the winning source.");
         var sequences = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         if (sequences.Length != 1)
             throw new NotSupportedException($"IDLE {idle.Form} requires one source KF sequence, found {sequences.Length}.");
@@ -170,9 +175,12 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                     string.Join("; ", selected.UnboundChannels.Select(channel => channel.Source.NodeName + "/" + channel.Reason)));
             var clock = new FalloutIdleAnimationPlayback(selected.Sequence.StartTime, selected.Sequence.StopTime,
                 selected.Sequence.Frequency, selected.Sequence.CycleType,
-                selected.TextKeys.Select(key => (key.Time, key.Value)).ToArray(), timing.SelectAdditionalLoops(_aiRandom.NextBounded));
-            if (_baseAnimation is null) selected.ApplySourceTime(selected.Sequence.StartTime);
-            else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (selected, selected.Sequence.StartTime));
+                selected.TextKeys.Select(key => (key.Time, key.Value)).ToArray(),
+                saved?.Clock.SelectedAdditionalLoops ?? timing.SelectAdditionalLoops(_aiRandom.NextBounded));
+            if (saved is not null) clock.Restore(saved.Clock);
+            if (saved is not null) RestoreFurnitureResidualPose(saved.ResidualPose!, selected);
+            if (_baseAnimation is null) selected.ApplySourceTime(clock.SourceSeconds);
+            else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (selected, clock.SourceSeconds));
             foreach (var old in _animationObjects) old.Free();
             _animationObjects.Clear();
             _animationObjects.AddRange(created);
@@ -180,11 +188,16 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             _animation = selected;
             _idleData = timing;
             _idlePlayback = clock;
-            _animationSeconds = selected.Sequence.StartTime;
+            _animationSeconds = clock.SourceSeconds;
+            _idleAnimationResource = path; _idleAnimationSha256 = source.Sha256;
             _idleForm = idle.Form;
             _idleOwner = owner;
-            _idleRevision++;
-            _idleReplays.Started(idle.Form, timing.ReplayDelaySeconds);
+            if (saved is null)
+            {
+                _idleRevision++;
+                _idleReplays.Started(idle.Form, timing.ReplayDelaySeconds);
+            }
+            else _idleRevision = saved.Revision;
             if (_animationSounds is null)
             {
                 _animationSounds = new(stack, content, this, Skeleton.UnitsToMetres, _aiRandom);
@@ -275,6 +288,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         _idlePlayback = null;
         _idleForm = null;
         _idleOwner = null;
+        _idleAnimationResource = null; _idleAnimationSha256 = null;
         foreach (var item in _animationObjects) item.Free();
         _animationObjects.Clear();
         if (owner == "package-idle") _packageIdles!.Finish();
@@ -291,6 +305,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         _idlePlayback = null;
         _idleForm = null;
         _idleOwner = null;
+        _idleAnimationResource = null; _idleAnimationSha256 = null;
         foreach (var item in _animationObjects) item.Free();
         _animationObjects.Clear();
     }

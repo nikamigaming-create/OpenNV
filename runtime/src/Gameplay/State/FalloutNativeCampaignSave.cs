@@ -48,7 +48,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v38";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v39";
+    internal const string FactionRelationSchema = "opennv-native-fnv-campaign-save/v38";
     internal const string DeathHistorySchema = "opennv-native-fnv-campaign-save/v37";
     internal const string ProcedureSchema = "opennv-native-fnv-campaign-save/v36";
     internal const string BroadcastSchema = "opennv-native-fnv-campaign-save/v35";
@@ -296,6 +297,7 @@ internal static class FalloutNativeCampaignSave
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
             if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
+        if (state.Schema == FactionRelationSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References is not null)
             state = state with
             {
@@ -307,7 +309,7 @@ internal static class FalloutNativeCampaignSave
     }
 
     private static IReadOnlyList<FalloutReferenceSnapshot>? RestoreLegacyDeathCounts(FalloutNativeCampaignState state) =>
-        state.Schema is ExpectedSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
+        state.Schema is ExpectedSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
         { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray();
 
     private static void ValidateQuestValueHandles(FalloutPluginStack stack,
@@ -390,12 +392,23 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
-        if (state.Schema != ExpectedSchema && state.FactionRelations is { Count: > 0 })
+        if (state.Schema != ExpectedSchema && (state.WeaponHandling?.AttackRandomState is not null ||
+            state.References?.Any(reference => reference.AttackRandomState is not null ||
+                reference.Engagement?.AttackRandomState is not null ||
+                reference.Engagement?.WeaponHandling?.AttackRandomState is not null) == true))
+            throw new InvalidDataException("Legacy campaign schema has attack selection random state.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference =>
+            reference.FurnitureContinuation?.IdleState?.ActiveAnimation is not null ||
+            reference.DialogueContinuation?.IdleState.ActiveAnimation is not null ||
+            reference.PackageBindingFailure?.IdleState?.ActiveAnimation is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema has an active package collection animation.");
+        if (state.Schema is not (ExpectedSchema or FactionRelationSchema) && state.FactionRelations is { Count: > 0 })
             throw new InvalidDataException("Legacy campaign schema has mutable faction reactions.");
-        if (state.Schema == ExpectedSchema && state.FactionRelations is null)
+        if (state.Schema is ExpectedSchema or FactionRelationSchema && state.FactionRelations is null)
             throw new InvalidDataException("Saved campaign is missing its faction reaction state.");
         if (state.FactionRelations is { Count: > 0 } && state.References is null)
             throw new InvalidDataException("Saved faction reactions have no reference world.");
+        if (state.Schema == FactionRelationSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema is not (ExpectedSchema or DeathHistorySchema) && state.References?.Any(reference => reference.DeathCount is not null) == true)
             throw new InvalidDataException("Legacy campaign schema has cumulative actor death history.");
         if (state.Schema is ExpectedSchema or DeathHistorySchema && state.References?.Any(reference =>

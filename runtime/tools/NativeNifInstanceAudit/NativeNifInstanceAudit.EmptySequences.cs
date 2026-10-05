@@ -115,12 +115,12 @@ public partial class NativeNifInstanceAudit
         { Time(w, -1, 0x006c); w.Write((ushort)1); w.Write(1); })));
         blocks.Add(("NiControllerSequence", Sequence(1, invalid == "cycle" ? 1U : 0U, 2,
             invalid == "range" ? 2 : 4, invalid == "keys" ? -1 : 10, invalid == "channel")));
-        blocks.Add(("NiControllerSequence", Sequence(invalid == "name" ? 1 : 2, 2, 10, 11, 11)));
+        blocks.Add(("NiControllerSequence", Sequence(invalid == "duplicate" ? 1 : 2, 2, 10, 11, 11)));
         blocks.Add(("NiTextKeyExtraData", Keys(2, 4)));
         blocks.Add(("NiTextKeyExtraData", Keys(10, 11)));
         blocks.Add(("NiDefaultAVObjectPalette", Bytes(w =>
         { w.Write(0); w.Write(1); w.Write(7); w.Write("surface"u8); w.Write(1); })));
-        string[] names = ["surface", "Loop", "Finite", "start", "end", "UnownedController"];
+        string[] names = ["surface", invalid == "name" ? "" : "Loop", "Finite", "start", "end", "UnownedController"];
         return Bytes(w =>
         {
             w.Write("Gamebryo File Format, Version 20.2.0.7\n"u8);

@@ -27,7 +27,7 @@ internal partial class RuntimeNativeNpc
         _findFurniture is null && _seat is null && _sitting == 0 && !_furnitureApproaching && !_travelActive &&
         _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _guardPackage is null && _patrol is null &&
         _animation is null && !_responseIdleActive && _packageIdleError is null && AnimationError is null &&
-        _idleReplays.Remaining.Count == 0 && _conversationTarget is null && Combat?.OwnsPose != true && Combat?.PackageOwnsPose != true &&
+        _idleReplays.Remaining.Count == 0 && _conversationTarget is null && CanCaptureStoppedAiPose() &&
         !_baseLocomotionMoving && _baseClock.Resource.Length != 0;
 
     private FalloutActorSelectionFailure CaptureSelectionFailure()

@@ -23,7 +23,8 @@ public partial class NativeActorPerformanceAudit
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(path)) ??
                 throw new InvalidDataException("Reached checkpoint is absent.");
-            if (saved.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.ProcedureSchema) ||
+            if (saved.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.FactionRelationSchema or
+                FalloutNativeCampaignSave.DeathHistorySchema or FalloutNativeCampaignSave.ProcedureSchema) ||
                 saved.SaveCompatibilityId != content.SaveCompatibilityId)
                 throw new InvalidDataException("Reached checkpoint belongs to a different schema or source stack.");
             if (saved.Schema == FalloutNativeCampaignSave.ProcedureSchema)

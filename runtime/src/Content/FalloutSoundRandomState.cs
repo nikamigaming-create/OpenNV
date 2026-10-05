@@ -13,6 +13,7 @@ internal sealed class FalloutSoundRandomState
 
     internal ulong State { get; private set; }
     internal void Restore(ulong state) => State = state;
+    internal uint NextUInt32() => unchecked((uint)NextUInt64());
 
     internal float NextUnitFloat() => (float)(unchecked((uint)NextUInt64()) / 4294967296.0);
 

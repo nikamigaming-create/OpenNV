@@ -11,7 +11,9 @@ internal static class CombatAlarmContracts
         var first = world.Get(Key(0x900)); var second = world.Get(Key(0x901));
         var unrelated = world.Get(Key(0x902)); var target = world.Get(Key(0x906));
         var player = records.RuntimeFormKey(0x14);
-        first.Engagement = new(player); second.Engagement = new(player);
+        first.AttackRandom.Restore(17); _ = first.AttackRandom.NextUInt32();
+        var consumedAttackRandom = first.AttackRandom.State;
+        first.Engagement = new(player, AttackRandomState: consumedAttackRandom); second.Engagement = new(player);
         unrelated.Engagement = new(target.Reference); target.Engagement = new(first.Reference);
         var stopped = new List<FalloutFormKey>();
         first.StopCombat = () => stopped.Add(first.Reference);
@@ -39,6 +41,19 @@ internal static class CombatAlarmContracts
         if (cold.Get(first.Reference).Engagement is not null || cold.Get(second.Reference).Engagement is not null ||
             cold.Get(target.Reference).Engagement is not null)
             throw new InvalidDataException("Cold state restored a retired fighting flag.");
+        if (first.Capture().AttackRandomState != consumedAttackRandom || cold.Get(first.Reference).Capture().AttackRandomState != consumedAttackRandom ||
+            first.AttackRandom.NextUInt32() != cold.Get(first.Reference).AttackRandom.NextUInt32())
+            throw new InvalidDataException("Combat retirement or cold restoration reset the consumed actor attack stream.");
+        var mismatched = first.Capture() with { Engagement = new(player, AttackRandomState: consumedAttackRandom) };
+        try { FalloutReferenceSnapshot.Validate([mismatched]); throw new InvalidOperationException("Mismatched attack randomness was accepted."); }
+        catch (InvalidDataException) { }
+        using var invalidRandom = new FalloutReferenceWorld(records);
+        try
+        {
+            invalidRandom.Restore([world.Get(Key(0x903)).Capture() with { AttackRandomState = 1 }]);
+            throw new InvalidOperationException("Nonactor reference acquired attack randomness.");
+        }
+        catch (InvalidDataException) { }
         second.Engagement = new(player);
         foreach (var invalid in new[] { Key(0x903), Key(0x840), Key(0x9030) })
         {
@@ -55,6 +70,6 @@ internal static class CombatAlarmContracts
         world.StopCombatAlarmOnActor(player);
         if (first.Engagement?.Target != target.Reference || second.Engagement?.Target != target.Reference)
             throw new InvalidDataException("Combat alarm erased a new engagement created by its completion event.");
-        Console.WriteLine("OPENNV_COMBAT_ALARM_CONTRACT_PASS player=true implicit=true compiledActor=true aliases=true distinctTargets=true onceOnlyRetirement=true cold=true invalidActorAtomic=true completionRetarget=true");
+        Console.WriteLine("OPENNV_COMBAT_ALARM_CONTRACT_PASS player=true implicit=true compiledActor=true aliases=true distinctTargets=true onceOnlyRetirement=true cold=true invalidActorAtomic=true completionRetarget=true attackRandomRetiredCold=true invalidAttackRandom=true");
     }
 }

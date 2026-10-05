@@ -103,13 +103,14 @@ public partial class NativePlayerPresentationAudit : Node3D
                                     }
                                 }
                                 foreach (var group in groups)
-                                {
-                                    var action = actor.PrepareAction(group);
-                                    actor.SetAction(group, (action.Sequence.StopTime - action.Sequence.StartTime) / action.Sequence.Frequency * .6);
-                                    actor.Advance(0, Vector3.Zero, true, false);
-                                    if (actor.Error is not null) throw new NotSupportedException(actor.Error);
-                                    GD.Print($"OPENNV_PLAYER_ACTION_BOUND first={first} weapon={held.Form} group={group} keys={action.TextKeys.Count}");
-                                }
+                                    for (var variant = 0; variant < actor.ActionVariants(group).Count; variant++)
+                                    {
+                                        var action = actor.PrepareAction(group, variant);
+                                        actor.SetAction(group, (action.Sequence.StopTime - action.Sequence.StartTime) / action.Sequence.Frequency * .6, variant);
+                                        actor.Advance(0, Vector3.Zero, true, false);
+                                        if (actor.Error is not null) throw new NotSupportedException(actor.Error);
+                                        GD.Print($"OPENNV_PLAYER_ACTION_BOUND first={first} weapon={held.Form} group={group} keys={action.TextKeys.Count}");
+                                    }
                                 actor.SetAction(null, 0); actor.SetDrawn(false); actor.Advance(0, Vector3.Zero, true, false);
                                 actor.SetDrawn(true); actor.Advance(0, Vector3.Zero, true, false);
                             }

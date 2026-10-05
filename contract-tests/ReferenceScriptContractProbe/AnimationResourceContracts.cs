@@ -37,6 +37,15 @@ internal static class AnimationResourceContracts
         var before = reads;
         Require(owner.Require(first, "2hahandgrip1").Equals(first + "/2hahandgrip1.kf", StringComparison.OrdinalIgnoreCase) && reads == before,
             "Exact source resource did not retain priority over its variant.");
+        var complete = owner.Variants(first, "2hahandgrip1");
+        Require(complete.Count == 2 && complete.Contains(first + "/2hahandgrip1.kf", StringComparer.OrdinalIgnoreCase) &&
+            complete.Contains(first + "/2hahandgrip1_variant.kf", StringComparer.OrdinalIgnoreCase),
+            "Explicit action catalog discarded a valid exact or suffixed source sequence.");
+        var repeated = owner.Variants(first, "2hrhandgrip3");
+        Require(repeated.Count == 2, "Explicit action catalog lost a source alternative.");
+        before = reads;
+        Require(ReferenceEquals(repeated, owner.Variants(first, "2hrhandgrip3")) && reads == before,
+            "Explicit action catalog reread source variants.");
         Reject(() => owner.Find(first, "2hrhandgrip3"));
         Reject(() => owner.Find(first, "2hrhandgrip4"));
         Reject(() => owner.Find(first, "2hrhandgrip5"));

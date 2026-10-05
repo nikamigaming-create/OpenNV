@@ -105,7 +105,8 @@ internal static partial class CellGraphAudit
             foreach (var link in owner.ReadSubrecords().Where(field => field.Signature == "PKID"))
             {
                 var slot = priority++; FalloutFormKey? key = null; FalloutPluginRecord? record = null;
-                object? parsed = null; object? schedule = null; var conditions = new List<object>(); var errors = new List<object>();
+                object? parsed = null; object? schedule = null; FalloutPackageData? packageData = null;
+                var conditions = new List<object>(); var errors = new List<object>();
                 try
                 {
                     if (link.Data.Length != 4) throw new InvalidDataException("PKID extent is invalid.");
@@ -113,6 +114,7 @@ internal static partial class CellGraphAudit
                     if (record.Signature != "PACK") throw new InvalidDataException("PKID does not bind PACK.");
                     try
                     {
+                        packageData = FalloutPackageData.Read(record);
                         var package = FalloutScriptPackage.Read(record);
                         parsed = new { package.EditorId, package.Procedure, package.Flags, package.LocationType,
                             locationReference = package.LocationReference?.ToString(), package.LocationRadius, package.IdleFlags, package.IdleTimer,
@@ -139,9 +141,9 @@ internal static partial class CellGraphAudit
                     }
                 }
                 catch (Exception error) { errors.Add(new { lane = "package-link", error = error.Message }); }
-                var pkdt = record?.ReadSubrecords().FirstOrDefault(field => field.Signature == "PKDT").Data ?? ReadOnlyMemory<byte>.Empty;
                 alternatives.Add(new { priority = slot, package = key?.ToString(), winner = record?.Plugin.Name,
-                    sha256 = record is null ? null : Hash(record.ReadData()), sourceProcedure = pkdt.Length == 12 ? (byte?)pkdt.Span[4] : null,
+                    sha256 = record is null ? null : Hash(record.ReadData()), sourceProcedure = packageData?.Procedure,
+                    packageData, packageDataExtent = packageData?.SourceExtent,
                     parsed, schedule, conditions, errors, nativeProcedureExecution = "unverified unless joined to the selected native snapshot" });
             }
             lists.Add(new { owner = owner.FormKey.ToString(), sha256 = Hash(owner.ReadData()), authoredPriorityAlternatives = alternatives });

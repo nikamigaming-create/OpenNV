@@ -47,6 +47,9 @@ internal sealed record FalloutActorFurnitureContinuation(FalloutActorPackageAssi
             throw new InvalidDataException("Saved furniture phase, source selection or lifecycle is invalid.");
         ValidatePose(Pose);
         Blink?.Validate();
+        IdleState?.ActiveAnimation?.Validate();
+        if (IdleState?.ActiveAnimation is not null && Phase != 3)
+            throw new InvalidDataException("Active collection pose requires an occupied furniture base owner.");
         if (Phase == 0)
         {
             if (Furniture is not null || FurnitureSha256 is not null || Model is not null || ModelSha256 is not null ||

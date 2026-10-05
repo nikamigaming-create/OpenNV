@@ -16,6 +16,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     private readonly Dictionary<AudioStreamPlayer3D, FalloutAnimationSoundSelection> _spatial = [];
     private long _eventCount;
     private readonly SortedSet<string> _unbound = new(StringComparer.Ordinal);
+    private bool _lostCaptureAtRetirement;
+    internal bool CanCaptureSilent => !_lostCaptureAtRetirement && _spatial.Count == 0 && _voices.Count == 0 && _unbound.Count == 0;
     internal IReadOnlyCollection<string> Unbound => _unbound;
     internal IEnumerable<FalloutSoundRecord> Sources => _descriptors.Values.Select(entry => entry.Source);
     internal static Action<object>? SoundObserver { get; set; }

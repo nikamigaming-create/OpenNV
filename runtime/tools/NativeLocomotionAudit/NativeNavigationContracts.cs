@@ -141,6 +141,23 @@ internal static class NativeNavigationContracts
             probe.LastRejection?.Reason != "root-floor-missing" || probe.LastRejection.Contact is not null ||
             !probe.DescribeFailure().Contains("step-headroom", StringComparison.Ordinal))
             throw new InvalidOperationException("A subsequent floor-only rejection erased the exact source-guided contact.");
+        var downwardContact = contact with { From = Vector3.Up, Desired = Vector3.Down, Travel = Vector3.Down * .2f };
+        probe.ObserveDownward(new(Vector3.Up, Vector3.Down, Vector3.Down * .2f, true, [downwardContact]));
+        probe.Reject("landing-slope", Vector3.Zero, Vector3.Right, downwardContact); probe.RejectGuide();
+        var rootFloor = contact with { Point = Vector3.Zero, Normal = Vector3.Up, From = Vector3.Up, Desired = Vector3.Down };
+        probe.BeginEdge();
+        probe.ObserveDownward(new(Vector3.Up, Vector3.Down, Vector3.Down * .2f, true, [downwardContact]));
+        probe.ObserveReconciledLanding(rootFloor);
+        probe.BeginEdge(); probe.Reject("destination-not-resident", Vector3.Back, Vector3.Forward, null);
+        if (probe.LastDownwardSweep is not null || probe.GuideDownwardSweep is not { Contacts.Count: 1 } sweep ||
+            sweep.Contacts[0].Reference != source || sweep.Travel != Vector3.Down * .2f ||
+            sweep.Contacts[0].Travel != sweep.Travel || probe.GuideRejection?.Contact?.Travel != sweep.Travel ||
+            !probe.DescribeFailure().Contains("guideDownward=[from=", StringComparison.Ordinal))
+            throw new InvalidOperationException("A later edge erased the exact source-guided downward contact or its travel.");
+        if (probe.ReconciledLandings != 1 || probe.FirstReconciledLanding is not { } support ||
+            support.Capsule.Travel != sweep.Travel || support.Floor.Reference != source ||
+            support.Floor.Normal != Vector3.Up || support.Floor.From != Vector3.Up || support.Floor.Desired != Vector3.Down)
+            throw new InvalidOperationException("A later edge erased the capsule and actual root-floor support receipt.");
         var limited = new NativeNavigationProbe(null);
         for (var index = 0; index < 19; index++) limited.Reject("fixture-" + index, Vector3.Zero, Vector3.One, null);
         limited.Reject("fixture-0", Vector3.Zero, Vector3.One, null);

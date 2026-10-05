@@ -129,6 +129,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
 
     public override void _ExitTree()
     {
+        _lostCaptureAtRetirement |= _spatial.Count != 0 || _voices.Count != 0 || _unbound.Count != 0;
         foreach (var node in _voices.Keys.ToArray())
         {
             StopVoice(node); FinishVoice(node, completed: false);

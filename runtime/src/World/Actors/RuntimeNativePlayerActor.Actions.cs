@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Formats.Gamebryo;
 
@@ -11,21 +12,29 @@ internal sealed partial class RuntimeNativePlayerActor
     private Transform3D _weaponRest;
     private RuntimeNativeNifAnimation? _actionClip;
     private string? _actionGroup;
-    private int _attackVariant;
+    private int? _actionVariant;
+    private string? _actionPath, _actionHash;
     private double _actionSeconds;
     private bool _drawn = true;
 
-    internal RuntimeNativeNifAnimation PrepareAction(string group)
+    internal object ActionSelection => new
+    {
+        path = _actionPath,
+        sha256 = _actionHash,
+        seconds = _actionSeconds,
+        sequence = _actionClip?.Sequence.Name,
+        variant = _actionVariant,
+        boundary = "source-KF;shared-action-selection;retail-global-RNG-phase-and-view-mapping-unmatched"
+    };
+
+    internal IReadOnlyList<string> ActionVariants(string group)
     {
         if (Weapon is null) throw new InvalidOperationException("Weapon action has no equipped weapon.");
         var baseName = Weapon.AnimationGroup + group;
         if (group.StartsWith("attack", StringComparison.Ordinal))
         {
-            var primarySuffix = _attackVariant == 0 ? "_a" : "_b";
-            var secondarySuffix = _attackVariant == 0 ? "_b" : "_a";
-            if (ClipExists(baseName)) return Clip(baseName);
-            if (ClipExists(baseName + primarySuffix)) return Clip(baseName + primarySuffix);
-            if (ClipExists(baseName + secondarySuffix)) return Clip(baseName + secondarySuffix);
+            var candidates = _content.ActorAnimations.Variants(_directory, baseName);
+            if (candidates.Count != 0) return candidates;
             var opposite = group.Contains("attackleft", StringComparison.Ordinal)
                 ? group.Replace("attackleft", "attackright", StringComparison.Ordinal)
                 : group.Contains("attackright", StringComparison.Ordinal)
@@ -34,15 +43,24 @@ internal sealed partial class RuntimeNativePlayerActor
             if (opposite is not null)
             {
                 var oppositeBase = Weapon.AnimationGroup + opposite;
-                if (ClipExists(oppositeBase)) return Clip(oppositeBase);
-                if (ClipExists(oppositeBase + primarySuffix)) return Clip(oppositeBase + primarySuffix);
-                if (ClipExists(oppositeBase + secondarySuffix)) return Clip(oppositeBase + secondarySuffix);
+                candidates = _content.ActorAnimations.Variants(_directory, oppositeBase);
+                if (candidates.Count != 0) return candidates;
             }
         }
-        return Clip(baseName);
+        return [_content.ActorAnimations.Require(_directory, baseName)];
     }
 
-    internal void SetAction(string? group, double seconds)
+    internal RuntimeNativeNifAnimation PrepareAction(string group, int? variant = null)
+    {
+        var candidates = ActionVariants(group);
+        if (variant is null && candidates.Count != 1)
+            throw new NotSupportedException($"Player attack {group} requires an explicit variant selection owner.");
+        var index = variant ?? 0;
+        if (index < 0 || index >= candidates.Count) throw new InvalidDataException("Player attack variant is outside its source catalog.");
+        return ClipPath(candidates[index]);
+    }
+
+    internal void SetAction(string? group, double seconds, int? variant = null)
     {
         if (group is null)
         {
@@ -50,15 +68,18 @@ internal sealed partial class RuntimeNativePlayerActor
             {
                 _actionClip = null;
                 _actionGroup = null;
-                _attackVariant = 1 - _attackVariant;
+                _actionVariant = null; _actionPath = null; _actionHash = null;
             }
         }
         else
         {
-            if (_actionGroup != group || _actionClip is null)
+            if (_actionGroup != group || _actionVariant != variant || _actionClip is null)
             {
-                _actionClip = PrepareAction(group);
+                _actionClip = PrepareAction(group, variant);
+                _actionPath = ActionVariants(group)[variant ?? 0];
+                _actionHash = Convert.ToHexString(SHA256.HashData(Read(_actionPath)));
                 _actionGroup = group;
+                _actionVariant = variant;
             }
         }
         _actionSeconds = seconds;

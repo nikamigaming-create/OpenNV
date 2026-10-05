@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
@@ -30,12 +29,7 @@ internal sealed partial class FalloutReferenceWorld
     }
 
     private static bool OncePerDay(FalloutPluginRecord package)
-    {
-        var fields = package.ReadSubrecords().Where(field => field.Signature == "PKDT").ToArray();
-        if (package.Signature != "PACK" || fields.Length != 1 || fields[0].Data.Length != 12)
-            throw new InvalidDataException("Package timing has no source PKDT declaration.");
-        return (BinaryPrimitives.ReadUInt32LittleEndian(fields[0].Data.Span) & 0x400) != 0;
-    }
+        => (FalloutPackageData.Read(package).Flags & 0x400) != 0;
 
     private void RestorePackageTiming(FalloutReferenceInstance instance, FalloutReferenceSnapshot snapshot)
     {

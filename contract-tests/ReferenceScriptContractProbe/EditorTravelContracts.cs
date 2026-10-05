@@ -16,15 +16,18 @@ internal static class EditorTravelContracts
         {
             File.WriteAllBytes(Path.Combine(directory, "Base.esm"), Join(Header(), Record("NPC_", 0x700),
                 Record("CELL", 0x800, Field("DATA", [1])), Actors([1, 2, 3, .1f, .2f, .3f]),
-                Package(0x400, 6, 3, 0x1006), Package(0x401, 6, 2, 0x1006),
+                Package(0x400, 6, 3, 0x1006, legacy: true), Package(0x401, 6, 2, 0x1006),
                 Package(0x402, 8, 3, 0x1006), Package(0x403, 6, 3, 0x100e),
-                Package(0x404, 6, 3, 0x1006, radius: -1), Package(0x405, 6, 3, 0x1006, search: true)));
+                Package(0x404, 6, 3, 0x1006, radius: -1), Package(0x405, 6, 3, 0x1006, search: true),
+                Package(0x406, 6, 3, 0x1006)));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Base.esm"), Actors([7, 8, 9, .4f, .5f, .6f])));
             using var records = FalloutPluginStack.Load(directory, ["Base.esm", "Patch.esp"]);
             FalloutFormKey Key(uint id) => new("Base.esm", id);
             using var world = new FalloutReferenceWorld(records);
             var actor = Key(0x900); var source = records.GetEffective(Key(0x400));
             var package = FalloutEditorTravelPackage.Read(source);
+            Require(package.Flags == FalloutEditorTravelPackage.Read(records.GetEffective(Key(0x406))).Flags,
+                "Short and long source declarations changed identical editor travel flags.");
             Require(package.Radius == 16 && package.MustComplete && !package.Running && !package.WeaponDrawn,
                 "Editor travel lost source procedure or movement declarations.");
             foreach (var id in new uint[] { 0x401, 0x402, 0x403, 0x404, 0x405 })
@@ -87,10 +90,10 @@ internal static class EditorTravelContracts
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800); BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6);
         reference.CopyTo(group, 24); return group;
     }
-    private static byte[] Package(uint id, byte procedure, int locationType, uint flags, int radius = 16, bool search = false)
+    private static byte[] Package(uint id, byte procedure, int locationType, uint flags, int radius = 16, bool search = false, bool legacy = false)
     {
-        var data = new byte[12]; BinaryPrimitives.WriteUInt32LittleEndian(data, flags); data[4] = procedure; data[5] = 0xcd;
-        data[10] = data[11] = 0xcd;
+        var data = new byte[legacy ? 8 : 12]; BinaryPrimitives.WriteUInt32LittleEndian(data, flags); data[4] = procedure; data[5] = 0xcd;
+        if (!legacy) data[10] = data[11] = 0xcd;
         var location = new byte[12]; BinaryPrimitives.WriteInt32LittleEndian(location, locationType);
         BinaryPrimitives.WriteInt32LittleEndian(location.AsSpan(8), radius);
         return Record("PACK", id, Field("EDID", "EditorTravel\0"u8.ToArray()), Field("PKDT", data), Field("PLDT", location),

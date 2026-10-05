@@ -30,6 +30,11 @@ public partial class NativeLocomotionAudit : Node3D
                 GetTree().Quit();
                 return;
             }
+            if (arguments.FirstOrDefault() is "--owned-step-query" or "--owned-step" or "--owned-route" or "--owned-floor-query")
+            {
+                await NativeOwnedNavigationAudit.Run(this, arguments);
+                GetTree().Quit(); return;
+            }
             if (arguments.FirstOrDefault() == "--route-door-contact")
             {
                 await CheckRouteDoorContact();
@@ -47,6 +52,13 @@ public partial class NativeLocomotionAudit : Node3D
                 await CheckSupportedStepHeadroom();
                 GetTree().Quit(); return;
             }
+            if (arguments is ["--landing-contact"])
+            {
+                NativeNavigationContracts.Run();
+                await CheckRoundedLandingContact();
+                await CheckUnsupportedLandingContact();
+                GetTree().Quit(); return;
+            }
             NativeNavigationContracts.Run();
             await CheckRouteAccumulation();
             await CheckRouteSmoothing();
@@ -57,6 +69,8 @@ public partial class NativeLocomotionAudit : Node3D
             await CheckNarrowPassageRefinement();
             await CheckOpenDoorFrameCorridor();
             await CheckSupportedStepHeadroom();
+            await CheckRoundedLandingContact();
+            await CheckUnsupportedLandingContact();
             await Check(.3f, false, true);
             await Check(2, false, false);
             await Check(.3f, true, false);

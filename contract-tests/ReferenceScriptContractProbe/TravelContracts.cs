@@ -26,7 +26,7 @@ internal static class TravelContracts
                 Package(0x40a, 0, 0x203404),
                 GuardPackage(0x404, 0, 0x14001000, 180, 240), GuardPackage(0x405, 3, 0x10001000, 0, 0),
                 Record("IDLE", 0x500, Field("MODL", Text("actor/event.kf")), Field("DATA", [0x54, 0, 0, 0, 0, 0]))));
-            File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Base.esm"), Package(0x400, 0, 0x1404, radius: 3)));
+            File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Base.esm"), Package(0x400, 0, 0x1404, radius: 3, legacy: true)));
             using var records = FalloutPluginStack.Load(directory, ["Base.esm", "Patch.esp"]);
             using var world = new FalloutReferenceWorld(records);
             FalloutFormKey Key(uint id) => new("Base.esm", id);
@@ -245,9 +245,9 @@ internal static class TravelContracts
         return Record("NAVM", id, Field("DATA", header), Field("NVER", BitConverter.GetBytes(11u)),
             Field("NVVX", vertices), Field("NVTR", triangle), Field("NVEX", []), Field("NVCA", []), Field("NVDP", []));
     }
-    private static byte[] Package(uint id, int locationType, uint flags, int radius = 1, ushort behavior = 0, bool idle = false)
+    private static byte[] Package(uint id, int locationType, uint flags, int radius = 1, ushort behavior = 0, bool idle = false, bool legacy = false)
     {
-        var data = new byte[12]; BinaryPrimitives.WriteUInt32LittleEndian(data, flags); data[4] = 6;
+        var data = new byte[legacy ? 8 : 12]; BinaryPrimitives.WriteUInt32LittleEndian(data, flags); data[4] = 6;
         BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(6), behavior);
         var location = new byte[12]; BinaryPrimitives.WriteInt32LittleEndian(location, locationType);
         BinaryPrimitives.WriteUInt32LittleEndian(location.AsSpan(4), locationType == 0 ? 0x902u : 0);

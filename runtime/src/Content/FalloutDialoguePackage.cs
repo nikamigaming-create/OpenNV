@@ -21,8 +21,8 @@ internal sealed record FalloutDialoguePackage(FalloutFormKey Form, FalloutFormKe
             return values.Length == 1 && values[0].Data.Length == size ? values[0].Data :
                 throw new InvalidDataException($"Dialogue package {name} extent is invalid.");
         }
-        var packageData = Required("PKDT", 12).Span;
-        if (packageData[4] != 15) throw new InvalidDataException("Package procedure is not Dialogue.");
+        var packageData = FalloutPackageData.Read(record);
+        if (packageData.Procedure != 15) throw new InvalidDataException("Package procedure is not Dialogue.");
         _ = FalloutScriptPackage.Read(record);
         var target = Required("PTDT", 16).Span;
         if (BinaryPrimitives.ReadInt32LittleEndian(target) != 0)
@@ -39,7 +39,7 @@ internal sealed record FalloutDialoguePackage(FalloutFormKey Form, FalloutFormKe
         if (type == 1 && topic is null) throw new InvalidDataException("SayTo dialogue package has no source topic.");
         return new(record.FormKey, record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(target[4..])), distance,
             fov, topic, flags, type, BinaryPrimitives.ReadUInt32LittleEndian(data[20..]))
-        { PackageFlags = BinaryPrimitives.ReadUInt32LittleEndian(packageData), TriggerLocation = FalloutDialogueTriggerLocation.Read(record) };
+        { PackageFlags = packageData.Flags, TriggerLocation = FalloutDialogueTriggerLocation.Read(record) };
     }
 }
 

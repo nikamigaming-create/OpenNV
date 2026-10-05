@@ -24,8 +24,11 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     private string _sourceHash = "";
     private readonly Dictionary<int, Body> _bySource = [];
     private bool _active;
+    private FalloutActorRagdollState? _retiredCapture;
     private Vector3 _lastSeparationVelocity;
     internal bool Active => _active;
+    internal bool CaptureReady => _active && (_state.CaptureRagdoll == Capture ||
+        _retiredCapture is not null && ReferenceEquals(_state.Ragdoll, _retiredCapture));
     internal bool Settled => _active && _bodies.All(body => body.Node.Sleeping);
     internal Transform3D TorsoTransform
     {
@@ -306,7 +309,11 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
 
     public override void _ExitTree()
     {
-        if (_active) { _state.Ragdoll = Capture(); _state.CaptureRagdoll = null; }
+        if (_active && _state.CaptureRagdoll == Capture)
+        {
+            _retiredCapture = Capture(); _retiredCapture.Validate();
+            _state.Ragdoll = _retiredCapture; _state.CaptureRagdoll = null;
+        }
         foreach (var joint in _joints) PhysicsServer3D.FreeRid(joint.Handle);
         _joints.Clear();
     }

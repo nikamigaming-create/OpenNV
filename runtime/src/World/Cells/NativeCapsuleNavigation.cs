@@ -124,6 +124,7 @@ internal static partial class NativeCapsuleNavigation
         NativeNavigationContact? rejected = null;
         bool SingleEdge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep)
         {
+            probe?.BeginEdge();
             rejected = null;
             landing = default;
             bool Reject(string reason, NativeNavigationContact? contact = null)
@@ -165,10 +166,22 @@ internal static partial class NativeCapsuleNavigation
                     drop += rise;
                 }
             }
-            if (!Sweep(supportedFrom, Vector3.Down * drop)) return Reject("landing-sweep-no-floor");
-            if (!Enumerable.Range(0, hit.GetCollisionCount())
-                .Any(index => hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine)) return Reject("landing-slope");
+            var downward = Vector3.Down * drop;
+            var collided = Sweep(supportedFrom, downward);
+            probe?.ObserveDownward(CaptureSweep(hit, supportedFrom, supportedFrom + downward, collided));
+            if (!collided) return Reject("landing-sweep-no-floor");
+            if (hit.GetCollisionCount() == 0) return Reject("landing-sweep-no-contact");
             landing = supportedFrom + hit.GetTravel();
+            NativeNavigationContact? reconciledFloor = null;
+            if (!Enumerable.Range(0, hit.GetCollisionCount())
+                .Any(index => hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine) &&
+                !NativeCharacterStep.TrySupport(body, landing, stepHeight, out reconciledFloor)) return Reject("landing-slope",
+                    FirstContact(hit, supportedFrom, supportedFrom + downward));
+            // The rounded bottom can stop on a steep stair edge although the
+            // same pose has a walkable root floor within the mover's snap
+            // interval. Only that shared native support reconciles it; the
+            // complete capsule sweeps, root floor, height and residency still
+            // apply. A source guide's incline supplies no support evidence.
             // A rounded capsule can touch a walkable normal on a ledge while
             // its feet remain over empty space. Sliding then pushes that body
             // off the edge instead of executing the planned waypoint. Require
@@ -181,7 +194,9 @@ internal static partial class NativeCapsuleNavigation
             var height = landing.Y - from.Y;
             if (height > stepHeight + body.SafeMargin * 8) return Reject("landing-too-high");
             if (height < -maximumDrop - body.SafeMargin * 8) return Reject("landing-too-low");
-            return resident(landing) || Reject("landing-not-resident");
+            if (!resident(landing)) return Reject("landing-not-resident");
+            if (reconciledFloor is not null) probe?.ObserveReconciledLanding(reconciledFloor);
+            return true;
         }
         static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
         bool Edge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep = true)

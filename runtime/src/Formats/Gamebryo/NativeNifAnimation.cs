@@ -8,6 +8,7 @@ internal sealed class RuntimeNativeNifAnimation
 {
     private readonly RuntimeNativeNifSkeleton _skeleton;
     private readonly List<(int Bone, byte Priority, FalloutNifAnimationSampler Sampler)> _transforms = [];
+    private readonly Dictionary<int, FalloutNifTransformComponents> _transformComponents = [];
     private readonly List<Action<float>> _otherChannels = [];
     private readonly List<RuntimeNifUnboundAnimationChannel> _unbound = [];
     private readonly List<FalloutNifControllerLink> _absentTargets = [];
@@ -69,6 +70,7 @@ internal sealed class RuntimeNativeNifAnimation
                     var sampler = new FalloutNifAnimationSampler(source, link.Interpolator);
                     if (!targets.Add(bone))
                         throw new NotSupportedException("Multiple transform links require a blend/priority owner.");
+                    _transformComponents.Add(bone, sampler.Sample(sequence.StartTime).Components);
                     _transforms.Add((bone, link.Priority, sampler));
                 }
                 else if (link.ControllerType == "NiFloatExtraDataController")
@@ -107,6 +109,24 @@ internal sealed class RuntimeNativeNifAnimation
     internal IReadOnlyList<RuntimeNifUnboundAnimationChannel> UnboundChannels => _unbound;
     internal IReadOnlyList<FalloutNifControllerLink> AbsentSourceTargets => _absentTargets;
     internal int TransformChannelCount => _transforms.Count;
+
+    // The same whole-bone priority selection used by ApplyLayers determines
+    // which components have a current source owner. Missing components retain
+    // their previously published pose and need an independent continuation.
+    internal static FalloutNifTransformComponents[] TransformCoverage(params RuntimeNativeNifAnimation[] layers)
+    {
+        if (layers.Length == 0) throw new ArgumentException("Pose coverage needs a source layer.", nameof(layers));
+        var skeleton = layers[0]._skeleton;
+        var channels = new List<FalloutNifTransformCoverageChannel>();
+        foreach (var animation in layers)
+        {
+            if (animation._skeleton != skeleton || animation.UnboundChannels.Count != 0)
+                throw new NotSupportedException("Pose coverage requires complete source layers on one skeleton.");
+            foreach (var (bone, priority, _) in animation._transforms)
+                channels.Add(new(bone, priority, animation.Sequence.Weight, animation._transformComponents[bone]));
+        }
+        return FalloutNifTransformCoverage.Resolve(skeleton.Node.GetBoneCount(), channels);
+    }
 
     internal void ApplySourceTime(float sourceTime)
     {

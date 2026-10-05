@@ -5,6 +5,31 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--attack-variant-contracts"])
+{
+    AnimationResourceContracts.Run(); AttackVariantContracts.Run();
+    return;
+}
+if (args is ["--stopped-pose-contracts"])
+{
+    StoppedPoseContracts.Run();
+    return;
+}
+if (args is ["--package-data-contracts"])
+{
+    PackageDataContracts.Run();
+    EditorTravelContracts.Run();
+    TravelContracts.Run();
+    return;
+}
+if (args.Length >= 9 && args[0] == "--audit-owned-package-data")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    uint Form(string value) => uint.Parse(value, System.Globalization.NumberStyles.HexNumber, invariant);
+    OwnedPackageDataProbe.Run(args[1], args[2], args[3], new(args[4], Form(args[5])),
+        new(args[6], Form(args[7])), args[8], args[9..]);
+    return;
+}
 if (args is ["--speech-completion-contracts"])
 {
     SpeechCompletionContracts.Run();
@@ -321,6 +346,7 @@ if (args is ["--inventory-command-contracts"])
 if (args is ["--animation-resource-contracts"])
 {
     AnimationResourceContracts.Run();
+    AttackVariantContracts.Run();
     return;
 }
 if (args is ["--audit-player-start-inventory", var inventoryRoot])
@@ -711,11 +737,13 @@ NpcDialogueLinkContracts.Run();
 RadioContracts.Run();
 PatrolContracts.Run();
 EscortContracts.Run();
+PackageDataContracts.Run();
 EditorTravelContracts.Run();
 TravelContracts.Run();
 FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
+StoppedPoseContracts.Run();
 ScriptDeathContracts.Run();
 StageConditionScopeContracts.Run();
 PlayerSkillContracts.Run();
@@ -762,6 +790,7 @@ StageAndInventoryContracts.Run();
 QuestObjectContracts.Run();
 InventoryCommandContracts.Run();
 AnimationResourceContracts.Run();
+AttackVariantContracts.Run();
 WeaponHandlingContracts.Run();
 WeaponFiringContracts.Run();
 DestructionContracts.Run();

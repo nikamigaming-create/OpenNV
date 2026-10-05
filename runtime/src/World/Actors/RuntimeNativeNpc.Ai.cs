@@ -213,7 +213,7 @@ internal partial class RuntimeNativeNpc
         else
         {
             PlayLocomotion(moving: bindingFailure?.MovingBasePose == true);
-            AdvanceAi(initializing: true);
+            if (bindingFailure is null || !HasIndependentStoppedPose) AdvanceAi(initializing: true);
         }
         if (bindingFailure is not null && _aiError is not null)
         {
@@ -223,6 +223,8 @@ internal partial class RuntimeNativeNpc
         _bindingInitialBase = false;
         _baseClock.Bind(_baseResource, _baseHash);
         ResumeBaseClock();
+        if (_animation is { } overlay && _baseAnimation is { } baseAnimation)
+            RuntimeNativeNifAnimation.ApplyLayers((baseAnimation, _baseAnimationSeconds), (overlay, _animationSeconds));
         if (bindingFailure is not null) PublishFace();
     }
 
@@ -413,10 +415,10 @@ internal partial class RuntimeNativeNpc
                 return;
             }
             var fields = selected.ReadSubrecords().ToArray();
-            var data = fields.Single(field => field.Signature == "PKDT").Data;
+            var data = FalloutPackageData.Read(selected);
             var location = fields.Single(field => field.Signature == "PLDT").Data;
-            if (data.Length != 12 || location.Length != 12) throw new InvalidDataException("AI package has an invalid field extent.");
-            if (data.Span[4] != 6 || BinaryPrimitives.ReadInt32LittleEndian(location.Span) != 0)
+            if (location.Length != 12) throw new InvalidDataException("AI package has an invalid location extent.");
+            if (data.Procedure != 6 || BinaryPrimitives.ReadInt32LittleEndian(location.Span) != 0)
                 throw new NotSupportedException($"PACK {selected.FormKey} requires its travel/procedure owner.");
             var target = selected.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(location.Span[4..]));
             var reference = _aiCell!.References.SingleOrDefault(value => value.FormKey == target) ??

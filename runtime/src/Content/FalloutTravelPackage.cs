@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
@@ -16,15 +15,14 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
         var source = FalloutScriptPackage.Read(record);
         if (source.Procedure != 6 || source.LocationType is not (0 or 3))
             throw new NotSupportedException("Travel requires its reference-marker or editor-location owner.");
-        var data = record.ReadSubrecords().Single(field => field.Signature == "PKDT").Data.Span;
+        var data = FalloutPackageData.Read(record);
         const uint supported = 2 | 4 | 0x400 | 0x1000 | 0x2000 | FalloutScriptPackage.HeadTrackingOffFlag |
             FalloutScriptPackage.WeaponsUnequippedFlag;
-        var flags = BinaryPrimitives.ReadUInt32LittleEndian(data);
+        var flags = data.Flags;
         // Skip Fallout Behavior disables the optional behavior lane. Retained
         // declarations in that lane do not add a second travel procedure.
         if ((flags & ~supported) != 0 ||
-            (flags & 0x1000) == 0 && BinaryPrimitives.ReadUInt16LittleEndian(data[6..]) != 0 ||
-            BinaryPrimitives.ReadUInt16LittleEndian(data[8..]) != 0 ||
+            (flags & 0x1000) == 0 && data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0) ||
             record.ReadSubrecords().Any(field => field.Signature is "PLD2" or "PTDT" or "PTD2") ||
             !ownsIdleCollection && source.Idles.Count != 0)
             throw new NotSupportedException("Travel has additional unowned behavior, target or idle-collection inputs.");

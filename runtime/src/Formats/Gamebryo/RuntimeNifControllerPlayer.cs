@@ -6,6 +6,7 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
 {
     private readonly Dictionary<string, RuntimeNifControllerSequence> _sequences =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<RuntimeNifControllerSequence> _sourceSequences = [];
     private RuntimeNifControllerSequence? _active;
     private float[] _boundaries = [];
     private double _elapsedSeconds;
@@ -18,13 +19,14 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     internal IReadOnlyCollection<string> UnboundTextKeys => _unboundTextKeys;
     internal static Action<object>? TextKeyObserver { get; set; }
     internal Func<FalloutNifTextKeyEvent, string>? TextKeyHandler { get; set; }
-    internal bool HasTextKeys => _sequences.Values.Any(sequence => sequence.TextKeys.Count != 0);
+    internal bool HasTextKeys => _sourceSequences.Any(sequence => sequence.TextKeys.Count != 0);
     internal bool CompletedDirectInitialization => _active is { CycleType: 2, DirectClock: not null } &&
         SourceTimeSeconds >= _active.StopTime && _sequences.Count == 1 && !HasTextKeys;
     internal long TextKeyCount => _textKeyCount;
 
     internal IReadOnlyCollection<string> SequenceNames => _sequences.Keys;
     internal string? ActiveSequence => _active?.Name;
+    internal int? ActiveSourceSequence => _active?.SourceSequence;
     internal int SourceController { get; init; } = -1;
     internal string SourceSha256 { get; init; } = "";
     internal bool HasSequence(string name) => _sequences.ContainsKey(name);
@@ -46,6 +48,20 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         get
         {
             if (_active is null) return double.PositiveInfinity;
+            if (_active.DirectClock is null)
+            {
+                var duration = ((double)_active.StopTime - _active.StartTime) / _active.Frequency;
+                var cycleStart = _active.CycleType == 0 ? Math.Floor(_elapsedSeconds / duration) * duration : 0;
+                foreach (var boundary in _boundaries)
+                {
+                    // Split in the same elapsed-time domain used by text keys.
+                    // Subtracting the rounded absolute source time can finish
+                    // the visual clock before its final key has been crossed.
+                    var elapsedAtBoundary = cycleStart + ((double)boundary - _active.StartTime) / _active.Frequency;
+                    if (elapsedAtBoundary > _elapsedSeconds) return elapsedAtBoundary - _elapsedSeconds;
+                }
+                return _active.CycleType == 0 ? cycleStart + duration - _elapsedSeconds : double.PositiveInfinity;
+            }
             foreach (var boundary in _boundaries)
                 if (boundary > SourceTimeSeconds + 1e-10)
                     return (boundary - SourceTimeSeconds) / _active.Frequency;
@@ -55,6 +71,7 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     internal object Observation => new
     {
         active = ActiveSequence,
+        activeSourceSequence = ActiveSourceSequence,
         playing = Playing,
         pending = _pendingSequence,
         awaitingSelection = _active is null && _sequences.Count > 1,
@@ -63,9 +80,11 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
         textKeyCount = _textKeyCount,
         lastTextKey = _lastTextKey,
         unboundTextKeys = _unboundTextKeys.ToArray(),
-        sequences = _sequences.Values.Select(sequence => new
+        sequences = _sourceSequences.Select(sequence => new
         {
+            sequence.SourceSequence,
             sequence.Name,
+            selectedByName = ReferenceEquals(_sequences[sequence.Name], sequence),
             sequence.CycleType,
             sequence.Frequency,
             sequence.StartTime,
@@ -85,15 +104,21 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
     {
         if (_sequences.Count != 0)
             throw new InvalidOperationException("NIF controller player is already configured.");
-        foreach (var sequence in sequences)
+        var registered = sequences.ToArray();
+        foreach (var sequence in registered)
         {
             if (string.IsNullOrWhiteSpace(sequence.Name) || !float.IsFinite(sequence.StartTime) ||
                 !float.IsFinite(sequence.StopTime) || sequence.StopTime <= sequence.StartTime ||
                 !float.IsFinite(sequence.Frequency) || sequence.Frequency <= 0 || sequence.CycleType is not (0 or 2))
                 throw new InvalidDataException("NIF source sequence clock is invalid.");
-            if (!_sequences.TryAdd(sequence.Name, sequence))
+            if (_sequences.TryGetValue(sequence.Name, out var previous) &&
+                !previous.Name.Equals(sequence.Name, StringComparison.Ordinal))
                 throw new InvalidDataException(
-                    $"NIF controller manager has duplicate sequence name {sequence.Name}.");
+                    $"NIF controller manager has unresolved sequence-name case collision {previous.Name}/{sequence.Name}.");
+            // Source registration retains every sequence while its name map
+            // replaces an earlier value with the last registered exact name.
+            _sourceSequences.Add(sequence);
+            _sequences[sequence.Name] = sequence;
         }
         var looping = _sequences.Values.Where(sequence => sequence.CycleType == 0 &&
             (sequence.DirectClock is null || (sequence.DirectClock.Flags & 8) != 0)).ToArray();
@@ -232,6 +257,7 @@ internal sealed record RuntimeNifControllerSequence(
     float StopTime,
     IReadOnlyList<RuntimeNifControllerChannel> Channels)
 {
+    internal int SourceSequence { get; init; } = -1;
     internal IReadOnlyList<FalloutNifTextKey> TextKeys { get; init; } = [];
     internal FalloutNifTimeController? DirectClock { get; init; }
 }

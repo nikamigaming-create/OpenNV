@@ -20,6 +20,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private readonly Dictionary<string, NativeActorCombatAnimation> _combatClips = new(StringComparer.OrdinalIgnoreCase);
     private NativeActorCombatAnimation? _combatIdle, _combatAim, _combatGrip;
     private string _movementPath = "", _attackPath = "";
+    private IReadOnlyList<string> _attackPaths = [];
     private int _attackHitCount;
     private bool Ranged => _enemyWeapon is not null && !_enemyWeapon.IsMeleeWeapon;
     private readonly (RuntimeNativeNifAnimation Animation, float SourceSeconds)[] _combatLayers = new (RuntimeNativeNifAnimation, float)[4];
@@ -44,8 +45,7 @@ internal sealed partial class RuntimeNativeActorCombat
             var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female" : "male";
             _movementPath = SelectPath(directory, "locomotion/h2hfastforward", "locomotion/h2hforward",
                 $"locomotion/{gender}/mtfastforward", "locomotion/mtfastforward", "locomotion/mtforward");
-            _attackPath = SelectPath(directory, "h2hattackleft", "h2hattackleft_a", "h2hattackleft_b",
-                "h2hattackright", "h2hattackright_a", "h2hattackright_b");
+            _attackPaths = SelectAttackPaths(directory, "h2hattackleft", "h2hattackright");
             _combatIdle = Clip(SelectPath(directory, "locomotion/mtidle", "mtidle"), true);
             _combatAim = Clip(SelectPath(directory, "h2haim"), true);
         }
@@ -58,16 +58,20 @@ internal sealed partial class RuntimeNativeActorCombat
             if (reach.Length != 1) throw new InvalidDataException("Creature reach extent is invalid.");
             _attackRange = reach[0] * _skeleton.UnitsToMetres * _skeleton.Node.Scale.X;
             _movementPath = SelectPath(directory, "locomotion/mtfastforward", "locomotion/mtforward", "mtforward");
-            _attackPath = SelectPath(directory, "h2hattackleft", "h2hattackleft_a", "h2hattackleft_b",
-                "h2hattackright", "h2hattackright_a", "h2hattackright_b");
+            _attackPaths = SelectAttackPaths(directory, "h2hattackleft", "h2hattackright");
             _combatIdle = Clip(SelectPath(directory, "mtidle", "locomotion/mtidle"), true);
         }
         if (!float.IsFinite(_attackRange) || !float.IsFinite(_naturalDamage) || _attackRange <= 0 || _naturalDamage < 0)
             throw new InvalidDataException("Actor attack range/damage is invalid.");
-        var attackClip = Clip(_attackPath, _enemyWeapon?.Automatic == true);
-        _attackHitCount = attackClip.Events.Discharges;
-        if (_attackHitCount == 0) throw new NotSupportedException("Actor attack requires a source Hit, Fire or Release event.");
+        foreach (var path in _attackPaths)
+            if (Clip(path, _enemyWeapon?.Automatic == true).Events.Discharges == 0)
+                throw new NotSupportedException($"Actor attack {path} requires a source Hit, Fire or Release event.");
         _ = Clip(_movementPath, true);
+        var state = _state.Engagement!;
+        var attackRandom = _state.AttackRandom.State;
+        if (state.AttackRandomState is { } savedRandom && savedRandom != attackRandom)
+            throw new InvalidDataException("Active combat randomness differs from its persistent actor owner.");
+        _state.Engagement = state with { AttackRandomState = attackRandom };
     }
 
     private string SelectPath(string directory, params string[] groups)
@@ -79,11 +83,21 @@ internal sealed partial class RuntimeNativeActorCombat
         throw new FileNotFoundException("Source actor group is absent: " + string.Join(',', groups));
     }
 
+    private IReadOnlyList<string> SelectAttackPaths(string directory, params string[] groups)
+    {
+        foreach (var group in groups)
+        {
+            var paths = _content.ActorAnimations.Variants(directory, group);
+            if (paths.Count != 0) return paths;
+        }
+        throw new FileNotFoundException("Source actor attack group is absent: " + string.Join(',', groups));
+    }
+
     private NativeActorCombatAnimation Clip(string path, bool loop)
     {
         if (!_combatClips.TryGetValue(path, out var clip))
             _combatClips.Add(path, clip = new(path, _content, _skeleton, _enemyObject, loop,
-                path == _attackPath && _enemyWeapon is { Automatic: true, AttackAnimation: 74 }));
+                _attackPaths.Contains(path, StringComparer.OrdinalIgnoreCase) && _enemyWeapon is { Automatic: true, AttackAnimation: 74 }));
         return clip;
     }
 
@@ -114,6 +128,14 @@ internal sealed partial class RuntimeNativeActorCombat
             if (!_enemyWeaponHandling.CanReload(_enemyWeapon!)) throw new NotSupportedException("Actor exhausted usable ammunition and needs weapon reselection.");
             state = BeginWeaponReload(state);
         }
+        if (state.Action == "attack")
+        {
+            state = FalloutAttackAnimationSelection.Bind(state, _attackPaths,
+                path => Clip(path, _enemyWeapon?.Automatic == true).Hash);
+            _attackPath = state.Animation!;
+            _state.AttackRandom.Restore(state.AttackRandomState!.Value);
+            _state.Engagement = state;
+        }
         var path = state.Action switch
         {
             "pursue" => _movementPath,
@@ -127,6 +149,7 @@ internal sealed partial class RuntimeNativeActorCombat
             !state.AnimationHash!.Equals(clip.Hash, StringComparison.OrdinalIgnoreCase)))
             throw new NotSupportedException("Saved combat animation differs from the winning source.");
         state = state with { Animation = path, AnimationHash = clip.Hash };
+        if (state.Action == "attack") _attackHitCount = clip.Events.Discharges;
         double factor = state.Action is "attack" or "reload" ? _enemyWeapon?.AnimationMultiplier ?? 1 : 1;
         if (state.Action == "attack" && _enemyWeapon?.Automatic == true)
         {
