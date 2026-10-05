@@ -11,7 +11,7 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private void OpenSpecialBookMenu(int budget)
     {
-        if (ExecutionError is not null || _specialBookEntry is not null || _nameEntry is not null ||
+        if (BlockingExecutionError is not null || _specialBookEntry is not null || _nameEntry is not null ||
             _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null ||
             _traitEntry is not null || _recipeMenu is not null || _barterMenu is not null)
             throw new InvalidOperationException("SPECIAL book cannot open while another menu owns input or its driver has failed.");
@@ -28,7 +28,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         };
         entry.Failed += error =>
         {
-            ExecutionError ??= error.Message;
+            ExecutionError = BlockingExecutionError ?? error.Message;
             GD.PushError($"OPENNV_NATIVE_SPECIAL_BOOK_DIVERGENCE: {error.Message}");
         };
         entry.TreeExiting += () =>

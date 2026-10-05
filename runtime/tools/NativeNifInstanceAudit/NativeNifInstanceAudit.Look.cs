@@ -39,13 +39,43 @@ public partial class NativeNifInstanceAudit
             var direction = skeleton.GetBoneGlobalPose(1).Basis * Vector3.Forward;
             Require(MathF.Abs(Vector3.Forward.AngleTo(direction) - Mathf.DegToRad(30)) < 0.001f && direction.X > 0,
                 "Source head cone did not clamp toward the target.");
+            var saved = JsonSerializer.Deserialize<FalloutHeadTrackingPose>(JsonSerializer.Serialize(pose.Capture()))!;
+            Require(saved.Active && saved.Authored is not null && saved.Previous is not null,
+                "Head cold fixture did not capture an actual active procedural pose.");
+            var coldSkeleton = new Skeleton3D(); AddChild(coldSkeleton);
+            try
+            {
+                coldSkeleton.AddBone("Parent"); coldSkeleton.AddBone("Head"); coldSkeleton.SetBoneParent(1, 0);
+                coldSkeleton.SetBoneRest(0, Transform3D.Identity); coldSkeleton.SetBoneRest(1, new(Basis.Identity, Vector3.Up));
+                coldSkeleton.ResetBonePoses();
+                var cold = new NativeHeadTrackingPose(coldSkeleton, 1, part, settings, .01f); cold.Restore(saved);
+                Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(saved),
+                    "Cold head pose changed raw current/previous/authored quaternions or publication flags.");
+                foreach (var malformed in new[] { saved with { Current = [float.NaN, 0, 0, 1] }, saved with { Previous = null } })
+                {
+                    try { cold.Restore(malformed); throw new InvalidOperationException("Malformed head pose was restored."); }
+                    catch (InvalidDataException) { }
+                    Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(saved),
+                        "Rejected native head restoration mutated the published pose.");
+                }
+                foreach (var nextOverride in new[] { 0f, 90f, 0f })
+                {
+                    pose.RestoreAuthoredPose(); cold.RestoreAuthoredPose();
+                    Require(skeleton.GetBonePoseRotation(1) == coldSkeleton.GetBonePoseRotation(1),
+                        "Cold head did not return to its exact raw authored rotation before KF publication.");
+                    pose.Publish(target, nextOverride); cold.Publish(target, nextOverride);
+                    Require(JsonSerializer.Serialize(pose.Capture()) == JsonSerializer.Serialize(cold.Capture()),
+                        "Warm and cold head publication diverged at the next override/easing step.");
+                }
+            }
+            finally { coldSkeleton.Free(); }
             for (var frame = 0; frame < 30; frame++) { pose.RestoreAuthoredPose(); pose.Publish(target, 90); }
             Require(skeleton.GetBonePoseRotation(1).AngleTo(Quaternion.Identity) < 0.001f, "Authored float override did not release the procedural pose.");
             var authored = new Quaternion(Vector3.Up, -0.13f);
             pose.RestoreAuthoredPose(); skeleton.SetBonePoseRotation(1, authored);
             pose.Publish(new Vector3(0, 1, -100), 0);
             Require(skeleton.GetBonePoseRotation(1).AngleTo(authored) < 0.001f, "Out-of-range target overwrote the source pose.");
-            GD.Print("OPENNV_HEAD_POSE_CONTRACT_PASS cone=true publicationLimit=true authoredRestore=true override=true distanceGate=true");
+            GD.Print("OPENNV_HEAD_POSE_CONTRACT_PASS cone=true publicationLimit=true authoredRestore=true override=true distanceGate=true activeColdRaw=true exactNextPublication=true atomicRefusal=true");
         }
         finally { skeleton.Free(); }
     }

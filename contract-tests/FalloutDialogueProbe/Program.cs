@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 using System.Text;
 using OpenNV.Runtime.Content;
 
+if (args is ["--head-persistence-contracts"]) { HeadTrackingProbe.Run(); return; }
+
 BitmapFontEncodingProbe.Run();
 if (args is ["--font-encoding-contracts"]) return;
 

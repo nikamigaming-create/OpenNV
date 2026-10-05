@@ -33,6 +33,9 @@ internal sealed partial class FalloutReferenceScripts
         // A source fault may have consumed writes and effects. An asynchronous
         // completion never recovers it or re-enters its historical prefix.
         if (instance.ScriptError is { } error) return new(receipt.Speaker, "SayToDone", 0, error);
-        return DispatchFrameCore(instance, [new("SayToDone", Topics: receipt.Topics)], 0).Single();
+        var previous = _speechInvocation;
+        _speechInvocation = receipt.Info is null ? null : FalloutFinishedSpeechSourceBinding.Capture(records, instance, receipt);
+        try { return DispatchFrameCore(instance, [new("SayToDone", Topics: receipt.Topics)], 0).Single(); }
+        finally { _speechInvocation = previous; }
     }
 }

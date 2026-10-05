@@ -19,13 +19,13 @@ enters CELL 024512. The latest session ends through ordinary Quit there;
 detailed state 114 binds that actual state to runtime 1a53f095. It is a
 diagnostic snapshot, not a complete saved checkpoint. Save request 115 refuses at
 the retained speech fault. The immutable genuine checkpoint remains stage 10.
-Vault exit, Megaton and the train/Mojave route remain unreached. PR 147 is merged
-with all five checks passing at synchronized clean main ffd1b73. The fresh
-vault-exit/corpse/save-owner branch is active.
+Vault exit, Megaton and the train/Mojave route remain unreached. PR 148 is merged
+with all five checks passing at synchronized clean main e45f346. The fresh
+finished-speech/default-loot branch is active.
 The game is closed during integration/publication; recording is off. Verify an actual process
 and advancing state before input, never a stopped process's retained files.
 
-The current branch's selected native checks pass the original control-to-gear
+Merged PR 148's selected native checks pass the original control-to-gear
 activation, actual moving collision and cold finite clock. Stored reference locals
 now resolve in Activate's actor argument. The unchanged gear model builds all 50
 surfaces and five collision shapes with shader-owned texture/sampler binding;
@@ -33,9 +33,33 @@ empty shader filenames do not acquire a dormant legacy texture. All three report
 authored-dead NPCs pass their original XRGB accumulation frame and eighteen XRGD
 body poses, retirement and cold root/body restoration. Synthetic malformed and
 atomic-refusal checks pass. These are component checks; the next ordinary campaign
-run, corpse loot and a complete new checkpoint remain unverified. The complete
+run and a complete new checkpoint remain unverified. The complete
 required Release/Debug, formatting/analyzer, contract, launcher and native Godot
-gate passes for this repair; checked publication is next.
+gate passes for the merged ACTI/shader/XRGB repair.
+
+The current branch passes actual owned native default corpse activation and loot:
+the original source guard's ragdoll collider opens the original XML/font menu,
+transfers three source item kinds once and retains empty inventory and its
+stopped OnDeath fault through retirement/cold restoration. Original owned speech
+and INFO Look results complete once; an off-cell cold finished-speech receipt
+resumes its retained fixed-argument suffix without replaying audio, results or
+random draws. Active/opaque/uncommitted speech remains refused. Detection event
+creation and expiry use the shared current numeric setting; receiver detection
+and alert consumption remain unowned. Deferred ordinary ForceSave, IsHardcore,
+persistent actor alert and null-caller function contracts pass, along with the
+full plugin/runtime probe at their stated candidate build identities.
+Schema v41 now retains complete head targets, raw pose/controller state and closed
+quest-stage result receipts. Pure and actual owned native speech/Look cold checks
+pass, including child-first retirement and cleanup with source readers alive.
+The full plugin/reference probes and actual original stage-result prefix audit
+pass. Independent stage entries and engine updates retain the stopped result's
+error without replaying it; untouched suspended sibling iterators still refuse
+capture. The exact original exit point settles through the normal native player
+mover in fourteen physics steps with source LAND/canyon support and capsule
+clearance. No source height or collision geometry changes. The final combined
+Release/Debug, formatting/analyzer, contract, launcher and native Godot gate and
+git diff --check pass. Ordinary campaign save/cold Continue and vault exit remain
+unverified.
 
 The original overseer-terminal NIF previously failed at two exact-name Idle
 registrations. The general manager retains all blocks and uses its final ordered
@@ -111,13 +135,14 @@ with a proxy floor to conceal that unresolved entry path.
 ## Next owners and outcome
 
 Primary owns builds, native slots, ordinary input, complete save/cold continuation
-and checked publication. Publish the verified ACTI/shader/XRGB owner repair
-through the full required gate. The reached
-script fault is CreateDetectionEvent in actor 0569b4's already consumed GameMode
-invocation; SayToDone encounters that retained fault. Own the source detection
-event and stopped suffix without replaying speech, random draws or prior effects,
-and retain a completed failed speech receipt through save/cold continuation.
-The source detection receiver remains an independent behavior boundary.
+and checked publication. Publish the checked v41
+finished-speech/default-loot/manual-save repair. Resume the genuine post-Amata
+checkpoint, verify ordinary source control/gear/review/exit input, write and
+cold-load a complete new checkpoint, then continue to Megaton and the authored
+train route. Historical result failures remain independent visible divergence.
+Detection receiver/score behavior must not become a false answer. The authorized
+parallel worker prepares the next proven compiled-SCDA execution slice privately;
+it owns no builds, public edits or ordinary input.
 
 In parallel, trace the actual campaign's upright dead actors and refused looting,
 and the final-room activation/exit sequence from CELL 024512. Component corpse

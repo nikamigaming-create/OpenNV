@@ -5,13 +5,22 @@ G.O.A.T. The current campaign bot crosses the authored stair and portal into
 Vault101b (CELL 024511). User input acquires the source password, selects the
 terminal tunnel result at Escape stage 120 and enters CELL 024512. The retained
 completed-speech callback error blocks a complete new save there; the genuine
-checkpoint remains stage 10. The session ends through ordinary Quit. Source
-ragdoll root rotation blocks several authored corpses' death presentation, and
-animated ACTI default activation is silently ignored. The actual final-room exit
-and corpse looting are under investigation. The current candidate's general
-ACTI/shader/XRGB repairs pass the unchanged original linked control, moving gear
-collision, all three authored corpse poses and native cold continuation.
-The next ordinary campaign run and complete new save remain unverified.
+checkpoint remains stage 10. The session ends through ordinary Quit.
+The merged general ACTI/shader/XRGB repairs pass the unchanged original linked
+control, moving gear collision, all three authored corpse poses and native cold
+continuation. The new candidate's independent default activation passes actual
+source guard collider, original loot menu, item transfer and cold inventory/error
+preservation. Its ended-speech owner passes real audio/results, unloaded cold
+source recovery and once-only generation checks. Source manual-save/Hardcore and
+independent alert-state contracts pass, including v40 migration and global source
+functions. Save v41 preserves source-bound head targets/raw pose/controllers and
+closed quest-stage result inventories without replaying consumed effects.
+Typed closed-result failures retain their full diagnostics while independent
+stage/engine work continues. Native speech/Look retirement and cold restoration,
+full plugin/reference contracts and the original source result-prefix audit pass.
+The exact source exit point settles on original LAND/canyon collision with the
+normal player capsule. The complete required runtime gate and git diff --check
+pass. The next ordinary campaign run and complete new save remain unverified.
 Vault exit and Megaton remain unreached.
 The actual source stair passes complete native planned routes in both directions,
 with player and source NPC capsules preserving support and all gap/wall/slope

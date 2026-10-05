@@ -45,6 +45,7 @@ internal sealed partial class FalloutReferenceWorld
             if (snapshot is null || snapshot.Perks is null || snapshot.Factions is null ||
                 !RecordHash(ActorOverrideSource(snapshot.Target)).Equals(snapshot.SourceSha256, StringComparison.OrdinalIgnoreCase) ||
                 !admitted.TryAdd(snapshot.Target, snapshot)) throw new InvalidDataException("Saved actor overrides changed source or repeat a target.");
+            if (snapshot.Alerted is not null) RequireAlertActor(snapshot.Target);
             foreach (var (items, signature) in new[] { (snapshot.Perks, "PERK"), (snapshot.Factions, "FACT") })
             {
                 var seen = new HashSet<FalloutFormKey>();
@@ -75,6 +76,7 @@ internal sealed partial class FalloutReferenceWorld
         var changedAppearance = _actorOverrides.Where(item => item.Value.Race is not null || item.Value.FaceGeometry is not null || item.Value.Height is not null || item.Value.Hair is not null).Select(item => item.Key)
             .Concat(admitted.Where(item => item.Value.Race is not null || item.Value.FaceGeometry is not null || item.Value.Height is not null || item.Value.Hair is not null).Select(item => item.Key)).Distinct().ToArray();
         _actorOverrides.Clear();
+        _alertRevisions.Clear();
         foreach (var (key, value) in admitted) _actorOverrides.Add(key, value);
         foreach (var key in changedAppearance) _appearanceRevisions[key] = ++_appearanceRevision;
     }

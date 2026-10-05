@@ -36,7 +36,8 @@ internal static class RadioBroadcastContracts
             executor.ExecuteStage(quest, quest.ReadSubrecords().ToArray(), "RadioA.SetBroadcastState 1");
             Require(world.GetBroadcastState(Key(900)), "Source result did not bind the placed station.");
             var self = records.GetEffective(Key(900));
-            executor.ExecuteStage(self, self.ReadSubrecords().ToArray(), "SetBroadcastState 0");
+            executor.ExecuteProgram(self, records.GetEffective(Key(1100)),
+                FalloutGameModeProgram.Read("begin GameMode\nSetBroadcastState 0\nend"), 0);
             Require(!world.GetBroadcastState(Key(900)), "Calling-reference broadcast command lost its owner.");
             var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
             using var cold = new FalloutReferenceWorld(records);

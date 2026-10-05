@@ -250,6 +250,9 @@ internal sealed partial class FalloutQuestScripts
     internal FalloutQuestScriptHost? Host { get; set; }
     internal FalloutMessageResults MessageResults { get; } = new();
     internal FalloutScriptSession Session { get; }
+    private FalloutScriptManualSaveRequests? _scriptManualSaves;
+    internal FalloutScriptManualSaveRequests ScriptManualSaves => References?.ScriptManualSaves ??
+        (_scriptManualSaves ??= new(_records));
     internal FalloutChallenges Challenges { get; }
     internal FalloutRadioStations? Radio { get; }
     internal FalloutScriptEvents Events { get; }
@@ -321,7 +324,10 @@ internal sealed partial class FalloutQuestScripts
         else _inventory.Notifications.Publish([new(FalloutHudEventKind.Message, message.Form, 0, Script: script)]);
     }
 
-    internal FalloutQuestScriptsSnapshot Capture(FalloutSourceMessage? displayed = null) => new(
+    internal FalloutQuestScriptsSnapshot Capture(FalloutSourceMessage? displayed = null)
+    {
+        ScriptManualSaves.RequireCapture();
+        return new(
         _instances.Select(instance => new FalloutQuestScriptSnapshot(instance.Quest.FormKey, instance.Script.FormKey,
             instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture(), instance.PendingCommand,
             instance.Continuations.ToArray())).ToArray(),
@@ -329,6 +335,7 @@ internal sealed partial class FalloutQuestScripts
             .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
         FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent(), Challenges.Capture(), Radio?.Capture());
+    }
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
@@ -658,6 +665,8 @@ internal sealed partial class FalloutQuestScripts
                 { ReadOnly = true };
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => Session.LocationSpecificLoadScreensOnly ? 1 : 0) { ReadOnly = true };
+            if (parts.Length == 1 && operation == "ishardcore")
+                return new([], _ => Session.Hardcore ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && operation == "getinchargen")
                 return new([], _ => Session.InCharGen ? 1 : 0) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getheadingangle")
@@ -875,6 +884,21 @@ internal sealed partial class FalloutQuestScripts
                 return;
             }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
+            if (operation == "forcesave")
+            {
+                if (parts.Length != 1 || arguments.Count != 0)
+                    throw new InvalidDataException("ForceSave is a global zero-argument command.");
+                ScriptManualSaves.Request((program ?? instance.Program).LastStatement);
+                return;
+            }
+            if (operation == "setalert")
+            {
+                if (parts.Length != 2 || arguments.Count != 1)
+                    throw new InvalidDataException("Quest SetAlert requires an explicit actor and one integer.");
+                (References ?? throw new NotSupportedException("SetAlert has no shared reference world."))
+                    .SetActorAlert(instance.Bindings.Reference(parts[0]), NumberArgument(arguments[0]));
+                return;
+            }
             var caller = instance.Script.FormKey.OwnerPlugin;
             if (parts.Length <= 2 && operation is "equipitem" or "equipobject" or "unequipitem" or "removeallitems" or "resetinventory")
             {
@@ -1180,7 +1204,9 @@ internal sealed partial class FalloutQuestScripts
                 default: throw new NotSupportedException($"Reached script command {command} with {arguments.Count} arguments has no owner.");
             }
         }
-        (program ?? instance.Program).Execute(Read, Write, Call, Function, values: values);
+        var executing = program ?? instance.Program;
+        foreach (var _ in ScriptManualSaves.Execute(instance.Quest.FormKey, instance.Script, executing,
+            executing.Steps(Read, Write, Call, Function, values: values))) { }
         // Each reached operation publishes in source order. A later failure
         // retains the executed prefix, including consumptive message results
         // and nested SetStage scripts. A bound missing command may continue

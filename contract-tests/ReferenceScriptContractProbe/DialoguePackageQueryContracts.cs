@@ -25,6 +25,8 @@ internal static class DialoguePackageQueryContracts
         var first = Key(0x8f3); var other = Key(0x8f4);
         FalloutFormKey? speakerPackage = first, listenerPackage = other, playerPackage = other, queried = null;
         var speakerState = world.Get(speaker); var listenerState = world.Get(listener);
+        using var scriptWorld = new FalloutReferenceWorld(declarations);
+        scriptWorld.LoadCell(FalloutCellSceneReader.Read(declarations, speakerState.Cell));
         speakerState.QueryCurrentPackage = () => speakerPackage;
         listenerState.QueryCurrentPackage = () => listenerPackage;
         try
@@ -38,7 +40,7 @@ internal static class DialoguePackageQueryContracts
             void ScriptQuery(string expression, bool expected)
             {
                 var effects = 0;
-                var scripts = new FalloutReferenceScripts(declarations, world, new(declarations), new((_, _) => false,
+                var scripts = new FalloutReferenceScripts(declarations, scriptWorld, new(declarations), new((_, _) => false,
                     effect =>
                     {
                         if (effect.Kind != FalloutReferenceEffectKind.DefaultActivate || effect.Target != speaker)

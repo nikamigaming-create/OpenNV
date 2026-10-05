@@ -36,6 +36,24 @@ internal sealed class NativeHeadTrackingPose
 
     internal Vector3 WorldPosition => _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(_bone).Origin;
     internal Vector3 WorldForward => (_skeleton.GlobalBasis * _skeleton.GetBoneGlobalPose(_bone).Basis * _headForward).Normalized();
+    internal FalloutHeadTrackingPose Capture() => new(Rotation(_previous), Rotation(_authored),
+        Rotation(_skeleton.GetBonePoseRotation(_bone))!, _active, _clamped, _inRange, _overridden, _step,
+        _target is { } target ? Values(target) : null);
+
+    internal void Restore(FalloutHeadTrackingPose saved)
+    {
+        saved.Validate();
+        _previous = Rotation(saved.Previous); _authored = Rotation(saved.Authored);
+        _active = saved.Active; _clamped = saved.Clamped; _inRange = saved.InRange;
+        _overridden = saved.Overridden; _step = saved.StepRadians;
+        _target = saved.Target is { } target ? new(target[0], target[1], target[2]) : null;
+        // Keep the raw quaternion; Basis decomposition/normalization changes
+        // the continuation before the next ordinary authored KF publication.
+        _skeleton.SetBonePoseRotation(_bone, Rotation(saved.Current)!.Value);
+    }
+
+    private static float[]? Rotation(Quaternion? value) => value is { } q ? [q.X, q.Y, q.Z, q.W] : null;
+    private static Quaternion? Rotation(float[]? value) => value is { } q ? new(q[0], q[1], q[2], q[3]) : null;
     internal object State => new
     {
         bone = _skeleton.GetBoneName(_bone).ToString(),

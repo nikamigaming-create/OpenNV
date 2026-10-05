@@ -84,6 +84,8 @@ public partial class RuntimeCoordinator
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
                 pendingProcedureCaptureOwners = _nativeReferences.PendingProcedureCaptures,
+                detection = _nativeReferences.DetectionState,
+                stoppedScriptFrames = _nativeReferences.StoppedScriptFrames,
                 stoppedPackageBindings = _nativeReferences.StoppedPackageBindingCount,
                 talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
                 unloadedActorPackages = _nativeReferences.UnloadedPackages?.State,
@@ -138,6 +140,7 @@ public partial class RuntimeCoordinator
                 pending = _nativeOpeningStageDriver.PendingBlockers.ToArray(),
                 headTrackingCommands = _nativeOpeningStageDriver.HeadTrackingCommands,
                 error = _nativeOpeningStageDriver.ExecutionError,
+                blockingError = _nativeOpeningStageDriver.BlockingExecutionError,
                 stageResults = _nativeOpeningStageDriver.StageResultState,
                 saveRequest = _nativeOpeningStageDriver.SaveRequestState,
             },
@@ -512,6 +515,7 @@ public partial class RuntimeCoordinator
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
             _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
+            _nativeReferences.RestoreDetection(restore.State.DetectionEvents);
             _nativeReferences.RestoreFactionRelations(restore.State.FactionRelations);
         }
         else if (_nativeBootstrap is null)
@@ -1226,6 +1230,10 @@ public partial class RuntimeCoordinator
         _nativeOpeningStageDriver = new RuntimeNativeOpeningStageDriver
         {
             PrepareSubtitle = _nativeSubtitles.Prepare,
+            SourceManualSaveWriter = CreateNativeCheckpoint,
+            SourceManualSaveBlocker = () => _nativeSessionTransitioning || _retiringNativeSession ? "session-transition" :
+                _nativeDoorLoading || _nativeLoadingLayer is not null ? "loading" :
+                GetTree().Paused ? "paused" : NativeActiveMenus()?.Any() == true ? "native-menu" : null,
             ReferencePresentation = () => _nativeReferencePresentation ??
                 throw new InvalidOperationException("Native reference presentation is absent."),
             SayToCompleted = receipt => _nativeOpeningStageDriver!.DispatchSpeechCompletion(receipt),

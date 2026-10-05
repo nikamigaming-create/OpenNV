@@ -26,6 +26,29 @@ internal sealed class FalloutHeadTrackingState
         .Where(index => _enabled[index]).Select(index => _targets[index]).FirstOrDefault(target => target is not null);
     internal bool CanSelectDefault => DefaultHoldSeconds <= 0 && !_enabled.Skip(1).Any(value => value);
 
+    internal FalloutHeadTrackingTargets Capture() => new(_defaultHoldSeconds, DefaultHoldSeconds,
+        Slots.Select(slot => new FalloutHeadTrackingSlot(slot.Target, slot.Enabled)).ToArray(),
+        CachedTarget, Revision, TargetRevision);
+
+    internal void ValidateRestore(FalloutHeadTrackingTargets saved)
+    {
+        saved.Validate();
+        if (saved.SourceHoldSeconds != _defaultHoldSeconds)
+            throw new InvalidDataException("Saved head hold timer differs from its retained source setting.");
+    }
+
+    internal void Restore(FalloutHeadTrackingTargets saved)
+    {
+        ValidateRestore(saved);
+        for (var index = 0; index < _targets.Length; index++)
+        {
+            _targets[index] = saved.Slots[index].Target;
+            _enabled[index] = saved.Slots[index].Enabled;
+        }
+        DefaultHoldSeconds = saved.DefaultHoldSeconds; CachedTarget = saved.CachedTarget;
+        Revision = saved.Revision; TargetRevision = saved.TargetRevision;
+    }
+
     internal void SetTarget(int priority, FalloutFormKey? target)
     {
         if ((uint)priority >= _targets.Length) throw new ArgumentOutOfRangeException(nameof(priority));

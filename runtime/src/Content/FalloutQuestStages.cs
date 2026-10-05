@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Content;
 // Stage log entries retain their own condition and compiled-reference scopes.
 // Entered state is published before a result script; nested stages and a failed
 // result retain the reached prefix rather than replaying rewards on retry.
-internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQuestState quests,
+internal sealed partial class FalloutQuestStages(FalloutPluginStack records, FalloutQuestState quests,
     Func<FalloutPluginRecord, IReadOnlyList<FalloutPluginSubrecord>, string, IEnumerable<bool>> execute,
     Func<FalloutCondition, float> evaluate, Func<bool>? canContinue = null, bool evaluateRunOn = false)
 {
@@ -14,6 +14,7 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
     private readonly Dictionary<(FalloutFormKey Quest, short Stage), (int Steps, bool Completed)> _progress = [];
     private int _depth;
     internal bool HasUnfinishedResults => _pending.Count != 0 || _errors.Count != 0;
+    internal bool HasPendingResults => _pending.Count != 0 || _depth != 0;
     internal object Errors => _errors.Select(value => new { quest = value.Key.Item1.ToString(), stage = value.Key.Item2, error = value.Value }).ToArray();
     internal object State => new
     {
@@ -31,7 +32,12 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
     internal void Enter(FalloutFormKey key, short stage)
     {
         if (stage < 0) throw new ArgumentOutOfRangeException(nameof(stage));
-        if (_errors.TryGetValue((key, stage), out var failure)) throw new NotSupportedException(failure);
+        if (_errors.TryGetValue((key, stage), out var failure))
+        {
+            var retainedError = new NotSupportedException(failure);
+            RetainClosedFailure(key, stage, retainedError);
+            throw retainedError;
+        }
         var quest = records.GetEffective(key);
         if (quest.Signature != "QUST") throw new InvalidDataException("SetStage target is not a quest.");
         var fields = quest.ReadSubrecords().ToArray();
@@ -84,7 +90,15 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
     internal void Continue()
     {
         var pending = _pending.ToArray(); _pending.Clear();
-        foreach (var execution in pending) Resume(execution);
+        for (var index = 0; index < pending.Length; ++index)
+            try { Resume(pending[index]); }
+            catch
+            {
+                // Only this execution has retired. Other suspended source
+                // iterators keep their original consumed prefix and lease.
+                _pending.AddRange(pending[(index + 1)..]);
+                throw;
+            }
     }
 
     private void Resume((FalloutFormKey Quest, short Stage, IEnumerator<bool> Steps) execution)
@@ -108,7 +122,12 @@ internal sealed class FalloutQuestStages(FalloutPluginStack records, FalloutQues
             _pending.Add(execution);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
-        { _errors[(execution.Quest, execution.Stage)] = error.Message; execution.Steps.Dispose(); throw; }
+        {
+            _errors[(execution.Quest, execution.Stage)] = error.Message;
+            RetainClosedFailure(execution.Quest, execution.Stage, error);
+            execution.Steps.Dispose();
+            throw;
+        }
         finally { --_depth; }
     }
 }

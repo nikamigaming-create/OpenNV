@@ -35,7 +35,7 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
-    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null);
+    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Func<bool>? IsHardcore = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -55,6 +55,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     private readonly Dictionary<FalloutFormKey, InstanceProgram> _programs = [];
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutScriptEventProgram>> _definitions = [];
     private readonly Dictionary<(FalloutFormKey Owner, FalloutFormKey Script), FalloutScriptBindings> _questBindings = [];
+    private FalloutDetectionEventRequest? _preparedDetection;
+    private FalloutDetectionEventRequest? _restoringDetection;
+    private FalloutFinishedSpeechReceipt? _speechInvocation;
 
     internal FalloutReferenceScriptEventResult Dispatch(FalloutFormKey reference, string eventName,
         FalloutFormKey? actor = null, double elapsedSeconds = 0, FalloutFormKey? topic = null,
@@ -81,6 +84,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds,
         Action? observeActivationBegin = null, Action? observeActivationEnd = null)
     {
+        world.ScriptManualSaves.RequireNoFailure();
         var reference = instance.Reference;
         var admitted = new Dictionary<string, FalloutReferenceScriptEvent>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in events)
@@ -123,14 +127,23 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             else if (item.Topics is not null) throw new InvalidDataException("Topic registration belongs to SayToDone.");
         }
-        var recovered = RecoverMissingRead(instance, events) ?? RecoverMissingCommand(instance, events);
+        // A parsed program without OnActivate leaves the native default action
+        // independent of its other invocations, including a retained VM fault.
+        if (!instance.DeletePending && !instance.Deleted && admitted.TryGetValue("OnActivate", out var defaultActivation) &&
+            HasIndependentDefaultActivation(instance))
+            return DispatchIndependentDefaultActivation(instance, events, defaultActivation, elapsedSeconds,
+                observeActivationBegin, observeActivationEnd);
+        var recovered = instance.ScriptStoppedFrame is null ? RecoverMissingRead(instance, events) ?? RecoverMissingCommand(instance, events) : null;
         // A failed attempt cannot run again on its GameMode clock. A new
         // activation or contact entry is an explicit new event and may retry
         // the source program, including its guards and already-applied prefix.
         // Never skip the failed instruction or silently continue beyond it.
         if (instance.ScriptError is { } previousError && events.Any(item =>
             item.Name is "OnActivate" or "OnTriggerEnter" && previousError.StartsWith(item.Name + ":", StringComparison.OrdinalIgnoreCase)))
+        {
             instance.ScriptError = null;
+            instance.ScriptStoppedFrame = null;
+        }
         var counts = admitted.Keys.ToDictionary(name => name, _ => 0, StringComparer.OrdinalIgnoreCase);
         var failure = instance.ScriptError;
         IReadOnlyList<FalloutReferenceScriptEventResult> Results() => events.Select(item =>
@@ -138,11 +151,17 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 recovered?.StartsWith(item.Name + ":", StringComparison.OrdinalIgnoreCase) == true ? recovered : null)).ToArray();
         if (instance.ScriptError is not null || instance.DeletePending || instance.Deleted || events.Count == 0) return Results();
         var runningEvent = "Parse";
+        FalloutScriptEventProgram? runningBlock = null;
+        var runningOrdinal = -1;
+        FalloutFormKey? runningAction = null;
+        _preparedDetection = null;
         try
         {
             var program = instance.Script is null ? null : Program(instance);
+            var ordinal = -1;
             foreach (var block in program?.Events ?? [])
             {
+                ++ordinal;
                 var name = FalloutReferencePackageEvents.CanonicalName(block.Event);
                 if (!admitted.TryGetValue(name, out var item)) continue;
                 runningEvent = block.Event;
@@ -179,6 +198,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 }
                 var actionReference = hitEvent || packageEvent || trigger || block.Event.Equals("OnDeath", StringComparison.OrdinalIgnoreCase)
                     ? null : item.ActionReference;
+                runningBlock = block; runningOrdinal = ordinal; runningAction = actionReference;
                 if (activation) observeActivationBegin?.Invoke();
                 Execute(instance.Reference, program!.Bindings, block.Program, actionReference, elapsedSeconds);
                 if (activation) observeActivationEnd?.Invoke();
@@ -197,8 +217,19 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             failure = $"{runningEvent}: {error.Message}";
             // Failed native actions do not poison an absent source program.
             // Authored programs still retain their failure and executed prefix.
-            if (instance.Script is not null) instance.ScriptError = failure;
+            if (instance.Script is not null)
+            {
+                instance.ScriptError = failure;
+                if (runningBlock is not null && runningBlock.Program.LastStatement >= 0 &&
+                    (runningEvent.Equals("GameMode", StringComparison.OrdinalIgnoreCase) ||
+                    runningEvent.Equals("SayToDone", StringComparison.OrdinalIgnoreCase) && _speechInvocation is not null))
+                    instance.ScriptStoppedFrame = new FalloutReferenceScriptStoppedFrame(failure, instance.Script.Sha256, runningOrdinal,
+                        runningBlock!.Program.LastStatement, runningEvent, runningBlock.Filter, elapsedSeconds,
+                        runningAction, runningEvent.Equals("SayToDone", StringComparison.OrdinalIgnoreCase) ? _speechInvocation : null,
+                        _preparedDetection).Copy();
+            }
         }
+        finally { _preparedDetection = null; }
         return Results();
     }
 
@@ -451,6 +482,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => (host.LocationSpecificLoadScreensOnly ??
                     throw new NotSupportedException("Loading-screen policy query has no session owner."))() ? 1 : 0)
+                { ReadOnly = true };
+            if (parts.Length == 1 && operation == "ishardcore")
+                return new([], _ => (host.IsHardcore ??
+                    throw new NotSupportedException("IsHardcore has no shared player session owner."))() ? 1 : 0)
                 { ReadOnly = true };
             if (parts.Length == 1 && operation == "getinchargen")
                 return new([], _ => (host.InCharGen ??
@@ -726,6 +761,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var operation = parts[^1].ToLowerInvariant();
             var target = parts.Length == 1 ? source : parts.Length == 2 ? Reference(parts[0]) :
                 throw new NotSupportedException("Script command target path is unbound.");
+            if (operation == "forcesave")
+            {
+                if (parts.Length != 1 || arguments.Count != 0)
+                    throw new InvalidDataException("ForceSave is a global zero-argument command.");
+                world.ScriptManualSaves.Request(program.LastStatement);
+                return;
+            }
             if (operation == "call")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values,
@@ -753,7 +795,32 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     .Set(arguments[0], Number(arguments[1]));
                 return;
             }
+            if (operation == "setalert")
+            {
+                if (parts.Length > 2 || arguments.Count != 1)
+                    throw new InvalidDataException("SetAlert requires a calling actor and one integer.");
+                world.SetActorAlert(target, Number(arguments[0]));
+                return;
+            }
             var callerPlugin = bindings.Source.OwnerPlugin;
+            if (operation == "createdetectionevent" && parts.Length <= 2)
+            {
+                if (arguments.Count is < 2 or > 3)
+                    throw new InvalidDataException("CreateDetectionEvent requires an actor, signed level and optional signed type.");
+                static int Signed(double number) => double.IsFinite(number) && number >= int.MinValue && number <= int.MaxValue &&
+                    number == Math.Truncate(number) ? (int)number :
+                    throw new InvalidDataException("CreateDetectionEvent integer argument is invalid.");
+                var owner = Reference(arguments[0]);
+                var level = Signed(Number(arguments[1]));
+                var type = arguments.Count == 3 ? Signed(Number(arguments[2])) : 3;
+                var request = _restoringDetection ?? world.Detection.Prepare(owner, target, level, type);
+                if (request.Owner != owner || request.Location != target || request.SoundLevel != level || request.RequestedType != type)
+                    throw new InvalidDataException("Stopped detection request differs from its source command.");
+                _preparedDetection = request;
+                _ = world.Detection.Create(request, command, arguments.Count);
+                _restoringDetection = null; _preparedDetection = null;
+                return;
+            }
             if (parts.Length == 1 && operation is "triggerscreenblood" or "tsb")
             {
                 if (arguments.Count != 1) throw new InvalidDataException("TriggerScreenBlood requires one count.");
@@ -1253,7 +1320,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         }
         if (inspectFunctions is not null) { inspectFunctions(Function); return []; }
         if (inspectProgram is not null) { inspectProgram(new(values, Function, UserFunction)); return []; }
-        return program.Steps(Read, Write, Call, Function, UserFunction, budget, values);
+        return world.ScriptManualSaves.Execute(source, records.GetEffective(bindings.Source), program,
+            program.Steps(Read, Write, Call, Function, UserFunction, budget, values));
     }
 
     private static string StringArgument(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"' &&

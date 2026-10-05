@@ -104,6 +104,10 @@ internal sealed partial class FalloutGameModeProgram
     private IReadOnlyList<bool> _enteredBranches = [];
     internal int LastStatement { get; private set; } = -1;
     internal bool HasStatements => _lines.Count != 0;
+    private string? _programSha256;
+    internal string ProgramSha256 => _programSha256 ??= Convert.ToHexString(
+        System.Security.Cryptography.SHA256.HashData(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(_lines)))
+        .ToLowerInvariant();
     private readonly Dictionary<int, int> _loopEnds = [];
     private FalloutGameModeProgram(IReadOnlyList<string[]> lines)
     {
