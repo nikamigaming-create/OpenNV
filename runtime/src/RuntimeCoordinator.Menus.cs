@@ -11,6 +11,7 @@ public partial class RuntimeCoordinator
         var codes = _nativeOpeningStageDriver?.ActiveMenus().ToHashSet() ?? [];
         if (_nativeLoadingLayer is not null) codes.Add(1007);
         if (_nativeSessionMenu is not null) codes.Add(1013);
+        if (_nativeTerminalLayer is not null) codes.Add(1057);
         if (_nativeContainerLayer is { } container)
         {
             codes.Add(1008);

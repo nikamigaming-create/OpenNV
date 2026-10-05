@@ -12,12 +12,16 @@ demonstration remain active architectural requirements.
 ## Verified state
 
 The genuine post-Amata checkpoint cold-loads Escape stage 10 without replaying
-G.O.A.T. Ordinary input reaches stage 60, passes the authored stairs and door
-054285 into Vault101b (CELL 024511), and opens the overseer-office door. The latest
-session ends through ordinary Quit at supported office feet height 120.701454 m.
-That retained stage-60 diagnostic state is not a complete saved checkpoint.
-Vault exit, Megaton and the train/Mojave route remain unreached. The game is closed
-during integration and publication; recording is off. Verify an actual process
+G.O.A.T. The new ordinary bot crosses the authored stair and door 054285 into
+Vault101b (CELL 024511). User input obtains the password from source locker 038f37,
+opens terminal 0506d8, executes its source tunnel-opening result at stage 120 and
+enters CELL 024512. The latest session ends through ordinary Quit there;
+detailed state 114 binds that actual state to runtime 1a53f095. It is a
+diagnostic snapshot, not a complete saved checkpoint. Save request 115 refuses at
+the retained speech fault. The immutable genuine checkpoint remains stage 10.
+Vault exit, Megaton and the train/Mojave route remain unreached. PR 146 is merged
+at synchronized main 8262faf; the fresh terminal/actor-route branch is active.
+The game is closed during integration/publication; recording is off. Verify an actual process
 and advancing state before input, never a stopped process's retained files.
 
 The original overseer-terminal NIF previously failed at two exact-name Idle
@@ -25,8 +29,11 @@ registrations. The general manager retains all blocks and uses its final ordered
 name lookup. Its unchanged owned model now builds nine nodes, six surfaces and
 one collision shape, with source texture-channel checks. The native synthetic
 fixture verifies full-reader registration, instance isolation, finite end keys
-and cold suffixes. Ordinary terminal menus and final pixels remain unverified;
-the general TERM interaction owner is still absent from the product.
+and cold suffixes. The new general TERM interaction owner passes synthetic
+source/effect/cold/failure-prefix contracts, an actual unchanged-source entry audit
+and a native XML/font/control check. The UI fixture applies no gameplay effects.
+Ordinary password transfer, source terminal selection and tunnel entry now have
+independent runtime evidence. Matched final pixels/timing remain unverified.
 
 The stair planner now checks the actual ordinary mover's source-bound root support
 when a downward capsule sweep reports only steep corner contacts. It preserves
@@ -35,7 +42,7 @@ source stair supports a complete native route in both directions, 24 waypoints
 each, settling on its actual source collider. Native gap, wall, unsupported-start,
 ceiling and steep-slope negatives remain refused. The older tiny-leg endpoint
 fixture still exceeds its unchanged settling bound; no tolerance was relaxed.
-Ordinary campaign bot traversal with the new planner remains to be verified.
+Ordinary campaign bot traversal now crosses the actual authored stair and portal.
 
 The common PACK reader admits the source's eight- and twelve-byte PKDT layouts
 without inventing absent type-specific flags. The complete winning audit passes
@@ -57,10 +64,11 @@ source drift and child-first unload/restoration. A whole campaign checkpoint has
 with these repairs. Moving combat combined with a stopped AI fault and independent
 corpse weapon attachments remain explicit save boundaries.
 
-The integrated candidate passes the complete Release/Debug, formatting/analyzer,
-contract, launcher and native Godot gate. Selected owned source and native
-component audits pass at their stated build identities. Ordinary campaign
-continuation and complete saving remain the next independent checks.
+The terminal/actor-route candidate passes the complete Release/Debug,
+formatting/analyzer, contract, launcher and native Godot gate. Selected unchanged
+terminal source/XML checks and native actor query-lifetime/stair checks pass at
+their stated build identities. Ordinary campaign continuation and complete
+saving remain independent checks.
 
 ## Full denominator
 
@@ -90,13 +98,21 @@ with a proxy floor to conceal that unresolved entry path.
 ## Next owners and outcome
 
 Primary owns builds, native slots, ordinary input, complete save/cold continuation
-and checked publication. Publish/merge this checked slice. Start a
-fresh codex/ branch and apply the prepared
-general TERM reader/session/result owner and source computers-menu presentation.
-Route actual menu selection through its declaring entry scope and existing source
-SetOpenState/SetStage effects; retain failed prefixes and prevent replay. Resume
-the genuine checkpoint through ordinary bot movement, conversation and menus,
-write a complete reusable checkpoint, and continue to the vault exit and Megaton.
+and checked publication. Finish the terminal/actor-route audits and integrated
+gate, publish and merge the slice, then begin a fresh codex/ branch. The reached
+script fault is CreateDetectionEvent in actor 0569b4's already consumed GameMode
+invocation; SayToDone encounters that retained fault. Own the source detection
+event and stopped suffix without replaying speech, random draws or prior effects,
+and retain a completed failed speech receipt through save/cold continuation.
+The source detection receiver remains an independent behavior boundary.
+
+In parallel, trace the actual campaign's upright dead actors and refused looting,
+and the final-room activation/exit sequence from CELL 024512. Component corpse
+checks do not establish the observed campaign behavior. Prepared shared access
+conditions GetLocked/GetHasNote remain separate from the actual acquired password.
+Resume the genuine checkpoint through ordinary movement and source menus, write
+and cold-load a complete reusable checkpoint, then continue through the authored
+vault exit to Megaton. Stage 120 in diagnostic state 114 is not saved progress.
 
 Combat/detection script queries remain unbound at IsCombatTarget/GetDetected.
 Their actual actor groups and detection ownership cannot be replaced with selected
@@ -121,10 +137,14 @@ Source audit: tmp/development-lab/vault101-corridor-continuation. Its joined
 input/0000000092.state.json uses runtime edfeafa4 and retains settled old-cell
 speech plus earlier actor save blockers. The older 0000000085.state.json retains
 the original speech/save failure. Neither is the current integrated candidate.
+Actual state input/0000000114.state.json in the post-G.O.A.T. run binds runtime
+1a53f095 to CELL 024512 and CG04:120. Save request 115 refuses the retained speech
+fault. The game then quits ordinarily; retained live-state files are stale.
 Selected current owner logs are under tmp/development-lab: overseer-terminal,
 sequence-registration, package-data-owned, attack-native, stopped-corpse-native,
 occupied-idle-native, owned-stair-route-native and navigation-complete-native
 private logs. Their individual build identities and fixture boundaries remain
-independent from ordinary campaign progress. Prepared first-party terminal files
-under terminal-next-slice are temporary development source, not launch inputs.
+independent from ordinary campaign progress. Prepared first-party files under
+terminal-next-slice, detection-speech-next, condition-access-next, corpse-loot-next
+and vault-exit-next are temporary development source, not launch inputs.
 Owned files, saves, private executable contracts and diagnostics stay outside Git.

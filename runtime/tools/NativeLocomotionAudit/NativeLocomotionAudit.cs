@@ -30,7 +30,7 @@ public partial class NativeLocomotionAudit : Node3D
                 GetTree().Quit();
                 return;
             }
-            if (arguments.FirstOrDefault() is "--owned-step-query" or "--owned-step" or "--owned-route" or "--owned-floor-query")
+            if (arguments.FirstOrDefault() is "--owned-step-query" or "--owned-step" or "--owned-route" or "--owned-floor-query" or "--owned-actor-route")
             {
                 await NativeOwnedNavigationAudit.Run(this, arguments);
                 GetTree().Quit(); return;

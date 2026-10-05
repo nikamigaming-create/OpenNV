@@ -27,6 +27,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :
         _traitEntry is not null ? "trait-menu" : _recipeMenu is not null ? "recipe-menu" :
         _barterMenu is not null ? "barter-menu" :
+        TerminalSaveBlocker is { } terminal ? terminal :
         _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" :
         _stageResults?.HasUnfinishedResults == true ? "quest-stage-results" : null;
     internal object SaveRequestState => new

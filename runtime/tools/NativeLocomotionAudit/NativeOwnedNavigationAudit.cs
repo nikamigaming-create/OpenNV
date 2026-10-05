@@ -8,15 +8,17 @@ using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Cells;
 
 // Selected source placement and its actual NIF collision, with a disposable
-// controller. No campaign state, substitute floor or changed geometry is used.
-internal static class NativeOwnedNavigationAudit
+// player controller or read-only checkpoint-bound actor. No ordinary campaign
+// progress, substitute floor or changed source geometry is used.
+internal static partial class NativeOwnedNavigationAudit
 {
     internal static async Task Run(Node3D owner, string[] arguments)
     {
         var floorOnly = arguments[0] == "--owned-floor-query";
-        var wholeRoute = arguments[0] == "--owned-route";
-        var maximumNodes = wholeRoute ? 1200 : 1;
-        var offset = floorOnly ? 10 : 12;
+        var actorRoute = arguments[0] == "--owned-actor-route";
+        var wholeRoute = actorRoute || arguments[0] == "--owned-route";
+        var maximumNodes = actorRoute ? 512 : wholeRoute ? 1200 : 1;
+        var offset = floorOnly ? 10 : actorRoute ? 14 : 12;
         if (arguments.Length < offset)
             throw new ArgumentException("Owned navigation needs game/mod/root, source plugin/reference, from metres, then to metres or floor-ray reach, followed by dependency roots.");
         Vector3 Point(int index) => new(float.Parse(arguments[index], CultureInfo.InvariantCulture),
@@ -39,8 +41,11 @@ internal static class NativeOwnedNavigationAudit
             if (record.Signature != "REFR" || record.IsDeleted)
                 throw new InvalidDataException("Owned navigation needs an existing source static reference.");
             var cell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(record)!.Value);
-            world.LoadCell(cell);
-            if (!world.IsEnabled(key)) throw new InvalidDataException("Owned navigation cannot activate a source-disabled reference.");
+            if (!actorRoute)
+            {
+                world.LoadCell(cell);
+                if (!world.IsEnabled(key)) throw new InvalidDataException("Owned navigation cannot activate a source-disabled reference.");
+            }
             var reference = cell.References.Single(value => value.FormKey == key);
             var source = records.GetEffective(reference.Base);
             if (source.Signature != "STAT") throw new InvalidDataException("Owned navigation requires a source STAT collision model.");
@@ -56,20 +61,31 @@ internal static class NativeOwnedNavigationAudit
                 GamebryoCoordinate.ConvertVector(new(reference.Position[0], reference.Position[1], reference.Position[2])) * units);
             var instance = prototype.InstantiatePlaced(placement);
             fixture = new(); owner.AddChild(fixture); fixture.AddChild(instance);
-            var body = new CharacterBody3D
+            OwnedActorRoute? actorOwner = null;
+            CharacterBody3D body;
+            if (actorRoute)
             {
-                Position = start,
-                CollisionLayer = configuration.Player.CollisionLayer,
-                CollisionMask = configuration.Player.CollisionMask,
-                FloorSnapLength = configuration.Player.CapsuleRadiusMeters,
-                FloorMaxAngle = Mathf.DegToRad(configuration.Player.MaximumWalkableSlopeDegrees)
-            };
-            body.AddChild(new CollisionShape3D
+                actorOwner = PrepareOwnedActor(fixture, records, world, content, configuration, start, arguments[12], arguments[13], cell.Cell.FormKey);
+                body = actorOwner.Body;
+                if (!world.IsEnabled(key)) throw new InvalidDataException("The actual source checkpoint disables the selected collision reference.");
+            }
+            else
             {
-                Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters,
-                Shape = new CapsuleShape3D { Height = configuration.Player.CapsuleHeightMeters, Radius = configuration.Player.CapsuleRadiusMeters }
-            });
-            fixture.AddChild(body);
+                body = new CharacterBody3D
+                {
+                    Position = start,
+                    CollisionLayer = configuration.Player.CollisionLayer,
+                    CollisionMask = configuration.Player.CollisionMask,
+                    FloorSnapLength = configuration.Player.CapsuleRadiusMeters,
+                    FloorMaxAngle = Mathf.DegToRad(configuration.Player.MaximumWalkableSlopeDegrees)
+                };
+                body.AddChild(new CollisionShape3D
+                {
+                    Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters,
+                    Shape = new CapsuleShape3D { Height = configuration.Player.CapsuleHeightMeters, Radius = configuration.Player.CapsuleRadiusMeters }
+                });
+                fixture.AddChild(body);
+            }
             FalloutFormKey? Identity(ulong id) => GodotObject.InstanceFromId(id) is Node node && instance.IsAncestorOf(node) ? key : null;
             float[] Coordinates(Vector3 value) => [value.X, value.Y, value.Z];
             object? Floor(Vector3 point, float verticalReach)
@@ -111,8 +127,9 @@ internal static class NativeOwnedNavigationAudit
                 from = Coordinates(start),
                 to = Coordinates(target),
                 units,
-                configuration.Player.CapsuleHeightMeters,
-                configuration.Player.CapsuleRadiusMeters,
+                controllerOwner = actorRoute ? "source-NPC-BBX" : "configured-player-capsule",
+                CapsuleHeightMeters = actorRoute ? (float?)null : configuration.Player.CapsuleHeightMeters,
+                CapsuleRadiusMeters = actorOwner?.Radius ?? configuration.Player.CapsuleRadiusMeters,
                 configuration.Player.StepHeightMeters,
                 configuration.Player.MaximumWalkableSlopeDegrees,
                 body.SafeMargin,
@@ -184,10 +201,31 @@ internal static class NativeOwnedNavigationAudit
                 IReadOnlyList<Vector3>? Query(Vector3 from, Vector3 to)
                 {
                     var pose = body.GlobalTransform;
-                    var probe = new NativeNavigationProbe(NativeCapsuleNavigation.FirstCorridorContact(body, from, [to]), Identity);
+                    NativeNavigationIntent? intent = null;
+                    IReadOnlyList<Vector3> corridor = [to];
+                    if (actorOwner is not null)
+                    {
+                        Vector3 Source(Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
+                        var source = actorOwner.Navigation.FindPath(Source(from), Source(to))
+                            .Select(point => GamebryoCoordinate.ConvertVector(point) * units).ToArray();
+                        intent = NativeCapsuleNavigation.Intent(from, source, to, 0);
+                        if (intent.Resume < source.Length) throw new InvalidDataException("Selected actor corridor proof exceeds one complete bounded source prefix.");
+                        corridor = intent.Corridor;
+                    }
+                    var probe = new NativeNavigationProbe(NativeCapsuleNavigation.FirstCorridorContact(body, from,
+                        intent?.ReferenceApproach == true ? [to] : corridor), Identity);
                     IReadOnlyList<Vector3>? route = null; string? error = null;
-                    try { route = NativeCapsuleNavigation.Find(body, from, to, configuration.Player.StepHeightMeters, .32f, _ => true, maximumNodes, probe: probe, corridor: [to]); }
+                    string? coarseError = null; var refinements = 0;
+                    var spacing = actorOwner is null ? .32f : Math.Max(.3f, actorOwner.Radius * 2);
+                    var destination = intent?.Target ?? to;
+                    try { route = NativeCapsuleNavigation.Find(body, from, destination, configuration.Player.StepHeightMeters, spacing, _ => true, maximumNodes, probe: probe, corridor: corridor); }
                     catch (InvalidOperationException failure) { error = failure.Message; }
+                    if (route is null && actorOwner is not null && Math.Max(.15f, actorOwner.Radius) < spacing)
+                    {
+                        coarseError = error; refinements = 1; spacing = Math.Max(.15f, actorOwner.Radius);
+                        try { route = NativeCapsuleNavigation.Find(body, from, destination, configuration.Player.StepHeightMeters, spacing, _ => true, maximumNodes, probe: probe, corridor: corridor); error = null; }
+                        catch (InvalidOperationException failure) { error = failure.Message; }
+                    }
                     if (body.GlobalTransform != pose) throw new InvalidDataException("Owned navigation query moved its controller.");
                     var downward = probe.GuideDownwardSweep ?? probe.FirstDownwardSweep;
                     GD.Print(JsonSerializer.Serialize(new
@@ -196,6 +234,11 @@ internal static class NativeOwnedNavigationAudit
                         from = Coordinates(from),
                         to = Coordinates(to),
                         maximumNodes,
+                        spacing,
+                        refinements,
+                        coarseError,
+                        sourceCorridor = actorOwner is null ? null : corridor.Select(Coordinates),
+                        sourceIntent = intent is null ? null : new { intent.Resume, intent.ArrivalRadius, intent.ReferenceApproach, target = Coordinates(intent.Target) },
                         route = route?.Select(Coordinates),
                         error,
                         downward = Sweep(downward),
@@ -319,6 +362,7 @@ internal static class NativeOwnedNavigationAudit
                 !content.TryRead(path, null, out var after, out _) || !modelHash.AsSpan().SequenceEqual(SHA256.HashData(after)))
                 throw new InvalidDataException("Owned navigation changed its source records or model.");
             GD.Print("OPENNV_OWNED_NAVIGATION_SOURCE_UNCHANGED recording=false campaign=false parity=false");
+            actorOwner?.RequireUnchanged();
         }
         finally { fixture?.Free(); prototype?.Scene.Root.Free(); RuntimeLiveContentSource.Clear(); }
     }

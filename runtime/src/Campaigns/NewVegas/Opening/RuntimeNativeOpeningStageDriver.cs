@@ -66,7 +66,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private bool _restoringEnteredStage;
     private Func<RuntimeNativeImageSpace> _imageSpacePresenter = null!;
     internal string? ExecutionError { get; private set; }
-    internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault;
+    internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
@@ -112,6 +112,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (_traitEntry is not null) yield return 1084;
         if (_recipeMenu is not null) yield return 1077;
         if (_barterMenu is not null) yield return 1053;
+        if (_terminalMenus.Values.Any(menu => menu.Active)) yield return FalloutTerminal.MenuId;
     }
 
     internal void Configure(

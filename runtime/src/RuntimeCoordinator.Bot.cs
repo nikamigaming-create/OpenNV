@@ -51,6 +51,7 @@ public partial class RuntimeCoordinator
         var state = _nativeReferences!.Get(reference);
         var target = JsonSerializer.Serialize(new { state.Taken, state.DoorOpen, state.Deleted, state.Destroyed });
         string? outcome = _nativeContainerLayer is not null && _nativeContainerReference == reference ? "container" :
+            _nativeTerminalLayer is not null && _nativeTerminalReference == reference && _nativeTerminalMenu?.Error is null ? "terminal" :
             _nativeOpeningStageDriver?.PresentedConversationSpeaker == reference ? "conversation" :
             _nativePlayer?.CurrentFurniture == reference ? "furniture" :
             _botPortalDestinations.TryGetValue(reference, out var destination) && _nativeActiveCell?.Cell.FormKey == destination &&

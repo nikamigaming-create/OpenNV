@@ -70,13 +70,13 @@ internal static class FalloutMenuXml
         {
             var token = property.Value.Trim();
             if (float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var literal) && float.IsFinite(literal)) return literal;
-            return token switch
+            return token.ToLowerInvariant() switch
             {
-                "entity_true" => 1,
+                "entity_true" or "entity_highdef" => 1,
                 "entity_false" or "entity_console" or "entity_xbox" or "entity_left" => 0,
                 "entity_center" => 1,
                 "entity_right" => 2,
-                "entity_scale" => -1,
+                "entity_scale" or "entity_uselocalcolor" => -1,
                 _ => throw new NotSupportedException($"Menu numeric token has no owner: {token}"),
             };
         }

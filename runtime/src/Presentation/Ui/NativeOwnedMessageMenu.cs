@@ -387,15 +387,33 @@ internal sealed class NativeOwnedMenuTree
                     if (!_art.ContainsKey(tile)) _art[tile] = NativeOwnedUiArt.Read(tile, Filename(tile));
                     _ = Number(tile, "width"); _ = Number(tile, "height");
                     _ = Number(tile, "brightness"); _ = Number(tile, "alpha");
-                    _ = TileColor(tile);
+                    _ = DrawingColor(tile);
                 }
-                if (tile.Name == "text") { _ = Font(tile); _ = Lines(tile); _ = Number(tile, "justify"); }
+                if (tile.Name == "text") { _ = Font(tile); _ = Lines(tile); _ = Number(tile, "justify"); _ = DrawingColor(tile); }
             }
             catch (Exception error) { errors.Add($"{(string?)tile.Attribute("name")}: {error.Message}"); }
             foreach (var child in tile.Elements().Where(child => child.Attribute("name") is not null && child.Name != "template")) Validate(child);
         }
         Validate(Root);
         if (errors.Count != 0) throw new NotSupportedException("Owned menu drawing is unbound: " + string.Join(" | ", errors.Distinct()));
+    }
+    internal Color DrawingColor(XElement tile)
+    {
+        var brightness = Number(tile, "brightness");
+        var alpha = Number(tile, "alpha") / 255;
+        if (brightness == -1)
+        {
+            float Component(string channel)
+            {
+                if (tile.Element(channel) is null && !_values.ContainsKey((tile, channel)))
+                    throw new NotSupportedException($"Owned local color {(string?)tile.Attribute("name")}/{channel} has no source value.");
+                return Number(tile, channel) / 255;
+            }
+            return new(Component("red"), Component("green"), Component("blue"), alpha);
+        }
+        if (brightness < 0) throw new NotSupportedException($"Owned brightness {brightness} has no color owner.");
+        var color = TileColor(tile);
+        return new(color.R * brightness / 255, color.G * brightness / 255, color.B * brightness / 255, alpha);
     }
     internal void Draw(CanvasItem canvas)
     {
@@ -414,7 +432,7 @@ internal sealed class NativeOwnedMenuTree
         {
             visible &= Number(tile, "visible") != 0;
             if (!visible) return;
-            var color = TileColor(tile);
+            var color = DrawingColor(tile);
             var clip = Clip(tile);
             if (tile.Element("filename") is not null)
             {
@@ -422,8 +440,7 @@ internal sealed class NativeOwnedMenuTree
                 var size = new Vector2(Number(tile, "width"), Number(tile, "height"));
                 if (size.X > 0 && size.Y > 0)
                 {
-                    var brightness = Number(tile, "brightness") / 255;
-                    var tint = new Color(color.R * brightness, color.G * brightness, color.B * brightness, Number(tile, "alpha") / 255);
+                    var tint = color;
                     var position = Position(tile);
                     // Atlas members already declare their texture rectangle.
                     // Keep that mapping for members without an explicit zoom.
@@ -450,8 +467,7 @@ internal sealed class NativeOwnedMenuTree
                 var font = Font(tile);
                 var origin = Position(tile);
                 var justify = Number(tile, "justify");
-                var brightness = Number(tile, "brightness") / 255;
-                var textColor = new Color(color.R * brightness, color.G * brightness, color.B * brightness, Number(tile, "alpha") / 255);
+                var textColor = color;
                 foreach (var line in Lines(tile))
                 {
                     font.Draw(canvas, origin - new Vector2(MathF.Truncate(font.Font.Measure(line) * justify / 2), 0),

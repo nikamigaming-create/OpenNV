@@ -1,17 +1,27 @@
 # Product status
 
-Ordinary TTW input cold-loads the retained post-Amata save, reaches Escape stage
-60 and traverses the source portal into Vault101b (CELL 024511), opening the
-overseer-office door. The open doorway
-and authored stairs support ordinary movement. The latest checked candidate
-completes the old-cell source speech receipt after transition. The actual source
-stair now passes a complete native planned route in both directions, preserving
-ordinary support and all gap/wall/slope guards. The campaign bot remains to be
-verified on that candidate. Complete campaign saving remains unverified after
-the following independent owner repairs.
+Ordinary TTW input cold-loads the retained post-Amata save without replaying
+G.O.A.T. The current campaign bot crosses the authored stair and portal into
+Vault101b (CELL 024511). User input acquires the source password, selects the
+terminal tunnel result at Escape stage 120 and enters CELL 024512. The retained
+completed-speech callback error blocks a complete new save there; the genuine
+checkpoint remains stage 10. The session ends through ordinary Quit. Source
+ragdoll root rotation blocks several authored corpses' death presentation, and
+animated ACTI default activation is silently ignored. The actual final-room exit
+and corpse looting are under investigation. Vault exit and Megaton remain unreached.
+The actual source stair passes complete native planned routes in both directions,
+with player and source NPC capsules preserving support and all gap/wall/slope
+guards. The native actor search-lifetime check retains source faults and the real
+door obligation while retiring only unused queries. These component checks do
+not establish complete campaign saving.
 The original overseer-terminal model now passes a native source audit with its
 six surfaces and collision; repeated Idle blocks retain ordered source-name
-registration. Ordinary terminal-menu interaction remains unowned.
+registration. The general terminal interaction owner now passes source-scope,
+effect, failure-prefix and cold-settled synthetic contracts, an owned entry audit,
+and actual source XML/font/control layout. Ordinary password transfer and tunnel
+selection run through the source terminal and shared quest/animation owners.
+Matched menu pixels/timing and failed/active terminal continuation remain open.
+See [source terminal menus](source-terminal-menus.md).
 Native stopped-corpse and occupied-chair proofs now pass exact cold restoration,
 child-first retirement, retained source faults/effects and animation suffixes.
 Save v39 retains independent collection clocks and uncovered raw bone components.

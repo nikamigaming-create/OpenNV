@@ -5,6 +5,20 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--terminal-contracts"])
+{
+    TerminalContracts.Run();
+    return;
+}
+if (args.Length >= 8 && args[0] == "--audit-owned-terminal")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    var reference = new FalloutFormKey(args[4], uint.Parse(args[5],
+        System.Globalization.NumberStyles.HexNumber, invariant));
+    OwnedTerminalProbe.Run(args[1], args[2], args[3], reference,
+        int.Parse(args[6], invariant), args[7], args[8..]);
+    return;
+}
 if (args is ["--attack-variant-contracts"])
 {
     AnimationResourceContracts.Run(); AttackVariantContracts.Run();
@@ -744,6 +758,7 @@ FurnitureContracts.Run();
 AuthoredRagdollContracts.Run();
 ActorDamageContracts.Run();
 StoppedPoseContracts.Run();
+TerminalContracts.Run();
 ScriptDeathContracts.Run();
 StageConditionScopeContracts.Run();
 PlayerSkillContracts.Run();

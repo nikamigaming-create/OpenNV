@@ -37,6 +37,17 @@ internal sealed partial class RuntimeNativeActorCombat
         routeError = _routeError,
         routeRequests = _routeRequests,
         routePlanning = _routeSearch is not null,
+        routeFailures = _routeFailures,
+        routeRetrySeconds = Math.Max(0, _routeClock),
+        retiredPursuitSearches = _retiredPursuitSearches,
+        routeIntent = _routeIntent is { } intent ? new
+        {
+            scope = intent.ReferenceApproach ? "reference-approach" : "source-corridor",
+            target = new[] { intent.Target.X, intent.Target.Y, intent.Target.Z },
+            intent.Resume,
+            intent.ArrivalRadius,
+            corridorPoints = intent.Corridor.Count
+        } : null,
         routeSpacing = _routeSpacing,
         routeArrivalRadius = _routeArrivalRadius,
         routeRefinements = _routeRefinements,

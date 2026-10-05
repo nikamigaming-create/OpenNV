@@ -203,7 +203,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     {
         for (Node? node = collider; node is not null; node = node.GetParent())
             if (_nodeReferences.TryGetValue(node.GetInstanceId(), out var reference) && _bindings.TryGetValue(reference, out var binding) &&
-                _world.CanActivate(reference) && (binding.Instance.Script is not null || binding.Signature is "NPC_" or "CREA" or "TACT" or "DOOR" or "CONT" or "FURN" or "ACTI" || FalloutReferenceWorld.IsInventoryItem(binding.Signature)))
+                _world.CanActivate(reference) && (binding.Instance.Script is not null || binding.Signature is "NPC_" or "CREA" or "TACT" or "DOOR" or "CONT" or "TERM" or "FURN" or "ACTI" || FalloutReferenceWorld.IsInventoryItem(binding.Signature)))
                 return binding.Reference;
         return null;
     }
@@ -226,7 +226,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (binding.Signature != "DOOR") throw new NotSupportedException($"Default activation of {binding.Signature} by {actor} has no actor interaction owner.");
             RequireNpcDoor(binding, actor);
         }
-        if (binding.Signature is "DOOR" or "CONT" || FalloutReferenceWorld.IsInventoryItem(binding.Signature) ||
+        if (binding.Signature is "DOOR" or "CONT" or "TERM" || FalloutReferenceWorld.IsInventoryItem(binding.Signature) ||
             binding.Signature is "NPC_" or "CREA" && _world.IsDead(reference))
         {
             (Interact ?? throw new InvalidOperationException("Reference interaction owner is absent."))(binding.Reference, binding.Node, binding.Signature, actor);
