@@ -83,6 +83,7 @@ internal partial class RuntimeNativeNpc
         package = _aiPackage?.FormKey.ToString(),
         selectedPackage = CurrentPackage?.ToString(),
         evaluationPending = _requestedSelection is not null,
+        pendingSelectionCaptureReady = CanCapturePendingSelection(),
         furniture = _furnitureReference?.ToString(),
         marker = _seat?.MarkerId,
         sitting = SittingState,
@@ -193,6 +194,7 @@ internal partial class RuntimeNativeNpc
             packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents);
         BindFailureCapture();
         BindSelectionFailureCapture();
+        BindPendingSelectionCapture();
         BindFurnitureCapture();
         BindDialogueCapture();
         var bindingFailure = _aiReferenceState?.PackageBindingFailure;
@@ -200,7 +202,12 @@ internal partial class RuntimeNativeNpc
         // A stationary, unarmed actor owns its source movement-group idle
         // independently of package selection. An unsupported package must not
         // erase that motion owner and leave the skeleton in its bind pose.
-        if (_aiReferenceState?.SelectionFailure is { } selectionFailure)
+        if (_aiReferenceState?.PendingPackageSelection is { } pendingSelection)
+        {
+            PlayLocomotion(false);
+            RestorePendingSelection(pendingSelection);
+        }
+        else if (_aiReferenceState?.SelectionFailure is { } selectionFailure)
         {
             PlayLocomotion(false);
             RestoreSelectionFailure(selectionFailure);
@@ -340,6 +347,7 @@ internal partial class RuntimeNativeNpc
         {
             var selection = _requestedSelection ?? SelectSourcePackage();
             _requestedSelection = null;
+            if (_aiReferenceState is { } requestedState) requestedState.PendingPackageSelection = null;
             selected = selection.Record;
             _selectedSourcePackage = selected?.FormKey; _sourceSelectionKnown = true;
             if (!forced && _aiError is not null && selected is not null && _failedPackage == selected.FormKey) return;

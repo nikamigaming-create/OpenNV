@@ -20,16 +20,26 @@ internal static class NumericGameSettingContracts
                 Setting(0x100, "fSample", BitConverter.GetBytes(1f)), Setting(0x101, "iSample", BitConverter.GetBytes(-3)),
                 Setting(0x102, "bSample", BitConverter.GetBytes(0)), Setting(0x103, "uSample", BitConverter.GetBytes(uint.MaxValue)),
                 Setting(0x104, "sSample", Text("Text")), Setting(0x105, "fGuarded", BitConverter.GetBytes(1f)),
+                Setting(0x110, "fNamed", BitConverter.GetBytes(1f)),
                 Record("QUST", 0x600, Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x601u))),
                 Record("SCPT", 0x601, Field("SCHR", header), Local(1, "sample"), Local(2, "settingName"), Field("SCTX", Text(source)))));
-            File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Settings.esm"), Setting(0x100, "fSample", BitConverter.GetBytes(4f))));
-            var names = new[] { "Settings.esm", "Patch.esp" };
+            File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Settings.esm"),
+                Setting(0x100, "fSample", BitConverter.GetBytes(4f)), Setting(0x01000010, "fNamed", BitConverter.GetBytes(2f))));
+            File.WriteAllBytes(Path.Combine(directory, "Final.esp"), Join(Header("Settings.esm", "Patch.esp"),
+                Setting(0x110, "FNAMED", BitConverter.GetBytes(3f)),
+                Setting(0x02000020, "iOrdered", BitConverter.GetBytes(4)), Setting(0x02000010, "iOrdered", BitConverter.GetBytes(5))));
+            var names = new[] { "Settings.esm", "Patch.esp", "Final.esp" };
             using var records = FalloutPluginStack.Load(directory, names);
             var settings = records.NumericSettings;
             Require(FalloutGameSettingFloats.Read(records, "FSAMPLE") == 4 && settings.Get("iSample") == -3 &&
                 settings.Get("uSample") == uint.MaxValue, "Winning setting identity, signed integer or unsigned payload was lost.");
             Require(settings.Get("sSample") == -1 && !settings.Set("sSample", 1) && settings.Get("fMissing") == -1 &&
                 !settings.Set("fMissing", 1) && settings.Revision == 0, "Missing/string settings invented a numeric mutation.");
+            Require(settings.Get("fNamed") == 3 && settings.Get("iOrdered") == 5,
+                "Named aliases used FormID/first registration order instead of winning plugin and source declaration order.");
+            Require(settings.Set("fnamed", 7) && settings.Get("FNAMED") == 7 &&
+                FalloutGameSettingFloats.Read(records, "fNamed") == 7,
+                "Setting aliases or case variants did not share one live typed value.");
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
             var executor = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
@@ -69,19 +79,20 @@ internal static class NumericGameSettingContracts
             var coldQuests = new FalloutQuestState(coldRecords); coldQuests.Restore(quests.Capture());
             var cold = new FalloutQuestScripts(coldRecords, coldQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0);
             cold.Restore(snapshot);
-            Require(coldRecords.NumericSettings.Get("fSample") == 4 && coldRecords.NumericSettings.Get("iSample") == -3,
+            Require(coldRecords.NumericSettings.Get("fSample") == 4 && coldRecords.NumericSettings.Get("iSample") == -3 &&
+                coldRecords.NumericSettings.Get("fNamed") == 3 && coldRecords.NumericSettings.Get("iOrdered") == 5,
                 "Cold script restoration baked numeric mutations into a new loaded stack.");
             Require(BitConverter.ToSingle(records.GetEffective(Key(0x100)).ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span) == 4,
                 "Script setter modified winning source bytes.");
-            Console.WriteLine("OPENNV_NUMERIC_GAME_SETTING_CONTRACT_PASS winning=true typed=true sourceCommands=true returns=true fallbackStrings=true warm=true coldReset=true invalidAtomic=true retainedConsumerGapVisible=true sourceReadonly=true parity=unverified");
+            Console.WriteLine("OPENNV_NUMERIC_GAME_SETTING_CONTRACT_PASS winning=true namedAliases=true pluginAndDeclarationOrder=true typed=true sourceCommands=true returns=true fallbackStrings=true warm=true coldReset=true invalidAtomic=true retainedConsumerGapVisible=true sourceReadonly=true parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
     }
 
     private static FalloutFormKey Key(uint id) => new("Settings.esm", id);
     private static byte[] Setting(uint id, string name, byte[] data) => Record("GMST", id, Field("EDID", Text(name)), Field("DATA", data));
-    private static byte[] Header(string? master = null) => Record("TES4", 0, Field("HEDR", new byte[12]),
-        master is null ? [] : Join(Field("MAST", Text(master)), Field("DATA", new byte[8])));
+    private static byte[] Header(params string[] masters) => Record("TES4", 0, Field("HEDR", new byte[12]),
+        Join(masters.Select(master => Join(Field("MAST", Text(master)), Field("DATA", new byte[8]))).ToArray()));
     private static byte[] Local(uint index, string name)
     {
         var data = new byte[24]; BinaryPrimitives.WriteUInt32LittleEndian(data, index);

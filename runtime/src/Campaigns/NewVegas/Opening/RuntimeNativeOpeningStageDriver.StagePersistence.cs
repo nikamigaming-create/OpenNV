@@ -36,6 +36,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         }
         _restoreStageResults = null;
         _restoreStageResultFailure = null;
+        RestoreTerminalResults();
     }
 
     private void RetainDriverFailure(Exception error)

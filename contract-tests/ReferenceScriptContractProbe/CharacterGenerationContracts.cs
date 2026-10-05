@@ -130,7 +130,7 @@ internal static class CharacterGenerationContracts
             bootstrap.Start();
             Require(scripts.Session.InCharGen && scripts.Session.PlayerYoung && scripts.Session.PlayerToddler && scripts.Session.PlayerScale == .4f,
                 "Pre-world source result lost shared player policy.");
-            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true bootstrap=true youth=true youthSignedFlag=true youthRevision=true toddler=true toddlerSignedFlag=true sourceScale=true scalePrecisionClamp=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewards=unbound parity=unverified");
+            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true bootstrap=true youth=true youthSignedFlag=true youthRevision=true toddler=true toddlerSignedFlag=true sourceScale=true scalePrecisionClamp=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewardContracts=separate parity=unverified");
         }
         finally { File.Delete(path); Directory.Delete(directory); }
     }

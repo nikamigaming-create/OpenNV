@@ -28,7 +28,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorDialogueContinuation? DialogueContinuation = null, int? DeathCount = null, ulong? AttackRandomState = null,
     FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame = null,
     FalloutReferenceScriptStoppedFrame? CompletedScriptContinuation = null,
-    FalloutActorHeadTrackingSnapshot? HeadTracking = null)
+    FalloutActorHeadTrackingSnapshot? HeadTracking = null,
+    FalloutActorPendingPackageSelection? PendingPackageSelection = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -76,6 +77,11 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             snapshot.PackageAssignment?.Validate();
             snapshot.PackageBindingFailure?.Validate();
             snapshot.SelectionFailure?.Validate();
+            snapshot.PendingPackageSelection?.Validate();
+            if (snapshot.PendingPackageSelection is not null && (snapshot.Animation is null ||
+                snapshot.PackageAssignment is not null || snapshot.PackageBindingFailure is not null ||
+                snapshot.SelectionFailure is not null || snapshot.FurnitureContinuation is not null || snapshot.DialogueContinuation is not null))
+                throw new InvalidDataException("Pending selection requires its base clock and no active procedure.");
             FalloutActorStoppedPose.Validate(snapshot);
             snapshot.DialogueContinuation?.Validate();
             if (snapshot.DialogueContinuation is { } dialogue && (snapshot.Animation is null ||
@@ -157,6 +163,11 @@ internal sealed class FalloutReferenceInstance
     internal Func<FalloutActorPackageBindingFailure>? CapturePackageBindingFailure { get; set; }
     internal FalloutActorFurnitureContinuation? FurnitureContinuation { get; set; }
     internal FalloutActorSelectionFailure? SelectionFailure { get; set; }
+    internal FalloutActorPendingPackageSelection? PendingPackageSelection { get; set; }
+    internal Func<bool>? CanCapturePendingPackageSelection { get; set; }
+    internal Func<FalloutActorPendingPackageSelection>? CapturePendingPackageSelection { get; set; }
+    internal bool PendingPackageSelectionCaptureReady => CanCapturePendingPackageSelection?.Invoke() ??
+        PendingPackageSelection is not null && ProcedureCaptureBlocker == FalloutActorPendingPackageSelection.CaptureBlocker;
     internal FalloutActorDialogueContinuation? DialogueContinuation { get; set; }
     internal Func<bool>? CanCaptureDialogue { get; set; }
     internal Func<FalloutActorDialogueContinuation?>? CaptureDialogue { get; set; }
@@ -259,7 +270,7 @@ internal sealed class FalloutReferenceInstance
         if (HeadTrackingCaptureBlocker is not null || HeadTrackingRequired && CaptureHeadTracking is null && HeadTracking is null)
             throw new NotSupportedException($"Reference {Reference} cannot save head tracking: {HeadTrackingCaptureBlocker ?? "required owner is missing"}");
         var failureReady = PackageBindingFailureCaptureReady;
-        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !SelectionFailureCaptureReady && !DialogueCaptureReady)
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !SelectionFailureCaptureReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
         var bindingFailure = failureReady ? CapturePackageBindingFailure is { } captureFailure
             ? captureFailure() : PackageBindingFailure?.Copy() : null;
@@ -279,7 +290,9 @@ internal sealed class FalloutReferenceInstance
             DialogueContinuation: CaptureDialogue is { } captureDialogue ? captureDialogue() : DialogueContinuation?.Copy(),
             DeathCount: DeathCount == 0 ? null : DeathCount, AttackRandomState: _attackRandom?.State,
             ScriptStoppedFrame: ScriptStoppedFrame?.Copy(), CompletedScriptContinuation: CompletedScriptContinuation?.Copy(),
-            HeadTracking: CaptureHeadTracking?.Invoke() ?? HeadTracking?.Copy());
+            HeadTracking: CaptureHeadTracking?.Invoke() ?? HeadTracking?.Copy(),
+            PendingPackageSelection: PendingPackageSelectionCaptureReady ? CapturePendingPackageSelection is { } capturePending
+                ? capturePending() : PendingPackageSelection?.Copy() : null);
     }
 }
 
@@ -442,10 +455,10 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     }
 
     internal int PendingProcedureCaptureCount => _instances.Values.Count(instance =>
-        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady);
+        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
     internal object PendingProcedureCaptures => _instances.Values.Where(instance =>
-        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady)
+        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady)
         .Select(instance => new
         {
             reference = instance.Reference.ToString(),
@@ -666,6 +679,13 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         // placements must be restored before validating their Travel anchors.
         foreach (var snapshot in snapshots)
         {
+            if (snapshot.PendingPackageSelection is { } pendingSelection)
+            {
+                var actor = validated.Get(snapshot.Reference);
+                pendingSelection.Validate(records, actor);
+                actor.PendingPackageSelection = pendingSelection.Copy();
+                actor.ProcedureCaptureBlocker = FalloutActorPendingPackageSelection.CaptureBlocker;
+            }
             if (snapshot.DialogueContinuation is { } dialogue)
             {
                 var actor = validated.Get(snapshot.Reference);

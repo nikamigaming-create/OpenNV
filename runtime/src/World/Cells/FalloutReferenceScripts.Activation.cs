@@ -11,6 +11,9 @@ internal sealed partial class FalloutReferenceScripts
             error.StartsWith("OnActivate:", StringComparison.OrdinalIgnoreCase) || HasIndependentDefaultActivation(instance);
     }
 
+    internal bool CanAdmitIndependentDefaultActivation(FalloutFormKey reference)
+        => world.CanActivate(reference) && HasIndependentDefaultActivation(world.Get(reference));
+
     private bool HasIndependentDefaultActivation(FalloutReferenceInstance instance)
     {
         if (instance.Script is null) return true;

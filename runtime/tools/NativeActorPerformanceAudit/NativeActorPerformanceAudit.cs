@@ -23,10 +23,12 @@ public partial class NativeActorPerformanceAudit : Node
                     routeLifecycle: true);
                 GetTree().Quit(); return;
             }
-            if (args is ["--saved-stopped-corpse", var corpseGame, var corpseMod, var corpseRoot,
-                var corpsePath, var corpseActor, var corpseAttacker, .. var corpseDependencies])
+            if (args is [var corpseMode, var corpseGame, var corpseMod, var corpseRoot,
+                var corpsePath, var corpseActor, var corpseAttacker, .. var corpseDependencies] &&
+                corpseMode is "--saved-stopped-corpse" or "--saved-pending-corpse")
             {
-                await SavedStoppedCorpse(corpseGame, corpseMod, corpseRoot, corpsePath, corpseActor, corpseAttacker, corpseDependencies);
+                await SavedStoppedCorpse(corpseGame, corpseMod, corpseRoot, corpsePath, corpseActor, corpseAttacker, corpseDependencies,
+                    pendingSelection: corpseMode == "--saved-pending-corpse");
                 GetTree().Quit(); return;
             }
             if (args is ["--saved-actor-checkpoint", var savedGame, var savedMod, var savedRoot,

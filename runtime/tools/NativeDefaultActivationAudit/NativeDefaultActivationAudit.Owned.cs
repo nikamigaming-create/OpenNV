@@ -137,6 +137,9 @@ public partial class NativeDefaultActivationAudit
                 var before = JsonSerializer.Serialize(state.Capture());
                 var questBefore = JsonSerializer.Serialize(quests.Capture());
                 var events = Bind(world, actor, player);
+                Require(events.CanAdmitIndependentDefaultInteraction(identity) && state.ScriptError == fault.Error &&
+                    JsonSerializer.Serialize(state.Capture()) == before,
+                    "Original native corpse independent-default observation lost its fault, source prefix or real owner.");
                 Require(events.TryActivate(collider) && !events.TryActivate(collider), "Owned default input was refused or queued twice.");
                 Pump(events); Pump(events);
                 Require(menu is not null && interactionCount == 1 && completed.SequenceEqual([true]) &&
@@ -167,6 +170,8 @@ public partial class NativeDefaultActivationAudit
                 try
                 {
                     var coldCollider = await FreezeBodies(coldActor); var coldEvents = Bind(cold, coldActor, coldPlayer);
+                    Require(coldEvents.CanAdmitIndependentDefaultInteraction(identity) && cold.Get(identity).ScriptError == fault.Error,
+                        "Cold real corpse lost independent-default admission or acknowledged its stopped invocation.");
                     Require(coldEvents.TryActivate(coldCollider), "Cold actual corpse default activation was refused."); Pump(coldEvents);
                     Require(menu is not null && interactionCount == 2 && completed.SequenceEqual([true, true]) &&
                         cold.Get(identity).ScriptError == fault.Error &&

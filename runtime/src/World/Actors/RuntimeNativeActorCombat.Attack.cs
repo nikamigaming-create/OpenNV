@@ -67,11 +67,6 @@ internal sealed partial class RuntimeNativeActorCombat
             if (Clip(path, _enemyWeapon?.Automatic == true).Events.Discharges == 0)
                 throw new NotSupportedException($"Actor attack {path} requires a source Hit, Fire or Release event.");
         _ = Clip(_movementPath, true);
-        var state = _state.Engagement!;
-        var attackRandom = _state.AttackRandom.State;
-        if (state.AttackRandomState is { } savedRandom && savedRandom != attackRandom)
-            throw new InvalidDataException("Active combat randomness differs from its persistent actor owner.");
-        _state.Engagement = state with { AttackRandomState = attackRandom };
     }
 
     private string SelectPath(string directory, params string[] groups)

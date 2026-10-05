@@ -41,7 +41,7 @@ internal static class DefaultActivationContracts
                 results.Single(result => result.Event == "GameMode").Error == fault.Error && effects.Count == 1 && begins == 1 && ends == 1 &&
                 JsonSerializer.Serialize(world.Get(Key(0x900)).Capture()) == stopped,
                 "Independent default activation cleared, replayed or replaced the stopped invocation.");
-            Require(scripts.CanAdmitActivation(Key(0x900)) && scripts.Activate(Key(0x900), Key(0x14)).Error is null &&
+            Require(scripts.CanAdmitIndependentDefaultActivation(Key(0x900)) && scripts.CanAdmitActivation(Key(0x900)) && scripts.Activate(Key(0x900), Key(0x14)).Error is null &&
                 effects.Count == 2 && JsonSerializer.Serialize(world.Get(Key(0x900)).Capture()) == stopped,
                 "A fresh default activation repeated the consumed source prefix or duplicated one action.");
             rejectDefault = true;
@@ -52,7 +52,7 @@ internal static class DefaultActivationContracts
             using var cold = new FalloutReferenceWorld(records);
             cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!); cold.LoadCell(cell);
             var coldScripts = Scripts(cold);
-            Require(coldScripts.CanAdmitActivation(Key(0x900)) && coldScripts.Activate(Key(0x900), Key(0x14)).Error is null &&
+            Require(coldScripts.CanAdmitIndependentDefaultActivation(Key(0x900)) && coldScripts.CanAdmitActivation(Key(0x900)) && coldScripts.Activate(Key(0x900), Key(0x14)).Error is null &&
                 effects.Count == 3 && JsonSerializer.Serialize(cold.Get(Key(0x900)).Capture()) == stopped,
                 "Cold default activation lost the exact source error, hash or consumed locals.");
 
@@ -64,7 +64,7 @@ internal static class DefaultActivationContracts
                 "A later source VM failure suppressed an independent native action.");
             var blocked = scripts.Dispatch(Key(0x901), "GameMode");
             var blockedState = JsonSerializer.Serialize(world.Get(Key(0x901)).Capture());
-            Require(blocked.Error is not null && !scripts.CanAdmitActivation(Key(0x901)) &&
+            Require(blocked.Error is not null && !scripts.CanAdmitIndependentDefaultActivation(Key(0x901)) && !scripts.CanAdmitActivation(Key(0x901)) &&
                 scripts.Activate(Key(0x901), Key(0x14)).Error == blocked.Error && effects.Count == 4 &&
                 JsonSerializer.Serialize(world.Get(Key(0x901)).Capture()) == blockedState,
                 "A source OnActivate block was bypassed after an unrelated fault.");
@@ -72,7 +72,7 @@ internal static class DefaultActivationContracts
             {
                 var parse = scripts.Dispatch(Key(id), "GameMode");
                 var prior = JsonSerializer.Serialize(world.Get(Key(id)).Capture());
-                Require(parse.Error is not null && !scripts.CanAdmitActivation(Key(id)) &&
+                Require(parse.Error is not null && !scripts.CanAdmitIndependentDefaultActivation(Key(id)) && !scripts.CanAdmitActivation(Key(id)) &&
                     scripts.Activate(Key(id), Key(0x14)).Error == parse.Error && effects.Count == 4 &&
                     JsonSerializer.Serialize(world.Get(Key(id)).Capture()) == prior,
                     "Missing or malformed source was treated as proof of no OnActivate.");

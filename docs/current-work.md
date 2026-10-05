@@ -2,187 +2,121 @@
 
 ## Active objective
 
-Complete ordinary TTW input through Vault 101, Megaton, the authored Union Station
-power/ticket/train connection and Mojave, then the preserved Benny/JAM/dependency
-scope in implementation-plan.md. Keep complete reusable checkpoints and the
-requested game-wide retail record/playback comparison. All 36 broad requirements
-remain open. Compiled SCDA execution and a real x86 native-plugin compatibility
-demonstration remain active architectural requirements.
+Complete ordinary TTW input from Vault 101 through Megaton, the authored Union
+Station power/ticket/train connection and Mojave, then the preserved Benny/JAM
+and dependency scope in implementation-plan.md. Keep complete reusable saves.
+All 36 broad requirements remain open. Compiled SCDA authority, unchanged x86
+native-plugin compatibility and the requested retail record/playback comparison
+remain active requirements.
 
 ## Verified state
 
-The genuine post-Amata checkpoint cold-loads Escape stage 10 without replaying
-G.O.A.T. The new ordinary bot crosses the authored stair and door 054285 into
-Vault101b (CELL 024511). User input obtains the password from source locker 038f37,
-opens terminal 0506d8, executes its source tunnel-opening result at stage 120 and
-enters CELL 024512. The latest session ends through ordinary Quit there;
-detailed state 114 binds that actual state to runtime 1a53f095. It is a
-diagnostic snapshot, not a complete saved checkpoint. Save request 115 refuses at
-the retained speech fault. The immutable genuine checkpoint remains stage 10.
-Vault exit, Megaton and the train/Mojave route remain unreached. PR 148 is merged
-with all five checks passing at synchronized clean main e45f346. The fresh
-finished-speech/default-loot branch is active.
-The game is closed during integration/publication; recording is off. Verify an actual process
-and advancing state before input, never a stopped process's retained files.
+PR 149 is merged with all five exact-head checks passing. Local main and
+origin/main synchronized at 35019d1 before the current
+codex/ordinary-vault-exit-continuation branch. The genuine post-Amata checkpoint
+cold-loads Escape stage 10 without replaying G.O.A.T.
 
-Merged PR 148's selected native checks pass the original control-to-gear
-activation, actual moving collision and cold finite clock. Stored reference locals
-now resolve in Activate's actor argument. The unchanged gear model builds all 50
-surfaces and five collision shapes with shader-owned texture/sampler binding;
-empty shader filenames do not acquire a dormant legacy texture. All three reported
-authored-dead NPCs pass their original XRGB accumulation frame and eighteen XRGD
-body poses, retirement and cold root/body restoration. Synthetic malformed and
-atomic-refusal checks pass. These are component checks; the next ordinary campaign
-run and a complete new checkpoint remain unverified. The complete
-required Release/Debug, formatting/analyzer, contract, launcher and native Godot
-gate passes for the merged ACTI/shader/XRGB repair.
+The latest ordinary run crosses the source stair/portal 054285 into CELL024511,
+takes the office key from dresser0b01dd, opens office door053992, takes the
+password from locker038f37 and opens original terminal0506d8. Entry4 consumes
+its authored switch/desk prefix and reaches CG04:120. Its nested stage result
+fails at an unowned expression; closing the menu leaves an erroneous global
+terminal blocker. The game pauses and quits through ordinary input176/177.
+Diagnostic172 is reached state, not a complete save. Vault exit, Megaton,
+Union Station and Mojave remain unreached.
 
-The current branch passes actual owned native default corpse activation and loot:
-the original source guard's ragdoll collider opens the original XML/font menu,
-transfers three source item kinds once and retains empty inventory and its
-stopped OnDeath fault through retirement/cold restoration. Original owned speech
-and INFO Look results complete once; an off-cell cold finished-speech receipt
-resumes its retained fixed-argument suffix without replaying audio, results or
-random draws. Active/opaque/uncommitted speech remains refused. Detection event
-creation and expiry use the shared current numeric setting; receiver detection
-and alert consumption remain unowned. Deferred ordinary ForceSave, IsHardcore,
-persistent actor alert and null-caller function contracts pass, along with the
-full plugin/runtime probe at their stated candidate build identities.
-Schema v41 now retains complete head targets, raw pose/controller state and closed
-quest-stage result receipts. Pure and actual owned native speech/Look cold checks
-pass, including child-first retirement and cleanup with source readers alive.
-The full plugin/reference probes and actual original stage-result prefix audit
-pass. Independent stage entries and engine updates retain the stopped result's
-error without replaying it; untouched suspended sibling iterators still refuse
-capture. The exact original exit point settles through the normal native player
-mover in fourteen physics steps with source LAND/canyon support and capsule
-clearance. No source height or collision geometry changes. The final combined
-Release/Debug, formatting/analyzer, contract, launcher and native Godot gate and
-git diff --check pass. Ordinary campaign save/cold Continue and vault exit remain
-unverified.
+Ordinary save120 refuses at actor procedure initialization. Detailed123 identifies
+two retired guard owners:064912 lost a queued selection;064914 has a stopped
+selection/combat composition. Neither diagnostic can reconstruct the lost request.
+The immutable complete checkpoint remains stage10. No new complete checkpoint
+has been written or cold-verified. Recording is off; old live-state files now
+belong to an exited process and must never be used as live evidence.
 
-The original overseer-terminal NIF previously failed at two exact-name Idle
-registrations. The general manager retains all blocks and uses its final ordered
-name lookup. Its unchanged owned model now builds nine nodes, six surfaces and
-one collision shape, with source texture-channel checks. The native synthetic
-fixture verifies full-reader registration, instance isolation, finite end keys
-and cold suffixes. The new general TERM interaction owner passes synthetic
-source/effect/cold/failure-prefix contracts, an actual unchanged-source entry audit
-and a native XML/font/control check. The UI fixture applies no gameplay effects.
-Ordinary password transfer, source terminal selection and tunnel entry now have
-independent runtime evidence. Matched final pixels/timing remain unverified.
+## Current implementation and verification
 
-The stair planner now checks the actual ordinary mover's source-bound root support
-when a downward capsule sweep reports only steep corner contacts. It preserves
-all capsule sweeps, slope, residency and support guards. The selected unchanged
-source stair supports a complete native route in both directions, 24 waypoints
-each, settling on its actual source collider. Native gap, wall, unsupported-start,
-ceiling and steep-slope negatives remain refused. The older tiny-leg endpoint
-fixture still exceeds its unchanged settling bound; no tolerance was relaxed.
-Ordinary campaign bot traversal now crosses the actual authored stair and portal.
+Queued native package selection now has a first-party persistent receipt,
+including explicit-null selection, source priority/package hashes, raw pose,
+base clock, RNG, poll/schedule/revisions, activity, prior faults and consumed
+retirement/idle history. Repeated engagements join the persistent reference
+attack stream independently of prepared models without drawing. Pure pending,
+stopped-pose and eight-engagement contracts pass. Selected native checks pass
+eight cached engagements, selected/null queued selection and child-first retirement,
+plus cold composition with the original eighteen-body corpse. Independent moving
+combat, corpse attachments and physical owners
+remain mandatory rather than waived by the receipt.
 
-The common PACK reader admits the source's eight- and twelve-byte PKDT layouts
-without inventing absent type-specific flags. The complete winning audit passes
-93 short and 8,176 extended declarations, actual checkpoint priority, authored
-schedule/editor destination, cold state and once-only events. Actual guard
-animation preparation now admits its complete source attack alternatives without
-a selection draw. The selected owned native attack component verifies all
-alternatives, exact cold source/hash/clock, native poses and unchanged source.
-Global retail RNG phase/order and whole active combat continuation remain open.
+Save v42 combines queued selection with closed terminal result owners. Exact
+exception identity, fixed source SetStage instruction/operands, authored menu
+reachability and a matching closed stage cause permit cold restoration without
+replaying predicates, effects, prefix or suffix. The failed terminal remains
+stopped; unrelated movement has its own owner. Pure terminal/cold/source-drift
+contracts and the complete campaign-save contract probe pass. Opaque failures,
+active menus and unrelated equal-text presentation faults still refuse capture.
 
-The native stopped-corpse fixture now passes actual source OnHit dispatch, complete
-18-body ragdoll state, retained fault/basis/combat/death history, child-first
-retirement and exact cold restoration. Furniture collection continuation retains
-its selected IDLE, loops, source clocks, consumed keys and actual uncovered bone
-components. Native retirement exposed loss of its otherwise unchanged package
-assignment; the owner now retains that validated assignment. The actual native
-occupied-idle proof passes exact warm/cold bones, remaining text keys, seat,
-source drift and child-first unload/restoration. A whole campaign checkpoint has not yet been written
-with these repairs. Moving combat combined with a stopped AI fault and independent
-corpse weapon attachments remain explicit save boundaries.
+The generic RewardXP owner binds saved player XP, current source cap and threshold,
+Float32 amount, upward rounding and capped total. Acquired XP perk dispatch,
+level allocation and presentation remain explicit boundaries. Its object,
+quest/fallback/function/cold contracts pass. That check exposed automatic fault
+reset on activation/contact; it is removed so repeat input cannot replay a failed
+invocation's consumed prefix. Source faults remain visible. The original stage-200
+constant XP component passes with the actual source cap 60 and cold XP 200 at
+level 1. GMST aliases resolve by case-insensitive name and winning declaration
+load/file order rather than rejecting distinct FormIDs; synthetic override/order
+and unchanged owned cap declarations pass. Signed-total overflow refuses before
+publication. Whole stage execution, leveling and perk dispatch remain separate.
 
-Published PR 147 passes the complete Release/Debug,
-formatting/analyzer, contract, launcher and native Godot gate. Selected unchanged
-terminal source/XML checks and native actor query-lifetime/stair checks pass at
-their stated build identities. Ordinary campaign continuation and complete
-saving remain independent checks.
+Actual terminal geometry is offset about 4.4 m from its placed reference origin.
+The bot now selects a live matching native surface and real floor goal instead
+of planning against that origin. Native synthetic offset, moving-child, range,
+wall and missing-floor checks pass. The owned component includes all 171 source
+model prototypes and 50 explicit no-model declarations in the selected initial
+enable state; actual capsule approach, ordinary ray/range and unchanged source
+placements/inputs pass. It does not execute the terminal or establish campaign
+progress. An initial STAT-only fixture omitted non-actor support geometry and
+was corrected rather than changing the player pose or native collision rules.
+Ordinary corpse ray/loot and visible skin collapse still need direct campaign
+verification; existing eighteen-body/default-loot component checks do not prove
+that reported player interaction or final presentation.
 
-## Full denominator
+The bot now scopes only target-local faults through strict source/native
+independent-default admission. It cannot clear a fault or skip global execution,
+movement or presentation failures. Healthy native repeated activation and cold
+array/callback checks pass separately from legacy fault retention; native new
+contact/activation retains unknown consumed history rather than retrying it.
 
-The winning stack contains 1,556,615 records. Its canonical quest audit accounts
-for 918 quests, 27,827 source programs, 157,055 conditions, 221,586 parsed statements
-and both arms of 41,357 predicates without applying gameplay. Ten source-parser,
-one local-declaration, 3,990 expression declaration/context failures and 84,968
-uninspected legacy commands remain visible. Seven compiled-only programs and all
-26,995 nonempty SCDA bodies lack authoritative compiled execution. Numeric/loop
-state and reachable combinations are not exhaustively certified.
+The final combined runtime gate passes Release/Debug, format/analyzers, all 38
+contract projects, launcher checks and native project/interaction/ragdoll/
+locomotion/trace/input checks. git diff --check passes. No parity or whole-cell/
+campaign completion is claimed.
 
-The current ten-cell source audit retains all 7,155 references, 22 directed
-portals, 116 actors, 625 unique NIFs, 16 KFs, 795 DDSs and 19 NAVMs. Its 101 reference
-issues, 34 resource failures and nine package error bindings are overlapping
-lanes from the earlier candidate. Expanded LIGH inspection includes the previously
-omitted NiLightColorController. The 58 light refusals comprise 18 model/controller,
-27 scale and 13 flag owners. Correct placement math leaves 51 NAVM centroid
-projections without a packed-triangle/box hit; this does not prove native floor
-holes. Only the separately joined Vault101b snapshot has selected native evidence.
-Whole-cell presentation/floor coverage and the other nine native cells remain open.
+## Next owner and outcome
 
-The actual owned office model has supported floor at the earlier fallen sample's
-X/Z and height 120.5136 m. Entry below that floor remains unverified; the latest
-session ends on its supported source floor. Source geometry must not be replaced
-with a proxy floor to conceal that unresolved entry path.
+Primary owns integration, serialized builds/native checks, ordinary input and
+checked PR publication/merge. Finish this save/interaction repair, cold Continue
+from the immutable post-Amata slot, write and cold-load a complete early Escape
+checkpoint, then use source office/tunnel portal052196 into CELL024512, gear
+control02987d, farewell, original cave review and exit to Megaton. Do not replay
+the exam, edit a source lock/stage or manufacture progress.
 
-## Next owners and outcome
-
-Primary owns builds, native slots, ordinary input, complete save/cold continuation
-and checked publication. Publish the checked v41
-finished-speech/default-loot/manual-save repair. Resume the genuine post-Amata
-checkpoint, verify ordinary source control/gear/review/exit input, write and
-cold-load a complete new checkpoint, then continue to Megaton and the authored
-train route. Historical result failures remain independent visible divergence.
-Detection receiver/score behavior must not become a false answer. The authorized
-parallel worker prepares the next proven compiled-SCDA execution slice privately;
-it owns no builds, public edits or ordinary input.
-
-In parallel, trace the actual campaign's upright dead actors and refused looting,
-and the final-room activation/exit sequence from CELL 024512. Component corpse
-checks do not establish the observed campaign behavior. Prepared shared access
-conditions GetLocked/GetHasNote remain separate from the actual acquired password.
-Resume the genuine checkpoint through ordinary movement and source menus, write
-and cold-load a complete reusable checkpoint, then continue through the authored
-vault exit to Megaton. Stage 120 in diagnostic state 114 is not saved progress.
-
-Combat/detection script queries remain unbound at IsCombatTarget/GetDetected.
-Their actual actor groups and detection ownership cannot be replaced with selected
-target membership. Legacy spawners retain their consumed initialization prefix;
-never clear and replay a failed invocation. NPC procedures, source Havok
-constraint/water, literal missing KF and vertex-channel failures remain visible.
-Player-wall volumes are source triggers rather than architectural floors.
-VATS, complete mod/native-plugin behavior, matched retail comparison and physical
-headset acceptance remain required at their original scope.
+Source GetDetected/IsCombatTarget, unsupported procedures, missing resources and
+unowned expression operations remain visible. Required train command/time/light
+owners and level-up are traced independently. The frozen compiled-SCDA proposal
+frames26,995 nonempty bodies including seven without source, but its C# execution
+has not been run or integrated; framing is not execution or native-DLL support.
+Broader geometry, Havok constraints/water, VATS, dependencies and headset/retail
+acceptance retain their complete original scope.
 
 ## Private continuation
 
-Run: tmp/development-lab/ttw-post-goat-checkpoint-20261004. Immutable genuine
-post-exam slot a873c5936822484ab77db57aa11101c1, SHA256
-A3DC5AE9F6D454E2146337D9AE58266044FE0744C215319BD643191F1310731E.
-It cold-loads CG03:80 and the teacher's source desk occupation. Genuine post-Amata
-v37 slot 55647be524e54e9297a22ff12bcfaeec, SHA256
-5221625C01087675203F1463E684C2469ECD5157F33F89718112C88C0CAC54B5,
-contains CG04:10. Preserve both unchanged. Never run the exam-driving helper.
+Run: tmp/development-lab/ttw-post-goat-checkpoint-20261004. Genuine post-exam
+slot a873c5936822484ab77db57aa11101c1 SHA256
+A3DC5AE9F6D454E2146337D9AE58266044FE0744C215319BD643191F1310731E
+contains CG03:80. Genuine post-Amata v37 slot
+55647be524e54e9297a22ff12bcfaeec SHA256
+5221625C01087675203F1463E684C2469ECD5157F33F89718112C88C0CAC54B5
+contains CG04:10. Preserve both unchanged; never run the exam-driving helper.
 
-Source audit: tmp/development-lab/vault101-corridor-continuation. Its joined
-input/0000000092.state.json uses runtime edfeafa4 and retains settled old-cell
-speech plus earlier actor save blockers. The older 0000000085.state.json retains
-the original speech/save failure. Neither is the current integrated candidate.
-Actual state input/0000000114.state.json in the post-G.O.A.T. run binds runtime
-1a53f095 to CELL 024512 and CG04:120. Save request 115 refuses the retained speech
-fault. The game then quits ordinarily; retained live-state files are stale.
-Selected current owner logs are under tmp/development-lab: overseer-terminal,
-sequence-registration, package-data-owned, attack-native, stopped-corpse-native,
-occupied-idle-native, owned-stair-route-native and navigation-complete-native
-private logs. Their individual build identities and fixture boundaries remain
-independent from ordinary campaign progress. Prepared first-party files under
-terminal-next-slice, detection-speech-next, condition-access-next, corpse-loot-next
-and vault-exit-next are temporary development source, not launch inputs.
-Owned files, saves, private executable contracts and diagnostics stay outside Git.
+The exited ordinary child60916 used runtime4e9ff3f7; actual detailed123/157 and
+terminal input172 bind that session. Older detailed114/runtime1a53f095 in CELL024512
+belongs to a prior run and is not current progress. Private source/helper/logs
+stay outside Git. All temporary frames/trace blobs from this run were removed.

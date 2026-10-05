@@ -51,6 +51,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         var state = world.Get(actor);
         FalloutReferencePackageEvents.RequireActor(records, actor);
         if (state.ScriptError is { } failure) throw new NotSupportedException(failure);
+        if (state.PendingPackageSelection is { } pending) return pending.Package;
         if (state.PackageBindingFailure is { } stopped) return stopped.Package;
         if (state.SelectionFailure is not null) return null;
         var templates = state.Templates ?? world.InitializeActorTemplates(actor, playerLevel(), globals);

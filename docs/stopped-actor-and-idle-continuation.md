@@ -33,3 +33,17 @@ The prior directional-faction schema remains readable without changing genuine
 checkpoint bytes. Native fixtures separately verify source event dispatch,
 child-first retirement, complete corpse state and occupied animation suffixes;
 these component proofs do not establish whole-campaign save availability.
+
+Save v42 also retains an EVP selection consumed before native procedure binding.
+The receipt distinguishes an explicit null result from no selection. It keeps the
+winning priority/package identity, raw root pose, source base clock, poll and
+schedule, revisions, activity flags, random stream, prior faults and consumed
+package retirement/idle history. Cold attachment binds that existing result;
+only an eligible ordinary actor frame can consume it. Dead and combat-owned
+actors can retire without losing a waiting selection. Every independent physical
+owner remains required; the receipt cannot reconstruct an already lost request.
+
+Each new combat engagement joins the reference's persistent attack stream even
+when its source models are already prepared. That join draws no random value;
+the eventual real source attack selection consumes the stream once. A cached
+presentation cannot give a new engagement an absent or unrelated stream.

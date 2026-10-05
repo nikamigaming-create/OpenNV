@@ -8,6 +8,35 @@ apply. Opening corpse inventory uses the original container menu and shared item
 transfer owner. Neither opening nor looting recovers or replays the stopped VM.
 An unreadable script or an authored OnActivate block cannot establish this
 independent admission. Native default failure has its own visible result.
+New activation and trigger-entry input cannot clear an authored invocation's
+fault and replay its already consumed prefix. Only the existing admitted recovery
+or typed continuation owner may recover that invocation.
+
+RewardXP uses the shared saved player's XP pool independently of its calling
+object, quest or function. It reads the current source level cap, converts the
+signed amount through Float32, rounds upward and clamps to the source cap's XP
+threshold. It does not advance a level or heal the player. An active XP perk
+entry requires its dispatch owner before publication; unknown rank/priority
+and condition behavior cannot award unmodified XP. LevelUpMenu, allocation and
+XP presentation remain separate owners. Signed-total overflow and negative pools
+refuse before publication rather than being concealed by cap clamping.
+
+Numeric GMST names share a case-insensitive registry. Different winning FormIDs
+may declare the same name; source plugin load order, then serialized declaration
+order, selects its value. A later override of an older FormID must take priority
+over a new FormID from an earlier plugin. This follows the
+[xEdit GMST identity contract](https://tes5edit.github.io/docs/18-whatsnew.html#1847---whats-new-in-xedit-223)
+and [xNVSE name-based lookup](https://github.com/xNVSE/NVSE/blob/master/nvse/nvse/Commands_Game.cpp).
+Aliases share the existing typed mutable session value; cold loading reads the
+source value again. No source bytes are changed.
+
+The bot uses the same strict independent-default admission before scoping a
+target's retained script/selection/package fault. It requires a parsed source
+without OnActivate, actual resident/enabled native binding and an owned default
+interaction branch. Living dialogue, furniture and activators retain their
+existing target fault guards. Observation consumes no input; ordinary collider,
+queue, range, obstruction and transfer ownership remain independent. Global
+execution, movement and presentation faults still stop the bot.
 
 Finished speech gets a durable receipt only after actual audio retirement and
 committed INFO results. It binds the speaker, winning INFO/DIAL, generation and

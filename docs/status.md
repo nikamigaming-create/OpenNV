@@ -1,40 +1,42 @@
 # Product status
 
 Ordinary TTW input cold-loads the retained post-Amata save without replaying
-G.O.A.T. The current campaign bot crosses the authored stair and portal into
-Vault101b (CELL 024511). User input acquires the source password, selects the
-terminal tunnel result at Escape stage 120 and enters CELL 024512. The retained
-completed-speech callback error blocks a complete new save there; the genuine
-checkpoint remains stage 10. The session ends through ordinary Quit.
-The merged general ACTI/shader/XRGB repairs pass the unchanged original linked
-control, moving gear collision, all three authored corpse poses and native cold
-continuation. The new candidate's independent default activation passes actual
-source guard collider, original loot menu, item transfer and cold inventory/error
-preservation. Its ended-speech owner passes real audio/results, unloaded cold
-source recovery and once-only generation checks. Source manual-save/Hardcore and
-independent alert-state contracts pass, including v40 migration and global source
-functions. Save v41 preserves source-bound head targets/raw pose/controllers and
-closed quest-stage result inventories without replaying consumed effects.
-Typed closed-result failures retain their full diagnostics while independent
-stage/engine work continues. Native speech/Look retirement and cold restoration,
-full plugin/reference contracts and the original source result-prefix audit pass.
-The exact source exit point settles on original LAND/canyon collision with the
-normal player capsule. The complete required runtime gate and git diff --check
-pass. The next ordinary campaign run and complete new save remain unverified.
-Vault exit and Megaton remain unreached.
-The actual source stair passes complete native planned routes in both directions,
-with player and source NPC capsules preserving support and all gap/wall/slope
-guards. The native actor search-lifetime check retains source faults and the real
-door obligation while retiring only unused queries. These component checks do
-not establish complete campaign saving.
-The original overseer-terminal model now passes a native source audit with its
-six surfaces and collision; repeated Idle blocks retain ordered source-name
-registration. The general terminal interaction owner now passes source-scope,
-effect, failure-prefix and cold-settled synthetic contracts, an owned entry audit,
-and actual source XML/font/control layout. Ordinary password transfer and tunnel
-selection run through the source terminal and shared quest/animation owners.
-Matched menu pixels/timing and failed/active terminal continuation remain open.
-See [source terminal menus](source-terminal-menus.md).
+G.O.A.T. The latest run crosses the authored stair/portal into Vault101b
+(CELL 024511), takes the office key/password and selects the original terminal's
+tunnel result at Escape stage 120. The switch and desk prefix is consumed; its
+nested source expression stops. Closing the terminal incorrectly blocks further
+bot input, and actor procedure initialization refuses a complete new save. That
+run quits normally. Its diagnostics are not a checkpoint: the immutable complete
+save remains stage 10. The vault exit, Megaton and train/Mojave route remain
+unreached. Older CELL 024512 evidence belongs to a different run/build.
+
+The current candidate preserves queued package selection through cold binding
+without evaluating or drawing again. Selected native checks pass original
+eighteen-body corpse composition, child-first retirement and eight repeated
+cached combat engagements; independent moving combat/physical owners remain
+mandatory. Save v42 retains closed terminal selections through exact source
+SetStage/stage-failure receipts without replaying consumed effects. Full script
+and campaign-save contracts pass. Active/opaque terminal continuation remains
+unowned; see [source terminal menus](source-terminal-menus.md).
+
+The bot's non-actor goal now uses a live collision surface and its actual floor.
+Synthetic range, obstruction and moving-child checks pass. The selected owned
+terminal component passes actual capsule approach and ordinary activation ray
+with all enabled model-backed non-actors present; unchanged source identity and
+transforms are checked. It does not prove ordinary terminal or tunnel traversal.
+RewardXP shares saved player state, source thresholds and name-based GMST
+precedence. The isolated original exit command awards 200 XP under TTW's source
+cap 60 and cold-restores it at level 1. Perk dispatch, level allocation and XP
+presentation remain open. Repeated activation/contact cannot clear a stopped
+invocation or replay its consumed prefix. Ordinary corpse ray/loot and visible
+skin collapse still require direct verification. The combined candidate's final
+required runtime gate and git diff --check pass; no campaign or parity completion
+is claimed.
+
+Previously merged ACTI/shader/XRGB, speech retirement, source default loot and
+manual-save owners retain their selected component checks. Source stair routes
+and the original exit LAND/canyon collision also pass native component checks.
+They do not establish complete campaign saving or current ordinary traversal.
 Native stopped-corpse and occupied-chair proofs now pass exact cold restoration,
 child-first retirement, retained source faults/effects and animation suffixes.
 Save v39 retains independent collection clocks and uncovered raw bone components.

@@ -86,9 +86,10 @@ public partial class RuntimeCoordinator
         var key = new FalloutFormKey(identity[..separator], objectId);
         var world = _nativeReferences ?? throw new InvalidOperationException("Reference world is not active.");
         var referenceState = world.Get(key);
+        var targetFault = _nativeReferenceEvents?.CanAdmitIndependentDefaultInteraction(key) == true ? null :
+            referenceState.ScriptError ?? referenceState.SelectionFailure?.Error ?? referenceState.PackageBindingFailure?.Error;
         var executionFault = _nativeOpeningStageDriver?.BlockingExecutionFault ?? _nativeQuestScripts?.StartupError ??
-            world.PlayerMoves.Error ?? _nativeReferencePresentation?.Error ?? referenceState.ScriptError ??
-            referenceState.SelectionFailure?.Error ?? referenceState.PackageBindingFailure?.Error;
+            world.PlayerMoves.Error ?? _nativeReferencePresentation?.Error ?? targetFault;
         if (executionFault is not null)
             throw new InvalidOperationException("Gameplay execution stopped: " + executionFault);
         var node = _nativeReferencePresentation?.Nodes.GetValueOrDefault(key);
@@ -130,6 +131,15 @@ public partial class RuntimeCoordinator
             }
             else if (node is RuntimeNativeNpc actor)
                 aim = actor.Skeleton.Node.GlobalTransform * actor.Skeleton.Node.GetBoneGlobalPose(actor.Skeleton.BoneIndex("Bip01 Head")).Origin;
+            else if (node is not RuntimeNativeCreature)
+            {
+                var geometry = NativeReferenceGeometryTarget.Observe(node!, player, player.Camera.GlobalPosition,
+                    player.CombatCollisionRids, contact => _nativeReferenceEvents?.CollisionReference(contact.GetInstanceId()) == key,
+                    NativeCollisionResident, (_configuration.Player.ActivationDistanceMeters +
+                        _configuration.Player.CapsuleHeightMeters + _configuration.Player.StepHeightMeters) * player.GlobalBasis.Y.Length());
+                target = geometry.Target;
+                aim = geometry.Aim;
+            }
             else
             {
                 if (_botBoundsOwner != node)

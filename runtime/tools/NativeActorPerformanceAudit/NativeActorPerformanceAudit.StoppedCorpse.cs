@@ -10,7 +10,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private async Task SavedStoppedCorpse(string game, string mod, string root, string path,
-        string actorId, string attackerId, string[] dependencies)
+        string actorId, string attackerId, string[] dependencies, bool pendingSelection = false)
     {
         var fixture = new Node3D(); AddChild(fixture);
         try
@@ -20,8 +20,18 @@ public partial class NativeActorPerformanceAudit
                 installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
             var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
-            var campaign = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(path)) ??
+            var checkpointBytes = File.ReadAllBytes(path);
+            var campaign = JsonSerializer.Deserialize<FalloutNativeCampaignState>(checkpointBytes) ??
                 throw new InvalidDataException("Reached checkpoint is absent.");
+            if (pendingSelection)
+            {
+                var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
+                var opening = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
+                campaign = FalloutNativeCampaignSave.Read(path, content.SaveCompatibilityId, records,
+                    FalloutNativeVigorResolver.Resolve(records, opening), FalloutNativeTagSkillResolver.Resolve(records, controls),
+                    FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
+                    FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening)).State;
+            }
             if (campaign.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.FactionRelationSchema or
                 FalloutNativeCampaignSave.DeathHistorySchema) || campaign.SaveCompatibilityId != content.SaveCompatibilityId)
                 throw new InvalidDataException("Reached corpse fixture belongs to another schema or complete source stack.");
@@ -32,6 +42,8 @@ public partial class NativeActorPerformanceAudit
                     throw new ArgumentException("Corpse fixture identities require plugin:hex-object-id.");
             }
             var caller = Identity(actorId); var attacker = Identity(attackerId);
+            if (records.GetEffective(caller).Signature != "ACHR")
+                throw new InvalidDataException("Selected corpse fixture is not a winning ACHR.");
             if (records.GetEffective(attacker).Signature is not ("ACHR" or "ACRE"))
                 throw new InvalidDataException("Selected source attacker is not an actor reference.");
             var sourceReferences = campaign.References ?? throw new InvalidDataException("Reached save has no reference state.");
@@ -86,6 +98,7 @@ public partial class NativeActorPerformanceAudit
             var warm = Assemble(world); using var warmLifetime = new PackageFixtureLifetime(warm);
             if (JsonSerializer.Serialize(world.Get(caller).Capture()) != JsonSerializer.Serialize(original))
                 throw new InvalidDataException("Source cold attachment changed the selected genuine pre-hit checkpoint.");
+            if (pendingSelection) warm.EvaluatePackages(false);
             var combat = warm.Combat!;
             var contact = warm.FindChildren("*", "Area3D", true, false).OfType<Area3D>()
                 .First(area => area.HasMeta("opennv_nif_collision_bone") && combat.HitPart(area) == 0);
@@ -117,6 +130,14 @@ public partial class NativeActorPerformanceAudit
             GD.Print($"OPENNV_NATIVE_CORPSE_HIT_ADMISSION actor={caller} marks={hitBatch.Count} " +
                 $"blocks={hitResults.Sum(result => result.Blocks)} fault={hitResults.FirstOrDefault(result => result.Error is not null)?.Error ?? "none"} " +
                 "pendingCheckpointRefused=true sourceDispatch=true consumedPrefixRetained=true effectsNotInvented=true");
+            if (pendingSelection)
+            {
+                await QueuedCorpseCold(warm, world, records, cell, fixture, Assemble,
+                    world.CaptureActorOverrides(), campaign.FactionRelations);
+                if (!checkpointBytes.SequenceEqual(File.ReadAllBytes(path)))
+                    throw new InvalidDataException("Queued corpse audit changed its checkpoint input.");
+                return;
+            }
             var beforeUnload = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
             var dead = beforeUnload.Single(value => value.Reference == caller);
             RequireStoppedCorpse(dead, original, sourceFailure);

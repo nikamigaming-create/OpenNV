@@ -37,7 +37,8 @@ Ordinary reference events retain their residency boundary.
 [Source terminal menus](source-terminal-menus.md) retain placed callers, original
 entry scope and consumed result receipts through ordinary menu presentation.
 Access uses shared locks/inventory; successful settled effects share existing
-saves while active/failed menu continuation remains explicitly unowned.
+saves. Closed failed selections retain an exact source/stage cause through v42;
+active, opaque and unrelated presentation continuation remains explicitly unowned.
 
 [NIF sequence registration](source-nif-sequence-registration.md) retains every
 managed source block separately from its ordered last-exact-name lookup. Shared

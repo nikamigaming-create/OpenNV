@@ -4,6 +4,11 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceScripts
 {
+    internal sealed record TerminalResultFailure(FalloutTerminalSelection Selection, int Statement, int StatementCount, Exception Exception);
+    private TerminalResultFailure? _terminalResultFailure;
+    internal TerminalResultFailure? TerminalFailureFor(FalloutTerminalSelection selection, Exception error) =>
+        _terminalResultFailure is { } failure && ReferenceEquals(failure.Selection, selection) && ReferenceEquals(failure.Exception, error)
+            ? failure : null;
     // The actual placed terminal remains the caller even in a child TERM page.
     // The selected page and source ordinal supply only the compiled result scope.
     internal void ExecuteTerminalResult(FalloutTerminalSelection selection)
@@ -22,7 +27,12 @@ internal sealed partial class FalloutReferenceScripts
         if (entry.Program.Identity != selection.Entry.Program.Identity)
             throw new InvalidDataException("Terminal result fragment differs from its selection receipt.");
         entry.Program.RequireSourceExecution();
-        Execute(selection.Reference, Bindings(reference, current.Record, entry.Program.Fields),
-            FalloutGameModeProgram.Read("begin Result\n" + entry.Program.Source + "\nend", "Result"), null, 0);
+        var program = FalloutGameModeProgram.Read("begin Result\n" + entry.Program.Source + "\nend", "Result");
+        try { Execute(selection.Reference, Bindings(reference, current.Record, entry.Program.Fields), program, null, 0); }
+        catch (Exception error)
+        {
+            _terminalResultFailure = new(selection, program.LastStatement, program.StatementCount, error);
+            throw;
+        }
     }
 }

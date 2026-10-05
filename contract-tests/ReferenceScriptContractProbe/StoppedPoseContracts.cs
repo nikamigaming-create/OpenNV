@@ -47,6 +47,7 @@ internal static class StoppedPoseContracts
             using var records = FalloutPluginStack.Load(directory, ["Pose.esm"]);
             StoppedCombat(records);
             ActiveFurnitureIdle(records);
+            PendingPackageSelectionContracts.Run(records);
         }
         finally { Directory.Delete(directory, true); }
     }

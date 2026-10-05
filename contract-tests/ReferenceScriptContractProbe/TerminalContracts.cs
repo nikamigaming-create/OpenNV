@@ -4,7 +4,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class TerminalContracts
+internal static partial class TerminalContracts
 {
     internal static void Run()
     {
@@ -21,6 +21,7 @@ internal static class TerminalContracts
             VerifyFailure(records);
             VerifyPresentationFailure(records);
             VerifyScopedAndNestedFailure(records);
+            VerifyClosedStageResult(records);
             VerifyAdmissionAndConditions(records);
             VerifyMasterContext(directory);
             VerifyOutputGuard(directory);

@@ -4,6 +4,14 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal static class FalloutAttackAnimationSelection
 {
+    internal static FalloutActorEngagement BindRandomOwner(FalloutActorEngagement state, ulong randomState)
+    {
+        state.Validate();
+        if (state.AttackRandomState is { } retained && retained != randomState)
+            throw new InvalidDataException("Active combat randomness differs from its persistent actor owner.");
+        return state with { AttackRandomState = randomState };
+    }
+
     // Native multiple-sequence selection uses one unsigned draw modulo count,
     // with replacement. The OpenNV RNG's stream remains independently owned.
     internal static int Index(int count, Func<uint> next)

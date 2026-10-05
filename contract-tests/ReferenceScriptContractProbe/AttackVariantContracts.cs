@@ -47,6 +47,23 @@ internal static class AttackVariantContracts
         var replay = FalloutAttackAnimationSelection.Bind(mid.Transition("attack"), paths, Hash);
         Require(Same(next, replay) && next.AttackRandomState != mid.AttackRandomState,
             "Warm/cold next attack did not reproduce selection from persistent RNG.");
+        var persistent = new FalloutSoundRandomState(next.AttackRandomState!.Value);
+        for (var engagement = 0; engagement < 8; engagement++)
+        {
+            var randomBefore = persistent.State;
+            var fresh = new FalloutActorEngagement(start.Target);
+            var bound = FalloutAttackAnimationSelection.BindRandomOwner(fresh, persistent.State);
+            Require(persistent.State == randomBefore && bound.AttackRandomState == randomBefore &&
+                bound.Animation is null && Same(FalloutAttackAnimationSelection.BindRandomOwner(bound, persistent.State), bound),
+                "Repeated engagement preparation drew, reset or lost the actor's stream.");
+            var chosen = FalloutAttackAnimationSelection.Bind(bound.Transition("attack"), paths, Hash);
+            persistent.Restore(chosen.AttackRandomState!.Value);
+            var restoredStream = new FalloutSoundRandomState(persistent.State);
+            var restoredEngagement = JsonSerializer.Deserialize<FalloutActorEngagement>(JsonSerializer.Serialize(chosen))!;
+            Require(Same(FalloutAttackAnimationSelection.BindRandomOwner(restoredEngagement, restoredStream.State), chosen),
+                "Cold repeated engagement changed its consumed selection or source clock.");
+            Reject(() => FalloutAttackAnimationSelection.BindRandomOwner(chosen, randomBefore));
+        }
         Require(!Same(cold, mid with { Seconds = .4 }) && !Same(cold, mid with { AttackRandomState = 29 }) &&
             !Same(cold, mid with { AnimationHash = new('C', 64) }) &&
             !Same(cold, mid with { Position = [1, 2, 4] }) &&
@@ -69,7 +86,7 @@ internal static class AttackVariantContracts
         Require(handling.NextAttackRandomUInt32() == restored.NextAttackRandomUInt32() &&
             handling.Capture().AttackRandomState == restored.Capture().AttackRandomState,
             "Player shared attack randomness changed across cold handling restoration.");
-        Console.WriteLine("OPENNV_ATTACK_VARIANT_CONTRACT_PASS completeModuloDomain=true replacement=true singleNoDraw=true retainedNoDraw=true sourceHash=true clockPrefix=true futureColdSelection=true playerRandomCold=true ambiguityOwnerRequired=true");
+        Console.WriteLine("OPENNV_ATTACK_VARIANT_CONTRACT_PASS completeModuloDomain=true replacement=true singleNoDraw=true retainedNoDraw=true sourceHash=true clockPrefix=true futureColdSelection=true repeatedEngagementNoDraw=true playerRandomCold=true ambiguityOwnerRequired=true");
     }
 
     private static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }

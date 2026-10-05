@@ -204,7 +204,7 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
-    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null);
+    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Action<double>? RewardXp = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -900,6 +900,15 @@ internal sealed partial class FalloutQuestScripts
                 return;
             }
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (operation == "rewardxp")
+            {
+                if (parts.Length > 2 || arguments.Count != 1)
+                    throw new InvalidDataException("RewardXP requires one signed integer.");
+                if (parts.Length == 2) _ = ReferenceArgument(parts[0]);
+                (host?.RewardXp ?? throw new NotSupportedException("RewardXP has no shared player XP owner."))
+                    (NumberArgument(arguments[0]));
+                return;
+            }
             if (parts.Length <= 2 && operation is "equipitem" or "equipobject" or "unequipitem" or "removeallitems" or "resetinventory")
             {
                 var target = parts.Length == 2 ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey;

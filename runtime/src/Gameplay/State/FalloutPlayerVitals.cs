@@ -36,6 +36,15 @@ internal sealed class FalloutPlayerVitals
             throw new NotSupportedException("Earned player XP requires the source level-cap, skill/perk allocation and LevelUpMenu owners.");
     }
 
+    internal int ExperienceThreshold(int level)
+    {
+        if (level <= 1) return 0;
+        var value = (level - 1) * ((level - 2) * _xpBump / 2 + _xpBase);
+        if (!double.IsFinite(value) || value < 0 || value > int.MaxValue || value != Math.Truncate(value))
+            throw new NotSupportedException("Source XP threshold exceeds admitted integral player storage.");
+        return (int)value;
+    }
+
     internal FalloutPlayerVitals(FalloutPluginStack records, FalloutFormKey player, FalloutNativeSpecialState special,
         GameplayVitals? restore = null) : this(records, player)
     {

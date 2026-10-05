@@ -130,6 +130,16 @@ public partial class NativeReferenceEventsAudit : Node
                 "Native activation did not reach the reference-local script or suppressed its default incorrectly.");
             Require(records.PerkParameters.Get(Key(0x705), 0) == 1 && perkReader.Perk(Key(0x705)).Entries.Single().Value == 1,
                 "Native source activation changed a private perk parameter copy.");
+            Require(events.TryActivate(collider), "Healthy repeated source activation was refused.");
+            await Frames();
+            Require(world.Get(Key(0x901)).ScriptError is null && world.Get(Key(0x901)).Read(4) == 2 &&
+                perkReader.Perk(Key(0x705)).Entries.Single().Value == 2,
+                "Healthy reactivation lost its new invocation or retained perk refresh.");
+            await ScriptEvents(records, world, root);
+            var retainedPerkValue = perkReader.Perk(Key(0x705)).Entries.Single().Value;
+            // A legacy fault with no consumed cursor cannot acquire recovery
+            // just because a new contact or input occurs. Actual prefix/cold
+            // conservation is independently checked by the XP fault contracts.
             triggerState.ScriptError = "OnTriggerEnter: audit capability was unavailable.";
             var contactsBeforeFault = triggerState.Read(3);
             await Frames();
@@ -139,16 +149,18 @@ public partial class NativeReferenceEventsAudit : Node
             await Frames();
             player.Position = new Vector3(3, 0, 0);
             await Frames();
-            Require(triggerState.ScriptError is null && triggerState.Read(1) == 3,
-                "A saved script fault suppressed a fresh native contact entry.");
+            Require(triggerState.ScriptError == "OnTriggerEnter: audit capability was unavailable." && triggerState.Read(1) == 2 &&
+                triggerState.Read(3) == contactsBeforeFault,
+                "A fresh native contact acknowledged a saved fault or replayed its source prefix.");
             world.Get(Key(0x901)).ScriptError = "OnActivate: audit capability was unavailable.";
             Require(events.TryActivate(collider), "A failed activation permanently suppressed ordinary input.");
             await Frames();
-            Require(world.Get(Key(0x901)).ScriptError is null && world.Get(Key(0x901)).Read(4) == 2,
-                "Fresh native activation did not retry its source block.");
-            Require(perkReader.Perk(Key(0x705)).Entries.Single().Value == 2,
-                "Native reactivation left its cached perk reader unchanged.");
-            Require(reported.Count == 1 && reported[0].EndsWith("OnTriggerEnter: audit capability was unavailable.", StringComparison.Ordinal),
+            Require(world.Get(Key(0x901)).ScriptError == "OnActivate: audit capability was unavailable." && world.Get(Key(0x901)).Read(4) == 2,
+                "Fresh native activation acknowledged a saved fault or replayed its source block.");
+            Require(perkReader.Perk(Key(0x705)).Entries.Single().Value == retainedPerkValue,
+                "A stopped native activation replayed its perk mutation.");
+            Require(reported.Count == 2 && reported[0].EndsWith("OnTriggerEnter: audit capability was unavailable.", StringComparison.Ordinal) &&
+                reported[1].EndsWith("OnActivate: audit capability was unavailable.", StringComparison.Ordinal),
                 "Native fault reporting lost the expected divergence or reported an unexpected one.");
             world.DamageActor(Key(0x902), Key(0x14), 0, 100, 1, 1);
             events._Process(.75);
@@ -167,7 +179,6 @@ public partial class NativeReferenceEventsAudit : Node
             world.UnloadCell(cell.Cell.FormKey);
             world.LoadCell(cell);
             Require(state == System.Text.Json.JsonSerializer.Serialize(world.Capture()), "Native adapter changed reference state on residency change.");
-            await ScriptEvents(records, world, root);
             await InputControls(records);
             PlayerMoves(records);
             SaveDeferral();
@@ -175,7 +186,7 @@ public partial class NativeReferenceEventsAudit : Node
             AnimatedActivators(records);
             DisabledSpeech(records);
             HitEvents();
-            GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
+            GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentryRetained=true faultActivationRetained=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
         }
         catch (Exception error)
         {

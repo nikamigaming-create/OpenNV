@@ -196,6 +196,9 @@ internal sealed partial class RuntimeNativeActorCombat
             _engagementPrepared = true;
             _state.CaptureEngagement = CaptureEngagement;
         }
+        // Models remain prepared after an engagement ends. Each new
+        // engagement binds the actor's existing stream without drawing from it.
+        _state.Engagement = FalloutAttackAnimationSelection.BindRandomOwner(_state.Engagement!, _state.AttackRandom.State);
         Activity.SetAlerted(true); Activity.SetCombat(true);
         Activity.SetWeaponDrawn(_enemyWeapon is not null);
     }
