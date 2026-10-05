@@ -19,10 +19,23 @@ enters CELL 024512. The latest session ends through ordinary Quit there;
 detailed state 114 binds that actual state to runtime 1a53f095. It is a
 diagnostic snapshot, not a complete saved checkpoint. Save request 115 refuses at
 the retained speech fault. The immutable genuine checkpoint remains stage 10.
-Vault exit, Megaton and the train/Mojave route remain unreached. PR 146 is merged
-at synchronized main 8262faf; the fresh terminal/actor-route branch is active.
+Vault exit, Megaton and the train/Mojave route remain unreached. PR 147 is merged
+with all five checks passing at synchronized clean main ffd1b73. The fresh
+vault-exit/corpse/save-owner branch is active.
 The game is closed during integration/publication; recording is off. Verify an actual process
 and advancing state before input, never a stopped process's retained files.
+
+The current branch's selected native checks pass the original control-to-gear
+activation, actual moving collision and cold finite clock. Stored reference locals
+now resolve in Activate's actor argument. The unchanged gear model builds all 50
+surfaces and five collision shapes with shader-owned texture/sampler binding;
+empty shader filenames do not acquire a dormant legacy texture. All three reported
+authored-dead NPCs pass their original XRGB accumulation frame and eighteen XRGD
+body poses, retirement and cold root/body restoration. Synthetic malformed and
+atomic-refusal checks pass. These are component checks; the next ordinary campaign
+run, corpse loot and a complete new checkpoint remain unverified. The complete
+required Release/Debug, formatting/analyzer, contract, launcher and native Godot
+gate passes for this repair; checked publication is next.
 
 The original overseer-terminal NIF previously failed at two exact-name Idle
 registrations. The general manager retains all blocks and uses its final ordered
@@ -64,7 +77,7 @@ source drift and child-first unload/restoration. A whole campaign checkpoint has
 with these repairs. Moving combat combined with a stopped AI fault and independent
 corpse weapon attachments remain explicit save boundaries.
 
-The terminal/actor-route candidate passes the complete Release/Debug,
+Published PR 147 passes the complete Release/Debug,
 formatting/analyzer, contract, launcher and native Godot gate. Selected unchanged
 terminal source/XML checks and native actor query-lifetime/stair checks pass at
 their stated build identities. Ordinary campaign continuation and complete
@@ -98,8 +111,8 @@ with a proxy floor to conceal that unresolved entry path.
 ## Next owners and outcome
 
 Primary owns builds, native slots, ordinary input, complete save/cold continuation
-and checked publication. Finish the terminal/actor-route audits and integrated
-gate, publish and merge the slice, then begin a fresh codex/ branch. The reached
+and checked publication. Publish the verified ACTI/shader/XRGB owner repair
+through the full required gate. The reached
 script fault is CreateDetectionEvent in actor 0569b4's already consumed GameMode
 invocation; SayToDone encounters that retained fault. Own the source detection
 event and stopped suffix without replaying speech, random draws or prior effects,

@@ -2189,13 +2189,15 @@ internal static partial class RuntimeNativeNifMeshBuilder
             var texturePath = shader.FileName;
             if (texturing is not null)
             {
-                texturePath = ValidateLegacyTexturing(texturing);
-                if (!texturePath.Equals(shader.FileName, StringComparison.OrdinalIgnoreCase))
+                var legacyPath = ValidateLegacyTexturing(texturing);
+                // The shader owns its texture and sampler. A dormant legacy
+                // declaration is not a fallback for an empty shader filename.
+                // Legacy texture animation requires the matching shader slot;
+                // keep an unmatched active owner visible rather than redirect it.
+                if ((texturing.Controller != -1 || texturing.BaseTexture!.Transform is not null) &&
+                    !legacyPath.Equals(texturePath, StringComparison.OrdinalIgnoreCase))
                     throw new NotSupportedException(
-                        $"NIF legacy texturing property {texturing.Block.Index} differs from its no-lighting shader texture.");
-                if (FalloutNifTextureAddressing.LegacyTrilinearClampMode(texturing.BaseTexture!.Flags) != shader.TextureClampMode)
-                    throw new NotSupportedException(
-                        $"NIF legacy texturing property {texturing.Block.Index} differs from its no-lighting shader addressing.");
+                        $"NIF animated legacy texturing property {texturing.Block.Index} has no matching no-lighting shader texture.");
             }
             using var result = new StandardMaterial3D
             {

@@ -8,7 +8,11 @@ completed-speech callback error blocks a complete new save there; the genuine
 checkpoint remains stage 10. The session ends through ordinary Quit. Source
 ragdoll root rotation blocks several authored corpses' death presentation, and
 animated ACTI default activation is silently ignored. The actual final-room exit
-and corpse looting are under investigation. Vault exit and Megaton remain unreached.
+and corpse looting are under investigation. The current candidate's general
+ACTI/shader/XRGB repairs pass the unchanged original linked control, moving gear
+collision, all three authored corpse poses and native cold continuation.
+The next ordinary campaign run and complete new save remain unverified.
+Vault exit and Megaton remain unreached.
 The actual source stair passes complete native planned routes in both directions,
 with player and source NPC capsules preserving support and all gap/wall/slope
 guards. The native actor search-lifetime check retains source faults and the real
