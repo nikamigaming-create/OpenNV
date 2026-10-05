@@ -4,7 +4,10 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record NativeRouteDoorStatus(FalloutFormKey? Reference, bool Open = false, bool Moving = false,
-    bool Pending = false, string? Error = null, bool Admitted = false);
+    bool Pending = false, string? Error = null, bool Admitted = false)
+{
+    internal bool RequiresInteraction => !Open || Moving || Pending;
+}
 
 internal partial class RuntimeNativeReferenceEvents
 {

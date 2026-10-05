@@ -29,7 +29,7 @@ public partial class NativeRenderedMenuAudit
             var configuration = RuntimeConfiguration.Load();
             speech = new RuntimeNativeSpeech();
             speech.Configure(records, configuration.ActorCompiler.FaceGenAnimation.Lip, _ => 0, references: world);
-            speech.SayToCompleted += (_, _) => throw new InvalidDataException("Disabled owned command invented SayToDone.");
+            speech.SayToCompleted += _ => throw new InvalidDataException("Disabled owned command invented SayToDone.");
             speech.InfoCompleted += _ => throw new InvalidDataException("Disabled owned command invented INFO completion.");
             speech.PrepareSubtitle = _ => throw new InvalidDataException("Disabled owned command invented subtitles.");
             speech.ExecuteResults = (_, _, _) => throw new InvalidDataException("Disabled owned command invented results.");

@@ -6,6 +6,9 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed record NativeNavigationContact(ulong Collider, int Shape, Vector3 Point, Vector3 Normal,
     Vector3 From, Vector3 Desired, FalloutFormKey? Reference = null);
 
+internal sealed record NativeNavigationRejection(string Reason, Vector3 From, Vector3 Desired,
+    NativeNavigationContact? Contact);
+
 internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorContact, Func<ulong, FalloutFormKey?>? source = null)
 {
     internal NativeNavigationContact? CorridorContact { get; } = corridorContact is null ? null :
@@ -13,13 +16,42 @@ internal sealed class NativeNavigationProbe(NativeNavigationContact? corridorCon
     internal NativeNavigationContact? RejectedContact { get; private set; }
     internal Vector3[] Approach { get; private set; } = [];
     internal int RejectedEdges { get; private set; }
+    internal NativeNavigationRejection? LastRejection { get; private set; }
+    internal NativeNavigationRejection? GuideRejection { get; private set; }
+    internal int OmittedContactObservations { get; private set; }
+    internal int OmittedRejectionObservations { get; private set; }
     private readonly Dictionary<ulong, NativeNavigationContact> _contacts = [];
+    private readonly Dictionary<string, NativeNavigationRejection> _rejections = [];
     internal IReadOnlyCollection<NativeNavigationContact> RejectedContacts => _contacts.Values;
+    internal void Reject(string reason, Vector3 from, Vector3 desired, NativeNavigationContact? contact)
+    {
+        if (contact is not null) contact = contact with { Reference = source?.Invoke(contact.Collider) };
+        LastRejection = new(reason, from, desired, contact);
+        if (_rejections.ContainsKey(reason) || _rejections.Count < 16) _rejections[reason] = LastRejection;
+        else OmittedRejectionObservations++;
+    }
+    internal void RejectGuide() => GuideRejection = LastRejection;
+
+    internal string DescribeFailure()
+    {
+        static string Contact(NativeNavigationContact? contact) => contact is null ? "none" :
+            $"collider={contact.Collider} shape={contact.Shape} reference={contact.Reference?.ToString() ?? "unbound"} point={contact.Point} normal={contact.Normal} " +
+            $"from={contact.From} desired={contact.Desired}";
+        static string Describe(NativeNavigationRejection? rejection) => rejection is null ? "none" :
+            $"reason={rejection.Reason} from={rejection.From} desired={rejection.Desired} " +
+            $"contact=[{Contact(rejection.Contact)}]";
+        return $"directSweepHint=[{Contact(CorridorContact)}] selectedRejectedContact=[{Contact(RejectedContact)}] " +
+            $"guide=[{Describe(GuideRejection)}] last=[{Describe(LastRejection)}] rejectedEdges={RejectedEdges} " +
+            $"retainedContactBodies={_contacts.Count} contactHistoryLimit=8 omittedContactObservations={OmittedContactObservations} " +
+            "rejectionKinds=[" + string.Join(";", _rejections.Values.Select(Describe)) +
+            $"] rejectionKindLimit=16 omittedRejectionObservations={OmittedRejectionObservations}";
+    }
     internal void Record(NativeNavigationContact contact, Func<Vector3[]> approach)
     {
         RejectedEdges++;
         contact = contact with { Reference = source?.Invoke(contact.Collider) };
         if (_contacts.ContainsKey(contact.Collider) || _contacts.Count < 8) _contacts[contact.Collider] = contact;
+        else OmittedContactObservations++;
         // A lateral search may touch many doors. Only the exact source object
         // on the intended corridor qualifies, including its other NIF bodies.
         if (CorridorContact is not { } intended ||
@@ -42,6 +74,10 @@ internal static partial class NativeCapsuleNavigation
         }
         return null;
     }
+
+    private static NativeNavigationContact? FirstContact(PhysicsTestMotionResult3D hit, Vector3 from, Vector3 desired)
+        => hit.GetCollisionCount() == 0 ? null : new(hit.GetColliderId(0), hit.GetColliderShape(0),
+            hit.GetCollisionPoint(0), hit.GetCollisionNormal(0), from, desired);
 
     internal static NativeNavigationContact? FirstCorridorContact(CharacterBody3D body, Vector3 start, IReadOnlyList<Vector3> corridor)
     {

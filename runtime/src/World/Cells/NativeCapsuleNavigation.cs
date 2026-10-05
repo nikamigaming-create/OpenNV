@@ -61,27 +61,29 @@ internal static partial class NativeCapsuleNavigation
     }
 
     internal static IReadOnlyList<Vector3> Find(CharacterBody3D body, Vector3 start, Vector3 target,
-        float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200, float targetRadius = 0)
+        float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200, float targetRadius = 0,
+        NativeNavigationProbe? probe = null, IReadOnlyList<Vector3>? corridor = null)
     {
-        foreach (var result in Search(body, start, target, stepHeight, spacing, resident, maximumNodes, targetRadius: targetRadius))
+        foreach (var result in Search(body, start, target, stepHeight, spacing, resident, maximumNodes, probe, targetRadius, corridor))
             if (result is not null) return result;
         throw new InvalidOperationException("Capsule search ended without a route.");
     }
 
     internal static (IReadOnlyList<Vector3> Path, float Spacing, string? CoarseError) FindRefined(
         CharacterBody3D body, Vector3 start, Vector3 target, float stepHeight,
-        float coarseSpacing, float refinedSpacing, Func<Vector3, bool> resident, int maximumNodes = 1200, float targetRadius = 0)
+        float coarseSpacing, float refinedSpacing, Func<Vector3, bool> resident, int maximumNodes = 1200, float targetRadius = 0,
+        NativeNavigationProbe? probe = null, IReadOnlyList<Vector3>? corridor = null)
     {
         if (!float.IsFinite(coarseSpacing) || !float.IsFinite(refinedSpacing) ||
             coarseSpacing <= 0 || refinedSpacing <= 0 || refinedSpacing > coarseSpacing)
             throw new ArgumentOutOfRangeException(nameof(refinedSpacing));
-        try { return (Find(body, start, target, stepHeight, coarseSpacing, resident, maximumNodes, targetRadius), coarseSpacing, null); }
+        try { return (Find(body, start, target, stepHeight, coarseSpacing, resident, maximumNodes, targetRadius, probe, corridor), coarseSpacing, null); }
         catch (InvalidOperationException coarse) when (refinedSpacing < coarseSpacing)
         {
             // A lattice can miss a supported passage narrower than its node
             // spacing. One finer search keeps the same body, sweep/floor rules,
             // residency predicate and node bound. It cannot create clearance.
-            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, maximumNodes, targetRadius), refinedSpacing, coarse.Message); }
+            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, maximumNodes, targetRadius, probe, corridor), refinedSpacing, coarse.Message); }
             catch (InvalidOperationException refined)
             {
                 throw new InvalidOperationException($"Coarse capsule query: {coarse.Message} Refined capsule query: {refined.Message}", refined);
@@ -91,9 +93,10 @@ internal static partial class NativeCapsuleNavigation
 
     internal static IEnumerable<IReadOnlyList<Vector3>?> Search(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200,
-        NativeNavigationProbe? probe = null, float targetRadius = 0)
+        NativeNavigationProbe? probe = null, float targetRadius = 0, IReadOnlyList<Vector3>? corridor = null)
     {
-        if (!start.IsFinite() || !target.IsFinite() || stepHeight <= 0 || spacing <= 0 || maximumNodes <= 0 ||
+        if (!start.IsFinite() || !target.IsFinite() || !float.IsFinite(stepHeight) || !float.IsFinite(spacing) ||
+            stepHeight <= 0 || spacing <= 0 || maximumNodes <= 0 ||
             !float.IsFinite(targetRadius) || targetRadius < 0)
             throw new ArgumentOutOfRangeException(nameof(stepHeight));
         using var query = new PhysicsTestMotionParameters3D { Margin = body.SafeMargin, MaxCollisions = 4 };
@@ -108,17 +111,25 @@ internal static partial class NativeCapsuleNavigation
         // The landing still requires a complete native sweep and floor support;
         // movement follows it with gravity rather than writing the query pose.
         var maximumDrop = stepHeight + Math.Max(stepHeight, body.FloorSnapLength);
+        var sampleLength = Math.Min(spacing, Math.Max(.03f, Math.Min(stepHeight * .5f,
+            body.GetChildren().OfType<CollisionShape3D>()
+                .Where(shape => shape.Shape is CapsuleShape3D).Select(shape =>
+                    ((CapsuleShape3D)shape.Shape).Radius * Math.Min(shape.GlobalBasis.X.Length(), shape.GlobalBasis.Z.Length()) * .5f)
+                .DefaultIfEmpty(spacing).Min())));
         bool Sweep(Vector3 from, Vector3 motion)
         {
             query.From = new(basis, from); query.Motion = motion;
             return PhysicsServer3D.BodyTestMotion(rid, query, hit);
         }
         NativeNavigationContact? rejected = null;
-        bool Edge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep = true)
+        bool SingleEdge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep)
         {
             rejected = null;
             landing = default;
-            if (!resident(from) || !resident(desired)) return false;
+            bool Reject(string reason, NativeNavigationContact? contact = null)
+            { rejected = contact; probe?.Reject(reason, from, desired, contact); return false; }
+            if (!resident(from)) return Reject("source-not-resident");
+            if (!resident(desired)) return Reject("destination-not-resident");
             var motion = desired - from; motion.Y = 0;
             var supportedFrom = from + motion;
             var drop = maximumDrop + body.SafeMargin * 8;
@@ -127,14 +138,36 @@ internal static partial class NativeCapsuleNavigation
             if (Sweep(from, motion))
             {
                 var obstacle = Contact(hit, from, desired, floorCosine);
-                if (!allowStep) { rejected = obstacle; return false; }
-                var lift = Vector3.Up * (stepHeight + body.SafeMargin * 4);
-                if (Sweep(from, lift) || Sweep(from + lift, motion)) { rejected = obstacle; return false; }
-                supportedFrom += lift;
-                drop += lift.Y;
+                if (!allowStep) return Reject("flat-clearance", obstacle);
+                if (obstacle is not null)
+                {
+                    if (!NativeCharacterStep.TryQuery(body, new(basis, from), motion, stepHeight,
+                        out var stepped, out var reason, out var contact)) return Reject("step-" + reason, contact ?? obstacle);
+                    drop += stepped.Y - from.Y;
+                    supportedFrom = stepped;
+                }
+                else
+                {
+                    // Ordinary sliding can climb a walkable contact, including
+                    // the rounded capsule's curb contact. Sweep the full body
+                    // along its observed floor tangent; maximum step lift is
+                    // not a prerequisite for that supported motion.
+                    var normals = Enumerable.Range(0, hit.GetCollisionCount()).Select(hit.GetCollisionNormal)
+                        .Where(normal => normal.Dot(Vector3.Up) >= floorCosine && normal.Dot(motion) < -.000001f)
+                        .OrderBy(normal => normal.Dot(motion)).ToArray();
+                    if (normals.Length == 0) return Reject("walkable-contact-without-forward-tangent", FirstContact(hit, from, desired));
+                    var rise = -normals[0].Dot(motion) / normals[0].Y + body.SafeMargin * 4;
+                    if (rise > stepHeight + body.SafeMargin * 8) return Reject("slope-height");
+                    var tangent = motion + Vector3.Up * rise;
+                    if (Sweep(from, tangent)) return Reject("slope-clearance",
+                        Contact(hit, from, from + tangent, floorCosine) ?? FirstContact(hit, from, from + tangent));
+                    supportedFrom = from + tangent;
+                    drop += rise;
+                }
             }
-            if (!Sweep(supportedFrom, Vector3.Down * drop) || !Enumerable.Range(0, hit.GetCollisionCount())
-                .Any(index => hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine)) return false;
+            if (!Sweep(supportedFrom, Vector3.Down * drop)) return Reject("landing-sweep-no-floor");
+            if (!Enumerable.Range(0, hit.GetCollisionCount())
+                .Any(index => hit.GetCollisionNormal(index).Dot(Vector3.Up) >= floorCosine)) return Reject("landing-slope");
             landing = supportedFrom + hit.GetTravel();
             // A rounded capsule can touch a walkable normal on a ledge while
             // its feet remain over empty space. Sliding then pushes that body
@@ -143,13 +176,72 @@ internal static partial class NativeCapsuleNavigation
             supportRay.From = landing + Vector3.Up * body.SafeMargin * 8;
             supportRay.To = landing - Vector3.Up * Math.Max(stepHeight, body.FloorSnapLength);
             using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(supportRay);
-            if (support.Count == 0 || support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return false;
+            if (support.Count == 0) return Reject("root-floor-missing");
+            if (support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return Reject("root-floor-slope");
             var height = landing.Y - from.Y;
-            return height <= stepHeight + body.SafeMargin * 8 &&
-                height >= -maximumDrop - body.SafeMargin * 8 && resident(landing);
+            if (height > stepHeight + body.SafeMargin * 8) return Reject("landing-too-high");
+            if (height < -maximumDrop - body.SafeMargin * 8) return Reject("landing-too-low");
+            return resident(landing) || Reject("landing-not-resident");
         }
         static float Flat(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
+        bool Edge(Vector3 from, Vector3 desired, out Vector3 landing, bool allowStep = true)
+        {
+            landing = from;
+            var samples = Math.Max(1, (int)Math.Ceiling(Flat(from, desired) / sampleLength));
+            var origin = from;
+            for (var index = 1; index <= samples; index++)
+            {
+                if (!SingleEdge(landing, origin.Lerp(desired, (float)index / samples), out var next, allowStep)) return false;
+                landing = next;
+            }
+            return true;
+        }
         bool FlatEdge(Vector3 from, Vector3 desired, out Vector3 landing) => Edge(from, desired, out landing, allowStep: false);
+
+        // Authored portal midpoints are useful seeds, not a collision bypass.
+        // Validate every sampled capsule edge and root support first. A failed
+        // seed falls back to the same bounded native lattice; it never proves
+        // the full width of a NAVM portal is blocked.
+        if (corridor is { Count: > 0 })
+        {
+            var guided = new List<Vector3>();
+            var from = start;
+            var clear = true;
+            foreach (var destination in corridor)
+            {
+                if (!destination.IsFinite()) throw new InvalidDataException("Native source corridor has a nonfinite waypoint.");
+                var origin = from;
+                var samples = Math.Max(1, (int)Math.Ceiling(Flat(origin, destination) / sampleLength));
+                for (var index = 1; index <= samples; index++)
+                {
+                    var desired = origin.Lerp(destination, (float)index / samples);
+                    if (guided.Count >= maximumNodes)
+                    {
+                        probe?.Reject("source-corridor-node-bound", from, desired, null); probe?.RejectGuide(); clear = false;
+                    }
+                    else if (!SingleEdge(from, desired, out var landing, true))
+                    {
+                        probe?.RejectGuide();
+                        if (rejected is { } contact) probe?.Record(contact, () => guided.Prepend(start).ToArray());
+                        clear = false;
+                    }
+                    else if (Math.Abs(landing.Y - desired.Y) >= .6f)
+                    {
+                        probe?.Reject("source-corridor-height", from, desired, null); probe?.RejectGuide(); clear = false;
+                    }
+                    else { guided.Add(landing); from = landing; }
+                    yield return null;
+                    if (!clear) break;
+                }
+                if (!clear) break;
+            }
+            if (clear && (targetRadius > 0 ? from.DistanceTo(target) <= targetRadius :
+                Flat(from, target) <= body.SafeMargin * 8 && Math.Abs(from.Y - target.Y) < .6f))
+            {
+                foreach (var result in SmoothRoute(guided, start, spacing, body.SafeMargin * 8, FlatEdge)) yield return result;
+                yield break;
+            }
+        }
         (int X, int Z, int Y) Key(Vector3 p) => ((int)MathF.Round((p.X - start.X) / spacing),
             (int)MathF.Round((p.Z - start.Z) / spacing), (int)MathF.Round(p.Y / .2f));
         var positions = new Dictionary<(int X, int Z, int Y), Vector3>();
@@ -213,6 +305,7 @@ internal static partial class NativeCapsuleNavigation
                 }
             yield return null;
         }
-        throw new InvalidOperationException($"No supported capsule route within {closed.Count} native collision nodes; nearest target distance={nearest:F3}m.");
+        throw new InvalidOperationException($"No supported capsule route within {closed.Count}/{maximumNodes} native collision nodes; " +
+            $"nearest target distance={nearest:F3}m; search={(open.Count > 0 ? "node-bound" : "frontier-exhausted")}. {probe?.DescribeFailure()}");
     }
 }

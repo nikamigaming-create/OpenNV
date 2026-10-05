@@ -5,7 +5,10 @@ namespace OpenNV.Runtime.World.Actors;
 internal partial class RuntimeNativeSpeech
 {
     private sealed record NpcDialogueExchange(FalloutFormKey Speaker, FalloutFormKey Listener,
-        FalloutFormKey Topic, FalloutSayToCommand Command, Action? Completed);
+        FalloutFormKey Topic, FalloutSayToCommand Command, Action? Completed)
+    {
+        internal FalloutSpeechCompletionReceipt? Completion { get; set; }
+    }
 
     private readonly Dictionary<FalloutFormKey, NpcDialogueExchange> _npcDialogueParticipants = [];
     internal bool IsNpcDialogueActive(FalloutFormKey actor) => _npcDialogueParticipants.ContainsKey(actor);
@@ -45,7 +48,7 @@ internal partial class RuntimeNativeSpeech
                 npcConversation: npcConversation, immediateResults: true);
     }
 
-    private void AdvanceNpcExchange(NpcDialogueExchange exchange, Voice voice, FalloutDialogueInfo completed)
+    private void AdvanceNpcExchange(NpcDialogueExchange exchange, Voice voice, FalloutDialogueInfo completed, Action settled)
     {
         var goodbye = FalloutDialogueTopic.Find(_stack, "DIAL", "GOODBYE").FormKey;
         var turns = FalloutNpcDialogueLinks.Candidates(completed.NextSpeaker, completed.Flags, completed.Choices,
@@ -57,18 +60,22 @@ internal partial class RuntimeNativeSpeech
             if (info is null) continue;
             StartCore(new(turn.Speaker.ToString(), turn.Listener.ToString(), turn.Topic.ToString(), exchange.Command.ForceSubtitles),
                 _stack.GetEffective(turn.Speaker), turn.Topic, turn.Listener, exchange: exchange, selectedInfo: info);
+            settled();
             return;
         }
         if (turns.Count != 0)
             throw new NotSupportedException($"NPC dialogue {completed.Record.FormKey} has no eligible linked continuation.");
         _npcDialogueParticipants.Remove(exchange.Speaker);
         _npcDialogueParticipants.Remove(exchange.Listener);
-        if (exchange.Completed is { } completedPackage) { completedPackage(); ++_completedPackages; }
+        if (exchange.Completed is { } completedPackage) { completedPackage(); ++_completedPackages; settled(); }
         else
         {
-            (SayToCompleted ?? throw new NotSupportedException("SayTo has no completion-event owner."))
-                (exchange.Speaker, new HashSet<FalloutFormKey> { exchange.Topic });
-            ++Channel(exchange.Speaker).CompletedCommands; ++_completedCommands;
+            _emptyCompletions.Complete(exchange.Completion ??
+                throw new InvalidDataException("NPC dialogue lost its original source voice completion."), DispatchSourceCompletion, () =>
+                {
+                    ++Channel(exchange.Speaker).CompletedCommands; ++_completedCommands;
+                    settled();
+                });
         }
     }
 }

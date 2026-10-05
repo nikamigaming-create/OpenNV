@@ -29,6 +29,28 @@ internal static class NativeCharacterStep
             using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(supportRay);
             if (support.Count == 0 || support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return false;
         }
+        if (!TryQuery(body, from, motion, maximumHeight, out var destination, out blocked, out _, floorSupported: true)) return false;
+        body.GlobalPosition = destination;
+        return true;
+    }
+
+    // Planning uses the controller's supported-height probes and complete
+    // sweeps at a supplied pose. This query never publishes that pose.
+    internal static bool TryQuery(CharacterBody3D body, Transform3D from, Vector3 motion, float maximumHeight,
+        out Vector3 destination, out string? blocked, out NativeNavigationContact? contact, bool floorSupported = false)
+    {
+        destination = default; contact = null;
+        var floorCosine = MathF.Cos(body.FloorMaxAngle);
+        blocked = "floor-support";
+        if (!floorSupported)
+        {
+            var reach = Math.Min(maximumHeight, body.FloorSnapLength);
+            if (reach <= 0) return false;
+            using var supportRay = PhysicsRayQueryParameters3D.Create(from.Origin + Vector3.Up * body.SafeMargin,
+                from.Origin - Vector3.Up * reach, body.CollisionMask, [body.GetRid()]);
+            using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(supportRay);
+            if (support.Count == 0 || support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return false;
+        }
         using var parameters = new PhysicsTestMotionParameters3D
         { From = from, Motion = motion, Margin = body.SafeMargin, MaxCollisions = 4 };
         using var result = new PhysicsTestMotionResult3D();
@@ -43,14 +65,16 @@ internal static class NativeCharacterStep
         // A bevel can be just steeper than the walkable slope. Probe beyond
         // the contacted riser for its top, bounded by the step height; every
         // accepted move still sweeps the whole capsule up and forward.
-        var contact = result.GetCollisionPoint(wall);
+        var point = result.GetCollisionPoint(wall);
+        contact = new(result.GetColliderId(wall), result.GetColliderShape(wall), point,
+            result.GetCollisionNormal(wall), from.Origin, from.Origin + motion);
         var forward = motion.Normalized();
         using var ray = PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, body.CollisionMask, [rid]);
         blocked = "landing-support";
         for (var probe = 0; probe < 4; probe++)
         {
             var reach = probe == 0 ? body.SafeMargin * 4 : maximumHeight / (1 << (3 - probe));
-            var ahead = contact + forward * reach;
+            var ahead = point + forward * reach;
             ahead.Y = from.Origin.Y + maximumHeight + body.SafeMargin;
             ray.From = ahead; ray.To = ahead - Vector3.Up * maximumHeight;
             using var landing = body.GetWorld3D().DirectSpaceState.IntersectRay(ray);
@@ -69,7 +93,7 @@ internal static class NativeCharacterStep
             // capsule. Try the remaining supported heights within the same
             // step bound; each candidate still needs both complete sweeps.
             if (PhysicsServer3D.BodyTestMotion(rid, parameters, result)) continue;
-            body.GlobalPosition = parameters.From.Origin + motion;
+            destination = parameters.From.Origin + motion;
             blocked = null;
             return true;
         }

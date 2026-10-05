@@ -8,6 +8,7 @@ internal static class NativeNavigationContracts
     internal static void Run()
     {
         CheckProjectionBounds();
+        CheckRefinementIntent();
         var prefix = NativeCapsuleNavigation.CorridorPrefix(Vector3.Zero,
             [new(0, 0, 6), new(2, 0, 6), new(2, 4, 0)], 8);
         if (prefix.Target != new Vector3(2, 0, 6) || prefix.Resume != 2)
@@ -108,6 +109,45 @@ internal static class NativeNavigationContracts
             FalloutExteriorStreamTarget.Predict(-1, -1, -1000, 1000, units) != (-2, 0))
             throw new InvalidOperationException("Exterior demand lost early loading, negative-grid ownership or bounded lookahead.");
         Console.WriteLine("OPENNV_WORLD_NAVIGATION_CONTRACT_PASS sourceEdgeFlags=true distantProjection=true boundedPrefetch=true");
+    }
+
+    private static void CheckRefinementIntent()
+    {
+        var folded = NativeCapsuleNavigation.Intent(Vector3.Zero,
+            [new(0, 0, 6), new(2, 0, 6), new(2, 0, 0)], new(2, 0, 0), 1.5f);
+        if (folded.ReferenceApproach || folded.Target != new Vector3(2, 0, 6) || folded.Resume != 2 || folded.ArrivalRadius != 0)
+            throw new InvalidOperationException("A nearby reference replaced an untraversed folded source corridor.");
+        var elevated = NativeCapsuleNavigation.Intent(Vector3.Zero, [new(0, 3, 0)], new(1, 3, 0), 1.5f);
+        if (elevated.ReferenceApproach || elevated.Target != new Vector3(0, 3, 0))
+            throw new InvalidOperationException("An X/Z-near reference bypassed its authored floor transition.");
+        var end = new Vector3(.1f, 0, 0);
+        var approach = NativeCapsuleNavigation.Intent(Vector3.Zero, [end], new(2, 0, 0), 1.5f);
+        if (!approach.ReferenceApproach || approach.Target != new Vector3(2, 0, 0) || approach.ArrivalRadius != 1.5f || approach.Corridor.Count != 0)
+            throw new InvalidOperationException("An already reached source endpoint lost its separate native reference region.");
+        var loop = NativeCapsuleNavigation.Intent(Vector3.Zero, [new(0, 0, 2), Vector3.Zero], new(1, 0, 0), 1, 8);
+        if (loop.ReferenceApproach)
+            throw new InvalidOperationException("Endpoint proximity erased an untraversed source path.");
+        var source = new FalloutFormKey("Fixture.esm", 3);
+        if (!new NativeRouteDoorStatus(source).RequiresInteraction ||
+            !new NativeRouteDoorStatus(source, Open: true, Moving: true).RequiresInteraction ||
+            !new NativeRouteDoorStatus(source, Open: true, Pending: true).RequiresInteraction ||
+            new NativeRouteDoorStatus(source, Open: true).RequiresInteraction)
+            throw new InvalidOperationException("Door-state admission treated a settled open frame as a closed leaf.");
+        var contact = new NativeNavigationContact(31, 2, Vector3.One, Vector3.Left, Vector3.Zero, Vector3.Right);
+        var probe = new NativeNavigationProbe(contact, _ => source);
+        probe.Reject("step-headroom", Vector3.Zero, Vector3.Right, contact); probe.RejectGuide();
+        probe.Reject("root-floor-missing", Vector3.Back, Vector3.Forward, null);
+        if (probe.GuideRejection?.Contact?.Reference != source || probe.GuideRejection.Contact.Shape != 2 ||
+            probe.LastRejection?.Reason != "root-floor-missing" || probe.LastRejection.Contact is not null ||
+            !probe.DescribeFailure().Contains("step-headroom", StringComparison.Ordinal))
+            throw new InvalidOperationException("A subsequent floor-only rejection erased the exact source-guided contact.");
+        var limited = new NativeNavigationProbe(null);
+        for (var index = 0; index < 19; index++) limited.Reject("fixture-" + index, Vector3.Zero, Vector3.One, null);
+        limited.Reject("fixture-0", Vector3.Zero, Vector3.One, null);
+        if (limited.OmittedRejectionObservations != 3 ||
+            !limited.DescribeFailure().Contains("omittedRejectionObservations=3", StringComparison.Ordinal))
+            throw new InvalidOperationException("Bounded native rejection history silently dropped distinct failure observations.");
+        Console.WriteLine("OPENNV_NAVIGATION_INTENT_PASS foldedSource=true separateReferenceRegion=true stackedFloors=true openFrameAdmission=true exactNativeRejection=true");
     }
 
     private static void CheckProjectionBounds()

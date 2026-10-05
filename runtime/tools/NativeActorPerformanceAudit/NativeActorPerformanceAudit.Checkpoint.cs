@@ -29,6 +29,8 @@ public partial class NativeActorPerformanceAudit
             var globals = FalloutGlobalState.Read(records);
             var clock = new FalloutGameTime(globals, FalloutGameTimeBindings.Read(records),
                 FalloutCalendar.Read(Path.Combine(game, "FalloutNV.exe")));
+            if (expected == "selection") world.UnloadedPackages = new(records, world, quests, clock, globals,
+                (_, _) => throw new InvalidDataException("Failed selection unload ran package results."), () => 1);
             var cell = FalloutCellSceneReader.Read(records, world.Get(caller).Cell); world.LoadCell(cell);
             var rootReference = caller; var enabled = true; var parents = new HashSet<FalloutFormKey>();
             while (world.Get(rootReference).EnableParent is { } parent)
@@ -66,6 +68,11 @@ public partial class NativeActorPerformanceAudit
             }
             var warm = Assemble(world);
             using var warmLifetime = new PackageFixtureLifetime(warm);
+            if (expected == "quest-running")
+            {
+                NativePackageQuestRunning(warm, records, world, quests, caller, content, cell, units, fixture);
+                return;
+            }
             warm._Process(.125);
             if (expected == "dialogue")
             {
@@ -99,10 +106,97 @@ public partial class NativeActorPerformanceAudit
                     JsonSerializer.Serialize(cold.Get(caller).Capture()) != JsonSerializer.Serialize(world.Get(caller).Capture()))
                     throw new InvalidDataException("Native cold NPC continuation diverged after identical clock advancement.");
             }
+            if (expected == "selection")
+            {
+                var beforeUnload = world.Capture();
+                var failureBeforeUnload = beforeUnload.Single(value => value.Reference == caller).SelectionFailure!;
+                fixture.RemoveChild(warm); world.UnloadCell(cell.Cell.FormKey);
+                var retained = world.Get(caller);
+                if (retained.CanCaptureSelectionFailure is not null || retained.CaptureSelectionFailure is not null ||
+                    retained.QueryCurrentPackage is not null || retained.CapturePackageAssignment is not null ||
+                    retained.SelectionFailure is null || retained.ProcedureCaptureBlocker != failureBeforeUnload.Error ||
+                    world.IsResident(caller) || world.PendingProcedureCaptureCount != 0 ||
+                    world.CurrentPackage(caller) is not null)
+                    throw new InvalidDataException("Native selection unload lost its retained fault or left a live capture delegate.");
+                var afterUnload = world.Capture();
+                if (JsonSerializer.Serialize(afterUnload) != JsonSerializer.Serialize(beforeUnload))
+                    throw new InvalidDataException("Native selection unload changed source, pose, clock, random, blink or consumed retirement.");
+                foreach (var invalid in new[] { failureBeforeUnload with { Sha256 = new string('0', 64) },
+                    failureBeforeUnload with { Condition = FalloutCondition.Read(records.GetEffective(failureBeforeUnload.Candidate)).Count } })
+                {
+                    using var rejected = new FalloutReferenceWorld(records);
+                    var corrupted = afterUnload.Select(value => value.Reference == caller ? value with { SelectionFailure = invalid } : value).ToArray();
+                    var refused = false;
+                    try { rejected.Restore(corrupted); }
+                    catch (InvalidDataException) { refused = true; }
+                    if (!refused || rejected.InstanceCount != 0)
+                        throw new InvalidDataException("Native unloaded failed-selection source drift was not rejected atomically.");
+                }
+                using var unloadedCold = new FalloutReferenceWorld(records);
+                unloadedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(afterUnload))!);
+                unloadedCold.LoadCell(cell);
+                var afterUnloadActor = Assemble(unloadedCold);
+                using var afterUnloadLifetime = new PackageFixtureLifetime(afterUnloadActor);
+                if (afterUnloadActor.Transform != warm.Transform || afterUnloadActor.AiError != warm.AiError ||
+                    afterUnloadActor.CurrentPackage is not null ||
+                    JsonSerializer.Serialize(unloadedCold.Capture()) != JsonSerializer.Serialize(afterUnload))
+                    throw new InvalidDataException("Cold native attachment changed the unloaded failed selection.");
+                GD.Print($"OPENNV_NATIVE_SELECTION_UNLOAD_CHECKPOINT_PASS actor={caller} delegateRetired=true " +
+                    "unloadedCapture=true exactSourcePoseClockFaultRandom=true nativeCold=true sourceDriftAtomic=true packageResultsNotReplayed=true");
+            }
             GD.Print($"OPENNV_NATIVE_NPC_CHECKPOINT_PASS actor={caller} owner={expected} phase={warm.SittingState} " +
                 "nativeCold=true exactPose=true clock=true randomAndBlink=true sourceEffectsNotReplayed=true " +
                 "fixture=isolated-owned-records campaignAndParity=unverified recording=false");
         }
         finally { if (GodotObject.IsInstanceValid(fixture)) fixture.Free(); }
+    }
+
+    private static void NativePackageQuestRunning(RuntimeNativeNpc actor, FalloutPluginStack records,
+        FalloutReferenceWorld world, FalloutQuestState quests, FalloutFormKey caller,
+        RuntimeLiveContentSource content, FalloutCellScene cell, float units, Node3D fixture)
+    {
+        var sourceActor = world.Get(caller);
+        var packageOwner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(sourceActor.Base), 32, sourceActor.Templates);
+        var conditions = packageOwner.ReadSubrecords().Where(field => field.Signature == "PKID")
+            .Select(field => records.GetEffective(packageOwner.Plugin.AdjustFormId(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span))))
+            .SelectMany(FalloutCondition.Read).Where(condition => condition.Function == 56 && condition.RunOn == 0).ToArray();
+        if (conditions.Length == 0) throw new InvalidDataException("Selected source actor has no admitted quest-running package condition.");
+        var creatureReference = cell.References.FirstOrDefault(reference => records.GetEffective(reference.Base).Signature == "CREA") ??
+            throw new InvalidDataException("Selected source cell has no creature for the native condition-owner check.");
+        var creatureState = world.Get(creatureReference.FormKey);
+        world.InitializeActorTemplates(creatureReference.FormKey, 1, FalloutGlobalState.Read(records));
+        var creature = RuntimeNativeCreature.Create(records, content, creatureReference, creatureState, units);
+        try
+        {
+            creature.SetProcess(false); creature.SetPhysicsProcess(false); fixture.AddChild(creature);
+            creature.ConfigureAi(records, quests, world);
+            foreach (var condition in conditions)
+            {
+                var original = quests.Capture().SingleOrDefault(value => value.Quest == condition.FormArgument1)?.Running ??
+                    (quests.Evaluate(condition) == 1);
+                foreach (var running in new[] { false, true, false })
+                {
+                    quests.SetRunning(condition.FormArgument1, running);
+                    if (actor.EvaluateAiCondition(condition) != (running ? 1 : 0) ||
+                        creature.PackageCondition(condition) != (running ? 1 : 0))
+                        throw new InvalidDataException("Native package condition ignored its actual quest-running owner.");
+                }
+                foreach (var invalid in new[] { condition with { Function = 45 }, condition with { RunOn = 1, Reference = 0 },
+                    condition with { Argument1 = condition.Owner.RawFormId } })
+                {
+                    static void Refuse(Func<float> query)
+                    {
+                        try { _ = query(); }
+                        catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }
+                        throw new InvalidDataException("Native package quest query admitted an unrelated function, scope or record type.");
+                    }
+                    Refuse(() => actor.EvaluateAiCondition(invalid)); Refuse(() => creature.PackageCondition(invalid));
+                }
+                quests.SetRunning(condition.FormArgument1, original);
+                GD.Print($"OPENNV_NATIVE_PACKAGE_QUEST_RUNNING_PASS actor={caller} source={condition.Owner.FormKey} " +
+                    $"quest={condition.FormArgument1} npcAndCreature=true liveStartStop=true wrongTypeScopeAndUnrelatedFunctionRefused=true gameplay=false recording=false");
+            }
+        }
+        finally { creature.Free(); }
     }
 }

@@ -311,6 +311,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal int ScriptDefinitionCount => _definitions.Count;
     internal IEnumerable<FalloutReferenceInstance> ResidentInstances => _residentReferences.Keys.Select(key => _instances[key]);
     internal bool IsResident(FalloutFormKey reference) => _residentReferences.ContainsKey(reference);
+    internal FalloutReferenceInstance Retained(FalloutFormKey reference)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _instances.TryGetValue(reference, out var instance) ? instance :
+            throw new InvalidOperationException($"Reference {reference} has no retained world instance.");
+    }
     internal bool CanActivate(FalloutFormKey reference) => IsEnabled(reference) && Get(reference).Templates?.Absent != true &&
         Get(reference) is { Destroyed: false, DeletePending: false, Deleted: false };
 

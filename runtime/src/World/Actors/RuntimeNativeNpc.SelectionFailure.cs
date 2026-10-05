@@ -72,7 +72,11 @@ internal partial class RuntimeNativeNpc
     private void RetainSelectionFailure()
     {
         if (_aiReferenceState is not { } state) return;
-        if (CanCaptureSelectionFailure()) state.SelectionFailure = CaptureSelectionFailure();
+        if (CanCaptureSelectionFailure())
+        {
+            state.SelectionFailure = CaptureSelectionFailure();
+            state.ProcedureCaptureBlocker = state.SelectionFailure.Error;
+        }
         if (ReferenceEquals(state.CanCaptureSelectionFailure, _selectionFailureReady)) state.CanCaptureSelectionFailure = null;
         if (ReferenceEquals(state.CaptureSelectionFailure, _selectionFailureCapture)) state.CaptureSelectionFailure = null;
     }

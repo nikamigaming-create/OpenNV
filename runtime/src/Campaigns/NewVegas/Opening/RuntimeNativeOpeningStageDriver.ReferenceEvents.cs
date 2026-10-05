@@ -22,6 +22,13 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal void ExecutePackageEvent(FalloutPackageEvent program, FalloutFormKey actor) =>
         (_resultScripts ?? throw new InvalidOperationException("Package results have no shared script owner."))
             .ExecutePackageEvent(program, actor);
+    internal void DispatchSpeechCompletion(FalloutSpeechCompletionReceipt receipt)
+    {
+        var result = (_resultScripts ?? throw new InvalidOperationException("Speech completion has no shared script owner."))
+            .DispatchSpeechCompletion(receipt);
+        if (result.Error is { } error)
+            throw new NotSupportedException($"Source SayToDone actor {receipt.Speaker} failed: {error}");
+    }
     internal OpenNV.Runtime.Gameplay.State.FalloutPipBoyState PipBoy => _pipBoy ?? throw new InvalidOperationException("Pip-Boy state is absent.");
     internal FalloutQuestState Quests => _quests;
     internal IReadOnlyList<FalloutNativeSkillIdentity> Skills => _tagSkillContract.Skills;

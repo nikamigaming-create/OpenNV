@@ -15,6 +15,7 @@ internal static class QuestUpdateContracts
         {
             File.WriteAllBytes(Path.Combine(directory, "Updates.esm"), Fixture());
             using var records = FalloutPluginStack.Load(directory, ["Updates.esm"]);
+            CheckPackageQuestRunning(records);
             CheckProgress(records);
             CheckObjectives(records);
             CheckDispatch(records);
@@ -22,6 +23,27 @@ internal static class QuestUpdateContracts
             Console.WriteLine("OPENNV_QUEST_UPDATE_CONTRACT_PASS allDeclared=true displayRetained=true questRetained=true sourceOrder=true completedQuestSilent=true deferredCancellation=true ordinaryMessagesRetained=true loadingQueueRetained=true coldRequest=true fallback=true invalidPrefix=true parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
+    }
+
+    private static void CheckPackageQuestRunning(FalloutPluginStack records)
+    {
+        var quests = new FalloutQuestState(records);
+        var condition = FalloutCondition.Read(records.GetEffective(Key(0x400))).Single();
+        Require(FalloutAiPackages.QuestRunning(condition, quests) == 1,
+            "Package condition ignored the source start-game-enabled quest flag.");
+        quests.SetRunning(Key(0x100), false);
+        Require(FalloutAiPackages.QuestRunning(condition, quests) == 0,
+            "Package query returned stale running state after StopQuest.");
+        quests.SetRunning(Key(0x100), true);
+        Require(FalloutAiPackages.QuestRunning(condition, quests) == 1,
+            "Package query returned stale running state after StartQuest.");
+        var cold = new FalloutQuestState(records); cold.Restore(quests.Capture());
+        Require(FalloutAiPackages.QuestRunning(condition, cold) == 1,
+            "Cold package query lost the saved quest-running owner.");
+        Reject(() => FalloutAiPackages.QuestRunning(condition with { RunOn = 2, Reference = 0x300 }, quests));
+        Reject(() => FalloutAiPackages.QuestRunning(condition with { Argument1 = 0x300 }, quests));
+        Reject(() => FalloutAiPackages.QuestRunning(condition with { Function = 45 }, quests));
+        Console.WriteLine("OPENNV_PACKAGE_QUEST_RUNNING_CONTRACT_PASS fullReader=true sourceFlag=true liveStartStop=true cold=true wrongTypeScopeFunctionRefused=true nativeRouting=separate-audit");
     }
 
     private static void CheckProgress(FalloutPluginStack records)
@@ -163,11 +185,14 @@ internal static class QuestUpdateContracts
     {
         var header = new byte[20]; header[16] = 1; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(12), 1);
         var local = new byte[24]; BinaryPrimitives.WriteUInt32LittleEndian(local, 1);
+        var runningCondition = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(runningCondition.AsSpan(8), 56);
+        BinaryPrimitives.WriteUInt32LittleEndian(runningCondition.AsSpan(12), 0x100);
         var objectives = new uint[] { 30, 10, 20, 40 }.SelectMany(index =>
             Join(Field("QOBJ", BitConverter.GetBytes(index)), Field("NNAM", Text("Synthetic objective " + index)))).ToArray();
         return Join(Record("TES4", 0, Field("HEDR", new byte[12])),
             Record("QUST", 0x100, Field("EDID", Text("UpdatesQuest")), Field("DATA", [1, 0]), Field("SCRI", BitConverter.GetBytes(0x200u)), objectives),
             Record("QUST", 0x101, Field("DATA", [0, 0])), Record("ACTI", 0x300, Field("EDID", Text("WrongType"))),
+            Record("PACK", 0x400, Field("CTDA", runningCondition)),
             Record("SCPT", 0x200, Field("SCHR", header), Field("SLSD", local), Field("SCVR", Text("trace")),
                 Field("SCRO", BitConverter.GetBytes(0x100u)), Field("SCRO", BitConverter.GetBytes(0x300u)),
                 Field("SCTX", Text("short trace\nbegin GameMode\nCompleteAllObjectives UpdatesQuest\nKQU\nset trace to 2\nend"))));

@@ -487,6 +487,7 @@ internal partial class RuntimeNativeNpc
         25 => _travelActive || Combat?.PackageMoving == true ? 1 : 0,
         53 => (float)(_aiWorld ?? throw new NotSupportedException("AI script-variable query has no shared reference owner."))
             .ReadVariable(_questState!, condition.FormArgument1, condition.Argument2),
+        56 => FalloutAiPackages.QuestRunning(condition, _questState!),
         58 or 59 or 79 or 546 => _questState!.Evaluate(condition),
         63 => Activity.Attacked ? 1 : 0,
         69 => Appearance.Race == condition.FormArgument1 ? 1 : 0,

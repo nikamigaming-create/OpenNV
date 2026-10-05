@@ -49,7 +49,10 @@ public partial class NativeLocomotionAudit
             var before = body.GlobalTransform;
             var target = kind == "gap" ? new Vector3(0, before.Origin.Y, -2) :
                 kind == "steps" ? new Vector3(2, .4f, 0) : new Vector3(2, before.Origin.Y, -3.1f);
-            var route = NativeCapsuleNavigation.Find(body, before.Origin, target, .4f, .3f, _ => true);
+            var probe = new NativeNavigationProbe(NativeCapsuleNavigation.FirstCorridorContact(body, before.Origin, [target]));
+            IReadOnlyList<Vector3> route;
+            try { route = NativeCapsuleNavigation.Find(body, before.Origin, target, .4f, .3f, _ => true, probe: probe); }
+            catch (InvalidOperationException error) { throw new InvalidOperationException($"Smoothing fixture={kind}: {error.Message}", error); }
             if (body.GlobalTransform != before || kind == "open" && route.Count != 1 ||
                 kind == "gap" && !route.Any(point => point.X > 1.8f) ||
                 kind == "steps" && (route.Count < 3 || !route.Any(point => point.Y > .1f && point.Y < .3f)))

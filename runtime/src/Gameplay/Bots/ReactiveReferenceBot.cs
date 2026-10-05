@@ -12,7 +12,10 @@ internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, 
 
 internal sealed record BotNavigationRoute(IReadOnlyList<Vector3> Waypoints, Vector3 RequestedEndpoint,
     Vector3 ProjectedEndpoint, bool ReachesProjectedEndpoint, string? SourceIdentity = null, float ProjectionRadiusMeters = 0,
-    string? RequiredDoor = null);
+    string? RequiredDoor = null, BotNavigationRefinement? Refinement = null);
+
+internal sealed record BotNavigationRefinement(string Scope, Vector3 Target, float ArrivalRadiusMeters,
+    string SourceSha256);
 
 // Goals use source references. Travel may approach an authored exterior object
 // before it streams in, but arrival still requires its live presentation.
@@ -81,6 +84,13 @@ internal sealed class ReactiveReferenceBot
             segmentEndpoint = Coordinates(navigation.Waypoints[^1]),
             navigation.ReachesProjectedEndpoint,
             navigation.ProjectionRadiusMeters,
+            refinement = navigation.Refinement is { } refinement ? new
+            {
+                refinement.Scope,
+                target = Coordinates(refinement.Target),
+                refinement.ArrivalRadiusMeters,
+                refinement.SourceSha256
+            } : null,
             projectionDistanceMeters = Vector3.Distance(navigation.RequestedEndpoint, navigation.ProjectedEndpoint),
             projectedEndpointDistanceMeters = _observation is { } current ? Vector3.Distance(current.Position, navigation.ProjectedEndpoint) : (float?)null,
             segmentEndpointDistanceMeters = _observation is { } position ? FlatDistance(position.Position, navigation.Waypoints[^1]) : (float?)null,
