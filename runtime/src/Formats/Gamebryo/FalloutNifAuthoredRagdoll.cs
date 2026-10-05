@@ -4,6 +4,20 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal static class FalloutNifAuthoredRagdoll
 {
+    // Authored XRGB rotates the first ordered child of the actor's source
+    // scene root. Neither a bone name nor the placed reference selects it.
+    internal static FalloutNifNode BindAccumulationRoot(FalloutNifFile skeleton)
+    {
+        if (skeleton.Roots.Count != 1 || skeleton.Roots[0] < 0 ||
+            skeleton.ReadObject(skeleton.Roots[0]) is not FalloutNifNode root)
+            throw new NotSupportedException("Authored XRGB has no unique source scene root.");
+        if (root.Children.Length == 0 || root.Children[0] < 0)
+            throw new InvalidDataException("Authored XRGB scene root has no first ordered child.");
+        if (skeleton.ReadObject(root.Children[0]) is not FalloutNifNode child)
+            throw new NotSupportedException("Authored XRGB first ordered child is not a skeleton node.");
+        return child;
+    }
+
     internal static IReadOnlyList<(string Bone, FalloutAuthoredRagdollBone Pose)> Bind(
         FalloutNifFile skeleton, FalloutAuthoredRagdoll authored)
     {

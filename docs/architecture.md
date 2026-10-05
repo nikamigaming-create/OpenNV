@@ -49,6 +49,9 @@ and source attack alternatives separately from one persistent action selection.
 [Stopped actor and idle continuation](stopped-actor-and-idle-continuation.md)
 composes source faults with independent physical owners and retains uncovered
 skeletal components of an occupied collection idle.
+[Source activators and authored corpse poses](source-activators-and-authored-corpses.md)
+use the original action reference and finite motion clock, shader-owned texture
+binding and ordered source accumulation-root/body poses with cold restoration.
 
 [Actor death history](actor-death-counts.md) retains cumulative source-base counts
 through successful shared death transitions and cold saves. Source result-entry

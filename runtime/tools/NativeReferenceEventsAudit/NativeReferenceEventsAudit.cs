@@ -19,6 +19,14 @@ public partial class NativeReferenceEventsAudit : Node
             {
                 HitEvents(); GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--activator-control", var activatorRoot, var activatorMod, var activatorModRoot,
+                var controlReference, var targetReference, .. var activatorDependencies])
+            {
+                ExerciseOwnedActivatorControl(activatorRoot, activatorMod, activatorModRoot,
+                    controlReference, targetReference, activatorDependencies);
+                GetTree().Quit();
+                return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--door-state", var doorRoot, var doorMod, var doorModRoot,
                 var doorReference, var doorQuest, var doorStage, .. var doorDependencies])
             {
@@ -45,6 +53,10 @@ public partial class NativeReferenceEventsAudit : Node
             using var world = new FalloutReferenceWorld(records);
             var cell = FalloutCellSceneReader.Read(records, Key(0x800));
             world.LoadCell(cell);
+            if (OS.GetCmdlineUserArgs() is ["--animated-activators"])
+            {
+                AnimatedActivators(records); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--disabled-speech"])
             {
                 DisabledSpeech(records);
@@ -160,6 +172,7 @@ public partial class NativeReferenceEventsAudit : Node
             PlayerMoves(records);
             SaveDeferral();
             DoorActivation(records);
+            AnimatedActivators(records);
             DisabledSpeech(records);
             HitEvents();
             GD.Print("OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true primitiveHalfExtents=true axisConversion=true modelLess=true leave=true reentry=true retainedContacts=true retainedOnLoad=true activation=true faultReentry=true faultActivation=true localState=true delayedDeath=true killerFilter=true questDeathResult=true livePerkParameters=true parity=unverified");
@@ -264,7 +277,7 @@ public partial class NativeReferenceEventsAudit : Node
         var children = Reference(0x900, Field("XPRM", primitive), Field("XTRI", BitConverter.GetBytes(12u)))
             .Concat(Reference(0x901)).Concat(Record("ACRE", 0x902,
                 Field("NAME", BitConverter.GetBytes(0x701u)), Field("DATA", new byte[24])))
-            .Concat(DoorActivationReferences()).Concat(DisabledSpeechReferences()).ToArray();
+            .Concat(DoorActivationReferences()).Concat(AnimatedActivatorReferences()).Concat(DisabledSpeechReferences()).ToArray();
         var group = new byte[24 + children.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
@@ -284,6 +297,7 @@ public partial class NativeReferenceEventsAudit : Node
             .Concat(DeathFixture())
             .Concat(PlayerMoveFixture())
             .Concat(DoorActivationFixture())
+            .Concat(AnimatedActivatorRecords())
             .Concat(Record("DIAL", 0x740, Field("DATA", [0])))
             .Concat(Record("PERK", 0x705, Field("EDID", Encoding.ASCII.GetBytes("NativePerk\0")),
                 Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 1]), Field("EPFT", [1]),

@@ -161,7 +161,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private void PrepareDeath()
     {
         if (_ragdoll is not null) return;
-        var authored = Dead && _state.Ragdoll is null && FalloutActorHealthSource.StartsDead(_records, _state.Base, _state.Templates)
+        var authored = Dead && FalloutActorHealthSource.StartsDead(_records, _state.Base, _state.Templates)
             ? FalloutAuthoredRagdoll.Read(_records.GetEffective(_state.Reference)) : null;
         _ragdoll = RuntimeNativeActorRagdoll.Prepare(_actor, _skeleton, _state, _content, _skeletonPath, _layer, _mask,
             _world.BodyParts(_state.Reference).Parts, authored);

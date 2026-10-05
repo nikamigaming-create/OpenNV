@@ -139,7 +139,11 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             if (joints.Any(joint => !result._bySource.ContainsKey(joint.Header.EntityA) || !result._bySource.ContainsKey(joint.Header.EntityB)))
                 throw new InvalidDataException("Ragdoll joint leaves the actor's body graph.");
             result._bodies.Sort((left, right) => left.Bone.CompareTo(right.Bone));
-            if (authored is not null) ApplyAuthoredPose(skeleton, authored);
+            result.ValidateSavedSource();
+            // XRGB is the nonphysical accumulation frame. Restore that same
+            // source frame before publishing saved world-body poses; XRGD
+            // local body transforms belong only to initial authored assembly.
+            if (authored is not null) ApplyAuthoredPose(skeleton, authored, state.Ragdoll is null);
             actor.AddChild(result);
             if (!result.IsInsideTree()) throw new InvalidOperationException("Death rig did not enter the actor's live scene.");
             foreach (var body in result._bodies)
@@ -154,18 +158,40 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
         catch { result.Free(); throw; }
     }
 
-    private static void ApplyAuthoredPose(RuntimeNativeNifSkeleton skeleton, FalloutAuthoredRagdoll authored)
+    internal static void ApplyAuthoredPose(RuntimeNativeNifSkeleton skeleton, FalloutAuthoredRagdoll authored,
+        bool applyBodyPose = true)
     {
-        if (authored.BipedRotation is not null)
-            throw new NotSupportedException("Authored ragdoll XRGB accumulation-root rotation is not yet bound.");
-        var poses = FalloutNifAuthoredRagdoll.Bind(skeleton.Source, authored);
-        foreach (var (name, pose) in poses)
+        // Validate the complete source binding before publishing any component.
+        var poses = FalloutNifAuthoredRagdoll.Bind(skeleton.Source, authored).Select(value =>
         {
-            var bone = skeleton.BoneIndex(name);
-            skeleton.Node.SetBonePose(bone, new(
-                GamebryoCoordinate.ConvertReferenceEuler(new(pose.RotationRadians[0], pose.RotationRadians[1], pose.RotationRadians[2]),
-                    skeleton.Node.GetBoneRest(bone).Basis.Scale.X),
-                GamebryoCoordinate.ConvertVector(new(pose.Position[0], pose.Position[1], pose.Position[2])) * skeleton.UnitsToMetres));
+            var bone = skeleton.BoneIndex(value.Bone);
+            var pose = value.Pose;
+            var rotation = GamebryoCoordinate.ConvertReferenceEuler(
+                new(pose.RotationRadians[0], pose.RotationRadians[1], pose.RotationRadians[2]), 1).GetRotationQuaternion();
+            var position = GamebryoCoordinate.ConvertVector(new(pose.Position[0], pose.Position[1], pose.Position[2])) * skeleton.UnitsToMetres;
+            if (!position.IsFinite()) throw new InvalidDataException("Authored ragdoll position exceeds native units.");
+            return (Bone: bone, Position: position, Rotation: rotation);
+        }).ToArray();
+        (int Bone, Quaternion Rotation)? accumulation = null;
+        if (authored.BipedRotation is { } angles)
+        {
+            if (angles.Length != 3 || angles.Any(value => !float.IsFinite(value)))
+                throw new InvalidDataException("Authored XRGB requires three finite source angles.");
+            // The original source writer/apply boundary treats exact zero as
+            // absent. Preserve signed zero and the existing local components.
+            if (angles.Any(value => value != 0))
+            {
+                var source = FalloutNifAuthoredRagdoll.BindAccumulationRoot(skeleton.Source);
+                accumulation = (skeleton.BoneIndex(source.Name), GamebryoCoordinate.ConvertReferenceEuler(
+                    new(angles[0], angles[1], angles[2]), 1).GetRotationQuaternion());
+            }
+        }
+        if (accumulation is { } root) skeleton.Node.SetBonePoseRotation(root.Bone, root.Rotation);
+        if (!applyBodyPose) return;
+        foreach (var pose in poses)
+        {
+            skeleton.Node.SetBonePosePosition(pose.Bone, pose.Position);
+            skeleton.Node.SetBonePoseRotation(pose.Bone, pose.Rotation);
         }
     }
 
@@ -210,12 +236,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
         if (_active) return;
         if (_state.Injury?.Dead != true && !_state.KnockedDown) throw new InvalidOperationException("A living actor needs a knockdown owner to activate a ragdoll.");
         var saved = _state.Ragdoll;
-        if (saved is not null)
-        {
-            saved.Validate();
-            if (saved.SkeletonSha256 != _sourceHash || !saved.Bodies.Select(body => body.SourceBody).Order().SequenceEqual(_bySource.Keys.Order()))
-                throw new InvalidDataException("Saved ragdoll differs from its winning source skeleton.");
-        }
+        ValidateSavedSource();
         foreach (var body in _bodies)
         {
             var snapshot = saved?.Bodies.Single(value => value.SourceBody == body.Source);
@@ -229,12 +250,22 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
                 body.Node.Sleeping = snapshot.Sleeping;
             }
         }
-        var severed = _state.Injury!.SeveredParts ?? [];
-        if (!(saved?.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual(severed.Order()))
-            throw new InvalidDataException("Saved limb separation lacks its cut-time skin pose.");
         foreach (var cut in saved?.Cuts ?? []) Sever(cut.Part, cut);
         _active = true; _state.CaptureRagdoll = Capture;
         Publish();
+    }
+
+    private void ValidateSavedSource()
+    {
+        var saved = _state.Ragdoll;
+        if (saved is not null)
+        {
+            saved.Validate();
+            if (saved.SkeletonSha256 != _sourceHash || !saved.Bodies.Select(body => body.SourceBody).Order().SequenceEqual(_bySource.Keys.Order()))
+                throw new InvalidDataException("Saved ragdoll differs from its winning source skeleton.");
+        }
+        if (!(saved?.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual((_state.Injury?.SeveredParts ?? []).Order()))
+            throw new InvalidDataException("Saved limb separation lacks its cut-time skin pose.");
     }
 
     internal void RequireSeverable(byte type)

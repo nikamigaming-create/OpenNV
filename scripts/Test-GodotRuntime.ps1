@@ -124,6 +124,14 @@ if ($LASTEXITCODE -ne 0 -or $referenceText -match "(?m)^ERROR:" -or
 }
 Write-Output "OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true activation=true localState=true"
 
+$ragdollOutput = & $Godot --headless --path $runtime res://tools/NativeAuthoredRagdollAudit/NativeAuthoredRagdollAudit.tscn 2>&1
+$ragdollText = $ragdollOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $ragdollText -match "(?m)^ERROR:" -or
+    $ragdollText -notmatch "OPENNV_NATIVE_AUTHORED_RAGDOLL_PASS") {
+    throw "OpenNV native authored ragdoll binding failed:`n$ragdollText"
+}
+Write-Output "OPENNV_NATIVE_AUTHORED_RAGDOLL_PASS sourceFirstChild=true componentState=true"
+
 $locomotionOutput = & $Godot --headless --path $runtime res://tools/NativeLocomotionAudit/NativeLocomotionAudit.tscn 2>&1
 $locomotionText = $locomotionOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $locomotionText -match "(?m)^ERROR:" -or

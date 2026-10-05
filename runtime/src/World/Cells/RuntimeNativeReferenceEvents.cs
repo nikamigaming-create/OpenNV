@@ -246,7 +246,11 @@ internal partial class RuntimeNativeReferenceEvents : Node
             Player.ActivateFurniture(_records, _quests, binding.Reference, binding.Node.GlobalTransform, binding.Instance.Cell, _world);
             return;
         }
-        if (type == "ACTI") return; // Activators have no engine default action.
+        if (type == "ACTI")
+        {
+            DefaultActivateAnimatedActivator(binding, actor);
+            return;
+        }
         throw new NotSupportedException($"Default activation for {type} {reference} has no runtime interaction owner.");
     }
 

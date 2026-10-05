@@ -1236,7 +1236,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     host.Apply(new(FalloutReferenceEffectKind.DefaultActivate, source, target, actor));
                     break;
                 case "activate" when arguments.Count is 1 or 2:
-                    host.Apply(new(FalloutReferenceEffectKind.ScriptActivate, source, target, bindings.Reference(arguments[0]),
+                    host.Apply(new(FalloutReferenceEffectKind.ScriptActivate, source, target, Reference(arguments[0]),
                         Enable: arguments.Count == 2 && Boolean(arguments[1])));
                     break;
                 case "setstage" when parts.Length == 1 && arguments.Count == 2:

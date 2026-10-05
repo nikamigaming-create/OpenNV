@@ -7,6 +7,7 @@ public partial class NativeNifInstanceAudit
 {
     private static void ExerciseTextureAddressing()
     {
+        ExerciseNoLightingTextureOwner();
         var source = new FalloutNifNoLightingProperty(new(0, "BSShaderNoLightingProperty", 0, 0),
             "", [], -1, 1, 33, 0x82000000, 1, 1, 0, "", 1, 0, 1, 0);
         for (uint mode = 0; mode < 4; mode++)
