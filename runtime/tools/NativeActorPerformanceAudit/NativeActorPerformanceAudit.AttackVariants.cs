@@ -11,7 +11,8 @@ using OpenNV.Runtime.World.Cells;
 
 public partial class NativeActorPerformanceAudit
 {
-    private void OwnedAttackVariants(string game, string mod, string root, string checkpoint, string actorId, string[] dependencies)
+    private async Task OwnedAttackVariants(string game, string mod, string root, string checkpoint, string actorId, string[] dependencies,
+        bool routeLifecycle = false)
     {
         var fixture = new Node3D(); AddChild(fixture);
         var savedBytes = File.ReadAllBytes(checkpoint);
@@ -83,6 +84,11 @@ public partial class NativeActorPerformanceAudit
                 throw new InvalidDataException("Native attack preparation selected a KF or consumed a variant draw.");
             var paths = (IReadOnlyList<string>)pathsField.GetValue(actor.Combat)!;
             var clips = (Dictionary<string, NativeActorCombatAnimation>)clipsField.GetValue(actor.Combat)!;
+            if (routeLifecycle)
+            {
+                await OwnedRouteLifecycle(fixture, actor, world, records, content, saved, cell, globals, checkpoint, savedBytes);
+                return;
+            }
             // Restore the legal checkpoint history before applying an isolated
             // combat component clock. A source AI fault cannot admit a moving
             // attack/pursuit as a whole campaign save.

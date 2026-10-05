@@ -13,7 +13,14 @@ public partial class NativeActorPerformanceAudit : Node
             if (args is ["--owned-attack-variants", var attackGame, var attackMod, var attackRoot,
                 var attackCheckpoint, var attackActor, .. var attackDependencies])
             {
-                OwnedAttackVariants(attackGame, attackMod, attackRoot, attackCheckpoint, attackActor, attackDependencies);
+                await OwnedAttackVariants(attackGame, attackMod, attackRoot, attackCheckpoint, attackActor, attackDependencies);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--owned-route-lifecycle", var routeGame, var routeMod, var routeRoot,
+                var routeCheckpoint, var routeActor, .. var routeDependencies])
+            {
+                await OwnedAttackVariants(routeGame, routeMod, routeRoot, routeCheckpoint, routeActor, routeDependencies,
+                    routeLifecycle: true);
                 GetTree().Quit(); return;
             }
             if (args is ["--saved-stopped-corpse", var corpseGame, var corpseMod, var corpseRoot,

@@ -67,6 +67,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void EndEngagement()
     {
+        RetireUnusedPursuitSearch();
         CaptureEngagement();
         _state.Engagement = null;
         Activity.SetCombat(false); Activity.SetAlerted(false); Activity.SetWeaponDrawn(false);

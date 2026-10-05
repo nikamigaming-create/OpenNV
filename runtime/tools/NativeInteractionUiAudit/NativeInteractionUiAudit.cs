@@ -11,6 +11,12 @@ public partial class NativeInteractionUiAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-terminal-ui", ..])
+            {
+                await OwnedTerminalMenu(args);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length is not (2 or 3)) throw new ArgumentException("Expected owned root, CELL editor ID, and optional diagnostic PNG path.");
             var root = args[0]; var cellId = args[1];
             RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);

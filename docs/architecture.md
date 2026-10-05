@@ -34,6 +34,11 @@ capsule support for local movement. Typed finished-speech receipts dispatch thro
 the persistent source-script owner when a speaker's presentation cell unloads.
 Ordinary reference events retain their residency boundary.
 
+[Source terminal menus](source-terminal-menus.md) retain placed callers, original
+entry scope and consumed result receipts through ordinary menu presentation.
+Access uses shared locks/inventory; successful settled effects share existing
+saves while active/failed menu continuation remains explicitly unowned.
+
 [NIF sequence registration](source-nif-sequence-registration.md) retains every
 managed source block separately from its ordered last-exact-name lookup. Shared
 elapsed-time boundaries preserve finite text keys and cold animation suffixes.

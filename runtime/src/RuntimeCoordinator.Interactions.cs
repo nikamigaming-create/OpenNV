@@ -134,7 +134,7 @@ public partial class RuntimeCoordinator
         var player = actor == _nativePluginStack!.RuntimeFormKey(0x14);
         if (!player && (type != "DOOR" || reference.Teleport is not null || world.GetLocked(reference.FormKey) != 0))
             throw new NotSupportedException($"Default interaction by {actor} requires an unlocked ordinary door.");
-        if (player && type is "DOOR" or "CONT" && !world.UnlockWithKey(reference.FormKey, _nativeInventory))
+        if (player && type is "DOOR" or "CONT" or "TERM" && !world.UnlockWithKey(reference.FormKey, _nativeInventory))
         {
             GD.Print($"OPENNV_NATIVE_LOCKED reference={reference.FormKey} level={world.Lock(reference.FormKey)!.Level}");
             return;
@@ -144,6 +144,11 @@ public partial class RuntimeCoordinator
             if (node?.GetChildren().OfType<RuntimeNativeDoorPortal>().SingleOrDefault() is { } portal) portal.Activate();
             else (node?.GetChildren().OfType<RuntimeNativeDoorMotion>().SingleOrDefault() ??
                 throw new NotSupportedException("Door has no source animation owner.")).Activate();
+            return;
+        }
+        if (type == "TERM")
+        {
+            OpenNativeTerminal(reference);
             return;
         }
         if (type == "CONT" || type is "NPC_" or "CREA" && world.IsDead(reference.FormKey))

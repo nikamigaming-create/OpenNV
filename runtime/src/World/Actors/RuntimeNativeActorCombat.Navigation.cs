@@ -19,6 +19,8 @@ internal sealed partial class RuntimeNativeActorCombat
     private float _routeArrivalRadius;
     private int _routeRefinements, _routeRefinementRequests;
     private string? _coarseRouteError;
+    private NativeNavigationIntent? _routeIntent;
+    private int _retiredPursuitSearches;
 
     private Vector3? PursuitTarget(Vector3 target, double delta, float stoppingDistance)
     {
@@ -64,31 +66,19 @@ internal sealed partial class RuntimeNativeActorCombat
             {
                 var coarse = _context!.Route(_actor.GlobalPosition, target);
                 if (coarse.Length == 0) throw new InvalidOperationException("No source navigation corridor.");
-                var length = _actor.GlobalPosition.DistanceTo(coarse[0]);
-                for (var index = 1; index < coarse.Length; index++) length += coarse[index - 1].DistanceTo(coarse[index]);
-                // Refine the source corridor up to its next bounded segment.
-                // Its final segment accepts any supported point within the
-                // source stopping radius, independently of target collision.
-                var approach = Math.Clamp(length, _radius * .5f, 8);
-                // NAVM portal centres can make a nearby goal's polyline long.
-                // Within the same bounded local query, refine the actual
-                // projected goal rather than demand an occupied portal centre.
-                // A bounded segment can already reach the source arrival
-                // region even when its centre is just beyond the segment.
-                // Do not replace that region with an occupied portal centre.
-                var (end, resume) = _actor.GlobalPosition.DistanceTo(coarse[^1]) <= 8 + stoppingDistance ? (coarse[^1], coarse.Length) :
-                    NativeCapsuleNavigation.CorridorPrefix(_actor.GlobalPosition, coarse, approach);
-                _routeEnd = end;
-                _routeArrivalRadius = resume == coarse.Length ? stoppingDistance : 0;
+                var intent = _routeIntent = NativeCapsuleNavigation.Intent(_actor.GlobalPosition, coarse, target, stoppingDistance);
+                _routeEnd = intent.Target;
+                _routeArrivalRadius = intent.ArrivalRadius;
                 _routeSpacing = Math.Max(.3f, _radius * 2);
                 _routeRefinements = 0;
                 _coarseRouteError = null;
-                var prefix = coarse.Take(resume).Append(end).ToArray();
+                IReadOnlyList<Vector3> prefix = intent.ReferenceApproach ? [intent.Target] : intent.Corridor;
                 _routeProbe = new(NativeCapsuleNavigation.FirstCorridorContact(_mover, _actor.GlobalPosition, prefix), _context.CollisionReference);
-                // The source corridor carries intent; the actor's own complete
-                // capsule, resident collision and floor rules supply clearance.
-                _routeSearch = NativeCapsuleNavigation.Search(_mover, _actor.GlobalPosition, end,
-                    _context.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius).GetEnumerator();
+                // NAVM supplies bounded intent; the complete actor capsule and
+                // ordinary support/residency queries validate every guide edge.
+                _routeSearch = NativeCapsuleNavigation.Search(_mover, _actor.GlobalPosition, intent.Target,
+                    _context.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius,
+                    intent.Corridor).GetEnumerator();
                 _routeClock = .5;
             }
             catch (InvalidOperationException error)
@@ -107,6 +97,15 @@ internal sealed partial class RuntimeNativeActorCombat
         return _pursuitCursor < _pursuitPath.Length ? _pursuitPath[_pursuitCursor] : null;
     }
 
+    // An iterator with no movement intent is an unused native query, not an
+    // outstanding gameplay event. Retain its completed failure and any door
+    // obligation; never retire a requested pursuit merely because it is waiting.
+    private void RetireUnusedPursuitSearch()
+    {
+        if (_routeSearch is null) return;
+        _routeSearch.Dispose(); _routeSearch = null;
+        _retiredPursuitSearches++;
+    }
     private void AdvanceRouteSearch()
     {
         var started = Stopwatch.GetTimestamp();
@@ -136,7 +135,8 @@ internal sealed partial class RuntimeNativeActorCombat
                 _routeRefinements++;
                 _routeRefinementRequests++;
                 _routeSearch = NativeCapsuleNavigation.Search(_mover!, _actor.GlobalPosition, _routeEnd,
-                    _context!.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius).GetEnumerator();
+                    _context!.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius,
+                    _routeIntent!.Corridor).GetEnumerator();
                 return;
             }
             BeginDoorNavigation();

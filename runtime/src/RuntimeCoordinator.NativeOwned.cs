@@ -93,6 +93,8 @@ public partial class RuntimeCoordinator
                 actorOverrides = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.CaptureActorOverrides() : null
             },
             ui = _nativeUi?.State,
+            terminal = _nativeTerminalMenu?.Observation,
+            terminalSessions = _nativeOpeningStageDriver?.TerminalState,
             bootstrap = _nativeBootstrap?.State,
             loading = _nativeLoadingScreens?.State,
             loadingFeedback = _loadingScreen?.State ?? _nativeLoadingProgress?.State,

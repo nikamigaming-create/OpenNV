@@ -109,6 +109,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var reach = _attackRange + (Ranged ? 0 : _radius + TargetRadius(player));
         var visible = CanSeeTarget(player);
         Vector3? destination = null;
+        var requestedPursuit = false;
         if (state.Action is "pursue" or "idle")
         {
             var direction = offset; direction.Y = 0;
@@ -116,6 +117,7 @@ internal sealed partial class RuntimeNativeActorCombat
             var action = distance > reach || !visible ? "pursue" : facing ? "attack" : "idle";
             if (action == "pursue")
             {
+                requestedPursuit = true;
                 destination = PursuitTarget(TargetPosition(player), delta, Ranged ? _radius * 2 + TargetRadius(player) : reach);
                 if (destination is null) action = "idle";
             }
@@ -123,6 +125,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 throw new NotSupportedException("Actor's broken melee weapon requires its unarmed attack owner.");
             if (action != state.Action) state = state.Transition(action);
         }
+        if (!requestedPursuit) RetireUnusedPursuitSearch();
         if (state.Action == "attack" && state.StartPending && Ranged && !_enemyWeaponHandling!.CanFire(_enemyWeapon!))
         {
             if (!_enemyWeaponHandling.CanReload(_enemyWeapon!)) throw new NotSupportedException("Actor exhausted usable ammunition and needs weapon reselection.");
