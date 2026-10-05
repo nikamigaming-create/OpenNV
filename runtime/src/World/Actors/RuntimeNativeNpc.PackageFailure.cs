@@ -9,9 +9,11 @@ internal partial class RuntimeNativeNpc
 {
     private Func<bool>? _bindingFailureReady;
     private Func<FalloutActorPackageBindingFailure>? _bindingFailureCapture;
+    private Func<IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>?>? _bindingFailureWait;
     private bool _baseLocomotionMoving;
 
-    private bool CanCaptureBindingFailure() => _aiReferenceState is { } state &&
+    private bool CanCaptureBindingFailure() => CanCaptureBindingFailure(allowFiniteSoundWait: false);
+    private bool CanCaptureBindingFailure(bool allowFiniteSoundWait) => _aiReferenceState is { } state &&
         state.ProcedureCaptureBlocker == _selectionCaptureBlocker && _selectionCaptureBlocker is not null &&
         _aiError is not null && _failedPackage is { } failed && failed == _selectedSourcePackage &&
         _requestedSelection is null && _pendingPackage is null && _aiPackage is null &&
@@ -19,7 +21,7 @@ internal partial class RuntimeNativeNpc
         _packageIdleSource is not null && _packageIdles is not null &&
         _sitting == 0 && !_furnitureApproaching && !_travelActive && _travelProgress?.ArrivalPending != true &&
         _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _patrol is null &&
-        _animation is null && !_responseIdleActive && AnimationError is null &&
+        (_animation is null || CanCaptureStoppedIndependentIdle(allowFiniteSoundWait)) && !_responseIdleActive && AnimationError is null &&
         _conversationTarget is null && CanCaptureStoppedAiPose() &&
         _baseClock.Resource.Length != 0;
 
@@ -35,16 +37,21 @@ internal partial class RuntimeNativeNpc
             [position.X, position.Y, position.Z], [basis.X.X, basis.X.Y, basis.X.Z,
                 basis.Y.X, basis.Y.Y, basis.Y.Z, basis.Z.X, basis.Z.Y, basis.Z.Z],
             _baseLocomotionMoving, _aiRandom.State, Math.Max(0, _aiPollRemaining), _aiScheduleTime,
-            FalloutPackageRetirement.Capture(_aiStack, _packageEvents!), _blink?.Capture(), CapturePackageIdleState());
+            FalloutPackageRetirement.Capture(_aiStack, _packageEvents!), _blink?.Capture(), CapturePackageIdleState(),
+            _animation is null ? null : CaptureStoppedIndependentIdle());
         failure.Validate(_aiStack, _aiReferenceState!);
         return failure;
     }
+
+    private IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>? BindingFailureFiniteSoundWait() =>
+        CanCaptureBindingFailure(allowFiniteSoundWait: true) ? _animationSounds?.PendingFiniteVoices : null;
 
     private void BindFailureCapture()
     {
         if (_aiReferenceState is not { } state) return;
         state.CanCapturePackageBindingFailure = _bindingFailureReady = CanCaptureBindingFailure;
         state.CapturePackageBindingFailure = _bindingFailureCapture = CaptureBindingFailure;
+        state.PendingPackageBindingFiniteVoices = _bindingFailureWait = BindingFailureFiniteSoundWait;
     }
 
     private void RestoreBindingFailure(FalloutActorPackageBindingFailure failure)
@@ -98,6 +105,8 @@ internal partial class RuntimeNativeNpc
         }
         if (ReferenceEquals(state.CanCapturePackageBindingFailure, _bindingFailureReady))
             state.CanCapturePackageBindingFailure = null;
+        if (ReferenceEquals(state.PendingPackageBindingFiniteVoices, _bindingFailureWait))
+            state.PendingPackageBindingFiniteVoices = null;
         if (ReferenceEquals(state.CapturePackageBindingFailure, _bindingFailureCapture))
             state.CapturePackageBindingFailure = null;
     }

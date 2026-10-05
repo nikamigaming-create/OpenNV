@@ -72,7 +72,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         get => _executionError;
         private set { _executionError = value; _stageResultDriverFailure = null; }
     }
-    internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault;
+    internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
     internal string? BlockingExecutionError => _stageResultDriverFailure?.Error == ExecutionError ? null : ExecutionError;
     internal string? BlockingExecutionFault => BlockingExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
@@ -298,7 +298,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             RefreshRadioStations();
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
-            if (_saveRequested && SaveContinuationBlocker is null && !_scripts.References!.PlayerMoves.Pending)
+            if (_saveRequested && SaveContinuationBlocker is null && SourceFiniteAudioSaveBlocker is null &&
+                !_scripts.References!.PlayerMoves.Pending)
                 SaveCurrentState();
             _playerPackage?.Advance(delta);
             foreach (var expired in _imageSpaceState.Advance(delta))

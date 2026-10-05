@@ -11,12 +11,14 @@ using OpenNV.Runtime.World.Cells;
 
 public partial class NativeDefaultActivationAudit
 {
-    private async Task ExerciseOwned(string game, string mod, string root, string checkpoint, string selector, string[] dependencies)
+    private async Task ExerciseOwned(string game, string mod, string root, string checkpoint, string selector, string[] dependencies,
+        bool presentation = false, bool requireRenderer = false, bool naturalCollapse = false)
     {
         var setup = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
         RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
             setup.ContentRoots.Skip(1).ToArray(), setup.ActivePlugins, setup.Settings);
         var fixture = new Node3D(); AddChild(fixture);
+        SourceCorpseFloor? floor = null;
         try
         {
             var content = RuntimeLiveContentSource.Current!;
@@ -69,6 +71,7 @@ public partial class NativeDefaultActivationAudit
                 state.ScriptError == fault.Error && state.Injury is { Dead: true, DeathEventPending: false },
                 "Owned source did not retain a real consumed failing death invocation.");
             var units = RuntimeConfiguration.Load().World.GameUnitsToMeters;
+            if (naturalCollapse) floor = new(records, world, sourceCell, fixture, content, units);
             RuntimeNativeNpc Assemble(FalloutReferenceWorld owner)
             {
                 var actor = RuntimeNativeNpc.Create(records, content, reference, units, (_, _, _, _) => new StandardMaterial3D(),
@@ -87,11 +90,12 @@ public partial class NativeDefaultActivationAudit
                 }
                 catch { actor.Free(); throw; }
             }
-            async Task<RigidBody3D> FreezeBodies(RuntimeNativeNpc actor)
+            async Task<RigidBody3D> FreezeBodies(RuntimeNativeNpc actor, bool cold = false)
             {
                 await Deferred();
                 Require(actor.Combat!.Error is null && actor.Combat.Dead, "Actual source corpse has no prepared native owner: " + actor.Combat.Error);
                 var rig = actor.GetChildren().OfType<RuntimeNativeActorRagdoll>().Single();
+                if (naturalCollapse && !cold) await SettleSourceCorpse(actor, content, floor!, requireRenderer);
                 rig.SetProcess(false); rig.SetPhysicsProcess(false);
                 var bodies = rig.GetChildren().OfType<RigidBody3D>().ToArray();
                 Require(rig.Active && bodies.Length > 0 && bodies.All(body => body.GetChildren().OfType<CollisionShape3D>()
@@ -140,7 +144,8 @@ public partial class NativeDefaultActivationAudit
                 Require(events.CanAdmitIndependentDefaultInteraction(identity) && state.ScriptError == fault.Error &&
                     JsonSerializer.Serialize(state.Capture()) == before,
                     "Original native corpse independent-default observation lost its fault, source prefix or real owner.");
-                Require(events.TryActivate(collider) && !events.TryActivate(collider), "Owned default input was refused or queued twice.");
+                if (presentation) await ExerciseCorpseRayActivation(actor, events, identity, content, "warm");
+                else Require(events.TryActivate(collider) && !events.TryActivate(collider), "Owned default input was refused or queued twice.");
                 Pump(events); Pump(events);
                 Require(menu is not null && interactionCount == 1 && completed.SequenceEqual([true]) &&
                     JsonSerializer.Serialize(state.Capture()) == before && JsonSerializer.Serialize(quests.Capture()) == questBefore,
@@ -148,16 +153,20 @@ public partial class NativeDefaultActivationAudit
                 var loot = inventory.Items.Where(item => FalloutInventoryAccess.CanTransfer(records, records.GetEffective(item.FormKey), false)).ToArray();
                 Require(loot.Length > 0, "Selected original corpse has no source loot to test.");
                 var counts = loot.ToDictionary(item => item.FormKey, item => player.Item(item.FormKey)?.Count ?? 0);
-                menu!.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == FalloutGameSettingStrings.Read(records, "sTakeAll"))
-                    .EmitSignal(BaseButton.SignalName.Pressed);
-                Require(loot.All(item => inventory.Item(item.FormKey) is null && player.Item(item.FormKey)?.Count == counts[item.FormKey] + item.Count) &&
-                    state.ScriptError == fault.Error && JsonSerializer.Serialize(state.Capture() with { Inventory = null }) ==
-                    JsonSerializer.Serialize(JsonSerializer.Deserialize<FalloutReferenceSnapshot>(before)! with { Inventory = null }),
-                    "Original TakeAll did not use shared inventory or changed unrelated corpse state.");
+                if (!presentation)
+                {
+                    menu!.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == FalloutGameSettingStrings.Read(records, "sTakeAll"))
+                        .EmitSignal(BaseButton.SignalName.Pressed);
+                    Require(loot.All(item => inventory.Item(item.FormKey) is null && player.Item(item.FormKey)?.Count == counts[item.FormKey] + item.Count) &&
+                        state.ScriptError == fault.Error && JsonSerializer.Serialize(state.Capture() with { Inventory = null }) ==
+                        JsonSerializer.Serialize(JsonSerializer.Deserialize<FalloutReferenceSnapshot>(before)! with { Inventory = null }),
+                        "Original TakeAll did not use shared inventory or changed unrelated corpse state.");
+                }
                 var suffix = JsonSerializer.Serialize(state.Capture());
-                menu!.GetChildren().OfType<NativeBitmapMenuButton>().Single(button => button.Text == FalloutGameSettingStrings.Read(records, "sTakeAll"))
-                    .EmitSignal(BaseButton.SignalName.Pressed);
+                if (!presentation) menu!.GetChildren().OfType<NativeBitmapMenuButton>()
+                    .Single(button => button.Text == FalloutGameSettingStrings.Read(records, "sTakeAll")).EmitSignal(BaseButton.SignalName.Pressed);
                 Require(JsonSerializer.Serialize(state.Capture()) == suffix, "Repeated TakeAll regenerated the source inventory.");
+                var warmSkin = presentation ? await ObserveCorpseSkin(actor, content, "warm", requireRenderer) : null;
                 menu!.Free(); menu = null; events.Free(); actor.Free();
                 var retired = state.Capture();
                 Require(JsonSerializer.Serialize(retired) == suffix, "Normal corpse retirement lost the fault or consumed inventory.");
@@ -169,22 +178,43 @@ public partial class NativeDefaultActivationAudit
                 var coldActor = Assemble(cold);
                 try
                 {
-                    var coldCollider = await FreezeBodies(coldActor); var coldEvents = Bind(cold, coldActor, coldPlayer);
+                    var coldCollider = await FreezeBodies(coldActor, cold: true); var coldEvents = Bind(cold, coldActor, coldPlayer);
                     Require(coldEvents.CanAdmitIndependentDefaultInteraction(identity) && cold.Get(identity).ScriptError == fault.Error,
                         "Cold real corpse lost independent-default admission or acknowledged its stopped invocation.");
-                    Require(coldEvents.TryActivate(coldCollider), "Cold actual corpse default activation was refused."); Pump(coldEvents);
+                    if (presentation) await ExerciseCorpseRayActivation(coldActor, coldEvents, identity, content, "cold");
+                    else Require(coldEvents.TryActivate(coldCollider), "Cold actual corpse default activation was refused.");
+                    Pump(coldEvents);
                     Require(menu is not null && interactionCount == 2 && completed.SequenceEqual([true, true]) &&
                         cold.Get(identity).ScriptError == fault.Error &&
                         JsonSerializer.Serialize(cold.Get(identity).Capture().Variables) == JsonSerializer.Serialize(retired.Variables) &&
                         JsonSerializer.Serialize(cold.Get(identity).Capture().Inventory) == JsonSerializer.Serialize(retired.Inventory) &&
-                        loot.All(item => coldPlayer.Item(item.FormKey)?.Count == counts[item.FormKey] + item.Count) &&
+                        loot.All(item => (coldPlayer.Item(item.FormKey)?.Count ?? 0) == counts[item.FormKey] + (presentation ? 0 : item.Count)) &&
                         JsonSerializer.Serialize(quests.Capture()) == questBefore,
                         "Cold corpse lost the exact fault, prefix, real inventory or default callback.");
                     Require(ownedRecords.Zip(sourceHashes).All(pair => pair.Second.SequenceEqual(SHA256.HashData(pair.First.ReadData()))) &&
                         checkpointBytes.SequenceEqual(File.ReadAllBytes(checkpoint)), "Owned record or checkpoint source bytes changed.");
+                    floor?.VerifyInput(records, world, content);
+                    if (presentation)
+                    {
+                        var coldSkin = await ObserveCorpseSkin(coldActor, content, "cold", requireRenderer);
+                        CompareCorpseSkin(warmSkin!, coldSkin);
+                        GD.Print("OPENNV_CORPSE_SKIN_COLD_PASS " + JsonSerializer.Serialize(new
+                        {
+                            reference = identity.ToString(),
+                            warmSkin,
+                            coldSkin,
+                            rendererVerified = warmSkin!.MissingRendererMeshes == 0 && coldSkin.MissingRendererMeshes == 0,
+                            actualSourceBodies = true,
+                            sourceAndCheckpointUnchanged = true,
+                            componentDeath = true,
+                            sourceOutfitUnchanged = true,
+                            inventoryTransferred = false,
+                            finalPixels = "unverified",
+                        }));
+                    }
                     GD.Print($"OPENNV_OWNED_DEFAULT_LOOT_PASS reference={identity} script={script.Record.FormKey} " +
                         $"scriptSha256={Convert.ToHexString(sourceHashes[2])} sourceOnActivate=false componentDeath=true consumedDeathFault={JsonSerializer.Serialize(fault.Error)} " +
-                        $"actualNativeBodies=true queuedOnce=true sourceContainerXml=true transferredKinds={loot.Length} retainedFaultAndPrefix=true " +
+                        $"actualNativeBodies=true queuedOnce=true sourceContainerXml=true transferredKinds={(presentation ? 0 : loot.Length)} retainedFaultAndPrefix=true " +
                         "coldInventoryAndDefault=true sourceAndCheckpointUnchanged=true campaignAndPixelsUnverified=true");
                     menu!.Free(); menu = null; coldEvents.Free();
                 }
@@ -192,6 +222,6 @@ public partial class NativeDefaultActivationAudit
             }
             finally { if (GodotObject.IsInstanceValid(actor)) actor.Free(); }
         }
-        finally { fixture.Free(); RuntimeLiveContentSource.Clear(); }
+        finally { fixture.Free(); floor?.Dispose(); RuntimeLiveContentSource.Clear(); }
     }
 }

@@ -42,6 +42,8 @@ internal sealed partial class RuntimeNativeActorCombat
         hits = _hits,
         assistsReceived = _assistsReceived,
         pendingHitscanImpacts = _pendingHitscanImpacts,
+        enemySounds = _enemySounds?.CaptureDiagnostic,
+        enemySoundLast = _enemySounds?.LastEvent,
         lastAttack = _lastAttack,
         lastHitscanImpact = _lastHitscanImpact,
         impactMaterialError = _impactMaterialError,
@@ -206,7 +208,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private void PrepareFlee()
     {
         PrepareMovement();
-        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom);
+        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents);
         _actor.AddChild(_enemySounds);
         var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
         var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female/" : "";

@@ -85,7 +85,6 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds,
         Action? observeActivationBegin = null, Action? observeActivationEnd = null)
     {
-        world.ScriptManualSaves.RequireNoFailure();
         var reference = instance.Reference;
         var admitted = new Dictionary<string, FalloutReferenceScriptEvent>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in events)

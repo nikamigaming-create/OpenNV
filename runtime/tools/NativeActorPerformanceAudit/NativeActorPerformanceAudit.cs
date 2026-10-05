@@ -10,6 +10,25 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-stopped-idle", var stoppedGame, var stoppedMod, var stoppedRoot, var stoppedSave,
+                var stoppedActor, var stoppedQuest, var stoppedStage, var stoppedPackage, var stoppedForm, var stoppedSounds, .. var stoppedDependencies])
+            {
+                await OwnedStoppedIdle(stoppedGame, stoppedMod, stoppedRoot, stoppedSave, stoppedActor, stoppedQuest,
+                    short.Parse(stoppedStage, System.Globalization.CultureInfo.InvariantCulture), stoppedPackage, stoppedForm, stoppedSounds.Split(','), stoppedDependencies);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--owned-finite-sound-retirement", var finiteGame, var finiteMod, var finiteRoot,
+                var finiteSave, var finiteActor, var finiteSound, .. var finiteDependencies])
+            {
+                await OwnedEndedSounds(finiteGame, finiteMod, finiteRoot, finiteSave, finiteActor, finiteSound, finiteDependencies, finiteRetirement: true);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--owned-ended-sounds", var soundGame, var soundMod, var soundRoot,
+                var soundSave, var soundActor, var soundForm, .. var soundDependencies])
+            {
+                await OwnedEndedSounds(soundGame, soundMod, soundRoot, soundSave, soundActor, soundForm, soundDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is ["--owned-attack-variants", var attackGame, var attackMod, var attackRoot,
                 var attackCheckpoint, var attackActor, .. var attackDependencies])
             {

@@ -159,6 +159,6 @@ public partial class NativeActorPerformanceAudit
 
     private sealed class PackageFixtureLifetime(Node node) : IDisposable
     {
-        public void Dispose() => node.Free();
+        public void Dispose() { if (GodotObject.IsInstanceValid(node)) node.Free(); }
     }
 }

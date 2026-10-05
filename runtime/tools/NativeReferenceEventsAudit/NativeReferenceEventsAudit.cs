@@ -15,9 +15,26 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--save-input"])
+            {
+                await SaveInputReceipts(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--reference-hits"])
             {
                 HitEvents(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--sound-emitters", var soundRoot, var soundMod, var soundModRoot,
+                var firstSoundReference, var secondSoundReference, .. var soundDependencies])
+            {
+                await ExerciseOwnedSoundEmitters(soundRoot, soundMod, soundModRoot,
+                    firstSoundReference, secondSoundReference, soundDependencies);
+                GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--activation-parent", var parentRoot, var parentMod, var parentModRoot,
+                var parentReference, var childReference, .. var parentDependencies])
+            {
+                ExerciseOwnedActivationParent(parentRoot, parentMod, parentModRoot, parentReference, childReference, parentDependencies);
+                GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--activator-control", var activatorRoot, var activatorMod, var activatorModRoot,
                 var controlReference, var targetReference, .. var activatorDependencies])
@@ -53,6 +70,10 @@ public partial class NativeReferenceEventsAudit : Node
             using var world = new FalloutReferenceWorld(records);
             var cell = FalloutCellSceneReader.Read(records, Key(0x800));
             world.LoadCell(cell);
+            if (OS.GetCmdlineUserArgs() is ["--finite-sound-lifetime"])
+            {
+                await FiniteSoundLifetime(records); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--animated-activators"])
             {
                 AnimatedActivators(records); GetTree().Quit(); return;
@@ -180,6 +201,7 @@ public partial class NativeReferenceEventsAudit : Node
             world.LoadCell(cell);
             Require(state == System.Text.Json.JsonSerializer.Serialize(world.Capture()), "Native adapter changed reference state on residency change.");
             await InputControls(records);
+            await SaveInputReceipts();
             PlayerMoves(records);
             SaveDeferral();
             DoorActivation(records);
@@ -314,6 +336,7 @@ public partial class NativeReferenceEventsAudit : Node
                 Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 1]), Field("EPFT", [1]),
                 Field("EPFD", BitConverter.GetBytes(3f)), Field("PRKF", [])))
             .Concat(Record("ACTI", 0x700, Field("SCRI", BitConverter.GetBytes(0x500u))))
+            .Concat(FiniteSoundFixture())
             .Concat(Record("CELL", 0x800, Field("DATA", [1]))).Concat(group).ToArray();
     }
     private static byte[] DeathFixture()

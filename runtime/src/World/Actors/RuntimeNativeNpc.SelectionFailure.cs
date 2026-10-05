@@ -8,6 +8,59 @@ internal partial class RuntimeNativeNpc
     private FalloutCondition? _failedSelectionCondition;
     private Func<bool>? _selectionFailureReady;
     private Func<FalloutActorSelectionFailure>? _selectionFailureCapture;
+    private Func<FalloutActorSelectionCaptureDiagnostic>? _selectionCaptureDiagnostic;
+    private ulong _selectionCaptureNativeOwner;
+
+    private FalloutActorSelectionCaptureDiagnostic ReadSelectionCaptureDiagnostic(bool retired = false)
+    {
+        var blockers = new List<FalloutActorCaptureBlocker>();
+        void Refuse(bool condition, string predicate, string? detail = null)
+        {
+            if (condition) blockers.Add(new("npc-selection", predicate, detail));
+        }
+        Refuse(_failedSelectionCondition is null, "failed-condition-missing");
+        Refuse(_aiError is null, "selection-error-missing");
+        Refuse(_aiReferenceState is null, "reference-instance-missing");
+        Refuse(_selectionCaptureBlocker is null, "selection-blocker-missing");
+        Refuse(_aiReferenceState?.ProcedureCaptureBlocker != _selectionCaptureBlocker, "procedure-blocker-binding");
+        Refuse(_bindingInitialBase, "binding-initial-base");
+        Refuse(_requestedSelection is not null, "requested-selection");
+        Refuse(_pendingPackage is not null, "pending-package");
+        Refuse(_selectedSourcePackage is not null, "selected-source-package");
+        Refuse(_failedPackage is not null, "failed-package");
+        Refuse(_aiPackage is not null, "active-package");
+        Refuse(_packageEvents is null, "package-events-missing");
+        if (_packageEvents is { } events)
+        {
+            Refuse(events.Active is not null, "active-package-event");
+            Refuse(events.Done, "completed-package-event");
+            Refuse(events.Error is not null, "package-event-error", events.Error);
+        }
+        Refuse(_packageIdleSource is not null, "package-idle-source");
+        Refuse(_findFurniture is not null, "furniture-search");
+        Refuse(_seat is not null, "reserved-seat");
+        Refuse(_sitting != 0, "sitting");
+        Refuse(_furnitureApproaching, "furniture-approach");
+        Refuse(_travelActive, "travel-active");
+        Refuse(_escortPackage is not null, "escort-package");
+        Refuse(_editorTravel is not null, "editor-travel");
+        Refuse(_dialoguePackage is not null, "dialogue-package");
+        Refuse(_guardPackage is not null, "guard-package");
+        Refuse(_patrol is not null, "patrol");
+        Refuse(_animation is not null, "active-animation");
+        Refuse(_responseIdleActive, "response-idle");
+        Refuse(_packageIdleError is not null, "package-idle-error", _packageIdleError);
+        Refuse(AnimationError is not null, "animation-error", AnimationError);
+        Refuse(_idleReplays.Remaining.Count != 0, "remaining-idle-replays");
+        Refuse(_conversationTarget is not null, "conversation-target");
+        var pose = ReadStoppedPoseCaptureDiagnostic();
+        Refuse(!CanCaptureStoppedAiPose(), "independent-pose");
+        Refuse(_baseLocomotionMoving, "base-locomotion-moving");
+        Refuse(_baseClock.Resource.Length == 0, "base-clock-missing");
+        return new(_aiReferenceState?.Reference ?? Appearance.Reference!.Value, _selectionCaptureNativeOwner,
+            CanCaptureSelectionFailure(), retired, _failedSelectionCondition?.Owner.FormKey,
+            _failedSelectionCondition?.Function, blockers.AsReadOnly(), pose);
+    }
 
     private float EvaluateSelectionCondition(FalloutCondition condition)
     {
@@ -50,6 +103,9 @@ internal partial class RuntimeNativeNpc
         if (_aiReferenceState is not { } state) return;
         state.CanCaptureSelectionFailure = _selectionFailureReady = CanCaptureSelectionFailure;
         state.CaptureSelectionFailure = _selectionFailureCapture = CaptureSelectionFailure;
+        _selectionCaptureNativeOwner = GetInstanceId();
+        state.ObserveSelectionCapture = _selectionCaptureDiagnostic = () => ReadSelectionCaptureDiagnostic();
+        state.RetiredSelectionCaptureDiagnostic = null;
     }
 
     private void RestoreSelectionFailure(FalloutActorSelectionFailure failure)
@@ -72,6 +128,14 @@ internal partial class RuntimeNativeNpc
     private void RetainSelectionFailure()
     {
         if (_aiReferenceState is not { } state) return;
+        // The source reference can have a new destination presentation already.
+        // A retiring old node must not replace that instance's current observer.
+        if (ReferenceEquals(state.ObserveSelectionCapture, _selectionCaptureDiagnostic))
+        {
+            if (_selectionCaptureBlocker is not null)
+                state.RetiredSelectionCaptureDiagnostic = ReadSelectionCaptureDiagnostic(true);
+            state.ObserveSelectionCapture = null;
+        }
         if (CanCaptureSelectionFailure())
         {
             state.SelectionFailure = CaptureSelectionFailure();

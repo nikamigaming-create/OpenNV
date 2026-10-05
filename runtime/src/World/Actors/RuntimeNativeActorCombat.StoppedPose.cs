@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -37,6 +38,62 @@ internal sealed partial class RuntimeNativeActorCombat
     }
 
     private bool? _retiredStoppedPoseReady;
+    private FalloutActorStoppedPoseCaptureDiagnostic? _retiredStoppedPoseDiagnostic;
+    internal FalloutActorStoppedPoseCaptureDiagnostic StoppedAiPoseCaptureDiagnostic =>
+        _retiredStoppedPoseDiagnostic ?? ReadStoppedPoseDiagnostic(LiveStoppedAiPoseCaptureReady, false);
+
+    private FalloutActorStoppedPoseCaptureDiagnostic ReadStoppedPoseDiagnostic(bool ready, bool retired)
+    {
+        var blockers = new List<FalloutActorCaptureBlocker>();
+        void Refuse(bool condition, string predicate, string? detail = null)
+        {
+            if (condition) blockers.Add(new("combat-pose", predicate, detail));
+        }
+        Refuse(PackageOwnsPose, "package-owns-pose");
+        Refuse(PackageMoving, "package-moving");
+        Refuse(_state.KnockedDown, "knocked-down");
+        Refuse(_state.Unconscious, "unconscious");
+        Refuse(ReactingToHit, "active-hit-reaction");
+        Refuse(Error is not null, "combat-error", Error);
+        Refuse(_engagementError is not null, "engagement-error", _engagementError);
+        Refuse(_assistanceError is not null, "assistance-error", _assistanceError);
+        Refuse(_pendingHitscanImpacts != 0, "pending-hitscan-impacts", _pendingHitscanImpacts.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Refuse(_routeSearch is not null, "active-route-search");
+        Refuse(_routeDoor is not null, "active-route-door");
+        Refuse(_enemySounds?.CanCaptureSilent == false, "enemy-sounds");
+        if (Dead)
+        {
+            Refuse(_ragdoll?.CaptureReady != true, "corpse-capture-not-ready");
+            Refuse(_state.HitReaction is not null, "corpse-hit-reaction");
+            Refuse(_enemyObject is not null, "corpse-enemy-object");
+            Refuse(_packageWeapon is not null, "corpse-package-weapon");
+            Refuse(_enemyWeaponHandling is not null, "corpse-native-weapon-handling");
+            Refuse(_state.Engagement?.WeaponHandling is not null, "corpse-retained-weapon-handling");
+        }
+        else if (OwnsPose)
+        {
+            Refuse(!_engagementPrepared, "engagement-unprepared");
+            Refuse(_state.CaptureEngagement != CaptureEngagement, "engagement-capture-binding");
+            Refuse(_state.Engagement?.Action != "idle", "engagement-not-idle", _state.Engagement?.Action);
+            Refuse(_state.Engagement?.StartPending != false, "engagement-start-pending");
+            if (_state.Engagement is not { Animation: { } path, AnimationHash: { } hash })
+                Refuse(true, "engagement-source-animation-missing");
+            else
+            {
+                var found = _combatClips.TryGetValue(path, out var clip);
+                Refuse(!found, "engagement-clip-missing", path);
+                Refuse(found && !clip!.Hash.Equals(hash, StringComparison.OrdinalIgnoreCase), "engagement-clip-hash", path);
+            }
+            Refuse(_mover is null, "mover-missing");
+            Refuse(_mover is { } mover && !mover.Velocity.IsZeroApprox(), "mover-not-stationary");
+        }
+        if (retired && _state.CaptureEngagement != CaptureEngagement && _state.Engagement is not null)
+            Refuse(true, "retired-engagement-capture-binding");
+        // A failed selection before HitReaction was created is an independent
+        // historical fault, not one of the current readiness predicates.
+        return new(ready, retired, blockers.AsReadOnly(), _enemySounds?.CaptureDiagnostic,
+            _hitReactionError, _hitReactionSounds?.CaptureDiagnostic);
+    }
 
     // A stopped AI owner cannot waive a second pose owner. Only a completed
     // corpse capture or a stationary, source-bound combat idle composes here.
@@ -68,5 +125,6 @@ internal sealed partial class RuntimeNativeActorCombat
         _retiredStoppedPoseReady = LiveStoppedAiPoseCaptureReady;
         if (_state.CaptureEngagement != CaptureEngagement && _state.Engagement is not null)
             _retiredStoppedPoseReady = false;
+        _retiredStoppedPoseDiagnostic ??= ReadStoppedPoseDiagnostic(_retiredStoppedPoseReady.Value, true);
     }
 }

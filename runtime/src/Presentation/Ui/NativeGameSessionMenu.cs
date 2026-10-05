@@ -93,6 +93,19 @@ internal sealed partial class NativeGameSessionMenu : Control
         _status.Text = "Unable to load: " + message;
     }
 
+    internal void ShowManualSaveReceipt(RuntimeManualSaveReceipt? receipt)
+    {
+        if (receipt is null || _status is null || _confirming || _busy) return;
+        _status.Text = receipt.Disposition switch
+        {
+            "pending" => "Save requested; it has not been written. Resume to allow the pending check to finish.",
+            "completed" when receipt.CommittedSlot is not null => "The requested save was created. Earlier saves are retained.",
+            "failed" => "The requested save failed: " + receipt.Error,
+            "cancelled" => "The requested save was cancelled: " + receipt.Error,
+            _ => throw new InvalidDataException("Manual save has no visible disposition.")
+        };
+    }
+
     private void ShowPause()
     {
         _browser = false; BeginPage(_defeated ? "YOU DIED" : "PAUSED");

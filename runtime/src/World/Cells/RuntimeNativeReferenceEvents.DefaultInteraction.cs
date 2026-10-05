@@ -12,7 +12,7 @@ internal partial class RuntimeNativeReferenceEvents
         if (!_bindings.TryGetValue(reference, out var binding) || !_world.IsResident(reference) ||
             binding.Node is not { } node || !GodotObject.IsInstanceValid(node) || !node.IsInsideTree() ||
             !node.IsVisibleInTree() || node.IsQueuedForDeletion() || Interact is null ||
-            !_scripts.CanAdmitIndependentDefaultActivation(reference)) return false;
+            !_scripts.CanAdmitIndependentDefaultActivation(reference) || !_world.AllowsActivation(reference, _records.RuntimeFormKey(0x14))) return false;
         if (binding.PendingActivation is { } pending && pending != _records.RuntimeFormKey(0x14)) return false;
         // These are the existing DefaultActivate branches with a native
         // interaction callback. Other authored/default capabilities retain

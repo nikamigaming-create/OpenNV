@@ -4,6 +4,11 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--activation-parent-contracts"])
+{
+    ActivationParentContracts.Run();
+    return;
+}
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
 if (args is ["--reward-xp-contracts"])
 {
@@ -823,6 +828,7 @@ ActorDamageContracts.Run();
 StoppedPoseContracts.Run();
 TerminalContracts.Run();
 ScriptDeathContracts.Run();
+ActivationParentContracts.Run();
 DefaultActivationContracts.Run();
 ScriptManualSaveContracts.Run();
 HardcoreQueryContracts.Run();

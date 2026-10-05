@@ -45,16 +45,26 @@ public partial class NativeReferenceEventsAudit
             events.ScriptActivate(Key(0x923), npc, true);
             events.SetProcess(true); events._Process(0); events.SetProcess(false);
             Require(world.Get(Key(0x923)).ScriptError is not null && interactions.Count == 2, "Failed source activation opened its door.");
-            foreach (var id in new uint[] { 0x924, 0x925, 0x926 })
+            foreach (var id in new uint[] { 0x924, 0x926 })
             {
                 var denied = false;
                 try { events.DefaultActivate(Key(id), npc); }
                 catch (NotSupportedException) { denied = true; }
-                Require(denied && interactions.Count == 2, "NPC default activation bypassed inaccessible, parent-only or locked source access.");
+                Require(denied && interactions.Count == 2, "NPC default activation bypassed inaccessible or locked source access.");
                 var playerStatus = events.PlayerRouteDoor(Key(id));
                 Require(playerStatus.Reference == Key(id) && playerStatus.Error is not null && !playerStatus.Admitted && !playerStatus.Pending,
                     "Player route observation bypassed source door access or queued activation.");
             }
+            // XAPD suppresses unrelated activation before either the source
+            // script or default interaction. It is not an absent NPC owner.
+            var parentOnly = Key(0x925);
+            Require(!world.AllowsActivation(parentOnly, npc), "Source parent-only declaration admitted an unrelated NPC.");
+            events.DefaultActivate(parentOnly, npc);
+            events.ScriptActivate(parentOnly, npc, true);
+            events.SetProcess(true); events._Process(0); events.SetProcess(false);
+            var parentStatus = events.PlayerRouteDoor(parentOnly);
+            Require(interactions.Count == 2 && parentStatus.Reference == parentOnly && parentStatus.Error is not null &&
+                !parentStatus.Admitted && !parentStatus.Pending, "Suppressed parent-only activation dispatched a script, interaction or player route.");
             Require(events.PlayerRouteDoor(npc).Reference is null && interactions.Count == 2,
                 "Player route observation admitted an actor as a door or performed activation.");
             Require(!interactions.Any(value => value.Door == Key(0x927)), "An unrelated door received activation.");

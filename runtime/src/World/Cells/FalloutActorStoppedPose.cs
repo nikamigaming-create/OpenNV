@@ -7,6 +7,9 @@ internal static class FalloutActorStoppedPose
     internal static void Validate(FalloutReferenceSnapshot snapshot)
     {
         if (snapshot.PackageBindingFailure is null && snapshot.SelectionFailure is null && snapshot.PendingPackageSelection is null) return;
+        if (snapshot.PackageBindingFailure?.IndependentIdle is not null &&
+            (snapshot.Injury?.Dead == true || snapshot.Engagement is not null || snapshot.Ragdoll is not null))
+            throw new NotSupportedException("Stopped independent IDLE cannot replace an active combat or physical pose owner.");
         if (snapshot.KnockedDown || snapshot.HitReaction is not null)
             throw new InvalidDataException("Stopped AI has an unowned knockdown or hit-reaction composition.");
         if (snapshot.Injury?.Dead == true && snapshot.Ragdoll is null)

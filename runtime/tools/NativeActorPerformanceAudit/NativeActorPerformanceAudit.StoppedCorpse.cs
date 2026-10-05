@@ -32,7 +32,7 @@ public partial class NativeActorPerformanceAudit
                     FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
                     FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening)).State;
             }
-            if (campaign.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.FactionRelationSchema or
+            if (campaign.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.NativeSoundHistorySchema or FalloutNativeCampaignSave.TerminalResultsSchema or FalloutNativeCampaignSave.FactionRelationSchema or
                 FalloutNativeCampaignSave.DeathHistorySchema) || campaign.SaveCompatibilityId != content.SaveCompatibilityId)
                 throw new InvalidDataException("Reached corpse fixture belongs to another schema or complete source stack.");
             static FalloutFormKey Identity(string text)

@@ -15,6 +15,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
         internal bool ReportedError;
         internal FalloutFormKey? PendingActivation;
         internal bool PendingPlayerInput;
+        internal FalloutActivationRelayDelivery? PendingRelay;
         internal Node3D? Node = Presentation;
         internal bool ActorScriptStarted;
     }
@@ -55,6 +56,9 @@ internal partial class RuntimeNativeReferenceEvents : Node
         pendingHitEvents = _world.PendingHitEventCount,
         pendingHitReferences = _world.HitEvents.PendingReferences.Select(reference => reference.ToString()).ToArray(),
         triggers = _bindings.Values.Count(value => value.Trigger is not null),
+        activationRelays = _world.ActivationRelayState,
+        activationRelayErrors = _activationRelayErrors.Select(value => new { reference = value.Key.ToString(), error = value.Value }).ToArray(),
+        activationRelayBoundary = "source parent-shared delay/action/cold receipts; immediate activation uses the native frame queue; source sibling registration order and off-cell execution remain unbound",
         errors = _bindings.Values.Where(value => value.Instance.ScriptError is not null)
             .Select(value => new { reference = value.Reference.FormKey.ToString(), error = value.Instance.ScriptError }).ToArray(),
         abilityErrors = _abilityErrors.Select(value => new { reference = value.Key.ToString(), error = value.Value }).ToArray(),
@@ -189,7 +193,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (!_world.CanActivate(reference)) return false;
             if (binding.Instance.Script is null && binding.Signature is "STAT" or "SCOL" or "TREE" or "GRAS" or "XPRM" or "LIGH" or "SOUN" or "ASPC" or "IDLM")
                 return false;
-            if (!_scripts.CanAdmitActivation(reference) || binding.PendingActivation is not null) return false;
+            if (!_world.AllowsActivation(reference, _records.RuntimeFormKey(0x14)) || !_scripts.CanAdmitActivation(reference) || binding.PendingActivation is not null) return false;
             binding.PendingActivation = _records.RuntimeFormKey(0x14);
             binding.PendingPlayerInput = true;
             GD.Print($"OPENNV_NATIVE_REFERENCE_ACTIVATE reference={reference} queued=true");
@@ -220,11 +224,19 @@ internal partial class RuntimeNativeReferenceEvents : Node
         var binding = _bindings[reference];
         var actor = actionReference ?? _records.RuntimeFormKey(0x14);
         if (binding.Instance.Destroyed || binding.Instance.DeletePending) return;
+        if (!_world.AllowsActivation(reference, actor)) return;
         if (actor != _records.RuntimeFormKey(0x14) && binding.Signature != "ACTI")
         {
             if (binding.Signature != "DOOR") throw new NotSupportedException($"Default activation of {binding.Signature} by {actor} has no actor interaction owner.");
-            RequireNpcDoor(binding, actor);
+            if (_world.IsActivationParent(reference, actor))
+            {
+                RequireRouteDoor(binding, actor);
+                if (_world.GetLocked(reference) != 0) throw new NotSupportedException("Activation-parent door retains its source lock.");
+            }
+            else RequireNpcDoor(binding, actor);
         }
+        _world.ArmActivationChildren(reference, actor);
+        QueueActivationRelays(0);
         if (binding.Signature is "DOOR" or "CONT" or "TERM" || FalloutReferenceWorld.IsInventoryItem(binding.Signature) ||
             binding.Signature is "NPC_" or "CREA" && _world.IsDead(reference))
         {
@@ -256,7 +268,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     internal void ScriptActivate(FalloutFormKey reference, FalloutFormKey actor, bool runOnActivate)
     {
         if (!_bindings.TryGetValue(reference, out var binding)) throw new NotSupportedException("Script activation target has no resident event owner.");
-        if (binding.Instance.DeletePending) return;
+        if (binding.Instance.DeletePending || !_world.AllowsActivation(reference, actor)) return;
         if (!runOnActivate) { DefaultActivate(reference, actor); return; }
         if (binding.PendingActivation is not null) throw new InvalidOperationException("Reference already has an admitted activation.");
         binding.PendingActivation = actor;
@@ -308,6 +320,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
     {
         ++_frames;
         var tree = GetTree();
+        if (!IsProcessing() || tree.Paused) return;
+        QueueActivationRelays((float)delta);
         foreach (var binding in _bindings.Values)
         {
             var packageBatch = binding.Signature is "NPC_" or "CREA" &&
@@ -335,10 +349,12 @@ internal partial class RuntimeNativeReferenceEvents : Node
             // suppressing contact sampling here permanently poisoned saved triggers.
             var events = new List<FalloutReferenceScriptEvent>();
             var playerInput = false;
+            var relay = binding.PendingRelay;
             if (binding.PendingActivation is { } actor)
             {
                 events.Add(new("OnActivate", actor));
                 binding.PendingActivation = null;
+                binding.PendingRelay = null;
                 playerInput = binding.PendingPlayerInput;
                 binding.PendingPlayerInput = false;
             }
@@ -361,9 +377,16 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (hasPackageEvents) events.AddRange(packageBatch!.Events);
             if (hasHitEvents) events.AddRange(hitBatch!.Events);
             events.Add(new("GameMode"));
-            var results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta,
-                playerInput ? () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey) : null,
-                playerInput ? () => ObservePlayerActivationEnd?.Invoke(binding.Reference.FormKey, true) : null);
+            IReadOnlyList<FalloutReferenceScriptEventResult> results;
+            if (relay is not null) _dispatchingActivationRelays.Add(binding.Reference.FormKey);
+            try
+            {
+                results = _scripts.DispatchFrame(binding.Reference.FormKey, events, delta,
+                    playerInput ? () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey) : null,
+                    playerInput ? () => ObservePlayerActivationEnd?.Invoke(binding.Reference.FormKey, true) : null);
+            }
+            finally { if (relay is not null) _dispatchingActivationRelays.Remove(binding.Reference.FormKey); }
+            if (relay is not null) _world.ConsumeActivationRelay(relay);
             if (playerInput) ObservePlayerActivationFinished?.Invoke(binding.Reference.FormKey,
                 results.Single(result => result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase)).Error is null);
             // Source faults retain their executed prefix on the actual instance.

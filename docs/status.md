@@ -1,14 +1,34 @@
 # Product status
 
-Ordinary TTW input cold-loads the retained post-Amata save without replaying
-G.O.A.T. The latest run crosses the authored stair/portal into Vault101b
-(CELL 024511), takes the office key/password and selects the original terminal's
-tunnel result at Escape stage 120. The switch and desk prefix is consumed; its
-nested source expression stops. Closing the terminal incorrectly blocks further
-bot input, and actor procedure initialization refuses a complete new save. That
-run quits normally. Its diagnostics are not a checkpoint: the immutable complete
-save remains stage 10. The vault exit, Megaton and train/Mojave route remain
-unreached. Older CELL 024512 evidence belongs to a different run/build.
+Ordinary TTW input genuinely reaches Escape stage 140 and the final vault cave
+chamber (CELL 024512): actual pistol hits defeat the guard, ordinary inventory
+actions acquire the office key/password, and the original terminal/XTEL tunnel
+path succeeds. The general XAPR activation-parent relay passes pure and selected
+owned native/cold checks, and subsequent
+ordinary user input passes its switch/secret door and vault gear. Focused relay
+checks retain their timing/off-cell boundaries. The reached cave progress is unsaved: source ForceSave
+fails on missing named sound emission, and a retired room's cancelled voice
+also blocks complete capture. The asynchronous write failure then globally
+freezes later cave review scripts. Failure isolation, source sound dispatch,
+finite lifetime and all-retained finite-audio wait are integrated; the combined
+Debug runtime compiles without warnings/errors. Focused pure checks pass source
+failure isolation and all-retained finite wait. Actual owned gear/camera sounds
+finish after model retirement and cold-restore without replay. Full actor
+retirement capture has a selected finite-voice component pass. Ordinary F5,
+stopped nonaudio pose retirement and source cell-stop policy remain independent.
+Sound and F5 input
+diagnostics build and their focused contracts pass. The complete armed stage-18 v43 checkpoint
+remains preserved and verified through cold Continue and ordinary in-process
+Load. G.O.A.T. does not need replay. Vault exit, Megaton and train/Mojave remain
+unreached. Shared GetInSameCell condition 32 now has binary/cold contracts;
+IsCombatTarget, selected GetCombatTarget, authored Flee and NPC portal transfer
+still prevent the Holden residents' original cue.
+
+Completed attack sound history and independent stopped-Travel IDLE clocks have
+selected native/cold checks, including all 66 original bones and clean fixture
+retirement. The pending finite-voice F5 request owner builds and passes pure contracts;
+strict complete-save admission remains unchanged. The consumed terminal result
+retains its exact nested GetDetected fault without replay.
 
 The current candidate preserves queued package selection through cold binding
 without evaluating or drawing again. Selected native checks pass original
@@ -23,15 +43,18 @@ The bot's non-actor goal now uses a live collision surface and its actual floor.
 Synthetic range, obstruction and moving-child checks pass. The selected owned
 terminal component passes actual capsule approach and ordinary activation ray
 with all enabled model-backed non-actors present; unchanged source identity and
-transforms are checked. It does not prove ordinary terminal or tunnel traversal.
+transforms are checked. Current ordinary input independently verifies the actual
+terminal and tunnel traversal; the remaining secret-door relay is separate.
 RewardXP shares saved player state, source thresholds and name-based GMST
 precedence. The isolated original exit command awards 200 XP under TTW's source
 cap 60 and cold-restores it at level 1. Perk dispatch, level allocation and XP
 presentation remain open. Repeated activation/contact cannot clear a stopped
 invocation or replay its consumed prefix. Ordinary corpse ray/loot and visible
 skin collapse still require direct verification. The combined candidate's final
-required runtime gate and git diff --check pass; no campaign or parity completion
-is claimed.
+required runtime gate now passes Release/Debug builds, formatting/analyzers,
+contracts, launcher tests and native Godot checks. Selected actual finite-actor
+and stopped-IDLE delayed-write/cold components also pass; no campaign or parity
+completion is claimed.
 
 Previously merged ACTI/shader/XRGB, speech retirement, source default loot and
 manual-save owners retain their selected component checks. Source stair routes

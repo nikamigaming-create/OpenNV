@@ -563,6 +563,8 @@ internal partial class RuntimeNativeSpeech : Node
         var completed = voice.Info;
         var completedTopic = voice.Topic;
         var packageCompleted = voice.PackageCompleted;
+        var completedPackageEvent = voice.PackageEvent;
+        var completedGeneration = voice.Generation;
         void FinishResponse()
         {
             voice.Topic = null; voice.PackageCompleted = null;
@@ -607,7 +609,11 @@ internal partial class RuntimeNativeSpeech : Node
             if (packageCompleted is not null)
             {
                 packageCompleted();
-                if (voice.PackageEvent is null) ++_completedPackages;
+                if (completedPackageEvent is null) ++_completedPackages;
+                // Results and settled notifications can start the actor's next
+                // voice. Retire only this completed generation, after its
+                // callback succeeds; never clear a replacement or failed owner.
+                if (voice.Generation == completedGeneration) voice.PackageEvent = null;
             }
         }
     }

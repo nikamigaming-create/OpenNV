@@ -157,6 +157,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             throw new ArgumentOutOfRangeException(
                 nameof(unitsToMetres), "NIF-to-Godot scale must be finite and positive.");
         var root = new Node3D { Name = "NativeNif" };
+        root.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
         var state = new BuildState(source, unitsToMetres, preferredTextureArchive, externalSkeleton: externalTransformTargets is not null, contentSource: contentSource)
         { UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
         try

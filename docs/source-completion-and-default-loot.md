@@ -47,6 +47,14 @@ detection request. An owned fixed-argument suffix can resume that instruction;
 earlier guards, writes, result effects and random draws stay consumed. Historical
 snapshots without that invocation cannot acquire a reconstructed cursor.
 
+A successful package-event callback retires the consumed event marker only
+after INFO results and notification complete. If the callback starts another
+response, the new generation retains its own state. If it fails, the old marker
+and fault remain capture blockers. The original owned package-event voice
+passes actual audio retirement and cold-history checks; failing-callback and
+reentrant-response checks preserve consumed counters without replay. Ordinary
+F5 also writes a complete Escape checkpoint after this voice finishes.
+
 CreateDetectionEvent retains source caller placement, CELL, signed sound level,
 requested type provenance and Float32 simulation time. The proven High process
 replaces its one pending event; proven lower tiers allocate none. The native
@@ -62,6 +70,11 @@ their original suffix before a later engine frame may invoke the shared complete
 save writer. Suspended invocations, menus and loading retain the request; writer
 failure retains a visible failed receipt. The global command also works inside a
 source function with no placed caller, preserving its null calling reference.
+An asynchronous writer failure does not stop unrelated later source invocations
+or retry its writer. The original failed receipt, source hashes and ended
+invocation remain visible. Complete capture and another ForceSave still refuse
+that unowned failure history; successful writing is never inferred from source
+script completion.
 Concurrent AutoSave/ForceSave ordering and active request restoration remain
 unowned. IsHardcore reads the existing saved player session. SetAlert changes a
 source-bound persistent actor flag independently of weapon and combat state.

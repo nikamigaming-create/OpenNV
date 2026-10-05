@@ -20,8 +20,15 @@ internal static class StoppedPoseContracts
             var location = new byte[12]; UInt(location, 4, 0x901);
             var timing = new byte[8]; timing[0] = 71; timing[1] = 3; timing[2] = 6;
             BinaryPrimitives.WriteUInt16LittleEndian(timing.AsSpan(4), 9);
+            var independentTiming = new byte[8]; independentTiming[0] = 71;
+            independentTiming[1] = independentTiming[2] = byte.MaxValue;
             var predicate = new byte[28]; Float(predicate, 4, 1);
             BinaryPrimitives.WriteUInt16LittleEndian(predicate.AsSpan(8), 45); UInt(predicate, 12, 0x902);
+            var soundData = new byte[36]; soundData[0] = 1; soundData[1] = 10;
+            UInt(soundData, 4, (uint)FalloutSoundFlags.MuteWhenSubmerged);
+            for (var point = 0; point < 5; point++) BinaryPrimitives.WriteInt16LittleEndian(soundData.AsSpan(12 + point * 2), 100);
+            var stoppedRead = (byte[])predicate.Clone();
+            BinaryPrimitives.WriteUInt16LittleEndian(stoppedRead.AsSpan(8), 143); UInt(stoppedRead, 12, 0);
             var refs = Join(Reference("ACHR", 0x900, 0x10), Reference("ACHR", 0x902, 0x11),
                 Reference("REFR", 0x901, 0x40));
             var group = new byte[24 + refs.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
@@ -31,6 +38,8 @@ internal static class StoppedPoseContracts
                 Setting(0x61, "fAVDNPCHealthEnduranceOffset", -1), Setting(0x62, "fAVDNPCHealthEnduranceMult", 5.25f),
                 Setting(0x63, "fAVDNPCHealthLevelMult", 5),
                 Record("MISC", 0x12, Field("DATA", new byte[8])),
+                Record("SOUN", 0x68, Field("EDID", Text("FixturePartial")), Field("FNAM", Text("fixture/punch.wav")), Field("SNDD", soundData)),
+                Record("IDLE", 0x69, Field("CTDA", stoppedRead)),
                 Record("PACK", 0x20, Field("PKDT", pkdt)), Record("PACK", 0x22, Field("PKDT", pkdt)),
                 Record("PACK", 0x25, Field("PKDT", pkdt), Field("CTDA", predicate)),
                 Record("PACK", 0x21, Field("PKDT", pkdt), Field("PLDT", location),
@@ -41,10 +50,17 @@ internal static class StoppedPoseContracts
                 Record("IDLE", 0x31, Field("DATA", new byte[8]), Field("MODL", Text("fixture/chair-base.kf"))),
                 Record("IDLE", 0x32, Field("DATA", timing), Field("MODL", Text("fixture/other-overlay.kf"))),
                 Record("IDLE", 0x33, Field("DATA", timing), Field("MODL", Text("fixture/with-object.kf"))),
+                Record("IDLE", 0x34, Field("DATA", independentTiming), Field("MODL", Text("fixture/independent.kf"))),
                 Record("ANIO", 0x50, Field("DATA", BitConverter.GetBytes(0x33u)), Field("MODL", Text("fixture/object.nif"))),
                 Record("FURN", 0x40, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
                 Record("CELL", 0x800, Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Pose.esm"]);
+            CaptureDiagnosticContracts.Run(records);
+            NativeEventHistoryContracts.Run(records);
+            SoundCaptureDiagnosticContracts.Run(records);
+            ManualSaveQueueContracts.Run();
+            ManualSaveFiniteVoiceContracts.Run(records);
+            StoppedIndependentIdleContracts.Run(records);
             StoppedCombat(records);
             ActiveFurnitureIdle(records);
             PendingPackageSelectionContracts.Run(records);

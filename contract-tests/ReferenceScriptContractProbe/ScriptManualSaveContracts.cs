@@ -17,7 +17,7 @@ internal static class ScriptManualSaveContracts
         GlobalFunction();
         foreach (var shared in new[] { false, true }) QuestOwner(shared);
         Console.WriteLine("OPENNV_SCRIPT_MANUAL_SAVE_PASS deferred=true suffixCaptured=true newNormalSlot=true " +
-            "coalesced=true suspendedRefused=true phaseAndMenuGates=true failureRetained=true " +
+            "coalesced=true suspendedRefused=true phaseAndMenuGates=true failureRetained=true unrelatedSourceContinues=true " +
             "sourceFaultCold=true consumedPrefix=true sharedAndFallback=true globalFunction=true noActiveCursorCapture=true");
     }
 
@@ -75,7 +75,8 @@ internal static class ScriptManualSaveContracts
                 cold.Get(fixture.Caller).Read(1) == 1 && cold.Get(fixture.Caller).Read(2) == 0,
                 "Cold stopped invocation reran its prefix or suffix.");
         }
-        using (var fixture = new ScriptSaveFixture("set saved to 1\nForceSave\nset suffix to 7"))
+        using (var fixture = new ScriptSaveFixture("if saved == 0\nset saved to 1\nForceSave\nset suffix to 7\nendif",
+            gameModeBody: "set suffix to suffix + 1"))
         {
             var writes = 0; var failed = 0;
             fixture.Owner.Bind(_ => { ++writes; throw new IOException("Synthetic writer refusal"); }, _ => ++failed);
@@ -84,10 +85,17 @@ internal static class ScriptManualSaveContracts
             Require(!fixture.Owner.Drain(() => null) && writes == 1 && failed == 1 &&
                 fixture.Owner.Receipt is { Disposition: "failed", Error: "Synthetic writer refusal" },
                 "Writer refusal cleared or completed the request.");
-            Reject(() => fixture.Scripts.Activate(fixture.Caller, fixture.Player));
-            Reject(() => fixture.Owner.Drain(() => null));
+            var failedReceipt = fixture.Owner.Receipt;
+            Require(fixture.Scripts.Activate(fixture.Caller, fixture.Player).Error is null &&
+                fixture.Scripts.Dispatch(fixture.Caller, "GameMode").Error is null && fixture.Value(2) == 8 &&
+                fixture.Owner.EnteredInvocations == 0 && ReferenceEquals(fixture.Owner.Receipt, failedReceipt),
+                "A deferred writer failure poisoned later source instructions or replaced its failed receipt.");
+            fixture.Owner.AdvancePhase();
+            Require(!fixture.Owner.Drain(() => throw new InvalidDataException("A failed request reentered save admission.")),
+                "A failed deferred request replayed its writer.");
             Reject(() => fixture.World.Capture());
-            Require(fixture.Value(1) == 1 && fixture.Value(2) == 7 && writes == 1 && failed == 1,
+            Require(fixture.Value(1) == 1 && fixture.Value(2) == 8 && writes == 1 && failed == 1 &&
+                fixture.Owner.Receipt is { Disposition: "failed", SlotPath: null, Invocations: [{ Ended: true, SourceError: null }] },
                 "Failed deferred save replayed a source effect or writer.");
         }
     }
@@ -135,7 +143,9 @@ internal static class ScriptManualSaveContracts
         Require(missing.Scripts.Activate(missing.Caller, missing.Player).Error is not null &&
             missing.Value(1) == 1 && missing.Value(2) == 0 && missing.Owner.Receipt is { Disposition: "failed" },
             "An absent manual writer was silently waived.");
-        Reject(() => missing.Scripts.Activate(missing.Caller, missing.Player));
+        Require(missing.Scripts.Activate(missing.Caller, missing.Player).Error is not null &&
+            missing.Value(1) == 1 && missing.Value(2) == 0,
+            "An absent-writer source fault was cleared or replayed.");
         Reject(() => missing.World.Capture());
         Reject(() => missing.Owner.Request(0));
         using var wrongOwner = new ScriptSaveFixture("ForceSave");
@@ -212,7 +222,8 @@ internal sealed class ScriptSaveFixture : IDisposable
     internal FalloutFormKey Player => Records.RuntimeFormKey(0x14);
     internal FalloutPluginRecord Script => Records.GetEffective(new("Saves.esm", 0x50));
 
-    internal ScriptSaveFixture(string body, string questBody = "", Func<bool>? hardcore = null, string? functionBody = null)
+    internal ScriptSaveFixture(string body, string questBody = "", Func<bool>? hardcore = null, string? functionBody = null,
+        string gameModeBody = "")
     {
         _directory = Directory.CreateTempSubdirectory("opennv-script-save-");
         var header = new byte[20]; U32(2).CopyTo(header, 12);
@@ -223,7 +234,8 @@ internal sealed class ScriptSaveFixture : IDisposable
         File.WriteAllBytes(Path.Combine(_directory.FullName, "Saves.esm"), Join(
             Record("TES4", 0, Field("HEDR", new byte[12])), Record("NPC_", 7), Record("NPC_", 2),
             Record("ACTI", 1, Field("SCRI", U32(0x50))),
-            Record("SCPT", 0x50, Scope(header, "float saved\nfloat suffix\nbegin OnActivate\n" + body + "\nend")),
+            Record("SCPT", 0x50, Scope(header, "float saved\nfloat suffix\nbegin OnActivate\n" + body +
+                "\nend\nbegin GameMode\n" + gameModeBody + "\nend")),
             Record("QUST", 0x60, Field("DATA", [1, 0]), Field("SCRI", U32(0x51))),
             Record("SCPT", 0x51, Scope(questHeader, "float saved\nfloat suffix\nbegin GameMode\n" + questBody + "\nend")),
             functionBody is null ? [] : Record("SCPT", 0x52, Scope(header,

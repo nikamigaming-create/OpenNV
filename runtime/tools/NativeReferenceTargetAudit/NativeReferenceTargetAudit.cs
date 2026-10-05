@@ -15,6 +15,10 @@ public partial class NativeReferenceTargetAudit : Node3D
         {
             var arguments = OS.GetCmdlineUserArgs();
             if (arguments.Length == 0) await Synthetic();
+            else if (arguments is ["--owned-door-geometry", var doorGame, var doorMod, var doorRoot, var doorIdentity,
+                var doorX, var doorY, var doorZ, .. var doorDependencies])
+                await Owned(doorGame, doorMod, doorRoot, doorIdentity, new(float.Parse(doorX, CultureInfo.InvariantCulture),
+                    float.Parse(doorY, CultureInfo.InvariantCulture), float.Parse(doorZ, CultureInfo.InvariantCulture)), doorDependencies, true);
             else if (arguments is ["--owned-reference-geometry", var game, var mod, var root, var identity,
                 var x, var y, var z, .. var dependencies])
                 await Owned(game, mod, root, identity, new(float.Parse(x, CultureInfo.InvariantCulture),
@@ -39,11 +43,18 @@ public partial class NativeReferenceTargetAudit : Node3D
         await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
     }
 
-    private NativeReferenceGeometryObservation Observe(Node3D target, RuntimeNativePlayer player)
+    private NativeReferenceGeometryObservation Observe(Node3D target, RuntimeNativePlayer player, bool doorApproach = false)
     {
         var configuration = RuntimeConfiguration.Load();
         var original = player.GlobalTransform; var placed = target.GlobalTransform;
-        var result = NativeReferenceGeometryTarget.Observe(target, player, player.Camera.GlobalPosition,
+        NativeReferenceGeometryObservation result;
+        if (doorApproach)
+        {
+            var surface = NativeReferenceGeometryTarget.ObserveSurface(target, player, player.Camera.GlobalPosition,
+                player.CombatCollisionRids, collider => target.IsAncestorOf(collider), _ => true);
+            result = new(target.GlobalPosition, surface.Aim, surface.Bounds, surface.Collider, surface.Shape, 0, -1);
+        }
+        else result = NativeReferenceGeometryTarget.Observe(target, player, player.Camera.GlobalPosition,
             player.CombatCollisionRids, collider => target.IsAncestorOf(collider), _ => true,
             configuration.Player.ActivationDistanceMeters + configuration.Player.CapsuleHeightMeters + configuration.Player.StepHeightMeters);
         Require(player.GlobalTransform == original && target.GlobalTransform == placed,
@@ -51,7 +62,7 @@ public partial class NativeReferenceTargetAudit : Node3D
         return result;
     }
 
-    private async Task Approach(Node3D target, RuntimeNativePlayer player, NativeReferenceGeometryObservation geometry)
+    private async Task Approach(Node3D target, RuntimeNativePlayer player, NativeReferenceGeometryObservation geometry, bool doorApproach = false)
     {
         var configuration = RuntimeConfiguration.Load();
         var original = player.GlobalTransform;
@@ -75,7 +86,7 @@ public partial class NativeReferenceTargetAudit : Node3D
                 player.MoveAndSlide();
             }
         player.Velocity = Vector3.Zero;
-        geometry = Observe(target, player);
+        geometry = Observe(target, player, doorApproach);
         player.Camera.LookAt(geometry.Aim, Vector3.Up);
         Require(player.Camera.GlobalPosition.DistanceTo(geometry.Aim) <= configuration.Player.ActivationDistanceMeters &&
             player.AimedObject() is { } contact && target.IsAncestorOf(contact),
@@ -116,19 +127,45 @@ public partial class NativeReferenceTargetAudit : Node3D
             var moved = Observe(target, player);
             Require(MathF.Abs(moved.Target.X - result.Target.X - 1) < .001f && target.Position == Vector3.Zero,
                 "Source child motion reused stale mesh bounds or rewrote its reference pivot.");
+            var door = new Node3D { Position = new(1, 0, -2) }; fixture.AddChild(door);
+            door.AddChild(new MeshInstance3D { Position = Vector3.Up * .8f, Mesh = new BoxMesh { Size = new(1, 3, 1) } });
+            var doorCollider = Box(door, Vector3.Up * .8f, new(1, 3, 1));
+            await Sync();
+            var doorGoal = Observe(door, player, true);
+            Require(doorGoal.Target == door.GlobalPosition && doorGoal.AimCollider == doorCollider.GetInstanceId() &&
+                doorGoal.Bounds.Position.Y < 0 && doorGoal.FloorCollider == 0,
+                "Door surface replaced its authored approach with its embedded model's floor projection.");
+            await Approach(door, player, doorGoal, true);
+            var embedded = new Node3D { Position = new(-2, 0, -4) }; fixture.AddChild(embedded);
+            embedded.AddChild(new MeshInstance3D { Position = Vector3.Up * .8f, Mesh = new BoxMesh { Size = new(1, 3, 1) } });
+            _ = Box(embedded, Vector3.Up * .8f, new(1, 3, 1));
+            await Sync();
+            var embeddedGoal = Observe(embedded, player);
+            Require(embeddedGoal.Bounds.Position.Y < 0 && embeddedGoal.Target.IsEqualApprox(embedded.GlobalPosition) &&
+                embeddedGoal.FloorCollider == floor.GetInstanceId(),
+                "An embedded object skipped the real support above its mesh bottom or supplied a pivot as floor.");
             floor.Free(); await Sync();
             var refused = false;
             try { _ = Observe(target, player); }
             catch (NotSupportedException error) when (error.Message.Contains("native floor", StringComparison.Ordinal)) { refused = true; }
             Require(refused, "Missing native floor was replaced by an authored pivot or synthetic support.");
+            refused = false;
+            try
+            {
+                _ = NativeCapsuleNavigation.Find(player, player.GlobalPosition, doorGoal.Target,
+                    RuntimeConfiguration.Load().Player.StepHeightMeters, RuntimeConfiguration.Load().Player.CapsuleRadiusMeters,
+                    _ => true, targetRadius: 1.25f);
+            }
+            catch (InvalidOperationException) { refused = true; }
+            Require(refused, "Authored door approach bypassed the independent native floor owner.");
             GD.Print($"OPENNV_NATIVE_REFERENCE_GEOMETRY_PASS runtimeMvid={typeof(RuntimeConfiguration).Assembly.ManifestModule.ModuleVersionId} " +
                 "offsetMesh=true actualFloor=true actualCapsuleApproach=true ordinaryRayAndRange=true occlusionRefused=true childMotion=true " +
-                "queryNoMutation=true missingFloorRefused=true fixture=synthetic campaign=false parity=false recording=false");
+                "queryNoMutation=true missingFloorRefused=true embeddedObjectFloor=true embeddedDoorApproach=true doorFloorStillRequired=true fixture=synthetic campaign=false parity=false recording=false");
         }
         finally { fixture.Free(); }
     }
 
-    private async Task Owned(string game, string mod, string root, string identity, Vector3 from, string[] dependencies)
+    private async Task Owned(string game, string mod, string root, string identity, Vector3 from, string[] dependencies, bool doorGeometry = false)
     {
         if (!from.IsFinite()) throw new InvalidDataException("Owned geometry query requires a finite observed start pose.");
         var setup = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
@@ -179,12 +216,26 @@ public partial class NativeReferenceTargetAudit : Node3D
                 _ = Instance(reference);
             var target = Instance(selected); var player = Player(fixture, from, FalloutCameraProjection.Read(FalloutInstallationSettings.Read(content)));
             await Sync();
-            var geometry = Observe(target, player); var rootTransform = target.GlobalTransform;
+            var isDoor = records.GetEffective(selected.Base).Signature == "DOOR";
+            RuntimeNativeDoorMotion? doorMotion = null;
+            RuntimeNifControllerPlayer? doorController = null;
+            if (doorGeometry)
+            {
+                Require(isDoor, "Owned door geometry requires an actual source DOOR.");
+                var controllers = target.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
+                doorController = controllers.Single(controller => controller.HasSequence("Open") && controller.HasSequence("Close"));
+                doorMotion = new(world.Get(key), controllers, () => { }); target.AddChild(doorMotion);
+                doorMotion.SetProcess(false); await Sync();
+            }
+            var doorApproach = isDoor && !doorGeometry;
+            var geometry = Observe(target, player, doorApproach); var rootTransform = target.GlobalTransform;
+            if (doorGeometry) DoorObservation("closed-before-approach", key, target, player, geometry, doorMotion!, doorController!);
             var beforeModels = target.FindChildren("*", nameof(MeshInstance3D), true, false).OfType<MeshInstance3D>()
                 .Select(mesh => mesh.GlobalTransform).ToArray();
-            await Approach(target, player, geometry);
+            await Approach(target, player, geometry, doorApproach);
             Require(target.GlobalTransform == rootTransform && beforeModels.SequenceEqual(target.FindChildren("*", nameof(MeshInstance3D), true, false)
                 .OfType<MeshInstance3D>().Select(mesh => mesh.GlobalTransform)), "Geometry approach changed the original source placement or mesh transforms.");
+            if (doorGeometry) await ExerciseDoorGeometry(key, target, player, doorMotion!, doorController!, beforeModels);
             Require(hashes.All(pair => pair.Value == Convert.ToHexString(SHA256.HashData(records.GetEffective(pair.Key).ReadData()))) &&
                 resources.All(pair => content.TryRead(pair.Key, null, out var bytes, out _) && pair.Value == Convert.ToHexString(SHA256.HashData(bytes))),
                 "Owned geometry audit changed a winning record or resource input.");
@@ -198,6 +249,7 @@ public partial class NativeReferenceTargetAudit : Node3D
                 sourceGeometryOffsetMeters = rootTransform.Origin.DistanceTo(geometry.Bounds.GetCenter()),
                 geometry.AimShape,
                 geometry.FloorShape,
+                authoredDoorApproach = doorApproach,
                 architectureModels = prototypes.Count,
                 noModelDeclarations,
                 realNativeFloor = true,

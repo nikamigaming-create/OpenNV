@@ -29,7 +29,10 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame = null,
     FalloutReferenceScriptStoppedFrame? CompletedScriptContinuation = null,
     FalloutActorHeadTrackingSnapshot? HeadTracking = null,
-    FalloutActorPendingPackageSelection? PendingPackageSelection = null)
+    FalloutActorPendingPackageSelection? PendingPackageSelection = null,
+    FalloutAnimationSoundEventsSnapshot? AnimationSoundEvents = null,
+    FalloutHitReactionFaultsSnapshot? HitReactionFaults = null,
+    FalloutActivationRelaySnapshot? ActivationRelay = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -62,6 +65,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 }
             }
             snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations);
+            snapshot.ActivationRelay?.Validate();
             snapshot.LockState?.Validate();
             snapshot.OwnershipOverride?.Validate();
             if (snapshot.TalkingActivatorActor is { } dialogueActor && !ValidKey(dialogueActor))
@@ -107,6 +111,11 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             foreach (var start in snapshot.PackageStarts ?? [])
                 (start ?? throw new InvalidDataException("Saved package selection time is absent.")).Validate();
             snapshot.PackageIdle?.Validate();
+            snapshot.AnimationSoundEvents?.Validate();
+            snapshot.HitReactionFaults?.Validate();
+            if (snapshot.AnimationSoundEvents is { } sounds && sounds.Reference != snapshot.Reference ||
+                snapshot.HitReactionFaults is { } faults && faults.Reference != snapshot.Reference)
+                throw new InvalidDataException("Saved native event history belongs to a different reference.");
             snapshot.HitReaction?.Validate();
             if (snapshot.KnockedDown && (snapshot.Injury is not { Dead: false } || snapshot.Ragdoll is null && snapshot.HitReaction is null))
                 throw new InvalidDataException("Knockdown requires a living actor and a retained physical or recovery pose.");
@@ -145,6 +154,7 @@ internal sealed class FalloutReferenceInstance
     internal bool Taken { get; set; }
     internal bool DoorOpen { get; set; }
     internal FalloutDoorMotionState? DoorMotion { get; set; }
+    internal FalloutActivationRelaySnapshot? ActivationRelay { get; set; }
     internal bool Unlocked { get; set; }
     internal FalloutReferenceLockState? LockState { get; set; }
     internal FalloutReferenceOwnershipOverride? OwnershipOverride { get; set; }
@@ -161,6 +171,7 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
     internal Func<bool>? CanCapturePackageBindingFailure { get; set; }
     internal Func<FalloutActorPackageBindingFailure>? CapturePackageBindingFailure { get; set; }
+    internal Func<IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>?>? PendingPackageBindingFiniteVoices { get; set; }
     internal FalloutActorFurnitureContinuation? FurnitureContinuation { get; set; }
     internal FalloutActorSelectionFailure? SelectionFailure { get; set; }
     internal FalloutActorPendingPackageSelection? PendingPackageSelection { get; set; }
@@ -175,6 +186,10 @@ internal sealed class FalloutReferenceInstance
         DialogueContinuation is not null && ProcedureCaptureBlocker == FalloutActorDialogueContinuation.CaptureBlocker;
     internal Func<bool>? CanCaptureSelectionFailure { get; set; }
     internal Func<FalloutActorSelectionFailure>? CaptureSelectionFailure { get; set; }
+    internal Func<FalloutActorSelectionCaptureDiagnostic>? ObserveSelectionCapture { get; set; }
+    internal FalloutActorSelectionCaptureDiagnostic? RetiredSelectionCaptureDiagnostic { get; set; }
+    internal FalloutActorSelectionCaptureDiagnostic? SelectionCaptureDiagnostic =>
+        ObserveSelectionCapture?.Invoke() ?? RetiredSelectionCaptureDiagnostic;
     internal bool SelectionFailureCaptureReady => CanCaptureSelectionFailure?.Invoke() ??
         SelectionFailure is { } failure && ProcedureCaptureBlocker == failure.Error;
     internal Func<bool>? CanCaptureFurniture { get; set; }
@@ -196,6 +211,14 @@ internal sealed class FalloutReferenceInstance
     internal Dictionary<string, FalloutActorValue> ActorValues { get; } = [];
     internal FalloutReferenceEnableParent? EnableParent { get; }
     private FalloutSoundRandomState? _soundRandom;
+    private FalloutAnimationSoundEvents? _animationSoundEvents;
+    internal FalloutAnimationSoundEvents AnimationSoundEvents => _animationSoundEvents ??= new(Reference);
+    internal bool AnimationSoundsCaptureReady => _animationSoundEvents?.CanCapture != false;
+    internal FalloutAnimationSoundHistoryDiagnostic? AnimationSoundCaptureDiagnostic => _animationSoundEvents?.CaptureDiagnostic;
+    private FalloutHitReactionFaults? _hitReactionFaults;
+    internal FalloutHitReactionFaults HitReactionFaults => _hitReactionFaults ??= new(Reference);
+    internal string? CurrentHitReactionError => _hitReactionFaults?.CurrentError;
+    internal string? HitReactionFaultCaptureBlocker { get; set; }
     internal FalloutSoundRandomState SoundRandom => _soundRandom ??= new(
         BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))));
     internal FalloutActorAnimationState Animation { get; } = new();
@@ -269,6 +292,10 @@ internal sealed class FalloutReferenceInstance
     {
         if (HeadTrackingCaptureBlocker is not null || HeadTrackingRequired && CaptureHeadTracking is null && HeadTracking is null)
             throw new NotSupportedException($"Reference {Reference} cannot save head tracking: {HeadTrackingCaptureBlocker ?? "required owner is missing"}");
+        if (HitReactionFaultCaptureBlocker is { } hitFault)
+            throw new NotSupportedException($"Reference {Reference} cannot save its hit reaction: {hitFault}");
+        var soundEvents = _animationSoundEvents?.Capture();
+        var hitReactionFaults = _hitReactionFaults?.Capture();
         var failureReady = PackageBindingFailureCaptureReady;
         if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !SelectionFailureCaptureReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
@@ -292,7 +319,8 @@ internal sealed class FalloutReferenceInstance
             ScriptStoppedFrame: ScriptStoppedFrame?.Copy(), CompletedScriptContinuation: CompletedScriptContinuation?.Copy(),
             HeadTracking: CaptureHeadTracking?.Invoke() ?? HeadTracking?.Copy(),
             PendingPackageSelection: PendingPackageSelectionCaptureReady ? CapturePendingPackageSelection is { } capturePending
-                ? capturePending() : PendingPackageSelection?.Copy() : null);
+                ? capturePending() : PendingPackageSelection?.Copy() : null,
+            AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy());
     }
 }
 
@@ -457,6 +485,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal int PendingProcedureCaptureCount => _instances.Values.Count(instance =>
         instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
+    internal int PendingAnimationSoundCaptureCount => _instances.Values.Count(instance => !instance.AnimationSoundsCaptureReady);
+    internal object PendingAnimationSoundCaptures => _instances.Values.Where(instance => !instance.AnimationSoundsCaptureReady)
+        .OrderBy(instance => records.RuntimeFormId(instance.Reference)).Select(instance => new
+        {
+            reference = instance.Reference.ToString(),
+            cell = instance.Cell.ToString(),
+            resident = IsResident(instance.Reference),
+            history = instance.AnimationSoundCaptureDiagnostic
+        }).ToArray();
     internal object PendingProcedureCaptures => _instances.Values.Where(instance =>
         instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady)
         .Select(instance => new
@@ -465,6 +502,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             assignment = instance.PackageAssignment?.Package.ToString(),
             motion = instance.PackageMotion?.Package.ToString(),
             blocker = instance.ProcedureCaptureBlocker,
+            selectionCapture = instance.SelectionCaptureDiagnostic,
         }).ToArray();
 
     private FalloutScriptManualSaveRequests? _scriptManualSaves;
@@ -554,6 +592,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Taken = snapshot.Taken;
             instance.DoorOpen = snapshot.DoorOpen;
             instance.DoorMotion = snapshot.DoorMotion;
+            if (snapshot.ActivationRelay is { } relay)
+            {
+                validated.ValidateActivationRelay(snapshot.Reference, relay);
+                instance.ActivationRelay = relay.Copy();
+            }
             validated.RestoreAccess(instance, snapshot);
             if (snapshot.BroadcastState is { } broadcast)
                 validated.SetBroadcastState(snapshot.Reference, broadcast ? 1 : 0);
@@ -622,6 +665,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             validated.RestorePackageTiming(instance, snapshot);
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
+            if (snapshot.AnimationSoundEvents is { } soundEvents) instance.AnimationSoundEvents.Restore(soundEvents, records);
+            if (snapshot.HitReactionFaults is { } hitFaults)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                hitFaults.Validate();
+                if (hitFaults.Faults.Any(fault => !validated.BodyParts(snapshot.Reference).Parts.Any(part => part.Type == fault.Part)))
+                    throw new InvalidDataException("Saved hit-reaction fault has no source anatomy.");
+                instance.HitReactionFaults.Restore(hitFaults, records);
+            }
             if (snapshot.Animation is { } animation) instance.Animation.Restore(animation);
             if (snapshot.Unconscious) validated.SetUnconscious(snapshot.Reference, true);
             if (snapshot.MapMarker is { } mapMarker)

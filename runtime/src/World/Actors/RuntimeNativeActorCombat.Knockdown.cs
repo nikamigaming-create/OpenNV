@@ -86,6 +86,7 @@ internal sealed partial class RuntimeNativeActorCombat
             _state.HitReaction = new(selected.FormKey, Convert.ToHexString(SHA256.HashData(selected.ReadData())), 0,
                 new(clip.Path, clip.Hash, 0, true), [p.X, p.Y, p.Z], [q.X, q.Y, q.Z, q.W]);
             _hitReactionError = null;
+            _state.HitReactionFaults.ClearCurrentError();
             GD.Print($"OPENNV_ACTOR_KNOCKDOWN_RECOVER reference={_state.Reference} idle={selected.FormKey}");
         }
         catch (Exception error) { ReportHitReactionError(error); }

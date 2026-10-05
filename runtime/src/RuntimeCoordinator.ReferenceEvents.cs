@@ -15,6 +15,7 @@ public partial class RuntimeCoordinator
         AdvanceNativePlayerMoves();
         AdvanceNativeDeath();
         if (_nativeDeathPresented) return;
+        DrainNativeManualSave();
         AdvanceNativeExteriorStreaming(delta);
         if (_nativeReferences is { } world && world.PlacementRevision != _nativePlacementRevision &&
             _nativeCurrentCellRoot is { } root && _nativeActiveCell is { } scene && !_nativeDoorLoading)

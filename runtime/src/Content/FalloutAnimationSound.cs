@@ -37,6 +37,20 @@ internal static class FalloutAnimationSound
         return paths;
     }
 
+    internal static IReadOnlyList<string> PartialLanes(FalloutSoundRecord source, bool stereoOutput)
+    {
+        var unbound = new List<string>();
+        // Stereo retains the full-band voice while its missing surround send
+        // remains an independent presentation divergence.
+        if (stereoOutput && (source.Flags & FalloutSoundFlags.Lfe360) != 0)
+            unbound.Add("source-lfe-send-not-rendered-on-stereo-output");
+        if ((source.Flags & (FalloutSoundFlags.MenuSound | FalloutSoundFlags.EnvironmentIgnored)) == 0 && source.ReverbAttenuation != 100)
+            unbound.Add("source-environment-reverb-send");
+        if ((source.Flags & FalloutSoundFlags.MuteWhenSubmerged) != 0)
+            unbound.Add("authoritative-listener-submersion");
+        return unbound.AsReadOnly();
+    }
+
     internal static FalloutAnimationSoundSelection Select(FalloutSoundRecord source,
         IReadOnlyList<string> variants, FalloutSoundRandomState random, bool ownsLoopStop = false, bool stereoOutput = false)
     {
@@ -56,16 +70,7 @@ internal static class FalloutAnimationSound
             source.ValidateAttenuationCurve();
             _ = source.AttenuationDbAtDistanceGameUnits(source.MinimumDistanceGameUnits);
         }
-        var unbound = new List<string>();
-        // Stereo has no discrete LFE channel. Keep the original full-band
-        // voice; never silence it because a surround-only send is unavailable.
-        // The surround route remains rejected when that output is requested.
-        if (stereoOutput && (source.Flags & FalloutSoundFlags.Lfe360) != 0)
-            unbound.Add("source-lfe-send-not-rendered-on-stereo-output");
-        if ((source.Flags & (FalloutSoundFlags.MenuSound | FalloutSoundFlags.EnvironmentIgnored)) == 0 && source.ReverbAttenuation != 100)
-            unbound.Add("source-environment-reverb-send");
-        if ((source.Flags & FalloutSoundFlags.MuteWhenSubmerged) != 0)
-            unbound.Add("authoritative-listener-submersion");
+        var unbound = PartialLanes(source, stereoOutput);
         var before = random.State;
         if (!FalloutSoundPlaybackContract.PassesRandomChance(source, random))
             return new(source, false, null, 1, before, random.State, unbound);

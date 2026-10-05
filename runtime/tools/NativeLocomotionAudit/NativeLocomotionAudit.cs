@@ -20,6 +20,13 @@ public partial class NativeLocomotionAudit : Node3D
             {
                 await CheckRouteAccumulation(); GetTree().Quit(); return;
             }
+            if (arguments is ["--player-arrival-regions"])
+            {
+                NativeNavigationContracts.Run();
+                await CheckPlayerHalfSpacingRefinement();
+                await CheckNativeSourceArrivalRegion();
+                GetTree().Quit(); return;
+            }
             if (arguments is ["--route-smoothing"])
             {
                 await CheckRouteSmoothing(); GetTree().Quit(); return;
@@ -67,6 +74,8 @@ public partial class NativeLocomotionAudit : Node3D
             await CheckRouteDoorContact();
             await CheckSupportedDescentRefinement();
             await CheckNarrowPassageRefinement();
+            await CheckPlayerHalfSpacingRefinement();
+            await CheckNativeSourceArrivalRegion();
             await CheckOpenDoorFrameCorridor();
             await CheckSupportedStepHeadroom();
             await CheckRoundedLandingContact();

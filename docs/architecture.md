@@ -3,6 +3,16 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Source animation history](source-animation-event-history.md) retains genuine
+finished sound generations and stopped pure hit-query prefixes through save v43.
+Independent selected IDLE clocks and residual bone components compose with a
+failed package begin; active speech, sound, attachments and physical poses keep
+their own capture requirements.
+Finite source sounds keep their native lifetime outside model retirement;
+all-retained source/native/media receipts admit live save waiting without
+admitting active audio into a checkpoint. Source writer failures retain their
+own historical/capture boundary while later unrelated script frames continue.
+
 [Whole-stack script coverage](quest-graph-audit.md) discovers all winning
 standalone/embedded programs and condition owners. It inspects every authored
 arm through the shared deferred expression parser without consuming gameplay

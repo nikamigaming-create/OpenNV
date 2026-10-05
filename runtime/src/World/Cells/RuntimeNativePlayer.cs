@@ -266,6 +266,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     public override void _UnhandledInput(InputEvent inputEvent)
     {
+        ObserveSaveInput(inputEvent, "unhandled");
         if (_xr is not null) return;
         var input = _configuration.Player.DesktopInput;
         if (_inputControls is null && !_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
@@ -281,7 +282,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         }
         if (!_modalInput && _furniturePhase == 0 && inputEvent.IsActionPressed(input.Save.Action))
         {
+            ObserveSaveInput(inputEvent, "dispatch");
             SaveGame?.Invoke();
+            ObserveSaveInput(inputEvent, "returned");
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -441,6 +444,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         left = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveLeft.Action),
         right = Input.GetActionStrength(_configuration.Player.DesktopInput.MoveRight.Action),
         controls = _inputControls?.State,
+        saveControl = SaveInputState,
     };
     internal Node? AimedObject()
     {

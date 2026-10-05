@@ -28,7 +28,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private void PrepareEngagement()
     {
         PrepareMovement();
-        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom); _actor.AddChild(_enemySounds);
+        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents); _actor.AddChild(_enemySounds);
         var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
         var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2, _state.Templates);
         var statsData = stats.ReadSubrecords().Single(field => field.Signature == "DATA").Data;

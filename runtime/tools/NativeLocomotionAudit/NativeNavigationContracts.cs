@@ -9,6 +9,7 @@ internal static class NativeNavigationContracts
     {
         CheckProjectionBounds();
         CheckRefinementIntent();
+        CheckSourceArrivalRegion();
         var prefix = NativeCapsuleNavigation.CorridorPrefix(Vector3.Zero,
             [new(0, 0, 6), new(2, 0, 6), new(2, 4, 0)], 8);
         if (prefix.Target != new Vector3(2, 0, 6) || prefix.Resume != 2)
@@ -165,6 +166,63 @@ internal static class NativeNavigationContracts
             !limited.DescribeFailure().Contains("omittedRejectionObservations=3", StringComparison.Ordinal))
             throw new InvalidOperationException("Bounded native rejection history silently dropped distinct failure observations.");
         Console.WriteLine("OPENNV_NAVIGATION_INTENT_PASS foldedSource=true separateReferenceRegion=true stackedFloors=true openFrameAdmission=true exactNativeRejection=true");
+    }
+
+    private static void CheckSourceArrivalRegion()
+    {
+        var selected = new Vector3(1.1f, 0, 0);
+        var projection = new NativeNavigationProjectionRegion(new(2, 0, 0), selected, 2);
+        var final = NativeCapsuleNavigation.Intent(Vector3.Zero, [selected], new(3, 0, 0), 1.5f, projection: projection);
+        if (final.Projection != projection || final.ReferenceApproach || final.ArrivalRadius != 0 || final.Target != selected)
+            throw new InvalidOperationException("Final source arrival lost its independent requested/selected/radius lineage.");
+        var folded = NativeCapsuleNavigation.Intent(Vector3.Zero,
+            [new(0, 0, 6), new(2, 0, 6), selected], new(3, 0, 0), 1.5f, projection: projection);
+        if (folded.Projection is not null || folded.ReferenceApproach || folded.Resume != 2)
+            throw new InvalidOperationException("A final source region replaced an untraversed intermediate source prefix.");
+        var portal = new Vector3(0, 0, 7);
+        var longEnd = new Vector3(0, 0, 8.2f);
+        var longProjection = new NativeNavigationProjectionRegion(new(0, 0, 9), longEnd, 2);
+        var portalPrefix = NativeCapsuleNavigation.Intent(Vector3.Zero, [portal, longEnd], projection: longProjection);
+        var portalTail = NativeCapsuleNavigation.Intent(portal, [longEnd], projection: longProjection);
+        if (portalPrefix.Target != portal || portalPrefix.Resume != 1 || portalPrefix.Projection is not null ||
+            portalTail.Target != longEnd || portalTail.Projection != longProjection || portalTail.Resume != 1)
+            throw new InvalidOperationException("A bounded source slice cut inside its last segment or erased the next source region.");
+        foreach (var longPath in new Vector3[][] { [new(0, 0, 10)], [Vector3.Zero, new(0, 0, 10)], [new(0, 0, .1f), new(0, 0, 10)] })
+            if (NativeCapsuleNavigation.CorridorPrefix(Vector3.Zero, longPath, 8).Target.DistanceTo(new(0, 0, 8)) > .001f)
+                throw new InvalidOperationException("Portal-bounded slicing stalled at an already reached portal or lost its first long edge.");
+        var mismatched = false;
+        try { _ = NativeCapsuleNavigation.Intent(Vector3.Zero, [Vector3.One], projection: projection); }
+        catch (InvalidDataException) { mismatched = true; }
+        if (!mismatched) throw new InvalidOperationException("Source arrival accepted another selected endpoint.");
+        if (NativeCapsuleNavigation.RefinementSpacing(.32f, .32f, 1) != .16f ||
+            NativeCapsuleNavigation.RefinementSpacing(.3f, .32f, .4f) >= .3f * .51f)
+            throw new InvalidOperationException("Player refinement duplicated its coarse lattice instead of halving spacing.");
+        using var source = JsonDocument.Parse("""
+            {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
+              {"formId":"floor","cellFormId":"cell","version":11,
+               "verticesGameUnits":[[-3,-3,0],[3,-3,0],[-3,3,0],[3,3,0]],
+               "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,1,-1],"flags":0},
+                            {"vertexIndices":[1,3,2],"adjacentTriangles":[-1,-1,0],"flags":0}],"externalConnections":[]},
+              {"formId":"upper","cellFormId":"cell","version":11,
+               "verticesGameUnits":[[-3,-3,1],[3,-3,1],[-3,3,1],[3,3,1]],
+               "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,1,-1],"flags":0},
+                            {"vertexIndices":[1,3,2],"adjacentTriangles":[-1,-1,0],"flags":0}],"externalConnections":[]},
+              {"formId":"island","cellFormId":"cell","version":11,
+               "verticesGameUnits":[[4,0,0],[6,0,0],[4,3,0]],
+               "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,-1,-1],"flags":0}],"externalConnections":[]}]}
+            """);
+        var graph = CellNavigationGraph.Load(source.RootElement, new HashSet<string> { "cell" });
+        var requested = new Vector3(2.5f, 2.5f, .2f);
+        var sourceSelected = new Vector3(2.5f, 2.5f, 0);
+        var region = graph.ArrivalRegion(new(-2, -2, 0), requested, sourceSelected, 2, .01f, .6f);
+        if (!region(new(2, 2, .01f)) || region(new(2, 2, 1)) || region(new(3.1f, 1.5f, .01f)) ||
+            region(new(1, 1, 0)) || region(new(4.2f, 2, 0)))
+            throw new InvalidOperationException("Source arrival changed requested radius, authored floor projection or directed reachable domain.");
+        var unreachable = false;
+        try { _ = graph.ArrivalRegion(new(-2, -2, 0), requested, new(2.5f, 2.5f, 1), 2, .01f, .6f); }
+        catch (InvalidDataException) { unreachable = true; }
+        if (!unreachable) throw new InvalidOperationException("Source arrival accepted an unreachable selected floor.");
+        Console.WriteLine("OPENNV_SOURCE_ARRIVAL_CONTRACT_PASS requestedSelectedIndependent=true intermediatePrefixRetained=true portalThenRegion=true firstLongEdgeRetained=true originalRadius=true reachableFloor=true upperFloorRefused=true outsideNavmRefused=true halfSpacing=true");
     }
 
     private static void CheckProjectionBounds()

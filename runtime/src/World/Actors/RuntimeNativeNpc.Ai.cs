@@ -231,6 +231,7 @@ internal partial class RuntimeNativeNpc
         _bindingInitialBase = false;
         _baseClock.Bind(_baseResource, _baseHash);
         ResumeBaseClock();
+        if (bindingFailure?.IndependentIdle is { } independentIdle) RestoreStoppedIndependentIdle(independentIdle);
         if (_animation is { } overlay && _baseAnimation is { } baseAnimation)
             RuntimeNativeNifAnimation.ApplyLayers((baseAnimation, _baseAnimationSeconds), (overlay, _animationSeconds));
         if (bindingFailure is not null) PublishFace();
@@ -463,7 +464,7 @@ internal partial class RuntimeNativeNpc
 
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
-        if (condition.Function is 1 or 14)
+        if (condition.Function is 1 or 14 or 32)
         {
             FalloutReferencePlacement? playerPlacement = null;
             if (Combat?.PackagePlayer is { } player && Combat.PackagePlayerCell is { } playerCell)

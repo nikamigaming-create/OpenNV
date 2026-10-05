@@ -21,9 +21,14 @@ internal sealed record FalloutActorPackageIdleAnimation(FalloutFormKey Idle, str
 
     internal void Validate(FalloutPluginStack records, FalloutFormKey package)
     {
-        Validate();
+        ValidateSource(records);
         if (!FalloutScriptPackage.Read(records.GetEffective(package)).Idles.Contains(Idle))
             throw new InvalidDataException("Saved collection animation is absent from its source package.");
+    }
+
+    internal void ValidateSource(FalloutPluginStack records)
+    {
+        Validate();
         var record = records.GetEffective(Idle);
         if (record.Signature != "IDLE" || FalloutActorFurnitureContinuation.RecordHash(record) != IdleSha256)
             throw new InvalidDataException("Saved collection animation differs from its winning IDLE.");
