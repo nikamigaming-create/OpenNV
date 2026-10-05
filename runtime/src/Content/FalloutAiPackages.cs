@@ -5,6 +5,15 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutAiPackages
 {
+    internal static float QuestRunning(FalloutCondition condition, FalloutQuestState quests)
+    {
+        if (condition.Function != 56)
+            throw new InvalidDataException("Quest-running package query has a different source function.");
+        if (condition.RunOn != 0)
+            throw new NotSupportedException("Quest-running package condition requires its source subject scope owner.");
+        return quests.Evaluate(condition);
+    }
+
     internal static bool IsCurrentPackage(FalloutPluginStack records, FalloutFormKey actor,
         FalloutFormKey package, Func<FalloutFormKey, FalloutFormKey?> query)
     {

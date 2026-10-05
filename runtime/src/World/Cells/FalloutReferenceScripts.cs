@@ -74,6 +74,14 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0)
             throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
         if (!world.IsResident(reference)) throw new InvalidOperationException($"Reference {reference} cannot receive events while its cell is unloaded.");
+        return DispatchFrameCore(world.Get(reference), events, elapsedSeconds, observeActivationBegin, observeActivationEnd);
+    }
+
+    private IReadOnlyList<FalloutReferenceScriptEventResult> DispatchFrameCore(FalloutReferenceInstance instance,
+        IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds,
+        Action? observeActivationBegin = null, Action? observeActivationEnd = null)
+    {
+        var reference = instance.Reference;
         var admitted = new Dictionary<string, FalloutReferenceScriptEvent>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in events)
         {
@@ -115,7 +123,6 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             else if (item.Topics is not null) throw new InvalidDataException("Topic registration belongs to SayToDone.");
         }
-        var instance = world.Get(reference);
         var recovered = RecoverMissingRead(instance, events) ?? RecoverMissingCommand(instance, events);
         // A failed attempt cannot run again on its GameMode clock. A new
         // activation or contact entry is an explicit new event and may retry

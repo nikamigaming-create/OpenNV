@@ -5,6 +5,21 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--speech-completion-contracts"])
+{
+    SpeechCompletionContracts.Run();
+    SayToContracts.Run();
+    return;
+}
+if (args.Length >= 15 && args[0] == "--audit-owned-speech-completion")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    uint Form(string value) => uint.Parse(value, System.Globalization.NumberStyles.HexNumber, invariant);
+    OwnedSpeechCompletionProbe.Run(args[1], args[2], args[3], new(args[4], Form(args[5])), args[6],
+        new(args[7], Form(args[8])), args[9], double.Parse(args[10], invariant), double.Parse(args[11], invariant),
+        new(args[12], Form(args[13])), args[14], args[15..]);
+    return;
+}
 if (args is ["--escape-runtime-contracts"])
 {
     FactionRelationContracts.Run();
@@ -728,6 +743,7 @@ NoActivationSoundContracts.Run();
 VampireQueryContracts.Run();
 InventoryQueryContracts.Run();
 SayToContracts.Run();
+SpeechCompletionContracts.Run();
 RadioConversationContracts.Run();
 ScreenBloodContracts.Run();
 QuestMenuContracts.Run();

@@ -38,6 +38,19 @@ internal static partial class FurnitureContracts
                 "Synthetic reached source predicate fault.", pose, 12345, 8.25, null, false, new(0, null, null, null), null);
             owner.SelectionFailure = failure; owner.ProcedureCaptureBlocker = failure.Error;
             var saved = world.Capture();
+            owner.ProcedureCaptureBlocker = "Independent procedure remains unowned.";
+            Require(!owner.SelectionFailureCaptureReady && world.PendingProcedureCaptureCount == 1,
+                "A retained predicate fault admitted a different unowned procedure.");
+            Reject(() => world.Capture());
+            owner.ProcedureCaptureBlocker = failure.Error;
+            owner.CanCaptureSelectionFailure = () => false;
+            Require(!owner.SelectionFailureCaptureReady && world.PendingProcedureCaptureCount == 1,
+                "Retained selection state bypassed a refusing live capture owner.");
+            Reject(() => world.Capture());
+            owner.CanCaptureSelectionFailure = null;
+            Require(owner.SelectionFailureCaptureReady && world.PendingProcedureCaptureCount == 0 &&
+                JsonSerializer.Serialize(world.Capture()) == JsonSerializer.Serialize(saved),
+                "Retired selection delegate changed its exact retained fault or checkpoint state.");
             using (var cold = new FalloutReferenceWorld(records))
             {
                 cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(saved))!);

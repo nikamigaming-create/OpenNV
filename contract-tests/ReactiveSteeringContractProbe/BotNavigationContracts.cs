@@ -13,7 +13,31 @@ internal static class BotNavigationContracts
         ClosingAndStationaryBounds();
         QueuedPlanning();
         RouteDoors();
+        RefinementProvenance();
         Console.WriteLine("Reference bot navigation: short/inside endpoints, partial corridors, projection refinement, moving-target endpoints, queued/stale planning, ordinary route doors, ray result, closing progress and stationary bounds PASS.");
+    }
+
+    private static void RefinementProvenance()
+    {
+        var observation = Observation(6);
+        var nativeTarget = new Vector3(1, 2, 3);
+        var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) =>
+            new([end], end, end, true, "owned-cell", Refinement: new("source-corridor", nativeTarget, 0, "source-hash")), (_, _) => { });
+        bot.Start("source", "travel", 1); bot.Tick(.016f);
+        using (var state = State(bot))
+        {
+            var refinement = state.RootElement.GetProperty("navigation").GetProperty("refinement");
+            Require(refinement.GetProperty("scope").GetString() == "source-corridor" &&
+                refinement.GetProperty("sourceSha256").GetString() == "source-hash" &&
+                refinement.GetProperty("target").EnumerateArray().Select(value => value.GetSingle()).SequenceEqual(new[] { 1f, 2f, 3f }),
+                "Live bot serialization discarded the native refinement scope, exact target or source hash.");
+        }
+        bot.Fail("Native query: step-headroom; shape=2; source portals were not excluded.");
+        using (var state = State(bot))
+            Require(state.RootElement.GetProperty("error").GetString()!.Contains("step-headroom", StringComparison.Ordinal) &&
+                state.RootElement.GetProperty("navigation").GetProperty("refinement").GetProperty("scope").GetString() == "source-corridor" &&
+                !state.RootElement.GetProperty("active").GetBoolean(),
+                "Blocked planning lost its native failure/provenance or retained an input owner.");
     }
 
     private static void QueuedPlanning()

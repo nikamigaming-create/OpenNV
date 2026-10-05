@@ -84,12 +84,19 @@ public partial class NativeRenderedMenuAudit
                 results.Add((actor, info.Record.FormKey, begin));
             };
             var completedInfos = new List<FalloutFormKey>();
-            speech.InfoCompleted += completedInfos.Add;
-            speech.SayToCompleted += (actor, topics) =>
+            var committedInfos = new Dictionary<FalloutFormKey, int>();
+            speech.InfoCompleted += info =>
             {
-                var result = scripts.DispatchFrame(actor, [new("SayToDone", Topics: topics)], 0).Single();
+                if (committedInfos.GetValueOrDefault(info) <= completedInfos.Count(completed => completed == info))
+                    throw new InvalidDataException("INFO settled notification preceded its successful source completion.");
+                completedInfos.Add(info);
+            };
+            speech.SayToCompleted += receipt =>
+            {
+                var result = scripts.DispatchSpeechCompletion(receipt);
                 if (result.Error is not null) throw new InvalidDataException(result.Error);
-                events.Add(actor);
+                events.Add(receipt.Speaker);
+                if (receipt.Info is { } info) committedInfos[info] = committedInfos.GetValueOrDefault(info) + 1;
             };
             AddChild(speech);
             var player = records.RuntimeFormKey(0x14);

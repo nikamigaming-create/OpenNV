@@ -107,6 +107,7 @@ internal sealed partial class RuntimeNativeCreature
                 .GetDeadCount(condition.FormArgument1),
             71 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
             73 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
+            56 => FalloutAiPackages.QuestRunning(condition, _aiQuests!),
             58 or 59 or 79 or 546 => _aiQuests!.Evaluate(condition),
             32 when condition.RunOn == 0 => InSameCell(condition.FormArgument1) ? 1 : 0,
             35 => _aiWorld!.IsEnabled(Appearance.Reference!.Value) ? 0 : 1,

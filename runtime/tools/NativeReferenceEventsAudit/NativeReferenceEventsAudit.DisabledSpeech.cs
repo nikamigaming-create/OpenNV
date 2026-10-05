@@ -21,7 +21,7 @@ public partial class NativeReferenceEventsAudit
             var speech = new RuntimeNativeSpeech();
             speech.ReportDivergence = reported.Add;
             speech.Configure(records, configuration.ActorCompiler.FaceGenAnimation.Lip, _ => 0, references: state);
-            speech.SayToCompleted += (_, _) => throw new InvalidDataException("Disabled speech invented SayToDone.");
+            speech.SayToCompleted += _ => throw new InvalidDataException("Disabled speech invented SayToDone.");
             speech.InfoCompleted += _ => throw new InvalidDataException("Disabled speech invented INFO completion.");
             speech.PrepareSubtitle = _ => throw new InvalidDataException("Disabled speech invented subtitles.");
             speech.ExecuteResults = (_, _, _) => throw new InvalidDataException("Disabled speech invented results.");

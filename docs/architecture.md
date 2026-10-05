@@ -28,6 +28,12 @@ that same lifecycle; semantic quest progress is separate from timer-variable wri
 actor and winning PACK event, after its result script and before its event IDLE.
 Voice, dialogue results and completion use the shared speech owner.
 
+[Native corridor and speech continuation](native-corridor-continuation.md)
+separates source NAVM prefixes from final interaction refinement and uses actual
+capsule support for local movement. Typed finished-speech receipts dispatch through
+the persistent source-script owner when a speaker's presentation cell unloads.
+Ordinary reference events retain their residency boundary.
+
 [Actor death history](actor-death-counts.md) retains cumulative source-base counts
 through successful shared death transitions and cold saves. Source result-entry
 conditions use explicit host scope admission with the existing inventory owner.

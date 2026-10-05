@@ -80,7 +80,7 @@ public partial class NativeActorPerformanceAudit
                 quests: quests, playerFemale: () => false, references: world);
             speech.PrepareSubtitle = _ => { };
             speech.ExecuteResults = (_, _, _) => throw new NotSupportedException("This isolated audio fixture does not execute campaign results.");
-            speech.SayToCompleted += (_, _) => throw new InvalidDataException("Package speech invented a script SayToDone event.");
+            speech.SayToCompleted += _ => throw new InvalidDataException("Package speech invented a script SayToDone event.");
             fixture.AddChild(speech);
             var requests = 0; var completions = 0; Action? retired = null;
             bool Done() => JsonSerializer.SerializeToElement(actor.AiState).GetProperty("packageEvents").GetProperty("Done").GetBoolean();

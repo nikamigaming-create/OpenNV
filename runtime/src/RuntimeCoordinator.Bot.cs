@@ -17,7 +17,6 @@ public partial class RuntimeCoordinator
     private Aabb _botLocalBounds;
     private RuntimeSimulatorBotInput? _botSimulatorInput;
     private readonly Dictionary<FalloutFormKey, Vector3> _botAuthoredDestinations = [];
-    private readonly Dictionary<Vector3, ulong> _botBlockedPortals = [];
     private readonly BotInteractionEvidence _botInteractions = new();
     private readonly Dictionary<FalloutFormKey, FalloutFormKey> _botPortalDestinations = [];
 
@@ -185,7 +184,6 @@ public partial class RuntimeCoordinator
             _botNavigation = CellNavigationGraph.LoadOwned(_nativePluginStack!, cells,
                 (mesh, error) => GD.PushError($"OPENNV_BOT_NAVIGATION_UNAVAILABLE mesh={mesh} {error.Message}"));
             _botNavigationIdentity = identity;
-            _botBlockedPortals.Clear();
         }
         return identity;
     }
@@ -205,51 +203,34 @@ public partial class RuntimeCoordinator
         }
         var origin = new Vector3(start.X, start.Y, start.Z);
         var now = Time.GetTicksMsec();
-        foreach (var point in _botBlockedPortals.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
-            _botBlockedPortals.Remove(point);
-        // A portal midpoint is not the complete portal's traversable width.
-        // Rejecting a distant midpoint can disconnect an otherwise walkable
-        // route. Coarse A* excludes only segments that native refinement has
-        // actually rejected; every returned movement segment is still swept
-        // against resident collision with the player's complete capsule below.
-        bool Permitted(Vector3 point) => !_botBlockedPortals.ContainsKey(point);
-        for (var attempt = 0; attempt < 8; attempt++)
+        var path = _botNavigation!.FindPath(Source(start), Source(end), destinationRadiusGameUnits: projectionRadius / units);
+        var worldPath = path.Select(World).ToArray();
+        var intent = NativeCapsuleNavigation.Intent(origin, worldPath, approachTarget is { } referenceTarget ?
+            new(referenceTarget.X, referenceTarget.Y, referenceTarget.Z) : null, approachRadius);
+        IReadOnlyList<Vector3> corridor = intent.ReferenceApproach ? [intent.Target] : intent.Corridor;
+        Func<ulong, FalloutFormKey?>? source = _nativeReferenceEvents is { } events ? events.CollisionReference : null;
+        var probe = new NativeNavigationProbe(NativeCapsuleNavigation.FirstCorridorContact(_nativePlayer!, origin, corridor),
+            source);
+        var scope = intent.ReferenceApproach ? "reference-approach" : "source-corridor";
+        try
         {
-            // A reference may rest on an isolated counter/prop navmesh. Reach a
-            // nearby authored floor, then let the ordinary interaction ray and
-            // distance checks decide whether the target can actually be used.
-            var path = _botNavigation!.FindPath(Source(start), Source(end), Permitted, projectionRadius / units);
-            var worldPath = path.Select(World).ToArray();
-            if (worldPath.Length == 0) throw new InvalidOperationException("Source navigation returned no corridor.");
-            var (target, resume) = NativeCapsuleNavigation.CorridorPrefix(origin, worldPath, 8);
-            var arrivalRadius = 0f;
-            if (approachTarget is { } referenceTarget && origin.DistanceTo(new(referenceTarget.X, referenceTarget.Y, referenceTarget.Z)) <= 8)
-            {
-                target = new(referenceTarget.X, referenceTarget.Y, referenceTarget.Z);
-                arrivalRadius = approachRadius;
-                resume = worldPath.Length;
-            }
-            try
-            {
-                var spacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
-                var refinedSpacing = Math.Min(spacing, Math.Max(.15f,
-                    _configuration.Player.CapsuleRadiusMeters * _nativePlayer!.GlobalBasis.X.Length()));
-                var local = NativeCapsuleNavigation.FindRefined(_nativePlayer, origin, target,
-                    _configuration.Player.StepHeightMeters, spacing, refinedSpacing, NativeCollisionResident, targetRadius: arrivalRadius);
-                GD.Print($"OPENNV_BOT_CAPSULE_ROUTE from={origin} to={target} sourceWaypoint={resume} " +
-                    $"requested={end} projected={worldPath[^1]} projectionRadius={projectionRadius} " +
-                    $"reachesProjected={resume == worldPath.Length} blockedPortals={_botBlockedPortals.Count} " +
-                    $"arrivalRadius={arrivalRadius} " +
-                    $"spacing={local.Spacing} coarseError={local.CoarseError ?? "none"} ms={Time.GetTicksMsec() - now}");
-                return new(local.Path.Select(Numeric).ToArray(), end, Numeric(worldPath[^1]), resume == worldPath.Length, identity, projectionRadius);
-            }
-            catch (InvalidOperationException error) when (attempt < 7 && path.Count > 1)
-            {
-                var blocked = path[Math.Min(resume, path.Count - 2)];
-                _botBlockedPortals[blocked] = now + 30000;
-                GD.Print($"OPENNV_BOT_BLOCKED_PORTAL source={blocked} reason={error.Message}");
-            }
+            var spacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
+            var refinedSpacing = Math.Min(spacing, Math.Max(.15f,
+                _configuration.Player.CapsuleRadiusMeters * _nativePlayer!.GlobalBasis.X.Length()));
+            var local = NativeCapsuleNavigation.FindRefined(_nativePlayer, origin, intent.Target,
+                _configuration.Player.StepHeightMeters, spacing, refinedSpacing, NativeCollisionResident,
+                targetRadius: intent.ArrivalRadius, probe: probe, corridor: intent.Corridor);
+            GD.Print($"OPENNV_BOT_CAPSULE_ROUTE from={origin} to={intent.Target} sourceWaypoint={intent.Resume} " +
+                $"requested={end} projected={worldPath[^1]} projectionRadius={projectionRadius} scope={scope} " +
+                $"reachesProjected={intent.Resume == worldPath.Length} sourceExclusions=0 " +
+                $"arrivalRadius={intent.ArrivalRadius} sourceSha256={_botNavigation.SourceSha256} " +
+                $"spacing={local.Spacing} coarseError={local.CoarseError ?? "none"} ms={Time.GetTicksMsec() - now}");
+            return new(local.Path.Select(Numeric).ToArray(), end, Numeric(worldPath[^1]), intent.Resume == worldPath.Length, identity, projectionRadius,
+                Refinement: new(scope, Numeric(intent.Target), intent.ArrivalRadius, _botNavigation.SourceSha256));
         }
-        throw new InvalidOperationException("No capsule-supported source corridor after bounded A* alternatives.");
+        catch (InvalidOperationException error)
+        {
+            throw new InvalidOperationException($"No capsule-supported {scope}; source portals were not excluded. {error.Message}", error);
+        }
     }
 }

@@ -9,7 +9,13 @@ public partial class NativeLocomotionAudit : Node3D
     {
         try
         {
+            GD.Print($"OPENNV_NATIVE_NAVIGATION_OWNER_BUILD ownerBuild={typeof(NativeCapsuleNavigation).Module.ModuleVersionId} " +
+                "fixture=synthetic gameplay=separate parity=unverified");
             var arguments = OS.GetCmdlineUserArgs();
+            if (arguments is ["--navigation-contracts"])
+            {
+                NativeNavigationContracts.Run(); GetTree().Quit(); return;
+            }
             if (arguments is ["--route-motion"])
             {
                 await CheckRouteAccumulation(); GetTree().Quit(); return;
@@ -29,8 +35,17 @@ public partial class NativeLocomotionAudit : Node3D
                 await CheckRouteDoorContact();
                 await CheckSupportedDescentRefinement();
                 await CheckNarrowPassageRefinement();
+                await CheckOpenDoorFrameCorridor();
+                await CheckSupportedStepHeadroom();
                 GetTree().Quit();
                 return;
+            }
+            if (arguments is ["--source-corridor"])
+            {
+                NativeNavigationContracts.Run();
+                await CheckOpenDoorFrameCorridor();
+                await CheckSupportedStepHeadroom();
+                GetTree().Quit(); return;
             }
             NativeNavigationContracts.Run();
             await CheckRouteAccumulation();
@@ -40,6 +55,8 @@ public partial class NativeLocomotionAudit : Node3D
             await CheckRouteDoorContact();
             await CheckSupportedDescentRefinement();
             await CheckNarrowPassageRefinement();
+            await CheckOpenDoorFrameCorridor();
+            await CheckSupportedStepHeadroom();
             await Check(.3f, false, true);
             await Check(2, false, false);
             await Check(.3f, true, false);

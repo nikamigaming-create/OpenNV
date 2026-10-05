@@ -74,7 +74,7 @@ internal partial class RuntimeNativeSpeech : Node
     internal IReadOnlyCollection<string> Unbound => _unbound;
     internal Action<FalloutDialogueInfo, FalloutFormKey, bool>? ExecuteResults { get; set; }
     internal event Action<FalloutFormKey>? InfoCompleted;
-    internal event Action<FalloutFormKey, IReadOnlySet<FalloutFormKey>>? SayToCompleted;
+    internal event Action<FalloutSpeechCompletionReceipt>? SayToCompleted;
     internal Action<FalloutSpeechSubtitle>? PrepareSubtitle { get; set; }
     internal Action<string> ReportDivergence { get; set; } = GD.PushError;
     // Overlapping audio is actor-owned. HUD subtitle arbitration is a separate
@@ -161,8 +161,9 @@ internal partial class RuntimeNativeSpeech : Node
                 positionSeconds = voice?.Player.GetPlaybackPosition() ?? 0.0,
                 lipWeights = voice?.LipWeights ?? [],
                 facePoseOwner = voice?.Lip is null ? "source-lip-absent" : voice.TalkingActivator ? "talking-activator-lip-animation-unbound" :
-                    voice.Speaker is null ? "creature-speech-face-unbound" : "owned-tri-lip-morphs",
-                face = voice?.Speaker?.FaceState,
+                    voice.Speaker is null ? "creature-speech-face-unbound" : !IsInstanceValid(voice.Speaker) ?
+                    "speaker-presentation-unloaded" : "owned-tri-lip-morphs",
+                face = IsInstanceValid(voice?.Speaker) ? voice!.Speaker!.FaceState : null,
                 lipHeadMotionOwner = "unbound",
                 speakerAnimation = voice?.Info?.Responses[voice.ResponseIndex].SpeakerAnimation?.ToString(),
                 speakerAnimationOwner = voice?.Info?.Responses[voice.ResponseIndex].SpeakerAnimation is null
@@ -200,7 +201,7 @@ internal partial class RuntimeNativeSpeech : Node
         text = voice.Info?.Responses[voice.ResponseIndex].Text,
         positionSeconds = voice.Player.GetPlaybackPosition(),
         lipWeights = voice.LipWeights,
-        face = voice.Speaker?.FaceState,
+        face = IsInstanceValid(voice.Speaker) ? voice.Speaker!.FaceState : null,
         speakerAnimation = voice.Info?.Responses[voice.ResponseIndex].SpeakerAnimation?.ToString(),
         forceSubtitles = voice.Command?.ForceSubtitles == true,
         sayToTopic = voice.Topic?.ToString(),
@@ -391,6 +392,9 @@ internal partial class RuntimeNativeSpeech : Node
         voice.Binding = null; voice.LipSha256 = null; voice.Player.Stream = null;
         voice.Lip = null; voice.LipWeights = [];
         ++voice.Generation; _lastVoice = voice;
+        if (exchange is { Completed: null, Completion: null })
+            exchange.Completion = new(exchange.Speaker, new HashSet<FalloutFormKey> { exchange.Topic },
+                info.Record.FormKey, voice.Generation);
         if ((info.Flags & 4) != 0) _said.Add(info.Record.FormKey);
         RunResults(info, voice.DialogueSubject, true);
         if ((info.Flags & 8) != 0) RunResults(info, voice.DialogueSubject, false);
@@ -428,8 +432,11 @@ internal partial class RuntimeNativeSpeech : Node
     private void BindSpeaker(Voice voice, FalloutPluginRecord speaker, Node3D actor)
     {
         EndListenerAnimation(voice);
-        voice.Speaker?.ClearSpeechFace();
-        voice.Speaker?.EndResponseAnimation();
+        if (IsInstanceValid(voice.Speaker))
+        {
+            voice.Speaker!.ClearSpeechFace();
+            voice.Speaker.EndResponseAnimation();
+        }
         voice.Speaker = actor as RuntimeNativeNpc;
         voice.Creature = actor as RuntimeNativeCreature;
         voice.Presentation = actor;
@@ -457,14 +464,15 @@ internal partial class RuntimeNativeSpeech : Node
                 throw new NotSupportedException($"Response listener IDLE {listenerAnimation} requires its humanoid target animation owner.");
             voice.ListenerAnimationOwner.BeginResponseAnimation(_stack, listenerAnimation);
         }
-        if (voice.Speaker is null && response.SpeakerAnimation is not null)
-            throw new NotSupportedException($"Non-humanoid response IDLE {response.SpeakerAnimation} requires its animation blend owner.");
-        voice.Speaker?.BeginResponseAnimation(_stack, response.SpeakerAnimation);
+        if (!IsInstanceValid(voice.Speaker) && response.SpeakerAnimation is not null)
+            throw new NotSupportedException($"Response IDLE {response.SpeakerAnimation} requires its live humanoid animation owner.");
+        if (IsInstanceValid(voice.Speaker)) voice.Speaker!.BeginResponseAnimation(_stack, response.SpeakerAnimation);
         if (response.Sound is { } sound)
         {
             if (info.Speaker is { } specified && specified != voice.Identity!.Actor)
                 throw new InvalidDataException("Explicit dialogue sound belongs to a different actor.");
-            var actor = voice.Presentation ?? throw new InvalidOperationException("Sound response lost its speaker presentation.");
+            var actor = IsInstanceValid(voice.Presentation) ? voice.Presentation! :
+                throw new NotSupportedException("Source sound response has no live speaker presentation owner.");
             voice.ResponseSound = new(_stack, RuntimeLiveContentSource.Current!, actor, _unitsToMetres,
                 (_soundRandom ?? throw new NotSupportedException("Response SOUN has no retained random owner."))(voice.Reference));
             AddChild(voice.ResponseSound);
@@ -483,7 +491,7 @@ internal partial class RuntimeNativeSpeech : Node
             voice.Lip = FaceGenLipAnimation.Read(lipBytes, _lipConfiguration);
             voice.LipSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(lipBytes));
             voice.LipWeights = new float[voice.Lip.TargetNames.Count];
-            voice.Speaker?.ValidateSpeechFace(_lipConfiguration);
+            if (IsInstanceValid(voice.Speaker)) voice.Speaker!.ValidateSpeechFace(_lipConfiguration);
         }
         else _unbound.Add("missing-source-lip:" + lipPath);
         if (voice.Creature is not null) _unbound.Add("creature-speech-face:" + voice.Reference);
@@ -492,7 +500,7 @@ internal partial class RuntimeNativeSpeech : Node
         voice.Player.Play();
         GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} " +
             $"speaker={voice.Command!.SpeakerEditorId} voice={voice.Binding.AudioPath} lip={lipPath} voiceType={voice.Binding.VoiceType} " +
-            $"speakerIdle={response.SpeakerAnimation} lipLoaded={voice.Lip is not null} facePose={(voice.TalkingActivator ? "talking-activator-unbound" : voice.Speaker is null ? "creature-unbound" : "owned-tri-lip-morphs")} headMotion=unbound spatialAudio=unbound parity=unmeasured");
+            $"speakerIdle={response.SpeakerAnimation} lipLoaded={voice.Lip is not null} facePose={(voice.TalkingActivator ? "talking-activator-unbound" : voice.Speaker is null ? "creature-unbound" : !IsInstanceValid(voice.Speaker) ? "speaker-presentation-unloaded" : "owned-tri-lip-morphs")} headMotion=unbound spatialAudio=unbound parity=unmeasured");
     }
 
     public override void _Process(double delta)
@@ -502,8 +510,7 @@ internal partial class RuntimeNativeSpeech : Node
         {
             var frame = _channels.Values.Where(voice => voice.Info is not null)
                 .Select(voice => (Voice: voice, voice.Generation)).ToArray();
-            _emptyCompletions.Drain((speaker, topics) => (SayToCompleted ??
-                throw new NotSupportedException("SayTo has no completion-event owner."))(speaker, topics),
+            _emptyCompletions.Drain(DispatchSourceCompletion,
                 () => IsInsideTree() && IsProcessing() && !GetTree().Paused);
             if (GetTree().Paused) return;
             foreach (var entry in frame)
@@ -514,7 +521,8 @@ internal partial class RuntimeNativeSpeech : Node
                 }
             AdvanceDeferredSpeech();
         }
-        catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or
+            InvalidOperationException or KeyNotFoundException or OverflowException)
         {
             Fail(error);
         }
@@ -525,32 +533,54 @@ internal partial class RuntimeNativeSpeech : Node
         if (voice.Lip is not null)
         {
             voice.Lip.Sample(voice.Player.GetPlaybackPosition(), voice.LipWeights);
-            voice.Speaker?.ApplySpeechFace(_lipConfiguration, voice.LipWeights);
+            if (IsInstanceValid(voice.Speaker)) voice.Speaker!.ApplySpeechFace(_lipConfiguration, voice.LipWeights);
         }
         if (!voice.Advance) return;
         voice.Advance = false;
         ClearResponseSound(voice);
         EndListenerAnimation(voice);
-        voice.Speaker?.EndResponseAnimation();
+        if (IsInstanceValid(voice.Speaker)) voice.Speaker!.EndResponseAnimation();
         if (voice.ResponseCompleted is { } completion)
         {
             voice.ResponseCompleted = null; voice.Info = null; voice.Lip = null; voice.LipWeights = [];
-            voice.Speaker?.ClearSpeechFace();
+            if (IsInstanceValid(voice.Speaker)) voice.Speaker!.ClearSpeechFace();
             _conversationVoice = null;
             completion();
             return;
         }
         if (++voice.ResponseIndex < voice.Info!.Responses.Count) { PlayResponse(voice); return; }
         var completed = voice.Info;
-        var completedTopic = voice.Topic; voice.Topic = null;
-        var packageCompleted = voice.PackageCompleted; voice.PackageCompleted = null;
-        voice.Info = null; voice.Lip = null; voice.LipWeights = [];
-        voice.Speaker?.ClearSpeechFace();
-        GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner=audio-finished");
-        if ((completed.Flags & 8) == 0) RunResults(completed, voice.DialogueSubject, false);
-        InfoCompleted?.Invoke(completed.Record.FormKey);
+        var completedTopic = voice.Topic;
+        var packageCompleted = voice.PackageCompleted;
+        void FinishResponse()
+        {
+            voice.Topic = null; voice.PackageCompleted = null;
+            voice.Info = null; voice.Lip = null; voice.LipWeights = [];
+            if (IsInstanceValid(voice.Speaker)) voice.Speaker!.ClearSpeechFace();
+            GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner=audio-finished");
+            if ((completed.Flags & 8) == 0) RunResults(completed, voice.DialogueSubject, false);
+        }
+        if (voice.Radio is null && voice.NpcExchange is null && packageCompleted is null && completedTopic is { } sourceTopic)
+        {
+            var receipt = new FalloutSpeechCompletionReceipt(voice.Reference,
+                new HashSet<FalloutFormKey> { sourceTopic }, completed.Record.FormKey, voice.Generation);
+            _emptyCompletions.Complete(receipt, pending =>
+            {
+                FinishResponse();
+                DispatchSourceCompletion(pending);
+            }, () =>
+            {
+                ++voice.CompletedCommands; ++_completedCommands;
+                // The stage owner observes settled speech only after its source
+                // completion committed. A failed prefix retains the active receipt.
+                InfoCompleted?.Invoke(completed.Record.FormKey);
+            });
+            return;
+        }
+        FinishResponse();
         if (voice.Radio is { } radio)
         {
+            InfoCompleted?.Invoke(completed.Record.FormKey);
             radio.CompleteLine();
             if (radio.Info is { } next)
                 StartCore(voice.Command!, _stack.GetEffective(voice.Reference), radio.Topic!.Value, null,
@@ -560,19 +590,21 @@ internal partial class RuntimeNativeSpeech : Node
         else if (voice.NpcExchange is { } exchange)
         {
             voice.NpcExchange = null;
-            AdvanceNpcExchange(exchange, voice, completed);
+            AdvanceNpcExchange(exchange, voice, completed, () => InfoCompleted?.Invoke(completed.Record.FormKey));
         }
-        else if (packageCompleted is not null)
+        else
         {
-            packageCompleted();
-            if (voice.PackageEvent is null) ++_completedPackages;
-        }
-        else if (completedTopic is { } topic)
-        {
-            (SayToCompleted ?? throw new NotSupportedException("SayTo has no completion-event owner."))(voice.Reference, new HashSet<FalloutFormKey> { topic });
-            ++voice.CompletedCommands; ++_completedCommands;
+            InfoCompleted?.Invoke(completed.Record.FormKey);
+            if (packageCompleted is not null)
+            {
+                packageCompleted();
+                if (voice.PackageEvent is null) ++_completedPackages;
+            }
         }
     }
+
+    private void DispatchSourceCompletion(FalloutSpeechCompletionReceipt receipt) =>
+        (SayToCompleted ?? throw new NotSupportedException("SayTo has no completion-event owner."))(receipt);
 
     private void Fail(Exception error)
     {
@@ -606,8 +638,8 @@ internal partial class RuntimeNativeSpeech : Node
 
     private static void ClearResponseSound(Voice voice)
     {
-        if (voice.ResponseSound is null) return;
-        voice.ResponseSound.Free(); voice.ResponseSound = null;
+        if (IsInstanceValid(voice.ResponseSound)) voice.ResponseSound!.Free();
+        voice.ResponseSound = null;
     }
 
     private static void EndListenerAnimation(Voice voice)

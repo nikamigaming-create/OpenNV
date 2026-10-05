@@ -10,6 +10,13 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 9 && args[1] is "--npc-speech-settled" or "--npc-speech-failure")
+            {
+                await NpcSpeechSettled(args[0], args[2], args[3], args[4], args[5], args[6], args[7],
+                    short.Parse(args[8], System.Globalization.CultureInfo.InvariantCulture), args[9..], args[1] == "--npc-speech-failure");
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 6 && args[1] == "--script-sound-continuation")
             {
                 await ScriptSoundContinuation(args[0], args[2], args[3], args[4], args[5], args[6..]);

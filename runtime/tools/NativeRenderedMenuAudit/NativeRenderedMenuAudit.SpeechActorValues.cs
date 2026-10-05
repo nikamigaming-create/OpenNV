@@ -75,15 +75,22 @@ public partial class NativeRenderedMenuAudit
                 _ => throw new InvalidDataException("The isolated user-value response invented an unrelated stage effect.")));
             speech.ExecuteResults = scripts.ExecuteResult;
             var completions = 0;
-            speech.SayToCompleted += (reference, topics) =>
+            speech.SayToCompleted += receipt =>
             {
-                if (reference != actor.FormKey || !topics.SetEquals([topic.Topic.FormKey]))
+                if (receipt.Speaker != actor.FormKey || !receipt.Topics.SetEquals([topic.Topic.FormKey]))
                     throw new InvalidDataException("Scripted completion crossed actor or topic ownership.");
+                var result = scripts.DispatchSpeechCompletion(receipt);
+                if (result.Error is not null) throw new InvalidDataException(result.Error);
                 ++completions;
             };
             AddChild(speech);
             var completed = new List<string>();
-            speech.InfoCompleted += info => completed.Add(info.ToString());
+            speech.InfoCompleted += info =>
+            {
+                if (completed.Count >= completions || speech.Error is not null)
+                    throw new InvalidDataException("INFO settled notification preceded successful source completion or followed a failed prefix.");
+                completed.Add(info.ToString());
+            };
             for (var iteration = 0; iteration < (queued ? 1 : 2); ++iteration)
             {
                 speech.SayTo(actor.FormKey, records.RuntimeFormKey(0x14), topic.Topic.FormKey, true);

@@ -1,6 +1,12 @@
 # Product status
 
-Ordinary TTW input reaches Escape stage 18 inside Vault 101. Directional faction
+Ordinary TTW input cold-loads the retained post-Amata save, reaches Escape stage
+18 and traverses the source portal into Vault101b (CELL 024511). The open doorway
+and authored stairs support ordinary movement. The latest checked candidate
+completes the old-cell source speech receipt after transition. Saving still refuses
+at NPC procedure initialization, and the bot rejects an actual stair landing that
+ordinary movement crosses. These remaining owners require the next repair.
+Directional faction
 relations/save v38, reached actor-value/spatial queries, Travel weapon visibility,
 scripted radio links and the independent dialogue target trigger are merged in
 checked PR 141. Loading displays an animated phase/elapsed indicator and yields
@@ -49,7 +55,8 @@ separately from native contacts. See [source cell coverage](cell-graph-audit.md)
 Ordinary input completes all ten G.O.A.T. questions, scoring, original tag
 acceptance and Brotch's source desk occupation. The genuine complete stage-80
 checkpoint cold-loads without replaying the exam. A separate genuine post-Amata
-checkpoint is retained; its cold continuation still needs verification.
+checkpoint is retained; its cold continuation and onward ordinary cell transition
+are verified. Saving after that transition remains blocked by NPC procedure state.
 A headless genuine FNV-save XR check passes 27 independent grip/aim poses and
 held-weapon muzzle alignment. No guards were shot in that check. Physical headset
 and final-eye acceptance remain separate requirements.
