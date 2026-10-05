@@ -14,12 +14,11 @@ internal sealed record FalloutFindFurniturePackage(FalloutFormKey Form, uint Fla
         if (source.Procedure != 0 || source.LocationType != 0 || source.LocationReference is null)
             throw new NotSupportedException("Find Furniture requires its near-reference search location owner.");
         var fields = record.ReadSubrecords().ToArray();
-        var data = fields.Single(field => field.Signature == "PKDT").Data.Span;
-        var flags = BinaryPrimitives.ReadUInt32LittleEndian(data);
+        var data = FalloutPackageData.Read(record);
+        var flags = data.Flags;
         const uint supported = 2 | 4 | 0x400 | 0x1000 | 0x2000;
         if ((flags & ~supported) != 0 ||
-            (flags & 0x1000) == 0 && BinaryPrimitives.ReadUInt16LittleEndian(data[6..]) != 0 ||
-            BinaryPrimitives.ReadUInt16LittleEndian(data[8..]) != 0 ||
+            (flags & 0x1000) == 0 && data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0) ||
             fields.Any(field => field.Signature is "PLD2" or "PTD2"))
             throw new NotSupportedException("Find Furniture has additional unowned behavior or search inputs.");
         var targets = fields.Where(field => field.Signature == "PTDT").ToArray();

@@ -14,7 +14,7 @@ internal partial class RuntimeNativeNpc
     private bool CanCaptureFurnitureContinuation() => FurnitureProcedureActive && !_bindingInitialBase &&
         !_furnitureApproaching && !_travelActive && _requestedSelection is null && _aiError is null &&
         AnimationError is null && _packageEvents is { Active: not null, Error: null } &&
-        _packageIdleSource is not null && _animation is null && !_responseIdleActive &&
+        _packageIdleSource is not null && (_animation is null || CanCaptureFurnitureIdleAnimation()) && !_responseIdleActive &&
         _conversationTarget is null && Combat?.OwnsPose != true &&
         _baseClock.Resource.Length != 0 && _aiReferenceState?.ProcedureCaptureBlocker == FindFurnitureCaptureBlocker;
 
@@ -41,7 +41,7 @@ internal partial class RuntimeNativeNpc
             _furnitureModel, _furnitureModelHash, _seat is null ? null : _seat with { PlacementOffset = (float[])_seat.PlacementOffset.Clone() },
             _seat is null ? null : WriteFurniturePose(_furnitureOccupied),
             _furnitureClip is { } clip ? new(clip.Idle, clip.IdleHash, clip.Path, clip.Nif.Sha256) : null,
-            _furnitureInitialPlacement, CapturePackageIdleState());
+            _furnitureInitialPlacement, CapturePackageIdleState(captureAnimation: true));
         state.Validate();
         return state;
     }
@@ -100,6 +100,7 @@ internal partial class RuntimeNativeNpc
         Transform = ReadFurniturePose(saved.Pose);
         if (clip is not null) StartFurnitureAnimation(clip);
         else PlayLocomotion(false);
+        if (saved.IdleState?.ActiveAnimation is { } animation) RestoreFurnitureIdleAnimation(animation);
         _aiQuestRevision = _questState!.Revision; _aiActivityRevision = Activity.Revision;
         _aiPollRemaining = saved.PollRemaining; _aiScheduleTime = saved.ScheduleTime;
         _aiReferenceState!.ProcedureCaptureBlocker = FindFurnitureCaptureBlocker;
@@ -109,7 +110,13 @@ internal partial class RuntimeNativeNpc
     {
         if (_aiReferenceState is not { } state) return false;
         var retained = CanCaptureFurnitureContinuation();
-        if (retained) state.FurnitureContinuation = CaptureFurnitureContinuation();
+        if (retained)
+        {
+            var continuation = CaptureFurnitureContinuation() ??
+                throw new InvalidOperationException("Capturable furniture lost its source continuation during retirement.");
+            state.PackageAssignment = continuation.Assignment;
+            state.FurnitureContinuation = continuation;
+        }
         if (ReferenceEquals(state.CanCaptureFurniture, _furnitureCaptureReady)) state.CanCaptureFurniture = null;
         if (ReferenceEquals(state.CaptureFurniture, _furnitureCapture)) state.CaptureFurniture = null;
         return retained;
@@ -122,10 +129,11 @@ internal partial class RuntimeNativeNpc
         new Basis(new Vector3(pose[0], pose[1], pose[2]), new Vector3(pose[3], pose[4], pose[5]), new Vector3(pose[6], pose[7], pose[8])),
             new Vector3(pose[9], pose[10], pose[11]));
 
-    private FalloutActorPackageIdleState CapturePackageIdleState() => new(_packageIdleSource!.Form,
+    private FalloutActorPackageIdleState CapturePackageIdleState(bool captureAnimation = false) => new(_packageIdleSource!.Form,
         FalloutActorFurnitureContinuation.RecordHash(_aiStack!.GetEffective(_packageIdleSource.Form)),
         _packageIdles!.Capture(), _idleReplays.Remaining.Select(value => new FalloutIdleReplayCooldown(value.Key,
-            FalloutActorFurnitureContinuation.RecordHash(_aiStack.GetEffective(value.Key)), value.Value)).ToArray(), _packageIdleError);
+            FalloutActorFurnitureContinuation.RecordHash(_aiStack.GetEffective(value.Key)), value.Value)).ToArray(), _packageIdleError,
+        captureAnimation && _animation is not null ? CaptureFurnitureIdleAnimation() : null);
 
     private void RestorePackageIdleState(FalloutActorPackageIdleState? saved)
     {

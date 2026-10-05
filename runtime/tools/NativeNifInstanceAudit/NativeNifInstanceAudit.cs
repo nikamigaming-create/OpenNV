@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--managed-sequence-registration"])
+            {
+                ExerciseEmptyManagedSequences(); ExerciseRepeatedManagedSequences(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--empty-managed-sequences"])
             {
                 ExerciseEmptyManagedSequences(); GetTree().Quit(); return;
@@ -119,6 +123,7 @@ public partial class NativeNifInstanceAudit : Node
             await ExerciseHeadEquipmentAttachment();
             ExerciseObjectAnimation();
             ExerciseEmptyManagedSequences();
+            ExerciseRepeatedManagedSequences();
             Exercise(Synthetic(), 0.02f, "synthetic");
             ExercisePlaced(Synthetic(false), 0.02f);
             ExercisePlacedLights();

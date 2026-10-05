@@ -16,6 +16,7 @@ internal partial class RuntimeNativePlayer
     private bool _weaponActionLooping, _weaponActionStartPending;
     private double _weaponActionSeconds, _reloadHeld;
     private int _weaponActionHitCount;
+    private int? _weaponActionVariant;
     private bool _reloadPressed, _holdHandled;
     private bool _weaponTriggerHeld, _automaticFireStopped;
     private readonly SortedSet<string> _weaponUnboundEvents = new(StringComparer.Ordinal);
@@ -38,6 +39,8 @@ internal partial class RuntimeNativePlayer
         state = CaptureWeaponHandling(),
         action = _weaponAction,
         seconds = _weaponActionSeconds,
+        firstPerson = _firstPerson?.ActionSelection,
+        thirdPerson = _thirdPerson?.ActionSelection,
         error = _weaponActionError,
         sounds = _weaponSounds?.State,
         firing = FiringState,
@@ -90,18 +93,29 @@ internal partial class RuntimeNativePlayer
                 if (weapon.ReloadAnimation >= 19) throw new NotSupportedException("Incremental/special reload state is unbound.");
                 if (!_weaponHandling!.CanReload(weapon)) return;
             }
-            var clip = _firstPerson.PrepareAction(group);
-            _thirdPerson?.PrepareAction(group);
-            var sequence = clip.Sequence;
             var attack = group.StartsWith("attack", StringComparison.Ordinal);
-            _weaponActionKeys = new(clip.TextKeys, sequence.StartTime, sequence.StopTime, sequence.Frequency,
-                weaponCadence: attack && weapon.Automatic && weapon.AttackAnimation == 74 && sequence.CycleType == 0);
+            int? variant = null;
+            if (attack)
+            {
+                var first = _firstPerson.ActionVariants(group);
+                var third = _thirdPerson?.ActionVariants(group);
+                if (third is not null && (first.Count != third.Count || first.Where((path, index) =>
+                    !Path.GetFileName(path).Equals(Path.GetFileName(third[index]), StringComparison.OrdinalIgnoreCase)).Any()))
+                    throw new NotSupportedException("Player attack views have different source variant catalogs; their mapping is unbound.");
+                for (var index = 0; index < first.Count; index++)
+                {
+                    _ = ActionTimeline(_firstPerson.PrepareAction(group, index), weapon, attack: true);
+                    if (_thirdPerson is not null) _ = ActionTimeline(_thirdPerson.PrepareAction(group, index), weapon, attack: true);
+                }
+                variant = FalloutAttackAnimationSelection.Index(first.Count, _weaponHandling!.NextAttackRandomUInt32);
+            }
+            var clip = _firstPerson.PrepareAction(group, variant);
+            _thirdPerson?.PrepareAction(group, variant);
+            _weaponActionKeys = ActionTimeline(clip, weapon, attack);
             _weaponActionHitCount = attack ? _weaponActionKeys.Discharges : 0;
-            if (attack && _weaponActionHitCount == 0)
-                throw new NotSupportedException("Attack animation has no source Hit, Fire or Release event.");
-            if (sequence.CycleType != 2 && !(attack && weapon.Automatic && sequence.CycleType == 0))
-                throw new NotSupportedException("A weapon action needs a clamped sequence or an automatic attack loop.");
             _weaponAction = group; _weaponActionClip = clip; _weaponActionSeconds = 0;
+            _weaponActionVariant = variant;
+            _firstPerson.SetAction(group, 0, variant); _thirdPerson?.SetAction(group, 0, variant);
             _weaponActionStartPending = true; _weaponActionLooping = false;
             if (!attack) _aiming = false;
             if (group == "equip")
@@ -111,6 +125,18 @@ internal partial class RuntimeNativePlayer
             GD.Print($"OPENNV_WEAPON_ACTION_BEGIN weapon={weapon.Form} group={group}");
         }
         catch (Exception error) { _weaponActionError = error.Message; GD.PushError("OPENNV_WEAPON_ACTION_UNBOUND " + error.Message); }
+    }
+
+    private static FalloutWeaponAnimationTimeline ActionTimeline(RuntimeNativeNifAnimation clip, FalloutWeaponPresentation weapon, bool attack)
+    {
+        var sequence = clip.Sequence;
+        var timeline = new FalloutWeaponAnimationTimeline(clip.TextKeys, sequence.StartTime, sequence.StopTime, sequence.Frequency,
+            weaponCadence: attack && weapon.Automatic && weapon.AttackAnimation == 74 && sequence.CycleType == 0);
+        if (attack && timeline.Discharges == 0)
+            throw new NotSupportedException("Attack animation has no source Hit, Fire or Release event.");
+        if (sequence.CycleType != 2 && !(attack && weapon.Automatic && sequence.CycleType == 0))
+            throw new NotSupportedException("A weapon action needs a clamped sequence or an automatic attack loop.");
+        return timeline;
     }
 
     private void AdvanceWeaponHandling(double delta)
@@ -180,8 +206,8 @@ internal partial class RuntimeNativePlayer
             else
             {
                 var poseSeconds = _weaponActionKeys.SampleSeconds(_weaponActionSeconds, looping);
-                _firstPerson.SetAction(_weaponAction, poseSeconds);
-                _thirdPerson?.SetAction(_weaponAction, poseSeconds);
+                _firstPerson.SetAction(_weaponAction, poseSeconds, _weaponActionVariant);
+                _thirdPerson?.SetAction(_weaponAction, poseSeconds, _weaponActionVariant);
             }
             Activity.SetWeaponDrawn(_weaponHandling!.Drawn);
         }
@@ -194,6 +220,7 @@ internal partial class RuntimeNativePlayer
     private void CancelWeaponAction()
     {
         _weaponAction = null; _weaponActionClip = null; _weaponActionKeys = null; _weaponActionSeconds = 0; _weaponActionHitCount = 0;
+        _weaponActionVariant = null;
         _firstPerson?.SetAction(null, 0); _thirdPerson?.SetAction(null, 0);
     }
 

@@ -39,7 +39,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "classic-movement <Fallout 1 installation>\n" +
         "script <installation-or-source-stack> <SCPT editor ID> (or --contains <source text>)\n" +
         "record <installation-or-source-stack> <signature> <editor ID or runtime hex ID> [...] (or --contains <EDID text>)\n" +
-        "settings <installation-or-source-stack> <numeric-setting name fragment> [...]\n" +
+        "settings <installation-or-source-stack> <setting name fragment> [...]\n" +
         "dialogue <installation-or-source-stack> <quest editor ID>\n" +
         "replay <installation-or-source-stack> <scenario.json>\n" +
         "lifecycle <installation-or-source-stack> <CELL editor ID> [...] (or --all)\n" +
@@ -48,7 +48,8 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "resources <installation-or-source-stack> <logical-directory>\n" +
         "resource <installation-or-source-stack> <logical-path> [private-output-file]\n" +
         "nif <installation-or-source-stack> <logical-path>\n" +
-        "menu <installation-or-source-stack> <logical-path> [tile-name]");
+        "menu <installation-or-source-stack> <logical-path> [tile-name]\n" +
+        "Owned-data commands also accept --mod <id> <root> <dependency-root> ... last.");
     return 2;
 }
 
@@ -158,7 +159,17 @@ if (args[0] == "classic-frm")
 if (args[0] == "classic-scenery") return ClassicSceneryInventory.Run(args[1], args[2]);
 if (args[0] == "classic-assets") return ClassicAssetInventory.Run(args[1..]);
 if (args[0] == "classic-movement") return ClassicMovementProbe.Run(args[1]);
-RuntimeLiveContentSource.Configure(args[1], RuntimeLiveContentSource.FalloutNewVegasGame);
+var sourceModIndex = Array.IndexOf(args, "--mod");
+if (sourceModIndex >= 0)
+{
+    if (sourceModIndex < 3 || args.Length < sourceModIndex + 3)
+        throw new ArgumentException("Owned source selection needs --mod <id> <root> followed by dependency roots.");
+    var selection = new FalloutModStackSelection([new(args[sourceModIndex + 1], args[sourceModIndex + 2], args[(sourceModIndex + 3)..])]).Resolve(args[1]);
+    RuntimeLiveContentSource.Configure(args[1], RuntimeLiveContentSource.FalloutNewVegasGame,
+        selection.ContentRoots.Skip(1).ToArray(), selection.ActivePlugins, selection.Settings);
+    args = args[..sourceModIndex];
+}
+else RuntimeLiveContentSource.Configure(args[1], RuntimeLiveContentSource.FalloutNewVegasGame);
 using var content = RuntimeLiveContentSource.Current!;
 using var records = FalloutPluginStack.Load(content.PluginSources);
 var json = new JsonSerializerOptions { WriteIndented = true };
@@ -234,14 +245,16 @@ if (args[0] == "dialogue")
 }
 if (args[0] == "settings")
 {
+    var strings = FalloutExecutableStringTable.Read(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe"));
     var defaults = FalloutExecutableStringTable.ReadFloatDefaults(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe"));
     var integers = FalloutExecutableStringTable.ReadIntegerDefaults(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe"));
-    var names = defaults.Keys.Concat(integers.Keys).Concat(records.EffectiveRecords("GMST").SelectMany(record => record.ReadSubrecords()
+    var names = defaults.Keys.Concat(integers.Keys).Concat(strings.Keys).Concat(records.EffectiveRecords("GMST").SelectMany(record => record.ReadSubrecords()
         .Where(field => field.Signature == "EDID").Select(field => FalloutDialogueTopic.Text(field.Data.Span))))
-        .Where(name => (name.StartsWith('f') || name.StartsWith('i')) && args[2..].Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
+        .Where(name => (name.StartsWith('f') || name.StartsWith('i') || name.StartsWith('s')) && args[2..].Any(part => name.Contains(part, StringComparison.OrdinalIgnoreCase)))
         .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase);
     foreach (var name in names) Console.WriteLine(JsonSerializer.Serialize(new { name,
-        value = name.StartsWith('i') ? (double)FalloutGameSettingIntegers.Read(records, name) : FalloutGameSettingFloats.Read(records, name) }, json));
+        value = name.StartsWith('s') ? (object)FalloutGameSettingStrings.Read(records, name) :
+            name.StartsWith('i') ? (double)FalloutGameSettingIntegers.Read(records, name) : FalloutGameSettingFloats.Read(records, name) }, json));
     return 0;
 }
 if (args[0] == "record")

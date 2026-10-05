@@ -87,6 +87,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     {
         AddToGroup(CombatActorsGroup);
         _state.StopCombat = StopCombat;
+        _state.CaptureEngagement = CaptureEngagement;
         RestorePackageMotion();
         RestoreEngagementPose();
         // A cold cell enters the tree with this owner already attached. Its

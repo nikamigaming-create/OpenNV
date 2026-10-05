@@ -34,6 +34,17 @@ capsule support for local movement. Typed finished-speech receipts dispatch thro
 the persistent source-script owner when a speaker's presentation cell unloads.
 Ordinary reference events retain their residency boundary.
 
+[NIF sequence registration](source-nif-sequence-registration.md) retains every
+managed source block separately from its ordered last-exact-name lookup. Shared
+elapsed-time boundaries preserve finite text keys and cold animation suffixes.
+
+[Package and attack selection](source-package-and-attack-selection.md) retains
+short and extended package declarations separately from procedure admission,
+and source attack alternatives separately from one persistent action selection.
+[Stopped actor and idle continuation](stopped-actor-and-idle-continuation.md)
+composes source faults with independent physical owners and retains uncovered
+skeletal components of an occupied collection idle.
+
 [Actor death history](actor-death-counts.md) retains cumulative source-base counts
 through successful shared death transitions and cold saves. Source result-entry
 conditions use explicit host scope admission with the existing inventory owner.

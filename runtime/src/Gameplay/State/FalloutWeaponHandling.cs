@@ -3,13 +3,15 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record FalloutMagazineSnapshot(FalloutFormKey Weapon, FalloutFormKey Ammunition, int Loaded, bool UsesInventoryAmmo = true);
-internal sealed record FalloutWeaponHandlingSnapshot(bool Drawn, IReadOnlyList<FalloutMagazineSnapshot> Magazines, ulong? ShotRandomState = null);
+internal sealed record FalloutWeaponHandlingSnapshot(bool Drawn, IReadOnlyList<FalloutMagazineSnapshot> Magazines,
+    ulong? ShotRandomState = null, ulong? AttackRandomState = null);
 
 /// <summary>Inventory-backed magazine and draw state, shared by both player views.</summary>
 internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bool nativeNpc = false)
 {
     private readonly Dictionary<FalloutFormKey, FalloutMagazineSnapshot> _magazines = [];
     private readonly FalloutSoundRandomState _shotRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
+    private readonly FalloutSoundRandomState _attackRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
     internal bool Drawn { get; private set; } = true;
     internal void SetDrawn(bool drawn) => Drawn = drawn;
 
@@ -118,7 +120,7 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
 
     internal FalloutWeaponHandlingSnapshot Capture() => new(Drawn,
         _magazines.Values.Where(value => inventory.Item(value.Weapon) is not null).Select(value => value with
-        { Loaded = value.UsesInventoryAmmo ? Math.Min(value.Loaded, inventory.Item(value.Ammunition)?.Count ?? 0) : value.Loaded }).OrderBy(value => value.Weapon.ToString()).ToArray(), _shotRandom.State);
+        { Loaded = value.UsesInventoryAmmo ? Math.Min(value.Loaded, inventory.Item(value.Ammunition)?.Count ?? 0) : value.Loaded }).OrderBy(value => value.Weapon.ToString()).ToArray(), _shotRandom.State, _attackRandom.State);
 
     internal void Restore(FalloutWeaponHandlingSnapshot snapshot, Func<FalloutFormKey, FalloutWeaponPresentation> resolve)
     {
@@ -137,6 +139,7 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
         foreach (var entry in restored) _magazines.Add(entry.Key, entry.Value);
         Drawn = snapshot.Drawn;
         if (snapshot.ShotRandomState is { } random) _shotRandom.Restore(random);
+        if (snapshot.AttackRandomState is { } attackRandom) _attackRandom.Restore(attackRandom);
     }
 
     internal static void Validate(FalloutWeaponHandlingSnapshot snapshot)
@@ -148,4 +151,5 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
     }
 
     internal float NextShotRandomUnit() => _shotRandom.NextUnitFloat();
+    internal uint NextAttackRandomUInt32() => _attackRandom.NextUInt32();
 }

@@ -1,0 +1,35 @@
+# Independent actor pose continuation
+
+A stopped package or predicate owner retains its source fault and consumed
+effects. Saving that fault also requires every independent actor pose owner.
+It cannot waive a corpse, combat, hit reaction, weapon attachment, route or
+pending sound continuation.
+
+The stopped corpse owner requires a completed native ragdoll capture and keeps
+combat history, death state, source-event prefixes and clocks. Child-first tree
+retirement captures readiness before native delegates disappear. Its stopped
+AI root retains the actual raw basis rather than reconstructing it through a
+quaternion. Independent corpse weapon handling and unsettled physical owners
+remain refused. A living stopped actor currently admits only a captured,
+stationary, source-bound combat idle when that independent owner is active.
+
+An occupied source furniture package can have its own collection IDLE over the
+furniture base animation. Its selected source IDLE/KF hashes, additional-loop
+draw, remaining and completed repeats, absolute source clock, consumed start
+keys, cooldowns and seat reservation are retained. Restoration binds that exact
+choice rather than running collection selection or its start effects again.
+
+Partial source channels preserve prior skeletal components. An occupied idle
+receipt captures only components not published by the current source layers,
+using raw native position, quaternion and scale. The receipt binds the actual
+skeleton resource/hash and each source bone name/index. Complete component
+coverage and source identity are validated before any native setter. The same
+whole-bone priority selection governs coverage and publication; a zero-weight
+winning channel cannot acquire components it does not publish.
+
+Save v39 owns these active collection receipts and persistent attack randomness.
+Legacy schemas cannot carry forward fields that their version does not own.
+The prior directional-faction schema remains readable without changing genuine
+checkpoint bytes. Native fixtures separately verify source event dispatch,
+child-first retirement, complete corpse state and occupied animation suffixes;
+these component proofs do not establish whole-campaign save availability.

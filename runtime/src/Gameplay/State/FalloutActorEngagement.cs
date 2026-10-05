@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed record FalloutActorEngagement(FalloutFormKey Target, string Action = "pursue", double Seconds = 0,
     bool StartPending = true, string? Animation = null, string? AnimationHash = null,
     IReadOnlyList<float>? Position = null, IReadOnlyList<float>? Rotation = null,
-    FalloutWeaponHandlingSnapshot? WeaponHandling = null)
+    FalloutWeaponHandlingSnapshot? WeaponHandling = null, ulong? AttackRandomState = null)
 {
     internal void Validate()
     {

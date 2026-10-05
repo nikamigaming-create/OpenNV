@@ -44,8 +44,8 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
                 throw new InvalidDataException($"PACK {record.FormKey} requires one {size}-byte {name}.");
             return found[0].Data;
         }
-        var data = Required("PKDT", 12).Span;
-        var procedure = data[4];
+        var data = FalloutPackageData.Read(record);
+        var procedure = data.Procedure;
         // Follow and Dialogue may have no start location. Its absence means
         // use the target procedure immediately, not a missing source field.
         int? locationType = fields.Any(field => field.Signature == "PLDT")
@@ -114,7 +114,7 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         return new(record.FormKey, FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "EDID").Data.Span),
             idleFlags, timer, idles, events)
         {
-            Flags = BinaryPrimitives.ReadUInt32LittleEndian(data),
+            Flags = data.Flags,
             Procedure = procedure,
             LocationType = locationType,
             LocationReference = locationReference,

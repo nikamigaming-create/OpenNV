@@ -48,7 +48,7 @@ internal sealed record FalloutActorPackageBindingFailure(FalloutFormKey Package,
         if (IdleState is { } idles)
         {
             idles.Validate(records, Package);
-            if (idles.Collection != new FalloutIdleCollectionPlaybackSnapshot(0, 0, 0, false))
+            if (idles.ActiveAnimation is not null || idles.Collection != new FalloutIdleCollectionPlaybackSnapshot(0, 0, 0, false))
                 throw new InvalidDataException("Stopped initialization has already consumed its idle collection.");
         }
         else if (source.Idles.Count != 0)

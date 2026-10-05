@@ -15,7 +15,7 @@ internal sealed record FalloutActorDialogueContinuation(FalloutActorPackageAssig
     internal void Validate()
     {
         (Assignment ?? throw new InvalidDataException("Saved dialogue has no package assignment.")).Validate();
-        if (Assignment.Done || !WaitReached || IdleState is null || !double.IsFinite(PollRemaining) || PollRemaining < 0 ||
+        if (Assignment.Done || !WaitReached || IdleState is null || IdleState.ActiveAnimation is not null || !double.IsFinite(PollRemaining) || PollRemaining < 0 ||
             EventRevision <= 0 || EventRevision == long.MaxValue || LastEvent is not ("POBA" or "POCA" or "POEA") ||
             LastPackage is not { } last || !FalloutActorFurnitureContinuation.ValidKey(last) ||
             !FalloutActorFurnitureContinuation.ValidHash(LastPackageSha256) ||

@@ -15,19 +15,13 @@ internal static class NativeCharacterStep
         blocked = "upward-or-stationary";
         if (body.Velocity.Y > 0 || motion.LengthSquared() < 0.000001f) return false;
         var from = body.GlobalTransform;
-        var floorCosine = MathF.Cos(body.FloorMaxAngle);
         if (!body.IsOnFloor())
         {
             blocked = "floor-support";
             // A rounded capsule can report only the riser for a frame while
             // climbing onto a curb. Require nearby floor support instead of
             // losing stepping until the capsule somehow reaches the top.
-            var reach = Math.Min(maximumHeight, body.FloorSnapLength);
-            if (reach <= 0) return false;
-            using var supportRay = PhysicsRayQueryParameters3D.Create(from.Origin + Vector3.Up * body.SafeMargin,
-                from.Origin - Vector3.Up * reach, body.CollisionMask, [body.GetRid()]);
-            using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(supportRay);
-            if (support.Count == 0 || support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return false;
+            if (!TrySupport(body, from.Origin, maximumHeight, out _)) return false;
         }
         if (!TryQuery(body, from, motion, maximumHeight, out var destination, out blocked, out _, floorSupported: true)) return false;
         body.GlobalPosition = destination;
@@ -44,12 +38,7 @@ internal static class NativeCharacterStep
         blocked = "floor-support";
         if (!floorSupported)
         {
-            var reach = Math.Min(maximumHeight, body.FloorSnapLength);
-            if (reach <= 0) return false;
-            using var supportRay = PhysicsRayQueryParameters3D.Create(from.Origin + Vector3.Up * body.SafeMargin,
-                from.Origin - Vector3.Up * reach, body.CollisionMask, [body.GetRid()]);
-            using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(supportRay);
-            if (support.Count == 0 || support["normal"].AsVector3().Dot(Vector3.Up) < floorCosine) return false;
+            if (!TrySupport(body, from.Origin, maximumHeight, out _)) return false;
         }
         using var parameters = new PhysicsTestMotionParameters3D
         { From = from, Motion = motion, Margin = body.SafeMargin, MaxCollisions = 4 };
@@ -67,7 +56,7 @@ internal static class NativeCharacterStep
         // accepted move still sweeps the whole capsule up and forward.
         var point = result.GetCollisionPoint(wall);
         contact = new(result.GetColliderId(wall), result.GetColliderShape(wall), point,
-            result.GetCollisionNormal(wall), from.Origin, from.Origin + motion);
+            result.GetCollisionNormal(wall), from.Origin, from.Origin + motion, Travel: result.GetTravel());
         var forward = motion.Normalized();
         using var ray = PhysicsRayQueryParameters3D.Create(Vector3.Zero, Vector3.Zero, body.CollisionMask, [rid]);
         blocked = "landing-support";
@@ -98,5 +87,24 @@ internal static class NativeCharacterStep
             return true;
         }
         return false;
+    }
+
+    // The mover's root support can coexist with a steep contact on the
+    // rounded bottom of its capsule. Planning reads this same bounded ray;
+    // the receipt contains only the actual native floor and never moves it.
+    internal static bool TrySupport(CharacterBody3D body, Vector3 from, float maximumHeight,
+        out NativeNavigationContact? contact)
+    {
+        contact = null;
+        var reach = Math.Min(maximumHeight, body.FloorSnapLength);
+        if (!from.IsFinite() || !float.IsFinite(reach) || reach <= 0) return false;
+        using var ray = PhysicsRayQueryParameters3D.Create(from + Vector3.Up * body.SafeMargin,
+            from - Vector3.Up * reach, body.CollisionMask, [body.GetRid()]);
+        using var support = body.GetWorld3D().DirectSpaceState.IntersectRay(ray);
+        if (support.Count == 0) return false;
+        var point = support["position"].AsVector3(); var normal = support["normal"].AsVector3();
+        contact = new(checked((ulong)support["collider_id"].AsInt64()), support["shape"].AsInt32(),
+            point, normal, ray.From, ray.To);
+        return point.IsFinite() && normal.IsFinite() && normal.Dot(Vector3.Up) >= MathF.Cos(body.FloorMaxAngle);
     }
 }

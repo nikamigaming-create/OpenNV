@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -37,6 +38,32 @@ public partial class NativeNifInstanceAudit
             var nif = FalloutNifFile.Read(bytes);
             foreach (var block in nif.Blocks) _ = nif.ReadObject(block.Index);
             GD.Print($"OPENNV_OWNED_NIF_DECODE_PASS source={identity} sha256={nif.Sha256} stream={nif.UserVersion2} blocks={nif.Blocks.Count}");
+            foreach (var manager in nif.Blocks.Where(block => block.TypeName == "NiControllerManager")
+                .Select(block => (FalloutNifControllerManager)nif.ReadObject(block.Index)))
+                GD.Print(JsonSerializer.Serialize(new
+                {
+                    kind = "owned-nif-manager",
+                    source = identity,
+                    nif.Sha256,
+                    controller = manager.Block.Index,
+                    manager.Cumulative,
+                    manager.ObjectPalette,
+                    sequences = manager.Sequences.Select(reference => (FalloutNifControllerSequence)nif.ReadObject(reference))
+                        .Select(sequence => new
+                        {
+                            block = sequence.Block.Index,
+                            sequence.Name,
+                            sequence.Manager,
+                            sequence.TargetName,
+                            sequence.CycleType,
+                            sequence.Frequency,
+                            sequence.StartTime,
+                            sequence.StopTime,
+                            sequence.Weight,
+                            sequence.TextKeys,
+                            sequence.ControlledBlocks
+                        })
+                }));
             var phantoms = nif.Blocks.Where(block => block.TypeName == "bhkSimpleShapePhantom").ToArray();
             RuntimeNativeNifScene scene;
             try { scene = RuntimeNativeNifMeshBuilder.Build(nif, .0142875f, contentSource: content); }
@@ -56,9 +83,8 @@ public partial class NativeNifInstanceAudit
                 var channels = 0;
                 foreach (var player in scene.Root.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>())
                 {
-                    if (player.ActiveSequence is not { } name) continue;
-                    var sequence = nif.Blocks.Where(block => block.TypeName == "NiControllerSequence")
-                        .Select(block => (FalloutNifControllerSequence)nif.ReadObject(block.Index)).Single(value => value.Name == name);
+                    if (player.ActiveSourceSequence is not (>= 0 and var selected)) continue;
+                    var sequence = nif.ReadControllerSequence(selected);
                     foreach (var fraction in new[] { .271f, .713f })
                     {
                         var time = sequence.StartTime + (sequence.StopTime - sequence.StartTime) * fraction;

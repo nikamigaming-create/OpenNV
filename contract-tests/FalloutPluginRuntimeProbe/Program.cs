@@ -1082,6 +1082,8 @@ try
                 Subrecord("BTXT", LayerHeader(0x160, 2, 0xffff)))))))));
     File.WriteAllBytes(Path.Combine(fixtureRoot, "SkillLabel.esp"), Combine(
         Record("TES4", 0, 0, Subrecord("MAST", ZString("Cell.esm"))),
+        Record("FACT", 0x01000760, 0, Subrecord("EDID", ZString("SourceForwardFaction"))),
+        Record("FACT", 0x01000761, 0, Subrecord("EDID", ZString("SourceReverseFaction"))),
         Record("AVIF", 0x19b, 0, Combine(Subrecord("EDID", ZString("RenamedSurvivalIdentity")),
             Subrecord("FULL", ZString("Survival")), Subrecord("ANAM", ZString("Mod short name"))))));
     using var cellStack = FalloutPluginStack.Load(fixtureRoot, ["Cell.esm", "SkillLabel.esp"]);
@@ -1462,6 +1464,50 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema && referenceRestore.State.References?.Count == 0,
         "Campaign save lost its explicit reference state owner.");
+    using (var factionWorld = new FalloutReferenceWorld(cellStack))
+    {
+        factionWorld.SetFactionRelationship(new("SkillLabel.esp", 0x760), new("SkillLabel.esp", 0x761), true, 1, 0);
+        var priorFactionSave = referenceSave with
+        { Schema = FalloutNativeCampaignSave.FactionRelationSchema, FactionRelations = factionWorld.CaptureFactionRelations() };
+        FalloutNativeCampaignSave.Write(syntheticSavePath, priorFactionSave);
+        var priorFactionRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+            cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+        Require(priorFactionRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+            JsonSerializer.Serialize(priorFactionRestore.State.FactionRelations) == JsonSerializer.Serialize(priorFactionSave.FactionRelations) &&
+            JsonSerializer.Serialize(priorFactionRestore.State.References) == JsonSerializer.Serialize(priorFactionSave.References) &&
+            JsonSerializer.Serialize(priorFactionRestore.State.GameTime) == JsonSerializer.Serialize(priorFactionSave.GameTime),
+            "The v38 checkpoint lost directional source faction reactions or changed state while upgrading the idle-continuation schema.");
+        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorFactionSave with { FactionRelations = null }),
+            "faction reaction state");
+    }
+    var selectedOverlay = new FalloutActorPackageIdleAnimation(new("Cell.esm", 0x30), new string('a', 64),
+        "meshes/synthetic-selected.kf", new string('b', 64), new(.75, 4, 3, 1, false, false), 1);
+    var forwardOnlyFailure = new FalloutActorPackageBindingFailure(new("Cell.esm", 0x20), new string('c', 64),
+        "Source failed before begin.", [0, 0, 0], [1, 0, 0, 0, 1, 0, 0, 0, 1], false, 1, 0, null,
+        new(0, null, null, null), IdleState: new(new("Cell.esm", 0x20), new string('c', 64), new(1, 1, 0, false), [], null, selectedOverlay));
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
+    {
+        Schema = FalloutNativeCampaignSave.FactionRelationSchema,
+        References = [new(new("Cell.esm", 1), referenceSave.ActiveCell, new("Cell.esm", 2), null, null,
+            new Dictionary<uint, double>(), null, PackageBindingFailure: forwardOnlyFailure)]
+    }), "Legacy campaign schema has an active package collection animation");
+    var forwardRandomReference = new FalloutReferenceSnapshot(new("Cell.esm", 1), referenceSave.ActiveCell,
+        new("Cell.esm", 2), null, null, new Dictionary<uint, double>(), null);
+    foreach (var futureRandom in new[]
+    {
+        forwardRandomReference with { AttackRandomState = 1 },
+        forwardRandomReference with { Engagement = new(new("Cell.esm", 0x14), AttackRandomState: 1) },
+        forwardRandomReference with { Engagement = new(new("Cell.esm", 0x14),
+            WeaponHandling: new(false, [], AttackRandomState: 1)) },
+    })
+        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
+        { Schema = FalloutNativeCampaignSave.FactionRelationSchema, References = [futureRandom] }),
+            "Legacy campaign schema has attack selection random state");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
+    {
+        Schema = FalloutNativeCampaignSave.FactionRelationSchema,
+        WeaponHandling = new(false, [], AttackRandomState: 1),
+    }), "Legacy campaign schema has attack selection random state");
     var indexedTags = new FalloutPlayerTagSkills(cellStack, syntheticTagSkills);
     indexedTags.Set("Science", 3);
     indexedTags.Set("Guns", 0);
@@ -1834,7 +1880,8 @@ try
         "differs from the live Player/RACE graph");
     var cell = syntheticCellForVigor;
     using var eagerCellStack = FalloutPluginStack.Load(
-        [new FalloutPluginSource("Cell.esm", Path.Combine(fixtureRoot, "Cell.esm"))],
+        [new FalloutPluginSource("Cell.esm", Path.Combine(fixtureRoot, "Cell.esm")),
+            new FalloutPluginSource("SkillLabel.esp", Path.Combine(fixtureRoot, "SkillLabel.esp"))],
         loadAllSignatureIndexesForAudit: true,
         out _);
     var eagerCell = FalloutCellSceneReader.Read(

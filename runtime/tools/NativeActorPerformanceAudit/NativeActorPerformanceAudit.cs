@@ -10,6 +10,18 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-attack-variants", var attackGame, var attackMod, var attackRoot,
+                var attackCheckpoint, var attackActor, .. var attackDependencies])
+            {
+                OwnedAttackVariants(attackGame, attackMod, attackRoot, attackCheckpoint, attackActor, attackDependencies);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--saved-stopped-corpse", var corpseGame, var corpseMod, var corpseRoot,
+                var corpsePath, var corpseActor, var corpseAttacker, .. var corpseDependencies])
+            {
+                await SavedStoppedCorpse(corpseGame, corpseMod, corpseRoot, corpsePath, corpseActor, corpseAttacker, corpseDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is ["--saved-actor-checkpoint", var savedGame, var savedMod, var savedRoot,
                 var savedPath, var savedActors, .. var savedDependencies])
             {

@@ -55,6 +55,9 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void RestoreEngagementPose()
     {
+        // Stopped AI owns the complete captured matrix. Its combat quaternion
+        // is derived history and must not round that independent pose again.
+        if (RestoreStoppedAiPose()) return;
         if (_state.Engagement is not { Position: { } position, Rotation: { } rotation }) return;
         _actor.GlobalTransform = new(new Basis(new Quaternion(rotation[0], rotation[1], rotation[2], rotation[3]))
             .Scaled(_actor.Scale), new(position[0], position[1], position[2]));
@@ -250,6 +253,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _ExitTree()
     {
+        RetainStoppedPoseReadiness();
         if (_state.StopCombat == StopCombat) _state.StopCombat = null;
         if (_state.QuerySpatialPlacement == CaptureSpatialPlacement) _state.QuerySpatialPlacement = null;
         _routeSearch?.Dispose(); _routeSearch = null;

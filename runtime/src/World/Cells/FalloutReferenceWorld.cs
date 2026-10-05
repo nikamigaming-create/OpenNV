@@ -25,7 +25,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorPackageBindingFailure? PackageBindingFailure = null, bool? BroadcastState = null,
     IReadOnlyList<FalloutReferencePackageEventSnapshot>? PackageEvents = null,
     FalloutActorFurnitureContinuation? FurnitureContinuation = null, FalloutActorSelectionFailure? SelectionFailure = null,
-    FalloutActorDialogueContinuation? DialogueContinuation = null, int? DeathCount = null)
+    FalloutActorDialogueContinuation? DialogueContinuation = null, int? DeathCount = null, ulong? AttackRandomState = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -64,10 +64,13 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved talking activator actor identity is invalid.");
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
+            if (snapshot.Engagement?.AttackRandomState is { } attackRandom && snapshot.AttackRandomState != attackRandom)
+                throw new InvalidDataException("Saved attack randomness differs between reference and active engagement.");
             snapshot.PackageMotion?.Validate();
             snapshot.PackageAssignment?.Validate();
             snapshot.PackageBindingFailure?.Validate();
             snapshot.SelectionFailure?.Validate();
+            FalloutActorStoppedPose.Validate(snapshot);
             snapshot.DialogueContinuation?.Validate();
             if (snapshot.DialogueContinuation is { } dialogue && (snapshot.Animation is null ||
                 snapshot.PackageAssignment != dialogue.Assignment || snapshot.SelectionFailure is not null ||
@@ -176,6 +179,9 @@ internal sealed class FalloutReferenceInstance
     private FalloutSoundRandomState? _hitReactionRandom;
     internal FalloutSoundRandomState HitReactionRandom => _hitReactionRandom ??= new(
         BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))));
+    private FalloutSoundRandomState? _attackRandom;
+    internal FalloutSoundRandomState AttackRandom => _attackRandom ??= new(
+        BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))));
     internal FalloutActorHitReaction? HitReaction { get; set; }
     internal FalloutMapMarkerState? MapMarker { get; set; }
     internal FalloutActorInjury? Injury { get; set; }
@@ -257,7 +263,7 @@ internal sealed class FalloutReferenceInstance
             SelectionFailure: SelectionFailureCaptureReady ? CaptureSelectionFailure is { } captureSelection
                 ? captureSelection() : SelectionFailure?.Copy() : null,
             DialogueContinuation: CaptureDialogue is { } captureDialogue ? captureDialogue() : DialogueContinuation?.Copy(),
-            DeathCount: DeathCount == 0 ? null : DeathCount);
+            DeathCount: DeathCount == 0 ? null : DeathCount, AttackRandomState: _attackRandom?.State);
     }
 }
 
@@ -509,7 +515,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             var talkingActivator = snapshot.TalkedToPlayer && records.GetEffective(instance.Base).Signature == "TACT";
             if (talkingActivator) _ = FalloutDialogueSpeaker.Read(records, instance.Base);
             if (snapshot.Restrained || snapshot.PlayerTeammate || snapshot.TalkedToPlayer && !talkingActivator || snapshot.PackageMotion is not null ||
-                snapshot.HitReaction is not null || snapshot.HitReactionRandomState is not null)
+                snapshot.HitReaction is not null || snapshot.HitReactionRandomState is not null || snapshot.AttackRandomState is not null)
                 _ = validated.Actor(snapshot.Reference);
             instance.Restrained = snapshot.Restrained;
             instance.PlayerTeammate = snapshot.PlayerTeammate;
@@ -598,6 +604,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Ragdoll = snapshot.Ragdoll;
             instance.KnockedDown = snapshot.KnockedDown;
             instance.Engagement = snapshot.Engagement;
+            FalloutActorStoppedPose.ValidateTarget(records, snapshot);
             instance.ObjectAnimations = snapshot.ObjectAnimations?.ToArray();
             if (snapshot.HitReaction is { } reaction)
             {
@@ -609,6 +616,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 instance.HitReaction = reaction.Copy();
             }
             if (snapshot.HitReactionRandomState is { } reactionRandom) instance.HitReactionRandom.Restore(reactionRandom);
+            if (snapshot.AttackRandomState is { } attackRandom) instance.AttackRandom.Restore(attackRandom);
             if (instance.EnableRequest is not null && instance.EnableParent is not null)
                 throw new InvalidDataException("Saved child reference has an independent enable request.");
         }

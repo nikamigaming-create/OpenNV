@@ -1,11 +1,27 @@
 # Product status
 
 Ordinary TTW input cold-loads the retained post-Amata save, reaches Escape stage
-18 and traverses the source portal into Vault101b (CELL 024511). The open doorway
+60 and traverses the source portal into Vault101b (CELL 024511), opening the
+overseer-office door. The open doorway
 and authored stairs support ordinary movement. The latest checked candidate
-completes the old-cell source speech receipt after transition. Saving still refuses
-at NPC procedure initialization, and the bot rejects an actual stair landing that
-ordinary movement crosses. These remaining owners require the next repair.
+completes the old-cell source speech receipt after transition. The actual source
+stair now passes a complete native planned route in both directions, preserving
+ordinary support and all gap/wall/slope guards. The campaign bot remains to be
+verified on that candidate. Complete campaign saving remains unverified after
+the following independent owner repairs.
+The original overseer-terminal model now passes a native source audit with its
+six surfaces and collision; repeated Idle blocks retain ordered source-name
+registration. Ordinary terminal-menu interaction remains unowned.
+Native stopped-corpse and occupied-chair proofs now pass exact cold restoration,
+child-first retirement, retained source faults/effects and animation suffixes.
+Save v39 retains independent collection clocks and uncovered raw bone components.
+The common package reader admits both owned PKDT extents; the complete 8,269-package
+audit passes original priority, schedule, destination and cold/event contracts.
+The native guard attack component admits and samples its actual source variants
+without a preparation draw, retaining the selected source/hash/clock through cold
+restoration. Whole moving combat with a stopped AI fault and corpse weapon
+attachments remain explicit save boundaries. See [actor continuation](stopped-actor-and-idle-continuation.md)
+and [package/attack selection](source-package-and-attack-selection.md).
 Directional faction
 relations/save v38, reached actor-value/spatial queries, Travel weapon visibility,
 scripted radio links and the independent dialogue target trigger are merged in

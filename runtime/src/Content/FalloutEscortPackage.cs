@@ -21,12 +21,11 @@ internal sealed record FalloutEscortPackage(FalloutFormKey Form, FalloutFormKey 
             return rows.Length == 1 && rows[0].Data.Length == size ? rows[0].Data :
                 throw new InvalidDataException($"Escort package has invalid {name} extent/count.");
         }
-        var data = Required("PKDT", 12).Span;
-        if (data[4] != 2) throw new InvalidDataException("Package procedure is not Escort.");
-        var flags = BinaryPrimitives.ReadUInt32LittleEndian(data);
+        var data = FalloutPackageData.Read(record);
+        if (data.Procedure != 2) throw new InvalidDataException("Package procedure is not Escort.");
+        var flags = data.Flags;
         const uint supportedFlags = 0x2 | 0x1000 | 0x2000 | 0x400000 | 0x800000 | 0x1000000;
-        if ((flags & ~supportedFlags) != 0 || BinaryPrimitives.ReadUInt16LittleEndian(data[6..]) != 0 ||
-            BinaryPrimitives.ReadUInt16LittleEndian(data[8..]) != 0)
+        if ((flags & ~supportedFlags) != 0 || data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0))
             throw new NotSupportedException("Escort package needs its additional behavior or search-flag owner.");
         if (fields.Any(field => field.Signature is "PLD2" or "PTD2"))
             throw new NotSupportedException("Escort search location or additional targets require their owner.");

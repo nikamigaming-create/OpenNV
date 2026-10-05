@@ -60,15 +60,18 @@ public partial class NativePlayerPresentationAudit
                     {
                         try
                         {
-                            var clip = actor.PrepareAction(group);
-                            actor.SetAction(group, (clip.Sequence.StopTime - clip.Sequence.StartTime) / clip.Sequence.Frequency * .6);
-                            actor.Advance(0, Vector3.Zero, true, false);
-                            if (actor.Error is not null) throw new NotSupportedException(actor.Error);
-                            var keys = clip.TextKeys.SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).ToArray();
-                            actions.Add(new { first, group, clip.Sequence.CycleType, keys });
-                            if (group.StartsWith("attack", StringComparison.Ordinal) && !keys.Any(FalloutWeaponAnimationTimeline.DischargesWeapon) &&
-                                !(held.Automatic && held.AttackAnimation == 74 && clip.Sequence.CycleType == 0))
-                                throw new NotSupportedException("Attack animation has no source Hit, Fire or Release event.");
+                            for (var variant = 0; variant < actor.ActionVariants(group).Count; variant++)
+                            {
+                                var clip = actor.PrepareAction(group, variant);
+                                actor.SetAction(group, (clip.Sequence.StopTime - clip.Sequence.StartTime) / clip.Sequence.Frequency * .6, variant);
+                                actor.Advance(0, Vector3.Zero, true, false);
+                                if (actor.Error is not null) throw new NotSupportedException(actor.Error);
+                                var keys = clip.TextKeys.SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).ToArray();
+                                actions.Add(new { first, group, variant, clip.Sequence.CycleType, keys });
+                                if (group.StartsWith("attack", StringComparison.Ordinal) && !keys.Any(FalloutWeaponAnimationTimeline.DischargesWeapon) &&
+                                    !(held.Automatic && held.AttackAnimation == 74 && clip.Sequence.CycleType == 0))
+                                    throw new NotSupportedException("Attack animation has no source Hit, Fire or Release event.");
+                            }
                         }
                         catch (Exception failure) { failures.Add(new { stage = "action", first, group, error = failure.Message }); }
                     }

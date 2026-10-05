@@ -94,23 +94,24 @@ public partial class NativePlayerPresentationAudit
                     var groups = new List<string> { "equip", "unequip", held.AttackGroup };
                     if (held.HasAmmunitionSource && held.ClipSize > 0 && held.ReloadAnimation != 255) groups.Add(held.ReloadGroup);
                     foreach (var group in groups)
-                    {
-                        actor.SetAction(null, 0);
-                        var clip = actor.PrepareAction(group);
-                        var duration = (clip.Sequence.StopTime - clip.Sequence.StartTime) / clip.Sequence.Frequency;
-                        if (!double.IsFinite(duration) || duration <= 0 || clip.UnboundChannels.Count != 0)
-                            throw new InvalidDataException("Owned weapon action has invalid timing or unbound channels.");
-                        var keys = clip.TextKeys.SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).ToArray();
-                        if (group == held.AttackGroup && !keys.Any(FalloutWeaponAnimationTimeline.DischargesWeapon))
-                            throw new NotSupportedException("Owned attack lacks a source Hit, Fire or Release event.");
-                        foreach (var fraction in new[] { 0d, .5, 1 })
+                        for (var variant = 0; variant < actor.ActionVariants(group).Count; variant++)
                         {
-                            actor.SetAction(group, duration * fraction);
-                            AdvanceOwnedWeapon(actor, 0, false);
+                            actor.SetAction(null, 0);
+                            var clip = actor.PrepareAction(group, variant);
+                            var duration = (clip.Sequence.StopTime - clip.Sequence.StartTime) / clip.Sequence.Frequency;
+                            if (!double.IsFinite(duration) || duration <= 0 || clip.UnboundChannels.Count != 0)
+                                throw new InvalidDataException("Owned weapon action has invalid timing or unbound channels.");
+                            var keys = clip.TextKeys.SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).ToArray();
+                            if (group == held.AttackGroup && !keys.Any(FalloutWeaponAnimationTimeline.DischargesWeapon))
+                                throw new NotSupportedException("Owned attack lacks a source Hit, Fire or Release event.");
+                            foreach (var fraction in new[] { 0d, .5, 1 })
+                            {
+                                actor.SetAction(group, duration * fraction, variant);
+                                AdvanceOwnedWeapon(actor, 0, false);
+                            }
+                            GD.Print($"OPENNV_OWNED_WEAPON_ACTION_PASS first={first} weapon={held.Form} group={group} variant={variant} " +
+                                $"sequence={clip.Sequence.Name} channels={clip.TransformChannelCount} keys={string.Join('|', keys)} endpoints=true");
                         }
-                        GD.Print($"OPENNV_OWNED_WEAPON_ACTION_PASS first={first} weapon={held.Form} group={group} " +
-                            $"sequence={clip.Sequence.Name} channels={clip.TransformChannelCount} keys={string.Join('|', keys)} endpoints=true");
-                    }
                     actor.SetAction(null, 0);
                     actor.SetDrawn(false); AdvanceOwnedWeapon(actor, 0, false);
                     actor.SetDrawn(true); AdvanceOwnedWeapon(actor, 0, true);

@@ -1204,6 +1204,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 sequence.Name, sequence.CycleType, sequence.Frequency,
                 sequence.StartTime, sequence.StopTime, channels)
             {
+                SourceSequence = sequence.Block.Index,
                 TextKeys = ((FalloutNifTextKeyExtraData)_source.ReadObject(sequence.TextKeys)).Keys,
             };
         }
