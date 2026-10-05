@@ -10,6 +10,15 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length >= 12 && args[1] == "--speech-finished-cold")
+            {
+                await FinishedSpeechCold(args[0], args[2], args[3], args[4], args[5], args[6],
+                    short.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture), args[8],
+                    double.Parse(args[9], System.Globalization.CultureInfo.InvariantCulture), args[10],
+                    double.Parse(args[11], System.Globalization.CultureInfo.InvariantCulture), args[12..]);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 9 && args[1] is "--npc-speech-settled" or "--npc-speech-failure")
             {
                 await NpcSpeechSettled(args[0], args[2], args[3], args[4], args[5], args[6], args[7],

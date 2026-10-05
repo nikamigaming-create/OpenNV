@@ -43,9 +43,13 @@ public partial class RuntimeCoordinator
             foreach (var actor in _nativeReferencePresentation.Actors) actor.UpdateResidentScene(updated);
             _nativePlacementRevision = world.PlacementRevision;
         }
-        if (_nativeReferencePresentation is not { } presentation || presentation.Error is not null ||
-            _nativeReferenceEvents?.IsProcessing() != true || GetTree().Paused) return;
-        try { presentation.Advance(delta); }
+        if (_nativeReferenceEvents?.IsProcessing() != true || GetTree().Paused) return;
+        _nativeReferences?.AdvanceDetection(checked((float)delta));
+        if (_nativeReferencePresentation is not { } presentation || presentation.Error is not null) return;
+        try
+        {
+            presentation.Advance(delta);
+        }
         catch (Exception error) { GD.PushError($"OPENNV_NATIVE_REFERENCE_PRESENTATION_DIVERGENCE {error.Message}"); }
     }
 

@@ -42,7 +42,7 @@ internal sealed class FalloutNewGameBootstrap
             new((_, _) => throw new NotSupportedException("Startup furniture query has no resident actor."), Apply,
                 scripts.MessageResults.Take, Globals: globals, Command: command, Events: scripts.Events,
                 LocationSpecificLoadScreensOnly: () => scripts.Session.LocationSpecificLoadScreensOnly,
-                InCharGen: () => scripts.Session.InCharGen));
+                InCharGen: () => scripts.Session.InCharGen, IsHardcore: () => scripts.Session.Hardcore));
         _stages = new(records, quests, executor.StageSteps,
             condition => FalloutPlatformConditions.Evaluate(condition) ?? quests.Evaluate(condition), canContinue);
         Host = new((quest, stage) => () => _stages.Enter(quest, stage),

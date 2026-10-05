@@ -22,7 +22,7 @@ internal sealed record FalloutSpeechCompletionReceipt
 // Empty speech waits until the calling script's suffix has run. A finished
 // voice delivers immediately, retaining its exact receipt through source
 // results and SayToDone. Failed delivery keeps its consumed prefix, not a retry.
-internal sealed class FalloutSpeechCompletionEvents
+internal sealed partial class FalloutSpeechCompletionEvents
 {
     private sealed record Registration(FalloutFormKey Speaker, HashSet<FalloutFormKey> Topics,
         List<(FalloutFormKey Topic, Action Completed)> Packages)

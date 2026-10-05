@@ -25,7 +25,10 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorPackageBindingFailure? PackageBindingFailure = null, bool? BroadcastState = null,
     IReadOnlyList<FalloutReferencePackageEventSnapshot>? PackageEvents = null,
     FalloutActorFurnitureContinuation? FurnitureContinuation = null, FalloutActorSelectionFailure? SelectionFailure = null,
-    FalloutActorDialogueContinuation? DialogueContinuation = null, int? DeathCount = null, ulong? AttackRandomState = null)
+    FalloutActorDialogueContinuation? DialogueContinuation = null, int? DeathCount = null, ulong? AttackRandomState = null,
+    FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame = null,
+    FalloutReferenceScriptStoppedFrame? CompletedScriptContinuation = null,
+    FalloutActorHeadTrackingSnapshot? HeadTracking = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -64,6 +67,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved talking activator actor identity is invalid.");
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
+            snapshot.HeadTracking?.Validate();
+            if (snapshot.HeadTracking is { } head && head.Binding.Actor != snapshot.Reference)
+                throw new InvalidDataException("Saved head tracking belongs to a different reference.");
             if (snapshot.Engagement?.AttackRandomState is { } attackRandom && snapshot.AttackRandomState != attackRandom)
                 throw new InvalidDataException("Saved attack randomness differs between reference and active engagement.");
             snapshot.PackageMotion?.Validate();
@@ -120,6 +126,8 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorTemplateSelection? Templates { get; set; }
     internal Dictionary<uint, double> Variables { get; }
     internal string? ScriptError { get; set; }
+    internal FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame { get; set; }
+    internal FalloutReferenceScriptStoppedFrame? CompletedScriptContinuation { get; set; }
     internal bool Enabled { get; set; }
     internal FalloutReferenceEnableRequest? EnableRequest { get; set; }
     internal float Opacity { get; set; } = 1;
@@ -167,6 +175,10 @@ internal sealed class FalloutReferenceInstance
     internal List<FalloutPackageStart> PackageStarts { get; } = [];
     internal FalloutPackageEventIdle? PackageIdle { get; set; }
     internal string? ProcedureCaptureBlocker { get; set; }
+    internal FalloutActorHeadTrackingSnapshot? HeadTracking { get; set; }
+    internal bool HeadTrackingRequired { get; set; }
+    internal string? HeadTrackingCaptureBlocker { get; set; }
+    internal Func<FalloutActorHeadTrackingSnapshot>? CaptureHeadTracking { get; set; }
     internal FalloutReferencePlacement? Placement { get; set; }
     internal long PlacementRevision { get; set; }
     internal FalloutReferenceInventory? Inventory { get; set; }
@@ -244,6 +256,8 @@ internal sealed class FalloutReferenceInstance
 
     internal FalloutReferenceSnapshot Capture()
     {
+        if (HeadTrackingCaptureBlocker is not null || HeadTrackingRequired && CaptureHeadTracking is null && HeadTracking is null)
+            throw new NotSupportedException($"Reference {Reference} cannot save head tracking: {HeadTrackingCaptureBlocker ?? "required owner is missing"}");
         var failureReady = PackageBindingFailureCaptureReady;
         if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !SelectionFailureCaptureReady && !DialogueCaptureReady)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
@@ -263,7 +277,9 @@ internal sealed class FalloutReferenceInstance
             SelectionFailure: SelectionFailureCaptureReady ? CaptureSelectionFailure is { } captureSelection
                 ? captureSelection() : SelectionFailure?.Copy() : null,
             DialogueContinuation: CaptureDialogue is { } captureDialogue ? captureDialogue() : DialogueContinuation?.Copy(),
-            DeathCount: DeathCount == 0 ? null : DeathCount, AttackRandomState: _attackRandom?.State);
+            DeathCount: DeathCount == 0 ? null : DeathCount, AttackRandomState: _attackRandom?.State,
+            ScriptStoppedFrame: ScriptStoppedFrame?.Copy(), CompletedScriptContinuation: CompletedScriptContinuation?.Copy(),
+            HeadTracking: CaptureHeadTracking?.Invoke() ?? HeadTracking?.Copy());
     }
 }
 
@@ -438,8 +454,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             blocker = instance.ProcedureCaptureBlocker,
         }).ToArray();
 
+    private FalloutScriptManualSaveRequests? _scriptManualSaves;
+    internal FalloutScriptManualSaveRequests ScriptManualSaves => _scriptManualSaves ??= new(records);
+
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
+        _scriptManualSaves?.RequireCapture();
         ObjectDisposedException.ThrowIf(_disposed, this);
         PlayerMoves.RequireSettled();
         if (PendingHitEventCount != 0)
@@ -488,6 +508,23 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.ScriptError = instance.Script is null && !packageFault ||
                 snapshot.ScriptError?.StartsWith("Parse:", StringComparison.OrdinalIgnoreCase) == true
                 ? null : snapshot.ScriptError;
+            if (snapshot.ScriptStoppedFrame is not null || snapshot.CompletedScriptContinuation is not null)
+            {
+                if (instance.Script is null) throw new InvalidDataException("Saved stopped frame has no source script.");
+                var fields = instance.Script.Record.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
+                if (fields.Length != 1) throw new InvalidDataException("Saved stopped frame has no unique source program.");
+                var blocks = FalloutGameModeProgram.ReadEvents(FalloutDialogueTopic.ScriptText(fields[0].Data.Span));
+                snapshot.ScriptStoppedFrame?.Validate(instance.ScriptError, instance.Script.Sha256, blocks);
+                snapshot.CompletedScriptContinuation?.Validate(snapshot.CompletedScriptContinuation.Error, instance.Script.Sha256, blocks);
+                foreach (var retained in new[] { snapshot.ScriptStoppedFrame, snapshot.CompletedScriptContinuation }.OfType<FalloutReferenceScriptStoppedFrame>())
+                {
+                    if (retained.PreparedDetection is { } request) validated.Detection.ValidateRequest(request);
+                    if (retained.Speech is { } receipt)
+                        FalloutFinishedSpeechSourceBinding.Require(records, instance, receipt);
+                }
+                instance.ScriptStoppedFrame = snapshot.ScriptStoppedFrame?.Copy();
+                instance.CompletedScriptContinuation = snapshot.CompletedScriptContinuation?.Copy();
+            }
             instance.Enabled = snapshot.Enabled ?? instance.Enabled;
             instance.EnableRequest = snapshot.EnableRequest;
             instance.Opacity = snapshot.Opacity;
@@ -617,6 +654,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             if (snapshot.HitReactionRandomState is { } reactionRandom) instance.HitReactionRandom.Restore(reactionRandom);
             if (snapshot.AttackRandomState is { } attackRandom) instance.AttackRandom.Restore(attackRandom);
+            if (snapshot.HeadTracking is { } headTracking)
+            {
+                FalloutActorHeadTrackingSource.Validate(records, snapshot.Reference, headTracking);
+                instance.HeadTracking = headTracking.Copy(); instance.HeadTrackingRequired = true;
+            }
             if (instance.EnableRequest is not null && instance.EnableParent is not null)
                 throw new InvalidDataException("Saved child reference has an independent enable request.");
         }

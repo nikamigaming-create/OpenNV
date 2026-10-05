@@ -124,6 +124,14 @@ if ($LASTEXITCODE -ne 0 -or $referenceText -match "(?m)^ERROR:" -or
 }
 Write-Output "OPENNV_NATIVE_REFERENCE_EVENTS_AUDIT_PASS physicalContacts=true activation=true localState=true"
 
+$activationOutput = & $Godot --headless --path $runtime res://tools/NativeDefaultActivationAudit/NativeDefaultActivationAudit.tscn 2>&1
+$activationText = $activationOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $activationText -match "(?m)^ERROR:" -or
+    $activationText -notmatch "OPENNV_NATIVE_DEFAULT_ACTIVATION_PASS") {
+    throw "OpenNV independent default activation failed:`n$activationText"
+}
+Write-Output "OPENNV_NATIVE_DEFAULT_ACTIVATION_PASS retainedFault=true queuedOnce=true availabilityGuarded=true"
+
 $ragdollOutput = & $Godot --headless --path $runtime res://tools/NativeAuthoredRagdollAudit/NativeAuthoredRagdollAudit.tscn 2>&1
 $ragdollText = $ragdollOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $ragdollText -match "(?m)^ERROR:" -or

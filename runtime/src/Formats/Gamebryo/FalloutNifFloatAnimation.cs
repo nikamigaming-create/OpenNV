@@ -67,6 +67,13 @@ internal sealed class FalloutNifFloatExtraDataState
     internal float Get(string node, string name) => _values.TryGetValue((node, name), out var value)
         ? value : throw new InvalidDataException($"Float property has no source declaration: {node}/{name}.");
 
+    internal void Restore(string node, string name, float value)
+    {
+        _ = Get(node, name);
+        if (!float.IsFinite(value)) throw new InvalidDataException("Saved float property is not finite.");
+        _values[(node, name)] = value;
+    }
+
     internal void Add(string node, string name, float value)
     {
         if (node.Length == 0 || name.Length == 0 || !float.IsFinite(value) || !_values.TryAdd((node, name), value))

@@ -5,6 +5,51 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--quest-stage-persistence-contracts"])
+{
+    QuestStagePersistenceContracts.Run();
+    return;
+}
+if (args.Length >= 7 && args[0] == "--audit-owned-quest-stage-persistence")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    OwnedQuestStagePersistenceProbe.Run(args[1], args[2], args[3], new(args[4],
+        uint.Parse(args[5], System.Globalization.NumberStyles.HexNumber, invariant)), short.Parse(args[6], invariant), args[7..]);
+    return;
+}
+if (args is ["--detection-speech-contracts"])
+{
+    SpeechCompletionContracts.Run();
+    return;
+}
+if (args.Length >= 11 && args[0] == "--audit-owned-detection-speech")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    uint Form(string value) => uint.Parse(value, System.Globalization.NumberStyles.HexNumber, invariant);
+    OwnedDetectionSpeechProbe.Run(args[1], args[2], args[3], new(args[4], Form(args[5])),
+        new(args[6], Form(args[7])), new(args[8], Form(args[9])), args[10], args[11..]);
+    return;
+}
+if (args is ["--default-activation-contracts"])
+{
+    DefaultActivationContracts.Run();
+    return;
+}
+if (args is ["--script-save-contracts"])
+{
+    ScriptManualSaveContracts.Run();
+    HardcoreQueryContracts.Run();
+    ActorAlertContracts.Run();
+    return;
+}
+if (args.Length >= 7 && args[0] == "--audit-owned-script-save-source")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    OwnedScriptSaveSourceProbe.Run(args[1], args[2], args[3],
+        new(args[4], uint.Parse(args[5], System.Globalization.NumberStyles.HexNumber, invariant)),
+        args[6], args[7..]);
+    return;
+}
 if (args is ["--terminal-contracts"])
 {
     TerminalContracts.Run();
@@ -760,6 +805,10 @@ ActorDamageContracts.Run();
 StoppedPoseContracts.Run();
 TerminalContracts.Run();
 ScriptDeathContracts.Run();
+DefaultActivationContracts.Run();
+ScriptManualSaveContracts.Run();
+HardcoreQueryContracts.Run();
+ActorAlertContracts.Run();
 StageConditionScopeContracts.Run();
 PlayerSkillContracts.Run();
 PlayerTagSkillContracts.Run();
@@ -802,6 +851,7 @@ else if (args is [var patrolRoot, "--patrols", var patrolOutput]) OwnedPatrolPro
 else if (args is [var recoveryRoot, "--script-recovery", var recoverySave, var recoveryOutput])
     OwnedScriptRecoveryProbe.Run(recoveryRoot, recoverySave, recoveryOutput);
 StageAndInventoryContracts.Run();
+QuestStagePersistenceContracts.Run();
 QuestObjectContracts.Run();
 InventoryCommandContracts.Run();
 AnimationResourceContracts.Run();

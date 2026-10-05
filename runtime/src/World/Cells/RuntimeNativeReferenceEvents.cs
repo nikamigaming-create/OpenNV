@@ -189,8 +189,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (!_world.CanActivate(reference)) return false;
             if (binding.Instance.Script is null && binding.Signature is "STAT" or "SCOL" or "TREE" or "GRAS" or "XPRM" or "LIGH" or "SOUN" or "ASPC" or "IDLM")
                 return false;
-            if (binding.Instance.ScriptError is { } error && !error.StartsWith("OnActivate:", StringComparison.OrdinalIgnoreCase) ||
-                binding.PendingActivation is not null) return false;
+            if (!_scripts.CanAdmitActivation(reference) || binding.PendingActivation is not null) return false;
             binding.PendingActivation = _records.RuntimeFormKey(0x14);
             binding.PendingPlayerInput = true;
             GD.Print($"OPENNV_NATIVE_REFERENCE_ACTIVATE reference={reference} queued=true");
@@ -366,7 +365,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
                 playerInput ? () => ObservePlayerActivationBegin?.Invoke(binding.Reference.FormKey) : null,
                 playerInput ? () => ObservePlayerActivationEnd?.Invoke(binding.Reference.FormKey, true) : null);
             if (playerInput) ObservePlayerActivationFinished?.Invoke(binding.Reference.FormKey,
-                binding.Instance.ScriptError is null && results.All(result => result.Error is null));
+                results.Single(result => result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase)).Error is null);
             // Source faults retain their executed prefix on the actual instance.
             // Consume this admission once while preserving marks produced by it.
             if (hasPackageEvents) _world.PackageEvents.Consume(packageBatch!);
@@ -385,6 +384,11 @@ internal partial class RuntimeNativeReferenceEvents : Node
             binding.ReportedError = false;
             GD.Print($"OPENNV_NATIVE_REFERENCE_SCRIPT_RECOVERED reference={binding.Reference.FormKey} previous={recovered} policy={(commandRecovery ? "first-command-before-mutation" : "read-before-mutation")}");
         }
+        // A fresh default-action failure remains visible beside the unrelated
+        // stopped invocation even after that historical fault was reported.
+        if (binding.Instance.ScriptError is { } stopped && results.FirstOrDefault(result =>
+            result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase) && result.Error is not null && result.Error != stopped)?.Error is { } activationError)
+            ReportDivergence($"OPENNV_NATIVE_REFERENCE_EVENT_DIVERGENCE reference={binding.Reference.FormKey}: {activationError}");
         var error = binding.Instance.ScriptError ?? results.FirstOrDefault(result => result.Error is not null)?.Error;
         if (error is null || binding.ReportedError) return;
         binding.ReportedError = binding.Instance.ScriptError is not null;

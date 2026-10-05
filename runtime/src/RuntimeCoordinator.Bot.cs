@@ -86,7 +86,7 @@ public partial class RuntimeCoordinator
         var key = new FalloutFormKey(identity[..separator], objectId);
         var world = _nativeReferences ?? throw new InvalidOperationException("Reference world is not active.");
         var referenceState = world.Get(key);
-        var executionFault = _nativeOpeningStageDriver?.ExecutionFault ?? _nativeQuestScripts?.StartupError ??
+        var executionFault = _nativeOpeningStageDriver?.BlockingExecutionFault ?? _nativeQuestScripts?.StartupError ??
             world.PlayerMoves.Error ?? _nativeReferencePresentation?.Error ?? referenceState.ScriptError ??
             referenceState.SelectionFailure?.Error ?? referenceState.PackageBindingFailure?.Error;
         if (executionFault is not null)

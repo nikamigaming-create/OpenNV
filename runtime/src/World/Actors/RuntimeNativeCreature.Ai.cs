@@ -64,6 +64,7 @@ internal sealed partial class RuntimeNativeCreature
         _aiRecords = records; _aiQuests = quests; _aiWorld = world;
         _aiClock = clock; _aiGlobals = globals;
         _aiState = world.Get(Appearance.Reference!.Value);
+        world.BindActorAlert(Appearance.Reference!.Value, Activity);
         _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
         _packageEvents = new(DispatchPackageEvent);
         world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);

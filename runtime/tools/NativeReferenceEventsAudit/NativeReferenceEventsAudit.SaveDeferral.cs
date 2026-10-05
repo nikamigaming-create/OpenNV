@@ -54,6 +54,9 @@ public partial class NativeReferenceEventsAudit
         {
             Bind("_player", player); Bind("_scripts", scripts);
             Bind("_activeCell", Key(0x800));
+            Bind("_stageResults", new FalloutQuestStages(records, new(records),
+                (_, _, _) => throw new InvalidOperationException("Unexpected stage result in save-deferral fixture."),
+                _ => throw new InvalidOperationException("Unexpected stage condition in save-deferral fixture.")));
             // No Aid is active and the fixture advances zero time. The real
             // driver frame still evaluates and retains its autosave request.
             Bind("_ingestibles", new FalloutPlayerIngestibles(records, inventory, null!, new(Key(0x702), []),

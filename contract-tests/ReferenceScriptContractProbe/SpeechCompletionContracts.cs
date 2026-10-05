@@ -4,7 +4,7 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
-internal static class SpeechCompletionContracts
+internal static partial class SpeechCompletionContracts
 {
     private const string Locals = "short talking\nshort completions\nref caller\nref action\nshort resultPrefix\n";
     private const string Source = Locals + "begin GameMode\nset completions to completions + 100\nend\n" +
@@ -24,6 +24,9 @@ internal static class SpeechCompletionContracts
             RetainedCompletion(records, directory);
             InvalidAdmission(records);
             FailedSource(records);
+            DetectionPersistence(records);
+            DetectionEventStateContracts();
+            DetectionLifetimeContracts(records);
             Console.WriteLine("OPENNV_SPEECH_COMPLETION_CONTRACT_PASS retainedOnly=true offCellSource=true typedReceipt=true " +
                 "winningScript=true sourceOnce=true ordinaryResidency=true endResultFailure=true completionFailure=true coldLocals=true noReplay=true");
         }
@@ -190,13 +193,17 @@ internal static class SpeechCompletionContracts
             Record("QUST", 0x500), Script(0x400, Source.Replace("set completions to completions + 10", "set completions to completions + 20", StringComparison.Ordinal)),
             Script(0x410, Locals + "begin SayToDone Topic\nset completions to completions + 1\nMissingSpeechSuffix\nset talking to 0\nend"),
             Record("SCPT", 0x420, Declarations()),
+            Script(0x430, DetectionSource),
+            Record("GMST", 0x700, Field("EDID", Text("fDetectionEventExpireTime")), Field("DATA", BitConverter.GetBytes(10f))),
             Base("CREA", 0x300, 0x400), Base("NPC_", 0x301, 0x400), Base("TACT", 0x302, 0x400), Base("ACTI", 0x303, 0x400),
             Base("CREA", 0x310, 0x410), Base("CREA", 0x320, 0x420),
+            Base("CREA", 0x330, 0x430),
             Group(0x200, 7, Info(0x600, "set Speaker.resultPrefix to Speaker.resultPrefix + 1"),
                 Info(0x602, "set Speaker.resultPrefix to Speaker.resultPrefix + 1\nMissingResultSuffix\nset Speaker.talking to 0")),
             Record("CELL", 0x800, Field("DATA", [1])), Record("CELL", 0x801, Field("DATA", [1])),
             Group(0x800, 6, Reference("ACRE", 0x900, 0x300, "Speaker"), Reference("ACHR", 0x901, 0x301),
-                Reference("REFR", 0x902, 0x302), Reference("REFR", 0x903, 0x303), Reference("ACRE", 0x910, 0x310), Reference("ACRE", 0x920, 0x320))));
+                Reference("REFR", 0x902, 0x302), Reference("REFR", 0x903, 0x303), Reference("ACRE", 0x910, 0x310),
+                Reference("ACRE", 0x920, 0x320), Reference("ACRE", 0x930, 0x330))));
         File.WriteAllBytes(Path.Combine(directory, "SpeechPatch.esp"), Join(Header("Speech.esm"), Script(0x400, Source)));
     }
     private static byte[] Base(string kind, uint id, uint script) => Record(kind, id, Field("SCRI", BitConverter.GetBytes(script)));
@@ -205,7 +212,7 @@ internal static class SpeechCompletionContracts
     private static byte[] Info(uint id, string end) => Record("INFO", id, Field("DATA", [1, 0, 0]),
         Field("QSTI", BitConverter.GetBytes(0x500u)), Field("NEXT", []), Field("SCRO", BitConverter.GetBytes(0x900u)), Field("SCTX", Text(end)));
     private static byte[] Script(uint id, string source) => Record("SCPT", id, Declarations(), Field("SCRO", BitConverter.GetBytes(0x200u)),
-        Field("SCRO", BitConverter.GetBytes(0x201u)), Field("SCTX", Text(source)));
+        Field("SCRO", BitConverter.GetBytes(0x201u)), Field("SCRO", BitConverter.GetBytes(0x900u)), Field("SCTX", Text(source)));
     private static byte[] Declarations() => Join(Local(1, "talking"), Local(2, "completions"), Local(3, "caller", true), Local(4, "action", true), Local(5, "resultPrefix"));
     private static byte[] Local(uint index, string name, bool reference = false)
     {

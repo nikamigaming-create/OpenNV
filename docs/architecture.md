@@ -52,6 +52,10 @@ skeletal components of an occupied collection idle.
 [Source activators and authored corpse poses](source-activators-and-authored-corpses.md)
 use the original action reference and finite motion clock, shader-owned texture
 binding and ordered source accumulation-root/body poses with cold restoration.
+[Source completion and default loot](source-completion-and-default-loot.md)
+retain ended voice generations and stopped source suffixes, admit independent
+default actions without replaying failed invocations, and defer source manual
+save requests to the ordinary slot writer after source execution retires.
 
 [Actor death history](actor-death-counts.md) retains cumulative source-base counts
 through successful shared death transitions and cold saves. Source result-entry

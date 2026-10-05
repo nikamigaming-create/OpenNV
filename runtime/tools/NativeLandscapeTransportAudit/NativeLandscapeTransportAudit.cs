@@ -14,6 +14,12 @@ public partial class NativeLandscapeTransportAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length != 0 && args[0] == "--portal-capsule")
+            {
+                await RunPortalCapsuleAsync(args);
+                GetTree().Quit();
+                return;
+            }
             if (args is not [var ownedRoot, var interiorId])
                 throw new ArgumentException("Expected owned Data root and source interior CELL editor ID.");
             RuntimeLiveContentSource.Configure(ownedRoot, RuntimeLiveContentSource.FalloutNewVegasGame);

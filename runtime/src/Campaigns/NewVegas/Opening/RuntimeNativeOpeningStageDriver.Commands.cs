@@ -21,7 +21,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveContinuationBlocker =>
         _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
-        _conversation?.Active == true ? "conversation" : _speech?.Active == true ? "speech" :
+        _conversation?.Active == true ? "conversation" : _speech?.Active == true && !_speech.CanCaptureFinishedFailure ? "speech" :
         _nameEntry is not null ? "name-menu" : _raceSexEntry is not null ? "race-menu" :
         _specialBookEntry is not null ? "special-book-menu" :
         _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :
@@ -29,10 +29,12 @@ internal partial class RuntimeNativeOpeningStageDriver
         _barterMenu is not null ? "barter-menu" :
         TerminalSaveBlocker is { } terminal ? terminal :
         _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" :
-        _stageResults?.HasUnfinishedResults == true ? "quest-stage-results" : null;
+        StageResultsSaveBlocker;
     internal object SaveRequestState => new
     {
         requested = _saveRequested,
+        sourceManual = _scripts.ScriptManualSaves.Receipt,
+        sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
         deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker,
         activeContinuationSaving = "unbound"
     };
@@ -177,6 +179,7 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
+        _scripts.ScriptManualSaves.RequireCapture();
         _scripts.References!.PlayerMoves.RequireSettled();
         if (SaveContinuationBlocker is { } blocker)
             throw new NotSupportedException($"Saving {blocker} requires continuation state.");
@@ -187,7 +190,9 @@ internal partial class RuntimeNativeOpeningStageDriver
             _vigorContract, Special, _tagSkillContract, _tagSkills.Selection, _traitFarewellContract, _traits, PlayerControls,
             [transform.Origin.X, transform.Origin.Y, transform.Origin.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
             _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
-            QuestEditorId, Stage, complete, _player.ViewPitchRadians, _playerActorValues.Capture(), _tagSkills.Capture());
+            QuestEditorId, Stage, complete, _player.ViewPitchRadians, _playerActorValues.Capture(), _tagSkills.Capture(),
+            _scripts.References!.CaptureDetection(), _speech?.CaptureFinishedState(), CaptureFinishedSpeechStage(),
+            CaptureStageResults(), _stageResultDriverFailure);
         return state with
         {
             Vitals = Vitals,

@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--head-persistence-contracts"])
+            {
+                ExerciseHeadTracking(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--managed-sequence-registration"])
             {
                 ExerciseEmptyManagedSequences(); ExerciseRepeatedManagedSequences(); GetTree().Quit(); return;

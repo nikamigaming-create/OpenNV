@@ -65,8 +65,15 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutSkyLightingState? _skyLighting;
     private bool _restoringEnteredStage;
     private Func<RuntimeNativeImageSpace> _imageSpacePresenter = null!;
-    internal string? ExecutionError { get; private set; }
+    private string? _executionError;
+    internal string? ExecutionError
+    {
+        get => _executionError;
+        private set { _executionError = value; _stageResultDriverFailure = null; }
+    }
     internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault;
+    internal string? BlockingExecutionError => _stageResultDriverFailure?.Error == ExecutionError ? null : ExecutionError;
+    internal string? BlockingExecutionFault => BlockingExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
@@ -179,6 +186,12 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _imageSpaceState = imageSpaceState;
         _quests = quests;
         _scripts = scripts;
+        BindSourceManualSaves();
+        _scripts.References!.BindActorAlert(_pluginStack.RuntimeFormKey(0x14), _player.Activity);
+        _restoreFinishedSpeech = restore?.State.FinishedSpeech;
+        _restoreFinishedSpeechStage = restore?.State.FinishedSpeechStage;
+        _restoreStageResults = restore?.State.QuestStageResults;
+        _restoreStageResultFailure = restore?.State.StageResultFailure;
         _inventory = inventory;
         _globals = globals;
         _scripts.References!.BindPlayerAppearance(() => PlayerCreationState);
@@ -258,7 +271,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private void OpenVigorMenu(int total)
     {
-        if (_vigorEntry is not null || _specialBookEntry is not null || ExecutionError is not null)
+        if (_vigorEntry is not null || _specialBookEntry is not null || BlockingExecutionError is not null)
             throw new InvalidOperationException("SPECIAL menu cannot open while its owner is busy or failed.");
         _specialMenuContract = _vigorContract with { RequiredTotal = total };
         _vigorEntry = new RuntimeNativeVigorEntry();
@@ -274,9 +287,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     public override void _Process(double delta)
     {
-        if (ExecutionError is not null) return;
+        if (BlockingExecutionError is not null) return;
         try
         {
+            DrainSourceManualSaves();
+            if (BlockingExecutionError is not null) return;
             RefreshRadioStations();
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
@@ -288,7 +303,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or FileNotFoundException or InvalidOperationException or KeyNotFoundException or OverflowException)
         {
-            ExecutionError = error.Message;
+            RetainDriverFailure(error);
             GD.PushError($"OPENNV_NATIVE_PLAYER_PACKAGE_DIVERGENCE: {error.Message}");
             return;
         }
@@ -298,7 +313,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
             {
-                ExecutionError = error.Message;
+                RetainDriverFailure(error);
                 GD.PushError($"OPENNV_NATIVE_QUEST_SCRIPT_DIVERGENCE quest={QuestEditorId} stage={Stage}: {error.Message}");
                 return;
             }
@@ -343,13 +358,14 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _scripts.References!.GetDeadCount);
         AddChild(_speech);
         ConfigureConversation();
+        ConfigureDetectionAndFinishedSpeech();
         ApplyEnteredActorCommands();
     }
 
     private void Synchronize()
     {
         ApplyEnteredActorCommands();
-        if (ExecutionError is not null) return;
+        if (BlockingExecutionError is not null) return;
         _player.ApplySourceControls(PlayerControls);
         if (_machine is null) return;
         SynchronizeNameEntry();
@@ -373,7 +389,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private void ApplyEnteredActorCommands()
     {
-        if (!IsInsideTree() || ExecutionError is not null || _machine is null) return;
+        if (!IsInsideTree() || BlockingExecutionError is not null || _machine is null) return;
         try
         {
             while (_machine.TryTakeEnteredStage(out var stage))
@@ -384,7 +400,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or FileNotFoundException or InvalidOperationException or KeyNotFoundException or OverflowException)
         {
-            ExecutionError = error.Message;
+            RetainDriverFailure(error);
             GD.PushError($"OPENNV_NATIVE_STAGE_DIVERGENCE quest={QuestEditorId} stage={Stage}: {error.Message}");
         }
     }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
@@ -10,6 +11,7 @@ internal sealed record FalloutNativeSavedItem(
     string RecordType,
     int Count,
     IReadOnlyList<FalloutItemVariant>? Variants = null, bool UnequipLocked = false);
+internal sealed record FalloutFinishedSpeechStageScope(FalloutFormKey Quest, short Stage);
 
 internal sealed record FalloutNativeCampaignState(
     string Schema,
@@ -40,7 +42,12 @@ internal sealed record FalloutNativeCampaignState(
     IReadOnlyList<FalloutExplosionExposure>? ExplosionExposure = null,
     FalloutPlayerActorValuesSnapshot? PlayerActorValues = null,
     FalloutPlayerTagSkillsSnapshot? TagSkillSlots = null,
-    IReadOnlyList<FalloutFactionRelationSnapshot>? FactionRelations = null);
+    IReadOnlyList<FalloutFactionRelationSnapshot>? FactionRelations = null,
+    FalloutDetectionEventsSnapshot? DetectionEvents = null,
+    FalloutNativeFinishedSpeechSnapshot? FinishedSpeech = null,
+    FalloutFinishedSpeechStageScope? FinishedSpeechStage = null,
+    IReadOnlyList<FalloutQuestStageResultSnapshot>? QuestStageResults = null,
+    FalloutQuestStageDriverFailure? StageResultFailure = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -48,7 +55,9 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v39";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v41";
+    internal const string FinishedSpeechSchema = "opennv-native-fnv-campaign-save/v40";
+    internal const string OccupiedIdleSchema = "opennv-native-fnv-campaign-save/v39";
     internal const string FactionRelationSchema = "opennv-native-fnv-campaign-save/v38";
     internal const string DeathHistorySchema = "opennv-native-fnv-campaign-save/v37";
     internal const string ProcedureSchema = "opennv-native-fnv-campaign-save/v36";
@@ -115,7 +124,12 @@ internal static class FalloutNativeCampaignSave
         IReadOnlyList<FalloutReferenceSnapshot>? references = null, string questEditorId = OpeningQuestEditorId,
         short stage = CompletedOpeningStage, bool characterCreationComplete = true, float playerViewPitchRadians = 0,
         FalloutPlayerActorValuesSnapshot? playerActorValues = null,
-        FalloutPlayerTagSkillsSnapshot? tagSkillSlots = null)
+        FalloutPlayerTagSkillsSnapshot? tagSkillSlots = null,
+        FalloutDetectionEventsSnapshot? detectionEvents = null,
+        FalloutNativeFinishedSpeechSnapshot? finishedSpeech = null,
+        FalloutFinishedSpeechStageScope? finishedSpeechStage = null,
+        IReadOnlyList<FalloutQuestStageResultSnapshot>? questStageResults = null,
+        FalloutQuestStageDriverFailure? stageResultFailure = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract, special, allowUnspent: !characterCreationComplete);
@@ -157,7 +171,8 @@ internal static class FalloutNativeCampaignSave
             playerPosition.ToArray(),
             playerRotation.ToArray(), quests, scripts, globals, gameTime, skyLighting, references, grant.InventoryRandomState, characterCreationComplete,
             PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : [], PlayerActorValues: playerActorValues,
-            TagSkillSlots: tagSkillSlots, FactionRelations: []);
+            TagSkillSlots: tagSkillSlots, FactionRelations: [], DetectionEvents: detectionEvents, FinishedSpeech: finishedSpeech,
+            FinishedSpeechStage: finishedSpeechStage, QuestStageResults: questStageResults, StageResultFailure: stageResultFailure);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -205,6 +220,9 @@ internal static class FalloutNativeCampaignSave
         if (activeCell.Signature != "CELL")
             throw new InvalidDataException(
                 "Native campaign save active CELL differs from the live winning records.");
+        if (state.FinishedSpeechStage is { } speechStage &&
+            (stack.GetEffective(speechStage.Quest).Signature != "QUST" || stack.GetEffective(speechStage.Quest).IsDeleted))
+            throw new InvalidDataException("Saved finished speech stage has no winning source quest.");
         var characterContract = FalloutNativeRaceSexResolver.Resolve(stack);
         FalloutNativeRaceSexResolver.Validate(characterContract, state.Character);
         if (state.Character.Face is { } face)
@@ -272,6 +290,13 @@ internal static class FalloutNativeCampaignSave
             validatedQuests = new FalloutQuestState(stack);
             validatedQuests.Restore(state.Quests);
         }
+        if (state.QuestStageResults is { } stageResults)
+        {
+            var stages = new FalloutQuestStages(stack, validatedQuests ?? new FalloutQuestState(stack),
+                (_, _, _) => throw new InvalidDataException("Stage-result validation cannot execute source programs."),
+                _ => throw new InvalidDataException("Stage-result validation cannot execute source predicates."));
+            stages.RestoreResults(stageResults);
+        }
         if (state.Scripts is { } savedScripts)
         {
             new FalloutQuestObjectFlags(stack).Restore(savedScripts.Session?.QuestObjects);
@@ -290,6 +315,8 @@ internal static class FalloutNativeCampaignSave
             using var references = new FalloutReferenceWorld(stack, validatedValues);
             references.RestoreEncounterZones(state.EncounterZones);
             references.Restore(state.References);
+            references.RestoreDetection(state.DetectionEvents);
+            if (state.FinishedSpeech is { } finishedSpeech) RuntimeNativeSpeech.ValidateFinishedState(stack, references, finishedSpeech);
             references.ValidateValueHandles();
             references.RestoreActorOverrides(state.ActorOverrides);
             references.RestoreFactionRelations(state.FactionRelations);
@@ -297,7 +324,7 @@ internal static class FalloutNativeCampaignSave
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
             if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
-        if (state.Schema == FactionRelationSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema is FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References is not null)
             state = state with
             {
@@ -305,11 +332,13 @@ internal static class FalloutNativeCampaignSave
                 References = RestoreLegacyDeathCounts(state),
                 FactionRelations = []
             };
+        if (state.Schema == ExpectedSchema && state.References is not null)
+            state = state with { QuestStageResults = state.QuestStageResults ?? [] };
         return new FalloutNativeCampaignRestore(state, inventory);
     }
 
     private static IReadOnlyList<FalloutReferenceSnapshot>? RestoreLegacyDeathCounts(FalloutNativeCampaignState state) =>
-        state.Schema is ExpectedSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
+        state.Schema is ExpectedSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
         { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray();
 
     private static void ValidateQuestValueHandles(FalloutPluginStack stack,
@@ -348,6 +377,7 @@ internal static class FalloutNativeCampaignSave
             EncounterZones = state.References is null ? null : state.EncounterZones ?? [],
             TagSkillSlots = state.TagSkillSlots ?? FalloutPlayerTagSkills.FromLegacy(state.TagSkills),
             References = RestoreLegacyDeathCounts(state),
+            QuestStageResults = state.References is null ? null : state.QuestStageResults ?? [],
         };
         Validate(updated, state.SaveCompatibilityId);
         return updated;
@@ -392,6 +422,37 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
+        if (state.Schema != ExpectedSchema && (state.QuestStageResults is not null || state.StageResultFailure is not null))
+            throw new InvalidDataException("Legacy campaign schema contains future quest-stage execution receipts.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.HeadTracking is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema contains future native head-tracking continuation.");
+        if (state.Schema == ExpectedSchema && state.References is not null && state.QuestStageResults is null)
+            throw new InvalidDataException("Saved campaign is missing its closed quest-stage result owner.");
+        if (state.QuestStageResults is not null && state.References is null)
+            throw new InvalidDataException("Saved quest-stage results have no retained reference world.");
+        if (state.QuestStageResults is { Count: > 0 } && state.Quests is null)
+            throw new InvalidDataException("Saved quest-stage results have no consumed quest state.");
+        if (state.QuestStageResults is { } stageResults) FalloutQuestStages.ValidateSnapshotShape(stageResults);
+        FalloutQuestStages.ValidateDriverFailure(state.QuestStageResults, state.StageResultFailure);
+        // v40 could capture neither pending nor failed stage results. Its absent
+        // journal retains no historical error/cursor and invokes no source code.
+        // Reject supplied future fields against the original label first.
+        if (state.Schema == FinishedSpeechSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema != ExpectedSchema && state.ActorOverrides?.Any(actor => actor.Alerted is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema contains future actor alert state.");
+        if (state.Schema != ExpectedSchema && (state.DetectionEvents is not null || state.FinishedSpeech is not null || state.FinishedSpeechStage is not null ||
+            state.References?.Any(reference => reference.ScriptStoppedFrame is not null || reference.CompletedScriptContinuation is not null) == true))
+            throw new InvalidDataException("Legacy campaign schema contains future detection/speech invocation state.");
+        if (state.FinishedSpeechStage is { } stageScope && (stageScope.Stage < 0 || state.FinishedSpeech?.Failure is null))
+            throw new InvalidDataException("Saved finished speech stage scope has no ended failure receipt.");
+        if ((state.DetectionEvents is not null || state.FinishedSpeech is not null) && state.References is null)
+            throw new InvalidDataException("Saved detection/speech has no retained reference world.");
+        if (state.References?.Any(reference => reference.ScriptStoppedFrame?.PreparedDetection is not null ||
+            reference.CompletedScriptContinuation?.PreparedDetection is not null) == true && state.DetectionEvents is null)
+            throw new InvalidDataException("Stopped detection invocation is missing its original simulation clock.");
+        // v39 already owns attack selection and occupied animation. Check future
+        // fields against the original label before sharing its mature validators.
+        if (state.Schema == OccupiedIdleSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && (state.WeaponHandling?.AttackRandomState is not null ||
             state.References?.Any(reference => reference.AttackRandomState is not null ||
                 reference.Engagement?.AttackRandomState is not null ||

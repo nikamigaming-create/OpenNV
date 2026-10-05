@@ -177,6 +177,7 @@ internal partial class RuntimeNativeNpc
         if (world is not null)
         {
             _aiReferenceState = world.Get(Appearance.Reference!.Value);
+            world.BindActorAlert(Appearance.Reference!.Value, Activity);
             _baseClock = _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
             _aiReferenceState.QuerySitting = _sittingQuery = () => SittingState;
@@ -226,6 +227,7 @@ internal partial class RuntimeNativeNpc
         if (_animation is { } overlay && _baseAnimation is { } baseAnimation)
             RuntimeNativeNifAnimation.ApplyLayers((baseAnimation, _baseAnimationSeconds), (overlay, _animationSeconds));
         if (bindingFailure is not null) PublishFace();
+        BindHeadTrackingPersistence();
     }
 
     private void RestoreMarkerTravelLifecycleBeforeSelection()

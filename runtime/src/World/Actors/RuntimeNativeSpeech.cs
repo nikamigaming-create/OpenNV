@@ -151,6 +151,9 @@ internal partial class RuntimeNativeSpeech : Node
                 disabledCommands = _disabledCommands,
                 lastDisabledParticipant = _lastDisabledParticipant?.ToString(),
                 emptyCompletions = _emptyCompletions.State,
+                finishedFailureCapturable = CanCaptureFinishedFailure,
+                finishedFailureReceipt = _emptyCompletions.FinishedFailureReceipt,
+                lastCompletedFailure = _lastCompletedFailure,
                 voiceBinding = voice?.Binding,
                 responseSound = voice?.ResponseSound?.LastEvent,
                 audioSha256 = voice?.Player.Stream?.GetMeta("opennv_owned_media_sha256", "").AsString(),
@@ -252,6 +255,8 @@ internal partial class RuntimeNativeSpeech : Node
         if (_channels.TryGetValue(speaker, out var voice)) return voice;
         var player = new AudioStreamPlayer { Name = "OwnedActorVoice" };
         voice = new(speaker, player);
+        if (_restoredVoiceHistory.TryGetValue(speaker, out var restored))
+        { voice.Generation = restored.Generation; voice.CompletedCommands = restored.CompletedCommands; }
         var channel = voice;
         player.Finished += () => channel.Advance = true;
         _channels.Add(speaker, voice);
@@ -505,7 +510,13 @@ internal partial class RuntimeNativeSpeech : Node
 
     public override void _Process(double delta)
     {
-        if (Error is not null) return;
+        if (Error is not null)
+        {
+            if (!GetTree().Paused && CanCaptureFinishedFailure &&
+                _emptyCompletions.FinishedFailureReceipt is { } failed && CanResumeSourceCompletion?.Invoke(failed.Completion()) == true)
+                ResumeFinishedSource();
+            return;
+        }
         try
         {
             var frame = _channels.Values.Where(voice => voice.Info is not null)
@@ -564,11 +575,9 @@ internal partial class RuntimeNativeSpeech : Node
         {
             var receipt = new FalloutSpeechCompletionReceipt(voice.Reference,
                 new HashSet<FalloutFormKey> { sourceTopic }, completed.Record.FormKey, voice.Generation);
-            _emptyCompletions.Complete(receipt, pending =>
-            {
-                FinishResponse();
-                DispatchSourceCompletion(pending);
-            }, () =>
+            var identity = FalloutFinishedSpeechSourceBinding.Capture(_stack,
+                (_references ?? throw new InvalidOperationException("Finished speech has no shared reference owner.")).Retained(voice.Reference), receipt);
+            _emptyCompletions.CompleteFinished(receipt, identity.Source, FinishResponse, DispatchSourceCompletion, () =>
             {
                 ++voice.CompletedCommands; ++_completedCommands;
                 // The stage owner observes settled speech only after its source

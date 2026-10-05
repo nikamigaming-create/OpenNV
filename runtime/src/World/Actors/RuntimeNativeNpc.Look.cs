@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -86,21 +87,22 @@ internal partial class RuntimeNativeNpc
         packageHeadTrackingEnabled = PackageHeadTrackingEnabled,
         pose = _headPose?.State,
         error = _headError,
-        unbound = new[] { "automatic-default-acquisition", "combat-targets", "eye-aiming", "full-body-look", "target-save-restoration", "matched-native-pose-and-frame" },
+        unbound = new[] { "automatic-default-acquisition", "combat-targets", "eye-aiming", "full-body-look", "matched-native-pose-and-frame" },
     };
 
     internal void ConfigureHeadTracking(FalloutPluginStack records, RuntimeLiveContentSource source,
-        Func<FalloutFormKey, Vector3?> targetPoint)
+        Func<FalloutFormKey, Vector3?> targetPoint, FalloutReferenceInstance? referenceState = null)
     {
         if (source.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
             throw new NotSupportedException("This engine's humanoid head-tracking bootstrap is unbound.");
         // Ordinary NPCs use the engine's default humanoid body-part form. The
         // winning BPTD owns the actual node, flags and cone, including overrides.
+        _headRecords = records;
         _headPart = FalloutBodyPartLook.Read(records.GetEffective(records.RuntimeFormKey(0x1d)));
         _headSettings = FalloutLookSettings.Read(FalloutInstallationSettings.Read(source));
         _headTargets = new(FalloutGameSettingFloats.ReadRetained(records, "fAIHoldDefaultHeadTrackTimer", nameof(FalloutHeadTrackingState)));
         _headTargetPoint = targetPoint;
-        if (_headPart is null) return;
+        if (_headPart is null) { BindHeadTrackingPersistence(referenceState); return; }
         var bone = Skeleton.BoneIndex(_headPart.TargetNode);
         _headPose = new(Skeleton.Node, bone, _headPart, _headSettings, Skeleton.UnitsToMetres);
         var block = Skeleton.Node.GetBoneMeta(bone, "opennv_nif_block").AsInt32();
@@ -108,9 +110,10 @@ internal partial class RuntimeNativeNpc
             .Select(value => (FalloutNifFloatExtraDataController)Skeleton.Source.ReadObject(value.Index))
             .Where(value => value.Time.Target == block).ToArray();
         if (controllers.Length > 1) throw new NotSupportedException("Head float-controller selection is ambiguous.");
-        if (controllers.SingleOrDefault() is not { } controller) return;
+        if (controllers.SingleOrDefault() is not { } controller) { BindHeadTrackingPersistence(referenceState); return; }
         _ = Skeleton.FloatExtraData.Get(_headPart.TargetNode, controller.ExtraDataName);
         _headOverrideName = controller.ExtraDataName;
+        BindHeadTrackingPersistence(referenceState);
     }
 
     internal Vector3? HeadTargetPoint => _headPose?.WorldPosition;
@@ -144,6 +147,9 @@ internal partial class RuntimeNativeNpc
             _headTargets.Look(reference);
         }
         else _headTargets.StopLook();
+        // Mark the actual effect at application, rather than trying to infer
+        // consumed Look instructions from another owner's yielded-step count.
+        if ((_headReferenceState ?? _aiReferenceState) is { } state) state.HeadTrackingRequired = true;
     }
 
     private void RestoreAuthoredHeadPose() => _headPose?.RestoreAuthoredPose();

@@ -15,4 +15,4 @@ internal sealed record FalloutActorOverrides(FalloutFormKey Target, string Sourc
     IReadOnlyList<FalloutActorFormOverride> Factions,
     FalloutActorFormOverride? CombatStyle = null, bool IgnoreCrime = false, bool IgnoreFriendlyHits = false,
     FalloutActorFormOverride? Race = null, FalloutActorFaceGeometryOverride? FaceGeometry = null, float? Height = null,
-    FalloutActorHairOverride? Hair = null);
+    FalloutActorHairOverride? Hair = null, bool? Alerted = null);
