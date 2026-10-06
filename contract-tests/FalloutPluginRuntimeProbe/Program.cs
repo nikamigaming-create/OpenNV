@@ -7,6 +7,20 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-campaign-goals"])
+{
+    CampaignGoalContracts.Run();
+    return;
+}
+if (args.Length > 0 && args[0] == "--audit-campaign-goals")
+{
+    if (args.Length < 7)
+        throw new ArgumentException("--audit-campaign-goals requires mod root game questEditorId doorPlugin doorObjectIdHex [dependencies...].");
+    CampaignGoalsOwnedProbe.Run(args[1], args[2], args[3], args[4], args[5],
+        uint.Parse(args[6], System.Globalization.NumberStyles.AllowHexSpecifier,
+            System.Globalization.CultureInfo.InvariantCulture), args[7..]);
+    return;
+}
 if (args is ["--test-cell-graph"])
 {
     CellGraphAuditContracts.Run();
@@ -84,6 +98,7 @@ if (args is ["--mod-install-contracts"]) return;
 HudNotificationsProbe.Run();
 QuestScriptClockProbe.Run();
 QuestObjectiveProbe.Run();
+CampaignGoalContracts.Run();
 ScriptExpressionProbe.Run();
 ScriptPostfixProbe.Run();
 ScriptSourceStringProbe.Run();

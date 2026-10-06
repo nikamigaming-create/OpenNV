@@ -189,34 +189,7 @@ internal static class FalloutCellSceneReader
             var emittanceBytes = OptionalSingle(values, "XEMI", record);
             if (emittanceBytes is not null && emittanceBytes.Length != sizeof(uint))
                 throw Error(record, "XEMI must contain one FormID");
-            var teleportBytes = OptionalSingle(values, "XTEL", record);
-            FalloutTeleportDestination? teleport = null;
-            if (teleportBytes is not null)
-            {
-                if (teleportBytes.Length != TeleportDestinationBytes)
-                    throw Error(
-                        record,
-                        $"XTEL must contain exactly {TeleportDestinationBytes} destination bytes");
-                var destination = record.Plugin.AdjustOptionalFormId(
-                    BinaryPrimitives.ReadUInt32LittleEndian(teleportBytes));
-                if (destination is null)
-                    throw Error(record, "XTEL has a null destination door");
-                var destinationPosition = new float[3];
-                var destinationRotation = new float[3];
-                for (var index = 0; index < 3; ++index)
-                {
-                    destinationPosition[index] = ReadFiniteSingle(
-                        teleportBytes, sizeof(uint) + index * sizeof(float), record, "XTEL position");
-                    destinationRotation[index] = ReadFiniteSingle(
-                        teleportBytes, sizeof(uint) + (index + 3) * sizeof(float), record, "XTEL rotation");
-                }
-                teleport = new FalloutTeleportDestination(
-                    destination.Value,
-                    destinationPosition,
-                    destinationRotation,
-                    BinaryPrimitives.ReadUInt32LittleEndian(
-                        teleportBytes.AsSpan(TeleportDestinationBytes - sizeof(uint))));
-            }
+            var teleport = ReadTeleport(record, OptionalSingle(values, "XTEL", record));
             references.Add(new FalloutPlacedReference(
                 record.FormKey,
                 Text(OptionalSingle(values, "EDID", record)),
@@ -281,6 +254,33 @@ internal static class FalloutCellSceneReader
                 light));
         }
         return new FalloutCellScene(cell, references, bases);
+    }
+
+    internal static FalloutTeleportDestination? ReadTeleport(FalloutPluginRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        var fields = record.ReadSubrecords().Where(field => field.Signature == "XTEL").ToArray();
+        if (fields.Length > 1)
+            throw Error(record, $"contains {fields.Length} XTEL subrecords");
+        return ReadTeleport(record, fields.Length == 0 ? null : fields[0].Data.ToArray());
+    }
+
+    private static FalloutTeleportDestination? ReadTeleport(FalloutPluginRecord record, byte[]? bytes)
+    {
+        if (bytes is null) return null;
+        if (bytes.Length != TeleportDestinationBytes)
+            throw Error(record, $"XTEL must contain exactly {TeleportDestinationBytes} destination bytes");
+        var destination = record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(bytes));
+        if (destination is null) throw Error(record, "XTEL has a null destination door");
+        var position = new float[3];
+        var rotation = new float[3];
+        for (var index = 0; index < 3; ++index)
+        {
+            position[index] = ReadFiniteSingle(bytes, sizeof(uint) + index * sizeof(float), record, "XTEL position");
+            rotation[index] = ReadFiniteSingle(bytes, sizeof(uint) + (index + 3) * sizeof(float), record, "XTEL rotation");
+        }
+        return new(destination.Value, position, rotation,
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(TeleportDestinationBytes - sizeof(uint))));
     }
 
     internal static FalloutCellDefinition ReadDefinition(FalloutPluginStack stack, FalloutFormKey cellKey)
