@@ -11,6 +11,13 @@ Passwords use the existing shared lock and player inventory owners. Difficulty
 zero remains a lock. The reader does not turn a NOTE link into acquired inventory
 or replace authored access with a location-specific unlock.
 
+Run-on linked-reference conditions resolve the actual placed terminal's winning
+XLKR through the shared reference owner, independently of the TERM's declaring
+masters. GetOpenState reads that linked object's real resident or retained
+animation phase; lock predicates use the same shared access owner. Missing links
+and additional unowned linked-reference context refuse rather than choosing a
+nearby door. Current/master-adjusted and cold contracts retain this binding.
+
 Godot presents the owned computers-menu XML, bitmap fonts, source rows and result
 text. Root terminal metadata owns presentation while child pages retain their
 declaring result scope. Source highdef and local-RGB shortcuts share the common
