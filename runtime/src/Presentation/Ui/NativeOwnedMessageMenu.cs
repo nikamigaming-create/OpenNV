@@ -43,6 +43,9 @@ internal sealed partial class NativeOwnedMessageMenu : Control
             var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.Color)
             { Name = $"MM_Button_{index}", Text = label, FocusMode = FocusModeEnum.All, DrawText = false };
             var sourceIndex = message.ButtonIndices?[index] ?? index;
+            button.SetMeta("opennv_source_choice_kind", "message");
+            button.SetMeta("opennv_source_choice_id", sourceIndex);
+            button.SetMeta("opennv_source_choice_menu", message.Form.ToString());
             button.Pressed += () => { if (_submitted) return; _submitted = true; selected(sourceIndex); };
             button.MouseEntered += () => { Select(tile); QueueRedraw(); };
             button.FocusEntered += () => { Select(tile); QueueRedraw(); };

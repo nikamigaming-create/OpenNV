@@ -7,9 +7,15 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\runtime\src\Gameplay\Bots\ReactiveCampaignBot.cs" Link="ReactiveCampaignBot.cs" />
     <Compile Include="../../runtime/src/World/Cells/NativeNavigationWorkSchedule.cs" Link="NativeNavigationWorkSchedule.cs" />
     <Compile Include="../../runtime/src/Gameplay/Bots/ReactiveSteering.cs" Link="ReactiveSteering.cs" />
     <Compile Include="../../runtime/src/Gameplay/Bots/ReactiveReferenceBot.cs" Link="ReactiveReferenceBot.cs" />
+    <Compile Include="..\..\runtime\src\Gameplay\Bots\ReactiveReferenceBot.Combat.cs" Link="ReactiveReferenceBot.Combat.cs" />
+    <Compile Include="..\..\runtime\src\Gameplay\Bots\BotCombatObservation.cs" Link="BotCombatObservation.cs" />
+    <Compile Include="..\..\runtime\src\Gameplay\Bots\BotCombatTelemetry.cs" Link="BotCombatTelemetry.cs" />
+    <Compile Include="..\..\runtime\src\Gameplay\Bots\ReactiveCombatSkill.cs" Link="ReactiveCombatSkill.cs" />
+    <Compile Include="..\..\runtime\src\Gameplay\Bots\VerifiedBotSkillLibrary.cs" Link="VerifiedBotSkillLibrary.cs" />
     <Compile Include="../../runtime/src/Gameplay/Bots/BotInteractionEvidence.cs" Link="BotInteractionEvidence.cs" />
   </ItemGroup>
 </Project>

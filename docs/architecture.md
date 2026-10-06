@@ -86,6 +86,15 @@ to complete shared checkpoints and ordered source hashes. Native playback checks
 scene, clock and observed controls, releases input on failure and retains raw
 parity deltas independently of explicit floating-point tolerances.
 
+[Ordinary campaign attempts](ordinary-campaign-bot.md) choose displayed winning
+quest targets through the [source objective and directed portal graph](source-campaign-goals.md).
+Hierarchical ordinary-input skills retain source/build/native bindings, actual
+offered menu identities, attributed combat receipts and complete manual-save
+outcomes. Model-less internal source markers remain placement-only travel
+points, not proxy presentation or activation contacts. Bot policy never writes
+authoritative gameplay state; unowned behavior and incomplete checkpoints stop
+visibly. Whole campaign, cold checkpoint and retail parity remain independent.
+
 [Actor collision and package head tracking](actor-collision-and-package-head-tracking.md)
 retain movement filters through enable/fade changes, preserve source scale during
 turning and bind package head suppression independently of script Look targets.

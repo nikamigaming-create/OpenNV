@@ -17,7 +17,9 @@ internal sealed partial class RuntimeLiveHarness : Node
     private Func<(string StateKey, ulong EventOrdinal)> _captureIdentity = null!;
     private double _lastStateWriteMilliseconds;
     private double _lastSnapshotMilliseconds, _lastSerializeMilliseconds, _lastFileMilliseconds;
-    private Task<double>? _stateWrite;
+    private Task<LiveHarnessFileWrite>? _stateWrite;
+    private LiveHarnessFileWrite? _lastFileWrite;
+    private long _statePublicationSharingRetries;
     private long _statePublicationFailures;
     private string? _lastStatePublicationFailure;
     private readonly Dictionary<Key, ulong> _held = [];
@@ -50,7 +52,12 @@ internal sealed partial class RuntimeLiveHarness : Node
         if (!float.IsFinite(sensitivity) || sensitivity <= 0) throw new ArgumentException("Invalid mouse sensitivity.");
         _botSensitivity = sensitivity; _botForward = forward; _botActivate = activate;
         _pumpBotInput = pumpInput;
-        _bot = new(observe, route, (intent, activation) =>
+        _bot = new(identity =>
+        {
+            var observation = observe(identity);
+            _botCombatBindings = observation.Combat?.Bindings;
+            return observation;
+        }, route, (intent, activation) =>
         {
             if (inputOverride?.Invoke(intent, activation) == true)
             {
@@ -61,7 +68,8 @@ internal sealed partial class RuntimeLiveHarness : Node
             if (intent.YawRadians != 0 || intent.PitchRadians != 0)
                 DeliverLook(-intent.YawRadians / _botSensitivity, -intent.PitchRadians / _botSensitivity);
             SetKey(_botActivate, activation, 50);
-        }, approachRoute, cancelRoute);
+            DeliverBotCombatInput(intent);
+        }, approachRoute, cancelRoute, _botSkills, PersistBotSkillLibrary);
     }
 
     public override void _EnterTree()
@@ -125,6 +133,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             if (stamp != _lastStopWrite)
             {
                 _lastStopWrite = stamp;
+                _campaignBot.Stop();
                 _bot?.Stop();
                 _inputPlayback?.Stop("Playback interrupted by the stop request.", ReleaseAll);
                 FinishInputRecording("Recording interrupted by the stop request.");
@@ -157,6 +166,8 @@ internal sealed partial class RuntimeLiveHarness : Node
                 Dispatch(document.RootElement, request);
                 Receipt(request, true, document.RootElement.GetProperty("op").GetString()?.StartsWith("checkpoint.", StringComparison.Ordinal) == true
                     ? "Handled by the shared save owner; cold loading and resulting gameplay state are observed separately."
+                    : document.RootElement.GetProperty("op").GetString() == "bot"
+                    ? "Bot policy command accepted; native gameplay receipts and evidence persistence are observed separately."
                     : "Delivered to Godot input; resulting gameplay state is observed separately.");
             }
             catch (Exception exception) when (exception is ArgumentException or InvalidDataException or JsonException or InvalidOperationException or KeyNotFoundException or NotSupportedException or IOException or UnauthorizedAccessException)
@@ -165,10 +176,11 @@ internal sealed partial class RuntimeLiveHarness : Node
                 Receipt(request, false, exception.Message);
             }
         }
+        TickCampaign((float)delta);
         _bot?.Tick((float)delta);
         try { _pumpBotInput?.Invoke(); }
         catch (Exception error) when (error is IOException or InvalidOperationException)
-        { _bot?.Fail("Simulator input transport failed: " + error.Message); }
+        { _bot?.Fail("Simulator input transport failed: " + error.Message, "input-adapter"); }
         if (now - _lastStateMilliseconds >= 250)
         {
             _lastStateMilliseconds = now;
@@ -180,7 +192,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     {
         if (DispatchRecordedInput(command, request)) return;
         if (!_deliveringReplay && _inputPlayback?.Active == true &&
-            command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text" or "bot" or "checkpoint.load")
+            command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text" or "bot" or "campaign" or "checkpoint.load")
             _inputPlayback.Stop("Playback yielded to external input.", ReleaseAll);
         if (_inputRecording is not null && command.GetProperty("op").GetString() is "checkpoint.load" or "checkpoint.save" or "physics.sever")
             throw new InvalidOperationException("Finish the input segment before changing authoritative state through diagnostics.");
@@ -188,9 +200,15 @@ internal sealed partial class RuntimeLiveHarness : Node
         if (!_deliveringReplay && command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text" or "bot" or "physics.sever")
             _replayCheckpointPrepared = false;
         if (command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text")
+        {
+            _campaignBot.Stop();
             _bot?.Stop();
+        }
         switch (command.GetProperty("op").GetString())
         {
+            case "campaign":
+                DispatchCampaign(command);
+                break;
             case "physics.sever":
                 // Explicit development-harness operation for the requested
                 // limb physics check. This is never ordinary player input or
@@ -208,9 +226,17 @@ internal sealed partial class RuntimeLiveHarness : Node
             case "bot":
                 if (_bot is null) throw new NotSupportedException("Bot observation/input adapter is unavailable.");
                 var mode = command.GetProperty("mode").GetString()!;
-                if (mode == "stop") _bot.Stop();
-                else _bot.Start(command.GetProperty("reference").GetString()!, mode,
-                    command.TryGetProperty("distance", out var distance) ? distance.GetSingle() : 1.5f);
+                if (mode != "observe") _campaignBot.Stop();
+                var pauseAfter = !command.TryGetProperty("pauseAfter", out var pause) || pause.GetBoolean();
+                if (mode == "observe") { _bot.ObserveCombat(); PublishState(); }
+                else if (mode == "stop") _bot.Stop(pauseAfter);
+                else
+                {
+                    EnsureBotSkillLibrary();
+                    _bot.Start(command.TryGetProperty("reference", out var botReference) ? botReference.GetString() : null, mode,
+                        command.TryGetProperty("distance", out var distance) ? distance.GetSingle() : 1.5f,
+                        !command.TryGetProperty("combatTakeover", out var takeover) || takeover.GetBoolean(), pauseAfter);
+                }
                 break;
             case "key":
                 var name = command.GetProperty("key").GetString()!;
@@ -228,20 +254,8 @@ internal sealed partial class RuntimeLiveHarness : Node
                 SetKey(key, pressed, (ulong)lease);
                 break;
             case "button":
-                var path = command.GetProperty("path").GetString()!;
-                var button = GetTree().Root.GetNodeOrNull<BaseButton>(path);
-                if (button is null || !button.IsVisibleInTree() || button.Disabled)
-                    throw new InvalidOperationException("Observed button is no longer visible and enabled.");
-                var caption = ButtonText(button);
-                if (_deliveringReplay && caption != command.GetProperty("text").GetString())
-                    throw new InvalidOperationException("Recorded button caption differs from the currently observed action.");
-                var buttonStateKey = _captureIdentity().StateKey;
-                var center = button.GetGlobalTransformWithCanvas() * (button.Size / 2);
-                if (!button.GetViewport().GetVisibleRect().HasPoint(center))
-                    throw new InvalidOperationException("Observed button has no clickable center inside its viewport.");
-                PushHarnessInput(button.GetViewport(), new InputEventMouseButton { Position = center, GlobalPosition = center, ButtonIndex = MouseButton.Left, Pressed = true });
-                PushHarnessInput(button.GetViewport(), new InputEventMouseButton { Position = center, GlobalPosition = center, ButtonIndex = MouseButton.Left, Pressed = false });
-                RecordInput(JsonSerializer.SerializeToElement(new { op = "button", path, text = caption }, Json), buttonStateKey);
+                DeliverObservedButton(command.GetProperty("path").GetString()!,
+                    _deliveringReplay ? command.GetProperty("text").GetString() : null);
                 break;
             case "look":
                 var dx = command.GetProperty("dx").GetSingle();
@@ -343,6 +357,7 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     private void ReleaseAll()
     {
+        ReleaseBotCombatInput();
         foreach (var key in _recordedHumanKeys.Keys.ToArray())
         {
             _recordedHumanKeys.Remove(key);
@@ -377,7 +392,10 @@ internal sealed partial class RuntimeLiveHarness : Node
                 AtomicWrite(Path.Combine(_directory, "state-error.json"), JsonSerializer.Serialize(new
                 { drawCount = Engine.GetFramesDrawn(), error = error.Message, failures = _statePublicationFailures }, Json));
             }
-            catch (IOException) { }
+            catch (IOException markerError)
+            {
+                GD.PushWarning("OPENNV_STATE_FAILURE_MARKER_LOSS " + markerError.Message);
+            }
         }
     }
 
@@ -392,7 +410,11 @@ internal sealed partial class RuntimeLiveHarness : Node
     {
         var pending = _stateWrite;
         _stateWrite = null;
-        if (pending is not null) _lastFileMilliseconds = pending.GetAwaiter().GetResult();
+        if (pending is null) return;
+        var result = pending.GetAwaiter().GetResult();
+        _lastFileWrite = result;
+        _lastFileMilliseconds = result.Milliseconds;
+        _statePublicationSharingRetries += result.Attempts - 1;
     }
 
     private void WriteState()
@@ -428,10 +450,13 @@ internal sealed partial class RuntimeLiveHarness : Node
             semanticEventOrdinal = identity.EventOrdinal,
             statePublicationFailures = _statePublicationFailures,
             lastStatePublicationFailure = _lastStatePublicationFailure,
+            statePublicationSharingRetries = _statePublicationSharingRetries,
             nextCommandRequest = _nextRequest,
             commandReadFailure = _commandReadFailure,
             gameplay = _captureSummary(),
             bot = _bot?.State,
+            campaignBot = _campaignBot.State,
+            botSkillStore = BotSkillStoreState,
             physicsTest = _lastPhysicsTest,
             checkpoint = _lastCheckpoint,
             checkpointRestored = _restoredCheckpoint?.Invoke(),
@@ -463,6 +488,9 @@ internal sealed partial class RuntimeLiveHarness : Node
                 previousSnapshotMilliseconds = _lastSnapshotMilliseconds,
                 previousSerializeMilliseconds = _lastSerializeMilliseconds,
                 previousFileMilliseconds = _lastFileMilliseconds,
+                previousFileSharingRetries = _lastFileWrite is { } write ? write.Attempts - 1 : 0,
+                previousFileRetryError = _lastFileWrite?.LastRetryError,
+                previousFileRetryFailure = _lastFileWrite?.LastRetryFailure,
                 hostDrawIntervals = _frameIntervals.Capture(),
                 drawCalls = Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderTotalDrawCallsInFrame),
                 renderSetupCpuMilliseconds = renderTiming?.SetupMilliseconds,
@@ -479,15 +507,21 @@ internal sealed partial class RuntimeLiveHarness : Node
         var json = JsonSerializer.Serialize(snapshot, Json);
         _lastSerializeMilliseconds = Stopwatch.GetElapsedTime(phase).TotalMilliseconds;
         var errorPath = Path.Combine(_directory, "state-error.json");
-        if (File.Exists(errorPath)) File.Delete(errorPath);
         var path = Path.Combine(_directory, "live-state.json");
         // Freeze all engine/gameplay reads and serialization on their owner
         // thread. Only immutable text and file IO cross to this single writer.
         _stateWrite = Task.Run(() =>
         {
             var writeStarted = Stopwatch.GetTimestamp();
-            AtomicWrite(path, json);
-            return Stopwatch.GetElapsedTime(writeStarted).TotalMilliseconds;
+            var written = LiveHarnessAtomicFile.Write(path, json);
+            var cleared = LiveHarnessAtomicFile.Delete(errorPath);
+            return written with
+            {
+                Attempts = written.Attempts + cleared.Attempts - 1,
+                Milliseconds = Stopwatch.GetElapsedTime(writeStarted).TotalMilliseconds,
+                LastRetryError = cleared.LastRetryError ?? written.LastRetryError,
+                LastRetryFailure = cleared.LastRetryFailure ?? written.LastRetryFailure
+            };
         });
         _lastStateWriteMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }

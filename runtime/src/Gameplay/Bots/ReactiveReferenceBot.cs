@@ -6,7 +6,8 @@ internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Ca
     Vector3 Target, Vector3 Aim, string? AimedReference, bool Paused, bool MovementEnabled,
     bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false,
     BotDoorObservation? Door = null, long ProgressRevision = 0, string ActiveMenus = "", int ControlMask = 0,
-    bool ModalInput = false, bool Loading = false, string? ExecutionFault = null, bool Defeated = false);
+    bool ModalInput = false, bool Loading = false, string? ExecutionFault = null, bool Defeated = false,
+    BotCombatObservation? Combat = null);
 
 internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
@@ -22,7 +23,7 @@ internal sealed record BotNavigationProjection(Vector3 Requested, Vector3 Select
 // Goals use source references. Travel may approach an authored exterior object
 // before it streams in, but arrival still requires its live presentation.
 // Navigation and scene queries stay with the engine; steering is reusable C#.
-internal sealed class ReactiveReferenceBot
+internal sealed partial class ReactiveReferenceBot
 {
     internal const float ControlWaitLimitSeconds = 30;
     private readonly Func<string, BotObservation> _observe;
@@ -53,6 +54,7 @@ internal sealed class ReactiveReferenceBot
     private sealed record RouteRequest(Vector3 Start, Vector3 Endpoint, Vector3 Target);
     private RouteRequest? _request;
     private string? _routeDoor, _resumeMode;
+    internal BotCampaignSkill CampaignSkill => new(_reference is not null, _phase, _error, _failureKind);
     internal object State => new
     {
         phase = _phase,
@@ -110,20 +112,34 @@ internal sealed class ReactiveReferenceBot
             targetMovementMeters = _observation is { } target ? Vector3.Distance(target.Target, _plannedTarget) : (float?)null
         } : null,
         error = _error,
-        coverage = "source-reference travel/approach/follow/activation through ordinary input; campaign decisions and combat tactics unbound"
+        failureKind = _failureKind,
+        combatTakeover = _combatTakeover,
+        pauseAfter = _pauseAfter,
+        combat = _combat?.State,
+        combatObservation = _combatObservation?.State,
+        skills = _combatSkills.State,
+        coverage = "ordinary source-reference navigation/activation and bounded receipt-verified single-ray combat; campaign curriculum, other weapon families and retail tactics unbound"
     };
 
     internal ReactiveReferenceBot(Func<string, BotObservation> observe,
         Func<Vector3, Vector3, float, BotNavigationRoute> route, Action<SteeringIntent, bool> input,
-        Func<Vector3, Vector3, Vector3, float, float, BotNavigationRoute?>? approachRoute = null, Action? cancelRoute = null)
-    { _observe = observe; _route = route; _input = input; _approachRoute = approachRoute; _cancelRoute = cancelRoute; }
-
-    internal void Start(string reference, string mode, float distance)
+        Func<Vector3, Vector3, Vector3, float, float, BotNavigationRoute?>? approachRoute = null, Action? cancelRoute = null,
+        VerifiedBotSkillLibrary? skills = null, Action? persistSkills = null)
     {
-        if (string.IsNullOrWhiteSpace(reference) || mode is not ("interact" or "approach" or "follow" or "travel") ||
+        _observe = observe; _route = route; _input = input; _approachRoute = approachRoute; _cancelRoute = cancelRoute;
+        _combatSkills = skills ?? new(); _persistSkills = persistSkills;
+    }
+
+    internal void Start(string? reference, string mode, float distance, bool combatTakeover = true, bool pauseAfter = true)
+    {
+        if ((mode != "combat" && string.IsNullOrWhiteSpace(reference)) || mode is not ("interact" or "approach" or "follow" or "travel" or "combat") ||
             !float.IsFinite(distance) || distance is < .5f or > 5)
-            throw new ArgumentException("Bot goal requires a source reference, interact/approach/follow/travel and distance 0.5-5 metres.");
-        Stop(); _reference = _goalReference = reference; _mode = mode; _distance = _approachDistance = distance; _phase = "observing";
+            throw new ArgumentException("Bot goal requires interact/approach/follow/travel with a source reference, or combat with an optional source threat; distance is 0.5-5 metres.");
+        Stop(); _goalReference = string.IsNullOrWhiteSpace(reference) ? null : reference;
+        _reference = _goalReference ?? CombatObservationIdentity; _mode = mode;
+        _distance = _approachDistance = distance; _phase = "observing";
+        _combat = null; _combatFeedbackPublished = false; _combatCount = 0; _phaseBeforeCombat = null;
+        _combatTakeover = combatTakeover; _pauseAfter = pauseAfter; _combatObservation = null; _failureKind = null;
         _elapsed = _stalled = _waiting = _endpointAiming = 0;
         _replans = _obstructionReplans = _endpointReplans = _movingTargetReplans = 0; _error = null;
         _navigation = null; _observation = null; _projectionRadius = 2; _progressWaypoint = -1;
@@ -131,12 +147,24 @@ internal sealed class ReactiveReferenceBot
         _controlWaitSeconds = 0; _controlWaitReason = null; _progress = null;
     }
 
-    internal void Stop()
+    internal void Stop(bool pauseAfter = false)
     {
-        if (_reference is not null) _input(default, false);
-        CancelRoute(); _routeDoor = _resumeMode = null;
-        _reference = null; _path = null; _scene = null;
-        _interactionBefore = null; _steering.Reset(); _phase = "stopped";
+        if (pauseAfter)
+        {
+            try { _combatObservation = _observe(CombatObservationIdentity).Combat; }
+            catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or KeyNotFoundException or System.Text.Json.JsonException)
+            { _combatObservation = null; _error = "Stop protection observation failed: " + error.Message; }
+        }
+        _combat?.Cancel("Ordinary bot input yielded or stopped.");
+        try { if (_reference is not null || pauseAfter) ReleaseBotControls(pauseAfter); }
+        finally
+        {
+            _routeDoor = _resumeMode = null;
+            _reference = null; _path = null; _scene = null;
+            _interactionBefore = null; _steering.Reset(); _phase = "stopped";
+            CancelRoute();
+        }
+        PublishCombatFeedback();
     }
 
     internal void Tick(float seconds)
@@ -145,7 +173,9 @@ internal sealed class ReactiveReferenceBot
         try
         {
             if (!float.IsFinite(seconds) || seconds <= 0) throw new ArgumentException("Bot frame duration must be finite and positive.");
-            var state = _observe(_reference);
+            var state = _observe(_mode == "combat" || _combat?.Active == true ? CombatObservationIdentity : _reference);
+            _combatObservation = state.Combat;
+            if (TickCombat(state, seconds)) return;
             if (state.ExecutionFault is { } fault) throw new InvalidOperationException("Gameplay execution stopped: " + fault);
             if (state.Defeated) throw new InvalidOperationException("Player died; load an earlier save to continue the ordinary goal.");
             if (!Finite(state.Position) || !Finite(state.Target)) throw new ArgumentException("Bot observation has a nonfinite position or target.");
@@ -358,26 +388,33 @@ internal sealed class ReactiveReferenceBot
             if (near && _mode is "approach" or "travel") Complete("arrival-observed");
             else _input(intent, false);
         }
-        catch (Exception error) when (error is InvalidOperationException or IOException or InvalidDataException or ArgumentException or NotSupportedException or KeyNotFoundException or System.Text.Json.JsonException)
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException or NotSupportedException or KeyNotFoundException or System.Text.Json.JsonException)
         {
-            Fail(error.Message);
+            Fail(error.Message, error.Message.StartsWith("Bot skill evidence persistence failed:", StringComparison.Ordinal) ? "evidence-store" :
+                error is IOException or UnauthorizedAccessException ? "input-adapter" :
+                error is NotSupportedException or InvalidDataException or KeyNotFoundException ||
+                error.Message.StartsWith("Gameplay execution stopped:", StringComparison.Ordinal) ? "engine-owner" : "bot-policy");
         }
     }
 
-    internal void Fail(string error)
+    internal void Fail(string error, string kind = "bot-policy")
     {
-        _error = error;
+        _error = error; _failureKind = kind;
+        _combat?.Abort(kind, error);
+        try { PublishCombatFeedback(); }
+        catch (Exception persistence) when (persistence is IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException or System.Text.Json.JsonException)
+        { _error += "; skill evidence persistence failed: " + persistence.Message; }
         try { CancelRoute(); }
         catch (Exception cancellation) when (cancellation is IOException or InvalidOperationException or NotSupportedException or ArgumentException)
         { _error += "; route cancellation failed: " + cancellation.Message; }
         _reference = null; _path = null; _steering.Reset(); _phase = "blocked";
-        try { _input(default, false); }
+        try { ReleaseBotControls(_pauseAfter && (_combat is not null || _mode == "combat")); }
         catch (Exception release) when (release is IOException or InvalidOperationException or NotSupportedException or System.Text.Json.JsonException)
         { _error += "; input release failed (device lease expires): " + release.Message; }
     }
 
     private void CancelRoute() { _request = null; _cancelRoute?.Invoke(); }
-    private void Complete(string phase) { CancelRoute(); _input(default, false); _reference = null; _path = null; _steering.Reset(); _phase = phase; }
+    private void Complete(string phase) { CancelRoute(); ReleaseBotControls(_pauseAfter); _reference = null; _path = null; _steering.Reset(); _phase = phase; }
     private void Replan(string phase)
     { CancelRoute(); _path = null; _input(default, false); _steering.Reset(); _stalled = _endpointAiming = 0; _phase = phase; }
     private void ReplanEndpoint(bool closer)

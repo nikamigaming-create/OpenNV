@@ -19,6 +19,7 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
     internal string Phase { get; private set; } = "closed";
     internal string? Error { get; private set; }
     internal FalloutDialogueResponse? Response => Phase == "speaking" ? Info!.Responses[ResponseIndex] : null;
+    internal bool IsGoodbye(FalloutFormKey topic) => FalloutDialogueTopic.IsGoodbye(records, topic);
 
     internal void Start(FalloutFormKey speakerBase, FalloutFormKey topic)
     {

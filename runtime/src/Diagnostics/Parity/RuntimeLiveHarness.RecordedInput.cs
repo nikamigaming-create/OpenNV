@@ -41,7 +41,7 @@ internal sealed partial class RuntimeLiveHarness
                 var recordPath = command.GetProperty("path").GetString()!;
                 RequireTapePath(recordPath);
                 if (File.Exists(recordPath)) throw new IOException("Input recording never replaces an existing segment.");
-                _bot?.Stop(); ReleaseAll();
+                _campaignBot.Stop(); _bot?.Stop(); ReleaseAll();
                 // The shared owner must capture a complete reached state first.
                 // A pending procedure/result is not replaced by a partial tape.
                 var slot = (_saveCheckpoint ?? throw new NotSupportedException("Input recording has no campaign save owner."))(Guid.NewGuid());
@@ -69,7 +69,7 @@ internal sealed partial class RuntimeLiveHarness
                 // Validate the whole journal and binding before releasing or
                 // delivering any input. Retail measurements remain evidence.
                 var playback = new RecordedInputPlayback(tape, InputBinding(restored.Path), lateness);
-                _bot?.Stop(); ReleaseAll();
+                _campaignBot.Stop(); _bot?.Stop(); ReleaseAll();
                 _inputPlayback = playback; _inputTapePath = replayPath; _inputStarted = Stopwatch.GetTimestamp();
                 _inputReplayRequest = request;
                 _replayCheckpointPrepared = false;

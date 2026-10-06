@@ -91,13 +91,27 @@ public partial class RuntimeCoordinator
 
     private BotObservation ObserveNativeBot(string identity)
     {
+        var combat = ObserveNativeBotCombat();
+        if (identity == ReactiveReferenceBot.CombatObservationIdentity) return NativeBotCombatControlObservation(combat);
+        try { return ObserveNativeBotGoal(identity, combat); }
+        catch (Exception error) when ((error is InvalidOperationException or InvalidDataException or NotSupportedException or KeyNotFoundException) &&
+            !combat.Paused && !combat.Loading && !combat.ModalInput && ReactiveCombatSkill.SelectThreat(combat) is not null)
+        {
+            // A nonresident/faulted travel goal cannot suppress a genuine local
+            // threat. Its failure is still re-observed before navigation resumes.
+            return NativeBotCombatControlObservation(combat) with { ExecutionFault = "Gameplay execution stopped: " + error.Message };
+        }
+    }
+
+    private BotObservation ObserveNativeBotGoal(string identity, BotCombatObservation combatObservation)
+    {
         var player = _nativePlayer ?? throw new InvalidOperationException("Player is not active.");
         if (_nativeDeathPresented || player.IsDefeated?.Invoke() == true)
             return new(_nativeActiveCell!.Cell.FormKey.ToString(),
                 new(player.GlobalPosition.X, player.GlobalPosition.Y, player.GlobalPosition.Z),
                 Vector3ToNumeric(player.Camera.GlobalPosition), Vector3ToNumeric(-player.Camera.GlobalBasis.Z),
                 System.Numerics.Vector3.Zero, System.Numerics.Vector3.Zero, null, GetTree().Paused,
-                false, false, false, null, "0", Defeated: true);
+                false, false, false, null, "0", Defeated: true, Combat: combatObservation);
         if (_nativeXr is not null && RuntimeSimulatorBotInput.DirectoryPath is null)
             throw new NotSupportedException("Physical headset bot control is unbound; use the simulator input adapter.");
         var separator = identity.LastIndexOf(':');
@@ -120,6 +134,9 @@ public partial class RuntimeCoordinator
         var geometryRequired = interaction.RequiresNativeGeometry(loading);
         var node = _nativeReferencePresentation?.Nodes.GetValueOrDefault(key);
         var resident = node is not null && GodotObject.IsInstanceValid(node) && node.IsInsideTree() && node.IsVisibleInTree();
+        var sourcePoint = resident && node!.GetMeta("opennv_internal_static", false).AsBool() &&
+            _nativePluginStack!.GetEffective(key).Signature == "REFR" &&
+            _nativePluginStack.GetEffective(referenceState.Base).Signature == "STAT";
         var target = resident ? node!.GlobalPosition : Vector3.Zero;
         var travelReady = false;
         if (!resident && _nativeActiveCell?.Cell.Worldspace is { } worldspace &&
@@ -135,7 +152,7 @@ public partial class RuntimeCoordinator
             travelReady = !loading && player.CollisionResident;
         }
         var aim = target;
-        if (resident && geometryRequired)
+        if (resident && geometryRequired && !sourcePoint)
         {
             if (RuntimeNativeActorCombat.Find(node) is { Dead: true } combat)
             {
@@ -203,7 +220,7 @@ public partial class RuntimeCoordinator
             player.GetMeta("opennv_source_movement_enabled", false).AsBool() && !player.FurnitureActive,
             player.GetMeta("opennv_source_looking_enabled", false).AsBool(), resident && player.CollisionResident,
             player.BlockingShape, interaction.Revision.ToString(CultureInfo.InvariantCulture), travelReady, door,
-            _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask, player.ModalInput, loading);
+            _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask, player.ModalInput, loading, Combat: combatObservation);
     }
 
     private static System.Numerics.Vector3 Vector3ToNumeric(Vector3 value) => new(value.X, value.Y, value.Z);

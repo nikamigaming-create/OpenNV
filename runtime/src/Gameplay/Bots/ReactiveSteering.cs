@@ -41,4 +41,6 @@ internal sealed class ReactiveSteering
 internal readonly record struct SteeringIntent(bool Forward, float YawRadians, float PitchRadians)
 {
     internal Vector3? AimAt { get; init; }
+    internal BotCombatInput? Combat { get; init; }
+    internal bool Pause { get; init; }
 }
