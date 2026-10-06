@@ -127,10 +127,12 @@ internal static class DialoguePackageQueryContracts
             Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat() &&
                 !combat.HasSelectedCombatTarget(listener, player), "Retired engagement retained combat membership or a selected target.");
             combat.Get(listener).Engagement = new(player); combat.Get(listener).Enabled = false;
-            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat(), "Disabled actor remained in combat.");
+            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat() &&
+                !combat.HasSelectedCombatTarget(listener, player), "Disabled actor retained combat membership or its selected target.");
             combat.Get(listener).Enabled = true;
             combat.Get(listener).Injury = new(true, null, new Dictionary<byte, float>());
-            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat(), "Dead actor remained in combat.");
+            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat() &&
+                !combat.HasSelectedCombatTarget(listener, player), "Dead actor retained combat membership or its selected target.");
             var playerCombat = false;
             Check(!combat.IsInCombat(player, () => playerCombat), "Idle player acquired combat state.");
             playerCombat = true;

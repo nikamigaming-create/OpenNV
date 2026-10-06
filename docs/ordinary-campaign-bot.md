@@ -70,7 +70,9 @@ stale/source-binding faults and missing-objective bounds. Selected owned source
 checks are documented in [source campaign goals](source-campaign-goals.md).
 Actual ordinary input selected Escape objective 10 and crossed the authored
 054285 portal into CELL 024511 at full health. Later source-point input opened
-authored route doors and reached source Escape stage 35. These runs do not
-establish the vault exit, complete autonomous combat, whole campaign or retail
-parity. Current executable blockers and the preserved complete checkpoint belong
-in [current work](current-work.md).
+authored route doors and reached source Escape stage 35. The corrected shared
+target/input owner then defeats original guard 06490e through five attributable
+ordinary bot shots and four contacts, retaining full player health and actual
+7/24 ammunition. These runs do not establish the vault exit, complete autonomous
+combat, whole campaign or retail parity. Current executable blockers and the
+preserved complete checkpoint belong in [current work](current-work.md).

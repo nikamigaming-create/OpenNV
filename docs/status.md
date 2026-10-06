@@ -5,10 +5,12 @@ targets and directed source portal actions instead of requiring an operator to
 name each reference. Its campaign/combat/menu/save safety and source graph
 contracts pass. Ordinary input independently crossed the actual Escape portal
 into CELL 024511 at full health; subsequent source-point movement opened authored
-route doors and reached Escape stage 35. The selected native combat then refused
-uninitialized observational health; the adapter now uses the authoritative
-health owner and still needs actual combat proof. Fresh F5 waited for genuine
-finite audio and refused animation-sound-continuation on broken door 0aba56.
+route doors and reached Escape stage 35. The shared combat/input continuation
+now defeats original guard 06490e through five attributable ordinary bot shots
+and four actual contacts, retaining 120 HP and 7/24 rounds. Combat-idle does not
+erase the selected target; native aim uses an actual admitted source binding.
+Fresh F5 still refuses animation-sound-continuation on human 0569b4 and broken
+door 0aba56 after genuine finite waiting.
 No new complete checkpoint, vault exit or campaign/parity completion is claimed.
 See [ordinary campaign attempts](ordinary-campaign-bot.md) and
 [current work](current-work.md).
