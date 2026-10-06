@@ -94,6 +94,7 @@ internal sealed class FalloutPluginStack : IDisposable
         RuntimeLiveContentSource? ownedSource, FalloutInstallationSettings? installationSettings)
     {
         _plugins = new ReadOnlyCollection<FalloutPluginContext>(plugins.ToArray());
+        OwnedSource = ownedSource;
         _winners = new ReadOnlyDictionary<FalloutFormKey, FalloutPluginRecord>(
             new Dictionary<FalloutFormKey, FalloutPluginRecord>(winners, FalloutFormKeyComparer.Instance));
         _loadOrderIndices = new ReadOnlyDictionary<string, int>(
@@ -117,6 +118,7 @@ internal sealed class FalloutPluginStack : IDisposable
     }
 
     internal IReadOnlyList<FalloutPluginContext> Plugins => _plugins;
+    internal RuntimeLiveContentSource? OwnedSource { get; }
     internal bool IsPluginLoaded(string name) => _loadOrderIndices.ContainsKey(name);
     internal int WinnerRecordCount => _winners.Count;
     internal int EffectiveRecordCount => _effectiveRecordCount;
