@@ -9,6 +9,7 @@ internal partial class RuntimeNativeNpc
     private FalloutFormKey? _selectedSourcePackage;
     private bool _sourceSelectionKnown;
     private string? _selectionCaptureBlocker;
+    private Func<FalloutFormKey, FalloutFormKey, double>? _aiItemCount;
 
     private PackageSelection SelectSourcePackage()
     {
@@ -25,7 +26,6 @@ internal partial class RuntimeNativeNpc
     {
         if (_aiStack is null || _questState is null)
             throw new NotSupportedException("Actor package commands require the live AI owner.");
-        if (_aiReferenceState?.ScriptError is { } scriptError) throw new NotSupportedException(scriptError);
         if (_packageEvents?.Error is { } eventError) throw new NotSupportedException(eventError);
         // EVP evaluates source conditions now. Procedure binding/movement is
         // performed by the ordinary actor frame, as it is for creatures. A

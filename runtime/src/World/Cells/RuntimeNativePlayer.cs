@@ -144,6 +144,23 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         };
     }
 
+    internal Action AcquirePausedSaveInput()
+    {
+        if (!IsInsideTree() || !GetTree().Paused)
+            throw new InvalidOperationException("Save input protection requires an already paused native world.");
+        _modalInputLeases++;
+        _modalInput = true;
+        var released = false;
+        return () =>
+        {
+            if (released) return;
+            released = true;
+            _modalInputLeases--;
+            // A save pause must not cancel an authoritative action or velocity.
+            _modalInput = _requestedModalInput || _modalInputLeases > 0;
+        };
+    }
+
     private void ApplyModalInput(bool modal)
     {
         _modalInput = modal;

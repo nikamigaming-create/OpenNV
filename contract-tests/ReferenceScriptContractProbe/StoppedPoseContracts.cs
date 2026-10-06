@@ -9,10 +9,10 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class StoppedPoseContracts
 {
-    internal static void Run(bool finiteCompletionOnly = false)
+    internal static void Run(bool finiteCompletionOnly = false, bool savePreparationOnly = false)
     {
-        var directory = finiteCompletionOnly
-            ? Path.Combine("tmp", "opennv-finite-completion-contract-" + Guid.NewGuid().ToString("N"))
+        var directory = finiteCompletionOnly || savePreparationOnly
+            ? Path.Combine(".audit-artifacts", "opennv-finite-completion-contract-" + Guid.NewGuid().ToString("N"))
             : Path.Combine(Path.GetTempPath(), "opennv-stopped-pose-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -60,6 +60,11 @@ internal static class StoppedPoseContracts
                 Record("FURN", 0x40, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
                 Record("CELL", 0x800, Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Pose.esm"]);
+            if (savePreparationOnly)
+            {
+                ManualSavePreparationContracts.Run(records);
+                return;
+            }
             if (finiteCompletionOnly)
             {
                 FiniteSoundCompletionWaitContracts.Run(records);
@@ -73,6 +78,7 @@ internal static class StoppedPoseContracts
             ActorRetirementContracts.Run(records);
             SoundCaptureDiagnosticContracts.Run(records);
             ManualSaveQueueContracts.Run();
+            ManualSavePreparationContracts.Run(records);
             ManualSaveFiniteVoiceContracts.Run(records);
             StoppedIndependentIdleContracts.Run(records);
             StoppedCombat(records);

@@ -1,5 +1,15 @@
 # Product status
 
+The explicit player/menu save transaction now writes an actual complete stage-18
+Atrium slot while source world/input/producers stay paused and its original
+finite audio reaches native Finished. Ordinary quit/cold Continue restores
+120 HP and 12/24 rounds; F5 independently writes another complete slot.
+Post-combat actor/physics/procedure continuations remain separate refusals, not
+capture exemptions. An actually ended pending ForceSave now has pure/native
+original-source-then-manual ordering and both cold component captures; the
+ordinary exterior source request still needs its own proof. No exterior
+checkpoint or whole-campaign saving is accepted from this bounded result.
+
 The current source-driven campaign bot chooses displayed winning objective
 targets and directed source portal actions instead of requiring an operator to
 name each reference. Its campaign/combat/menu/save safety and source graph
@@ -9,9 +19,10 @@ route doors and reached Escape stage 35. The shared combat/input continuation
 now defeats original guard 06490e through five attributable ordinary bot shots
 and four actual contacts, retaining 120 HP and 7/24 rounds. Combat-idle does not
 erase the selected target; native aim uses an actual admitted source binding.
-Fresh F5 still refuses animation-sound-continuation on human 0569b4 and broken
-door 0aba56 after genuine finite waiting.
-No new complete checkpoint, vault exit or campaign/parity completion is claimed.
+The explicit audio preparation now permits the actual post-portal menu/F5
+checkpoint above. Post-combat saving still refuses the independent live
+resident/dead-guard actor continuations.
+No complete exterior checkpoint or campaign/parity completion is claimed.
 See [ordinary campaign attempts](ordinary-campaign-bot.md) and
 [current work](current-work.md).
 

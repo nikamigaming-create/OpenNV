@@ -81,6 +81,15 @@ internal static partial class TerminalContracts
         var states = new Dictionary<FalloutFormKey, int> { [A(0x91)] = 3, [A(0x92)] = 3, [A(0x90)] = 0 };
         var scripts = Scripts(records, world, quests, effects, states);
         var conditions = new FalloutTerminalConditions(records, quests, world, reference => states[reference]);
+        var linked = new FalloutCondition(records.GetEffective(A(0x20)), 0, 3, 157, 0, 0, 4, 0);
+        Require(world.GetLinkedRef(A(0x90)) == A(0x91) && conditions.Evaluate(A(0x90), linked) == 3,
+            "Terminal linked predicate borrowed the terminal pivot or a raw declaring-plugin FormID.");
+        Reject(() => conditions.Evaluate(A(0x90), linked with { Reference = 0x01000092 }));
+        Reject(() => conditions.Evaluate(A(0x90), linked with { RunOn = 3 }));
+        Reject(() => conditions.Evaluate(A(0x93), linked));
+        Require(conditions.Evaluate(A(0x90), linked with { Function = 5 }) == world.GetLocked(A(0x91)) &&
+            conditions.Evaluate(A(0x90), linked with { Function = 65 }) == world.GetLockLevel(A(0x91)),
+            "Linked terminal lock predicates did not use the current shared access owner.");
         var menu = Menu(records, world, conditions, scripts, inventory);
         Reject(menu.RequireSaveable);
         var generation = menu.Generation;
@@ -117,6 +126,8 @@ internal static partial class TerminalContracts
         var coldStates = new Dictionary<FalloutFormKey, int> { [A(0x91)] = 3, [A(0x92)] = 3, [A(0x90)] = 0 };
         var coldScripts = Scripts(records, cold, restoredQuests, coldEffects, coldStates);
         var coldConditions = new FalloutTerminalConditions(records, restoredQuests, cold, reference => coldStates[reference]);
+        Require(coldConditions.Evaluate(A(0x90), linked) == 3,
+            "Cold terminal linked predicate lost the unchanged authored reference binding.");
         var restoredMenu = Menu(records, cold, coldConditions, coldScripts, restoredInventory);
         Require(restoredQuests.Stage(A(0x60)) == 10 && restoredQuests.Variable(A(0x60), 1) == 2 &&
             restoredInventory.Item(B(0x30))?.Count == 1 && coldEffects.Count == 0 &&
@@ -299,7 +310,10 @@ internal static partial class TerminalContracts
             Field("INDX", BitConverter.GetBytes((short)11)), Field("QSDT", [0]),
             .. Program("set SyntheticQuest.sample to SyntheticQuest.sample + 1\nUnsupportedNestedResult", 0x60)]),
         Record("CELL", 0x80, Field("DATA", [1])),
-        Group(0x80, Reference("ACHR", 0x14, 0x10, "PlayerRef"), Reference("REFR", 0x90, 0x20, "TerminalRef"),
+        Group(0x80, Reference("ACHR", 0x14, 0x10, "PlayerRef"),
+            Record("REFR", 0x90, Field("EDID", Text("TerminalRef")), Field("NAME", UInt(0x20)),
+                Field("DATA", new byte[24]), Field("XLKR", UInt(0x91))),
+            Reference("REFR", 0x93, 0x20, "TerminalWithoutLink"),
             Reference("REFR", 0x91, 1, "DoorA"), Reference("REFR", 0x92, 1, "DoorB")),
         Terminal(0x70, [Field("ITXT", Text("bad")), Field("RNAM", Text("")), Field("ANAM", [0, 0]), .. Program("")]),
         Terminal(0x71, Entry("bad", "", 8, Program(""))),

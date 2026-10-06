@@ -59,10 +59,12 @@ internal sealed partial class RuntimeNativeCreature
     };
 
     internal void ConfigureAi(FalloutPluginStack records, FalloutQuestState quests, FalloutReferenceWorld world,
-        FalloutGameTime? clock = null, FalloutGlobalState? globals = null)
+        FalloutGameTime? clock = null, FalloutGlobalState? globals = null,
+        Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null)
     {
         _aiRecords = records; _aiQuests = quests; _aiWorld = world;
         _aiClock = clock; _aiGlobals = globals;
+        _aiItemCount = itemCount;
         _aiState = world.Get(Appearance.Reference!.Value);
         world.BindActorAlert(Appearance.Reference!.Value, Activity);
         _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
@@ -93,7 +95,11 @@ internal sealed partial class RuntimeNativeCreature
         }
     }
 
-    internal float PackageCondition(FalloutCondition condition) => condition.Function is 1 or 14 or 32
+    private Func<FalloutFormKey, FalloutFormKey, double>? _aiItemCount;
+
+    internal float PackageCondition(FalloutCondition condition) => condition.Function == 47
+        ? OpenNV.Runtime.Gameplay.State.FalloutActorInventoryConditions.ItemCount(condition, Appearance.Reference!.Value, _aiItemCount)
+        : condition.Function is 1 or 14 or 32
         ? ReferenceCondition(condition)
         : condition.RunOn != 0 && condition.Function is not (50 or 84 or 161 or 289)
         ? throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.")

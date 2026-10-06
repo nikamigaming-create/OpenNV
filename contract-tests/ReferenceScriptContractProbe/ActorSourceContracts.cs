@@ -93,6 +93,7 @@ internal static class ActorSourceContracts
                 Record("INFO", 0x860, Field("DATA", [0, 0, 0, 0]), Field("QSTI", BitConverter.GetBytes(0x870u)),
                     Field("TRDT", Response()), Field("NAM1", Text("Winning response")))));
             using var records = FalloutPluginStack.Load(directory, ["Actors.esm", "Patch.esp"]);
+            ActorInventoryConditionContracts.Run(records);
             PackageBindingFailureContracts.Run(records);
             FalloutFormKey Key(uint id) => new("Actors.esm", id);
             var map = FalloutWorldMap.Read(records, Key(0x8f0));

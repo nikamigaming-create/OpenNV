@@ -12,19 +12,27 @@ internal sealed class FalloutTerminalConditions(FalloutPluginStack records, Fall
         if (records.GetEffective(terminalReference).Signature != "REFR" ||
             records.GetEffective(world.Get(terminalReference).Base).Signature != "TERM")
             throw new InvalidDataException("Terminal condition subject has no actual placed TERM owner.");
-        if (condition.RunOn is not (0 or 2))
+        if (condition.RunOn is not (0 or 2 or 4))
             throw new NotSupportedException($"Terminal condition run-on {condition.RunOn} has no context owner.");
         // These reads query the explicit QUST argument. They do not change
         // owner when the calling reference or run-on reference changes.
         if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return quests.Evaluate(condition);
         if (condition.Function == 53)
             return (float)world.ReadVariable(quests, condition.FormArgument1, condition.Argument2);
-        var subject = condition.RunOn == 0 ? terminalReference :
-            condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
-                ?? throw new InvalidDataException("Terminal condition has no explicit run-on reference.");
+        var subject = condition.RunOn switch
+        {
+            0 => terminalReference,
+            2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
+                ?? throw new InvalidDataException("Terminal condition has no explicit run-on reference."),
+            4 when condition.Reference == 0 => world.GetLinkedRef(terminalReference)
+                ?? throw new NotSupportedException("Terminal linked condition has no actual source-linked reference."),
+            _ => throw new NotSupportedException("Terminal linked condition requires its additional reference context.")
+        };
         if (records.RuntimeFormId(subject) != 0x14 && records.GetEffective(subject).Signature is not ("REFR" or "ACHR" or "ACRE"))
             throw new InvalidDataException("Terminal condition run-on identity is not a placed reference.");
         if (FalloutPlatformConditions.Evaluate(condition) is { } platform) return platform;
+        if (condition.Function == 5) return world.GetLocked(subject);
+        if (condition.Function == 65) return world.GetLockLevel(subject);
         if (condition.Function == 157)
         {
             var state = world.IsResident(subject) ? getResidentOpenState(subject) :

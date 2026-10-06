@@ -83,6 +83,12 @@ internal sealed class FalloutScriptEvents
 
     internal bool IsKeyPressed(int key) { ValidateKey(key); return _pressed.Contains(key); }
 
+    internal void ObserveSavePausedKey(int key, bool down)
+    {
+        ValidateKey(key);
+        if (down) _pressed.Add(key); else _pressed.Remove(key);
+    }
+
     internal void SetRender(FalloutFormKey script, bool register, int flags = 0, int phaseFlags = 0)
     {
         if (flags != 0 || phaseFlags != 0)

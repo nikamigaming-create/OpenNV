@@ -9,14 +9,18 @@ namespace OpenNV.Runtime.Presentation.Ui;
 internal sealed partial class NativeGameSessionMenu : Control
 {
     private readonly RuntimeSaveSlotCatalog _catalog;
-    private readonly Action _resume, _save, _title, _quit;
+    private readonly Action _resume, _cancelSave, _title, _quit;
+    private readonly Func<RuntimeManualSaveReceipt> _save;
     private readonly Action<RuntimeSaveSlotMetadata> _load;
     private readonly Func<RuntimeSaveSlotMetadata, string> _describe;
     private readonly bool _inGame;
     private readonly bool _defeated;
     private VBoxContainer _body = null!;
     private Label _status = null!;
-    private bool _browser, _confirming, _busy;
+    private bool _browser, _confirming, _busy, _saving;
+    private RuntimeManualSaveReceipt? _manualSaveReceipt;
+    private readonly Dictionary<Button, bool> _saveDisabledButtons = [];
+    private Button? _cancelSaveButton;
     private int _page;
     private string? _selected;
     private readonly List<Button> _rows = [];
@@ -24,12 +28,13 @@ internal sealed partial class NativeGameSessionMenu : Control
     private int PageSize => _inGame && !_defeated ? 3 : 4;
 
     internal NativeGameSessionMenu(RuntimeSaveSlotCatalog catalog, bool inGame, bool showSaves, bool defeated,
-        Action resume, Action save, Action<RuntimeSaveSlotMetadata> load, Action title, Action quit,
+        Action resume, Func<RuntimeManualSaveReceipt> save, Action cancelSave,
+        Action<RuntimeSaveSlotMetadata> load, Action title, Action quit,
         Func<RuntimeSaveSlotMetadata, string> describe)
     {
         Name = "SessionMenu"; ProcessMode = ProcessModeEnum.Always;
         _catalog = catalog; _inGame = inGame; _browser = showSaves; _defeated = defeated;
-        _resume = resume; _save = save; _load = load; _title = title; _quit = quit; _describe = describe;
+        _resume = resume; _save = save; _cancelSave = cancelSave; _load = load; _title = title; _quit = quit; _describe = describe;
     }
 
     public override void _Ready()
@@ -54,7 +59,8 @@ internal sealed partial class NativeGameSessionMenu : Control
 
     internal void Back()
     {
-        if (_busy) return;
+        if (_saving) { _cancelSave(); return; }
+        if (_busy) { _status.Text = "Loading is still in progress."; return; }
         if (_confirming) { if (_browser) ShowSaves(); else ShowPause(); }
         else if (_browser && _inGame) ShowPause();
         else if (!_defeated) _resume();
@@ -62,7 +68,7 @@ internal sealed partial class NativeGameSessionMenu : Control
 
     private void BeginPage(string title)
     {
-        _confirming = false; _rows.Clear();
+        _confirming = false; _rows.Clear(); _cancelSaveButton = null;
         foreach (var node in _body.GetChildren()) { _body.RemoveChild(node); node.QueueFree(); }
         _body.AddChild(new Label { Text = title, HorizontalAlignment = HorizontalAlignment.Center });
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, CustomMinimumSize = new(760, 36) };
@@ -72,7 +78,7 @@ internal sealed partial class NativeGameSessionMenu : Control
     private Button AddButton(string name, string text, Action action)
     {
         var button = new Button { Name = name, Text = text, CustomMinimumSize = new(760, 50) };
-        button.Pressed += () => { if (!_busy) Run(action); };
+        button.Pressed += () => { if (!_busy || name == "CancelSave" && _saving) Run(action); };
         _body.AddChild(button); return button;
     }
 
@@ -95,27 +101,55 @@ internal sealed partial class NativeGameSessionMenu : Control
 
     internal void ShowManualSaveReceipt(RuntimeManualSaveReceipt? receipt)
     {
-        if (receipt is null || _status is null || _confirming || _busy) return;
-        _status.Text = receipt.Disposition switch
+        if (receipt is null) return;
+        _manualSaveReceipt = receipt;
+        if (_status is null || _confirming || _busy && !_saving) return;
+        var wasSaving = _saving;
+        _saving = receipt.Disposition == "pending";
+        _busy = _saving;
+        if (_saving)
         {
-            "pending" => "Save requested; it has not been written. Resume to allow the pending check to finish.",
-            "completed" when receipt.CommittedSlot is not null => "The requested save was created. Earlier saves are retained.",
-            "failed" => "The requested save failed: " + receipt.Error,
-            "cancelled" => "The requested save was cancelled: " + receipt.Error,
-            _ => throw new InvalidDataException("Manual save has no visible disposition.")
-        };
+            foreach (var button in _body.FindChildren("*", "", true, false).OfType<Button>().Where(button => button != _cancelSaveButton))
+            {
+                _saveDisabledButtons.TryAdd(button, button.Disabled); button.Disabled = true;
+            }
+        }
+        else if (wasSaving)
+        {
+            foreach (var (button, disabled) in _saveDisabledButtons)
+                if (GodotObject.IsInstanceValid(button)) button.Disabled = disabled;
+            _saveDisabledButtons.Clear();
+            if (receipt.Disposition == "completed" && _browser)
+            {
+                _page = 0; _selected = receipt.CommittedSlot!.Id; ShowSaves();
+            }
+        }
+        if (_cancelSaveButton is { } cancel)
+        {
+            cancel.Visible = _saving; cancel.Disabled = !_saving;
+            if (_saving && !cancel.HasFocus()) cancel.GrabFocus();
+        }
+        _status.Text = RuntimeManualSaveFeedback.Describe(receipt);
+    }
+
+    private void AddSaveCancel()
+    {
+        _cancelSaveButton = AddButton("CancelSave", "CANCEL SAVE", _cancelSave);
+        _cancelSaveButton.Visible = false; _cancelSaveButton.Disabled = true;
     }
 
     private void ShowPause()
     {
         _browser = false; BeginPage(_defeated ? "YOU DIED" : "PAUSED");
         if (!_defeated) AddButton("Resume", "RESUME", _resume).GrabFocus();
+        if (_inGame && !_defeated) AddSaveCancel();
         var saves = AddButton("SaveLoad", _defeated ? "LOAD GAME" : "SAVE / LOAD", ShowSaves);
         if (_defeated) saves.GrabFocus();
         AddButton("Title", "MAIN MENU", () => Confirm("Return to the title screen? Unsaved progress will be lost.", _title));
         AddButton("Quit", "QUIT GAME", () => Confirm("Quit the game? Unsaved progress will be lost.", _quit));
         _status.Text = _defeated ? "Health reached zero. Load an earlier save to continue." :
             "Escape / controller Menu / right stick click: back";
+        ShowManualSaveReceipt(_manualSaveReceipt);
     }
 
     private void ShowSaves()
@@ -127,8 +161,9 @@ internal sealed partial class NativeGameSessionMenu : Control
         if (_selected is null || !_slots.Any(slot => slot.Id == _selected)) _selected = _slots.FirstOrDefault()?.Id;
         if (_inGame && !_defeated) AddButton("CreateSave", "CREATE NEW SAVE", () =>
         {
-            _save(); _page = 0; _selected = null; ShowSaves(); _status.Text = "New save created. Earlier saves are retained.";
+            ShowManualSaveReceipt(_save());
         });
+        if (_inGame && !_defeated) AddSaveCancel();
         foreach (var slot in _slots.Skip(_page * PageSize).Take(PageSize))
         {
             var row = AddButton("Slot_" + slot.Id, _describe(slot), () =>
@@ -144,7 +179,7 @@ internal sealed partial class NativeGameSessionMenu : Control
             void Page(string text, int step)
             {
                 var button = new Button { Text = text, CustomMinimumSize = new(375, 45), Disabled = _page + step < 0 || (_page + step) * PageSize >= _slots.Count };
-                button.Pressed += () => Run(() => { _page += step; ShowSaves(); }); navigation.AddChild(button);
+                button.Pressed += () => { if (!_busy) Run(() => { _page += step; ShowSaves(); }); }; navigation.AddChild(button);
             }
             Page("PREVIOUS", -1); Page("NEXT", 1);
         }
@@ -160,6 +195,7 @@ internal sealed partial class NativeGameSessionMenu : Control
         AddButton("Back", "BACK", Back);
         _status.Text = failures.Count > 0 ? $"{failures.Count} unavailable save(s): {failures[0]}" :
             _slots.Count == 0 ? "No saved games yet." : $"{_slots.Count} saved games / page {_page + 1}";
+        ShowManualSaveReceipt(_manualSaveReceipt);
     }
 
     private void Confirm(string question, Action action)

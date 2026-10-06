@@ -79,11 +79,16 @@ public partial class NativeActorPerformanceAudit
             var evaluationCommand = expectedPackages is null;
             if (evaluationCommand)
             {
+                var scriptState = world.Get(caller);
+                const string independentScriptFault = "synthetic stopped GameMode invocation";
+                scriptState.ScriptError ??= independentScriptFault;
+                var retainedScriptFault = scriptState.ScriptError;
                 actor.EvaluatePackages(false);
                 var pending = JsonSerializer.SerializeToElement(actor.AiState);
                 if (!pending.GetProperty("evaluationPending").GetBoolean() || actor.CurrentPackage != selected ||
                     actor.Transform != before || world.Get(caller).ProcedureCaptureBlocker is null ||
-                    pending.GetProperty("currentProcedure").ValueKind != JsonValueKind.Null)
+                    pending.GetProperty("currentProcedure").ValueKind != JsonValueKind.Null ||
+                    scriptState.ScriptError != retainedScriptFault)
                     throw new InvalidDataException("EVP did not retain source selection independently of native procedure execution.");
                 QueuedSelectionCold(actor, world, records, content, cell, quests, clock, globals, presentation, Placement);
                 actor._Process(0);
@@ -141,6 +146,14 @@ public partial class NativeActorPerformanceAudit
             }
 
             const string failure = "Synthetic retained package result failure.";
+            var failedPackageEvents = new FalloutPackageEvents((_, _) => throw new NotSupportedException(failure));
+            try { failedPackageEvents.Change(FalloutScriptPackage.Read(package)); }
+            catch (NotSupportedException error) when (error.Message == failure) { }
+            if (failedPackageEvents.Error != failure)
+                throw new InvalidDataException("Fixture failed to retain its actual package-result lifecycle fault.");
+            (typeof(RuntimeNativeNpc).GetField("_packageEvents", System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic) ?? throw new MissingFieldException("NPC has no package event owner."))
+                .SetValue(actor, failedPackageEvents);
             world.Get(caller).ScriptError = failure;
             foreach (var reset in new[] { false, true })
             {

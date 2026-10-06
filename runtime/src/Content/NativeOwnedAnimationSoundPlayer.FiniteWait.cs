@@ -29,6 +29,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
 
     private FalloutFiniteSoundVoice? ReadFiniteVoice(Node node, Voice voice)
     {
+        if (voice.SaveDrain is { } prepared) return prepared.PendingVoice;
         if (_lostCaptureAtRetirement || _retiredCaptureDiagnostic is not null ||
             _events?.CanAwaitNativeCompletion != true ||
             _unbound.Except(_events.PartialLanes, StringComparer.Ordinal).Any() ||
@@ -52,6 +53,25 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             entry.Sound, entry.SoundSha256, entry.Path!, entry.MediaSha256!);
         return voice.CompletionWait.Observe(proof, node.GetInstanceId(), playback.GetInstanceId(), stream.GetInstanceId(),
             playing, node is AudioStreamPlayer3D ? Engine.GetPhysicsFrames() : Engine.GetProcessFrames(), Time.GetTicksMsec());
+    }
+
+    private NativeOwnedFiniteSoundSaveDrain PrepareFiniteSaveDrain(Node node, Voice voice)
+    {
+        bool Bound() => !_lostCaptureAtRetirement && _retiredCaptureDiagnostic is null &&
+            !_unbound.Except(_events!.PartialLanes, StringComparer.Ordinal).Any() &&
+            _voices.TryGetValue(node, out var current) && ReferenceEquals(current, voice) &&
+            voice.Loop.Mode == FalloutSoundLoopMode.None && !voice.Releasing && voice.Completed is null &&
+            voice.Attachment is { Alive: true };
+        if (_events?.CanAwaitNativeCompletion != true || voice.Generation is not { } generation ||
+            voice.CompletionWait is null || voice.SaveDrain is not null || !Bound())
+            throw new NotSupportedException("Source audio has no independent, already proven finite native save-drain binding.");
+        var entry = _events.Events.Single(entry => entry.Generation == generation);
+        var proof = new FalloutFiniteSoundVoice(_nativeOwner, _events.Reference, generation,
+            entry.Sound, entry.SoundSha256, entry.Path!, entry.MediaSha256!);
+        var lease = new NativeOwnedFiniteSoundSaveDrain(_records, _events, proof, node, voice.CompletionWait,
+            Bound, () => voice.SaveDrain = null);
+        voice.SaveDrain = lease;
+        return lease;
     }
 
     // This owner-scoped observation remains useful for procedure admission.

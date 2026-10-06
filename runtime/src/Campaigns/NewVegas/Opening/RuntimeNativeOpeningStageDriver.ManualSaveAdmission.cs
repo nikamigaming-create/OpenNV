@@ -4,12 +4,14 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class RuntimeNativeOpeningStageDriver
 {
-    internal RuntimeManualSaveAdmission ObserveManualSaveAdmission()
+    internal RuntimeManualSaveAdmission ObserveManualSaveAdmission(RuntimeManualSaveSourceOrder? sourceOrder = null,
+        RuntimeManualSaveReceipt? manual = null)
     {
         if (Vitals.HitPoints <= 0) return new(RuntimeManualSaveAdmissionKind.Refused, "player-defeated");
-        if (_scripts.ScriptManualSaves.Pending || _scripts.ScriptManualSaves.EnteredInvocations != 0 ||
-            _scripts.ScriptManualSaves.Error is not null)
-            return new(RuntimeManualSaveAdmissionKind.Refused, "source-manual-save");
+        var sourceBoundary = sourceOrder is null ? RuntimeManualSaveSourceBoundary.Observe(_scripts.ScriptManualSaves) :
+            sourceOrder.ObserveAdmission(_scripts.ScriptManualSaves,
+                manual ?? throw new InvalidOperationException("Ordered save admission has no original manual receipt."), Godot.Engine.GetProcessFrames());
+        if (sourceBoundary.Kind == RuntimeManualSaveAdmissionKind.Refused) return sourceBoundary;
         if (_scripts.References!.PlayerMoves.Pending) return new(RuntimeManualSaveAdmissionKind.Refused, "player-move");
         if (_saveRequested) return new(RuntimeManualSaveAdmissionKind.Refused, "concurrent-auto-save");
         if (_scripts.References.PendingHitEventCount != 0) return new(RuntimeManualSaveAdmissionKind.Refused, "reference-hit-event");

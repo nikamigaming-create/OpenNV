@@ -11,6 +11,7 @@
     <Compile Include="../../runtime/src/Content/FalloutQuestObjectFlags.cs" Link="FalloutQuestObjectFlags.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundVoices.cs" Link="FalloutSoundVoices.cs" />
     <Compile Include="../../runtime/src/Content/FalloutFiniteSoundVoice.cs" Link="FalloutFiniteSoundVoice.cs" />
+    <Compile Include="..\..\runtime\src\Content\FalloutFiniteSoundSaveDrain.cs" Link="FalloutFiniteSoundSaveDrain.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundPaths.cs" Link="FalloutSoundPaths.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPerkParameters.cs" Link="FalloutPerkParameters.cs" />
     <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />

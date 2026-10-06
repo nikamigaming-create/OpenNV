@@ -59,5 +59,18 @@ internal sealed class FalloutFiniteSoundCompletionWait
         return _receipt;
     }
 
+    internal FalloutFiniteSoundVoice? ObserveSavePreparation(FalloutFiniteSoundVoice receipt, ulong voice, ulong playback,
+        ulong stream, bool playing, bool paused, ulong nativePhase, ulong milliseconds)
+    {
+        if (!_observedPlaying || Error is not null) return null;
+        receipt.Validate();
+        if (receipt != _receipt || voice != _voice || playback != _playback || stream != _stream)
+            return Refuse("Finite save preparation changed its original source or playback binding.");
+        // A pause notification is not mixer EOS. Retain an already observed EOS
+        // deadline, but start no completion window from paused playback.
+        return paused && _sincePhase is null ? _receipt :
+            Observe(receipt, voice, playback, stream, playing, nativePhase, milliseconds);
+    }
+
     private FalloutFiniteSoundVoice? Refuse(string error) { Error = error; return null; }
 }
