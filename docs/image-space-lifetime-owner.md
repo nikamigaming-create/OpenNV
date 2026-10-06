@@ -21,7 +21,15 @@ without inventing drawable geometry or passing a null mesh to the native builder
 Synthetic current/pause/fault/static checks and the unchanged owned exit modifier
 pass in native Godot. These tests prove lifetime ownership, not the final exterior
 pixels, all lighting/HDR behavior or matched retail adaptation. Ordinary exterior
-replay and final-view inspection remain separate requirements.
+replay now additionally reaches Escape stage 150 in exterior CELL 0010c1 at
+115 HP through actual owned input. Original modifier 0213fe advances from
+0.566 to 9.624 seconds and then disappears at its authored ten-second boundary.
+The inspected final native view retains visible terrain, weapon, HUD and night
+sky without the reported persistent whiteout. Temporary PNG/pixel/metadata
+captures are deleted after inspection and recording stays off.
+Complete exterior saving, all lighting/HDR behavior and matched retail final
+pixels remain separate requirements; the reached exterior still has explicit
+source/resource divergences.
 
 ```powershell
 & $Godot --headless --path .\runtime 'res://tools/NativeReferenceEventsAudit/NativeReferenceEventsAudit.tscn' -- --image-space-clock

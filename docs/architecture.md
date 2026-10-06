@@ -72,6 +72,11 @@ and source attack alternatives separately from one persistent action selection.
 [Stopped actor and idle continuation](stopped-actor-and-idle-continuation.md)
 composes source faults with independent physical owners and retains uncovered
 skeletal components of an occupied collection idle.
+[Existing corpse equipment](corpse-equipment-continuation.md) retains the original
+native attachment graph, residual anchors and actual weapon handling without
+inventory mutation or invented drop physics. Genuine death retires only obsolete
+actor pursuit/door waits; original door effects, finite audio, pending hits,
+physical capture and stopped source faults keep their own owners.
 [Source activators and authored corpse poses](source-activators-and-authored-corpses.md)
 use the original action reference and finite motion clock, shader-owned texture
 binding and ordered source accumulation-root/body poses with cold restoration.

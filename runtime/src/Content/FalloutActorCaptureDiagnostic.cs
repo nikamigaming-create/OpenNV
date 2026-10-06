@@ -15,3 +15,7 @@ internal sealed record FalloutActorStoppedPoseCaptureDiagnostic(bool Ready, bool
 internal sealed record FalloutActorSelectionCaptureDiagnostic(FalloutFormKey Reference, ulong NativeOwner,
     bool Ready, bool Retired, FalloutFormKey? Candidate, ushort? ConditionFunction,
     IReadOnlyList<FalloutActorCaptureBlocker> Blockers, FalloutActorStoppedPoseCaptureDiagnostic StoppedPose);
+
+internal sealed record FalloutActorPackageBindingCaptureDiagnostic(FalloutFormKey Reference, ulong NativeOwner,
+    bool Ready, bool FiniteSoundReady, bool Retired, FalloutFormKey? Package,
+    IReadOnlyList<FalloutActorCaptureBlocker> Blockers, FalloutActorStoppedPoseCaptureDiagnostic StoppedPose);

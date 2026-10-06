@@ -9,9 +9,11 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class StoppedPoseContracts
 {
-    internal static void Run(bool finiteCompletionOnly = false, bool savePreparationOnly = false)
+    internal static void Run(bool finiteCompletionOnly = false, bool savePreparationOnly = false, bool corpseRetirementOnly = false)
     {
-        var directory = finiteCompletionOnly || savePreparationOnly
+        var directory = corpseRetirementOnly
+            ? Path.Combine("local", "corpse-retirement-contract-" + Guid.NewGuid().ToString("N"))
+            : finiteCompletionOnly || savePreparationOnly
             ? Path.Combine(".audit-artifacts", "opennv-finite-completion-contract-" + Guid.NewGuid().ToString("N"))
             : Path.Combine(Path.GetTempPath(), "opennv-stopped-pose-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -63,6 +65,13 @@ internal static class StoppedPoseContracts
             if (savePreparationOnly)
             {
                 ManualSavePreparationContracts.Run(records);
+                return;
+            }
+            if (corpseRetirementOnly)
+            {
+                ActorRetirementContracts.Run(records);
+                ActorRetirementContracts.Corpse(records);
+                StoppedCombat(records);
                 return;
             }
             if (finiteCompletionOnly)

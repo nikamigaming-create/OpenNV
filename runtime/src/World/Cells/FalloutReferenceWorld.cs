@@ -32,7 +32,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutActorPendingPackageSelection? PendingPackageSelection = null,
     FalloutAnimationSoundEventsSnapshot? AnimationSoundEvents = null,
     FalloutHitReactionFaultsSnapshot? HitReactionFaults = null,
-    FalloutActivationRelaySnapshot? ActivationRelay = null)
+    FalloutActivationRelaySnapshot? ActivationRelay = null,
+    FalloutActorCorpseEquipment? CorpseEquipment = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -72,6 +73,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved talking activator actor identity is invalid.");
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
+            FalloutActorCorpseEquipment.ValidateSnapshot(snapshot);
             snapshot.HeadTracking?.Validate();
             if (snapshot.HeadTracking is { } head && head.Binding.Actor != snapshot.Reference)
                 throw new InvalidDataException("Saved head tracking belongs to a different reference.");
@@ -172,6 +174,10 @@ internal sealed class FalloutReferenceInstance
     internal Func<bool>? CanCapturePackageBindingFailure { get; set; }
     internal Func<FalloutActorPackageBindingFailure>? CapturePackageBindingFailure { get; set; }
     internal Func<IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>?>? PendingPackageBindingFiniteVoices { get; set; }
+    internal Func<FalloutActorPackageBindingCaptureDiagnostic>? ObservePackageBindingCapture { get; set; }
+    internal FalloutActorPackageBindingCaptureDiagnostic? RetiredPackageBindingCaptureDiagnostic { get; set; }
+    internal FalloutActorPackageBindingCaptureDiagnostic? PackageBindingCaptureDiagnostic =>
+        ObservePackageBindingCapture?.Invoke() ?? RetiredPackageBindingCaptureDiagnostic;
     internal FalloutActorFurnitureContinuation? FurnitureContinuation { get; set; }
     internal FalloutActorSelectionFailure? SelectionFailure { get; set; }
     internal FalloutActorRetirementCandidate? StoppedRetirement { get; set; }
@@ -238,6 +244,11 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorEngagement? Engagement { get; set; }
     internal Action? StopCombat { get; set; }
     internal Func<FalloutActorEngagement?>? CaptureEngagement { get; set; }
+    internal FalloutActorCorpseEquipment? CorpseEquipment { get; set; }
+    internal Func<bool, bool>? CanCaptureCorpseEquipment { get; set; }
+    internal Func<FalloutActorCorpseEquipment?>? CaptureCorpseEquipment { get; set; }
+    internal string? CorpseEquipmentCaptureBlocker { get; set; }
+    internal bool CorpseEquipmentCaptureReady => CanCaptureCorpseEquipment?.Invoke(false) ?? CorpseEquipmentCaptureBlocker is null;
     internal IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations { get; set; }
     private readonly List<Func<IReadOnlyList<FalloutObjectAnimationSnapshot>>> _objectAnimationCaptures = [];
     internal Func<IReadOnlyList<FalloutObjectAnimationSnapshot>>? CaptureObjectAnimations => _objectAnimationCaptures.LastOrDefault();
@@ -305,6 +316,8 @@ internal sealed class FalloutReferenceInstance
     private FalloutReferenceSnapshot CaptureCore(FalloutActorSelectionFailure? selectionOverride,
         FalloutActorPackageBindingFailure? bindingOverride, bool nonaudioRetirement)
     {
+        if (Injury?.Dead == true && !(CanCaptureCorpseEquipment?.Invoke(nonaudioRetirement) ?? CorpseEquipmentCaptureReady))
+            throw new NotSupportedException($"Reference {Reference} cannot save its corpse equipment: {CorpseEquipmentCaptureBlocker ?? "native continuation is not ready"}");
         if (HeadTrackingCaptureBlocker is not null || HeadTrackingRequired && CaptureHeadTracking is null && HeadTracking is null)
             throw new NotSupportedException($"Reference {Reference} cannot save head tracking: {HeadTrackingCaptureBlocker ?? "required owner is missing"}");
         if (HitReactionFaultCaptureBlocker is { } hitFault)
@@ -336,7 +349,8 @@ internal sealed class FalloutReferenceInstance
             HeadTracking: CaptureHeadTracking?.Invoke() ?? HeadTracking?.Copy(),
             PendingPackageSelection: PendingPackageSelectionCaptureReady ? CapturePendingPackageSelection is { } capturePending
                 ? capturePending() : PendingPackageSelection?.Copy() : null,
-            AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy());
+            AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
+            CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy());
     }
 }
 
@@ -518,6 +532,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             assignment = instance.PackageAssignment?.Package.ToString(),
             motion = instance.PackageMotion?.Package.ToString(),
             blocker = instance.ProcedureCaptureBlocker,
+            bindingCapture = instance.PackageBindingCaptureDiagnostic,
             selectionCapture = instance.SelectionCaptureDiagnostic,
             stoppedRetirement = instance.StoppedRetirement?.State,
         }).ToArray();
@@ -723,6 +738,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Ragdoll = snapshot.Ragdoll;
             instance.KnockedDown = snapshot.KnockedDown;
             instance.Engagement = snapshot.Engagement;
+            if (snapshot.CorpseEquipment is { } equipment)
+            {
+                equipment.ValidateSource(records, instance.Inventory?.Contents ??
+                    throw new InvalidDataException("Saved corpse equipment has no retained inventory owner."));
+                instance.CorpseEquipment = equipment.Copy();
+            }
             FalloutActorStoppedPose.ValidateTarget(records, snapshot);
             instance.ObjectAnimations = snapshot.ObjectAnimations?.ToArray();
             if (snapshot.HitReaction is { } reaction)

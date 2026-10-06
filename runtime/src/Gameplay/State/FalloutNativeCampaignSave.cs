@@ -56,7 +56,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v44";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v45";
+    internal const string ActivationRelaySchema = "opennv-native-fnv-campaign-save/v44";
     internal const string NativeSoundHistorySchema = "opennv-native-fnv-campaign-save/v43";
     internal const string TerminalResultsSchema = "opennv-native-fnv-campaign-save/v42";
     internal const string ClosedStageSchema = "opennv-native-fnv-campaign-save/v41";
@@ -332,7 +333,7 @@ internal static class FalloutNativeCampaignSave
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
             if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
-        if (state.Schema is NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema is ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References is not null)
             state = state with
             {
@@ -346,7 +347,7 @@ internal static class FalloutNativeCampaignSave
     }
 
     private static IReadOnlyList<FalloutReferenceSnapshot>? RestoreLegacyDeathCounts(FalloutNativeCampaignState state) =>
-        state.Schema is ExpectedSchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
+        state.Schema is ExpectedSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
         { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray();
 
     private static void ValidateQuestValueHandles(FalloutPluginStack stack,
@@ -431,6 +432,9 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.CorpseEquipment is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema contains future corpse equipment continuation.");
+        if (state.Schema == ActivationRelaySchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.ActivationRelay is not null) == true)
             throw new InvalidDataException("Legacy campaign schema contains future activation-parent cycles.");
         if (state.Schema == NativeSoundHistorySchema) state = state with { Schema = ExpectedSchema };

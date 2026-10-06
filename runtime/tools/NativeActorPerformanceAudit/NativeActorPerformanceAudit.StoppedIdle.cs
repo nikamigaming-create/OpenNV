@@ -27,7 +27,7 @@ public partial class NativeActorPerformanceAudit
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(original) ?? throw new InvalidDataException("Stopped idle checkpoint is absent.");
             if (saved.SaveCompatibilityId != content.SaveCompatibilityId || saved.References is null ||
-                saved.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.NativeSoundHistorySchema or FalloutNativeCampaignSave.TerminalResultsSchema))
+                saved.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.ActivationRelaySchema or FalloutNativeCampaignSave.NativeSoundHistorySchema or FalloutNativeCampaignSave.TerminalResultsSchema))
                 throw new InvalidDataException("Stopped idle fixture requires its genuine matching complete checkpoint.");
             static FalloutFormKey Key(string text)
             {

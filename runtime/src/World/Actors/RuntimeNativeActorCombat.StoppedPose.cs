@@ -66,10 +66,7 @@ internal sealed partial class RuntimeNativeActorCombat
         {
             Refuse(_ragdoll?.CaptureReady != true, "corpse-capture-not-ready");
             Refuse(_state.HitReaction is not null, "corpse-hit-reaction");
-            Refuse(_enemyObject is not null, "corpse-enemy-object");
-            Refuse(_packageWeapon is not null, "corpse-package-weapon");
-            Refuse(_enemyWeaponHandling is not null, "corpse-native-weapon-handling");
-            Refuse(_state.Engagement?.WeaponHandling is not null, "corpse-retained-weapon-handling");
+            Refuse(!CorpseEquipmentCaptureReady(false), "corpse-equipment-continuation", _state.CorpseEquipmentCaptureBlocker);
         }
         else if (OwnsPose)
         {
@@ -114,8 +111,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 !(allowFiniteSoundWait && _enemySounds.CanAwaitFiniteCompletion)) return false;
         if (Dead)
             return _ragdoll?.CaptureReady == true && _state.HitReaction is null &&
-                _enemyObject is null && _packageWeapon is null && _enemyWeaponHandling is null &&
-                _state.Engagement?.WeaponHandling is null;
+                CorpseEquipmentCaptureReady(allowFiniteSoundWait);
         if (!OwnsPose) return true;
         return _engagementPrepared && _state.CaptureEngagement == CaptureEngagement &&
             _state.Engagement is { Action: "idle", Animation: { } path, AnimationHash: { } hash, StartPending: false } &&

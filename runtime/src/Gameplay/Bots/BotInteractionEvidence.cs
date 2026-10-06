@@ -1,4 +1,29 @@
+using System.Text.Json;
+
 namespace OpenNV.Runtime.Gameplay.Bots;
+
+internal sealed record BotInteractionAnimationState(int Controller, string Source, string Sequence,
+    double ElapsedSeconds, bool StartPending, string? PendingSequence);
+
+internal sealed record BotInteractionSourceState(string Reference, bool Taken, bool DoorOpen, bool Deleted,
+    bool Destroyed, IReadOnlyList<BotInteractionAnimationState> Animations)
+{
+    internal static string StableEffects(BotInteractionSourceState target, BotInteractionSourceState? linked)
+    {
+        static object Project(BotInteractionSourceState state) => new
+        {
+            state.Reference,
+            state.Taken,
+            state.DoorOpen,
+            state.Deleted,
+            state.Destroyed,
+            animations = state.Animations.OrderBy(animation => animation.Controller)
+                .ThenBy(animation => animation.Source, StringComparer.Ordinal).Select(animation => new
+                { animation.Controller, animation.Source, animation.Sequence, animation.PendingSequence }).ToArray()
+        };
+        return JsonSerializer.Serialize(new { target = Project(target), linked = linked is null ? null : Project(linked) });
+    }
+}
 
 // Stable effects, not script clocks, stage changes, input receipts or pauses.
 internal sealed record BotInteractionSnapshot(string TargetState, string? TargetOutcome, IReadOnlyList<uint> Menus,

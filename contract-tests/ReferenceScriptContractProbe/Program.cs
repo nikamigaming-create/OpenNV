@@ -9,6 +9,13 @@ if (args is ["--manual-save-preparation-contracts"])
     StoppedPoseContracts.Run(savePreparationOnly: true);
     return;
 }
+if (args is ["--corpse-equipment-contracts"])
+{
+    CorpseEquipmentContracts.Run();
+    WeaponHandlingContracts.Run();
+    StoppedPoseContracts.Run(corpseRetirementOnly: true);
+    return;
+}
 if (args is ["--finite-sound-completion-wait-contracts"])
 {
     StoppedPoseContracts.Run(finiteCompletionOnly: true);

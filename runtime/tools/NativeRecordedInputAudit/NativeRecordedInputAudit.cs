@@ -55,6 +55,37 @@ public partial class NativeRecordedInputAudit : Node
                     "Native recorded-input command returned an unexpected receipt: " + receipt.RootElement);
                 return receipt.RootElement.Clone();
             }
+            var forcedRequests = new List<long>();
+            for (var index = 0; index < 16; index++)
+            {
+                var number = ++request; forcedRequests.Add(number);
+                var commandPath = Path.Combine(directory, $"{number:D10}.command");
+                File.WriteAllText(commandPath + ".pending", "{\"op\":\"input.state\"}");
+                File.Move(commandPath + ".pending", commandPath);
+            }
+            var publicationDeadline = Time.GetTicksMsec() + 5000;
+            JsonElement published = default;
+            do
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (!LiveHarnessAtomicFile.TryRead(Path.Combine(directory, "live-state.json"), out var text, out _)) continue;
+                using var state = JsonDocument.Parse(text);
+                published = state.RootElement.Clone();
+            }
+            while ((published.ValueKind != JsonValueKind.Object ||
+                published.GetProperty("nextCommandRequest").GetUInt64() <= (ulong)forcedRequests[^1]) &&
+                Time.GetTicksMsec() < publicationDeadline);
+            Require(published.ValueKind == JsonValueKind.Object &&
+                published.GetProperty("nextCommandRequest").GetUInt64() > (ulong)forcedRequests[^1] &&
+                published.GetProperty("statePublicationFailures").GetInt64() == 0 &&
+                !File.Exists(Path.Combine(directory, "state-error.json")),
+                "A same-phase forced snapshot batch lost its fresh command ordinal, collided with a healthy writer or concealed telemetry loss.");
+            foreach (var number in forcedRequests)
+            {
+                using var receipt = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(directory, $"{number:D10}.receipt.json")));
+                Require(receipt.RootElement.GetProperty("delivered").GetBoolean(),
+                    "A queued publication query lost its exact ordinary request receipt.");
+            }
             await Send(new { op = "input.record.start", path = tapePath }, false);
             Require(!File.Exists(tapePath), "A blocked save owner emitted a replayable segment.");
             blocked = false;
@@ -85,6 +116,9 @@ public partial class NativeRecordedInputAudit : Node
                 while (!LiveHarnessAtomicFile.TryRead(statePath, out text, out _))
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 using var state = JsonDocument.Parse(text);
+                Require(state.RootElement.GetProperty("statePublicationFailures").GetInt64() == 0 &&
+                    !File.Exists(Path.Combine(directory, "state-error.json")),
+                    "Forced recorded-input observation collided with its periodic publication or concealed telemetry loss.");
                 return state.RootElement.GetProperty("recordedInput").GetProperty("playback").Clone();
             }
             var limit = Time.GetTicksMsec() + 5000;

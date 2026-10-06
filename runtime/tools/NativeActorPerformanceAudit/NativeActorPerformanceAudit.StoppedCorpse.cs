@@ -10,7 +10,7 @@ using OpenNV.Runtime.World.Cells;
 public partial class NativeActorPerformanceAudit
 {
     private async Task SavedStoppedCorpse(string game, string mod, string root, string path,
-        string actorId, string attackerId, string[] dependencies, bool pendingSelection = false)
+        string actorId, string attackerId, string[] dependencies, bool pendingSelection = false, bool equipmentContinuation = false)
     {
         var fixture = new Node3D(); AddChild(fixture);
         try
@@ -23,7 +23,7 @@ public partial class NativeActorPerformanceAudit
             var checkpointBytes = File.ReadAllBytes(path);
             var campaign = JsonSerializer.Deserialize<FalloutNativeCampaignState>(checkpointBytes) ??
                 throw new InvalidDataException("Reached checkpoint is absent.");
-            if (pendingSelection)
+            if (pendingSelection || equipmentContinuation)
             {
                 var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
                 var opening = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
@@ -32,7 +32,7 @@ public partial class NativeActorPerformanceAudit
                     FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
                     FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening)).State;
             }
-            if (campaign.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.NativeSoundHistorySchema or FalloutNativeCampaignSave.TerminalResultsSchema or FalloutNativeCampaignSave.FactionRelationSchema or
+            if (campaign.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.ActivationRelaySchema or FalloutNativeCampaignSave.NativeSoundHistorySchema or FalloutNativeCampaignSave.TerminalResultsSchema or FalloutNativeCampaignSave.FactionRelationSchema or
                 FalloutNativeCampaignSave.DeathHistorySchema) || campaign.SaveCompatibilityId != content.SaveCompatibilityId)
                 throw new InvalidDataException("Reached corpse fixture belongs to another schema or complete source stack.");
             static FalloutFormKey Identity(string text)
@@ -100,6 +100,7 @@ public partial class NativeActorPerformanceAudit
                 throw new InvalidDataException("Source cold attachment changed the selected genuine pre-hit checkpoint.");
             if (pendingSelection) warm.EvaluatePackages(false);
             var combat = warm.Combat!;
+            var equipment = equipmentContinuation ? await PrepareOwnedCorpseEquipment(fixture, warm, world, records, content, cell, attacker, context) : null;
             var contact = warm.FindChildren("*", "Area3D", true, false).OfType<Area3D>()
                 .First(area => area.HasMeta("opennv_nif_collision_bone") && combat.HitPart(area) == 0);
             var health = world.Health(caller).Current;
@@ -107,6 +108,7 @@ public partial class NativeActorPerformanceAudit
             if (first.Dead || !combat.OwnsPose || world.Get(caller).Engagement is not { StartPending: true })
                 throw new InvalidDataException("Real source hit did not retain an independent pending combat history.");
             var fatal = combat.Hit(contact, new(health * 100, 1, 100, 1), attacker, level, globals);
+            if (equipment is not null) await RequireOwnedCorpseEquipmentAdmission(warm, world, records, equipment);
             if (!fatal.Died || !combat.Dead || !combat.StoppedAiPoseCaptureReady || world.PendingProcedureCaptureCount != 0)
                 throw new InvalidDataException("Actual source corpse did not compose with its stopped source failure.");
             if (world.PendingHitEventCount == 0)
@@ -141,12 +143,14 @@ public partial class NativeActorPerformanceAudit
             var beforeUnload = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
             var dead = beforeUnload.Single(value => value.Reference == caller);
             RequireStoppedCorpse(dead, original, sourceFailure);
+            if (equipment is not null) RequireCorpseEquipmentConservation(dead, equipment);
             var deadRagdoll = dead.Ragdoll!;
             if (deadRagdoll.Bodies.Count == 0 || deadRagdoll.Bodies.Any(body => body.Transform.Any(value => !float.IsFinite(value))))
                 throw new InvalidDataException("Corpse fixture lacks the complete native source rig.");
             fixture.RemoveChild(warm); world.UnloadCell(cell.Cell.FormKey);
             var retired = world.Get(caller);
             if (retired.CaptureEngagement is not null || retired.CaptureRagdoll is not null ||
+                retired.CaptureCorpseEquipment is not null || retired.CanCaptureCorpseEquipment is not null ||
                 retired.CanCapturePackageBindingFailure is not null || retired.CapturePackageBindingFailure is not null ||
                 retired.PackageBindingFailure is null || retired.ProcedureCaptureBlocker != retired.PackageBindingFailure.Error ||
                 world.PendingProcedureCaptureCount != 0 || world.IsResident(caller))
@@ -156,6 +160,7 @@ public partial class NativeActorPerformanceAudit
                 throw new InvalidDataException("Corpse unload changed consumed source, random, clock, physical state or combat history.");
             using var cold = new FalloutReferenceWorld(records);
             cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(afterUnload))!);
+            cold.RestoreActorOverrides(equipment is null ? campaign.ActorOverrides : world.CaptureActorOverrides());
             cold.RestoreFactionRelations(campaign.FactionRelations); cold.LoadCell(cell);
             var resumed = Assemble(cold); using var resumedLifetime = new PackageFixtureLifetime(resumed);
             if (cold.Get(caller).PackageBindingFailureCaptureReady || cold.PendingProcedureCaptureCount == 0)
@@ -165,6 +170,7 @@ public partial class NativeActorPerformanceAudit
             if (resumed.Combat!.Error is not null || !resumed.Combat.StoppedAiPoseCaptureReady || cold.PendingProcedureCaptureCount != 0)
                 throw new InvalidDataException("Cold corpse did not acquire the real deferred native physical owner: " + resumed.Combat.Error);
             var actual = cold.Get(caller).Capture(); RequireStoppedCorpse(actual, original, sourceFailure);
+            if (equipment is not null) RequireCorpseEquipmentConservation(actual, equipment);
             RequireCorpsePose(actual.Ragdoll!, deadRagdoll);
             if (JsonSerializer.Serialize(actual with { Ragdoll = deadRagdoll }) != JsonSerializer.Serialize(dead))
             {
@@ -172,7 +178,8 @@ public partial class NativeActorPerformanceAudit
                     JsonSerializer.SerializeToElement(dead), JsonSerializer.SerializeToElement(actual with { Ragdoll = deadRagdoll }))));
                 throw new InvalidDataException("Cold corpse changed its retained source error, prefix, history, clock or selected random state.");
             }
-            var bodies = resumed.FindChildren("*", "RigidBody3D", true, false).OfType<RigidBody3D>().ToArray();
+            var bodies = resumed.FindChildren("*", "RigidBody3D", true, false).OfType<RigidBody3D>()
+                .Where(body => body.GetParent() is RuntimeNativeActorRagdoll).ToArray();
             if (bodies.Length != deadRagdoll.Bodies.Count || bodies.Any(body => !body.IsInsideTree() || body.CollisionLayer != 2))
                 throw new InvalidDataException("Cold corpse has no complete live source body graph.");
             foreach (var delta in new[] { 0d, .125, .25 })
@@ -196,6 +203,14 @@ public partial class NativeActorPerformanceAudit
                 if (!refused || rejected.InstanceCount != 0)
                     throw new InvalidDataException("Stopped corpse source or independent-owner corruption was not refused atomically.");
             }
+            if (!checkpointBytes.SequenceEqual(File.ReadAllBytes(path)))
+                throw new InvalidDataException("Corpse component changed its genuine checkpoint input.");
+            if (equipment is not null)
+                GD.Print($"OPENNV_NATIVE_EQUIPPED_CORPSE_PASS actor={caller} attachments={dead.CorpseEquipment!.Attachments.Count} " +
+                    $"finiteGenerations={equipment.SoundGenerations.Length} muzzle={equipment.MuzzleStarted} " +
+                    "actualCurrent=true nativeCold=true childFirstRetirement=true sourceTravelFault=true sourceDoorNotCompleted=true " +
+                    "noCombatEnd=true itemAmmoConditionRandomConservation=true activeAudioAndEffectsRefused=true sourceGraphDriftAtomic=true " +
+                    "fixture=owned-component dropPhysicsRetailCampaignAndPixels=unverified recording=false");
             GD.Print($"OPENNV_NATIVE_STOPPED_CORPSE_PASS actor={caller} sourceContact={contact.GetMeta("opennv_nif_collision_bone")} " +
                 $"bodies={deadRagdoll.Bodies.Count} runtimeMvid={typeof(RuntimeConfiguration).Assembly.ManifestModule.ModuleVersionId} " +
                 "sourceFaultAndConsumedPrefix=true combatHistory=true childFirstRetirement=true nativeCold=true deferredCaptureGuard=true " +

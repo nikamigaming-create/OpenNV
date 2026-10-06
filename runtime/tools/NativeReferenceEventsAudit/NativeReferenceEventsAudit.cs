@@ -73,11 +73,12 @@ public partial class NativeReferenceEventsAudit : Node
                 ExerciseOwnedActivationParent(parentRoot, parentMod, parentModRoot, parentReference, childReference, parentDependencies);
                 GetTree().Quit(); return;
             }
-            if (OS.GetCmdlineUserArgs() is ["--activator-control", var activatorRoot, var activatorMod, var activatorModRoot,
-                var controlReference, var targetReference, .. var activatorDependencies])
+            if (OS.GetCmdlineUserArgs() is [var controlMode, var activatorRoot, var activatorMod, var activatorModRoot,
+                var controlReference, var targetReference, .. var activatorDependencies] &&
+                controlMode is "--activator-control" or "--activator-control-selection")
             {
                 ExerciseOwnedActivatorControl(activatorRoot, activatorMod, activatorModRoot,
-                    controlReference, targetReference, activatorDependencies);
+                    controlReference, targetReference, activatorDependencies, controlMode == "--activator-control-selection");
                 GetTree().Quit();
                 return;
             }

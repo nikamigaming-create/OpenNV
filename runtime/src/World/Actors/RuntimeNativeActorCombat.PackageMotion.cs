@@ -100,7 +100,7 @@ internal sealed partial class RuntimeNativeActorCombat
         }
         if (_actor is RuntimeNativeNpc { CurrentFurniture: not null }) return;
         motion.Validate();
-        if (motion.Travel is { NavigationSha256: not null } travel)
+        if (!Dead && motion.Travel is { NavigationSha256: not null } travel)
         {
             _pursuitPath = travel.RouteWaypoints!.Select(point => new Vector3(point[0], point[1], point[2])).ToArray();
             _pursuitCursor = travel.RouteCursor;

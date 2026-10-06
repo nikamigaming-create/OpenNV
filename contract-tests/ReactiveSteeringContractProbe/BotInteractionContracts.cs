@@ -67,10 +67,35 @@ internal static class BotInteractionContracts
         evidence.Begin("later-failure", closed); evidence.End("later-failure", unrelatedMenu, true);
         evidence.Begin("later-failure", unrelatedMenu); evidence.Finish("later-failure", false);
         Require(evidence.Observe("later-failure", unrelatedMenu) == 0, "A later block failure published an earlier activation prefix.");
+        CheckSourceLinkedEffects();
         CheckBotResponse();
         CheckPortalObservation();
         CheckDefeatedObservation();
         Console.WriteLine("Reference bot interaction evidence: source-target results, actual book menu, unrelated stage/timer/pause/menu rejection, other-target isolation, failed prefix and deferred target UI PASS.");
+    }
+
+    private static void CheckSourceLinkedEffects()
+    {
+        var control = new BotInteractionSourceState("source-control", false, false, false, false, []);
+        var linked = new BotInteractionSourceState("source-door", false, false, false, false,
+            [new(1, "owned-model-hash", "Close", 2, false, null)]);
+        var before = new BotInteractionSnapshot(BotInteractionSourceState.StableEffects(control, linked), null, []);
+        var ticking = linked with
+        { Animations = linked.Animations.Select(animation => animation with { ElapsedSeconds = 9, StartPending = true }).ToArray() };
+        Require(BotInteractionSourceState.StableEffects(control, ticking) == before.TargetState,
+            "An animation clock or consumed start marker became a stable source activation effect.");
+        var opened = linked with { DoorOpen = true, Animations = [new(1, "owned-model-hash", "Open", 0, true, null)] };
+        var after = before with { TargetState = BotInteractionSourceState.StableEffects(control, opened) };
+        var evidence = new BotInteractionEvidence();
+        evidence.Begin("source-control", before); evidence.End("source-control", after, true); evidence.Finish("source-control", true);
+        Require(evidence.Observe("source-control", after) == 1 && evidence.Observe("other-control", after) == 0,
+            "A real source-linked door/sequence change was ignored or attributed to a different activator.");
+        evidence.Begin("no-op", before); evidence.End("no-op", before, true); evidence.Finish("no-op", true);
+        Require(evidence.Observe("no-op", after) == 0,
+            "A linked target's later autonomous mutation became a no-op activation's result.");
+        evidence.Begin("failed-control", before); evidence.End("failed-control", after, false); evidence.Finish("failed-control", false);
+        Require(evidence.Observe("failed-control", after) == 0,
+            "A failed source control published a linked effect from its consumed prefix.");
     }
 
     private static void CheckBotResponse()

@@ -18,6 +18,9 @@ internal sealed partial class RuntimeLiveHarness : Node
     private double _lastStateWriteMilliseconds;
     private double _lastSnapshotMilliseconds, _lastSerializeMilliseconds, _lastFileMilliseconds;
     private Task<LiveHarnessFileWrite>? _stateWrite;
+    private ulong _stateWriteStartedMilliseconds;
+    private bool _statePublicationRequested;
+    private long _statePublicationDeferredRequests;
     private LiveHarnessFileWrite? _lastFileWrite;
     private long _statePublicationSharingRetries;
     private long _statePublicationFailures;
@@ -29,7 +32,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     private ulong _nextRequest = 1;
     private string? _commandReadFailure;
     private ulong _pendingCapture;
-    private ulong _lastStateMilliseconds;
+    private readonly LiveHarnessPublicationCadence _statePublicationCadence = new();
     private ulong _lastStopWrite;
     private LiveHarnessFrameBuffer? _liveFrames;
     private RuntimeRenderTrace? _trace;
@@ -181,9 +184,11 @@ internal sealed partial class RuntimeLiveHarness : Node
         try { _pumpBotInput?.Invoke(); }
         catch (Exception error) when (error is IOException or InvalidOperationException)
         { _bot?.Fail("Simulator input transport failed: " + error.Message, "input-adapter"); }
-        if (now - _lastStateMilliseconds >= 250)
+        var publicationNow = Time.GetTicksMsec();
+        if (_statePublicationRequested && _stateWrite?.IsCompleted == true ||
+            _statePublicationCadence.Due(publicationNow))
         {
-            _lastStateMilliseconds = now;
+            _statePublicationCadence.Scheduled(publicationNow);
             PublishState();
         }
     }
@@ -420,7 +425,13 @@ internal sealed partial class RuntimeLiveHarness : Node
     private void WriteState()
     {
         if (_stateWrite is { IsCompleted: false })
-            throw new IOException("Live-state publication exceeded its interval; one pending snapshot is retained.");
+        {
+            if (!LiveHarnessPublicationCadence.WithinPendingDeadline(Time.GetTicksMsec(), _stateWriteStartedMilliseconds))
+                throw new IOException("Live-state publication exceeded its interval; one pending snapshot is retained.");
+            _statePublicationRequested = true;
+            _statePublicationDeferredRequests++;
+            return;
+        }
         CompleteStateWrite();
         var started = Stopwatch.GetTimestamp();
         var renderTiming = SampleRenderTiming();
@@ -451,6 +462,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             statePublicationFailures = _statePublicationFailures,
             lastStatePublicationFailure = _lastStatePublicationFailure,
             statePublicationSharingRetries = _statePublicationSharingRetries,
+            statePublicationDeferredRequests = _statePublicationDeferredRequests,
             nextCommandRequest = _nextRequest,
             commandReadFailure = _commandReadFailure,
             gameplay = _captureSummary(),
@@ -523,6 +535,9 @@ internal sealed partial class RuntimeLiveHarness : Node
                 LastRetryFailure = cleared.LastRetryFailure ?? written.LastRetryFailure
             };
         });
+        _stateWriteStartedMilliseconds = Time.GetTicksMsec();
+        _statePublicationCadence.Scheduled(_stateWriteStartedMilliseconds);
+        _statePublicationRequested = false;
         _lastStateWriteMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
 

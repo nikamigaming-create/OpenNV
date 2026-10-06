@@ -14,7 +14,31 @@ internal static class CampaignBotContracts
         SourceMenus();
         WrittenCheckpoint();
         StartupAndSafety();
+        AttemptOwnedSkills();
         Console.WriteLine("Campaign bot: source goal/portal selection, no fake primitive completion, offered paused menus, real save receipts, startup, binding/fault/stale/missing-objective refusal PASS.");
+    }
+
+    private static void AttemptOwnedSkills()
+    {
+        var priorFailure = new BotCampaignSkill(false, "stopped", "Earlier manual activation had no result.", "bot-policy");
+        var bot = new ReactiveCampaignBot(); bot.Start();
+        Require(bot.Tick(State(), priorFailure, .2f).Reference == "door-a" && bot.Active && bot.Error is null,
+            "A stale failed manual skill blocked a campaign before it issued any reference action.");
+        Require(bot.Tick(State(2), priorFailure, .2f).Kind == BotCampaignCommandKind.Pause && !bot.Active &&
+            bot.Error == priorFailure.Error,
+            "An error after the campaign issued its own reference action was ignored.");
+        bot.Start();
+        Require(bot.Tick(State(3), priorFailure, .2f).Reference == "door-a" && bot.Active,
+            "Restarting a stopped campaign retained ownership of its earlier skill.");
+
+        var foreign = new ReactiveCampaignBot(); foreign.Start();
+        Require(foreign.Tick(State(), new(true, "approaching", null, null), .2f).Kind == BotCampaignCommandKind.Pause &&
+            foreign.FailureKind == "input-owner",
+            "An already active unowned reference skill was adopted or replaced by a new campaign.");
+        var engine = new ReactiveCampaignBot(); engine.Start();
+        Require(engine.Tick(State() with { Error = "Actual source execution fault." }, priorFailure, .2f).Kind ==
+            BotCampaignCommandKind.Pause && engine.Error == "Actual source execution fault.",
+            "Ignoring stale skill feedback waived a current authoritative engine fault.");
     }
 
     private static void SourceGoalSelection()

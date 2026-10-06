@@ -13,6 +13,7 @@ internal sealed class NativeActorMuzzle(FalloutPluginStack records, RuntimeLiveC
     private OmniLight3D? _light;
     private FalloutFormKey? _lightForm;
     internal string? LightError { get; private set; }
+    internal bool CaptureReady => _playback?.Active != true;
     internal object State => new
     {
         path = _path,
