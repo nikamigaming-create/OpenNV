@@ -22,8 +22,10 @@ consumed keys and applies only the remaining selected sequence suffix.
 The native `--managed-sequence-registration` fixture uses complete synthetic NIFs,
 distinct retained source blocks and different clocks, checks last-name lookup,
 instance isolation, cold finite completion and consumed text keys, and retains
-malformed bindings and unresolved case collisions as refusals. The standard native
-NIF gate includes this fixture.
+malformed bindings and unresolved case collisions as refusals. The detached
+case-collision fixture frees its native controller in a `finally` path and
+checks native invalidation; disposing only the managed wrapper does not retire
+a Godot Node. The standard native NIF gate includes this fixture.
 
 The private owned overseer-terminal model previously failed at repeated Idle
 registration. Its unchanged bytes now build real source surfaces and collision,

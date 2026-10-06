@@ -41,10 +41,16 @@ public partial class NativeNifInstanceAudit
                 $"Repeated source-name cold restoration diverged: warmBlock={warm.ActiveSourceSequence} coldBlock={cold.ActiveSourceSequence} " +
                 $"warmTime={warm.SourceTimeSeconds} coldTime={cold.SourceTimeSeconds} warmPlaying={warm.Playing} coldPlaying={cold.Playing} " +
                 $"warmKeys={JsonSerializer.Serialize(events)} coldKeys={JsonSerializer.Serialize(resumedEvents)} original={original.ActiveSequence} surfaces={prototype.Scene.Surfaces}.");
-            using var invalid = new RuntimeNifControllerPlayer();
-            RejectEmptySequence(() => invalid.Configure([
-                new("Loop", 0, 1, 0, 1, []), new("loop", 0, 1, 0, 2, [])]));
-            GD.Print("OPENNV_MANAGED_SEQUENCE_REGISTRATION_PASS fullNif=true retainedBlocks=true lastExactName=true clockFromSelectedBlock=true coldConsumedKeys=true instanceIsolation=true caseCollisionRefused=true pixels=unverified");
+            var invalid = new RuntimeNifControllerPlayer();
+            try
+            {
+                RejectEmptySequence(() => invalid.Configure([
+                    new("Loop", 0, 1, 0, 1, []), new("loop", 0, 1, 0, 2, [])]));
+            }
+            finally { invalid.Free(); }
+            RequireEmptySequence(!GodotObject.IsInstanceValid(invalid),
+                "The refused detached controller retained a native node after retirement.");
+            GD.Print("OPENNV_MANAGED_SEQUENCE_REGISTRATION_PASS fullNif=true retainedBlocks=true lastExactName=true clockFromSelectedBlock=true coldConsumedKeys=true instanceIsolation=true caseCollisionRefused=true refusedControllerFreed=true pixels=unverified");
         }
         finally { first?.Free(); second?.Free(); prototype.Scene.Root.Free(); }
     }
