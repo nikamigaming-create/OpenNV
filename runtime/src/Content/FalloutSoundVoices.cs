@@ -6,7 +6,8 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
 {
     private sealed record Voice(long Id, FalloutFormKey Sound, FalloutFormKey? Reference,
         string Owner, Func<bool> Playing, Action Stop, Action? Retire,
-        FalloutFormKey? SourceReference, Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? FiniteWait);
+        FalloutFormKey? SourceReference, Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? FiniteWait,
+        Func<object?>? FiniteWaitState);
     private readonly Dictionary<long, Voice> _voices = [];
     private long _nextId, _stopRequests, _stopped;
     private readonly List<Action> _retirementObservers = [];
@@ -25,6 +26,7 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
             reference = voice.Reference?.ToString(),
             voice.Owner,
             playing = voice.Playing(),
+            finiteCompletion = voice.FiniteWaitState?.Invoke(),
         }).ToArray(),
         error = Error,
         persistence = "transient-source-voices;no-cold-replay",
@@ -32,7 +34,7 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
 
     internal IDisposable Register(FalloutFormKey sound, FalloutFormKey? reference, string owner,
         Func<bool> playing, Action stop, Action? retire = null, FalloutFormKey? sourceReference = null,
-        Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? finiteWait = null)
+        Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? finiteWait = null, Func<object?>? finiteWaitState = null)
     {
         sound = ValidateSound(sound);
         if (reference is { } attached) reference = ValidateReference(attached);
@@ -40,7 +42,7 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
         ArgumentNullException.ThrowIfNull(playing); ArgumentNullException.ThrowIfNull(stop);
         var id = checked(++_nextId);
-        _voices.Add(id, new(id, sound, reference, owner, playing, stop, retire, sourceReference, finiteWait));
+        _voices.Add(id, new(id, sound, reference, owner, playing, stop, retire, sourceReference, finiteWait, finiteWaitState));
         return new Scope(() => _voices.Remove(id));
     }
 

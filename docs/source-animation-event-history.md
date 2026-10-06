@@ -37,6 +37,54 @@ owner, independently of manual save requests. An asynchronous source writer
 failure retains its request and complete-capture refusal without stopping
 unrelated future script frames or retrying the failed writer.
 
+## Native completion dispatch boundary
+
+Godot's [4.7.2 native playback owner](https://github.com/godotengine/godot/blob/4.7.2-stable/scene/audio/audio_stream_player_internal.cpp)
+reads mixer activity for `Playing`, but removes ended playback and emits
+`Finished` during its later node-processing notification. Spatial players use
+the [native physics notification](https://github.com/godotengine/godot/blob/4.7.2-stable/scene/3d/audio_stream_player_3d.cpp).
+Mixer inactivity alone therefore cannot supply either completion or refusal of
+an otherwise proven live finite wait.
+
+The proposed completion-wait owner retains the original native node, playback,
+stream, source/media hashes and generation, after observing that playback
+playing. `awaiting-native-finished` admits only the same registered, resident,
+processable, unpaused, nonlooping playback. It returns the unchanged transient
+receipt for at most two subsequent native processing phases and 1,000 ms.
+Either bound expiring is a visible refusal, never a synthesized event. Missing
+startup, replacement bindings, resumed playback without completion, source
+drift, cancellation, opaque history and loops remain refusals. Neither the
+retained ledger nor the complete writer's capture predicate changes.
+`soundVoices.active[].finiteCompletion` exposes the phase, original binding and
+timeout cause without changing history or admitting a checkpoint.
+
+Focused selectors extend the existing pure, native finite-lifetime and owned
+emitter/cold audits. Run these serially with recording off; they have not been
+executed as part of this isolated proposal:
+
+```powershell
+dotnet run --project .\contract-tests\ReferenceScriptContractProbe -- --finite-sound-completion-wait-contracts
+& $Godot --headless --path .\runtime 'res://tools/NativeReferenceEventsAudit/NativeReferenceEventsAudit.tscn' -- --finite-sound-completion-wait
+& $Godot --headless --path .\runtime 'res://tools/NativeReferenceEventsAudit/NativeReferenceEventsAudit.tscn' -- --finite-sound-lifetime
+& $Godot --headless --path .\runtime 'res://tools/NativeReferenceEventsAudit/NativeReferenceEventsAudit.tscn' -- --sound-finite-completion-edge $OwnedFNV 'ttw' $OwnedTTW 'Fallout3.esm:0aba56' 'FalloutNV.esm:06eb6f' @OwnedDependencies
+```
+
+Use the selected legally owned installation and unchanged dependency folders for
+those variables. The owned selector resolves its exact winning sound from the
+reference's original NIF text keys, repeats the isolated component on fresh
+owners, and requires genuine native inactivity before `Finished`, strict active
+capture refusal, one later complete reference-world capture and cold non-replay.
+It neither executes campaign input nor writes the selected source installation.
+The native component deliberately holds only its own main-thread dispatch while
+the real mixer reaches EOS; elapsed time supplies only failure deadlines.
+Disposable component captures are removed in `finally`.
+This establishes no ordinary failed-F5 attribution, complete campaign save,
+cell-stop policy, endpoint audio or retail parity. A current immutable receipt
+must additionally bind the refusal's exact generation to its native playback
+phase; an older registered nonplaying voice is not that same observation.
+
+## Independent stopped continuation
+
 A hit-reaction read failure retains the exact source condition ordinal, visited
 sources, successful predicate/random prefix and failed query. It is historical
 state rather than an active pose or resumable script cursor. Cold restoration

@@ -110,7 +110,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                 {
                     var voice = new AudioStreamPlayer { Stream = stream, PitchScale = selected.PitchScale, VolumeDb = selected.GainDb };
                     TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed, generation, followEmitter);
-                    voice.Finished += () => FinishVoice(voice); voice.Play();
+                    PlayVoice(voice);
                 }
                 else
                 {
@@ -124,8 +124,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                     };
                     _spatial.Add(voice, selected);
                     TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed, generation, followEmitter);
-                    voice.Finished += () => FinishVoice(voice);
-                    ApplyListener(voice, selected); voice.Play();
+                    ApplyListener(voice, selected); PlayVoice(voice);
                 }
             }
             LastEvent = new
