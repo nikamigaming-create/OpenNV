@@ -7,6 +7,12 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args.Length >= 7 && args[0] == "--audit-model-less-headpart")
+{
+    ModelLessHeadPartOwnedProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6], args[7..]);
+    return;
+}
+
 if (args is ["--test-campaign-goals"])
 {
     CampaignGoalContracts.Run();

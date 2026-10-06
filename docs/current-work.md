@@ -11,8 +11,8 @@ campaign, cell or parity completion.
 
 ## Verified state
 
-Checked PR 151 is merged with all five checks passing. Main/origin synchronized
-at 21d670b before the fresh codex/combat-idle-target-continuation branch.
+Checked PR 152 is merged with all five checks passing. Main/origin synchronized
+at 970abd3 before the fresh codex/finite-save-vault-acceptance branch.
 The published campaign-bot, source-goal, finite-audio/emitter, fair navigation
 and strict guest-memory slices retain their focused and full gate evidence.
 Original DLL execution remains unowned.
@@ -44,8 +44,16 @@ Ordinary input genuinely reached CG04:140 in the final cave, CELL 024512.
 Actual pistol contacts defeated guard 06490e. Ordinary inventory, key/password,
 terminal and source stair/XTEL traversal worked. Subsequent user input passed
 the actual switch/secret door and vault gear. No position, stage, inventory,
-damage or collision was fabricated. Vault exit, Megaton, Union Station and
-Mojave remain unreached.
+damage or collision was fabricated. This earlier cave component did not verify
+vault exit; Megaton, Union Station and Mojave remain unreached.
+
+Subsequent ordinary user input genuinely exits to exterior CELL 0010c1 at
+CG04:150 and 107 HP. That session is unsaved and the user closed it. The
+exterior remains washed out: original DEMOEyeAdjustISFX retains elapsed zero
+despite its ten-second duration because an appearance failure stops its former
+driver-owned clock. An independent shared image-space clock and general
+model-less HDPT admission now pass native/pause/fault/owned-source contracts;
+actual final exterior-view replay remains unverified.
 
 The cave session exited without a complete new save. Its ForceSave failed on
 gear 024710's missing named sound emitter; retired broken-door 0aba56 also
@@ -77,7 +85,11 @@ The latest post-guard F5 additionally retains resident human 0569b4's generation
 DRSVaultVerticalBroken, all active with no opaque error. No complete slot was
 written. Exact failed receipts remain; finite completion/cell-stop policy cannot
 be replaced with a guessed finished voice. The complete stage-18 checkpoint
-remains intact.
+remains intact. The bounded native mixer-before-Finished window now has pure,
+native and unchanged owned proof, but fresh ordinary F5 still waits on repeated
+finite producers. Paused Create New Save also uses a synchronous capture while
+those voices are paused. A separate paused-save transaction proposal is next;
+neither component proof nor a returned UI action establishes a written save.
 
 Complete canonical v43 slot 5f9792be93bb43319f7672eb74787dd6 remains intact at
 CG04:18, CELL 028138, full health, drawn pistol and 12/24 rounds. Cold Continue
@@ -135,13 +147,13 @@ level-up and directional sensory proposals remain unintegrated.
 
 ## Next owner and outcome
 
-Primary owns serial builds/native checks, ordinary input and publication. Publish
-the checked combat-idle/input slice and finish source-marker continuation.
-The separate finite-save-edge worktree owns the exact resident finite-audio
-completion refusal, with synthetic/native evidence required before integration.
-Resolve that general owner before claiming a reusable later checkpoint, then
-follow original vault/cave review into the exterior. Publish checked slices and
-verify main/origin before the next block.
+Primary owns serial builds/native checks, ordinary input and publication. Finish
+the general F5/paused-menu save transaction, replay the genuine exit, inspect
+the expired source effect's final exterior view and cold-verify a complete save.
+The separate paused-save worktree owns preparation/receipts and exact native
+finite-drain lifetime. Complete the whole source room/loot/inventory/door
+denominator before onward Megaton and authored train/Mojave claims. Publish
+checked slices and verify main/origin before the next block.
 
 Interrupted actor-query, modeled-light, portable-startup, compiled-SCDA and
 level-allocation implementations remain in separate private codex worktrees;
@@ -154,10 +166,11 @@ Source visibility, process/cadence, train/calendar and wider owners remain open.
 ## Private continuation
 
 Run: tmp/development-lab/ttw-bot-health-20261006. The last protected input
-reaches CG04:35 at 120 HP, CELL 024511, with actual guard death and 7/24 rounds.
-It quit normally after F5 refusal. No game is running. Original canonical data remains in
+reaches CG04:150 at 107 HP in exterior CELL 0010c1 after ordinary user input.
+The user closed it after save failure and persistent whiteout. No game is
+running. Original canonical data remains in
 tmp/development-lab/ttw-post-goat-checkpoint-20261004; preserve save.json and every
 complete immutable slot. The farthest genuine, unsaved progress remains
-CG04:140 in the cave. New manual request 1/slot 96aca60194a7493f97b148eb067b1abf
-failed after genuine finite waiting; retain its audio receipt without replay.
+CG04:150 in the exterior. Preserve failed request receipts and immutable native
+diagnostics; no later complete slot is verified.
 Source probes, helpers and logs remain private. Recording is off.

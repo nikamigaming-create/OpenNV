@@ -302,8 +302,6 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 !_scripts.References!.PlayerMoves.Pending)
                 SaveCurrentState();
             _playerPackage?.Advance(delta);
-            foreach (var expired in _imageSpaceState.Advance(delta))
-                GD.Print($"OPENNV_NATIVE_IMAD_EXPIRED source={expired.Form} duration={expired.Duration:R} owner=gameplay-clock");
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or FileNotFoundException or InvalidOperationException or KeyNotFoundException or OverflowException)
         {

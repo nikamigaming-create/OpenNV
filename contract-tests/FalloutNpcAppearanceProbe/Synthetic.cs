@@ -22,6 +22,8 @@ internal static class Synthetic
                 Npc(0x114, 0, 0, female: true, eyes: null), Npc(0x115, 64, 0x112),
                 Npc(0x116, 0, 0, eyes: 0x300),
                 Npc(0x117, 0, 0, female: true, armor: 0x406),
+                Npc(0x118, 0, 0, head: 0x306), Npc(0x119, 0, 0, head: 0x307),
+                Npc(0x11a, 0, 0, head: 0x308),
                 ActorList(0x703, 0, 1, (1, 0x704), (1, 0x704)), ActorList(0x704, 0, 0, (1, 0x101)),
                 ActorList(0x705, 0, 0, (1, 0x100), (1, 0x101)), ActorList(0x706, 25, 0, (1, 0x101)),
                 ActorList(0x707, 0, 0, (2, 0x101)), ActorList(0x708, 0, 0, (1, 0x708)),
@@ -30,6 +32,9 @@ internal static class Synthetic
                 Record("HAIR", 0x301, Field("MODL", Z("hairB.nif")), Field("ICON", Z("hairB.dds")), Field("DATA", [8])),
                 Record("EYES", 0x310, Field("ICON", Z("eye.dds"))),
                 Head(0x302, 0x303), Head(0x303, 0), Head(0x304, 0x305), Head(0x305, 0x304),
+                Record("HDPT", 0x306, Field("HNAM", U32(0x303))),
+                Record("HDPT", 0x307, Field("MODL", [0]), Field("HNAM", U32(0x303))),
+                Record("HDPT", 0x308, Field("MODL", [0])),
                 Armor(0x400, "base.nif", 4, 0x410), Armor(0x401, "template.nif", 4, 0),
                 Armor(0x402, "conflict.nif", 4, 0),
                 Record("ARMO", 0x406, Field("BMDT", Combine(U32(4), U32(0))), Field("MODL", Z("shared-body.nif")), Field("MODD", [1])),
@@ -48,6 +53,14 @@ internal static class Synthetic
                 Race(0x200, "raceA", 0x301, 0), Armor(0x400, "winning.nif", 4, 0x410), Record("TXST", 0x500, Field("TX00", Z("winning.dds")))));
             using var stack = FalloutPluginStack.Load(directory.FullName, ["base.esm", "override.esp"]);
             var appearance = FalloutNpcAppearanceResolver.Resolve(stack, Key(0x100));
+            foreach (var identity in new uint[] { 0x118, 0x119, 0x11a })
+            {
+                var selected = FalloutNpcAppearanceResolver.Resolve(stack, Key(identity));
+                var extras = selected.Models.Where(part => part.Role == "head-addon").ToArray();
+                Require(selected.CanConstruct && extras.Length == (identity == 0x11a ? 0 : 1) &&
+                    extras.All(part => part.Source == Key(0x303) && part.ModelPath is not null),
+                    "An authored model-less head selection invented geometry or dropped its actual extra part.");
+            }
             foreach (var female in new[] { false, true })
             {
                 var draft = new FalloutActorAppearanceState(female, null, Key(0x300), null, HeadParts: [Key(0x302)]);
