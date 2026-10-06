@@ -72,6 +72,28 @@ Mods are additive checkboxes beneath the active game. Load order is automatic
 from authored dependencies and verified rules, with optional Advanced overrides.
 Selecting mod settings must not replace the active game or disable other mods.
 
+The October 5 direction requires end-user acceptance from a brand-new save for
+standalone Fallout 3, standalone New Vegas and TTW. Test the exported package on
+clean non-developer Windows systems and fresh OpenNV profiles: select owned
+files, start New Game, complete ordinary opening interactions, write a complete
+save, quit and cold Continue. A supplied checkpoint or direct diagnostic launch
+does not establish this path. Resolve startup/native dependency errors visibly;
+do not require a Godot editor, development SDK, manually installed FFmpeg or
+cloud-AI account to play. Bundle and resolve any required authored movie decoder
+executables independently of system PATH, with their redistribution notices;
+keep diagnostic video dependencies separate. Unsupported campaign gates remain
+until their real entry and gameplay pass.
+
+The ordinary-input bot must gain reusable verified skills, source/build-bound
+learning, hierarchical campaign decisions, combat/menu policies and bounded
+recovery from complete cold checkpoints. Borrow implementation-neutral
+curriculum, skill-library and execution-feedback ideas rather than Minecraft
+dependencies or cheat-enabled actions. Reuse existing navigation, input,
+development-lab and parity owners. Missing engine behavior stays a visible
+failure; the bot cannot invent state or bypass source conditions to finish a
+route. Parallel owners work on isolated proposals while one primary controls
+builds, live input, saves and publication.
+
 ## Execution
 
 Provide code-addressable saves for actually reached campaign states. Capture the

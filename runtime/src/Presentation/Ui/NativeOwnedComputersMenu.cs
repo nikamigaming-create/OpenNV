@@ -97,6 +97,10 @@ internal sealed partial class NativeOwnedComputersMenu : Control
                 ? FalloutNote.Read(_records, note).RequireText() : _session.DisplayText;
             _tiles.Bind(_back, "visible", 1);
             _backButton.Visible = true;
+            _backButton.SetMeta("opennv_source_choice_kind", "terminal-back");
+            _backButton.SetMeta("opennv_source_choice_id", "back");
+            _backButton.SetMeta("opennv_source_choice_menu",
+                _session.Reference + ":" + _session.CurrentPage.Record.FormKey + ":" + _session.HasResult);
             var available = _session.VisibleEntries;
             var rowsPerPage = checked((int)_tiles.Number(_list, "_number_of_visible_items"));
             if (rowsPerPage <= 0) throw new InvalidDataException("Source terminal list has no visible row extent.");
@@ -116,6 +120,10 @@ internal sealed partial class NativeOwnedComputersMenu : Control
                     var generation = _session.Generation;
                     var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.TileColor(text))
                     { Text = choice.Entry.Text, DrawText = false, Disabled = !choice.Selectable, FocusMode = FocusModeEnum.All };
+                    button.SetMeta("opennv_source_choice_kind", "terminal");
+                    button.SetMeta("opennv_source_choice_id", choice.Entry.Index);
+                    button.SetMeta("opennv_source_choice_menu",
+                        _session.Reference + ":" + _session.CurrentPage.Record.FormKey);
                     button.Pressed += () => Select(choice.Entry.Index, generation);
                     void Focus()
                     {

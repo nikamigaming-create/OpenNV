@@ -15,6 +15,9 @@ internal sealed class RuntimeSimulatorBotInput
     private SteeringIntent _intent;
     private bool _activation;
     private long _primaryUntil;
+    private BotCombatInput? _combat;
+    private bool _firePending, _reloadPending, _combatRelease, _pausePending;
+    private long _combatUntil, _menuUntil;
     private int _hand;
     private int _pendingHands;
     private bool _headPending;
@@ -37,6 +40,14 @@ internal sealed class RuntimeSimulatorBotInput
 
     internal void Submit(SteeringIntent intent, bool activate)
     {
+        if (_combat is not null && intent.Combat is null)
+        {
+            _firePending = _reloadPending = false; _combatUntil = 0; _combatRelease = true;
+        }
+        _combat = intent.Combat;
+        _firePending |= intent.Combat?.Fire == true;
+        _reloadPending |= intent.Combat?.Reload == true;
+        _pausePending |= intent.Pause;
         _intent = intent; _activation |= activate;
         _headPosition = _rig.Camera.Position;
         var global = new Basis(Vector3.Up, intent.YawRadians) * _rig.Camera.GlobalBasis;
@@ -60,6 +71,57 @@ internal sealed class RuntimeSimulatorBotInput
         }
         var controllerPath = Path.Combine(_directory, "controller_pose_command.json");
         if (File.Exists(controllerPath)) return;
+        if (_combatRelease)
+        {
+            LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+            { hand = 1, trigger = 0, buttonB = 0, primary = 0, buttonA = 0, grip = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 200 }));
+            _combatRelease = false; _pendingHands &= ~2;
+            return;
+        }
+        if (_firePending || _reloadPending)
+        {
+            // Preserve the actual accepted source muzzle/controller ray. Only
+            // native action edges change; delivery is not a combat receipt.
+            LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+            {
+                hand = 1,
+                trigger = _firePending ? 1 : 0,
+                buttonB = _reloadPending ? 1 : 0,
+                primary = 0,
+                buttonA = 0,
+                grip = 0,
+                thumbstickX = 0,
+                thumbstickY = 0,
+                leaseMilliseconds = 200
+            }));
+            _firePending = _reloadPending = false;
+            _combatUntil = Stopwatch.GetTimestamp() + Stopwatch.Frequency / 10;
+            return;
+        }
+        if (_combatUntil != 0)
+        {
+            if (Stopwatch.GetTimestamp() < _combatUntil) return;
+            LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+            { hand = 1, trigger = 0, buttonB = 0, primary = 0, buttonA = 0, grip = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 200 }));
+            _combatUntil = 0;
+            return;
+        }
+        if (_pausePending || _menuUntil != 0)
+        {
+            if (_pausePending)
+            {
+                LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+                { hand = 0, menu = 1, grip = 0, trigger = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 200 }));
+                _pausePending = false; _menuUntil = Stopwatch.GetTimestamp() + Stopwatch.Frequency / 10;
+            }
+            else if (Stopwatch.GetTimestamp() >= _menuUntil)
+            {
+                LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+                { hand = 0, menu = 0, grip = 0, trigger = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 200 }));
+                _menuUntil = 0; _pendingHands &= ~1;
+            }
+            return;
+        }
         // Preserve the exact tracked ray that passed the bot's target check.
         // Input edges must not also reposition the controller before the game
         // consumes Activate. Button release keeps that same pose as well.
@@ -88,6 +150,24 @@ internal sealed class RuntimeSimulatorBotInput
         }
         if ((_pendingHands & (1 << _hand)) == 0) _hand = 1 - _hand;
         if ((_pendingHands & (1 << _hand)) == 0) return;
+        if (_combat is not null && _intent.AimAt is null)
+        {
+            LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
+            {
+                hand = _hand,
+                trigger = 0,
+                buttonB = 0,
+                primary = 0,
+                buttonA = 0,
+                grip = 0,
+                menu = 0,
+                thumbstickX = 0,
+                thumbstickY = 0,
+                leaseMilliseconds = 200
+            }));
+            _pendingHands &= ~(1 << _hand); _hand = 1 - _hand;
+            return;
+        }
         // A simulated standing user's wrists stay below/in front of their eyes
         // as they turn. These are controller poses, never player/body writes.
         var wrist = _headPosition + _headBasis.X * (_hand == 0 ? -.22f : .22f) + forward * .32f + Vector3.Down * .35f;
@@ -119,7 +199,10 @@ internal sealed class RuntimeSimulatorBotInput
             primary = 0,
             grip = 0,
             trigger = 0,
-            leaseMilliseconds = 500,
+            buttonA = 0,
+            buttonB = 0,
+            menu = 0,
+            leaseMilliseconds = _combat is null ? 500 : 200,
         }));
         _pendingHands &= ~(1 << _hand); _hand = 1 - _hand;
     }

@@ -88,6 +88,7 @@ $probes = @(
     "GamebryoUiTileContractProbe",
     "OwnedAuxResourceProbe",
     "ParityTelemetryContractProbe",
+    "NativePluginGuestMemoryProbe",
     "RuntimeSaveSlotContractProbe",
     "RuntimeSettingsContractProbe"
 )

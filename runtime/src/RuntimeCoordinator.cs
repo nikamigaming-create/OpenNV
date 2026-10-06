@@ -123,6 +123,8 @@ public partial class RuntimeCoordinator : Node3D
                     ApplyNativeBotSimulatorInput, () => _botSimulatorInput?.Pump(), AdvanceNativeReferenceApproachRoute, CancelNativeBotRoute);
                 harness.ConfigureCheckpoints(CreateNativeCheckpoint, LoadNativeCheckpoint, () => _nativeSessionTransitioning,
                     () => _restoredNativeCheckpoint);
+                harness.ConfigureCampaign(ObserveNativeCampaign, _configuration.Player.DesktopInput.Save.Action,
+                    _configuration.Player.DesktopInput.Cancel.Action);
                 AddChild(harness);
             }
             GetWindow().Size = new Vector2I(

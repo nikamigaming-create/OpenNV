@@ -31,6 +31,66 @@ try
     if (!LiveHarnessAtomicFile.TryRead(livePath, out var retriedText, out var retryError) ||
         retriedText != "{\"sequence\":64}" || retryError is not null)
         throw new InvalidOperationException("A released command did not return its complete original payload.");
+    if (OperatingSystem.IsWindows())
+    {
+        Task<LiveHarnessFileWrite> blockedWriter;
+        using (var reader = new FileStream(livePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            blockedWriter = Task.Run(() => LiveHarnessAtomicFile.Write(livePath, "{\"sequence\":65}"));
+            if (!SpinWait.SpinUntil(() => File.Exists(livePath + ".pending"), TimeSpan.FromSeconds(3)))
+                throw new InvalidOperationException("The blocked snapshot writer did not start.");
+            Thread.Sleep(15);
+            if (blockedWriter.IsCompleted)
+            {
+                var written = blockedWriter.GetAwaiter().GetResult();
+                if (written.Attempts < 2 || written.LastRetryError is not (32 or 33 or 1175) ||
+                    string.IsNullOrEmpty(written.LastRetryFailure) || written.Milliseconds <= 0)
+                    throw new InvalidOperationException("A recovered snapshot lost its original lock and measured retry receipt.");
+                throw new InvalidOperationException("A snapshot replaced a reader that denied delete sharing.");
+            }
+            using var textReader = new StreamReader(reader, leaveOpen: true);
+            if (textReader.ReadToEnd() != "{\"sequence\":64}")
+                throw new InvalidOperationException("A blocked replacement changed its reader's snapshot.");
+        }
+        blockedWriter.GetAwaiter().GetResult();
+        if (File.ReadAllText(livePath) != "{\"sequence\":65}")
+            throw new InvalidOperationException("A temporary reader lock lost the pending complete snapshot.");
+        using (var reader = new FileStream(livePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var denied = false;
+            try { LiveHarnessAtomicFile.Write(livePath, "{\"sequence\":66}"); }
+            catch (IOException) { denied = true; }
+            if (!denied || File.ReadAllText(livePath) != "{\"sequence\":65}" ||
+                File.ReadAllText(livePath + ".pending") != "{\"sequence\":66}")
+                throw new InvalidOperationException("A persistent reader lock concealed loss or changed the prior snapshot.");
+        }
+        File.Delete(livePath + ".pending");
+        var errorPath = Path.Combine(traceDirectory, "state-error.json");
+        File.WriteAllText(errorPath, "{\"failed\":true}");
+        using var deletionStarted = new ManualResetEventSlim();
+        Task<LiveHarnessFileWrite> deletion;
+        using (var reader = new FileStream(errorPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            deletion = Task.Run(() =>
+            {
+                deletionStarted.Set();
+                return LiveHarnessAtomicFile.Delete(errorPath);
+            });
+            if (!deletionStarted.Wait(TimeSpan.FromSeconds(3)))
+                throw new InvalidOperationException("The failure-marker retirement did not start.");
+            Thread.Sleep(15);
+            if (deletion.IsCompleted)
+            {
+                deletion.GetAwaiter().GetResult();
+                throw new InvalidOperationException("A failure marker ignored its reader's delete-sharing boundary.");
+            }
+            if (!File.Exists(errorPath))
+                throw new InvalidOperationException("A pending marker retirement concealed its failure.");
+        }
+        var deleted = deletion.GetAwaiter().GetResult();
+        if (File.Exists(errorPath) || deleted.Attempts < 2 || deleted.LastRetryError is not (32 or 33 or 1175))
+            throw new InvalidOperationException("A released failure marker did not retain its measured sharing retries.");
+    }
     File.Delete(livePath);
     var cadence = new FrameIntervalWindow();
     if (cadence.Capture() is not null) throw new InvalidOperationException("Unobserved cadence reported timing.");
@@ -42,7 +102,7 @@ try
     for (var index = 0; index < 512; index++) cadence.Record(timestamp += 12);
     if (cadence.Capture() is not { Samples: 512, MedianMilliseconds: 12, P99Milliseconds: 12, MaximumMilliseconds: 12 })
         throw new InvalidOperationException("Frame cadence did not retire its bounded previous window.");
-    Console.WriteLine("OPENNV_LIVE_DIAGNOSTIC_CONTRACT_OK replacementWithReader=64 oldSnapshotIntact=true commandReadRetry=true boundedCadence=512 hitchVisible=true");
+    Console.WriteLine($"OPENNV_LIVE_DIAGNOSTIC_CONTRACT_OK replacementWithReader=64 oldSnapshotIntact=true commandReadRetry=true transientSharingRetry={OperatingSystem.IsWindows()} persistentSharingRefused={OperatingSystem.IsWindows()} boundedCadence=512 hitchVisible=true");
     var store = new RenderTraceBlobStore(traceDirectory);
     byte[] payload = [0, 0, 0, 0x80, 7, 3, 255];
     var first = store.Put(payload);

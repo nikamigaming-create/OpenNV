@@ -17,6 +17,8 @@ internal partial class NativeOwnedDialogueMenu : Control
     private int _selectedChoiceIndex;
     private int _visibleChoiceCount;
     private bool _faulted, _submitted;
+    private string _sourceMenuIdentity = "";
+    private Func<FalloutFormKey, bool>? _isGoodbye;
 
     internal NativeOwnedDialogueMenu(Action skip, Action<Exception> failed)
     {
@@ -42,6 +44,8 @@ internal partial class NativeOwnedDialogueMenu : Control
     {
         ClearChoices();
         _conversationChoices = conversation.Choices;
+        _sourceMenuIdentity = conversation.Info?.Record.FormKey.ToString() ?? conversation.Phase;
+        _isGoodbye = conversation.IsGoodbye;
         _choose = choose;
         _offset = 0;
         _selectedChoiceIndex = 0;
@@ -122,6 +126,11 @@ internal partial class NativeOwnedDialogueMenu : Control
             var font = _tiles.Font(text);
             var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.Color)
             { Text = choice.Text, DrawText = false, FocusMode = FocusModeEnum.All };
+            button.SetMeta("opennv_source_choice_kind", "dialogue");
+            button.SetMeta("opennv_source_choice_id", choice.Topic.ToString());
+            button.SetMeta("opennv_source_choice_menu", _sourceMenuIdentity);
+            button.SetMeta("opennv_source_choice_goodbye",
+                (_isGoodbye ?? throw new InvalidOperationException("Dialogue topic identity owner is absent."))(choice.Topic));
             button.Pressed += () =>
             {
                 if (_submitted) return;
