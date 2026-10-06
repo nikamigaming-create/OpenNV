@@ -247,6 +247,7 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorCorpseEquipment? CorpseEquipment { get; set; }
     internal Func<bool, bool>? CanCaptureCorpseEquipment { get; set; }
     internal Func<FalloutActorCorpseEquipment?>? CaptureCorpseEquipment { get; set; }
+    internal Func<FalloutOpeningInventoryGrant, FalloutOpeningInventoryGrant, FalloutInventoryChangeLease?>? PrepareNativeInventoryRemoval { get; set; }
     internal string? CorpseEquipmentCaptureBlocker { get; set; }
     internal bool CorpseEquipmentCaptureReady => CanCaptureCorpseEquipment?.Invoke(false) ?? CorpseEquipmentCaptureBlocker is null;
     internal IReadOnlyList<FalloutObjectAnimationSnapshot>? ObjectAnimations { get; set; }
@@ -813,7 +814,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         validated.PackageEvents.Restore(snapshots);
         _packageEvents = validated._packageEvents;
         validated._packageEvents = null;
-        foreach (var (key, instance) in validated._instances) _instances.Add(key, instance);
+        foreach (var (key, instance) in validated._instances)
+        {
+            _instances.Add(key, instance);
+            BindInventoryRemoval(instance);
+        }
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
         foreach (var (seat, actor) in validated._furnitureSeats) _furnitureSeats.Add(seat, actor);
     }

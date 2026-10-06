@@ -8,7 +8,11 @@ The source-bound corpse equipment continuation now permits an actual complete
 post-combat v45 slot at Escape stage 35. Ordinary cold Continue verifies 120 HP,
 2/24 rounds and both original dead guards with their native equipment.
 Equipped corpse item transfer, exterior and other actor/physics/procedure
-continuations remain independent; no capture exemption is added.
+continuations retain independent owners; no capture exemption is added.
+The current staged settled-corpse transfer candidate additionally passes actual
+ordinary Take All/save/quit/cold Continue, conserving source baton/armor,
+120 HP and 2/24 rounds without recreating removed weapon attachments.
+Whole loot, living equipment and drop physics remain open.
 The independent authored aggressive/key route additionally reaches Escape
 stage 140 and writes a complete cave slot at 115 HP and 8/14 rounds. That slot's
 cold Continue is verified, and actual ordinary input exits at stage 150 in

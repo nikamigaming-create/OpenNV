@@ -25,6 +25,17 @@ internal sealed partial class FalloutPlayerInventory
         bool retainOwnership, bool notifyDestination)
     {
         if (ReferenceEquals(this, destination)) return;
+        var events = notifyDestination ? Items.Where(item => Removable(records, records.GetEffective(item.FormKey), player))
+            .Select(item => new FalloutHudEvent(FalloutHudEventKind.ItemAdded, item.FormKey, item.Count)).ToArray() : [];
+        destination?.Notifications.RequirePublish(events);
+        ApplyRemovalTransaction(destination, (source, target) =>
+            source.RemoveAllCore(records, player, target, retainOwnership));
+        destination?.Notifications.Publish(events);
+    }
+
+    private void RemoveAllCore(FalloutPluginStack records, bool player, FalloutPlayerInventory? destination, bool retainOwnership)
+    {
+        if (ReferenceEquals(this, destination)) return;
         // Prepare the whole transaction before publishing either inventory.
         var source = Copy();
         var target = destination?.Copy();
@@ -33,7 +44,7 @@ internal sealed partial class FalloutPlayerInventory
         {
             if (target is not null)
             {
-                source.TransferTo(target, item.FormKey, item.Count, force: true);
+                source.TransferToCore(target, item.FormKey, item.Count, null, force: true);
                 if (!retainOwnership)
                 {
                     // TransferTo merges equal variants; clear ownership only on
@@ -51,14 +62,12 @@ internal sealed partial class FalloutPlayerInventory
                 }
                 target._items[item.FormKey] = target.Item(item.FormKey)! with { UnequipLocked = destination!.Item(item.FormKey)?.UnequipLocked ?? false };
             }
-            else source.Remove(item.FormKey, item.Count, silent: true);
+            else source.RemoveCore(item.FormKey, item.Count, silent: true);
         }
         Replace(source.Capture());
         if (destination is not null)
         {
             destination.Replace(target!.Capture());
-            if (notifyDestination) destination.Notifications.Publish(removed.Select(item =>
-                new FalloutHudEvent(FalloutHudEventKind.ItemAdded, item.FormKey, item.Count)).ToArray());
         }
     }
 
@@ -81,6 +90,7 @@ internal sealed partial class FalloutPlayerInventory
 
     internal void Replace(FalloutOpeningInventoryGrant snapshot)
     {
+        RequireNoChangeInProgress();
         var validated = new FalloutPlayerInventory();
         validated.Restore(snapshot.Inventory, snapshot.EquippedRuntimeFormIds.ToArray(), snapshot.InventoryRandomState);
         _items.Clear(); foreach (var pair in validated._items) _items.Add(pair.Key, pair.Value);

@@ -4,6 +4,13 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--corpse-equipped-loot-contracts"])
+{
+    CorpseEquipmentContracts.Run(lootOnly: true);
+    WeaponHandlingContracts.Run();
+    InventoryCommandContracts.Run(projectLocal: true);
+    return;
+}
 if (args is ["--manual-save-preparation-contracts"])
 {
     StoppedPoseContracts.Run(savePreparationOnly: true);

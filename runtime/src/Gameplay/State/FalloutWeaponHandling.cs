@@ -118,9 +118,19 @@ internal sealed class FalloutWeaponHandling(FalloutPlayerInventory inventory, bo
         return true;
     }
 
-    internal FalloutWeaponHandlingSnapshot Capture() => new(Drawn,
-        _magazines.Values.Where(value => inventory.Item(value.Weapon) is not null).Select(value => value with
-        { Loaded = value.UsesInventoryAmmo ? Math.Min(value.Loaded, inventory.Item(value.Ammunition)?.Count ?? 0) : value.Loaded }).OrderBy(value => value.Weapon.ToString()).ToArray(), _shotRandom.State, _attackRandom.State);
+    internal FalloutWeaponHandlingSnapshot Capture() => Reconcile(new(Drawn,
+        _magazines.Values.OrderBy(value => value.Weapon.ToString()).ToArray(), _shotRandom.State, _attackRandom.State), inventory.Items);
+
+    internal static FalloutWeaponHandlingSnapshot Reconcile(FalloutWeaponHandlingSnapshot snapshot, IReadOnlyList<FalloutCampaignItem> items)
+    {
+        Validate(snapshot);
+        var carried = items.ToDictionary(item => item.FormKey);
+        return snapshot with
+        {
+            Magazines = snapshot.Magazines.Where(value => carried.ContainsKey(value.Weapon)).Select(value => value with
+            { Loaded = value.UsesInventoryAmmo ? Math.Min(value.Loaded, carried.GetValueOrDefault(value.Ammunition)?.Count ?? 0) : value.Loaded }).ToArray()
+        };
+    }
 
     internal void Restore(FalloutWeaponHandlingSnapshot snapshot, Func<FalloutFormKey, FalloutWeaponPresentation> resolve)
     {

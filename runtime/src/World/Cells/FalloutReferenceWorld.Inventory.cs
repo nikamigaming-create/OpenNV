@@ -79,8 +79,9 @@ internal sealed partial class FalloutReferenceWorld
         var actor = InventoryOwner(reference);
         var npc = records.GetEffective(actor.Base);
         if (npc.Signature is "NPC_" or "CREA") InitializeActorTemplates(reference, level, globals);
-        if (actor.Inventory is { } existing) return existing;
-        return actor.Inventory = SourceInventory(actor, npc, level, globals);
+        actor.Inventory ??= SourceInventory(actor, npc, level, globals);
+        BindInventoryRemoval(actor);
+        return actor.Inventory;
     }
 
     private FalloutReferenceInventory SourceInventory(FalloutReferenceInstance actor, FalloutPluginRecord npc,

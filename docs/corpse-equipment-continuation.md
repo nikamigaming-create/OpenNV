@@ -65,9 +65,30 @@ source binding, absent weapon, phantom loaded round or incompatible shared alert
 owner also refuses. `CorpseEquipmentCaptureBlocker` and the stopped-pose diagnostic
 identify the boundary. Original source/package/hit faults remain independent.
 
-Removing/replacing a presented equipped item still requires the existing actor
-inventory-change/attachment-retirement owner. This capability does not resolve
-corpse loot release or that independent source-drop behavior.
+## Settled corpse item retirement
+
+Ordinary container rows, quantities, Take All and source RemoveItem/RemoveAllItems
+share one staged inventory transaction. Every item and both owners preflight
+before inventory publication or native removal. Both actual inventories publish
+before reversible equipment commits; native destruction follows all successful
+commits. A later commit failure restores exact inventories/revisions, equipped
+variants, source faults and native attachment parents/order without a success
+notice or UI result.
+
+The native corpse must have its actual settled source ragdoll, current capture
+binding, no pending hit admission and every existing audio/effect/procedure/head
+gate. Only attachment graphs whose actual source weapon disappears retire.
+Unrelated cached weapons retain visibility and pose. Handling retires only with
+its selected source weapon; ammo-only changes use the shared Reconcile owner
+without drawing randomness, reloading or inventing carried rounds.
+
+Retained off-cell equipment follows the same source-validated reconciliation
+after native callbacks are gone and original bodies/hits/audio are settled.
+Resident, stale, pending or opaque owners refuse. Empty equipment stays empty
+through current/tree retirement/cold state; v45 needs no proxy or new schema.
+Living presented-equipment removal, partial equipped stacks and replacement/
+unequip/reset presentation remain separate boundaries. This is not drop physics,
+living weapon reselection, armor replacement or whole-loot/retail acceptance.
 
 ## Focused verification
 
@@ -117,3 +138,31 @@ Create New Save writes a complete v45 Atrium slot at Escape stage 35, 120 HP and
 equipment, cell/stage/health/ammunition. Full publication gating, ordinary
 equipped-item transfer, exterior/campaign saving, source drop semantics and
 matched retail event timing/pixels remain independent requirements.
+
+The focused transfer selector is:
+
+```powershell
+dotnet run --project .\contract-tests\ReferenceScriptContractProbe\ReferenceScriptContractProbe.csproj -- --corpse-equipped-loot-contracts
+```
+
+Pure transfer/source-command/current/cold tests pass ammo/condition/ownership,
+selective retirement, late overflow, post-publication rollback, nested mutation
+and moving/pending/opaque/partial-stack refusals.
+
+The owned native selector is:
+
+```text
+--saved-equipped-corpse-loot <owned-game-root> <mod-id> <mod-root> <complete-v45-checkpoint> <actor-plugin:hex-id> [dependencies...]
+```
+
+It starts from an already-dead genuinely saved source actor. Actual default
+activation opens the owned container and its real Take All uses the common
+inventory owner. Current/cold/child-first retirement, source RemoveItem, genuine
+finite audio, injected later-owner rollback, node/material order, pending/awake/
+opaque negatives and living removal refusal pass the selected owned component.
+Actual ordinary Take All from source 064913 transfers one police baton and one
+source armor item with other counts, 120 HP and 2/24 rounds unchanged.
+Paused Create New Save and ordinary quit/cold Continue verify the transferred
+items, original corpse fault and empty attachment/handling state without replay.
+The full required local gate and selected owned audit pass. Checked publication,
+whole loot/other equipment and matched retail/drop behavior remain independent.

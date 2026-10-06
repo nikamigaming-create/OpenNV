@@ -78,9 +78,10 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_corpseVisualBoundary is { } boundary) throw new NotSupportedException(boundary);
         if (_enemyObject is null && _packageWeapon is null && _enemyWeaponHandling is null && _deathRouteRetirement is null)
         {
-            if (_state.Engagement?.WeaponHandling is not null || _state.CorpseEquipment is not null)
+            if (_state.Engagement?.WeaponHandling is not null || _state.CorpseEquipment is { } previous &&
+                (previous.Attachments.Count != 0 || previous.HandlingWeapon is not null))
                 throw new NotSupportedException("Corpse equipment lost an already retained independent owner.");
-            return null;
+            if (_state.CorpseEquipment is null) return null;
         }
         var attachments = new List<FalloutCorpseWeaponAttachment>();
         if (_enemyObject is not null) attachments.Add(_enemyObject.CapturePersistence("combat", _records));
