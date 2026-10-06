@@ -36,6 +36,18 @@ explicit skill boundaries. Learned feedback is a bounded private evidence
 library keyed by build/source/input mode, not executable generated code or
 authoritative gameplay state.
 
+Combat membership and selected-target identity survive pursue, attack, reload,
+flee and combat-idle actions. Only retirement of the engagement, disable or
+death removes that shared ownership; an idle animation is not disengagement.
+The bot reads the same selected-target query rather than inferring membership
+from the current clip/action.
+
+Ordinary combat input prefers an actual mapped mouse alternative when present.
+It never replaces a source binding with a hard-coded button. Side-specific
+keyboard-only bindings currently refuse because the existing bot key lease
+does not preserve physical location; a left/right modifier is not delivered
+as an unspecified key. Plain source keyboard bindings remain supported.
+
 Model-less internal STAT markers use their real source node and placement as
 travel points. They do not invent visible geometry, an activation contact or an
 actor proxy. Native support/capsule/NAVM requirements remain unchanged.
