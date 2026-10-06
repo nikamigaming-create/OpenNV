@@ -7,8 +7,9 @@ namespace OpenNV.Runtime.World.Actors;
 
 // Both the player and native NPCs attach the equipped source object to their
 // existing skeleton. There is no second character or dropped-object physics.
-internal sealed class NativeActorWeaponAttachment
+internal sealed partial class NativeActorWeaponAttachment
 {
+    internal FalloutWeaponPresentation Weapon { get; }
     internal BoneAttachment3D Attachment { get; }
     internal Node3D Root { get; }
     internal Node3D[] Nodes { get; }
@@ -20,11 +21,13 @@ internal sealed class NativeActorWeaponAttachment
     internal NativeActorWeaponAttachment(FalloutWeaponPresentation weapon, RuntimeNativeNifSkeleton skeleton,
         RuntimeLiveContentSource content)
     {
+        Weapon = weapon;
         _units = skeleton.UnitsToMetres;
         var model = weapon.Model ?? throw new NotSupportedException("This weapon is embedded in its source actor skeleton and cannot attach as an inventory model.");
         var path = model.ModelPath ?? throw new InvalidDataException("Equipped weapon has no source model.");
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
         var source = FalloutNifFile.Read(bytes);
+        _modelResource = path; _modelSha256 = source.Sha256;
         var targets = source.Blocks.Where(block => block.TypeName is "NiNode" or "NiTriShape" or "NiTriStrips")
             .Select(block => source.ReadObject(block.Index) is FalloutNifNode node ? node.Name : source.ReadGeometry(block.Index).Name).ToHashSet(StringComparer.Ordinal);
         Root = RuntimeNativeNifMeshBuilder.Build(source, _units, externalTransformTargets: targets, contentSource: content).Root;
@@ -34,6 +37,7 @@ internal sealed class NativeActorWeaponAttachment
             Attachment = new() { Name = "EquippedWeapon", BoneName = "Weapon" };
             skeleton.Node.AddChild(Attachment); Attachment.AddChild(Root);
             Nodes = Root.FindChildren("*", "", true, false).OfType<Node3D>().ToArray();
+            _sourceNodes = Root.FindChildren("*", "", true, false).ToArray();
             Targets = Nodes.Select(node => node.GetMeta("opennv_nif_source_name", "").AsString()).ToHashSet(StringComparer.Ordinal);
             BindBodyAttachments(source, skeleton);
             Root.VisibilityChanged += () =>

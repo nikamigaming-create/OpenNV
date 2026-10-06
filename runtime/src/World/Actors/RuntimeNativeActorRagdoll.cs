@@ -30,6 +30,10 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     internal bool CaptureReady => _active && (_state.CaptureRagdoll == Capture ||
         _retiredCapture is not null && ReferenceEquals(_state.Ragdoll, _retiredCapture));
     internal bool Settled => _active && _bodies.All(body => body.Node.Sleeping);
+    internal IReadOnlyList<(string Name, FalloutNifTransformComponents Covered)> PoseCoverage =>
+        Enumerable.Range(0, _skeleton.Node.GetBoneCount()).Select(index =>
+            (_skeleton.Node.GetBoneName(index).ToString(), _bodies.Any(body => body.Bone == index) ?
+                FalloutNifTransformComponents.All : FalloutNifTransformComponents.None)).ToArray();
     internal Transform3D TorsoTransform
     {
         get

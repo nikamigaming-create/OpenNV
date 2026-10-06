@@ -11,8 +11,8 @@ percentage follows from component checks or record counts.
 
 ## Verified state
 
-Checked PR 153 is merged with all five checks passing. Main/origin synchronized
-at 2840e1c before the fresh codex/complete-paused-save-and-exit branch.
+Checked PR 154 is merged with all five checks passing. Main/origin synchronized
+at d16047b before the fresh codex/post-combat-exterior-save branch.
 The published independent image-space clock, model-less HDPT admission,
 stack-owned cold head resources and native finite-completion window retain
 their selected owned-data and full required gate evidence.
@@ -38,6 +38,30 @@ b7c950fc1cf74e3887d950839a27f150 at Escape stage 18 in CELL 024511, 120 HP and
 SHA256: 9E222EC09C362B79377333CCC4C881B4C5C235D7450B7E873A7A53B31815C13F.
 Actual F5 also writes separate complete slot 3a32b6a31c004f84b6c01d63b73f1fb3.
 SHA256: 928CD7AC80A44E85009D17A54AF0A6480F487C013C40AE0AA4D79AA6556AB535.
+
+The general corpse equipment continuation now retains the actually presented
+source weapon graph, handling, residual pose and original death-route retirement
+without drops or capture exemptions. Pure current/cold/conservation/retirement
+contracts and the original guard's eighteen-body native current/cold component
+pass. Actual ordinary source movement/combat defeats both 06490e and 064913,
+then paused Create New Save commits complete v45 slot
+ccaf9f6be7bb4220bbd5b1847f842cb6 at Escape stage 35 in CELL 024511, 120 HP and
+2/24 rounds. Ordinary quit and cold Continue verify both original dead guards,
+native equipment without errors, cell/stage/health and exact loaded/reserve ammo.
+SHA256: FF60BAB249DE3D16F1DF8C0975D7B8BD3D5F9BBB0F0FF55F9BF06051FB35E7AB.
+The live resident's independent IDLE is already admitted under the real prepared
+audio lease; ordinary pause alone is not a finite-completion receipt.
+
+Subsequent ordinary aim/fire defeats the source Overseer at 115 HP, and the
+actual corpse UI transfers only the offered office key and terminal password.
+Ordinary source navigation opens the office door, reaches its terminal, traverses
+the tunnel and activates the original vault control panel to reach Escape
+stage 140 in CELL 024512. The terminal's consumed nested GetDetected failure
+remains retained, not replayed or treated as a working conversation branch.
+Paused Create New Save writes complete v45 cave slot
+8d5b7e5dbccf4554b357c80811354405 at 115 HP and 8/14 rounds.
+SHA256: 7B4D9B56E28E87D2591F414F9A56FE29D43AE6D552BF5B4076B5C2948448B513.
+The cave slot's ordinary cold Continue and exterior progression are next.
 
 One actually ended pending original ForceSave can precede the manual slot
 under the same exact quiescent preparation lease. Pure contracts and 21 native
@@ -66,12 +90,13 @@ consumed effects and failures cannot be cleared or replayed.
 
 ## Current divergence owners
 
-The actual post-security paused save refuses actor-procedure capture for live
-resident 0569b4 and dead guard 064913. The resident's independent IDLE/source
-capture needs exact native diagnosis. The corpse retains a combat route search,
-presented weapon and native weapon handling without a cold equipment owner.
-Neither failure is waived. The primary owns resident diagnosis and live input;
-an isolated worker owns general corpse equipment/actual death-route persistence.
+The source post-security save and cold continuation now succeed. Live actor
+conversation/source queries still stop at the original unowned GetDetected
+expression; no predicate value or consumed prefix is invented. The authored
+aggressive/key route progresses independently without a conversation claim.
+Equipped corpse
+Take All/item removal still needs its settled attachment/handling retirement
+owner. An isolated worker owns that tightly coupled transfer capability.
 
 The source-bound whole-vault audit retains all 7,155 winning references across
 ten selected interiors and restores the unchanged complete checkpoint against
@@ -84,15 +109,28 @@ Whole conversations, sensory predicates, Flee/NPC portal behavior, modeled
 lights and full package/IDLE owners remain open. Compiled SCDA, level allocation,
 unchanged native DLL execution and original mod outcomes are not established.
 Actual authored movie playback depends on FFprobe/FFmpeg from PATH; an isolated
-portable-decoder worker owns application-relative resolution/export wiring.
+portable-decoder proposal has checked application-relative/export contracts but
+is not integrated. Vetted binaries/licensing and actual exported acceptance
+remain necessary.
 No clean-system FO3/FNV/TTW New Game acceptance is claimed.
 
 ## Next owner and outcome
 
 Primary owns serial builds/native checks, ordinary input and publication.
-Publish the checked complete-save/linked-terminal/independent actor-query slices
-after the selected owned audits and full required gate. Resolve exact resident
-and corpse continuations, replay the genuine exit, inspect expiry of the
+Publish the checked corpse continuation after the selected owned audits and
+full required gate. A new campaign attempt now scopes stale reference-skill
+errors to its own issued actions; source activation evidence reads actual
+original/XLKR-selected animation effects, not stage changes or ticking clocks.
+Pure and unchanged owned native control-selection checks pass; ordinary
+continued campaign proof remains necessary. The combined corpse,
+source-bot and telemetry cadence candidate now passes the full required
+Release/Debug, formatting/analyzers, contracts, launcher and native gate.
+A forced snapshot previously collided with an already-due periodic publication;
+the shared unchanged 250 ms cadence now resets on each accepted snapshot and
+uses the post-dispatch clock. Three native input regressions retain zero
+publication losses; genuine I/O/deadline failures remain visible.
+Complete ordinary equipped-item retirement, resolve reached source query
+owners and replay the genuine exit, inspect expiry of the
 original ten-second eye effect and cold-verify a complete exterior save.
 Complete the whole source room/loot/inventory/door denominator before onward
 Megaton and authored train/Mojave claims. Reuse retained first-party proposals
@@ -102,7 +140,8 @@ required after packaging capability checks.
 ## Private continuation
 
 Run: tmp/development-lab/ttw-bot-health-20261006. No game is currently running.
-Resume through ordinary Continue from the new complete Atrium slot; preserve
+Resume through ordinary Continue from the new complete cave slot and verify
+its cold state before onward input; preserve
 every immutable slot and failed request receipt. The original canonical v43
 slot 5f9792be93bb43319f7672eb74787dd6 in
 tmp/development-lab/ttw-post-goat-checkpoint-20261004 remains intact at Escape

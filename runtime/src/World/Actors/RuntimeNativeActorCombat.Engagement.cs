@@ -258,6 +258,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _ExitTree()
     {
+        RetainCorpseEquipment();
         RetainStoppedPoseReadiness();
         if (_state.StopCombat == StopCombat) _state.StopCombat = null;
         if (_state.QuerySpatialPlacement == CaptureSpatialPlacement) _state.QuerySpatialPlacement = null;

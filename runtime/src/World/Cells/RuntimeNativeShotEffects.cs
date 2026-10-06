@@ -36,6 +36,8 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
     private long _casings, _impacts;
     private object? _lastCasing, _lastImpact, _lastProjectile;
     private string? _decalError;
+    internal bool CaptureReady => _effects.Count == 0 && _projectiles.Count == 0 && _projectileErrors == 0 &&
+        _decals?.Count is not > 0 && _sounds.CanCaptureSilent && _decalError is null;
     internal object State => new
     {
         casings = _casings,

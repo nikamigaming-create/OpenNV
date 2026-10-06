@@ -60,7 +60,9 @@ public partial class RuntimeCoordinator
     {
         var world = _nativeReferences ?? throw new InvalidOperationException("Reference world is not active.");
         var state = world.Get(reference);
-        var target = JsonSerializer.Serialize(new { state.Taken, state.DoorOpen, state.Deleted, state.Destroyed });
+        var linked = world.GetLinkedRef(reference);
+        var target = BotInteractionSourceState.StableEffects(NativeBotSourceState(state),
+            linked is { } linkedReference ? NativeBotSourceState(world.Get(linkedReference)) : null);
         var settledPortal = _botPortalDestinations.TryGetValue(reference, out var destination) &&
             _nativeActiveCell?.Cell.FormKey == destination && !NativeBotLoading(world) &&
             _nativePlayer?.CollisionResident == true;
@@ -77,6 +79,12 @@ public partial class RuntimeCoordinator
             settledPortal && outcome == "portal:" + destination ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
             requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other);
     }
+
+    internal static BotInteractionSourceState NativeBotSourceState(FalloutReferenceInstance state) =>
+        new(state.Reference.ToString(), state.Taken, state.DoorOpen, state.Deleted, state.Destroyed,
+            (state.CaptureObjectAnimations?.Invoke() ?? state.ObjectAnimations ?? [])
+                .Select(animation => new BotInteractionAnimationState(animation.Controller, animation.Sha256,
+                    animation.Sequence, animation.ElapsedSeconds, animation.StartPending, animation.PendingSequence)).ToArray());
 
     private bool ApplyNativeBotSimulatorInput(SteeringIntent intent, bool activate)
     {

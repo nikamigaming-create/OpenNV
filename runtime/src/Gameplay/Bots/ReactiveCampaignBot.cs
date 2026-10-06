@@ -132,8 +132,10 @@ internal sealed class ReactiveCampaignBot
             if (_progress >= 0) ++_verifiedSegments;
             _progress = observation.Progress; _idle = 0;
         }
-        if (skill.Error is { } skillError)
+        if (_goal is not null && skill.Error is { } skillError)
             return Fail(skill.FailureKind ?? "bot-policy", skillError, !observation.Paused);
+        if (_goal is null && skill.Active)
+            return Fail("input-owner", "An active reference skill belongs to a different campaign attempt.", !observation.Paused);
         if (skill.Active) { Phase = "executing-skill"; return new(BotCampaignCommandKind.None); }
         if (observation.Paused && observation.Choices.Count == 0)
         { Phase = "paused"; return new(BotCampaignCommandKind.None); }

@@ -96,6 +96,7 @@ internal sealed class FalloutActorRetirementCandidate
     // All presentation capture callbacks must have retired before a candidate
     // can wait or commit. No old native callback is invoked to infer readiness.
     private bool ModelCapturesRetired => _state.CaptureEngagement is null && _state.CaptureRagdoll is null &&
+        _state.CaptureCorpseEquipment is null && _state.CanCaptureCorpseEquipment is null &&
         _state.CaptureHeadTracking is null && _state.CapturePackageAssignment is null &&
         _state.CaptureFurniture is null && _state.CaptureDialogue is null && _state.CapturePendingPackageSelection is null &&
         _state.CaptureObjectAnimations is null && _state.QuerySpatialPlacement is null &&
@@ -121,7 +122,9 @@ internal sealed class FalloutActorRetirementCandidate
         _state.HitReaction,
         _state.HitReactionFaultCaptureBlocker,
         _state.Engagement,
-        _state.Ragdoll,
+        ragdoll = _state.CaptureRagdoll is null ? _state.Ragdoll : _snapshot.Ragdoll,
+        corpseEquipment = _state.CaptureCorpseEquipment is null ? _state.CorpseEquipment : _snapshot.CorpseEquipment,
+        _state.CorpseEquipmentCaptureBlocker,
         animation = _state.Animation.Capture(),
         _state.PackageAssignment,
         _state.PackageMotion,

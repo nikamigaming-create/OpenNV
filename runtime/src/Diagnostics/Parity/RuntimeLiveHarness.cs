@@ -29,7 +29,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     private ulong _nextRequest = 1;
     private string? _commandReadFailure;
     private ulong _pendingCapture;
-    private ulong _lastStateMilliseconds;
+    private readonly LiveHarnessPublicationCadence _statePublicationCadence = new();
     private ulong _lastStopWrite;
     private LiveHarnessFrameBuffer? _liveFrames;
     private RuntimeRenderTrace? _trace;
@@ -181,9 +181,10 @@ internal sealed partial class RuntimeLiveHarness : Node
         try { _pumpBotInput?.Invoke(); }
         catch (Exception error) when (error is IOException or InvalidOperationException)
         { _bot?.Fail("Simulator input transport failed: " + error.Message, "input-adapter"); }
-        if (now - _lastStateMilliseconds >= 250)
+        var publicationNow = Time.GetTicksMsec();
+        if (_statePublicationCadence.Due(publicationNow))
         {
-            _lastStateMilliseconds = now;
+            _statePublicationCadence.Scheduled(publicationNow);
             PublishState();
         }
     }
@@ -523,6 +524,7 @@ internal sealed partial class RuntimeLiveHarness : Node
                 LastRetryFailure = cleared.LastRetryFailure ?? written.LastRetryFailure
             };
         });
+        _statePublicationCadence.Scheduled(Time.GetTicksMsec());
         _lastStateWriteMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
 

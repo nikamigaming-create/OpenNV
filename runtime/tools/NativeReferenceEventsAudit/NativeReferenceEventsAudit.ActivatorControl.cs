@@ -4,13 +4,14 @@ using Godot;
 using OpenNV.Runtime;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.Bots;
 using OpenNV.Runtime.SceneGraph;
 using OpenNV.Runtime.World.Cells;
 
 public partial class NativeReferenceEventsAudit
 {
     private void ExerciseOwnedActivatorControl(string gameRoot, string mod, string modRoot,
-        string controlSelector, string targetSelector, string[] dependencies)
+        string controlSelector, string targetSelector, string[] dependencies, bool selectionOnly = false)
     {
         var installation = new FalloutModStackSelection([new(mod, modRoot, dependencies)]).Resolve(gameRoot);
         RuntimeLiveContentSource.Configure(gameRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
@@ -25,8 +26,9 @@ public partial class NativeReferenceEventsAudit
         Require(world.Get(control).Cell == world.Get(target).Cell, "Selected source control and ACTI belong to different cells.");
         var sourceCell = FalloutCellSceneReader.Read(records, world.Get(control).Cell);
         var references = sourceCell.References.Where(reference => reference.FormKey == control || reference.FormKey == target).ToArray();
-        Require(references.Length == 2 && references.All(reference => sourceCell.BaseObjects[reference.Base].Signature == "ACTI"),
-            "Selected native control requires two real source ACTI placements.");
+        Require(references.Length == 2 && sourceCell.BaseObjects[world.Get(control).Base].Signature == "ACTI" &&
+            sourceCell.BaseObjects[world.Get(target).Base].Signature is "ACTI" or "DOOR",
+            "Selected native control requires real source ACTI and linked ACTI/DOOR placements.");
         var cell = sourceCell with { References = references };
         world.LoadCell(cell);
         Require(world.Get(control).Script is not null && world.Get(target).Script is not null,
@@ -121,9 +123,31 @@ public partial class NativeReferenceEventsAudit
             Require(direct.Error is null && direct.Blocks == 1 && messagesObserved == 1 && defaults == 0 &&
                 world.Get(target).DoorMotion?.OpenState == 3 && Pose(targetNode) == closedPose,
                 $"Actual target script did not suppress player default activation: {direct.Error}");
+            BotInteractionSnapshot ObserveControl() => new(BotInteractionSourceState.StableEffects(
+                RuntimeCoordinator.NativeBotSourceState(world.Get(control)),
+                RuntimeCoordinator.NativeBotSourceState(world.Get(target))), null, []);
+            var interaction = new BotInteractionEvidence();
+            interaction.Begin(control.ToString(), ObserveControl());
             var activation = scripts.Activate(control, player);
+            interaction.End(control.ToString(), ObserveControl(), activation.Error is null);
+            interaction.Finish(control.ToString(), activation.Error is null);
             Require(activation.Error is null && activation.Blocks == 1 && stagesObserved == 1 && defaults == 0 &&
                 live.Presentation.IsAnimPlaying(control, null), $"Actual control did not enter its authored animation: {activation.Error}");
+            Require(interaction.Observe(control.ToString(), ObserveControl()) == 1,
+                "The source bot did not observe the actual control's original animation-selection effect.");
+            if (selectionOnly)
+            {
+                for (var index = 0; index < sources.Length; index++)
+                    Require(Convert.ToHexString(SHA256.HashData(sources[index].ReadData())) == hashes[index],
+                        "Owned control-selection evidence changed its source bytes.");
+                Require(interaction.Observe(control.ToString(), ObserveControl()) == 1 &&
+                    interaction.Observe(target.ToString(), ObserveControl()) == 0,
+                    "Owned control-selection evidence repeated or changed its exact caller.");
+                GD.Print($"OPENNV_OWNED_CONTROL_SELECTION_PASS control={control} target={target} " +
+                    "actualNativeSourceSelection=true linkedSource=true exactCaller=true sourceUnchanged=true " +
+                    "stageEffects=observed-only delayedRelaysAndWholeDoor=unverified fixture=true recording=false");
+                return;
+            }
             var waiting = scripts.Dispatch(control, "GameMode");
             Require(waiting.Error is null && defaults == 0 && !world.Get(target).DoorOpen,
                 "Control opened its ACTI before the actual native animation completed.");
@@ -147,6 +171,8 @@ public partial class NativeReferenceEventsAudit
             Require(scripts.Dispatch(control, "GameMode").Error is null && effects.Count == effectCount &&
                 controlState == JsonSerializer.Serialize(world.Get(control).Capture()), "Consumed control result repeated its linked activation.");
             controller._Process(controller.FiniteEffectDuration / 2); motion.Synchronize();
+            Require(interaction.Observe(control.ToString(), ObserveControl()) == 1,
+                "Later source animation clocks or linked-door progression published duplicate activation evidence.");
             var midpoint = Pose(targetNode); var midpointClock = JsonSerializer.Serialize(controller.CaptureScriptState());
             live.Events.ScriptActivate(target, target, false);
             Require(midpointClock == JsonSerializer.Serialize(controller.CaptureScriptState()), "Repeated self default restarted an active owned ACTI clock.");

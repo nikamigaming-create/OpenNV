@@ -9,8 +9,11 @@ The stopped corpse owner requires a completed native ragdoll capture and keeps
 combat history, death state, source-event prefixes and clocks. Child-first tree
 retirement captures readiness before native delegates disappear. Its stopped
 AI root retains the actual raw basis rather than reconstructing it through a
-quaternion. Independent corpse weapon handling and unsettled physical owners
-remain refused. A living stopped actor currently admits only a captured,
+quaternion. [Existing corpse equipment](corpse-equipment-continuation.md) now
+retains source-bound current attachments, residual anchor bones and actual native
+weapon handling through save v45 without selecting, reloading, hiding or dropping
+items. Unowned equipment channels, finite sounds, pending attack effects and
+independent physical owners still refuse. A living stopped actor currently admits only a captured,
 stationary, source-bound combat idle when that independent owner is active.
 
 An occupied source furniture package can have its own collection IDLE over the

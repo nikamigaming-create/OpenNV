@@ -5,6 +5,24 @@ using System.Security.Cryptography;
 NativeReferenceObservationProbe.Run();
 RecordedInputProbe.Run();
 
+var publicationCadence = new LiveHarnessPublicationCadence();
+if (publicationCadence.Due(249) || !publicationCadence.Due(250))
+    throw new InvalidOperationException("Live-state publication changed its exact 250 ms interval.");
+publicationCadence.Scheduled(250);
+publicationCadence.Scheduled(499);
+if (publicationCadence.Due(500) || publicationCadence.Due(748) || !publicationCadence.Due(749))
+    throw new InvalidOperationException("A forced publication failed to reset the periodic snapshot's interval.");
+foreach (var clock in new[] { 0UL, 498UL })
+{
+    var refused = false;
+    try { publicationCadence.Due(clock); } catch (InvalidDataException) { refused = true; }
+    if (!refused) throw new InvalidOperationException("Publication clock regression became a wrapped deadline.");
+}
+var scheduleRefused = false;
+try { publicationCadence.Scheduled(498); } catch (InvalidDataException) { scheduleRefused = true; }
+if (!scheduleRefused) throw new InvalidOperationException("Publication scheduling accepted a regressed clock.");
+Console.WriteLine("OPENNV_PUBLICATION_CADENCE_CONTRACT_PASS intervalMilliseconds=250 forcedSnapshotResets=true currentClock=true regressionVisible=true pendingWriterFaultUnchanged=true");
+
 var traceDirectory = Path.Combine(Path.GetTempPath(), "opennv-trace-contract-" + Guid.NewGuid().ToString("N"));
 try
 {

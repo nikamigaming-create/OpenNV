@@ -308,3 +308,12 @@ unknown failures still refuse and enter the loss counter. A failed replacement
 keeps the prior complete snapshot and pending payload. The separate failure
 marker retires only after a new snapshot publishes successfully. Its own
 publication failure is logged explicitly.
+
+Every accepted snapshot, including an explicit input/state observation, resets
+the same 250 ms publication cadence. The native loop reads the current
+monotonic clock after command dispatch rather than reusing its earlier frame
+timestamp. A forced snapshot therefore cannot immediately collide with a
+periodic write that was already due. Exact 249/250 ms and reset boundaries,
+clock-regression refusal and native recorded-input runs with zero publication
+losses cover this owner. Genuine still-pending writer deadlines, atomic I/O
+failures and loss reporting remain unchanged.

@@ -60,6 +60,24 @@ Missing source/input/query/capture owners stop visibly. Death requires an
 ordinary complete-checkpoint load; automatic recovery and general character
 creation/all-menu policies remain incomplete.
 
+A new campaign attempt owns reference-skill feedback only after issuing its
+first reference action. A stopped failed manual or earlier attempt cannot block
+that fresh source decision. An already active foreign skill still refuses
+ownership, and current authoritative execution faults and failures of an issued
+campaign skill remain stopping errors.
+
+An activation result observes stable state and selected controller sequences
+on both the original reference and its actual source XLKR target. Controls can
+therefore acknowledge a real linked door/animation request without inventing
+state on the panel itself. Elapsed clocks, start markers and quest-stage changes
+are not outcomes; later unrelated mutations and failed activation prefixes
+remain unaccepted.
+
+The native `--activator-control-selection` audit exercises the original control
+and XLKR gear with real source models/controller selection and the same state
+projection as live input. It establishes an acknowledged animation-selection
+effect, not completed delayed relays, door collision or campaign progression.
+
 Stop requests, external input and input playback/recording handoffs release
 campaign/skill ownership. Physical-headset automation is refused; flat and the
 existing simulator adapter keep their separate ordinary input boundaries.

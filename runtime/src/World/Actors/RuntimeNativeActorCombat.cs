@@ -38,6 +38,9 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         bodyTarget = ObserveBodyTarget(),
         injury = _state.Injury,
         ragdoll = _ragdoll?.Observation,
+        corpseEquipment = _state.CorpseEquipment,
+        corpseEquipmentError = _state.CorpseEquipmentCaptureBlocker,
+        corpseRouteRetirement = _deathRouteRetirement,
         gore = _goreEffects?.State,
         lastSeverEffect = _lastSeverEffect,
         goreError = _goreError,
@@ -48,7 +51,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         beamPresentationError = _beamPresentationError,
         engagement = EngagementObservation,
         hitReaction = HitReactionObservation,
-        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,forced-hit-reactions,combat-AI-tactics,confidence-threat-ratios,target-priority,hit-script-events,death-XP,exploded-limbs"
+        unbound = "critical,sneak,conditional-resistance-modifiers,armor-wear,forced-hit-reactions,combat-AI-tactics,confidence-threat-ratios,target-priority,hit-script-events,death-XP,exploded-limbs,source-corpse-weapon-drop-and-dynamic-equipment"
     };
 
     internal static RuntimeNativeActorCombat Attach(Node3D actor, RuntimeNativeNifSkeleton skeleton, string skeletonPath,
@@ -89,6 +92,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         _state.StopCombat = StopCombat;
         _hitReactionError = _state.CurrentHitReactionError;
         _state.CaptureEngagement = CaptureEngagement;
+        _state.CanCaptureCorpseEquipment = CorpseEquipmentCaptureReady;
+        _state.CaptureCorpseEquipment = CaptureCorpseEquipment;
         RestorePackageMotion();
         RestoreEngagementPose();
         // A cold cell enters the tree with this owner already attached. Its
@@ -102,7 +107,12 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         if (!IsInsideTree() || IsQueuedForDeletion()) return;
         if (Dead && _deathPresentationAttempted) return;
         if (Dead) _deathPresentationAttempted = true;
-        try { PrepareDeath(); if (Dead) BeginDeath(); else BeginKnockdown(); }
+        try
+        {
+            PrepareDeath();
+            if (Dead) { RestoreCorpseEquipment(); BeginDeath(); }
+            else BeginKnockdown();
+        }
         catch (Exception error) { Error = error.Message; GD.PushError($"OPENNV_ACTOR_DEATH_UNBOUND reference={_state.Reference} {Error}"); }
     }
 
@@ -224,12 +234,14 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private void BeginDeath()
     {
         _deathPresentationAttempted = true;
+        RetireDeathPursuit();
         _state.KnockedDown = false;
         _state.HitReaction = null;
         _hitReactionClip = null;
         foreach (var area in _actor.FindChildren("*", "Area3D", true, false).OfType<Area3D>())
             if (area.HasMeta("opennv_nif_collision_bone")) GamebryoReferenceEnableRuntime.SetCollisionFilter(area, 0, 0);
         _ragdoll!.Activate();
+        _corpseEquipmentRestored = true;
     }
 
     internal static RuntimeNativeActorCombat? Find(Node? collider)

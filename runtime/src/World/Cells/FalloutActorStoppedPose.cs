@@ -14,7 +14,7 @@ internal static class FalloutActorStoppedPose
             throw new InvalidDataException("Stopped AI has an unowned knockdown or hit-reaction composition.");
         if (snapshot.Injury?.Dead == true && snapshot.Ragdoll is null)
             throw new InvalidDataException("Stopped dead AI requires its complete physical corpse capture.");
-        if (snapshot.Injury?.Dead == true && snapshot.Engagement?.WeaponHandling is not null)
+        if (snapshot.Injury?.Dead == true && snapshot.Engagement?.WeaponHandling is not null && snapshot.CorpseEquipment is null)
             throw new NotSupportedException("Stopped corpse weapon handling requires its independent attachment continuation.");
         if (snapshot.Injury?.Dead != true && snapshot.Engagement is { } engagement &&
             (engagement.Action != "idle" || engagement.StartPending || engagement.Animation is null ||

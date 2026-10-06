@@ -10,6 +10,7 @@ internal partial class RuntimeNativeNpc
     private Func<bool>? _bindingFailureReady;
     private Func<FalloutActorPackageBindingFailure>? _bindingFailureCapture;
     private Func<IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>?>? _bindingFailureWait;
+    private Func<FalloutActorPackageBindingCaptureDiagnostic>? _bindingFailureDiagnostic;
     private bool _baseLocomotionMoving;
 
     private bool CanCaptureBindingFailure() => CanCaptureBindingFailure(allowFiniteSoundWait: false);
@@ -24,6 +25,48 @@ internal partial class RuntimeNativeNpc
         (_animation is null || CanCaptureStoppedIndependentIdle(allowFiniteSoundWait)) && !_responseIdleActive && AnimationError is null &&
         _conversationTarget is null && CanCaptureStoppedAiPose(allowFiniteSoundWait) &&
         _baseClock.Resource.Length != 0;
+
+    private FalloutActorPackageBindingCaptureDiagnostic ReadBindingCaptureDiagnostic(bool retired = false)
+    {
+        var blockers = new List<FalloutActorCaptureBlocker>();
+        void Refuse(bool condition, string predicate, string? detail = null)
+        {
+            if (condition) blockers.Add(new("npc-binding", predicate, detail));
+        }
+        Refuse(_aiReferenceState is null, "reference-instance-missing");
+        Refuse(_selectionCaptureBlocker is null, "binding-blocker-missing");
+        Refuse(_aiReferenceState?.ProcedureCaptureBlocker != _selectionCaptureBlocker, "procedure-blocker-binding");
+        Refuse(_aiError is null, "binding-error-missing");
+        Refuse(_failedPackage is null || _failedPackage != _selectedSourcePackage, "failed-source-package-binding");
+        Refuse(_requestedSelection is not null, "requested-selection");
+        Refuse(_pendingPackage is not null, "pending-package");
+        Refuse(_aiPackage is not null, "active-package");
+        Refuse(_packageEvents is null, "package-events-missing");
+        if (_packageEvents is { } events)
+        {
+            Refuse(events.Active is not null, "active-package-event");
+            Refuse(events.Done, "completed-package-event");
+            Refuse(events.Error is not null, "package-event-error", events.Error);
+        }
+        Refuse(_packageIdleSource is null || _packageIdles is null, "idle-collection-missing");
+        Refuse(_sitting != 0, "sitting");
+        Refuse(_furnitureApproaching, "furniture-approach");
+        Refuse(_travelActive || _travelProgress?.ArrivalPending == true, "travel-continuation");
+        Refuse(_escortPackage is not null || _editorTravel is not null || _dialoguePackage is not null || _patrol is not null,
+            "independent-package-continuation");
+        Refuse(_animation is not null && !CanCaptureStoppedIndependentIdle(), "independent-idle",
+            $"owner={_idleOwner ?? "none"} complete={_idlePlayback?.Complete} objects={_animationObjects.Count} weapon={Combat?.AnimationWeapon is not null} finiteReady={CanCaptureStoppedIndependentIdle(allowFiniteSoundWait: true)} " +
+            $"baseMoving={_baseLocomotionMoving} independentPose={HasIndependentStoppedPose} combatPose={Combat?.OwnsPose == true} baseAnimation={_baseAnimation is not null} idle={_idleForm} data={_idleData is not null} revision={_idleRevision} " +
+            $"resource={_idleAnimationResource} hash={_idleAnimationSha256 is not null} silent={_animationSounds?.CanCaptureSilent} finite={_animationSounds?.CanAwaitFiniteCompletion}");
+        Refuse(_responseIdleActive, "response-idle");
+        Refuse(AnimationError is not null, "animation-error", AnimationError);
+        Refuse(_conversationTarget is not null, "conversation-target");
+        Refuse(!CanCaptureStoppedAiPose(), "independent-pose");
+        Refuse(_baseClock.Resource.Length == 0, "base-clock-missing");
+        return new(_aiReferenceState?.Reference ?? Appearance.Reference!.Value, GetInstanceId(),
+            CanCaptureBindingFailure(), CanCaptureBindingFailure(allowFiniteSoundWait: true), retired,
+            _failedPackage, blockers.AsReadOnly(), ReadStoppedPoseCaptureDiagnostic());
+    }
 
     private FalloutActorPackageBindingFailure CaptureBindingFailure() => CaptureBindingFailure(allowFiniteSoundWait: false);
     private FalloutActorPackageBindingFailure CaptureBindingFailure(bool allowFiniteSoundWait)
@@ -55,6 +98,8 @@ internal partial class RuntimeNativeNpc
         state.CanCapturePackageBindingFailure = _bindingFailureReady = CanCaptureBindingFailure;
         state.CapturePackageBindingFailure = _bindingFailureCapture = CaptureBindingFailure;
         state.PendingPackageBindingFiniteVoices = _bindingFailureWait = BindingFailureFiniteSoundWait;
+        state.RetiredPackageBindingCaptureDiagnostic = null;
+        state.ObservePackageBindingCapture = _bindingFailureDiagnostic = () => ReadBindingCaptureDiagnostic();
     }
 
     private void RestoreBindingFailure(FalloutActorPackageBindingFailure failure)
@@ -103,6 +148,7 @@ internal partial class RuntimeNativeNpc
         if (_aiReferenceState is not { } state) return;
         var authoritative = ReferenceEquals(state.CanCapturePackageBindingFailure, _bindingFailureReady) &&
             ReferenceEquals(state.CapturePackageBindingFailure, _bindingFailureCapture);
+        if (authoritative) state.RetiredPackageBindingCaptureDiagnostic = ReadBindingCaptureDiagnostic(retired: true);
         if (authoritative && CanCaptureBindingFailure())
         {
             state.PackageBindingFailure = CaptureBindingFailure();
@@ -119,5 +165,7 @@ internal partial class RuntimeNativeNpc
             state.PendingPackageBindingFiniteVoices = null;
         if (ReferenceEquals(state.CapturePackageBindingFailure, _bindingFailureCapture))
             state.CapturePackageBindingFailure = null;
+        if (ReferenceEquals(state.ObservePackageBindingCapture, _bindingFailureDiagnostic))
+            state.ObservePackageBindingCapture = null;
     }
 }

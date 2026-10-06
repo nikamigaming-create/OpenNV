@@ -51,10 +51,10 @@ public partial class NativeActorPerformanceAudit : Node
             }
             if (args is [var corpseMode, var corpseGame, var corpseMod, var corpseRoot,
                 var corpsePath, var corpseActor, var corpseAttacker, .. var corpseDependencies] &&
-                corpseMode is "--saved-stopped-corpse" or "--saved-pending-corpse")
+                corpseMode is "--saved-stopped-corpse" or "--saved-pending-corpse" or "--saved-equipped-corpse")
             {
                 await SavedStoppedCorpse(corpseGame, corpseMod, corpseRoot, corpsePath, corpseActor, corpseAttacker, corpseDependencies,
-                    pendingSelection: corpseMode == "--saved-pending-corpse");
+                    pendingSelection: corpseMode == "--saved-pending-corpse", equipmentContinuation: corpseMode == "--saved-equipped-corpse");
                 GetTree().Quit(); return;
             }
             if (args is ["--saved-actor-checkpoint", var savedGame, var savedMod, var savedRoot,

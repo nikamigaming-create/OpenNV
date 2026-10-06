@@ -85,6 +85,9 @@ public partial class NativeRecordedInputAudit : Node
                 while (!LiveHarnessAtomicFile.TryRead(statePath, out text, out _))
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 using var state = JsonDocument.Parse(text);
+                Require(state.RootElement.GetProperty("statePublicationFailures").GetInt64() == 0 &&
+                    !File.Exists(Path.Combine(directory, "state-error.json")),
+                    "Forced recorded-input observation collided with its periodic publication or concealed telemetry loss.");
                 return state.RootElement.GetProperty("recordedInput").GetProperty("playback").Clone();
             }
             var limit = Time.GetTicksMsec() + 5000;

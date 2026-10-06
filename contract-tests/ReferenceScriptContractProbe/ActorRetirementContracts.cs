@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
 internal static class ActorRetirementContracts
@@ -61,6 +62,63 @@ internal static class ActorRetirementContracts
             Bindings[index].Dispose();
         }
         public void Dispose() { foreach (var binding in Bindings) binding.Dispose(); World.Dispose(); }
+    }
+
+    internal static void Corpse(FalloutPluginStack records)
+    {
+        using var fixture = new Fixture(records, selection: false);
+        var state = fixture.State;
+        _ = fixture.World.Inventory(state.Reference, 1);
+        Require(fixture.World.DamageActor(state.Reference, Key(0x902), 0, 125, 1, 1).Died,
+            "Synthetic corpse retirement did not enter authoritative death.");
+        var ragdoll = new FalloutActorRagdollState(new string('c', 64),
+            [new(7, (float[])Pose.Clone(), [.125f, 0, -.25f], [0, .5f, 0], false)]);
+        var equipment = new FalloutActorCorpseEquipment((float[])Pose.Clone(), new(false, true, false, false, false, true, 7),
+            new("meshes/fixture/skeleton.nif", new string('c', 64),
+                [new(1, "Weapon", [.125f, -.25f, .5f], [0, 0, 0, 1], [1, 1, 1])]), [],
+            RouteRetirement: new(true, "Retained pre-death route failure.", null, 3));
+        var nativeReads = 0; var retired = false;
+        state.CaptureRagdoll = () =>
+        {
+            if (retired) throw new InvalidDataException("Retired ragdoll was reread.");
+            nativeReads++; return ragdoll;
+        };
+        state.CaptureCorpseEquipment = () =>
+        {
+            if (retired) throw new InvalidDataException("Retired equipment was reread.");
+            nativeReads++; return equipment.Copy();
+        };
+        state.CanCaptureCorpseEquipment = allowFinite => allowFinite;
+        var candidate = fixture.Prepare(records, selection: false);
+        state.Ragdoll = ragdoll;
+        state.CorpseEquipment = equipment.Copy();
+        state.CaptureRagdoll = null; state.CaptureCorpseEquipment = null; state.CanCaptureCorpseEquipment = null;
+        retired = true; candidate.Bind();
+        Require(fixture.World.PendingProcedureFiniteVoiceWait()?.Count == 1 && fixture.World.PendingProcedureCaptureCount == 1,
+            "Retired corpse waived a genuine still-active finite generation.");
+        Reject(() => fixture.World.Capture());
+        fixture.Finish();
+        Require(fixture.World.PendingProcedureCaptureCount == 0, "Actual matching Finished receipt failed corpse retirement admission.");
+        state.CaptureCorpseEquipment = () => throw new InvalidDataException("Replacement native callback must not be invoked.");
+        Require(fixture.World.PendingProcedureCaptureCount == 1,
+            "A new corpse native binding was interpreted as the retired original owner.");
+        state.CaptureCorpseEquipment = null;
+        state.CanCaptureCorpseEquipment = _ => throw new InvalidDataException("Replacement native readiness must not be invoked.");
+        Require(fixture.World.PendingProcedureCaptureCount == 1,
+            "A stale corpse readiness callback was ignored by retirement.");
+        state.CanCaptureCorpseEquipment = null;
+        state.CorpseEquipment = equipment with { RootPose = [1, 0, 0, 0, 1, 0, 0, 0, 1, 99, 5, 6] };
+        Require(fixture.World.PendingProcedureCaptureCount == 1, "Corpse retirement admitted changed independent pose data.");
+        state.CorpseEquipment = equipment.Copy();
+        var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(fixture.World.Capture()))!;
+        Require(nativeReads == 2 && JsonSerializer.Serialize(saved.Single(snapshot => snapshot.Reference == state.Reference).CorpseEquipment) ==
+            JsonSerializer.Serialize(equipment), "Retired corpse reread a disposed native owner or changed its captured receipt.");
+        using var cold = new FalloutReferenceWorld(records);
+        cold.Restore(saved);
+        Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(saved),
+            "Cold corpse retirement replayed a finite generation or changed original faults/physical history.");
+        Console.WriteLine("OPENNV_CORPSE_RETIREMENT_CONTRACT_PASS activeRefused=true exactFinished=true currentOwnerRequired=true " +
+            "nonaudioCopy=true noRetiredNativeReads=true rawPoseDriftRefused=true originalFault=true cold=true synthetic=true");
     }
 
     internal static void Run(FalloutPluginStack records)
