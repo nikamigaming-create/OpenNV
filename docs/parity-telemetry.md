@@ -301,3 +301,10 @@ The live harness also counts failed state publications. A Windows reader
 which denies replacement sharing can block a snapshot; the next successful
 publication retains the failure count and last error. It does not silently
 turn that gap into a successful observation or stop ordinary key-lease expiry.
+Known Windows sharing/lock and retained ReplaceFile removal failures have a
+50 ms retry window for the same immutable snapshot. Successful receipts retain
+the retry count, original native error and actual file time; exhausted or
+unknown failures still refuse and enter the loss counter. A failed replacement
+keeps the prior complete snapshot and pending payload. The separate failure
+marker retires only after a new snapshot publishes successfully. Its own
+publication failure is logged explicitly.
