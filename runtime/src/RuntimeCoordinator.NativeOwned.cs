@@ -881,7 +881,8 @@ public partial class RuntimeCoordinator
                     _nativeReferences!, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
                     _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
                 actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, cell, ReferenceTransform,
-                    () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences);
+                    () => _nativeReferences!.ActorFactions(reference.FormKey), _nativeGameTime, _nativeGlobals, _nativeReferences,
+                    NativeActorItemCount);
                 root.AddChild(actor);
                 AddNativeReferenceEmittance(actor, reference);
                 _nativeActorDivergences[reference.FormKey.ToString()] =
@@ -923,7 +924,8 @@ public partial class RuntimeCoordinator
                 actor.Combat = RuntimeNativeActorCombat.Attach(actor, actor.Skeleton, actor.Appearance.SkeletonPath,
                     _nativeReferences!, _nativeReferences.Get(reference.FormKey), _nativePluginStack!, source,
                     _configuration.Player.CollisionLayer, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
-                actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, _nativeReferences, _nativeGameTime, _nativeGlobals);
+                actor.ConfigureAi(_nativePluginStack!, _nativeQuestState!, _nativeReferences, _nativeGameTime, _nativeGlobals,
+                    NativeActorItemCount);
                 actor.ExecutePackageEvent = (program, caller) => (_nativeOpeningStageDriver ??
                     throw new InvalidOperationException("Creature package results have no gameplay owner."))
                     .ExecutePackageEvent(program, caller);
@@ -1238,9 +1240,7 @@ public partial class RuntimeCoordinator
         {
             PrepareSubtitle = _nativeSubtitles.Prepare,
             SourceManualSaveWriter = CreateNativeCheckpoint,
-            SourceManualSaveBlocker = () => _nativeSessionTransitioning || _retiringNativeSession ? "session-transition" :
-                _nativeDoorLoading || _nativeLoadingLayer is not null ? "loading" :
-                GetTree().Paused ? "paused" : NativeActiveMenus()?.Any() == true ? "native-menu" : null,
+            SourceManualSaveBlocker = NativeSourceManualSaveBlocker,
             ReferencePresentation = () => _nativeReferencePresentation ??
                 throw new InvalidOperationException("Native reference presentation is absent."),
             SayToCompleted = receipt => _nativeOpeningStageDriver!.DispatchSpeechCompletion(receipt),

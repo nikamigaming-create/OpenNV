@@ -10,8 +10,10 @@ public partial class NativeReferenceEventsAudit : Node
     public override async void _Ready()
     {
         var completionEdge = OS.GetCmdlineUserArgs() is ["--finite-sound-completion-wait"];
-        var directory = completionEdge
-            ? Path.Combine("tmp", "opennv-finite-completion-native-" + Guid.NewGuid().ToString("N"))
+        var pausedSave = OS.GetCmdlineUserArgs() is ["--paused-save-transaction"];
+        var ownedPausedSave = OS.GetCmdlineUserArgs() is ["--sound-paused-save-transaction", ..];
+        var directory = completionEdge || pausedSave || ownedPausedSave
+            ? Path.Combine(".audit-artifacts", "opennv-finite-completion-native-" + Guid.NewGuid().ToString("N"))
             : Path.Combine(Path.GetTempPath(), "opennv-contact-audit-" + Guid.NewGuid().ToString("N"));
         var path = Path.Combine(directory, "Contact.esm");
         Node3D? root = null;
@@ -56,6 +58,13 @@ public partial class NativeReferenceEventsAudit : Node
             {
                 await ExerciseOwnedSoundEmitters(edgeRoot, edgeMod, edgeModRoot,
                     edgeReference, edgeReference, edgeDependencies, completionEdge: true, completionSound: edgeSound);
+                GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--sound-paused-save-transaction", var saveRoot, var saveMod, var saveModRoot,
+                var saveReference, var saveSound, .. var saveDependencies])
+            {
+                await ExerciseOwnedSoundEmitters(saveRoot, saveMod, saveModRoot,
+                    saveReference, saveReference, saveDependencies, completionSound: saveSound, pausedSave: true);
                 GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--activation-parent", var parentRoot, var parentMod, var parentModRoot,
@@ -105,6 +114,10 @@ public partial class NativeReferenceEventsAudit : Node
             if (completionEdge)
             {
                 await FiniteSoundLifetime(records, completionEdge: true); GetTree().Quit(); return;
+            }
+            if (pausedSave)
+            {
+                await FiniteSoundLifetime(records, pausedSave: true); GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--animated-activators"])
             {

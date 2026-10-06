@@ -5,182 +5,108 @@
 Complete ordinary TTW input from Vault 101 through Megaton, the authored Union
 Station power/ticket/train connection and Mojave, with complete reusable saves
 and 1:1 retail behavior. The Benny/JAM, dependency, compiled SCDA, unchanged x86
-native-plugin and retail comparison scope in implementation-plan.md remains
-active. All 36 requirements remain open. Component checks do not establish
-campaign, cell or parity completion.
+native-plugin and retail comparison scope in [implementation-plan.md](implementation-plan.md)
+remains active. All 36 broad requirements remain open; no overall completion
+percentage follows from component checks or record counts.
 
 ## Verified state
 
-Checked PR 152 is merged with all five checks passing. Main/origin synchronized
-at 970abd3 before the fresh codex/finite-save-vault-acceptance branch.
-The published campaign-bot, source-goal, finite-audio/emitter, fair navigation
-and strict guest-memory slices retain their focused and full gate evidence.
-Original DLL execution remains unowned.
+Checked PR 153 is merged with all five checks passing. Main/origin synchronized
+at 2840e1c before the fresh codex/complete-paused-save-and-exit branch.
+The published independent image-space clock, model-less HDPT admission,
+stack-owned cold head resources and native finite-completion window retain
+their selected owned-data and full required gate evidence.
 
-The source-driven campaign controller and ordinary combat skill build without
-warnings/errors and pass focused safety, menu/save, source-goal and portal
-contracts. The current finite-completion/independent-image-clock/source-binding
-candidate also passes the full required Release/Debug, formatting/analyzer,
-contract, launcher and native Godot gate. A detached refused-controller audit
-leak is fixed with explicit native retirement, verified in both selected and
-full native instance checks. Ordinary input independently chose Escape objective 10, planned and
-crossed original 054285 into CELL 024511 at 120 HP without an operator-specified
-reference goal. Model-less STAT marker travel now keeps actual source placement
-without requesting invented visible geometry. Later ordinary source-point input
-opened authored route doors and reached CG04:35. The adapter now reads the shared
-authoritative health owner. The fresh c7ff637 slice separates retained combat
-membership/selected target from pursue, attack, reload, flee and idle actions.
-Source mouse alternatives remain actual bindings; side-specific keyboard-only
-bot input refuses rather than losing location.
+Ordinary user input genuinely exits to exterior CELL 0010c1 at Escape stage 150
+and 107 HP. The user closed that unsaved session after reporting persistent
+whiteout. Its original ten-second DEMOEyeAdjustISFX had elapsed zero because an
+unrelated appearance failure stopped the former driver clock. The general
+independent, pause-respecting clock and authored model-less head-part fix pass
+native/fault/pause/unchanged-owned-source checks. Final exterior pixels and a
+complete exterior checkpoint still require an ordinary replay.
 
-Actual ordinary source-point travel and threat takeover now defeat original
-guard 06490e at 120 HP through five attributable player shots, four actor
-contacts and matching native death. Loaded rounds change 12 to 7; reserve remains
-24. The bot uses original BPNT, source hit rays and mapped aim/fire input.
-No damage, target, inventory, stage, position or collision was fabricated.
-Full cold/all-action shared query and native mapped-input/recorder contracts pass.
-Whole combat, retail tactics and later complete save remain independent.
+The current shared explicit F5/menu save-preparation owner freezes actual
+world/input/source producers, drains only the exact already-proven finite
+native voices to genuine Finished, then invokes the unchanged complete writer
+once. Pure and actual native spatial/flat/current/cold/negative checks pass,
+including an original broken-door sound and the real paused Create New Save
+component with owned fonts and truthful saving/cancel/committed feedback.
 
-Ordinary input genuinely reached CG04:140 in the final cave, CELL 024512.
-Actual pistol contacts defeated guard 06490e. Ordinary inventory, key/password,
-terminal and source stair/XTEL traversal worked. Subsequent user input passed
-the actual switch/secret door and vault gear. No position, stage, inventory,
-damage or collision was fabricated. This earlier cave component did not verify
-vault exit; Megaton, Union Station and Mojave remain unreached.
+Actual paused Create New Save writes complete v44 slot
+b7c950fc1cf74e3887d950839a27f150 at Escape stage 18 in CELL 024511, 120 HP and
+12/24 rounds. Ordinary quit and cold Continue verify that state.
+SHA256: 9E222EC09C362B79377333CCC4C881B4C5C235D7450B7E873A7A53B31815C13F.
+Actual F5 also writes separate complete slot 3a32b6a31c004f84b6c01d63b73f1fb3.
+SHA256: 928CD7AC80A44E85009D17A54AF0A6480F487C013C40AE0AA4D79AA6556AB535.
 
-Subsequent ordinary user input genuinely exits to exterior CELL 0010c1 at
-CG04:150 and 107 HP. That session is unsaved and the user closed it. The
-exterior remains washed out: original DEMOEyeAdjustISFX retains elapsed zero
-despite its ten-second duration because an appearance failure stops its former
-driver-owned clock. An independent shared image-space clock and general
-model-less HDPT admission now pass native/pause/fault/owned-source contracts;
-actual final exterior-view replay remains unverified.
+One actually ended pending original ForceSave can precede the manual slot
+under the same exact quiescent preparation lease. Pure contracts and 21 native
+transaction cases pass, including two original-source-then-manual commits,
+both cold captures, original GUID/hash/site/history retention, source-writer
+failure and cancellation without replay. Entered/suspended/failed source history
+and concurrent AutoSave remain visible refusals. Ordinary exterior source-save
+ordering still requires its own proof.
+The combined candidate passes the full required Release/Debug, formatting and
+analyzer, contract, launcher and native Godot gate, plus the selected unchanged
+owned paused-menu sound and current/cold independent package-selection audits.
 
-The cave session exited without a complete new save. Its ForceSave failed on
-gear 024710's missing named sound emitter; retired broken-door 0aba56 also
-retained a genuinely cancelled voice. A global asynchronous writer-error latch
-then prevented later cave GameMode review transitions. The candidate isolates
-that failure from unrelated source execution while preserving the exact failed
-receipt and complete-capture refusal. Pure contracts pass actual later source
-blocks, retained failure and no writer replay.
+Original XLKR-linked terminal predicates now use the actual linked reference
+and shared open/lock state. Ordinary security terminal 0183b6 offers Lock Cell
+Door and its selected source result succeeds. Both ordinary source-route guards
+can be defeated; actual corpse Take All adds the police baton, security armor
+and helmet with unrelated counts unchanged. These are bounded interactions,
+not all-loot or whole combat acceptance.
 
-General XAPR contracts and the actual owned switch 057ae9/door 0521a3 native
-component pass source delay/action, cold clock/pose/collision and no replay.
-Immediate timing, source sibling order and off-cell execution remain explicit.
-Stable finite source audio survives actual model retirement and finishes through
-the native signal; source Stop and graph cancellation remain distinct. The owned
-gear's six finite sound keys and camera 06a5e8's default absent emitter pass
-native completion and cold source/media history with no replay. All-retained
-finite-audio wait, strict refusal and manual request contracts pass. An actual
-owned finite actor voice also survives model retirement and enters a complete
-cold reference capture. The stopped-IDLE native component waits on a genuine
-later engine phase and writes exactly once after native Finished. Stopped pose
-retirement during audio now passes an actual owned native/cold component.
-Fresh ordinary F5 has the explicit failed receipt below. These checks do not
-establish retail audio timing, output, cell-stop policy or whole campaign saving.
-
-Fresh ordinary F5 after the autonomous portal transition genuinely reaches its
-handler and waits for finite voices, then refuses animation-sound-continuation.
-The latest post-guard F5 additionally retains resident human 0569b4's generation
-29 NPCHumanOtherBangGlassFist and broken-door 0aba56's generations 18/19
-DRSVaultVerticalBroken, all active with no opaque error. No complete slot was
-written. Exact failed receipts remain; finite completion/cell-stop policy cannot
-be replaced with a guessed finished voice. The complete stage-18 checkpoint
-remains intact. The bounded native mixer-before-Finished window now has pure,
-native and unchanged owned proof, but fresh ordinary F5 still waits on repeated
-finite producers. Paused Create New Save also uses a synchronous capture while
-those voices are paused. A separate paused-save transaction proposal is next;
-neither component proof nor a returned UI action establishes a written save.
-
-Complete canonical v43 slot 5f9792be93bb43319f7672eb74787dd6 remains intact at
-CG04:18, CELL 028138, full health, drawn pistol and 12/24 rounds. Cold Continue
-and ordinary in-process Load already verify it. SHA256:
-66923966C36A1C0C920EFE37EBF1FF5C0706BF5090F9E29542E79C45AFF185A4.
-It contains neither the later guard defeat nor key/password/tunnel state.
-G.O.A.T. does not need replay.
+NPC EVP now remains independent of an unrelated stopped reference-script fault
+while real failed PACK events still refuse. NPC/creature GetItemCount uses the
+actual subject and shared live inventory owner. Pure subject/count and unchanged
+owned current/cold/queued-selection/package-event refusal checks pass. The
+original Overseer conversation still stops at stage 38's unowned GetDetected;
+consumed effects and failures cannot be cleared or replayed.
 
 ## Current divergence owners
 
-Fresh cold Continue restores the complete armed checkpoint and ordinary input
-crosses 054285 into CELL 024511 at full health. The current F5 diagnostic's
-remaining animation-sound owner is broken door 0aba56. Earlier assembled
-radroach wrappers lacked the complete source string domain. Their
-actual skeleton and body both exclude AttachSound, and original no-name finite
-NPCRoachWings keys require the proven positional default-emission arm. Unknown
-domains and declared names without an adapter still refuse. The actual source
-root/bone adapter and skeleton/current-part catalogs are now integrated.
-Synthetic native pose/root/scale, ambiguity and equipment-retirement checks pass.
-Both actual radroach references pass their original h2hequip NPCRoachWings key,
-native Finished after actual skeleton retirement, unchanged source and cold
-history/RNG without replay. Old failed histories cannot be erased. Fresh ordinary
-F5 reaches finite waiting and the separate broken-door failure above; endpoint
-audio remains unverified.
+The actual post-security paused save refuses actor-procedure capture for live
+resident 0569b4 and dead guard 064913. The resident's independent IDLE/source
+capture needs exact native diagnosis. The corpse retains a combat route search,
+presented weapon and native weapon handling without a cold equipment owner.
+Neither failure is waived. The primary owns resident diagnosis and live input;
+an isolated worker owns general corpse equipment/actual death-route persistence.
 
-The latest ordinary source-point input reaches CG04:35 at full health, defeats
-the actual guard through bot ordinary input and pauses for inspection. The
-private input runner releases controls on takeover, success, failure and expiry;
-this is input protection, not combat parity. Shared capsule searches had
-a proven first-caller budget starvation risk. A round-robin cursor owner uses the
-same 2 ms/16-step bounds and real body/RID/world/thread retirement. Its pure
-starvation/lifetime contracts, native component and unchanged owned stair route
-pass. Current ordinary budget/progress observation is pending.
+The source-bound whole-vault audit retains all 7,155 winning references across
+ten selected interiors and restores the unchanged complete checkpoint against
+its actual owned resources. It still has 101 reference issues, 34 failed resource
+declarations and 51 NAVM samples without packed/box support. Native contacts,
+draws/visibility/pixels and every room/loot/inventory/door behavior remain
+independent acceptance lanes.
 
-Mary and Tom Holden have a genuine shared GetInSameCell condition failure. The
-general current-placement/player/explicit-subject query is integrated and its
-full binary/master/cold contracts pass. Their separate IsCombatTarget fault,
-the guard's actual selected GetCombatTarget, authored type-10 Flee procedure,
-NPC portal transfer and default IDLE predicates remain unowned. Detection and
-combat membership cannot be replaced with a guessed target or predicate value.
-
-Modeled LIGH records are still omitted by the light-only path. Their actual
-point transform and diffuse clock require general owners. The classified import
-failures in the supplied older three-cell lanes identify no structural-room NIF
-refusal; observed shaped-phantom refusals are trigger ACTIs. This does not verify
-current room geometry, visibility, pixels or complete actor placement.
-
-The fresh whole-vault source audit accounts for all 7,155 references across ten
-selected interiors, including disconnected authored alternatives and directed
-portal closure. It now restores the complete preserved checkpoint against its
-actual owned head resources rather than an absent global launch singleton.
-It retains 101 reference issues, 34 failed resource declarations, zero package
-error bindings and 51 NAVM samples without packed/box support. Native contacts,
-each room's draw/visibility, every loot/inventory action and door traversal are
-still separate acceptance lanes; these counts cannot establish completion.
-
-Earlier selected checks pass original stopped-Travel independent IDLE clocks,
-ended guard sound history, source arrival regions, finer capsule navigation and
-real portal prefixes. Ordinary office/terminal traversal verifies those routes.
-The original eighteen-body corpse has native/cold composition checks; ordinary
-corpse loot and final pixels remain unverified. RewardXP/source cap checks do
-not establish whole exit execution or level allocation. Compiled SCDA, wardrobe,
-level-up and directional sensory proposals remain unintegrated.
+Whole conversations, sensory predicates, Flee/NPC portal behavior, modeled
+lights and full package/IDLE owners remain open. Compiled SCDA, level allocation,
+unchanged native DLL execution and original mod outcomes are not established.
+Actual authored movie playback depends on FFprobe/FFmpeg from PATH; an isolated
+portable-decoder worker owns application-relative resolution/export wiring.
+No clean-system FO3/FNV/TTW New Game acceptance is claimed.
 
 ## Next owner and outcome
 
-Primary owns serial builds/native checks, ordinary input and publication. Finish
-the general F5/paused-menu save transaction, replay the genuine exit, inspect
-the expired source effect's final exterior view and cold-verify a complete save.
-The separate paused-save worktree owns preparation/receipts and exact native
-finite-drain lifetime. Complete the whole source room/loot/inventory/door
-denominator before onward Megaton and authored train/Mojave claims. Publish
-checked slices and verify main/origin before the next block.
-
-Interrupted actor-query, modeled-light, portable-startup, compiled-SCDA and
-level-allocation implementations remain in separate private codex worktrees;
-they are not integrated or validated. Recover those first-party changes and
-neutral contracts rather than duplicate them. Fresh-system acceptance must
-resolve the actual authored movie decoder's FFprobe/FFmpeg dependency without
-manual installation or PATH assumptions. No end-user startup fix is claimed.
-Source visibility, process/cadence, train/calendar and wider owners remain open.
+Primary owns serial builds/native checks, ordinary input and publication.
+Publish the checked complete-save/linked-terminal/independent actor-query slices
+after the selected owned audits and full required gate. Resolve exact resident
+and corpse continuations, replay the genuine exit, inspect expiry of the
+original ten-second eye effect and cold-verify a complete exterior save.
+Complete the whole source room/loot/inventory/door denominator before onward
+Megaton and authored train/Mojave claims. Reuse retained first-party proposals
+rather than duplicate canceled work. Fresh-system exported acceptance remains
+required after packaging capability checks.
 
 ## Private continuation
 
-Run: tmp/development-lab/ttw-bot-health-20261006. The last protected input
-reaches CG04:150 at 107 HP in exterior CELL 0010c1 after ordinary user input.
-The user closed it after save failure and persistent whiteout. No game is
-running. Original canonical data remains in
-tmp/development-lab/ttw-post-goat-checkpoint-20261004; preserve save.json and every
-complete immutable slot. The farthest genuine, unsaved progress remains
-CG04:150 in the exterior. Preserve failed request receipts and immutable native
-diagnostics; no later complete slot is verified.
-Source probes, helpers and logs remain private. Recording is off.
+Run: tmp/development-lab/ttw-bot-health-20261006. No game is currently running.
+Resume through ordinary Continue from the new complete Atrium slot; preserve
+every immutable slot and failed request receipt. The original canonical v43
+slot 5f9792be93bb43319f7672eb74787dd6 in
+tmp/development-lab/ttw-post-goat-checkpoint-20261004 remains intact at Escape
+stage 18 in CELL 028138, 120 HP and 12/24 rounds.
+SHA256: 66923966C36A1C0C920EFE37EBF1FF5C0706BF5090F9E29542E79C45AFF185A4.
+The protected user exterior observation is not a save. Source probes, helpers,
+logs and owned evidence remain private. Recording is off.

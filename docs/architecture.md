@@ -79,6 +79,11 @@ binding and ordered source accumulation-root/body poses with cold restoration.
 retain ended voice generations and stopped source suffixes, admit independent
 default actions without replaying failed invocations, and defer source manual
 save requests to the ordinary slot writer after source execution retires.
+Explicit F5/menu preparation freezes actual world/input/source producers while
+only its exact proven finite native audio drains to genuine Finished. An ended
+pending original ForceSave keeps its original GUID/writer and commits before
+the separate manual slot under that same quiescent lease, without a capture
+exemption or consumed source replay.
 
 [Actor death history](actor-death-counts.md) retains cumulative source-base counts
 through successful shared death transitions and cold saves. Source result-entry

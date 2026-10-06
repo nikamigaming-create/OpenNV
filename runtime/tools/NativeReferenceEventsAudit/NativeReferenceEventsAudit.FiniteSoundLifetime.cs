@@ -19,7 +19,7 @@ public partial class NativeReferenceEventsAudit
             Field("FNAM", Text("fixture/finite.wav")), Field("SNDD", flatData))).ToArray();
     }
 
-    private async Task FiniteSoundLifetime(FalloutPluginStack records, bool completionEdge = false)
+    private async Task FiniteSoundLifetime(FalloutPluginStack records, bool completionEdge = false, bool pausedSave = false)
     {
         using var world = new FalloutReferenceWorld(records);
         var root = new Node3D(); AddChild(root);
@@ -42,9 +42,10 @@ public partial class NativeReferenceEventsAudit
             node.SetMeta("opennv_reference_form_key", reference.ToString()); root.AddChild(node); return node;
         }
         (Node Node, FalloutAnimationSoundEvents Ledger, long Generation,
-            NativeOwnedFiniteSoundHost.Attachment Attachment) Start(Node3D emitter, FalloutFormKey reference, bool followEmitter = true, bool flat = false)
+            NativeOwnedFiniteSoundHost.Attachment Attachment) Start(Node3D emitter, FalloutFormKey reference,
+            bool followEmitter = true, bool flat = false, bool suppressSourceFinished = false, FalloutReferenceWorld? sourceWorld = null)
         {
-            var ledger = world.Get(reference).AnimationSoundEvents;
+            var ledger = (sourceWorld ?? world).Get(reference).AnimationSoundEvents;
             var descriptor = flat ? FalloutSoundRecordReader.Read(records, Key(0xb61)) : source;
             var selected = FalloutAnimationSound.Select(descriptor, [descriptor.LogicalPath], random, true, true);
             var generation = ledger.Begin(records, selected, "Sound: " + descriptor.EditorId, true, [descriptor.LogicalPath]);
@@ -56,6 +57,7 @@ public partial class NativeReferenceEventsAudit
                 generation, descriptor.FormKey, ledger.Events.Last().SoundSha256, selected.Path!, ledger.Events.Last().MediaSha256!);
             NativeOwnedFiniteSoundHost.Attachment? attachment = null; IDisposable? registration = null;
             FalloutFiniteSoundCompletionWait? completion = null;
+            NativeOwnedFiniteSoundSaveDrain? saveDrain = null;
             var settled = false;
             void Release()
             {
@@ -76,6 +78,7 @@ public partial class NativeReferenceEventsAudit
                 FalloutSoundLoop.Read(descriptor), Cancel, () => { }, followEmitter); leases.Add(attachment);
             FalloutFiniteSoundVoice? Pending()
             {
+                if (saveDrain is not null) return saveDrain.PendingVoice;
                 if (settled || !GodotObject.IsInstanceValid(node) || attachment?.Alive != true || !node.CanProcess()) return null;
                 var playback = NativeFinitePlayback(node);
                 var paused = node is AudioStreamPlayer3D spatial ? spatial.StreamPaused : ((AudioStreamPlayer)node).StreamPaused;
@@ -88,10 +91,18 @@ public partial class NativeReferenceEventsAudit
                 {
                     if (settled) return; settled = true; sourceStops++;
                     Stop(); ledger.Complete(generation, FalloutAnimationSoundEnd.SourceStopped); Release();
-                }, Cancel, reference, Pending, () => completion?.State); leases.Add(registration);
+                }, Cancel, reference, Pending, () => completion?.State, () =>
+                {
+                    var wait = completion ?? throw new NotSupportedException("Fixture has no original observed native playback.");
+                    saveDrain = new NativeOwnedFiniteSoundSaveDrain(records, ledger, receipt, node, wait,
+                        () => !settled && attachment is { Alive: true }, () => saveDrain = null);
+                    return saveDrain;
+                }); leases.Add(registration);
             node.TreeExiting += Cancel;
             void Finished()
             {
+                if (suppressSourceFinished) return;
+                saveDrain?.NativeFinished();
                 if (settled) return; settled = true; nativeFinished++;
                 ledger.Complete(generation, FalloutAnimationSoundEnd.NativeFinished); Release();
             }
@@ -114,6 +125,128 @@ public partial class NativeReferenceEventsAudit
         }
         try
         {
+            if (pausedSave)
+            {
+                var results = new List<object>();
+                foreach (var flat in new[] { false, true })
+                    foreach (var alreadyPaused in new[] { false, true })
+                    {
+                        var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901), flat: flat);
+                        results.Add(await ProvePausedFiniteSave(records, world, [active.Node], "synthetic-native-fixture", alreadyPaused));
+                    }
+                foreach (var alreadyPaused in new[] { false, true })
+                {
+                    var emitter = Emitter(Key(0x901));
+                    var spatial = Start(emitter, Key(0x901)); var flat = Start(emitter, Key(0x901), flat: true);
+                    results.Add(await ProvePausedFiniteSave(records, world, [spatial.Node, flat.Node],
+                        "synthetic-native-fixture", alreadyPaused));
+                }
+                foreach (var alreadyPaused in new[] { false, true })
+                {
+                    using var orderedWorld = new FalloutReferenceWorld(records);
+                    var emitter = Emitter(Key(0x901));
+                    var spatial = Start(emitter, Key(0x901), sourceWorld: orderedWorld);
+                    var flat = Start(emitter, Key(0x901), flat: true, sourceWorld: orderedWorld);
+                    results.Add(await ProvePausedFiniteSave(records, orderedWorld, [spatial.Node, flat.Node],
+                        "synthetic-native-fixture", alreadyPaused, orderedSource: true));
+                }
+                foreach (var failSource in new[] { false, true })
+                {
+                    using var orderedWorld = new FalloutReferenceWorld(records);
+                    var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901), sourceWorld: orderedWorld);
+                    results.Add(await ProvePausedFiniteSave(records, orderedWorld, [active.Node], "synthetic-native-fixture", true,
+                        expectedDisposition: failSource ? "failed" : "cancelled",
+                        afterBegin: failSource ? null : transaction => transaction.Cancel("Actual ordered user cancel."),
+                        orderedSource: true, failSourceWriter: failSource));
+                    if (!failSource) await Finish(active.Ledger, active.Generation);
+                }
+                foreach (var flat in new[] { false, true })
+                    foreach (var alreadyPaused in new[] { false, true })
+                    {
+                        var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901), flat: flat);
+                        results.Add(await ProvePausedFiniteSave(records, world, [active.Node], "synthetic-native-fixture", alreadyPaused,
+                            expectedDisposition: "cancelled", afterBegin: transaction => transaction.Cancel("Actual player cancel.")));
+                        await Finish(active.Ledger, active.Generation);
+                    }
+                {
+                    var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901));
+                    var unknown = new AudioStreamPlayer { Stream = stream };
+                    NativeOwnedSoundVoice.Bind(records, unknown, source.FormKey, () => Key(0x901),
+                        "actual-native-opaque-save-fixture", () => unknown.Playing, unknown.Stop);
+                    root.AddChild(unknown); unknown.Play();
+                    try
+                    {
+                        results.Add(await ProvePausedFiniteSave(records, world, [active.Node], "synthetic-native-fixture", true,
+                            expectedDisposition: "failed"));
+                    }
+                    finally { unknown.Free(); }
+                    await Finish(active.Ledger, active.Generation);
+                }
+                {
+                    var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901));
+                    (Node Node, FalloutAnimationSoundEvents Ledger, long Generation,
+                        NativeOwnedFiniteSoundHost.Attachment Attachment)? added = null;
+                    results.Add(await ProvePausedFiniteSave(records, world, [active.Node], "synthetic-native-fixture", false,
+                        expectedDisposition: "cancelled", afterBegin: _ => added = Start(emitter, Key(0x901), flat: true)));
+                    await Finish(active.Ledger, active.Generation);
+                    var extra = added ?? throw new InvalidDataException("Native generation-drift fixture never registered its actual new voice.");
+                    await Finish(extra.Ledger, extra.Generation);
+                }
+                {
+                    var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901));
+                    results.Add(await ProvePausedFiniteSave(records, world, [active.Node], "synthetic-native-fixture", true,
+                        expectedDisposition: "failed", independentBlocker: "unowned-actor/movement/conversation/source-continuation"));
+                    await Finish(active.Ledger, active.Generation);
+                }
+                {
+                    var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901), flat: true);
+                    results.Add(await ProvePausedFiniteSave(records, world, [active.Node], "synthetic-native-fixture", false,
+                        expectedDisposition: "failed", maximumWaitMilliseconds: 1));
+                    await Finish(active.Ledger, active.Generation);
+                }
+                {
+                    var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901));
+                    string? changed = null;
+                    results.Add(await ProvePausedFiniteSave(records, world, [active.Node], "synthetic-native-fixture", true,
+                        expectedDisposition: "cancelled", afterBegin: _ => changed = "Actual native session/source/death generation changed.",
+                        invalidation: () => changed));
+                    await Finish(active.Ledger, active.Generation);
+                }
+                {
+                    var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901), flat: true);
+                    var replacement = new AudioStreamWav
+                    {
+                        Format = stream.Format,
+                        MixRate = stream.MixRate,
+                        Data = stream.Data,
+                        LoopMode = stream.LoopMode
+                    };
+                    replacement.SetMeta("opennv_owned_media_sha256", stream.GetMeta("opennv_owned_media_sha256"));
+                    try
+                    {
+                        results.Add(await ProvePausedFiniteSave(records, world, [active.Node], "synthetic-native-fixture", false,
+                            expectedDisposition: "cancelled", afterBegin: _ => ((AudioStreamPlayer)active.Node).Stream = replacement));
+                    }
+                    finally
+                    {
+                        active.Node.Free(); replacement.Dispose();
+                    }
+                    Require(active.Ledger.Events.Last().End == FalloutAnimationSoundEnd.Cancelled,
+                        "Native replacement/retirement was erased or fabricated as Finished.");
+                }
+                // A new world must not erase the previous world's real cancellation.
+                {
+                    using var missingWorld = new FalloutReferenceWorld(records);
+                    var emitter = Emitter(Key(0x900));
+                    var active = Start(emitter, Key(0x900), flat: true, suppressSourceFinished: true, sourceWorld: missingWorld);
+                    results.Add(await ProvePausedFiniteSave(records, missingWorld, [active.Node], "synthetic-native-fixture", false,
+                        expectedDisposition: "failed"));
+                    Require(active.Ledger.Events.Last().End == FalloutAnimationSoundEnd.Active,
+                        "Missing source Finished was fabricated instead of retained as refusal.");
+                }
+                GD.Print("OPENNV_NATIVE_PAUSED_SAVE_TRANSACTION_PASS " + JsonSerializer.Serialize(results));
+                return;
+            }
             if (completionEdge)
             {
                 var proofs = new List<object>();
@@ -127,17 +260,17 @@ public partial class NativeReferenceEventsAudit
                 GD.Print("OPENNV_NATIVE_FINITE_COMPLETION_EDGE_PASS " + JsonSerializer.Serialize(proofs));
                 return;
             }
-            var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901));
-            var last = new Vector3(3.25f, 4.5f, -2); emitter.GlobalPosition = last;
+            var retiredEmitter = Emitter(Key(0x901)); var retiredVoice = Start(retiredEmitter, Key(0x901));
+            var last = new Vector3(3.25f, 4.5f, -2); retiredEmitter.GlobalPosition = last;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            root.RemoveChild(emitter); emitter.Free();
-            Require(active.Attachment.EmitterRetired && active.Attachment.Alive && active.Node.IsInsideTree() &&
-                ((AudioStreamPlayer3D)active.Node).GlobalPosition == last && active.Attachment.LastRealPosition == last &&
-                active.Ledger.Events.Last().End == FalloutAnimationSoundEnd.Active && !active.Ledger.CanCapture &&
+            root.RemoveChild(retiredEmitter); retiredEmitter.Free();
+            Require(retiredVoice.Attachment.EmitterRetired && retiredVoice.Attachment.Alive && retiredVoice.Node.IsInsideTree() &&
+                ((AudioStreamPlayer3D)retiredVoice.Node).GlobalPosition == last && retiredVoice.Attachment.LastRealPosition == last &&
+                retiredVoice.Ledger.Events.Last().End == FalloutAnimationSoundEnd.Active && !retiredVoice.Ledger.CanCapture &&
                 world.PendingAnimationSoundFiniteVoiceWait() is { Count: 1 },
                 "Emitter retirement cancelled, completed or moved the actual finite source voice.");
             Reject(() => world.Capture());
-            await Finish(active.Ledger, active.Generation);
+            await Finish(retiredVoice.Ledger, retiredVoice.Generation);
             var snapshot = JsonSerializer.Serialize(world.Capture());
             using var cold = new FalloutReferenceWorld(records);
             cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(snapshot)!);

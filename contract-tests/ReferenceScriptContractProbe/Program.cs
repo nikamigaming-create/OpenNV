@@ -4,6 +4,11 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--manual-save-preparation-contracts"])
+{
+    StoppedPoseContracts.Run(savePreparationOnly: true);
+    return;
+}
 if (args is ["--finite-sound-completion-wait-contracts"])
 {
     StoppedPoseContracts.Run(finiteCompletionOnly: true);

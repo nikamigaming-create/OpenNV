@@ -79,6 +79,124 @@ Concurrent AutoSave/ForceSave ordering and active request restoration remain
 unowned. IsHardcore reads the existing saved player session. SetAlert changes a
 source-bound persistent actor flag independently of weapon and combat state.
 
+## Explicit player/menu save preparation
+
+The synchronous pause-menu callback was a separate failure owner: it invoked the
+complete writer while `SceneTree.Paused` kept the original finite audio paused.
+The F5 wait could independently remain pending because running model/actor
+source clocks kept emitting overlapping finite generations. The shared
+transaction routes both surfaces through `RuntimeManualSaveRequests`, retaining
+one request identity, one slot, coalesced input counts and all failed/cancelled
+history. Diagnostic checkpoint and source ForceSave ordering stay separate.
+
+A transient `RuntimeNativeManualSavePreparation` observes the settled session,
+source graph, player, driver, CELL and menu identities, then keeps authoritative
+world/input/source-producer clocks paused. Its input lease changes only modal
+ownership: it does not cancel weapon actions, clear velocity or invent settled
+gameplay. The status/menu says **Saving**, disables competing menu actions and
+offers cancellation. There is no created-save feedback before the writer returns
+the matching committed slot and that slot exists.
+The source-script subtree acquires exact process-mode leases as well:
+ordinary pause alone does not stop its Always-mode MenuMode, input and pre-draw
+callbacks. Pre-draw source invocation now honors its node's process eligibility.
+Those leases freeze source scripts/UI clocks without changing ordinary menu
+execution, permanently toggling event registrations or touching the independent
+image-space owner. Pending/failed script-sound continuations still refuse.
+The input adapter continues observing genuine physical key edges without
+dispatching gameplay callbacks, so a real release cannot become a stuck key
+after cleanup; paused callbacks are neither executed nor replayed.
+
+The existing source sound registry prepares a fixed set of already observed
+finite native voices. Each lease binds the original node, playback, stream,
+winning SOUN, source generation and owned media hash. Only those exact audio
+nodes temporarily acquire `ProcessMode.Always` and unpaused playback. The source
+host, actor/model clocks and completion continuations are not resumed; a voice
+with a gameplay completion callback cannot acquire this independent lease.
+This is explicit save preparation, not a global paused-audio policy. Pause
+notifications cannot start a false mixer-EOS window.
+
+Only the original native `Finished` handler settles a prepared generation.
+`Playing=false`, registry removal, wall time, cancellation and authored Stop
+cannot supply that receipt. The prior finite dispatch-window limits remain;
+the complete transaction additionally refuses after 60,000 monotonic
+milliseconds. Missing Finished, opaque/cancelled history, native/source loops,
+unknown audio and unsupported actor, movement, conversation or source
+continuations still refuse. A new registration/generation, resumed or replaced
+playback, source/media drift, reload, loading, death or session/menu drift
+cancels the transaction rather than migrating its lease.
+
+The shared ordinary writer recaptures every existing authoritative predicate
+after the entire fixed set genuinely finishes. It runs once, with no active
+audio added to the save schema. `finally` cleanup restores the prior tree pause,
+modal ownership, mouse mode and surviving audio process/playback flags, including
+partial preparation and native teardown failures. The slot catalog rolls back
+the prior Continue bytes and removes the candidate slot if writing, validation
+or committed metadata fails. A rollback/cleanup failure remains visible.
+
+Pure preparation/source-ordering contracts, actual native spatial/flat positive
+and negative transactions, and the unchanged owned broken-door/real paused-menu
+component pass. Ordinary paused Create New Save writes a complete Atrium slot;
+ordinary quit and cold Continue restore its genuine stage-18 state at 120 HP and
+12/24 rounds. F5 independently creates another complete slot through the same
+owner. Post-combat actor/physics/procedure capture and ordinary exterior source
+ForceSave remain separate evidence boundaries. These results do not establish complete
+campaign saving or retail parity. Run focused checks serially with recording off:
+
+```powershell
+dotnet run --project .\contract-tests\ReferenceScriptContractProbe -- --manual-save-preparation-contracts
+& $Godot --headless --path .\runtime 'res://tools/NativeReferenceEventsAudit/NativeReferenceEventsAudit.tscn' -- --paused-save-transaction
+& $Godot --headless --path .\runtime 'res://tools/NativeReferenceEventsAudit/NativeReferenceEventsAudit.tscn' -- --sound-paused-save-transaction $OwnedFNV 'ttw' $OwnedTTW 'Fallout3.esm:0aba56' 'FalloutNV.esm:06eb6f' @OwnedDependencies
+```
+
+The pure selector covers fixed-set receipts, bounded missing completion,
+source/native/media/generation drift, unknown/loop refusal, writer-once/cold
+state, truthful feedback and Continue rollback. The native selector uses real
+spatial and flat finite playback, overlapping generations, genuine mixer
+Finished while the world is paused, an actually advancing producer clock that
+must remain frozen, one committed component slot and cold non-replay. Negative
+cases cover user cancel in both pause contexts, unsupported continuations,
+actual unknown native audio, new source/native registration, timeout, native
+replacement, session/death invalidation and deliberately missing source Finished.
+Their previous Continue bytes and pause/modal/mouse/audio flags must survive.
+The owned selector binds an original source NIF sound key and the actual typed
+create-save menu callback with owned fonts, saving/busy/cancel UI and committed
+browser refresh. Every component capture is removed in `finally`. Ordinary F5,
+whole-campaign cold Continue, Vault exit/Megaton/train/Mojave and retail
+comparison still require their own evidence.
+
+One pre-existing pending ForceSave may now precede the ordinary player/menu slot
+under the same owned preparation. `RuntimeManualSaveSourceOrder` binds the
+original generation/GUID, requested phase, source hashes/sites and actually ended
+requesting invocations, plus the exact manual session/source/origin/slot. It
+requires the original owner's real engine-phase binding; it does not advance a
+phase or retire a cursor. Only a later phase, unchanged paused producer/input
+leases, every real finite Finished receipt and otherwise complete admission
+permit the original `FalloutScriptManualSaveRequests.Drain` to run.
+
+The coordinator's original source blocker accepts this specific quiescent
+lease only during that ordered drain, never an arbitrary pause or menu. The
+original bound writer commits its original slot with its existing
+`WritingRequestedSlot` self-capture exception and source validation. Then
+ordinary complete admission is checked again and the F5/menu writer commits its
+different slot once. Receipt/UI state retains both outcomes; a committed source
+slot cannot be hidden by a later manual failure. Source failure remains failed
+without retry, and prevents the ordinary writer.
+
+Unknown, entered/suspended or failed source requests, unowned stopped suffixes,
+new source generations, phase/binding drift and concurrent AutoSave still refuse
+or invalidate the lease. No request is cleared/cancelled/superseded and no consumed
+prefix/suffix is replayed. Already ended typed source faults keep their original
+error receipt and still require the original writer's existing whole-state
+capture admission; ordering supplies no missing continuation. The focused pure selector covers both origins, exact
+original source receipts, self-capture, two writers once in order and source
+failure isolation. The native paused-save selector additionally covers actual
+overlapping spatial/flat finite Finished while paused, the ordered source slot
+and ordinary slot, both cold captures, frozen producers and restored modes.
+These added pure checks and the 21-case native selector pass after integration,
+including two distinct original-source-then-manual commits and both cold
+captures. Ordinary exterior ForceSave, complete actor continuation and matched
+retail ordering remain separate evidence.
+
 Closed quest-stage results retain their exact source identity, entered stage,
 consumed step count and failure through schema v41 saves. Restoring a failed
 stage does not execute it; entering it again refuses before predicates and

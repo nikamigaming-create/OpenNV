@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace OpenNV.Runtime.Content;
 
 // One transient SOUN instance registry per loaded graph. Source identity and
@@ -7,10 +9,11 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
     private sealed record Voice(long Id, FalloutFormKey Sound, FalloutFormKey? Reference,
         string Owner, Func<bool> Playing, Action Stop, Action? Retire,
         FalloutFormKey? SourceReference, Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? FiniteWait,
-        Func<object?>? FiniteWaitState);
+        Func<object?>? FiniteWaitState, Func<IFalloutFiniteSoundSaveDrainLease>? PrepareSaveDrain);
     private readonly Dictionary<long, Voice> _voices = [];
     private long _nextId, _stopRequests, _stopped;
     private readonly List<Action> _retirementObservers = [];
+    private FalloutFiniteSoundSaveDrain? _saveDrain;
     internal int ActiveVoices => _voices.Count;
     internal string? Error { get; private set; }
     internal object? LastStop { get; private set; }
@@ -34,7 +37,8 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
 
     internal IDisposable Register(FalloutFormKey sound, FalloutFormKey? reference, string owner,
         Func<bool> playing, Action stop, Action? retire = null, FalloutFormKey? sourceReference = null,
-        Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? finiteWait = null, Func<object?>? finiteWaitState = null)
+        Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? finiteWait = null, Func<object?>? finiteWaitState = null,
+        Func<IFalloutFiniteSoundSaveDrainLease>? prepareSaveDrain = null)
     {
         sound = ValidateSound(sound);
         if (reference is { } attached) reference = ValidateReference(attached);
@@ -42,8 +46,55 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
         ArgumentNullException.ThrowIfNull(playing); ArgumentNullException.ThrowIfNull(stop);
         var id = checked(++_nextId);
-        _voices.Add(id, new(id, sound, reference, owner, playing, stop, retire, sourceReference, finiteWait, finiteWaitState));
+        _voices.Add(id, new(id, sound, reference, owner, playing, stop, retire, sourceReference, finiteWait, finiteWaitState, prepareSaveDrain));
         return new Scope(() => _voices.Remove(id));
+    }
+
+    internal FalloutFiniteSoundSaveDrain PrepareFiniteSaveDrain()
+    {
+        if (_saveDrain is not null) throw new InvalidOperationException("The source graph already has a finite save-drain lease.");
+        if (Error is not null) throw new NotSupportedException("Source audio failure: " + Error);
+        var generation = _nextId;
+        var bound = _voices.Values.ToArray();
+        var leases = new List<IFalloutFiniteSoundSaveDrainLease>();
+        try
+        {
+            foreach (var voice in bound)
+            {
+                if (voice.SourceReference is null || voice.PrepareSaveDrain is null)
+                    throw new NotSupportedException($"Active audio has no proven finite save-drain owner: registration={voice.Id} owner={voice.Owner} sound={voice.Sound}.");
+                var lease = voice.PrepareSaveDrain();
+                leases.Add(lease);
+                lease.Voice.Validate();
+                var source = records.GetEffective(lease.Voice.Sound);
+                if (lease.Voice.Reference != voice.SourceReference || lease.Voice.Sound != voice.Sound ||
+                    voice.FiniteWait?.Invoke() != lease.Voice || source.Signature != "SOUN" ||
+                    !Convert.ToHexString(SHA256.HashData(source.ReadData())).Equals(lease.Voice.SoundSha256, StringComparison.OrdinalIgnoreCase) ||
+                    FalloutSoundLoop.Read(FalloutSoundRecordReader.Read(source)).Mode != FalloutSoundLoopMode.None)
+                    throw new InvalidDataException("Prepared native audio differs from its exact registered source voice.");
+            }
+            if (leases.DistinctBy(lease => (lease.Voice.Reference, lease.Voice.Generation)).Count() != leases.Count)
+                throw new InvalidDataException("Finite save-drain leases repeat a source generation.");
+            var drain = new FalloutFiniteSoundSaveDrain(leases.AsReadOnly(), () =>
+            {
+                if (Error is not null || _nextId != generation ||
+                    _voices.Keys.Except(bound.Select(voice => voice.Id)).Any())
+                    throw new FalloutFiniteSoundSaveDrainInvalidatedException("The source/native audio registry changed during save preparation.");
+            }, () => _saveDrain = null);
+            _saveDrain = drain;
+            return drain;
+        }
+        catch (Exception failure)
+        {
+            List<Exception> errors = [failure];
+            foreach (var lease in leases.AsEnumerable().Reverse())
+            {
+                try { lease.Dispose(); }
+                catch (Exception cleanup) { errors.Add(cleanup); }
+            }
+            if (errors.Count != 1) throw new AggregateException("Finite save-drain preparation and cleanup failed.", errors);
+            throw;
+        }
     }
 
     internal IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>? PendingFiniteSourceVoices(FalloutFormKey reference)

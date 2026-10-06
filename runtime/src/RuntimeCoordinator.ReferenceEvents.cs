@@ -12,10 +12,10 @@ public partial class RuntimeCoordinator
 
     public override void _Process(double delta)
     {
+        if (GetTree().Paused) return;
         AdvanceNativePlayerMoves();
         AdvanceNativeDeath();
         if (_nativeDeathPresented) return;
-        DrainNativeManualSave();
         AdvanceNativeExteriorStreaming(delta);
         if (_nativeReferences is { } world && world.PlacementRevision != _nativePlacementRevision &&
             _nativeCurrentCellRoot is { } root && _nativeActiveCell is { } scene && !_nativeDoorLoading)

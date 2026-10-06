@@ -47,7 +47,7 @@ public partial class RuntimeCoordinator
     {
         if (_nativeDeathPresented || _nativeDoorLoading || _nativePlayer is null ||
             _nativeOpeningStageDriver?.Vitals.HitPoints != 0) return;
-        CancelNativeManualSave("Player defeated before the pending F5 could commit.");
+        CancelNativeManualSave("Player defeated before the pending manual save could commit.");
         _nativeDeathPresented = true;
         if (_nativeXr?.PointAtPipBoy is not null) FocusNativeXrPipBoy(false);
         _nativePlayer.SetModalInput(true);
@@ -89,26 +89,11 @@ public partial class RuntimeCoordinator
         return slot;
     }
 
-    private void SaveNativeMenuSlot()
-    {
-        try
-        {
-            if (_nativeDoorLoading || _nativePlayer is null) return;
-            if (_nativeOpeningStageDriver!.Vitals.HitPoints == 0)
-                throw new InvalidOperationException("Load an earlier save after death; the previous Continue save is preserved.");
-            var slot = CreateNativeCheckpoint(Guid.NewGuid());
-            CancelNativeManualSave($"Pending F5 superseded by explicit complete menu save {slot.Id}.");
-            GD.Print($"OPENNV_NATIVE_SAVE_SLOT_CREATED id={slot.Id} save={slot.Path}");
-        }
-        catch (Exception error)
-        {
-            GD.PushError($"OPENNV_NATIVE_SAVE_SLOT_FAILURE {error}");
-            if (_nativeSessionMenu is not null) throw;
-        }
-    }
+    private RuntimeManualSaveReceipt SaveNativeMenuSlot() => RequestNativeManualSave(RuntimeManualSaveOrigin.SessionMenu);
 
     private void ToggleNativeSessionMenu()
     {
+        if (_nativeManualSaves.Pending) { CancelNativeManualSaveFromInput(); return; }
         if (_nativeSessionTransitioning) return;
         if (_nativeSessionMenu is not null) { _nativeSessionMenu.Back(); return; }
         if (_nativePlayer is null || _nativeDoorLoading || _nativeOpeningStageDriver is null) return;
@@ -120,11 +105,12 @@ public partial class RuntimeCoordinator
     private void OpenNativeSessionMenu(bool showSaves, Control? previousMenu = null)
     {
         if (_nativeSessionLayer is not null) return;
+        CloseNativeManualSaveStatus();
         _sessionWasPaused = GetTree().Paused; _sessionMouseMode = Input.MouseMode;
         _sessionPreviousMenu = previousMenu; previousMenu?.Hide();
         _nativeSessionLayer = new CanvasLayer { Name = "NativeSessionLayer", Layer = 150, ProcessMode = ProcessModeEnum.Always };
         _nativeSessionMenu = new(NativeSaveSlots(), _nativePlayer is not null, showSaves, _nativeOpeningStageDriver?.Vitals.HitPoints == 0,
-            CloseNativeSessionMenu, SaveNativeMenuSlot, LoadNativeSelectedSlot,
+            CloseNativeSessionMenu, SaveNativeMenuSlot, CancelNativeManualSaveFromInput, LoadNativeSelectedSlot,
             () => RestartNativeSession(false), () => QuitNativeSession(), DescribeNativeSave);
         AddChild(_nativeSessionLayer); _nativeSessionLayer.AddChild(_nativeSessionMenu);
         _nativePlayer?.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -137,6 +123,7 @@ public partial class RuntimeCoordinator
     {
         if (_nativeSessionTransitioning) return;
         if (_nativeDeathPresented && !_retiringNativeSession) return;
+        CancelNativeManualSave("Session menu closed before the pending manual save committed.");
         _nativeSessionLayer?.QueueFree(); _nativeSessionLayer = null; _nativeSessionMenu = null;
         _nativePlayer?.SetModalInput(false); GetTree().Paused = _sessionWasPaused; Input.MouseMode = _sessionMouseMode;
         _sessionPreviousMenu?.Show(); _sessionPreviousMenu = null;
@@ -174,7 +161,7 @@ public partial class RuntimeCoordinator
     private async void RestartNativeSession(bool continueSave, bool pauseAfterLoad = false, RuntimeSaveSlotMetadata? checkpoint = null)
     {
         if (_nativeSessionTransitioning) return;
-        CancelNativeManualSave("Native session transition started before the pending F5 could commit.");
+        CancelNativeManualSave("Native session transition started before the pending manual save could commit.");
         _nativeSessionTransitioning = true;
         try
         {
@@ -227,7 +214,7 @@ public partial class RuntimeCoordinator
     private async void QuitNativeSession()
     {
         if (_nativeSessionTransitioning) return;
-        CancelNativeManualSave("Native session transition started before the pending F5 could commit.");
+        CancelNativeManualSave("Native session transition started before the pending manual save could commit.");
         _nativeSessionTransitioning = true;
         try
         {

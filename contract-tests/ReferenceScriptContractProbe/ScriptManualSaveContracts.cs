@@ -223,9 +223,10 @@ internal sealed class ScriptSaveFixture : IDisposable
     internal FalloutPluginRecord Script => Records.GetEffective(new("Saves.esm", 0x50));
 
     internal ScriptSaveFixture(string body, string questBody = "", Func<bool>? hardcore = null, string? functionBody = null,
-        string gameModeBody = "")
+        string gameModeBody = "", string? artifactDirectory = null)
     {
-        _directory = Directory.CreateTempSubdirectory("opennv-script-save-");
+        _directory = artifactDirectory is null ? Directory.CreateTempSubdirectory("opennv-script-save-") :
+            Directory.CreateDirectory(Path.Combine(artifactDirectory, "source-save-ordering-" + Guid.NewGuid().ToString("N")));
         var header = new byte[20]; U32(2).CopyTo(header, 12);
         var questHeader = header.ToArray(); questHeader[16] = 1;
         byte[][] Scope(byte[] scriptHeader, string source) => [Field("SCHR", scriptHeader),

@@ -155,6 +155,29 @@ internal partial class RuntimeNativeNpc
         },
         error = _aiError,
         stoppedBindingCaptureReady = CanCaptureBindingFailure(),
+        stoppedBindingCapture = _selectionCaptureBlocker is null ? null : new
+        {
+            finiteSoundReady = CanCaptureBindingFailure(allowFiniteSoundWait: true),
+            referenceBlockerBound = _aiReferenceState?.ProcedureCaptureBlocker == _selectionCaptureBlocker,
+            failedPackage = _failedPackage?.ToString(),
+            failedPackageIsSelected = _failedPackage == _selectedSourcePackage,
+            activePackage = _aiPackage?.FormKey.ToString(),
+            hasIdleSource = _packageIdleSource is not null,
+            hasIdleCollection = _packageIdles is not null,
+            activeAnimation = _animation is not null,
+            independentIdleCaptureReady = _animation is null || CanCaptureStoppedIndependentIdle(),
+            independentIdleFiniteCaptureReady = _animation is null || CanCaptureStoppedIndependentIdle(allowFiniteSoundWait: true),
+            idleOwner = _idleOwner,
+            idlePlaybackComplete = _idlePlayback?.Complete,
+            activeAnimationObjects = _animationObjects.Count,
+            hasAnimationWeapon = Combat?.AnimationWeapon is not null,
+            responseIdleActive = _responseIdleActive,
+            pendingTravelArrival = _travelProgress?.ArrivalPending,
+            conversationTarget = _conversationTarget?.ToString(),
+            animationError = AnimationError,
+            baseResource = _baseClock.Resource
+        },
+        stoppedPoseCapture = _selectionCaptureBlocker is null ? null : ReadStoppedPoseCaptureDiagnostic(),
         scheduleTime = _aiScheduleTime,
         evaluationPolicy = "quest-activity-hour-changes-and-ten-second-poll;retail-cadence-unmatched",
         referencePackageEventOwner = _aiWorld is null ? "unbound-no-reference-world" : "shared-reference-world",
@@ -164,7 +187,8 @@ internal partial class RuntimeNativeNpc
     internal void ConfigureAi(FalloutPluginStack stack, FalloutQuestState quests, FalloutCellScene cell,
         Func<FalloutPlacedReference, Transform3D> referenceTransform,
         Func<IReadOnlyDictionary<FalloutFormKey, sbyte>>? factions = null,
-        FalloutGameTime? clock = null, FalloutGlobalState? globals = null, FalloutReferenceWorld? world = null)
+        FalloutGameTime? clock = null, FalloutGlobalState? globals = null, FalloutReferenceWorld? world = null,
+        Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null)
     {
         _aiStack = stack;
         _idleConditions = new(stack);
@@ -174,6 +198,7 @@ internal partial class RuntimeNativeNpc
         _aiClock = clock; _aiGlobals = globals;
         _aiCell = cell;
         _aiWorld = world;
+        _aiItemCount = itemCount;
         _bindingInitialBase = true;
         if (world is not null)
         {
@@ -464,6 +489,9 @@ internal partial class RuntimeNativeNpc
 
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
+        if (condition.Function == 47)
+            return OpenNV.Runtime.Gameplay.State.FalloutActorInventoryConditions.ItemCount(
+                condition, Appearance.Reference!.Value, _aiItemCount);
         if (condition.Function is 1 or 14 or 32)
         {
             FalloutReferencePlacement? playerPlacement = null;

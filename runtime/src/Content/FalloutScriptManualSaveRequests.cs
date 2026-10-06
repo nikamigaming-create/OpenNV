@@ -80,6 +80,7 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
     internal string? Error => _receipt?.Error;
     internal int EnteredInvocations => _entered.Count;
     internal bool WritingRequestedSlot => _writing;
+    internal ulong ObservedEnginePhase => CurrentPhase;
     internal string? DeferredBy { get; private set; }
     private ulong CurrentPhase => _enginePhase?.Invoke() ?? _phase;
 

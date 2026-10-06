@@ -56,12 +56,37 @@ internal sealed class RuntimeSaveSlotCatalog
         ArgumentNullException.ThrowIfNull(writeAuthoritativeSave);
         var target = SlotPath(slotId);
         if (File.Exists(target)) throw new InvalidOperationException("Save-slot identity already exists.");
-        writeAuthoritativeSave();
-        var bytes = File.ReadAllBytes(_canonicalSavePath);
-        using var validated = Validate(bytes);
-        Directory.CreateDirectory(_slotDirectory);
-        AtomicWrite(target, bytes);
-        return ReadMetadata(target);
+        var previous = File.Exists(_canonicalSavePath) ? File.ReadAllBytes(_canonicalSavePath) : null;
+        var previousWrittenUtc = previous is null ? (DateTime?)null : File.GetLastWriteTimeUtc(_canonicalSavePath);
+        try
+        {
+            writeAuthoritativeSave();
+            var bytes = File.ReadAllBytes(_canonicalSavePath);
+            using var validated = Validate(bytes);
+            Directory.CreateDirectory(_slotDirectory);
+            AtomicWrite(target, bytes);
+            return ReadMetadata(target);
+        }
+        catch (Exception failure)
+        {
+            List<Exception> rollbackErrors = [];
+            try
+            {
+                if (previous is null) File.Delete(_canonicalSavePath);
+                else
+                {
+                    AtomicWrite(_canonicalSavePath, previous);
+                    File.SetLastWriteTimeUtc(_canonicalSavePath, previousWrittenUtc!.Value);
+                }
+            }
+            catch (Exception rollback) { rollbackErrors.Add(rollback); }
+            try { File.Delete(target); }
+            catch (Exception rollback) { rollbackErrors.Add(rollback); }
+            if (rollbackErrors.Count != 0)
+                throw new IOException("Complete save failed and its previous Continue/slot rollback also failed.",
+                    new AggregateException(new[] { failure }.Concat(rollbackErrors)));
+            throw;
+        }
     }
 
     internal RuntimeSaveSlotMetadata ReadSlot(string slotId) => slotId == "current" ? ReadMetadata(_canonicalSavePath) :
