@@ -20,7 +20,10 @@ internal partial class NativeOwnedContainerMenu : Control
     private bool _closed;
     private NativeOwnedQuantityMenu? _quantity;
     private readonly uint _askQuantityAt;
-    internal string? Error { get; private set; }
+    private readonly Label _transferStatus;
+    private string? _layoutError;
+    internal string? TransferError { get; private set; }
+    internal string? Error => _layoutError ?? TransferError;
     private const int RowsPerPage = 6;
 
     internal NativeOwnedContainerMenu(FalloutPluginStack records, FalloutPlayerInventory player, FalloutPlayerInventory container,
@@ -43,13 +46,25 @@ internal partial class NativeOwnedContainerMenu : Control
                 _tiles.Bind(Named($"CM_{side}_{direction}FilterArrow"), "visible", 0);
         AddTarget(Named("CM_TakeAllButton"), FalloutGameSettingStrings.Read(records, "sTakeAll"), TakeAll);
         AddTarget(Named("CM_ExitButton"), FalloutGameSettingStrings.Read(records, "sExit"), Close);
+        var statusFont = _tiles.Font(Named("CM_TakeAllButton").DescendantsAndSelf("text").FirstOrDefault() ?? Named("CM_TakeAllButton"));
+        _transferStatus = new()
+        {
+            Name = "ContainerTransferRefusal",
+            Visible = false,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            MouseFilter = MouseFilterEnum.Ignore
+        };
+        _transferStatus.AddThemeFontOverride("font", statusFont.CreateFontFile());
+        _transferStatus.AddThemeFontSizeOverride("font_size", Mathf.RoundToInt(statusFont.Font.SourceSize));
+        _transferStatus.AddThemeColorOverride("font_color", _tiles.Color);
+        AddChild(_transferStatus);
         SetMeta("opennv_ui_source", "menus/container_menu.xml; source-fonts-and-atlas");
         SetMeta("opennv_ui_unverified", "item-preview,filters,theft,retail-transfer-policy,matched-pixels");
     }
     public override void _Ready()
     {
         try { Refresh(); }
-        catch (Exception error) { Error = error.Message; GD.PushError($"OPENNV_CONTAINER_UI_FAIL {error.Message}"); }
+        catch (Exception error) { _layoutError = error.Message; GD.PushError($"OPENNV_CONTAINER_UI_FAIL {error.Message}"); }
     }
     private NativeViewportLayout? _viewportLayout;
     public override void _EnterTree() => _viewportLayout = new(this, Layout);
@@ -81,18 +96,41 @@ internal partial class NativeOwnedContainerMenu : Control
         // Recheck after the modal choice; another authoritative action may
         // have changed this inventory while the quantity menu was open.
         if ((_inventories[side].Item(form)?.Count ?? 0) < count) { Refresh(); return; }
-        _inventories[side].TransferTo(_inventories[1 - side], form, count);
-        _inventories[0].Notifications.Publish([new(side == 1 ? FalloutHudEventKind.ItemAdded : FalloutHudEventKind.ItemRemoved, form, count)]);
-        _changed(); Refresh();
+        ApplyTransfer(() =>
+        {
+            var notice = new FalloutHudEvent(side == 1 ? FalloutHudEventKind.ItemAdded : FalloutHudEventKind.ItemRemoved, form, count);
+            _inventories[0].Notifications.RequirePublish([notice]);
+            _inventories[side].TransferTo(_inventories[1 - side], form, count);
+            _inventories[0].Notifications.Publish([notice]);
+        });
     }
     private void TakeAll()
     {
         if (_closed || _quantity is not null) return;
-        foreach (var item in TransferableItems(1))
+        ApplyTransfer(() =>
         {
-            _inventories[1].TransferTo(_inventories[0], item.FormKey, item.Count);
-            _inventories[0].Notifications.Publish([new(FalloutHudEventKind.ItemAdded, item.FormKey, item.Count)]);
+            var items = TransferableItems(1);
+            var notices = items.Select(item => new FalloutHudEvent(FalloutHudEventKind.ItemAdded, item.FormKey, item.Count)).ToArray();
+            _inventories[0].Notifications.RequirePublish(notices);
+            _inventories[1].TransferItemsTo(_inventories[0], items.Select(item => new FalloutInventoryTransfer(item.FormKey, item.Count)).ToArray());
+            _inventories[0].Notifications.Publish(notices);
+        });
+    }
+    private void ApplyTransfer(Action transfer)
+    {
+        try
+        {
+            transfer();
         }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or OverflowException or KeyNotFoundException)
+        {
+            TransferError = error.Message;
+            _transferStatus.Text = "Transfer refused: " + error.Message;
+            _transferStatus.Visible = true;
+            GD.PushError($"OPENNV_CONTAINER_TRANSFER_REFUSED {error.Message}");
+            return;
+        }
+        TransferError = null; _transferStatus.Visible = false;
         _changed(); Refresh();
     }
     private FalloutCampaignItem[] TransferableItems(int side) => _inventories[side].Items
@@ -143,6 +181,8 @@ internal partial class NativeOwnedContainerMenu : Control
         foreach (var (tile, button) in _targets.Concat(_rows))
         { button.Position = _tiles.Position(tile); button.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height")); }
         _tiles.ValidateDrawing();
+        _transferStatus.Position = new(24, Math.Max(24, Size.Y - 160));
+        _transferStatus.Size = new(Math.Max(1, Size.X - 48), 120);
         QueueRedraw();
     }
     public override void _Input(InputEvent inputEvent)
@@ -160,8 +200,8 @@ internal partial class NativeOwnedContainerMenu : Control
     }
     public override void _Draw()
     {
-        if (Error is not null) return;
+        if (_layoutError is not null) return;
         try { _tiles.Draw(this); }
-        catch (Exception error) { Error = error.Message; GD.PushError($"OPENNV_CONTAINER_UI_FAIL {error.Message}"); }
+        catch (Exception error) { _layoutError = error.Message; GD.PushError($"OPENNV_CONTAINER_UI_FAIL {error.Message}"); }
     }
 }

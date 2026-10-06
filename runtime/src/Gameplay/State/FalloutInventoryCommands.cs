@@ -39,7 +39,8 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 {
                     // Retire an actual worn weapon before deleting its last item.
                     // Armor and unrelated contents retain their existing pose owner.
-                    if (!isPlayer && inventory.Item(changedItem) is { RecordType: "WEAP" } weapon &&
+                    if (!isPlayer && world.Get(command.Target).Injury?.Dead != true &&
+                        inventory.Item(changedItem) is { RecordType: "WEAP" } weapon &&
                         command.Count >= weapon.Count && inventory.Equipped.Contains(weapon.RuntimeFormId))
                         prepareActorChange?.Invoke(command.Target);
                     inventory.Remove(changedItem, command.Count, command.Silent || !isPlayer);
@@ -48,7 +49,7 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
                 break;
             case FalloutInventoryCommandKind.RemoveAll:
                 var destination = command.Destination is { } target ? Inventory(target) : null;
-                if (!isPlayer) prepareActorChange?.Invoke(command.Target);
+                if (!isPlayer && world.Get(command.Target).Injury?.Dead != true) prepareActorChange?.Invoke(command.Target);
                 inventory.RemoveAll(records, isPlayer, destination, command.RetainOwnership,
                     command.Destination is { } receiver && IsPlayer(receiver) && !command.Silent);
                 if (!isPlayer) world.InventoryChanged(command.Target);

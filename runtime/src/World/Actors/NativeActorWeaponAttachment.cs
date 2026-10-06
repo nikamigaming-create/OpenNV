@@ -53,7 +53,7 @@ internal sealed partial class NativeActorWeaponAttachment
                 mesh.MaterialOverride = NativeNifMeshBuilder.BuildMaterial(source, geometry,
                     texturePaths: NativeNpcMaterial.Alternate(model, source, geometry));
                 foreach (var property in geometry.Properties.Where(index => index >= 0).Select(source.ReadObject))
-                    skeleton.MaterialChannels.Add(geometry.Name, source, property, [mesh.MaterialOverride]);
+                    skeleton.MaterialChannels.Add(geometry.Name, source, property, [mesh.MaterialOverride], owner: Root);
             }
         }
         catch

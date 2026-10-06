@@ -60,9 +60,14 @@ internal sealed class FalloutHudNotifications
 
     internal void Publish(IReadOnlyList<FalloutHudEvent> events)
     {
+        RequirePublish(events);
+        foreach (var value in events) _pending.Enqueue(new(++_ordinal, value));
+    }
+
+    internal void RequirePublish(IReadOnlyList<FalloutHudEvent> events)
+    {
         Validate(events);
         _ = checked(_ordinal + events.Count);
-        foreach (var value in events) _pending.Enqueue(new(++_ordinal, value));
     }
 
     internal void Advance(double seconds, Func<FalloutHudEvent, double> duration)

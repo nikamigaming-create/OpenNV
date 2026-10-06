@@ -8,7 +8,7 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class CorpseEquipmentContracts
 {
-    internal static void Run()
+    internal static void Run(bool lootOnly = false)
     {
         var directory = Path.Combine("local", "corpse-equipment-contract-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -43,6 +43,11 @@ internal static class CorpseEquipmentContracts
             var complete = Roundtrip(world.Capture());
             FalloutReferenceSnapshot.Validate(complete);
             var corpse = complete.Single(snapshot => snapshot.Reference == state.Reference);
+            if (lootOnly)
+            {
+                CorpseEquippedLootContracts.Run(records, complete);
+                return;
+            }
             Require(JsonSerializer.Serialize(state.Inventory.Capture()) == inventoryBefore && corpse.DeathCount == 1 &&
                 corpse.Injury is { DeathEventPending: true, DeathInventoryGranted: true } &&
                 corpse.PackageBindingFailure!.Error == state.ProcedureCaptureBlocker,
@@ -297,7 +302,9 @@ internal static class CorpseEquipmentContracts
             Setting(0x61, "fAVDNPCHealthEnduranceOffset", -1), Setting(0x62, "fAVDNPCHealthEnduranceMult", 5.25f),
             Setting(0x63, "fAVDNPCHealthLevelMult", 5), Record("PACK", 0x20, Field("PKDT", pkdt)),
             Record("PACK", 0x22, Field("PKDT", pkdt)),
-            Weapon(0x50, weapon), Weapon(0x52, virtualWeapon), Record("AMMO", 0x51, Field("EDID", Text("FixtureAmmo")), Field("DATA", new byte[13])),
+            Weapon(0x50, weapon), Weapon(0x52, virtualWeapon), Weapon(0x53, weapon),
+            Record("MISC", 0x54, Field("EDID", Text("FixtureMisc")), Field("DATA", new byte[8])),
+            Record("AMMO", 0x51, Field("EDID", Text("FixtureAmmo")), Field("DATA", new byte[13])),
             Record("DOOR", 0x40), Record("CELL", 0x800, Field("DATA", [1])), group));
     }
     private static byte[] Reference(string kind, uint id, uint item) => Record(kind, id, Field("NAME", BitConverter.GetBytes(item)), Field("DATA", new byte[24]));

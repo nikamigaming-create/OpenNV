@@ -18,11 +18,16 @@ internal sealed partial class FalloutPlayerInventory
     internal IReadOnlyList<uint> Equipped => _equipped.Order().ToArray();
     internal FalloutCampaignItem? Item(FalloutFormKey form) => _items.GetValueOrDefault(form);
     internal void TransferTo(FalloutPlayerInventory target, FalloutFormKey form, int count, int? variantIndex = null, bool force = false)
+        => ApplyRemovalTransaction(target, (source, destination) => source.TransferToCore(destination!, form, count, variantIndex, force));
+
+    private void TransferToCore(FalloutPlayerInventory target, FalloutFormKey form, int count, int? variantIndex, bool force)
     {
         if (ReferenceEquals(this, target)) throw new InvalidOperationException("Inventory transfer needs distinct owners.");
         var source = Item(form) ?? throw new InvalidOperationException("Transferred item is absent.");
         if (source.UnequipLocked && !force) throw new InvalidOperationException("Locked equipped items cannot be transferred.");
         if (count <= 0 || count > source.Count) throw new ArgumentOutOfRangeException(nameof(count));
+        if (_equipped.Contains(source.RuntimeFormId) && count != source.Count)
+            throw new NotSupportedException("Partial transfer of an equipped stack needs item-instance selection.");
         var remaining = (source.Variants ?? [new(source.Count)]).ToList();
         var selected = new List<FalloutItemVariant>();
         var toMove = count;
@@ -36,6 +41,9 @@ internal sealed partial class FalloutPlayerInventory
         }
         if (toMove != 0) throw new InvalidOperationException("Selected extra-data stack has too few items.");
         var previous = target.Item(form);
+        if (previous is not null && (previous.RuntimeFormId != source.RuntimeFormId ||
+            previous.RecordType != source.RecordType || previous.EditorId != source.EditorId))
+            throw new InvalidDataException("Transfer inventories disagree on the source item identity.");
         var variants = (previous?.Variants ?? (previous is null ? [] : [new(previous.Count)])).ToList();
         foreach (var item in selected)
         {
@@ -57,6 +65,17 @@ internal sealed partial class FalloutPlayerInventory
         ++Revision;
     }
     internal void Remove(FalloutFormKey form, int count, bool silent)
+    {
+        if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
+        if (Item(form) is not { } item) return;
+        var events = silent ? Array.Empty<FalloutHudEvent>() :
+            new[] { new FalloutHudEvent(FalloutHudEventKind.ItemRemoved, form, Math.Min(count, item.Count)) };
+        Notifications.RequirePublish(events);
+        ApplyRemovalTransaction(null, (source, _) => source.RemoveCore(form, count, silent: true));
+        Notifications.Publish(events);
+    }
+
+    private void RemoveCore(FalloutFormKey form, int count, bool silent)
     {
         if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count));
         if (Item(form) is not { } previous) return;
@@ -115,6 +134,7 @@ internal sealed partial class FalloutPlayerInventory
 
     internal void Equip(FalloutPluginStack records, FalloutFormKey form, bool? noUnequip = null)
     {
+        RequireNoChangeInProgress();
         var item = Item(form) ?? throw new InvalidOperationException("Cannot equip an item absent from inventory.");
         if (item.RecordType is not ("ARMO" or "WEAP")) throw new NotSupportedException("Equipped item has no armor/weapon owner.");
         uint Slots(FalloutFormKey key)
@@ -142,6 +162,7 @@ internal sealed partial class FalloutPlayerInventory
     }
     internal bool Unequip(FalloutPluginStack records, FalloutFormKey form, bool force = false)
     {
+        RequireNoChangeInProgress();
         if (Item(form)?.UnequipLocked == true && !force) return false;
         if (!_equipped.Remove(records.RuntimeFormId(form))) return false;
         if (Item(form) is { UnequipLocked: true } item) _items[form] = item with { UnequipLocked = false };
@@ -150,6 +171,7 @@ internal sealed partial class FalloutPlayerInventory
     }
     internal void Publish(IReadOnlyCollection<FalloutCampaignItem> replacements)
     {
+        RequireNoChangeInProgress();
         if (replacements.Any(item => item.Count <= 0 || item.Variants is { } variants &&
             (variants.Sum(value => value.Count) != item.Count || variants.Any(value => value.Count <= 0 ||
                 value.Condition is { } condition && (!float.IsFinite(condition) || condition < 0 || condition > 1)))) ||

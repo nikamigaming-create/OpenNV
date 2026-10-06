@@ -10,6 +10,12 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--saved-equipped-corpse-loot", var lootGame, var lootMod, var lootRoot,
+                var lootSave, var lootActor, .. var lootDependencies])
+            {
+                await SavedEquippedCorpseLoot(lootGame, lootMod, lootRoot, lootSave, lootActor, lootDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is ["--owned-stopped-idle", var stoppedGame, var stoppedMod, var stoppedRoot, var stoppedSave,
                 var stoppedActor, var stoppedQuest, var stoppedStage, var stoppedPackage, var stoppedForm, var stoppedSounds, .. var stoppedDependencies])
             {

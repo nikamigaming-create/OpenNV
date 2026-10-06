@@ -8,6 +8,20 @@ internal sealed partial class FalloutPlayerInventory
 {
     internal void Exchange(FalloutPlayerInventory other, IReadOnlyList<FalloutTradeTransfer> transfers)
     {
+        ArgumentNullException.ThrowIfNull(transfers);
+        if (transfers.Any(transfer => transfer is null))
+            throw new InvalidDataException("Trade transfer is absent.");
+        var events = transfers.GroupBy(transfer =>
+                (transfer.FromThisInventory ? FalloutHudEventKind.ItemRemoved : FalloutHudEventKind.ItemAdded, transfer.Form))
+            .Select(group => new FalloutHudEvent(group.Key.Item1, group.Key.Form,
+                group.Aggregate(0, (count, transfer) => checked(count + transfer.Count)))).ToArray();
+        Notifications.RequirePublish(events);
+        ApplyRemovalTransaction(other, (source, target) => source.ExchangeCore(target!, transfers));
+        Notifications.Publish(events);
+    }
+
+    private void ExchangeCore(FalloutPlayerInventory other, IReadOnlyList<FalloutTradeTransfer> transfers)
+    {
         ArgumentNullException.ThrowIfNull(other);
         ArgumentNullException.ThrowIfNull(transfers);
         if (ReferenceEquals(this, other)) throw new InvalidOperationException("Trade needs distinct inventory owners.");
@@ -40,11 +54,6 @@ internal sealed partial class FalloutPlayerInventory
         ++Revision;
         ++other.Revision;
 
-        Notifications.Publish(transfers.GroupBy(transfer =>
-                (transfer.FromThisInventory ? FalloutHudEventKind.ItemRemoved : FalloutHudEventKind.ItemAdded, transfer.Form))
-            .Select(group => new FalloutHudEvent(group.Key.Item1, group.Key.Form,
-                group.Aggregate(0, (count, transfer) => checked(count + transfer.Count))))
-            .ToArray());
     }
 
     private static void Move(Dictionary<FalloutFormKey, FalloutCampaignItem> sourceItems,

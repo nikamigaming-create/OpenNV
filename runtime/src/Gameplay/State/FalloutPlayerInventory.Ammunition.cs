@@ -9,6 +9,7 @@ internal sealed partial class FalloutPlayerInventory
     internal void ConsumeAmmunition(FalloutFormKey form, int count, FalloutCampaignItem? returned,
         FalloutCampaignItem? wornWeapon = null)
     {
+        RequireNoChangeInProgress();
         var source = Item(form) ?? throw new InvalidOperationException("Fired ammunition is absent.");
         if (source.RecordType != "AMMO" || count <= 0 || count > source.Count)
             throw new InvalidDataException("Ammunition consumption is invalid.");

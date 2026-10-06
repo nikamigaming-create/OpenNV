@@ -7,9 +7,10 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class InventoryCommandContracts
 {
-    internal static void Run()
+    internal static void Run(bool projectLocal = false)
     {
-        var directory = Directory.CreateTempSubdirectory("opennv-inventory-commands-");
+        var directory = projectLocal ? Directory.CreateDirectory(Path.Combine("local", "inventory-commands-" + Guid.NewGuid().ToString("N")))
+            : Directory.CreateTempSubdirectory("opennv-inventory-commands-");
         try
         {
             var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
