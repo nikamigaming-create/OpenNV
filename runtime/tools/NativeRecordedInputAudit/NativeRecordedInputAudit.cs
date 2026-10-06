@@ -5,6 +5,7 @@ using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Diagnostics.Parity;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.InputSystem;
 
 public partial class NativeRecordedInputAudit : Node
 {
@@ -15,6 +16,7 @@ public partial class NativeRecordedInputAudit : Node
         RuntimeLiveHarness? harness = null;
         try
         {
+            ExerciseBotActionBindings();
             Directory.CreateDirectory(directory);
             var pluginPath = Path.Combine(directory, "Input.esm");
             File.WriteAllBytes(pluginPath, Fixture());
@@ -117,6 +119,34 @@ public partial class NativeRecordedInputAudit : Node
     }
     private static void Require(bool condition, string message)
     { if (!condition) throw new InvalidDataException(message); }
+
+    private static void ExerciseBotActionBindings()
+    {
+        const string action = "opennv_native_audit_bot_aim";
+        Require(!InputMap.HasAction(action), "The isolated bot binding fixture already has an owner.");
+        InputMap.AddAction(action);
+        try
+        {
+            using var keyboard = NativeScriptKeys.Create(56);
+            using var mouse = NativeScriptKeys.Create(257);
+            InputMap.ActionAddEvent(action, keyboard);
+            InputMap.ActionAddEvent(action, mouse);
+            Require(RuntimeLiveHarness.PhysicalBotAction(action) is { Key: Key.None, Mouse: MouseButton.Right },
+                "Bot aim lost the source mouse binding to an unsupported side-specific keyboard event.");
+            InputMap.ActionEraseEvent(action, mouse);
+            var rejected = false;
+            try { RuntimeLiveHarness.PhysicalBotAction(action); }
+            catch (NotSupportedException error) { rejected = error.Message.Contains("physical-side", StringComparison.Ordinal); }
+            Require(rejected, "A side-specific keyboard binding was silently delivered without its native location.");
+            InputMap.ActionEraseEvents(action);
+            using var reload = NativeScriptKeys.Create(19);
+            InputMap.ActionAddEvent(action, reload);
+            Require(RuntimeLiveHarness.PhysicalBotAction(action) is { Key: Key.R, Mouse: MouseButton.None },
+                "Ordinary source keyboard input was replaced by a guessed mouse binding.");
+        }
+        finally { InputMap.EraseAction(action); }
+        GD.Print("OPENNV_NATIVE_BOT_ACTION_BINDINGS_PASS sourceDualBinding=true mappedMousePreferred=true sideSpecificKeyRefused=true ordinaryKeyboardRetained=true");
+    }
     private static FalloutPluginStack LoadRecords(string directory)
     {
         var args = OS.GetCmdlineUserArgs();

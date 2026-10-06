@@ -10,7 +10,7 @@ internal sealed partial class RuntimeLiveHarness
     private bool _botSkillsLoaded, _botSkillsDirty;
     private string? _botSkillsError;
     private BotPhysicalInput? _botAimInput;
-    private readonly record struct BotPhysicalInput(Key Key, MouseButton Mouse);
+    internal readonly record struct BotPhysicalInput(Key Key, MouseButton Mouse);
     private object BotSkillStoreState => new
     {
         path = Path.Combine(_directory, "bot-skills.json"),
@@ -74,15 +74,21 @@ internal sealed partial class RuntimeLiveHarness
         }
     }
 
-    private BotPhysicalInput PhysicalBotAction(string action)
+    internal static BotPhysicalInput PhysicalBotAction(string action)
     {
         if (!InputMap.HasAction(action)) throw new NotSupportedException("Ordinary bot action is unbound: " + action);
-        foreach (var input in InputMap.ActionGetEvents(action))
-        {
-            if (input is InputEventKey key && (key.PhysicalKeycode != Key.None || key.Keycode != Key.None))
-                return new(key.PhysicalKeycode != Key.None ? key.PhysicalKeycode : key.Keycode, MouseButton.None);
+        var events = InputMap.ActionGetEvents(action);
+        foreach (var input in events)
             if (input is InputEventMouseButton mouse && mouse.ButtonIndex is MouseButton.Left or MouseButton.Right or MouseButton.Middle)
                 return new(Key.None, mouse.ButtonIndex);
+        foreach (var input in events)
+        {
+            if (input is InputEventKey key && (key.PhysicalKeycode != Key.None || key.Keycode != Key.None))
+            {
+                if (key.Location != KeyLocation.Unspecified)
+                    throw new NotSupportedException("Ordinary bot keyboard input requires its physical-side adapter: " + action);
+                return new(key.PhysicalKeycode != Key.None ? key.PhysicalKeycode : key.Keycode, MouseButton.None);
+            }
         }
         throw new NotSupportedException("Ordinary bot action has no native keyboard/mouse binding: " + action);
     }

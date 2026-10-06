@@ -21,8 +21,8 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     private readonly Dictionary<string, byte> _parts = new(StringComparer.Ordinal);
     private object? _lastLimbEffect;
     internal bool Dead => _state.Injury?.Dead == true;
-    internal bool EngagedWith(FalloutFormKey target) => !Dead && _state.Enabled &&
-        _state.Engagement is { Action: not "idle" } engagement && engagement.Target == target;
+    internal bool EngagedWith(FalloutFormKey target) =>
+        _world.HasSelectedCombatTarget(_state.Reference, target);
     internal bool IsInCombat(FalloutFormKey reference) => _world.IsInCombat(reference,
         _world.PlayerInCombat);
     internal bool CanReceiveExplosionDamage => _state.Enabled && !Dead;

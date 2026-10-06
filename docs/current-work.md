@@ -11,14 +11,11 @@ campaign, cell or parity completion.
 
 ## Verified state
 
-Checked PR 150 is merged. Main/origin and the fresh
-codex/vault-continuation-parallel-owners branch start at 16578d6. Its published
-31768ed candidate has five passing checks. Stopped-actor finite-audio retirement,
-assembled source emitters and fair navigation pass the full required runtime
-gate, focused pure/owned native/cold checks and the unchanged owned stair route
-in both directions. Verified slices 3df4a3a and e00e1d8 retain bounded guest
-memory and winning quest targets/directed portal sources. Original DLL execution
-remains unowned.
+Checked PR 151 is merged with all five checks passing. Main/origin synchronized
+at 21d670b before the fresh codex/combat-idle-target-continuation branch.
+The published campaign-bot, source-goal, finite-audio/emitter, fair navigation
+and strict guest-memory slices retain their focused and full gate evidence.
+Original DLL execution remains unowned.
 
 The source-driven campaign controller and ordinary combat skill build without
 warnings/errors and pass focused safety, menu/save, source-goal and portal
@@ -29,9 +26,19 @@ full native instance checks. Ordinary input independently chose Escape objective
 crossed original 054285 into CELL 024511 at 120 HP without an operator-specified
 reference goal. Model-less STAT marker travel now keeps actual source placement
 without requesting invented visible geometry. Later ordinary source-point input
-opened authored route doors and reached CG04:35. The native combat attempt then
-refused a null observational health value; the adapter now reads the shared
-authoritative health owner. Actual guard combat on that fix is pending.
+opened authored route doors and reached CG04:35. The adapter now reads the shared
+authoritative health owner. The fresh c7ff637 slice separates retained combat
+membership/selected target from pursue, attack, reload, flee and idle actions.
+Source mouse alternatives remain actual bindings; side-specific keyboard-only
+bot input refuses rather than losing location.
+
+Actual ordinary source-point travel and threat takeover now defeat original
+guard 06490e at 120 HP through five attributable player shots, four actor
+contacts and matching native death. Loaded rounds change 12 to 7; reserve remains
+24. The bot uses original BPNT, source hit rays and mapped aim/fire input.
+No damage, target, inventory, stage, position or collision was fabricated.
+Full cold/all-action shared query and native mapped-input/recorder contracts pass.
+Whole combat, retail tactics and later complete save remain independent.
 
 Ordinary input genuinely reached CG04:140 in the final cave, CELL 024512.
 Actual pistol contacts defeated guard 06490e. Ordinary inventory, key/password,
@@ -65,10 +72,12 @@ establish retail audio timing, output, cell-stop policy or whole campaign saving
 
 Fresh ordinary F5 after the autonomous portal transition genuinely reaches its
 handler and waits for finite voices, then refuses animation-sound-continuation.
-Resident broken-door 0aba56 retains generation 3 DRSVaultVerticalBroken with
-active end state and no opaque error. No complete slot was written. The exact
-failed receipt remains; cell-stop/audio policy cannot be replaced with a guessed
-finished voice. The complete stage-18 checkpoint remains intact.
+The latest post-guard F5 additionally retains resident human 0569b4's generation
+29 NPCHumanOtherBangGlassFist and broken-door 0aba56's generations 18/19
+DRSVaultVerticalBroken, all active with no opaque error. No complete slot was
+written. Exact failed receipts remain; finite completion/cell-stop policy cannot
+be replaced with a guessed finished voice. The complete stage-18 checkpoint
+remains intact.
 
 Complete canonical v43 slot 5f9792be93bb43319f7672eb74787dd6 remains intact at
 CG04:18, CELL 028138, full health, drawn pistol and 12/24 rounds. Cold Continue
@@ -94,11 +103,10 @@ history/RNG without replay. Old failed histories cannot be erased. Fresh ordinar
 F5 reaches finite waiting and the separate broken-door failure above; endpoint
 audio remains unverified.
 
-The latest ordinary source-point input reaches CG04:35 at full health and
-releases controls with an explicit combat-owner refusal rather than leaving the
-player exposed. Actual shared-health combat on the corrected adapter remains
-pending. The private input runner pauses on takeover, success, failure and
-expiry; this is input protection, not combat parity. Shared capsule searches had
+The latest ordinary source-point input reaches CG04:35 at full health, defeats
+the actual guard through bot ordinary input and pauses for inspection. The
+private input runner releases controls on takeover, success, failure and expiry;
+this is input protection, not combat parity. Shared capsule searches had
 a proven first-caller budget starvation risk. A round-robin cursor owner uses the
 same 2 ms/16-step bounds and real body/RID/world/thread retirement. Its pure
 starvation/lifetime contracts, native component and unchanged owned stair route
@@ -128,10 +136,11 @@ level-up and directional sensory proposals remain unintegrated.
 ## Next owner and outcome
 
 Primary owns serial builds/native checks, ordinary input and publication. Publish
-the fully gated campaign-bot slice, then verify actual shared-health combat and source
-marker continuation, then resolve original broken-door finite audio/cell-stop
-capture before claiming a reusable later checkpoint. Follow original vault/cave
-review into the exterior through ordinary input. Publish checked slices and
+the checked combat-idle/input slice and finish source-marker continuation.
+The separate finite-save-edge worktree owns the exact resident finite-audio
+completion refusal, with synthetic/native evidence required before integration.
+Resolve that general owner before claiming a reusable later checkpoint, then
+follow original vault/cave review into the exterior. Publish checked slices and
 verify main/origin before the next block.
 
 Interrupted actor-query, modeled-light, portable-startup, compiled-SCDA and
@@ -144,11 +153,11 @@ Source visibility, process/cadence, train/calendar and wider owners remain open.
 
 ## Private continuation
 
-Run: tmp/development-lab/ttw-copilot-ordinary-20261005. The last protected input
-reached CG04:35 at 120 HP, CELL 024511, then quit normally for the shared-health
-adapter build. No game is running. Original canonical data remains in
+Run: tmp/development-lab/ttw-bot-health-20261006. The last protected input
+reaches CG04:35 at 120 HP, CELL 024511, with actual guard death and 7/24 rounds.
+It quit normally after F5 refusal. No game is running. Original canonical data remains in
 tmp/development-lab/ttw-post-goat-checkpoint-20261004; preserve save.json and every
 complete immutable slot. The farthest genuine, unsaved progress remains
-CG04:140 in the cave. New manual request 1/slot aac9444ded344cb9bb1cdaaefb22d699
+CG04:140 in the cave. New manual request 1/slot 96aca60194a7493f97b148eb067b1abf
 failed after genuine finite waiting; retain its audio receipt without replay.
 Source probes, helpers and logs remain private. Recording is off.

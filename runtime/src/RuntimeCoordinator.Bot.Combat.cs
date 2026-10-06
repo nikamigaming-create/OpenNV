@@ -77,7 +77,7 @@ public partial class RuntimeCoordinator
                         node.IsQueuedForDeletion() || !node.IsInsideTree()) continue;
                     var state = world!.Get(key);
                     var targetsPlayer = !state.Unconscious && !state.Restrained &&
-                        state.Engagement is { Action: not "idle" } engagement && engagement.Target == playerKey;
+                        world.HasSelectedCombatTarget(key, playerKey);
                     if (!targetsPlayer && !_botCombatObservedThreats.Contains(key)) continue;
                     if (targetsPlayer) _botCombatObservedThreats.Add(key);
                     var resident = node.IsVisibleInTree() && state.Enabled && NativeCollisionResident(node.GlobalPosition);
