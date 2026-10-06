@@ -11,9 +11,9 @@ percentage follows from component checks or record counts.
 
 ## Verified state
 
-Checked PR 155 is merged with all five checks passing. Clean main/origin
-synchronized at 36a917a before the fresh
-codex/settled-corpse-loot-and-exterior-save branch. Published F5/menu preparation,
+Checked PR 156 is merged with all five checks passing. Local main and origin/main
+were verified equal and clean, with no outstanding task pull requests.
+Published F5/menu preparation,
 original ForceSave ordering, terminal XLKR, independent actor queries, corpse
 equipment and source-bot slices retain focused/full gate evidence.
 
@@ -46,7 +46,7 @@ The final inspected native viewport shows terrain, weapon, HUD and night sky
 without persistent whiteout. Temporary PNG/pixels/frame metadata are deleted;
 recording is off. Matched retail pixels remain independent.
 
-## Current candidate
+## Verified settled corpse transfer
 
 Settled corpse item removal now uses staged inventory publication followed by
 reversible source equipment commits and final native retirement. Pure current/
@@ -64,7 +64,7 @@ attachment/handling.
 SHA256: 50F0751D0D06D17BC51C5B1582F9E7C58D67DA3889BE8B29D28A5B278FCFE105.
 The full required Release/Debug, formatting/analyzers, contract, launcher and
 native gate passes, as does the final selected unchanged owned transfer audit.
-Checked pull-request publication is next.
+Checked PR 156 publishes this verified transfer.
 
 ## Current divergence owners
 
@@ -99,8 +99,7 @@ accepted from those component tests.
 ## Next owner and outcome
 
 Primary owns serial builds/native checks, ordinary input and checked publication.
-Publish the cold-verified settled corpse transfer after the full required gate,
-then resolve the supported looping audio checkpoint/mixer interface before
+Resolve the supported looping audio checkpoint/mixer interface before
 exterior cold-save or onward route claims. Reuse retained first-party work.
 Complete the whole vault room/loot/inventory/door denominator before Megaton and
 authored train/Mojave acceptance.
