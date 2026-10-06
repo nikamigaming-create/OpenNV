@@ -19,8 +19,9 @@ Original DLL execution remains unowned.
 
 The source-driven campaign controller and ordinary combat skill build without
 warnings/errors and pass focused safety, menu/save, source-goal and portal
-contracts. The full required Release/Debug, formatting/analyzer, contract,
-launcher and native Godot gate now passes. A detached refused-controller audit
+contracts. The current finite-completion/independent-image-clock/source-binding
+candidate also passes the full required Release/Debug, formatting/analyzer,
+contract, launcher and native Godot gate. A detached refused-controller audit
 leak is fixed with explicit native retirement, verified in both selected and
 full native instance checks. Ordinary input independently chose Escape objective 10, planned and
 crossed original 054285 into CELL 024511 at 120 HP without an operator-specified
@@ -136,6 +137,15 @@ point transform and diffuse clock require general owners. The classified import
 failures in the supplied older three-cell lanes identify no structural-room NIF
 refusal; observed shaped-phantom refusals are trigger ACTIs. This does not verify
 current room geometry, visibility, pixels or complete actor placement.
+
+The fresh whole-vault source audit accounts for all 7,155 references across ten
+selected interiors, including disconnected authored alternatives and directed
+portal closure. It now restores the complete preserved checkpoint against its
+actual owned head resources rather than an absent global launch singleton.
+It retains 101 reference issues, 34 failed resource declarations, zero package
+error bindings and 51 NAVM samples without packed/box support. Native contacts,
+each room's draw/visibility, every loot/inventory action and door traversal are
+still separate acceptance lanes; these counts cannot establish completion.
 
 Earlier selected checks pass original stopped-Travel independent IDLE clocks,
 ended guard sound history, source arrival regions, finer capsule navigation and

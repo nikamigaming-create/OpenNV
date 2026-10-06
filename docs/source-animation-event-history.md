@@ -46,7 +46,7 @@ the [native physics notification](https://github.com/godotengine/godot/blob/4.7.
 Mixer inactivity alone therefore cannot supply either completion or refusal of
 an otherwise proven live finite wait.
 
-The proposed completion-wait owner retains the original native node, playback,
+The completion-wait owner retains the original native node, playback,
 stream, source/media hashes and generation, after observing that playback
 playing. `awaiting-native-finished` admits only the same registered, resident,
 processable, unpaused, nonlooping playback. It returns the unchanged transient
@@ -59,8 +59,10 @@ retained ledger nor the complete writer's capture predicate changes.
 timeout cause without changing history or admitting a checkpoint.
 
 Focused selectors extend the existing pure, native finite-lifetime and owned
-emitter/cold audits. Run these serially with recording off; they have not been
-executed as part of this isolated proposal:
+emitter/cold audits. Pure completion-window, actual flat/spatial native lifetime
+and unchanged owned broken-door completion-edge/cold checks pass with recording
+off. They establish the narrow native dispatch boundary, not ordinary saving
+while producers continue or a paused Save/Load transaction:
 
 ```powershell
 dotnet run --project .\contract-tests\ReferenceScriptContractProbe -- --finite-sound-completion-wait-contracts

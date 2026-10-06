@@ -23,6 +23,12 @@ lifetime and authored model-less head-part admission now pass focused native,
 pause/fault and unchanged owned-source checks; final exterior-view replay and
 complete saving remain unverified. See [image-space ownership](image-space-lifetime-owner.md).
 
+The fresh source-bound vault audit retains all 7,155 winning references across
+ten selected interiors and successfully joins the unchanged complete checkpoint.
+There are still 101 reference issues and 34 failed resource declarations;
+zero package error bindings is not procedure or gameplay completion. No native
+snapshot or whole room/loot/inventory/door acceptance is inferred from this audit.
+
 Ordinary TTW input genuinely reaches Escape stage 140 and the final vault cave
 chamber (CELL 024512): actual pistol hits defeat the guard, ordinary inventory
 actions acquire the office key/password, and the original terminal/XTEL tunnel
