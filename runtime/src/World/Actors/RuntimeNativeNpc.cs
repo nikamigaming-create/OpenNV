@@ -200,7 +200,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             else _idleRevision = saved.Revision;
             if (_animationSounds is null)
             {
-                _animationSounds = new(stack, content, this, Skeleton.UnitsToMetres, _aiRandom);
+                _animationSounds = new(stack, content, this, Skeleton.UnitsToMetres, _aiRandom, _aiReferenceState?.AnimationSoundEvents);
                 AddChild(_animationSounds);
             }
             AnimationError = null;

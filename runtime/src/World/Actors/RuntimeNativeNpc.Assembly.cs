@@ -65,6 +65,7 @@ internal partial class RuntimeNativeNpc
             if (appearance.Reference is { } key) actor.SetMeta("opennv_reference_form_key", key.ToString());
             actor.SetMeta("opennv_npc_form_key", appearance.Npc.ToString());
             actor.SetMeta("opennv_source_skeleton", appearance.SkeletonPath);
+            actor.Skeleton.BindSoundSource(actor);
             return _complete = true;
         }
 

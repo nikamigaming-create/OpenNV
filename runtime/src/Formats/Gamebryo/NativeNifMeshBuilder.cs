@@ -157,6 +157,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             throw new ArgumentOutOfRangeException(
                 nameof(unitsToMetres), "NIF-to-Godot scale must be finite and positive.");
         var root = new Node3D { Name = "NativeNif" };
+        root.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
         var state = new BuildState(source, unitsToMetres, preferredTextureArchive, externalSkeleton: externalTransformTargets is not null, contentSource: contentSource)
         { UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
         try
@@ -240,6 +241,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             .Count(block => source.ReadGeometry(block.Index).Name.Equals(selectedGeometryName, StringComparison.OrdinalIgnoreCase)) != 1)
             throw new InvalidDataException($"Source model has no unique equipped geometry named {selectedGeometryName}.");
         var result = new Node3D { Name = $"NativePart{skeleton.Node.GetChildCount()}" };
+        result.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
         try
         {
             foreach (var rootIndex in source.Roots)

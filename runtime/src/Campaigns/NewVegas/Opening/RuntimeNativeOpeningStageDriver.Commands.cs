@@ -35,7 +35,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         requested = _saveRequested,
         sourceManual = _scripts.ScriptManualSaves.Receipt,
         sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
-        deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker,
+        deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceFiniteAudioSaveBlocker,
         activeContinuationSaving = "unbound"
     };
 
@@ -192,7 +192,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
             QuestEditorId, Stage, complete, _player.ViewPitchRadians, _playerActorValues.Capture(), _tagSkills.Capture(),
             _scripts.References!.CaptureDetection(), _speech?.CaptureFinishedState(), CaptureFinishedSpeechStage(),
-            CaptureStageResults(), _stageResultDriverFailure);
+            CaptureStageResults(), _stageResultDriverFailure, CaptureTerminalResults());
         return state with
         {
             Vitals = Vitals,

@@ -8,10 +8,11 @@ internal sealed partial class FalloutReferenceWorld
     internal float? EvaluateActorReferenceCondition(FalloutFormKey caller, FalloutCondition condition,
         FalloutReferencePlacement? player = null, float unitsToMetres = 1)
     {
-        if (condition.Function is not (1 or 14)) return null;
+        if (condition.Function is not (1 or 14 or 32)) return null;
         if (condition.Argument2 != 0) throw new InvalidDataException("Actor reference condition has an unexpected second argument.");
         var subject = FalloutAiPackages.ConditionSubject(condition, caller);
         if (condition.Function == 1) return Distance(subject, condition.FormArgument1, player, unitsToMetres);
+        if (condition.Function == 32) return InSameCell(subject, condition.FormArgument1, player, unitsToMetres) ? 1 : 0;
         var value = checked((int)condition.Argument1);
         return ActorValue(subject, value switch
         {

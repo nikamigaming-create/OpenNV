@@ -1,5 +1,15 @@
 namespace OpenNV.Runtime.Content;
 
+internal sealed record FalloutActorActivitySnapshot(bool Alerted, bool Attacked, bool WeaponDrawn,
+    bool Running, bool Sneaking, bool InCombat, long Revision)
+{
+    internal void Validate()
+    {
+        if (Revision < 0 || Revision == long.MaxValue)
+            throw new InvalidDataException("Saved actor activity revision is invalid.");
+    }
+}
+
 /// <summary>Mutable activity flags for a freshly instantiated actor.</summary>
 internal sealed class FalloutActorActivityState
 {
@@ -15,6 +25,21 @@ internal sealed class FalloutActorActivityState
     internal bool InCombat { get; private set; }
     private long _revision;
     internal long Revision => checked(_revision + (_alertRevision?.Invoke() ?? 0));
+
+    internal FalloutActorActivitySnapshot Capture() => new(Alerted, Attacked, WeaponDrawn, Running, Sneaking, InCombat, Revision);
+
+    internal void Restore(FalloutActorActivitySnapshot snapshot)
+    {
+        snapshot.Validate();
+        if (_readAlerted is not null && Alerted != snapshot.Alerted)
+            throw new InvalidDataException("Saved actor activity differs from its shared alert owner.");
+        var revision = checked(snapshot.Revision - (_alertRevision?.Invoke() ?? 0));
+        _alerted = snapshot.Alerted; Attacked = snapshot.Attacked; WeaponDrawn = snapshot.WeaponDrawn;
+        Running = snapshot.Running; Sneaking = snapshot.Sneaking; InCombat = snapshot.InCombat;
+        // The world owns its own alert generation. Preserve the observed total
+        // without writing that owner or replaying any activity transition.
+        _revision = revision;
+    }
 
     internal void BindAlerted(Func<bool> read, Action<bool> write, Func<long> revision)
     {

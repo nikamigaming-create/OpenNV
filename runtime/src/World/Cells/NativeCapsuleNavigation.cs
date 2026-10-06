@@ -8,8 +8,28 @@ namespace OpenNV.Runtime.World.Cells;
 // part of a node identity, so a bridge cannot join the floor beneath it.
 internal static partial class NativeCapsuleNavigation
 {
-    private static ulong _workFrame;
-    private static double _workMilliseconds;
+    internal const float SourceHeightTolerance = .6f;
+    private static NativeNavigationWorkSchedule? _workSchedule;
+    private static NativeNavigationWorkSchedule WorkSchedule
+    {
+        get
+        {
+            if (OS.GetThreadCallerId() != OS.GetMainThreadId())
+                throw new InvalidOperationException("Native capsule navigation requires the Godot main thread.");
+            return _workSchedule ??= new();
+        }
+    }
+    internal static int RegisteredSearches => WorkSchedule.Count;
+    internal static NativeNavigationWorkSnapshot? Work(IEnumerator<IReadOnlyList<Vector3>?>? search) =>
+        (search as NativeNavigationScheduledSearch<IReadOnlyList<Vector3>?>)?.State;
+
+    internal static float RefinementSpacing(float coarse, float capsuleRadius, float horizontalScale)
+    {
+        if (!float.IsFinite(coarse) || !float.IsFinite(capsuleRadius) || !float.IsFinite(horizontalScale) ||
+            coarse <= 0 || capsuleRadius <= 0 || horizontalScale <= 0)
+            throw new ArgumentOutOfRangeException(nameof(coarse));
+        return Math.Min(coarse * .5f, Math.Max(.15f, capsuleRadius * horizontalScale * .5f));
+    }
 
     internal static Vector3 RouteMotion(Vector3 position, Vector3 accumulatedMotion, Vector3 waypoint)
     {
@@ -21,28 +41,30 @@ internal static partial class NativeCapsuleNavigation
         return distance == 0 ? Vector3.Zero : direction / distance * Math.Min(distance, accumulatedMotion.Length());
     }
 
-    // All runtime actor searches share this physics-thread budget. Queries
-    // stay with their native owner and yield between node expansions; source
-    // reads can use content workers, but physics is not safe worker-pool work.
+    // Actor and player searches share the original global time/node budget.
+    // Round-robin leases reserve progress for late Process callers even when
+    // earlier PhysicsProcess callbacks overrun an indivisible collision query.
     internal static bool Advance(IEnumerator<IReadOnlyList<Vector3>?> search, out IReadOnlyList<Vector3>? result)
     {
-        var frame = Engine.GetPhysicsFrames();
-        if (_workFrame != frame) { _workFrame = frame; _workMilliseconds = 0; }
+        var schedule = WorkSchedule;
+        if (search is not NativeNavigationScheduledSearch<IReadOnlyList<Vector3>?> owned)
+            throw new InvalidOperationException("Capsule search lacks its native work registration.");
         result = null;
-        if (_workMilliseconds >= 2) return false;
+        if (!owned.TryBegin(Engine.GetPhysicsFrames(), Engine.GetProcessFrames())) return false;
         var started = Stopwatch.GetTimestamp();
         try
         {
-            for (var nodes = 0; nodes < 16 && _workMilliseconds + Stopwatch.GetElapsedTime(started).TotalMilliseconds < 2; nodes++)
+            for (var steps = 0; steps < NativeNavigationWorkSchedule.MaximumIteratorSteps &&
+                schedule.UsedMilliseconds + Stopwatch.GetElapsedTime(started).TotalMilliseconds < NativeNavigationWorkSchedule.BudgetMilliseconds; steps++)
             {
-                if (!search.MoveNext()) throw new InvalidOperationException("Capsule search ended without a route.");
-                if (search.Current is not { } path) continue;
+                if (!owned.MoveNext()) throw new InvalidOperationException("Capsule search ended without a route.");
+                if (owned.Current is not { } path) continue;
                 result = path;
                 return true;
             }
             return false;
         }
-        finally { _workMilliseconds += Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
+        finally { owned.Finish(Stopwatch.GetElapsedTime(started).TotalMilliseconds); }
     }
 
     internal static (Vector3 Target, int Resume) CorridorPrefix(Vector3 start, IReadOnlyList<Vector3> path, float length)
@@ -53,7 +75,14 @@ internal static partial class NativeCapsuleNavigation
         for (var index = 0; index < path.Count; index++)
         {
             var distance = previous.DistanceTo(path[index]);
-            if (distance > length) return (previous.Lerp(path[index], length / distance), index);
+            if (distance > length)
+            {
+                // Keep the bounded slice on its preceding authored portal.
+                // An arbitrary cut inside the final segment can be occupied,
+                // while its source arrival region belongs to the next slice.
+                if (index > 0 && start.DistanceTo(previous) > .2f) return (previous, index);
+                return (previous.Lerp(path[index], length / distance), index);
+            }
             length -= distance;
             previous = path[index];
         }
@@ -62,9 +91,9 @@ internal static partial class NativeCapsuleNavigation
 
     internal static IReadOnlyList<Vector3> Find(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200, float targetRadius = 0,
-        NativeNavigationProbe? probe = null, IReadOnlyList<Vector3>? corridor = null)
+        NativeNavigationProbe? probe = null, IReadOnlyList<Vector3>? corridor = null, Func<Vector3, bool>? arrival = null)
     {
-        foreach (var result in Search(body, start, target, stepHeight, spacing, resident, maximumNodes, probe, targetRadius, corridor))
+        foreach (var result in Search(body, start, target, stepHeight, spacing, resident, maximumNodes, probe, targetRadius, corridor, arrival))
             if (result is not null) return result;
         throw new InvalidOperationException("Capsule search ended without a route.");
     }
@@ -72,18 +101,18 @@ internal static partial class NativeCapsuleNavigation
     internal static (IReadOnlyList<Vector3> Path, float Spacing, string? CoarseError) FindRefined(
         CharacterBody3D body, Vector3 start, Vector3 target, float stepHeight,
         float coarseSpacing, float refinedSpacing, Func<Vector3, bool> resident, int maximumNodes = 1200, float targetRadius = 0,
-        NativeNavigationProbe? probe = null, IReadOnlyList<Vector3>? corridor = null)
+        NativeNavigationProbe? probe = null, IReadOnlyList<Vector3>? corridor = null, Func<Vector3, bool>? arrival = null)
     {
         if (!float.IsFinite(coarseSpacing) || !float.IsFinite(refinedSpacing) ||
             coarseSpacing <= 0 || refinedSpacing <= 0 || refinedSpacing > coarseSpacing)
             throw new ArgumentOutOfRangeException(nameof(refinedSpacing));
-        try { return (Find(body, start, target, stepHeight, coarseSpacing, resident, maximumNodes, targetRadius, probe, corridor), coarseSpacing, null); }
+        try { return (Find(body, start, target, stepHeight, coarseSpacing, resident, maximumNodes, targetRadius, probe, corridor, arrival), coarseSpacing, null); }
         catch (InvalidOperationException coarse) when (refinedSpacing < coarseSpacing)
         {
             // A lattice can miss a supported passage narrower than its node
             // spacing. One finer search keeps the same body, sweep/floor rules,
             // residency predicate and node bound. It cannot create clearance.
-            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, maximumNodes, targetRadius, probe, corridor), refinedSpacing, coarse.Message); }
+            try { return (Find(body, start, target, stepHeight, refinedSpacing, resident, maximumNodes, targetRadius, probe, corridor, arrival), refinedSpacing, coarse.Message); }
             catch (InvalidOperationException refined)
             {
                 throw new InvalidOperationException($"Coarse capsule query: {coarse.Message} Refined capsule query: {refined.Message}", refined);
@@ -93,12 +122,35 @@ internal static partial class NativeCapsuleNavigation
 
     internal static IEnumerable<IReadOnlyList<Vector3>?> Search(CharacterBody3D body, Vector3 start, Vector3 target,
         float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes = 1200,
-        NativeNavigationProbe? probe = null, float targetRadius = 0, IReadOnlyList<Vector3>? corridor = null)
+        NativeNavigationProbe? probe = null, float targetRadius = 0, IReadOnlyList<Vector3>? corridor = null, Func<Vector3, bool>? arrival = null)
+    {
+        var schedule = WorkSchedule;
+        if (!GodotObject.IsInstanceValid(body) || !body.IsInsideTree() || body.IsQueuedForDeletion())
+            throw new InvalidOperationException("Capsule search requires its actual resident native body.");
+        var identity = body.GetInstanceId(); var rid = body.GetRid(); var world = body.GetWorld3D().GetInstanceId();
+        bool OwnerValid() => GodotObject.IsInstanceValid(body) && body.IsInsideTree() && !body.IsQueuedForDeletion() &&
+            body.GetInstanceId() == identity && body.GetRid().Equals(rid) && body.GetWorld3D().GetInstanceId() == world;
+        Action BindRetirement(Action retired)
+        {
+            body.TreeExiting += retired;
+            return () => { if (GodotObject.IsInstanceValid(body)) body.TreeExiting -= retired; };
+        }
+        return new NativeNavigationScheduledEnumerable<IReadOnlyList<Vector3>?>(schedule,
+            work => SearchCore(body, start, target, stepHeight, spacing, resident, maximumNodes, probe,
+                targetRadius, corridor, arrival, work).GetEnumerator(), OwnerValid, result => result is not null, BindRetirement);
+    }
+
+    private static IEnumerable<IReadOnlyList<Vector3>?> SearchCore(CharacterBody3D body, Vector3 start, Vector3 target,
+        float stepHeight, float spacing, Func<Vector3, bool> resident, int maximumNodes,
+        NativeNavigationProbe? probe, float targetRadius, IReadOnlyList<Vector3>? corridor, Func<Vector3, bool>? arrival,
+        NativeNavigationWorkSchedule.Registration work)
     {
         if (!start.IsFinite() || !target.IsFinite() || !float.IsFinite(stepHeight) || !float.IsFinite(spacing) ||
             stepHeight <= 0 || spacing <= 0 || maximumNodes <= 0 ||
             !float.IsFinite(targetRadius) || targetRadius < 0)
             throw new ArgumentOutOfRangeException(nameof(stepHeight));
+        if (arrival is not null && targetRadius != 0)
+            throw new InvalidDataException("Native route has competing source and reference arrival regions.");
         using var query = new PhysicsTestMotionParameters3D { Margin = body.SafeMargin, MaxCollisions = 4 };
         using var hit = new PhysicsTestMotionResult3D();
         var rid = body.GetRid();
@@ -230,6 +282,7 @@ internal static partial class NativeCapsuleNavigation
                 for (var index = 1; index <= samples; index++)
                 {
                     var desired = origin.Lerp(destination, (float)index / samples);
+                    work.GuidedSamples++;
                     if (guided.Count >= maximumNodes)
                     {
                         probe?.Reject("source-corridor-node-bound", from, desired, null); probe?.RejectGuide(); clear = false;
@@ -240,7 +293,7 @@ internal static partial class NativeCapsuleNavigation
                         if (rejected is { } contact) probe?.Record(contact, () => guided.Prepend(start).ToArray());
                         clear = false;
                     }
-                    else if (Math.Abs(landing.Y - desired.Y) >= .6f)
+                    else if (Math.Abs(landing.Y - desired.Y) >= SourceHeightTolerance)
                     {
                         probe?.Reject("source-corridor-height", from, desired, null); probe?.RejectGuide(); clear = false;
                     }
@@ -250,10 +303,11 @@ internal static partial class NativeCapsuleNavigation
                 }
                 if (!clear) break;
             }
-            if (clear && (targetRadius > 0 ? from.DistanceTo(target) <= targetRadius :
-                Flat(from, target) <= body.SafeMargin * 8 && Math.Abs(from.Y - target.Y) < .6f))
+            if (clear && (arrival?.Invoke(from) ?? (targetRadius > 0 ? from.DistanceTo(target) <= targetRadius :
+                Flat(from, target) <= body.SafeMargin * 8 && Math.Abs(from.Y - target.Y) < SourceHeightTolerance)))
             {
-                foreach (var result in SmoothRoute(guided, start, spacing, body.SafeMargin * 8, FlatEdge)) yield return result;
+                foreach (var result in SmoothRoute(guided, start, spacing, body.SafeMargin * 8, FlatEdge))
+                { if (result is null) work.SmoothingSteps++; yield return result; }
                 yield break;
             }
         }
@@ -284,23 +338,25 @@ internal static partial class NativeCapsuleNavigation
             var from = positions[current];
             rejected = null;
             nearest = Math.Min(nearest, from.DistanceTo(target));
+            work.ObserveNode(from.DistanceTo(target));
             // A source approach radius describes a reachable region. Every
             // discovered point already passed the complete capsule sweep and
             // support query; it need not enter the target's collision body.
             // Three-dimensional distance keeps other floors outside the region.
-            if (targetRadius > 0 && current != first && from.DistanceTo(target) <= targetRadius)
+            if (current != first && (arrival?.Invoke(from) ?? (targetRadius > 0 && from.DistanceTo(target) <= targetRadius)))
             {
                 foreach (var result in SmoothRoute(Approach(current), start, spacing, body.SafeMargin * 8, FlatEdge))
-                    yield return result;
+                { if (result is null) work.SmoothingSteps++; yield return result; }
                 yield break;
             }
-            if (Flat(from, target) <= spacing * 1.5f && Edge(from, target, out var goal) && Math.Abs(goal.Y - target.Y) < .6f)
+            if (Flat(from, target) <= spacing * 1.5f && Edge(from, target, out var goal) &&
+                Math.Abs(goal.Y - target.Y) < SourceHeightTolerance && (arrival is null || arrival(goal)))
             {
                 var path = new List<Vector3> { goal };
                 while (current != first) { path.Add(positions[current]); current = parents[current]; }
                 path.Reverse();
                 foreach (var result in SmoothRoute(path, start, spacing, body.SafeMargin * 8, FlatEdge))
-                    yield return result;
+                { if (result is null) work.SmoothingSteps++; yield return result; }
                 yield break;
             }
             Record(current);

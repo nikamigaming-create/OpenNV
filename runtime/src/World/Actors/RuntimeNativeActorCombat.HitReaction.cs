@@ -37,10 +37,25 @@ internal sealed partial class RuntimeNativeActorCombat
             _lastHitReaction = new { hit.Part, hitLocation, selected = active.Idle, disposition = "retained-active-reaction" };
             return;
         }
+        var attempt = _state.HitReactionFaults.BeginAttempt();
+        var randomBefore = _state.HitReactionRandom.State;
+        var consumed = new List<FalloutHitReactionPredicateRead>();
+        FalloutCondition? failedCondition = null;
         try
         {
             _hitReactionTree ??= new(_records, _skeletonPath);
-            var selected = _hitReactionTree.Select(condition => HitReactionCondition(condition, hitLocation));
+            var selected = _hitReactionTree.Select(condition =>
+            {
+                var before = _state.HitReactionRandom.State;
+                try
+                {
+                    var actual = HitReactionCondition(condition, hitLocation);
+                    consumed.Add(new(FalloutHitReactionFaults.Source(condition.Owner), FalloutHitReactionFaults.Ordinal(condition),
+                        actual, before, _state.HitReactionRandom.State));
+                    return actual;
+                }
+                catch { failedCondition = condition; throw; }
+            });
             _lastHitReaction = new
             {
                 hit.Part,
@@ -65,9 +80,29 @@ internal sealed partial class RuntimeNativeActorCombat
             Activity.SetMovement(false, false);
             _hitReactionsStarted++;
             _hitReactionError = null;
+            _state.HitReactionFaults.ClearCurrentError();
             GD.Print($"OPENNV_ACTOR_HIT_REACTION reference={_state.Reference} part={hit.Part} idle={selected.FormKey} animation={source.AnimationPath}");
         }
-        catch (Exception error) { ReportHitReactionError(error); }
+        catch (Exception error)
+        {
+            var captured = false;
+            if (failedCondition is { } site && site.Function != 77 && _state.HitReaction is null)
+            {
+                try
+                {
+                    var visited = _hitReactionTree!.LastVisited.Select(key => FalloutHitReactionFaults.Source(_records.GetEffective(key))).ToArray();
+                    _state.HitReactionFaults.Record(new(attempt, hit.Part, hitLocation,
+                        FalloutHitReactionFaults.Source(site.Owner), FalloutHitReactionFaults.Ordinal(site), site.Function,
+                        error.Message, randomBefore, _state.HitReactionRandom.State, visited, consumed.ToArray()), _records);
+                    captured = true;
+                }
+                catch (Exception receiptError)
+                {
+                    _state.HitReactionFaultCaptureBlocker ??= "Hit-reaction read receipt is unbound: " + receiptError.Message;
+                }
+            }
+            ReportHitReactionError(error, captured);
+        }
     }
 
     private float HitReactionCondition(FalloutCondition condition, int hitLocation) => condition.Function switch
@@ -109,7 +144,7 @@ internal sealed partial class RuntimeNativeActorCombat
             var clip = _hitReactionClip;
             if (_hitReactionSounds is null)
             {
-                _hitReactionSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom);
+                _hitReactionSounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents);
                 _actor.AddChild(_hitReactionSounds);
             }
             PrepareMovement();
@@ -139,10 +174,11 @@ internal sealed partial class RuntimeNativeActorCombat
         return true;
     }
 
-    private void ReportHitReactionError(Exception error)
+    private void ReportHitReactionError(Exception error, bool capturedRead = false)
     {
         if (_hitReactionError != error.Message)
             GD.PushError($"OPENNV_ACTOR_HIT_REACTION_UNBOUND reference={_state.Reference} {error.Message}");
         _hitReactionError = error.Message;
+        if (!capturedRead) _state.HitReactionFaultCaptureBlocker ??= "Hit reaction has no retained source/pose continuation: " + error.Message;
     }
 }

@@ -105,28 +105,38 @@ internal sealed class FalloutNumericGameSettings(FalloutPluginStack records, Run
     private Declaration? Resolve(string name)
     {
         if (_declarations.TryGetValue(name, out var cached)) return cached;
-        _winning ??= records.EffectiveRecords("GMST").ToLookup(record =>
-            Name(record.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span), StringComparer.OrdinalIgnoreCase);
-        var matches = _winning[name].ToArray();
-        if (matches.Length > 1) throw new InvalidDataException($"Multiple winning GMST identities have EDID {name}.");
-        Declaration? declaration = null;
-        if (matches.Length == 1)
+        if (_winning is null)
         {
-            var fields = matches[0].ReadSubrecords().ToArray();
+            // Settings share a case-insensitive name registry. Separate FormIDs
+            // can declare the same setting; the last source declaration wins.
+            // Runtime FormID and first registration order are not load order
+            // when a later plugin overrides an older FormID.
+            var order = records.Plugins.ToDictionary(plugin => plugin.Plugin.Name,
+                plugin => plugin.LoadOrderIndex, StringComparer.OrdinalIgnoreCase);
+            _winning = records.EffectiveRecords("GMST").OrderBy(record => order[record.Plugin.Name])
+                .ThenBy(record => record.HeaderOffset).ToLookup(record =>
+                    Name(record.ReadSubrecords().Single(field => field.Signature == "EDID").Data.Span), StringComparer.OrdinalIgnoreCase);
+        }
+        var winner = _winning[name].LastOrDefault();
+        Declaration? declaration = null;
+        if (winner is not null)
+        {
+            var fields = winner.ReadSubrecords().ToArray();
             var identity = Name(fields.Single(field => field.Signature == "EDID").Data.Span);
             if (identity.Length == 0) throw new InvalidDataException("Game setting has no EDID.");
-            if (identity[0] is 'f' or 'i' or 'b' or 'u')
+            var kind = char.ToLowerInvariant(identity[0]);
+            if (kind is 'f' or 'i' or 'b' or 'u')
             {
                 var data = fields.Single(field => field.Signature == "DATA").Data.Span;
                 if (data.Length != 4) throw new InvalidDataException($"Numeric GMST {identity} has an invalid payload extent.");
-                double number = identity[0] switch
+                double number = kind switch
                 {
                     'f' => (double)BinaryPrimitives.ReadSingleLittleEndian(data),
                     'u' => BinaryPrimitives.ReadUInt32LittleEndian(data),
                     _ => BinaryPrimitives.ReadInt32LittleEndian(data),
                 };
                 if (!double.IsFinite(number)) throw new InvalidDataException($"Numeric GMST {identity} is non-finite.");
-                declaration = new(identity, identity[0], number);
+                declaration = new(identity, kind, number);
             }
         }
         else if (ownedSource is { } content)

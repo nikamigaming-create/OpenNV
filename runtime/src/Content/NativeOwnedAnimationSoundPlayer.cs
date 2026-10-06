@@ -11,13 +11,24 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     private readonly Node3D _actor;
     private readonly float _unitsToMetres;
     private readonly FalloutSoundRandomState _random;
+    private readonly FalloutAnimationSoundEvents? _events;
     private readonly Dictionary<string, (FalloutSoundRecord Source, IReadOnlyList<string> Variants, long Revision)> _descriptors = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AudioStream> _streams = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<AudioStreamPlayer3D, FalloutAnimationSoundSelection> _spatial = [];
     private long _eventCount;
     private readonly SortedSet<string> _unbound = new(StringComparer.Ordinal);
     private bool _lostCaptureAtRetirement;
-    internal bool CanCaptureSilent => !_lostCaptureAtRetirement && _spatial.Count == 0 && _voices.Count == 0 && _unbound.Count == 0;
+    private bool _retired;
+    private readonly ulong _nativeOwner;
+    internal IReadOnlyList<Node> ActiveNativeVoices => _voices.Keys.ToArray();
+    private FalloutAnimationSoundCaptureDiagnostic? _retiredCaptureDiagnostic;
+    internal FalloutAnimationSoundCaptureDiagnostic CaptureDiagnostic => _retiredCaptureDiagnostic ?? ReadCaptureDiagnostic(_retired);
+
+    private FalloutAnimationSoundCaptureDiagnostic ReadCaptureDiagnostic(bool retired) => new(CanCaptureSilent, retired,
+        _lostCaptureAtRetirement, _spatial.Count, _voices.Count, _eventCount, Array.AsReadOnly(_unbound.ToArray()));
+    private bool HasUnreceiptedFault => _events is null ? _unbound.Count != 0 :
+        !_events.CanCapture || _unbound.Except(_events.PartialLanes, StringComparer.Ordinal).Any();
+    internal bool CanCaptureSilent => !_lostCaptureAtRetirement && _spatial.Count == 0 && _voices.Count == 0 && !HasUnreceiptedFault;
     internal IReadOnlyCollection<string> Unbound => _unbound;
     internal IEnumerable<FalloutSoundRecord> Sources => _descriptors.Values.Select(entry => entry.Source);
     internal static Action<object>? SoundObserver { get; set; }
@@ -25,17 +36,34 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     internal object State => new
     {
         eventCount = _eventCount,
+        ownerRetired = _retired,
         activeSpatial = _spatial.Count,
         activeVoices = _voices.Count,
         unbound = _unbound.ToArray(),
-        last = LastEvent
+        last = LastEvent,
+        sourceEvents = _events?.Events,
+        finiteLifetime = _voices.Values.Where(voice => voice.Attachment is not null).Select(voice => new
+        {
+            generation = voice.Generation,
+            nativeEmitter = voice.Attachment!.EmitterNativeOwner,
+            emitter = voice.Attachment.EmitterPath,
+            followsEmitter = voice.Attachment.FollowEmitter,
+            retired = voice.Attachment.EmitterRetired,
+            lastRealPosition = new[] { voice.Attachment.LastRealPosition.X, voice.Attachment.LastRealPosition.Y, voice.Attachment.LastRealPosition.Z }
+        }).ToArray()
     };
 
     internal NativeOwnedAnimationSoundPlayer(FalloutPluginStack records, RuntimeLiveContentSource content,
-        Node3D actor, float unitsToMetres, FalloutSoundRandomState random)
+        Node3D actor, float unitsToMetres, FalloutSoundRandomState random, FalloutAnimationSoundEvents? events = null)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0) throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
-        _records = records; _content = content; _actor = actor; _unitsToMetres = unitsToMetres; _random = random;
+        _records = records; _content = content; _actor = actor; _unitsToMetres = unitsToMetres; _random = random; _events = events;
+        _nativeOwner = actor.GetInstanceId();
+        if (_events is not null)
+        {
+            _events.ValidateMedia(content);
+            _unbound.UnionWith(_events.PartialLanes);
+        }
         Name = "OwnedAnimationSounds";
     }
 
@@ -44,9 +72,10 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     internal string DispatchSound(FalloutFormKey form, Node3D? emitter = null, Action? completed = null) =>
         Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: true, form, completed);
 
-    private string Dispatch(string textKey, Node3D emitter, bool ownsLoopStop, FalloutFormKey? form = null, Action? completed = null)
+    private string Dispatch(string textKey, Node3D emitter, bool ownsLoopStop, FalloutFormKey? form = null, Action? completed = null, bool followEmitter = true)
     {
         LastEvent = null;
+        long? generation = null;
         try
         {
             var editorId = form?.ToString() ?? FalloutAnimationSound.EditorId(textKey);
@@ -59,8 +88,9 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                 entry = (source, FalloutAnimationSound.Variants(source, source.HasExactFile ? [] : _content.ResourcePathsUnder(source.LogicalPath)), path.Revision);
                 _descriptors[editorId] = entry;
             }
-            var selected = FalloutAnimationSound.Select(entry.Source, entry.Variants, _random, ownsLoopStop,
-                stereoOutput: AudioServer.GetSpeakerMode() == AudioServer.SpeakerMode.ModeStereo);
+            var stereoOutput = AudioServer.GetSpeakerMode() == AudioServer.SpeakerMode.ModeStereo;
+            var selected = FalloutAnimationSound.Select(entry.Source, entry.Variants, _random, ownsLoopStop, stereoOutput);
+            generation = _events?.Begin(_records, selected, textKey, stereoOutput, entry.Variants);
             foreach (var lane in selected.Unbound) _unbound.Add(selected.Source.FormKey + ":" + lane);
             var disposition = selected.Play ? selected.Unbound.Count == 0 ? "source-sound-playing" : "source-sound-dry-playing-partial" : "source-sound-chance-skipped";
             AudioStream? stream = null;
@@ -72,12 +102,14 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                     if (stream is AudioStreamWav wav) wav.LoopMode = AudioStreamWav.LoopModeEnum.Disabled;
                     _streams.Add(selected.Path!, stream);
                 }
+                if (generation is { } mediaGeneration)
+                    _events!.BindMedia(mediaGeneration, stream!.GetMeta("opennv_owned_media_sha256").AsString());
                 var loop = FalloutSoundLoop.Read(selected.Source);
                 if (loop.Mode != FalloutSoundLoopMode.None) stream = NativeOwnedSoundPlayback.CreateLoopStream(stream, loop);
                 if (selected.Source.IsTwoDimensional)
                 {
                     var voice = new AudioStreamPlayer { Stream = stream, PitchScale = selected.PitchScale, VolumeDb = selected.GainDb };
-                    AddChild(voice); TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed);
+                    TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed, generation, followEmitter);
                     voice.Finished += () => FinishVoice(voice); voice.Play();
                 }
                 else
@@ -90,7 +122,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                         MaxDistance = selected.Source.MaximumDistanceGameUnits * _unitsToMetres,
                         AreaMask = 0
                     };
-                    emitter.AddChild(voice); _spatial.Add(voice, selected); TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed);
+                    _spatial.Add(voice, selected);
+                    TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed, generation, followEmitter);
                     voice.Finished += () => FinishVoice(voice);
                     ApplyListener(voice, selected); voice.Play();
                 }
@@ -112,6 +145,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
         {
+            _events?.Fail(generation, error.Message);
             _unbound.Add(textKey + ":" + error.Message);
             LastEvent = new { ordinal = ++_eventCount, textKey, disposition = "unbound-source-sound", error = error.Message };
             ObserveEvent();
@@ -139,12 +173,12 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
 
     public override void _Process(double delta)
     {
-        foreach (var (voice, selected) in _spatial) ApplyListener(voice, selected);
+        foreach (var (voice, selected) in _spatial.Where(pair => _voices[pair.Key].Attachment is null)) ApplyListener(voice, selected);
     }
 
     private void ApplyListener(AudioStreamPlayer3D voice, FalloutAnimationSoundSelection selected)
     {
-        var listener = _actor.GetViewport().GetCamera3D();
+        var listener = voice.GetViewport().GetCamera3D();
         // No listener is not zero distance: keep the unresolved lane silent.
         voice.VolumeDb = listener is null ? float.NegativeInfinity : selected.GainDb +
             selected.Source.AttenuationDbAtDistanceGameUnits(voice.GlobalPosition.DistanceTo(listener.GlobalPosition) / _unitsToMetres);

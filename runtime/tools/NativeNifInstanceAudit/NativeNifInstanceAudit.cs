@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--actor-sound-emitters"])
+            {
+                ExerciseActorSoundEmitters(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--head-persistence-contracts"])
             {
                 ExerciseHeadTracking(); GetTree().Quit(); return;
@@ -123,6 +127,7 @@ public partial class NativeNifInstanceAudit : Node
             }
             ExerciseReferenceAngles();
             ExerciseActorSkinRoot();
+            ExerciseActorSoundEmitters();
             await ExerciseFaceGenAttachment();
             await ExerciseHeadEquipmentAttachment();
             ExerciseObjectAnimation();

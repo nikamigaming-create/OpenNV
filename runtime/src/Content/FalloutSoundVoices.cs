@@ -5,9 +5,11 @@ namespace OpenNV.Runtime.Content;
 internal sealed class FalloutSoundVoices(FalloutPluginStack records)
 {
     private sealed record Voice(long Id, FalloutFormKey Sound, FalloutFormKey? Reference,
-        string Owner, Func<bool> Playing, Action Stop);
+        string Owner, Func<bool> Playing, Action Stop, Action? Retire,
+        FalloutFormKey? SourceReference, Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? FiniteWait);
     private readonly Dictionary<long, Voice> _voices = [];
     private long _nextId, _stopRequests, _stopped;
+    private readonly List<Action> _retirementObservers = [];
     internal int ActiveVoices => _voices.Count;
     internal string? Error { get; private set; }
     internal object? LastStop { get; private set; }
@@ -29,15 +31,36 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
     };
 
     internal IDisposable Register(FalloutFormKey sound, FalloutFormKey? reference, string owner,
-        Func<bool> playing, Action stop)
+        Func<bool> playing, Action stop, Action? retire = null, FalloutFormKey? sourceReference = null,
+        Func<OpenNV.Runtime.Content.FalloutFiniteSoundVoice?>? finiteWait = null)
     {
         sound = ValidateSound(sound);
         if (reference is { } attached) reference = ValidateReference(attached);
+        if (sourceReference is { } origin) sourceReference = ValidateReference(origin);
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
         ArgumentNullException.ThrowIfNull(playing); ArgumentNullException.ThrowIfNull(stop);
         var id = checked(++_nextId);
-        _voices.Add(id, new(id, sound, reference, owner, playing, stop));
+        _voices.Add(id, new(id, sound, reference, owner, playing, stop, retire, sourceReference, finiteWait));
         return new Scope(() => _voices.Remove(id));
+    }
+
+    internal IReadOnlyList<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>? PendingFiniteSourceVoices(FalloutFormKey reference)
+    {
+        reference = ValidateReference(reference);
+        var bound = _voices.Values.Where(voice => voice.SourceReference == reference).ToArray();
+        if (bound.Length == 0 || Error is not null) return null;
+        var result = new List<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>();
+        foreach (var voice in bound)
+        {
+            if (voice.FiniteWait?.Invoke() is not { } proof) return null;
+            proof.Validate();
+            if (proof.Reference != reference || proof.Sound != voice.Sound)
+                throw new InvalidDataException("Native finite wait belongs to another source voice.");
+            result.Add(proof);
+        }
+        if (result.DistinctBy(proof => proof.Generation).Count() != result.Count)
+            throw new InvalidDataException("Native finite wait repeats a source generation.");
+        return result.OrderBy(proof => proof.Generation).ToArray();
     }
 
     internal void Stop(FalloutFormKey sound, FalloutFormKey? reference = null)
@@ -78,10 +101,19 @@ internal sealed class FalloutSoundVoices(FalloutPluginStack records)
         }
     }
 
+    internal IDisposable BindRetirement(Action retire)
+    {
+        ArgumentNullException.ThrowIfNull(retire);
+        _retirementObservers.Add(retire);
+        return new Scope(() => _retirementObservers.Remove(retire));
+    }
+
     internal void Retire()
     {
         var voices = _voices.Values.ToArray(); _voices.Clear();
-        foreach (var voice in voices) voice.Stop();
+        foreach (var voice in voices) (voice.Retire ?? voice.Stop)();
+        foreach (var retire in _retirementObservers.ToArray()) retire();
+        _retirementObservers.Clear();
     }
 
     private FalloutFormKey ValidateSound(FalloutFormKey sound)

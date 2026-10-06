@@ -27,8 +27,20 @@ instantiating gameplay. The native UI component check validates actual source
 fonts/control extents and closing, with conditional rows visibly blocked and no
 access, world predicate or source effect manufactured for rendering.
 
-Active or failed terminal sessions refuse saving until their continuation owner
-is implemented; closed successful effects use existing complete state. Compiled
+Save v42 retains closed terminal owners, placed/page/fragment source hashes,
+selection generation and consumed result status. A failed selection can close
+without globally stopping gameplay only when the exact thrown exception binds
+its source SetStage instruction and fixed operands to a closed quest-stage
+failure. The failed terminal remains stopped. Its prior writes and door motions
+stay in their independent world owners; neither the terminal prefix nor its
+unexecuted suffix is replayed. Cold restoration validates source menu reachability
+and the matching stage receipt without admission, conditions or result execution.
+An equal-text presentation error does not acquire that causal scope.
+
+Active menus, arbitrary failed results, dynamic operands without retained values
+and unrelated presentation faults still require their own continuation owner.
+Old genuine saves acquire an empty closed-terminal inventory, never invented
+selection history. Compiled
 SCDA authority, embedded event-list locals, mixed AddNote/result operation order,
 hacking, boot/camera/typewriter/scanline timing, plugin menu mutations and matched
 retail presentation remain independent unsupported or unverified owners.

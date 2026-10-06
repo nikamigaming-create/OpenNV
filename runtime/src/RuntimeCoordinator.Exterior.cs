@@ -193,6 +193,7 @@ public partial class RuntimeCoordinator
 
     public override void _ExitTree()
     {
+        CancelNativeManualSave("Native session retired before the pending F5 could commit.");
         GetWindow().CloseRequested -= OnNativeCloseRequested;
         CancelNativeGridRead();
         if (!_retiringNativeSession) return;

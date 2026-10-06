@@ -10,6 +10,32 @@ public partial class NativeActorPerformanceAudit : Node
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--owned-stopped-idle", var stoppedGame, var stoppedMod, var stoppedRoot, var stoppedSave,
+                var stoppedActor, var stoppedQuest, var stoppedStage, var stoppedPackage, var stoppedForm, var stoppedSounds, .. var stoppedDependencies])
+            {
+                await OwnedStoppedIdle(stoppedGame, stoppedMod, stoppedRoot, stoppedSave, stoppedActor, stoppedQuest,
+                    short.Parse(stoppedStage, System.Globalization.CultureInfo.InvariantCulture), stoppedPackage, stoppedForm, stoppedSounds.Split(','), stoppedDependencies);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--owned-actor-finite-retirement", var retireGame, var retireMod, var retireRoot,
+                var retireSave, var retireActor, var retireSound, .. var retireDependencies])
+            {
+                await OwnedEndedSounds(retireGame, retireMod, retireRoot, retireSave, retireActor, retireSound, retireDependencies,
+                    actorRetirement: true);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--owned-finite-sound-retirement", var finiteGame, var finiteMod, var finiteRoot,
+                var finiteSave, var finiteActor, var finiteSound, .. var finiteDependencies])
+            {
+                await OwnedEndedSounds(finiteGame, finiteMod, finiteRoot, finiteSave, finiteActor, finiteSound, finiteDependencies, finiteRetirement: true);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--owned-ended-sounds", var soundGame, var soundMod, var soundRoot,
+                var soundSave, var soundActor, var soundForm, .. var soundDependencies])
+            {
+                await OwnedEndedSounds(soundGame, soundMod, soundRoot, soundSave, soundActor, soundForm, soundDependencies);
+                GetTree().Quit(); return;
+            }
             if (args is ["--owned-attack-variants", var attackGame, var attackMod, var attackRoot,
                 var attackCheckpoint, var attackActor, .. var attackDependencies])
             {
@@ -23,10 +49,12 @@ public partial class NativeActorPerformanceAudit : Node
                     routeLifecycle: true);
                 GetTree().Quit(); return;
             }
-            if (args is ["--saved-stopped-corpse", var corpseGame, var corpseMod, var corpseRoot,
-                var corpsePath, var corpseActor, var corpseAttacker, .. var corpseDependencies])
+            if (args is [var corpseMode, var corpseGame, var corpseMod, var corpseRoot,
+                var corpsePath, var corpseActor, var corpseAttacker, .. var corpseDependencies] &&
+                corpseMode is "--saved-stopped-corpse" or "--saved-pending-corpse")
             {
-                await SavedStoppedCorpse(corpseGame, corpseMod, corpseRoot, corpsePath, corpseActor, corpseAttacker, corpseDependencies);
+                await SavedStoppedCorpse(corpseGame, corpseMod, corpseRoot, corpsePath, corpseActor, corpseAttacker, corpseDependencies,
+                    pendingSelection: corpseMode == "--saved-pending-corpse");
                 GetTree().Quit(); return;
             }
             if (args is ["--saved-actor-checkpoint", var savedGame, var savedMod, var savedRoot,

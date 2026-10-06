@@ -26,3 +26,4 @@ Console.WriteLine("Reactive steering: moving-target convergence, bounded delayed
 ReferenceBotContracts.Run();
 BotNavigationContracts.Run();
 BotInteractionContracts.Run();
+NativeNavigationSchedulingContracts.Run();

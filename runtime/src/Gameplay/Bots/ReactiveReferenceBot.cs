@@ -6,7 +6,7 @@ internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Ca
     Vector3 Target, Vector3 Aim, string? AimedReference, bool Paused, bool MovementEnabled,
     bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false,
     BotDoorObservation? Door = null, long ProgressRevision = 0, string ActiveMenus = "", int ControlMask = 0,
-    bool ModalInput = false, bool Loading = false, string? ExecutionFault = null);
+    bool ModalInput = false, bool Loading = false, string? ExecutionFault = null, bool Defeated = false);
 
 internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
@@ -15,7 +15,9 @@ internal sealed record BotNavigationRoute(IReadOnlyList<Vector3> Waypoints, Vect
     string? RequiredDoor = null, BotNavigationRefinement? Refinement = null);
 
 internal sealed record BotNavigationRefinement(string Scope, Vector3 Target, float ArrivalRadiusMeters,
-    string SourceSha256);
+    string SourceSha256, BotNavigationProjection? Projection = null);
+
+internal sealed record BotNavigationProjection(Vector3 Requested, Vector3 Selected, float Radius, Vector3 Accepted);
 
 // Goals use source references. Travel may approach an authored exterior object
 // before it streams in, but arrival still requires its live presentation.
@@ -89,7 +91,14 @@ internal sealed class ReactiveReferenceBot
                 refinement.Scope,
                 target = Coordinates(refinement.Target),
                 refinement.ArrivalRadiusMeters,
-                refinement.SourceSha256
+                refinement.SourceSha256,
+                projection = refinement.Projection is { } projection ? new
+                {
+                    requested = Coordinates(projection.Requested),
+                    selected = Coordinates(projection.Selected),
+                    projection.Radius,
+                    accepted = Coordinates(projection.Accepted)
+                } : null
             } : null,
             projectionDistanceMeters = Vector3.Distance(navigation.RequestedEndpoint, navigation.ProjectedEndpoint),
             projectedEndpointDistanceMeters = _observation is { } current ? Vector3.Distance(current.Position, navigation.ProjectedEndpoint) : (float?)null,
@@ -136,9 +145,11 @@ internal sealed class ReactiveReferenceBot
         try
         {
             if (!float.IsFinite(seconds) || seconds <= 0) throw new ArgumentException("Bot frame duration must be finite and positive.");
-            var state = _observation = _observe(_reference);
-            if (!Finite(state.Position) || !Finite(state.Target)) throw new ArgumentException("Bot observation has a nonfinite position or target.");
+            var state = _observe(_reference);
             if (state.ExecutionFault is { } fault) throw new InvalidOperationException("Gameplay execution stopped: " + fault);
+            if (state.Defeated) throw new InvalidOperationException("Player died; load an earlier save to continue the ordinary goal.");
+            if (!Finite(state.Position) || !Finite(state.Target)) throw new ArgumentException("Bot observation has a nonfinite position or target.");
+            _observation = state;
             var progress = new GameplayProgress(state.Scene, state.ProgressRevision, state.ActiveMenus, state.ControlMask,
                 state.MovementEnabled, state.LookingEnabled, state.ModalInput);
             if (_progress != progress) { _progress = progress; _controlWaitSeconds = 0; }

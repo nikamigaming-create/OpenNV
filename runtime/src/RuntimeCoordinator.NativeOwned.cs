@@ -65,6 +65,8 @@ public partial class RuntimeCoordinator
         return new
         {
             paused = GetTree().Paused,
+            botPlanning = NativeBotPlanningState,
+            manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },
             combatWheel = _nativeCombatWheel?.State,
             xr = _nativeXr?.State,
             detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-reference-controller-and-quest-details",
@@ -84,13 +86,15 @@ public partial class RuntimeCoordinator
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
                 pendingProcedureCaptureOwners = _nativeReferences.PendingProcedureCaptures,
+                pendingAnimationSoundCaptures = _nativeReferences.PendingAnimationSoundCaptureCount,
+                pendingAnimationSoundCaptureOwners = _nativeReferences.PendingAnimationSoundCaptures,
                 detection = _nativeReferences.DetectionState,
                 stoppedScriptFrames = _nativeReferences.StoppedScriptFrames,
                 stoppedPackageBindings = _nativeReferences.StoppedPackageBindingCount,
                 talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
                 unloadedActorPackages = _nativeReferences.UnloadedPackages?.State,
                 state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
-                    _nativeReferences.PendingProcedureCaptureCount == 0
+                    _nativeReferences.PendingProcedureCaptureCount == 0 && _nativeReferences.PendingAnimationSoundCaptureCount == 0
                     ? _nativeReferences.Capture() : null,
                 actorOverrides = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.CaptureActorOverrides() : null
             },
@@ -973,7 +977,8 @@ public partial class RuntimeCoordinator
         if (controllers.Any(controller => controller.HasTextKeys))
         {
             var sounds = new NativeOwnedAnimationSoundPlayer(_nativePluginStack!, source, instance,
-                _configuration.World.GameUnitsToMeters, _nativeReferences!.Get(reference.FormKey).SoundRandom);
+                _configuration.World.GameUnitsToMeters, _nativeReferences!.Get(reference.FormKey).SoundRandom,
+                _nativeReferences.Get(reference.FormKey).AnimationSoundEvents);
             instance.AddChild(sounds);
             foreach (var controller in controllers.Where(controller => controller.HasTextKeys))
                 controller.TextKeyHandler = sounds.Dispatch;

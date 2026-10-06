@@ -55,7 +55,9 @@ internal sealed partial class RuntimeRenderTrace : IDisposable
         report = _lastReport,
         error = _error,
         coverage = "source-byte-ranges,scene-submission,particles,bound-resources,audio-voices-and-bus-samples,image-space-pass-submission-and-readback,pre-post-draw,pixels",
-        missing = _lastMissing,
+        missing = Enabled ? _lastMissing : ["trace-disabled; last trace issues retained by count", "native-GPU-draw-execution",
+            "per-pixel-contributor-IDs", "retail-frame-join", "complete-audio-events"],
+        lastTraceMissingCount = _lastMissing.Length,
     };
 
     internal void SetEnabled(bool enabled)

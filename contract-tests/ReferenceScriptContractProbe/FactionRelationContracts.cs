@@ -22,8 +22,11 @@ internal static class FactionRelationContracts
                 Record("SCPT", 0x51, Field("SCHR", QuestHeader()), Field("SCRO", U32(0x10)), Field("SCRO", U32(0x11)),
                     Field("SCTX", Text("begin GameMode\nSetEnemy FirstFaction SecondFaction 1 0\nend"))),
                 Record("CELL", 0x80, Field("DATA", [1])), Group(0x80,
-                    Reference("REFR", 0x90, 9), Reference("ACHR", 0x91, 7), Reference("ACHR", 0x92, 8))));
-            File.WriteAllBytes(Path.Combine(directory.FullName, "Patch.esp"), Join(Header("Relations.esm"), Faction(0x10, "FirstFaction", 3)));
+                    Reference("REFR", 0x90, 9), Reference("ACHR", 0x91, 7), Reference("ACHR", 0x92, 8)),
+                Record("CELL", 0x81, Field("DATA", [1])), Group(0x81, Reference("ACHR", 0x93, 8))));
+            File.WriteAllBytes(Path.Combine(directory.FullName, "Patch.esp"), Join(Header("Relations.esm"), Faction(0x10, "FirstFaction", 3),
+                Record("PACK", 0x40, Field("PTDT", Join(U32(0), U32(0x92), new byte[8])),
+                    Field("CTDA", SameCellCondition(0x14)))));
             using var records = FalloutPluginStack.Load(directory.FullName, ["Relations.esm", "Patch.esp"]);
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x80)));
@@ -76,6 +79,44 @@ internal static class FactionRelationContracts
             Require(world.EvaluateActorReferenceCondition(Key(0x91), distance, new(Key(0x80), [0, 0, 0], [0, 0, 0])) == 13,
                 "Distance used stale editor placement instead of current native actor and player poses.");
             Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), distance));
+            // Read the winning condition from complete binary records. Its placed
+            // target is independent of the package's scoped subject.
+            var sameCell = FalloutCondition.Read(owner).Single();
+            Require(owner.Plugin.Name == "Patch.esp" && sameCell.Function == 32 && sameCell.FormArgument1 == records.RuntimeFormKey(0x14),
+                "Same-cell condition ignored its winning source record/master adjustment.");
+            var playerHere = new FalloutReferencePlacement(Key(0x80), [0, 0, 0], [0, 0, 0]);
+            var playerElsewhere = playerHere with { Cell = Key(0x81) };
+            Require(world.EvaluateActorReferenceCondition(Key(0x91), sameCell, playerHere) == 1 &&
+                world.EvaluateActorReferenceCondition(Key(0x91), sameCell, playerElsewhere) == 0 &&
+                FalloutCondition.AllPass([sameCell], condition => world.EvaluateActorReferenceCondition(Key(0x91), condition, playerHere)!.Value),
+                "Same-cell package predicate did not follow actual player cell ownership.");
+            Require(world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument1 = 0x92 }) == 1 &&
+                world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument1 = 0x93 }) == 0,
+                "Reference-target same-cell query used the package target or residency in place of its source argument.");
+            world.SetPlacement(Key(0x92), playerElsewhere);
+            Require(world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 1 }, playerHere) == 0 &&
+                world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 2, Reference = 0x93 }, playerElsewhere) == 1 &&
+                world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument1 = 0x92 }) == 0,
+                "Same-cell scope ignored current moved placement, package target or explicit source reference.");
+            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell));
+            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument2 = 1 }, playerHere));
+            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 3 }, playerHere));
+            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 2, Reference = 0 }, playerHere));
+            world.Get(Key(0x91)).QuerySpatialPlacement = () => playerElsewhere;
+            Reject(() => world.EvaluateActorReferenceCondition(Key(0x91), sameCell, playerElsewhere));
+            world.Get(Key(0x91)).QuerySpatialPlacement = null;
+            var spatialState = world.Capture();
+            using var spatialCold = new FalloutReferenceWorld(records);
+            spatialCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(spatialState))!);
+            var coldBeforeQuery = JsonSerializer.Serialize(spatialCold.Capture());
+            Require(spatialCold.EvaluateActorReferenceCondition(Key(0x91), sameCell, playerHere) == 1 &&
+                spatialCold.EvaluateActorReferenceCondition(Key(0x91), sameCell with { RunOn = 1 }, playerHere) == 0 &&
+                spatialCold.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Argument1 = 0x92 }) == 0 &&
+                JsonSerializer.Serialize(spatialCold.Capture()) == coldBeforeQuery,
+                "Cold same-cell query lost moved cell state or mutated authoritative state.");
+            Require(world.EvaluateActorReferenceCondition(Key(0x91), sameCell with { Function = 45 }, playerHere) is null,
+                "Same-cell admission silently admitted unsupported detection.");
+            Console.WriteLine("OPENNV_AI_SAME_CELL_CONTRACT_PASS fullBinaryReader=true winningMaster=true actualPlayerCell=true placedReferenceTarget=true scopedSubject=true movedCold=true nativeCellMismatchRefused=true unknownDetectionRefused=true");
             Console.WriteLine("OPENNV_FACTION_AI_REFERENCE_CONTRACT_PASS winningSource=true directional=true objectAndQuest=true liveCombat=true cold=true atomicReject=true actualActorValues=true scopedQueries=true nativePoseDistance=true unsupportedRefused=true");
         }
         finally { directory.Delete(true); }
@@ -104,6 +145,11 @@ internal static class FactionRelationContracts
     {
         var bytes = new byte[6 + data.Length]; Encoding.ASCII.GetBytes(signature).CopyTo(bytes, 0);
         BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), checked((ushort)data.Length)); data.CopyTo(bytes, 6); return bytes;
+    }
+    private static byte[] SameCellCondition(uint target)
+    {
+        var bytes = new byte[28]; BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(4), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(8), 32); U32(target).CopyTo(bytes, 12); return bytes;
     }
     private static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
     private static byte[] U32(uint value) => BitConverter.GetBytes(value);

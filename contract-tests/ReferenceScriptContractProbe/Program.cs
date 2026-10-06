@@ -4,7 +4,24 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--activation-parent-contracts"])
+{
+    ActivationParentContracts.Run();
+    return;
+}
 var directory = Path.Combine(Path.GetTempPath(), "opennv-reference-contract-" + Guid.NewGuid().ToString("N"));
+if (args is ["--reward-xp-contracts"])
+{
+    RewardXpContracts.Run();
+    return;
+}
+if (args.Length >= 6 && args[0] == "--audit-owned-reward-xp")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    OwnedRewardXpProbe.Run(args[1], args[2], new(args[3], uint.Parse(args[4],
+        System.Globalization.NumberStyles.HexNumber, invariant)), short.Parse(args[5], invariant), args[6..]);
+    return;
+}
 if (args is ["--quest-stage-persistence-contracts"])
 {
     QuestStagePersistenceContracts.Run();
@@ -684,13 +701,19 @@ try
     Require(scripts.Activate(Key(0x904), Key(0x14)).Error is null, "Native activation could not be retried.");
     effects.Clear();
     var capabilityAvailable = false;
-    var retrying = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ =>
-    { if (!capabilityAvailable) throw new NotSupportedException("Missing runtime capability"); }));
-    Require(retrying.Activate(Key(0x902), Key(0x14)).Error is not null, "Unsupported scripted activation did not fail closed.");
+    using var faultWorld = new FalloutReferenceWorld(records);
+    faultWorld.LoadCell(FalloutCellSceneReader.Read(records, Key(0x801)));
+    var faultCalls = 0;
+    var retrying = new FalloutReferenceScripts(records, faultWorld, new(records), new((_, _) => false, _ =>
+    { ++faultCalls; if (!capabilityAvailable) throw new NotSupportedException("Missing runtime capability"); }));
+    var sourceFailure = retrying.Activate(Key(0x902), Key(0x14)).Error;
+    Require(sourceFailure is not null, "Unsupported scripted activation did not fail closed.");
+    var consumedFaultState = JsonSerializer.Serialize(faultWorld.Get(Key(0x902)).Capture());
     capabilityAvailable = true;
     Require(retrying.Dispatch(Key(0x902), "GameMode").Error is not null, "A failed interaction retried automatically on the frame clock.");
-    Require(retrying.Activate(Key(0x902), Key(0x14)).Error is null && world.Get(Key(0x902)).ScriptError is null,
-        "A fresh player activation could not retry its failed source program.");
+    Require(retrying.Activate(Key(0x902), Key(0x14)).Error == sourceFailure && faultCalls == 1 &&
+        JsonSerializer.Serialize(faultWorld.Get(Key(0x902)).Capture()) == consumedFaultState,
+        "Fresh input acknowledged a failed source invocation or replayed its consumed prefix.");
     Require(scripts.Activate(Key(0x902), Key(0x14)) is { Blocks: 1, Error: null },
         "Activation filtered its ignored header argument or rejected instance-local writes.");
     Require(effects.Select(effect => effect.Kind).SequenceEqual(new[] { FalloutReferenceEffectKind.SetStage,
@@ -805,6 +828,7 @@ ActorDamageContracts.Run();
 StoppedPoseContracts.Run();
 TerminalContracts.Run();
 ScriptDeathContracts.Run();
+ActivationParentContracts.Run();
 DefaultActivationContracts.Run();
 ScriptManualSaveContracts.Run();
 HardcoreQueryContracts.Run();
@@ -818,6 +842,7 @@ InputControlContracts.Run();
 PlayerMoveContracts.Run();
 LoadingScreenContracts.Run();
 CharacterGenerationContracts.Run();
+RewardXpContracts.Run();
 PlayerScriptPackageContracts.Run();
 PackageEventContracts.Run();
 ReferencePackageEventContracts.Run();

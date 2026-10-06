@@ -74,6 +74,8 @@ public partial class NativeActorPerformanceAudit
             const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var prepare = typeof(RuntimeNativeActorCombat).GetMethod("PrepareCombatPresentation", flags)!;
             var publish = typeof(RuntimeNativeActorCombat).GetMethod("PublishCombatPose", flags)!;
+            var end = typeof(RuntimeNativeActorCombat).GetMethod("EndEngagement", flags)!;
+            var provoke = typeof(RuntimeNativeActorCombat).GetMethod("Provoke", flags)!;
             var pathsField = typeof(RuntimeNativeActorCombat).GetField("_attackPaths", flags)!;
             var clipsField = typeof(RuntimeNativeActorCombat).GetField("_combatClips", flags)!;
             state.AttackRandom.Restore(17);
@@ -163,6 +165,33 @@ public partial class NativeActorPerformanceAudit
                     poses = 3
                 });
             }
+            var scriptError = state.ScriptError;
+            var stoppedFrame = JsonSerializer.Serialize(state.ScriptStoppedFrame);
+            var repeatedSelections = new List<object>();
+            for (var engagement = 0; engagement < 8; engagement++)
+            {
+                var beforeRandom = state.AttackRandom.State;
+                end.Invoke(actor.Combat, null);
+                if (state.Engagement is not null || state.AttackRandom.State != beforeRandom)
+                    throw new InvalidDataException("Ordinary engagement retirement discarded the reference's attack stream.");
+                provoke.Invoke(actor.Combat, [records.RuntimeFormKey(0x14)]);
+                if (state.Engagement is not { Action: "pursue", StartPending: true })
+                    throw new InvalidDataException("Ordinary attack provocation did not create a fresh engagement.");
+                prepare.Invoke(actor.Combat, null);
+                if (state.AttackRandom.State != beforeRandom || state.Engagement.AttackRandomState != beforeRandom ||
+                    state.Engagement.Animation is not null || !ReferenceEquals(clips, clipsField.GetValue(actor.Combat)))
+                    throw new InvalidDataException("Cached native preparation failed to bind the new engagement without drawing or rebuilding.");
+                var attack = FalloutAttackAnimationSelection.Bind(state.Engagement.Transition("attack"), paths, path => clips[path].Hash);
+                state.AttackRandom.Restore(attack.AttackRandomState!.Value);
+                state.Engagement = attack with { Seconds = clips[attack.Animation!].Duration / 2, StartPending = false };
+                var beforePrepare = JsonSerializer.Serialize(state.Engagement);
+                prepare.Invoke(actor.Combat, null);
+                if (JsonSerializer.Serialize(state.Engagement) != beforePrepare ||
+                    state.AttackRandom.State != attack.AttackRandomState || state.ScriptError != scriptError ||
+                    JsonSerializer.Serialize(state.ScriptStoppedFrame) != stoppedFrame)
+                    throw new InvalidDataException("Cached preparation changed the chosen KF/clock, stream or stopped source invocation.");
+                repeatedSelections.Add(new { engagement, beforeRandom, attack.Animation, attack.AnimationHash, attack.AttackRandomState });
+            }
             if (!savedBytes.SequenceEqual(File.ReadAllBytes(checkpoint))) throw new InvalidDataException("Attack audit changed its checkpoint input.");
             GD.Print("OPENNV_NATIVE_OWNED_ATTACK_VARIANTS " + JsonSerializer.Serialize(new
             {
@@ -178,11 +207,14 @@ public partial class NativeActorPerformanceAudit
                 preparationNoDraw = true,
                 cold = true,
                 sourceUnchanged = true,
+                repeatedSelections,
+                cachedPreparationNoDraw = true,
+                stoppedScriptUnchanged = true,
                 campaign = false,
                 framesRecorded = false,
                 boundary = "independent-native-attack-component;whole-mixed-fault-save-refused;ordinary-attack-damage-and-cold-action-campaign-unverified;retail-global-RNG-phase-and-list-order-unmatched"
             }));
-            GD.Print("OPENNV_NATIVE_OWNED_ATTACK_VARIANTS_PASS nativePreparation=true allVariants=true preparationNoDraw=true coldKfHashClock=true nativePoses=true sourceUnchanged=true campaign=false framesRecorded=false");
+            GD.Print("OPENNV_NATIVE_OWNED_ATTACK_VARIANTS_PASS nativePreparation=true allVariants=true preparationNoDraw=true coldKfHashClock=true nativePoses=true repeatedEngagements=8 cachedPreparationNoDraw=true stoppedScriptUnchanged=true sourceUnchanged=true campaign=false framesRecorded=false");
         }
         finally { fixture.Free(); RuntimeLiveContentSource.Clear(); }
     }

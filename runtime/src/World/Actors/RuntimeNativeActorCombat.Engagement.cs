@@ -42,6 +42,8 @@ internal sealed partial class RuntimeNativeActorCombat
         hits = _hits,
         assistsReceived = _assistsReceived,
         pendingHitscanImpacts = _pendingHitscanImpacts,
+        enemySounds = _enemySounds?.CaptureDiagnostic,
+        enemySoundLast = _enemySounds?.LastEvent,
         lastAttack = _lastAttack,
         lastHitscanImpact = _lastHitscanImpact,
         impactMaterialError = _impactMaterialError,
@@ -196,6 +198,9 @@ internal sealed partial class RuntimeNativeActorCombat
             _engagementPrepared = true;
             _state.CaptureEngagement = CaptureEngagement;
         }
+        // Models remain prepared after an engagement ends. Each new
+        // engagement binds the actor's existing stream without drawing from it.
+        _state.Engagement = FalloutAttackAnimationSelection.BindRandomOwner(_state.Engagement!, _state.AttackRandom.State);
         Activity.SetAlerted(true); Activity.SetCombat(true);
         Activity.SetWeaponDrawn(_enemyWeapon is not null);
     }
@@ -203,7 +208,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private void PrepareFlee()
     {
         PrepareMovement();
-        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom);
+        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents);
         _actor.AddChild(_enemySounds);
         var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
         var gender = _actor is RuntimeNativeNpc npc && npc.Appearance.Female ? "female/" : "";
@@ -256,7 +261,7 @@ internal sealed partial class RuntimeNativeActorCombat
         RetainStoppedPoseReadiness();
         if (_state.StopCombat == StopCombat) _state.StopCombat = null;
         if (_state.QuerySpatialPlacement == CaptureSpatialPlacement) _state.QuerySpatialPlacement = null;
-        _routeSearch?.Dispose(); _routeSearch = null;
+        DisposeRouteSearch();
         // A door can materialize the same reference in its destination before
         // the previous presentation leaves the tree. Only the current binding
         // may capture a pose or release the shared save callback.

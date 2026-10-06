@@ -13,7 +13,7 @@ internal sealed record FalloutTerminalSelectionReceipt(FalloutTerminalSelection 
 // The source menu owns selection, not the native row or its visible position.
 // Its host admits the real placed reference and applies all authoritative
 // selection effects inside one retained attempt. Presentation cannot replay it.
-internal sealed class FalloutTerminalMenu
+internal sealed partial class FalloutTerminalMenu
 {
     private readonly FalloutPluginStack _records;
     private readonly Action<FalloutFormKey> _requireAdmission;
@@ -169,13 +169,14 @@ internal sealed class FalloutTerminalMenu
 
     internal void RequireSaveable()
     {
-        if (Error is { } error) throw new NotSupportedException("Saving a failed terminal result requires continuation state: " + error);
         if (Active || _executing) throw new NotSupportedException("Saving an active terminal menu requires continuation state.");
+        if (BlockingError is { } error) throw new NotSupportedException("Saving a failed terminal result requires continuation state: " + error);
     }
 
     internal void ReportPresentationFailure(Exception error)
     {
         ArgumentNullException.ThrowIfNull(error);
+        if (ReferenceEquals(error, _closedResultException)) return;
         _presentationError ??= error.Message;
     }
 

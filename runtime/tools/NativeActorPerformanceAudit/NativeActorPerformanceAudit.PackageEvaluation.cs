@@ -85,8 +85,7 @@ public partial class NativeActorPerformanceAudit
                     actor.Transform != before || world.Get(caller).ProcedureCaptureBlocker is null ||
                     pending.GetProperty("currentProcedure").ValueKind != JsonValueKind.Null)
                     throw new InvalidDataException("EVP did not retain source selection independently of native procedure execution.");
-                try { _ = world.Get(caller).Capture(); throw new InvalidDataException("Pending package selection became saveable."); }
-                catch (NotSupportedException) { }
+                QueuedSelectionCold(actor, world, records, content, cell, quests, clock, globals, presentation, Placement);
                 actor._Process(0);
                 if (JsonSerializer.SerializeToElement(actor.AiState).GetProperty("evaluationPending").GetBoolean() ||
                     actor.AiError is null || actor.CurrentPackage != selected || actor.Transform != before ||
@@ -152,7 +151,7 @@ public partial class NativeActorPerformanceAudit
                 !hash.AsSpan().SequenceEqual(SHA256.HashData(package.ReadData())))
                 throw new InvalidDataException("Package evaluation changed source bytes, pose or its retained result failure.");
             GD.Print($"OPENNV_NATIVE_PACKAGE_EVALUATION_PASS actor={caller} package={selected} sourceSelection=true " +
-                $"evaluationCommand={evaluationCommand} queuedPendingSaveRefused={evaluationCommand} nativeFaultVisible=true stoppedCold={stoppedCold} retainedResults=true " +
+                $"evaluationCommand={evaluationCommand} queuedSelectionCold={evaluationCommand} nativeFaultVisible=true stoppedCold={stoppedCold} retainedResults=true " +
                 "sourceReadonly=true fixture=isolated-owned-command campaignAndParity=unverified recording=false");
         }
         finally { if (GodotObject.IsInstanceValid(presentation)) presentation!.Free(); }
@@ -160,6 +159,6 @@ public partial class NativeActorPerformanceAudit
 
     private sealed class PackageFixtureLifetime(Node node) : IDisposable
     {
-        public void Dispose() => node.Free();
+        public void Dispose() { if (GodotObject.IsInstanceValid(node)) node.Free(); }
     }
 }

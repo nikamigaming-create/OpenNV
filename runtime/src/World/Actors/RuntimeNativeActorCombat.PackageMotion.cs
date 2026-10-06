@@ -76,6 +76,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (_state.Engagement is not null) return;
         if (_state.FurnitureContinuation is not null) return;
         if (_state.SelectionFailure is not null) return;
+        if (_state.PendingPackageSelection is not null) return;
         if (_state.DialogueContinuation is not null) return;
         // NPC binding can retry before its body enters the tree. Its registered
         // pre-begin owner already restored the actual pose; a retained motion

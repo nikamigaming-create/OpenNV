@@ -3,6 +3,21 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Source animation history](source-animation-event-history.md) retains genuine
+finished sound generations and stopped pure hit-query prefixes through save v43.
+Independent selected IDLE clocks and residual bone components compose with a
+failed package begin; active speech, sound, attachments and physical poses keep
+their own capture requirements.
+Finite source sounds keep their native lifetime outside model retirement;
+all-retained source/native/media receipts admit live save waiting without
+admitting active audio into a checkpoint. Source writer failures retain their
+own historical/capture boundary while later unrelated script frames continue.
+Assembled actor skeletons and parts retain complete source string domains.
+Named sound bones use the actual posed skeleton; a proven absent name uses the
+actual source root frame with the original finite/Loop attachment distinction.
+Pre-teardown copies retain already admitted stopped nonaudio actor state until
+every original finite generation finishes, without calling retired native owners.
+
 [Whole-stack script coverage](quest-graph-audit.md) discovers all winning
 standalone/embedded programs and condition owners. It inspects every authored
 arm through the shared deferred expression parser without consuming gameplay
@@ -37,7 +52,8 @@ Ordinary reference events retain their residency boundary.
 [Source terminal menus](source-terminal-menus.md) retain placed callers, original
 entry scope and consumed result receipts through ordinary menu presentation.
 Access uses shared locks/inventory; successful settled effects share existing
-saves while active/failed menu continuation remains explicitly unowned.
+saves. Closed failed selections retain an exact source/stage cause through v42;
+active, opaque and unrelated presentation continuation remains explicitly unowned.
 
 [NIF sequence registration](source-nif-sequence-registration.md) retains every
 managed source block separately from its ordered last-exact-name lookup. Shared

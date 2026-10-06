@@ -28,7 +28,7 @@ internal partial class RuntimeNativeReferenceEvents
             throw new NotSupportedException("Locked NPC route-door key/ownership semantics remain unbound.");
     }
 
-    private void RequireRouteDoor(Binding door)
+    private void RequireRouteDoor(Binding door, FalloutFormKey? activatingParent = null)
     {
         if (!_world.CanActivate(door.Reference.FormKey)) throw new NotSupportedException("Route door is not active.");
         if ((door.Reference.Flags & 0x100) != 0) throw new NotSupportedException("Route door is inaccessible.");
@@ -36,7 +36,7 @@ internal partial class RuntimeNativeReferenceEvents
         var parent = _records.GetEffective(door.Reference.FormKey).ReadSubrecords().Where(field => field.Signature == "XAPD").ToArray();
         if (parent.Length > 1 || parent.Length == 1 && parent[0].Data.Length != 1)
             throw new InvalidDataException("Door activation-parent declaration is invalid.");
-        if (parent.Length == 1 && parent[0].Data.Span[0] != 0)
+        if (parent.Length == 1 && parent[0].Data.Span[0] != 0 && (activatingParent is null || !_world.IsActivationParent(door.Reference.FormKey, activatingParent.Value)))
             throw new NotSupportedException("Route door admits only activation from its parent.");
         if (door.Instance.ScriptError is { } error) throw new NotSupportedException($"Route door retains a source failure: {error}");
     }

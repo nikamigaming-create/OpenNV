@@ -35,9 +35,10 @@ internal partial class RuntimeNativeNpc
         if (_aiReferenceState is not null) ClearBindingFailure();
         if (reset) { _aiError = null; _packageIdleError = null; }
         _requestedSelection = selected;
+        if (_aiReferenceState is { } state) state.PendingPackageSelection = null;
         _selectedSourcePackage = selected.Record?.FormKey; _sourceSelectionKnown = true;
         _aiQuestRevision = -1; _aiPollRemaining = 0;
-        BlockSelectionCapture("Actor package selection awaits its native procedure continuation.");
+        BlockSelectionCapture(OpenNV.Runtime.World.Cells.FalloutActorPendingPackageSelection.CaptureBlocker);
     }
 
     private void BlockSelectionCapture(string message)

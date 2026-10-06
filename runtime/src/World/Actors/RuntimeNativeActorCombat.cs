@@ -87,6 +87,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     {
         AddToGroup(CombatActorsGroup);
         _state.StopCombat = StopCombat;
+        _hitReactionError = _state.CurrentHitReactionError;
         _state.CaptureEngagement = CaptureEngagement;
         RestorePackageMotion();
         RestoreEngagementPose();

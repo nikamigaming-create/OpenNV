@@ -20,12 +20,22 @@ public partial class RuntimeCoordinator
     private readonly BotInteractionEvidence _botInteractions = new();
     private readonly Dictionary<FalloutFormKey, FalloutFormKey> _botPortalDestinations = [];
 
+    private bool NativeBotLoading(FalloutReferenceWorld world) =>
+        _nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession || world.PlayerMoves.Pending ||
+        _nativeLoadingLayer is not null || _loadingScreen is not null;
+
+    private RuntimeNativeDoorPortal? NativeBotPortal(FalloutFormKey reference)
+    {
+        var node = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference);
+        return node is not null && GodotObject.IsInstanceValid(node) && node.IsInsideTree()
+            ? node.GetChildren().OfType<RuntimeNativeDoorPortal>().SingleOrDefault() : null;
+    }
+
     private void BeginNativeBotActivation(FalloutFormKey reference)
     {
         try
         {
-            var node = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference);
-            if (node?.GetChildren().OfType<RuntimeNativeDoorPortal>().SingleOrDefault() is { } portal)
+            if (NativeBotPortal(reference) is { } portal)
                 _botPortalDestinations[reference] = portal.DestinationCell;
             _botInteractions.Begin(reference.ToString(), NativeBotInteractionSnapshot(reference));
         }
@@ -48,20 +58,24 @@ public partial class RuntimeCoordinator
 
     private BotInteractionSnapshot NativeBotInteractionSnapshot(FalloutFormKey reference)
     {
-        var state = _nativeReferences!.Get(reference);
+        var world = _nativeReferences ?? throw new InvalidOperationException("Reference world is not active.");
+        var state = world.Get(reference);
         var target = JsonSerializer.Serialize(new { state.Taken, state.DoorOpen, state.Deleted, state.Destroyed });
+        var settledPortal = _botPortalDestinations.TryGetValue(reference, out var destination) &&
+            _nativeActiveCell?.Cell.FormKey == destination && !NativeBotLoading(world) &&
+            _nativePlayer?.CollisionResident == true;
         string? outcome = _nativeContainerLayer is not null && _nativeContainerReference == reference ? "container" :
             _nativeTerminalLayer is not null && _nativeTerminalReference == reference && _nativeTerminalMenu?.Error is null ? "terminal" :
             _nativeOpeningStageDriver?.PresentedConversationSpeaker == reference ? "conversation" :
             _nativePlayer?.CurrentFurniture == reference ? "furniture" :
-            _botPortalDestinations.TryGetValue(reference, out var destination) && _nativeActiveCell?.Cell.FormKey == destination &&
-                !_nativeDoorLoading && _nativePlayer?.CollisionResident == true ? "portal:" + destination : null;
-        var portal = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference)?.GetChildren()
-            .OfType<RuntimeNativeDoorPortal>().SingleOrDefault();
+            settledPortal ? "portal:" + destination : null;
+        var portal = NativeBotPortal(reference);
         var requested = _nativeOpeningStageDriver?.PendingConversationSpeaker == reference ? "conversation" :
             portal is { ActivationRequests: > 0 } ? "portal:" + portal.DestinationCell : null;
         return new(target, outcome, _nativeOpeningStageDriver?.ActiveMenus().Order().ToArray() ?? [], requested,
-            requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? portal!.ActivationRequests : 0);
+            requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? portal!.ActivationRequests : 0,
+            settledPortal && outcome == "portal:" + destination ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
+            requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other);
     }
 
     private bool ApplyNativeBotSimulatorInput(SteeringIntent intent, bool activate)
@@ -78,6 +92,12 @@ public partial class RuntimeCoordinator
     private BotObservation ObserveNativeBot(string identity)
     {
         var player = _nativePlayer ?? throw new InvalidOperationException("Player is not active.");
+        if (_nativeDeathPresented || player.IsDefeated?.Invoke() == true)
+            return new(_nativeActiveCell!.Cell.FormKey.ToString(),
+                new(player.GlobalPosition.X, player.GlobalPosition.Y, player.GlobalPosition.Z),
+                Vector3ToNumeric(player.Camera.GlobalPosition), Vector3ToNumeric(-player.Camera.GlobalBasis.Z),
+                System.Numerics.Vector3.Zero, System.Numerics.Vector3.Zero, null, GetTree().Paused,
+                false, false, false, null, "0", Defeated: true);
         if (_nativeXr is not null && RuntimeSimulatorBotInput.DirectoryPath is null)
             throw new NotSupportedException("Physical headset bot control is unbound; use the simulator input adapter.");
         var separator = identity.LastIndexOf(':');
@@ -86,11 +106,18 @@ public partial class RuntimeCoordinator
         var key = new FalloutFormKey(identity[..separator], objectId);
         var world = _nativeReferences ?? throw new InvalidOperationException("Reference world is not active.");
         var referenceState = world.Get(key);
+        var targetFault = _nativeReferenceEvents?.CanAdmitIndependentDefaultInteraction(key) == true ? null :
+            referenceState.ScriptError ?? referenceState.SelectionFailure?.Error ?? referenceState.PackageBindingFailure?.Error;
         var executionFault = _nativeOpeningStageDriver?.BlockingExecutionFault ?? _nativeQuestScripts?.StartupError ??
-            world.PlayerMoves.Error ?? _nativeReferencePresentation?.Error ?? referenceState.ScriptError ??
-            referenceState.SelectionFailure?.Error ?? referenceState.PackageBindingFailure?.Error;
+            world.PlayerMoves.Error ?? _nativeReferencePresentation?.Error ?? targetFault;
         if (executionFault is not null)
             throw new InvalidOperationException("Gameplay execution stopped: " + executionFault);
+        var loading = NativeBotLoading(world);
+        // Observe the activation-owned destination before touching a model
+        // that can belong to the retiring source cell. A settled source portal
+        // still requires its genuine request and collision-ready destination.
+        var interaction = _botInteractions.ObserveInteraction(key.ToString(), NativeBotInteractionSnapshot(key));
+        var geometryRequired = interaction.RequiresNativeGeometry(loading);
         var node = _nativeReferencePresentation?.Nodes.GetValueOrDefault(key);
         var resident = node is not null && GodotObject.IsInstanceValid(node) && node.IsInsideTree() && node.IsVisibleInTree();
         var target = resident ? node!.GlobalPosition : Vector3.Zero;
@@ -105,10 +132,10 @@ public partial class RuntimeCoordinator
                 target = new Vector3(placement.Position[0], placement.Position[2], -placement.Position[1]) * _configuration.World.GameUnitsToMeters;
                 _botAuthoredDestinations.Add(key, target);
             }
-            travelReady = player.CollisionResident;
+            travelReady = !loading && player.CollisionResident;
         }
         var aim = target;
-        if (resident)
+        if (resident && geometryRequired)
         {
             if (RuntimeNativeActorCombat.Find(node) is { Dead: true } combat)
             {
@@ -130,6 +157,19 @@ public partial class RuntimeCoordinator
             }
             else if (node is RuntimeNativeNpc actor)
                 aim = actor.Skeleton.Node.GlobalTransform * actor.Skeleton.Node.GetBoneGlobalPose(actor.Skeleton.BoneIndex("Bip01 Head")).Origin;
+            else if (_nativePluginStack!.GetEffective(referenceState.Base).Signature == "DOOR")
+                aim = NativeReferenceGeometryTarget.ObserveSurface(node!, player, player.Camera.GlobalPosition,
+                    player.CombatCollisionRids, contact => _nativeReferenceEvents?.CollisionReference(contact.GetInstanceId()) == key,
+                    NativeCollisionResident).Aim;
+            else if (node is not RuntimeNativeCreature)
+            {
+                var geometry = NativeReferenceGeometryTarget.Observe(node!, player, player.Camera.GlobalPosition,
+                    player.CombatCollisionRids, contact => _nativeReferenceEvents?.CollisionReference(contact.GetInstanceId()) == key,
+                    NativeCollisionResident, (_configuration.Player.ActivationDistanceMeters +
+                        _configuration.Player.CapsuleHeightMeters + _configuration.Player.StepHeightMeters) * player.GlobalBasis.Y.Length());
+                target = geometry.Target;
+                aim = geometry.Aim;
+            }
             else
             {
                 if (_botBoundsOwner != node)
@@ -143,10 +183,10 @@ public partial class RuntimeCoordinator
                 aim = node!.GlobalTransform * _botLocalBounds.GetCenter();
             }
         }
-        var aimed = player.AimedObject() is { } collider ? _nativeReferenceEvents?.AimedReference(collider)?.FormKey.ToString() : null;
-        var interaction = _botInteractions.Observe(key.ToString(), NativeBotInteractionSnapshot(key)).ToString(CultureInfo.InvariantCulture);
+        var aimed = geometryRequired && player.AimedObject() is { } collider
+            ? _nativeReferenceEvents?.AimedReference(collider)?.FormKey.ToString() : null;
         BotDoorObservation? door = null;
-        if (_nativePluginStack!.GetEffective(referenceState.Base).Signature == "DOOR")
+        if (geometryRequired && _nativePluginStack!.GetEffective(referenceState.Base).Signature == "DOOR")
         {
             var observedDoor = _nativeReferenceEvents?.PlayerRouteDoor(key) ??
                 throw new InvalidOperationException("Source route door has no reference event owner.");
@@ -162,10 +202,11 @@ public partial class RuntimeCoordinator
             Numeric(-player.Camera.GlobalBasis.Z), Numeric(target), Numeric(aim), aimed, GetTree().Paused,
             player.GetMeta("opennv_source_movement_enabled", false).AsBool() && !player.FurnitureActive,
             player.GetMeta("opennv_source_looking_enabled", false).AsBool(), resident && player.CollisionResident,
-            player.BlockingShape, interaction, travelReady, door, _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask,
-            player.ModalInput, _nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession ||
-                world.PlayerMoves.Pending || _nativeLoadingLayer is not null || _loadingScreen is not null);
+            player.BlockingShape, interaction.Revision.ToString(CultureInfo.InvariantCulture), travelReady, door,
+            _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask, player.ModalInput, loading);
     }
+
+    private static System.Numerics.Vector3 Vector3ToNumeric(Vector3 value) => new(value.X, value.Y, value.Z);
 
     private BotNavigationRoute FindNativeNavigationRoute(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float projectionRadius)
         => FindNativeNavigationRoute(start, end, true, projectionRadius);
@@ -207,27 +248,38 @@ public partial class RuntimeCoordinator
         var path = _botNavigation!.FindPath(Source(start), Source(end), destinationRadiusGameUnits: projectionRadius / units);
         var worldPath = path.Select(World).ToArray();
         var intent = NativeCapsuleNavigation.Intent(origin, worldPath, approachTarget is { } referenceTarget ?
-            new(referenceTarget.X, referenceTarget.Y, referenceTarget.Z) : null, approachRadius);
+            new(referenceTarget.X, referenceTarget.Y, referenceTarget.Z) : null, approachRadius,
+            projection: projectionRadius > 0 ? new(new(end.X, end.Y, end.Z), worldPath[^1], projectionRadius) : null);
         IReadOnlyList<Vector3> corridor = intent.ReferenceApproach ? [intent.Target] : intent.Corridor;
         Func<ulong, FalloutFormKey?>? source = _nativeReferenceEvents is { } events ? events.CollisionReference : null;
         var probe = new NativeNavigationProbe(NativeCapsuleNavigation.FirstCorridorContact(_nativePlayer!, origin, corridor),
             source);
-        var scope = intent.ReferenceApproach ? "reference-approach" : "source-corridor";
+        var scope = intent.ReferenceApproach ? "reference-approach" : intent.Projection is not null ? "source-projection-region" : "source-corridor";
+        Func<Vector3, bool>? arrival = null;
+        if (intent.Projection is not null)
+        {
+            var region = _botNavigation!.ArrivalRegion(Source(start), Source(end), path[^1], projectionRadius / units,
+                _nativePlayer!.SafeMargin * 8 / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
+            arrival = point => region(new Vector3(point.X, -point.Z, point.Y) / units);
+        }
         try
         {
             var spacing = Math.Max(.3f, _configuration.Player.CapsuleRadiusMeters);
-            var refinedSpacing = Math.Min(spacing, Math.Max(.15f,
-                _configuration.Player.CapsuleRadiusMeters * _nativePlayer!.GlobalBasis.X.Length()));
+            var refinedSpacing = NativeCapsuleNavigation.RefinementSpacing(spacing,
+                _configuration.Player.CapsuleRadiusMeters, _nativePlayer!.GlobalBasis.X.Length());
             var local = NativeCapsuleNavigation.FindRefined(_nativePlayer, origin, intent.Target,
                 _configuration.Player.StepHeightMeters, spacing, refinedSpacing, NativeCollisionResident,
-                targetRadius: intent.ArrivalRadius, probe: probe, corridor: intent.Corridor);
+                targetRadius: intent.ArrivalRadius, probe: probe, corridor: intent.Corridor, arrival: arrival);
             GD.Print($"OPENNV_BOT_CAPSULE_ROUTE from={origin} to={intent.Target} sourceWaypoint={intent.Resume} " +
-                $"requested={end} projected={worldPath[^1]} projectionRadius={projectionRadius} scope={scope} " +
+                $"requested={end} projected={worldPath[^1]} projectionRadius={projectionRadius} accepted={local.Path[^1]} scope={scope} " +
                 $"reachesProjected={intent.Resume == worldPath.Length} sourceExclusions=0 " +
                 $"arrivalRadius={intent.ArrivalRadius} sourceSha256={_botNavigation.SourceSha256} " +
                 $"spacing={local.Spacing} coarseError={local.CoarseError ?? "none"} ms={Time.GetTicksMsec() - now}");
-            return new(local.Path.Select(Numeric).ToArray(), end, Numeric(worldPath[^1]), intent.Resume == worldPath.Length, identity, projectionRadius,
-                Refinement: new(scope, Numeric(intent.Target), intent.ArrivalRadius, _botNavigation.SourceSha256));
+            var accepted = intent.Projection is null ? worldPath[^1] : World(_botNavigation.FindNearestPoint(Source(Numeric(local.Path[^1]))));
+            BotNavigationProjection? projection = intent.Projection is { } sourceProjection ?
+                new(Numeric(sourceProjection.Requested), Numeric(sourceProjection.Selected), sourceProjection.Radius, Numeric(accepted)) : null;
+            return new(local.Path.Select(Numeric).ToArray(), end, Numeric(accepted), intent.Resume == worldPath.Length, identity, projectionRadius,
+                Refinement: new(scope, Numeric(intent.Target), intent.ArrivalRadius, _botNavigation.SourceSha256, projection));
         }
         catch (InvalidOperationException error)
         {

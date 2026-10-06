@@ -52,7 +52,12 @@ public partial class NativeDefaultActivationAudit
             events.ObservePlayerActivationFinished = (_, success) => completed.Add(success);
             root.AddChild(events); events.SetProcess(false);
             var stopped = JsonSerializer.Serialize(world.Get(Key(0x900)).Capture());
+            Require(events.CanAdmitIndependentDefaultInteraction(Key(0x900)) &&
+                JsonSerializer.Serialize(world.Get(Key(0x900)).Capture()) == stopped,
+                "Resident independent-default observation acknowledged a source failure or lost its native owner.");
             Require(events.TryActivate(body[Key(0x900)]) && !events.TryActivate(body[Key(0x900)]), "Pending activation was rejected or duplicated.");
+            Require(events.CanAdmitIndependentDefaultInteraction(Key(0x900)) && defaults == 0,
+                "Observing the existing independent activation consumed its queue or reinstated the unrelated script blocker.");
             Pump(events); Pump(events);
             Require(defaults == 1 && opened == 1 && begins == 1 && ends == 1 && completed.SequenceEqual([true]) &&
                 JsonSerializer.Serialize(world.Get(Key(0x900)).Capture()) == stopped,
@@ -66,11 +71,16 @@ public partial class NativeDefaultActivationAudit
                 JsonSerializer.Serialize(world.Get(Key(0x900)).Capture()) == stopped,
                 "A fresh default failure hid its error or poisoned the stopped source invocation.");
             foreach (var id in new uint[] { 0x901, 0x902, 0x903 })
+            {
+                Require(!events.CanAdmitIndependentDefaultInteraction(Key(id)), "Authored or unparsed script acquired independent bot fault scope.");
                 Require(!events.TryActivate(body[Key(id)]), "Authored/unknown activation acquired the independent default path.");
+            }
             world.Get(Key(0x900)).Enabled = false;
+            Require(!events.CanAdmitIndependentDefaultInteraction(Key(0x900)), "Disabled reference acquired independent bot fault scope.");
             Require(!events.TryActivate(body[Key(0x900)]), "Disabled native reference admitted input.");
             world.Get(Key(0x900)).Enabled = true;
             events.SetResidency(cell with { References = [] }, root);
+            Require(!events.CanAdmitIndependentDefaultInteraction(Key(0x900)), "Unresident reference acquired independent bot fault scope.");
             Require(!events.TryActivate(body[Key(0x900)]), "Unresident native binding admitted input.");
             GD.Print("OPENNV_NATIVE_DEFAULT_QUEUE_PASS duplicatePending=false idleReplay=false freshInput=true " +
                 "completionIndependent=true retainedFaultAndPrefix=true failedDefaultVisible=true unknownAndAuthoredGuarded=true enabledAndResidency=true");

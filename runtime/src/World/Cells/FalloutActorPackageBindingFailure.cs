@@ -10,7 +10,8 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed record FalloutActorPackageBindingFailure(FalloutFormKey Package, string PackageSha256,
     string Error, float[] Position, float[] Basis, bool MovingBasePose, ulong AiRandomState,
     double PollRemaining, FalloutScheduleTime? ScheduleTime, FalloutPackageRetirement Retirement,
-    FalloutFaceBlinkSnapshot? Blink = null, FalloutActorPackageIdleState? IdleState = null)
+    FalloutFaceBlinkSnapshot? Blink = null, FalloutActorPackageIdleState? IdleState = null,
+    FalloutActorStoppedIdleAnimation? IndependentIdle = null)
 {
     internal void Validate()
     {
@@ -33,6 +34,9 @@ internal sealed record FalloutActorPackageBindingFailure(FalloutFormKey Package,
             throw new InvalidDataException("Saved actor package pose has an invalid basis.");
         Blink?.Validate();
         Retirement.Validate();
+        IndependentIdle?.Validate();
+        if (IndependentIdle is not null && MovingBasePose)
+            throw new NotSupportedException("Stopped independent IDLE requires its stationary base pose.");
     }
 
     internal void Validate(FalloutPluginStack records, FalloutReferenceInstance actor)
@@ -54,10 +58,17 @@ internal sealed record FalloutActorPackageBindingFailure(FalloutFormKey Package,
         else if (source.Idles.Count != 0)
             throw new NotSupportedException("Stopped initialization requires its declared idle collection state.");
         Retirement.Validate(records);
+        IndependentIdle?.Validate(records);
         if (Blink is not null && Blink.Settings != FalloutFaceBlinkSettings.Read(records))
             throw new NotSupportedException("Saved stopped actor blink settings differ from the winning source.");
     }
 
     internal FalloutActorPackageBindingFailure Copy() => this with
-    { Position = (float[])Position.Clone(), Basis = (float[])Basis.Clone(), Blink = Blink?.Copy(), IdleState = IdleState?.Copy() };
+    {
+        Position = (float[])Position.Clone(),
+        Basis = (float[])Basis.Clone(),
+        Blink = Blink?.Copy(),
+        IdleState = IdleState?.Copy(),
+        IndependentIdle = IndependentIdle?.Copy()
+    };
 }

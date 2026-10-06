@@ -28,7 +28,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private void PrepareEngagement()
     {
         PrepareMovement();
-        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom); _actor.AddChild(_enemySounds);
+        _enemySounds = new(_records, _content, _actor, _skeleton.UnitsToMetres, _state.SoundRandom, _state.AnimationSoundEvents); _actor.AddChild(_enemySounds);
         var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
         var stats = FalloutActorTemplateOwner.Resolve(_records, _records.GetEffective(_state.Base), 2, _state.Templates);
         var statsData = stats.ReadSubrecords().Single(field => field.Signature == "DATA").Data;
@@ -67,11 +67,6 @@ internal sealed partial class RuntimeNativeActorCombat
             if (Clip(path, _enemyWeapon?.Automatic == true).Events.Discharges == 0)
                 throw new NotSupportedException($"Actor attack {path} requires a source Hit, Fire or Release event.");
         _ = Clip(_movementPath, true);
-        var state = _state.Engagement!;
-        var attackRandom = _state.AttackRandom.State;
-        if (state.AttackRandomState is { } savedRandom && savedRandom != attackRandom)
-            throw new InvalidDataException("Active combat randomness differs from its persistent actor owner.");
-        _state.Engagement = state with { AttackRandomState = attackRandom };
     }
 
     private string SelectPath(string directory, params string[] groups)

@@ -292,6 +292,7 @@ internal partial class RuntimeNativeNpc
     public override void _ExitTree()
     {
         RetainHeadTracking();
+        RetainPendingSelection();
         RetainBindingFailure();
         RetainSelectionFailure();
         RetainDialogueContinuation();

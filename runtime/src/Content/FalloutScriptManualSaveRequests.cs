@@ -41,7 +41,6 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
         internal void Stop(Exception failure) => Finish(failure.Message);
         internal bool MoveNext(IEnumerator<bool> steps)
         {
-            _owner.RequireNoFailure();
             _owner._executing.Push(_entered);
             try { return steps.MoveNext(); }
             finally
@@ -96,7 +95,6 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
 
     private Invocation Enter(FalloutFormKey caller, FalloutPluginRecord program, FalloutGameModeProgram executing)
     {
-        RequireNoFailure();
         if (records.RuntimeFormId(caller) != 0x14 &&
             records.GetEffective(caller).Signature is not ("REFR" or "ACHR" or "ACRE" or "QUST") &&
             !(caller == program.FormKey && program.Signature == "SCPT"))
@@ -166,10 +164,10 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
         if (!_entered.Remove(entered.Invocation))
             throw new InvalidOperationException("Source execution retirement does not match its entered invocation.");
         _unclosedRequests.Remove(entered.Invocation);
-        if (_receipt is not null)
+        if (_receipt?.Invocations is { } invocations && invocations.Any(item => item.Invocation == entered.Invocation))
             _receipt = _receipt! with
             {
-                Invocations = (_receipt.Invocations ?? []).Select(item => item.Invocation == entered.Invocation
+                Invocations = invocations.Select(item => item.Invocation == entered.Invocation
                     ? item with { Ended = true, SourceError = error } : item).ToArray()
             };
         // A stopped suffix is still stopped. The ordinary complete campaign
@@ -189,7 +187,6 @@ internal sealed class FalloutScriptManualSaveRequests(FalloutPluginStack records
     internal bool Drain(Func<string?> normalSaveBlocker)
     {
         ArgumentNullException.ThrowIfNull(normalSaveBlocker);
-        RequireNoFailure();
         if (!Pending) return false;
         if (CurrentPhase <= _receipt!.RequestedPhase || _entered.Count != 0 || _unclosedRequests.Count != 0)
         { DeferredBy = "source-script-execution"; return false; }

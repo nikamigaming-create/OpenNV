@@ -35,7 +35,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
-    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Func<bool>? IsHardcore = null);
+    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Func<bool>? IsHardcore = null,
+    Action<double>? RewardXp = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -84,7 +85,6 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds,
         Action? observeActivationBegin = null, Action? observeActivationEnd = null)
     {
-        world.ScriptManualSaves.RequireNoFailure();
         var reference = instance.Reference;
         var admitted = new Dictionary<string, FalloutReferenceScriptEvent>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in events)
@@ -134,16 +134,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             return DispatchIndependentDefaultActivation(instance, events, defaultActivation, elapsedSeconds,
                 observeActivationBegin, observeActivationEnd);
         var recovered = instance.ScriptStoppedFrame is null ? RecoverMissingRead(instance, events) ?? RecoverMissingCommand(instance, events) : null;
-        // A failed attempt cannot run again on its GameMode clock. A new
-        // activation or contact entry is an explicit new event and may retry
-        // the source program, including its guards and already-applied prefix.
-        // Never skip the failed instruction or silently continue beyond it.
-        if (instance.ScriptError is { } previousError && events.Any(item =>
-            item.Name is "OnActivate" or "OnTriggerEnter" && previousError.StartsWith(item.Name + ":", StringComparison.OrdinalIgnoreCase)))
-        {
-            instance.ScriptError = null;
-            instance.ScriptStoppedFrame = null;
-        }
+        // A new activation/contact cannot acknowledge a failed invocation.
+        // Its consumed effects remain owned by the retained fault or a typed
+        // continuation; repeating player input must not replay that prefix.
         var counts = admitted.Keys.ToDictionary(name => name, _ => 0, StringComparer.OrdinalIgnoreCase);
         var failure = instance.ScriptError;
         IReadOnlyList<FalloutReferenceScriptEventResult> Results() => events.Select(item =>
@@ -788,6 +781,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return;
             }
             arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
+            if (operation == "rewardxp")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("RewardXP requires one signed integer.");
+                (host.RewardXp ?? throw new NotSupportedException("RewardXP has no shared player XP owner."))(Number(arguments[0]));
+                return;
+            }
             if (parts.Length == 1 && operation == "setplayertagskill")
             {
                 if (arguments.Count != 2) throw new InvalidDataException("SetPlayerTagSkill requires a skill and slot.");

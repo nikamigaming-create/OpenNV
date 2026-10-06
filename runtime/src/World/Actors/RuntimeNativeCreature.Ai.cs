@@ -93,7 +93,7 @@ internal sealed partial class RuntimeNativeCreature
         }
     }
 
-    internal float PackageCondition(FalloutCondition condition) => condition.Function is 1 or 14
+    internal float PackageCondition(FalloutCondition condition) => condition.Function is 1 or 14 or 32
         ? ReferenceCondition(condition)
         : condition.RunOn != 0 && condition.Function is not (50 or 84 or 161 or 289)
         ? throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.")
@@ -110,7 +110,6 @@ internal sealed partial class RuntimeNativeCreature
             73 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
             56 => FalloutAiPackages.QuestRunning(condition, _aiQuests!),
             58 or 59 or 79 or 546 => _aiQuests!.Evaluate(condition),
-            32 when condition.RunOn == 0 => InSameCell(condition.FormArgument1) ? 1 : 0,
             35 => _aiWorld!.IsEnabled(Appearance.Reference!.Value) ? 0 : 1,
             36 when condition.Argument1 == 0 => Combat!.PackagePlayer?.ModalInput == true ? 1 : 0,
             50 => FalloutAiPackages.HasTalkedToPlayer(condition, Appearance.Reference!.Value,
@@ -139,19 +138,6 @@ internal sealed partial class RuntimeNativeCreature
             placement = new(cell, [position.X, -position.Z, position.Y], [0, 0, 0]);
         }
         return _aiWorld!.EvaluateActorReferenceCondition(Appearance.Reference!.Value, condition, placement, Skeleton.UnitsToMetres)!.Value;
-    }
-
-    private bool InSameCell(FalloutFormKey target)
-    {
-        FalloutReferencePlacement? placement = null;
-        if (target == _aiRecords!.RuntimeFormKey(0x14))
-        {
-            var player = Combat!.PackagePlayer ?? throw new NotSupportedException("Player cell query has no resident player.");
-            var position = player.GlobalPosition / Skeleton.UnitsToMetres;
-            placement = new(Combat.PackagePlayerCell ?? throw new NotSupportedException("Player cell query has no active cell."),
-                [position.X, -position.Z, position.Y], [0, 0, 0]);
-        }
-        return _aiWorld!.InSameCell(Appearance.Reference!.Value, target, placement, Skeleton.UnitsToMetres);
     }
 
     private void SelectPackage()

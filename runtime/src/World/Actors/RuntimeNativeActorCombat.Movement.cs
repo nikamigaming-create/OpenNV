@@ -37,6 +37,7 @@ internal sealed partial class RuntimeNativeActorCombat
         routeError = _routeError,
         routeRequests = _routeRequests,
         routePlanning = _routeSearch is not null,
+        routeWork = NativeCapsuleNavigation.Work(_routeSearch) ?? _routeWork,
         routeFailures = _routeFailures,
         routeRetrySeconds = Math.Max(0, _routeClock),
         retiredPursuitSearches = _retiredPursuitSearches,

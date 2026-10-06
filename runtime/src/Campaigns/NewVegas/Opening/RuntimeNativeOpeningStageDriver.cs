@@ -33,6 +33,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         (_scripts.References?.ActorAppearanceRevision(_pluginStack.RuntimeFormKey(0x14)) ?? 0);
     private FalloutPlayerActorValues _playerActorValues = null!;
     private FalloutPlayerVitals _vitals = null!;
+    private FalloutPlayerExperience _experience = null!;
     private FalloutPlayerSkills _playerSkills = null!;
     private FalloutPlayerIngestibles _ingestibles = null!;
     private FalloutPlayerTagSkills _tagSkills = null!;
@@ -71,9 +72,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         get => _executionError;
         private set { _executionError = value; _stageResultDriverFailure = null; }
     }
-    internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault;
+    internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
     internal string? BlockingExecutionError => _stageResultDriverFailure?.Error == ExecutionError ? null : ExecutionError;
-    internal string? BlockingExecutionFault => BlockingExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault;
+    internal string? BlockingExecutionFault => BlockingExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
@@ -192,6 +193,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _restoreFinishedSpeechStage = restore?.State.FinishedSpeechStage;
         _restoreStageResults = restore?.State.QuestStageResults;
         _restoreStageResultFailure = restore?.State.StageResultFailure;
+        _restoreTerminalResults = restore?.State.TerminalResults;
         _inventory = inventory;
         _globals = globals;
         _scripts.References!.BindPlayerAppearance(() => PlayerCreationState);
@@ -229,13 +231,14 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
             ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: _playerActorValues.Change,
             Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
-            Sitting: ActorSitting, TagSkills: _tagSkills);
+            Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: value => _experience.Reward(value));
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
             () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)), _playerActorValues);
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
+        _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
@@ -295,7 +298,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             RefreshRadioStations();
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
-            if (_saveRequested && SaveContinuationBlocker is null && !_scripts.References!.PlayerMoves.Pending)
+            if (_saveRequested && SaveContinuationBlocker is null && SourceFiniteAudioSaveBlocker is null &&
+                !_scripts.References!.PlayerMoves.Pending)
                 SaveCurrentState();
             _playerPackage?.Advance(delta);
             foreach (var expired in _imageSpaceState.Advance(delta))
