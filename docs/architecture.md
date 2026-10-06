@@ -3,6 +3,13 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Image-space lifetime](image-space-lifetime-owner.md) uses one independent C#
+gameplay-clock owner across interior/exterior presentation. Finite source
+modifiers expire at their authored durations despite an unrelated script,
+appearance or save failure. Pause still suspends their authoritative clocks.
+Model-less HDPT selections retain their source identity/extra-part graph
+without inventing geometry.
+
 [Source animation history](source-animation-event-history.md) retains genuine
 finished sound generations and stopped pure hit-query prefixes through save v43.
 Independent selected IDLE clocks and residual bone components compose with a

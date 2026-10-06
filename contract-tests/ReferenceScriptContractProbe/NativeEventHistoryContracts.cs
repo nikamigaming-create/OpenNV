@@ -6,6 +6,7 @@ internal static class NativeEventHistoryContracts
 {
     internal static void Run(FalloutPluginStack records)
     {
+        FiniteSoundCompletionWaitContracts.Run(records);
         FiniteSoundRegistryContracts.Run(records);
         AllLedgerFiniteSoundWaitContracts.Run(records);
         var caller = new FalloutFormKey("Pose.esm", 0x900);

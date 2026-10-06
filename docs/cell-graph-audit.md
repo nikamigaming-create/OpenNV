@@ -45,6 +45,10 @@ the source-only world separate. This join does not perform a complete cold load,
 advance script events or establish reusable campaign continuation. An optional
 native snapshot is joined only to the seed CELL and retains its original build
 identity and capture time; it is not a current-build observation of other cells.
+Source-bound head tracking validates the content owner attached to the actual
+plugin stack, including isolated read-only audits, rather than requiring an
+unrelated global native-launch singleton. This preserves the same owned
+settings/skeleton/hash checks without admitting absent content.
 
 Full-reader synthetic fixtures check interior closure, exterior boundaries,
 disconnected and empty selections, failed-cell reference accounting, modeled

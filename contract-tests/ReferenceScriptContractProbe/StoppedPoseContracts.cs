@@ -9,9 +9,11 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class StoppedPoseContracts
 {
-    internal static void Run()
+    internal static void Run(bool finiteCompletionOnly = false)
     {
-        var directory = Path.Combine(Path.GetTempPath(), "opennv-stopped-pose-" + Guid.NewGuid().ToString("N"));
+        var directory = finiteCompletionOnly
+            ? Path.Combine("tmp", "opennv-finite-completion-contract-" + Guid.NewGuid().ToString("N"))
+            : Path.Combine(Path.GetTempPath(), "opennv-stopped-pose-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
         {
@@ -58,6 +60,14 @@ internal static class StoppedPoseContracts
                 Record("FURN", 0x40, Field("MNAM", BitConverter.GetBytes(0x40000001u))),
                 Record("CELL", 0x800, Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Pose.esm"]);
+            if (finiteCompletionOnly)
+            {
+                FiniteSoundCompletionWaitContracts.Run(records);
+                FiniteSoundRegistryContracts.Run(records);
+                AllLedgerFiniteSoundWaitContracts.Run(records);
+                ManualSaveFiniteVoiceContracts.Run(records);
+                return;
+            }
             CaptureDiagnosticContracts.Run(records);
             NativeEventHistoryContracts.Run(records);
             ActorRetirementContracts.Run(records);

@@ -23,7 +23,8 @@ internal static class FalloutActorHeadTrackingSource
         foreach (var target in saved.Targets.Slots.Select(slot => slot.Target).Append(saved.Targets.CachedTarget).OfType<FalloutFormKey>())
             if (target != records.RuntimeFormKey(0x14) && records.GetEffective(target).Signature is not ("REFR" or "ACHR" or "ACRE"))
                 throw new InvalidDataException("Saved head target is not a source reference.");
-        var content = RuntimeLiveContentSource.Current ?? throw new NotSupportedException("Saved head tracking has no owned content source.");
+        var content = records.OwnedSource ?? RuntimeLiveContentSource.Current ??
+            throw new NotSupportedException("Saved head tracking has no owned content source.");
         if (FalloutLookSettings.Read(FalloutInstallationSettings.Read(content)) != binding.Settings ||
             FalloutGameSettingFloats.ReadRetained(records, "fAIHoldDefaultHeadTrackTimer", nameof(FalloutHeadTrackingState)) != saved.Targets.SourceHoldSeconds)
             throw new InvalidDataException("Saved head tracking differs from its source LookIK or hold settings.");

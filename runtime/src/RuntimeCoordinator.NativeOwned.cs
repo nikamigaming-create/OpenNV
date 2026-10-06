@@ -52,6 +52,7 @@ public partial class RuntimeCoordinator
     private RuntimeNativeOpeningStageDriver? _nativeOpeningStageDriver;
     private bool _nativeContinueOpening;
     private readonly FalloutImageSpaceState _nativeImageSpaceState = new();
+    private World.RuntimeNativeImageSpaceClock? _nativeImageSpaceClock;
     private readonly Dictionary<string, string> _nativeActorDivergences = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _nativeReferenceDivergences = new(StringComparer.Ordinal);
 
@@ -65,6 +66,7 @@ public partial class RuntimeCoordinator
         return new
         {
             paused = GetTree().Paused,
+            imageSpaceClock = _nativeImageSpaceClock?.State,
             botPlanning = NativeBotPlanningState,
             manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },
             combatWheel = _nativeCombatWheel?.State,
@@ -1281,6 +1283,8 @@ public partial class RuntimeCoordinator
                 .Select(field => FalloutDialogueTopic.Text(field.Data.Span)).Single() ?? "VCG00",
             0, _nativeBootstrap?.Controls);
         AddChild(_nativeOpeningStageDriver);
+        _nativeImageSpaceClock = new(_nativeImageSpaceState);
+        AddChild(_nativeImageSpaceClock);
         GD.Print(
             $"OPENNV_NATIVE_PLAYER_START reference={start?.Reference.FormKey ?? _nativeReferences!.PlayerMoves.Next?.Destination} " +
             $"quest={start?.Quest ?? _nativeStartingQuest!.FormKey} stage={start?.Stage ?? 0} " +

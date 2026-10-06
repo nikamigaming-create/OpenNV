@@ -10,6 +10,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         internal bool Releasing { get; set; }
         internal IDisposable? Registration { get; set; }
         internal NativeOwnedFiniteSoundHost.Attachment? Attachment { get; set; }
+        internal FalloutFiniteSoundCompletionWait? CompletionWait { get; set; }
     }
     private readonly Dictionary<Node, Voice> _voices = [];
     private readonly Dictionary<string, Node3D> _emitters = new(StringComparer.Ordinal);
@@ -78,7 +79,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             () => GodotObject.IsInstanceValid(voice) && (voice is AudioStreamPlayer3D positioned ? positioned.Playing : ((AudioStreamPlayer)voice).Playing),
             () => { StopVoice(voice); FinishVoice(voice, FalloutAnimationSoundEnd.SourceStopped); },
             () => { StopVoice(voice); FinishVoice(voice, FalloutAnimationSoundEnd.Cancelled); },
-            _events?.Reference, () => ReadFiniteVoice(voice, state));
+            _events?.Reference, () => ReadFiniteVoice(voice, state), () => state.CompletionWait?.State);
         _voices.Add(voice, state);
         // Unexpected retirement of the actual audio node remains cancellation.
         // Retiring only its finite source attachment does not emit this signal.

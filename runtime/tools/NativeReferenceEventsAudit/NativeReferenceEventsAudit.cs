@@ -9,12 +9,25 @@ public partial class NativeReferenceEventsAudit : Node
 {
     public override async void _Ready()
     {
-        var directory = Path.Combine(Path.GetTempPath(), "opennv-contact-audit-" + Guid.NewGuid().ToString("N"));
+        var completionEdge = OS.GetCmdlineUserArgs() is ["--finite-sound-completion-wait"];
+        var directory = completionEdge
+            ? Path.Combine("tmp", "opennv-finite-completion-native-" + Guid.NewGuid().ToString("N"))
+            : Path.Combine(Path.GetTempPath(), "opennv-contact-audit-" + Guid.NewGuid().ToString("N"));
         var path = Path.Combine(directory, "Contact.esm");
         Node3D? root = null;
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--image-space-clock"])
+            {
+                ExerciseImageSpaceClock(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-image-space-clock", var imageGame, var imageMod,
+                var imageRoot, var imageForm, .. var imageDependencies])
+            {
+                ExerciseOwnedImageSpaceClock(imageGame, imageMod, imageRoot, imageForm, imageDependencies);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--save-input"])
             {
                 await SaveInputReceipts(); GetTree().Quit(); return;
@@ -36,6 +49,13 @@ public partial class NativeReferenceEventsAudit : Node
             {
                 await ExerciseOwnedSoundEmitters(soundRoot, soundMod, soundModRoot,
                     firstSoundReference, secondSoundReference, soundDependencies);
+                GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--sound-finite-completion-edge", var edgeRoot, var edgeMod, var edgeModRoot,
+                var edgeReference, var edgeSound, .. var edgeDependencies])
+            {
+                await ExerciseOwnedSoundEmitters(edgeRoot, edgeMod, edgeModRoot,
+                    edgeReference, edgeReference, edgeDependencies, completionEdge: true, completionSound: edgeSound);
                 GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--activation-parent", var parentRoot, var parentMod, var parentModRoot,
@@ -81,6 +101,10 @@ public partial class NativeReferenceEventsAudit : Node
             if (OS.GetCmdlineUserArgs() is ["--finite-sound-lifetime"])
             {
                 await FiniteSoundLifetime(records); GetTree().Quit(); return;
+            }
+            if (completionEdge)
+            {
+                await FiniteSoundLifetime(records, completionEdge: true); GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--animated-activators"])
             {
@@ -212,6 +236,7 @@ public partial class NativeReferenceEventsAudit : Node
             await SaveInputReceipts();
             PlayerMoves(records);
             SaveDeferral();
+            ExerciseImageSpaceClock();
             DoorActivation(records);
             AnimatedActivators(records);
             DisabledSpeech(records);

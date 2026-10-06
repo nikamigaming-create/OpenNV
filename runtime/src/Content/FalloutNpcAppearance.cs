@@ -200,7 +200,8 @@ internal static class FalloutNpcAppearanceResolver
         if (added.Add(key.ToString()))
         {
             var record = Require(stack, key, "HDPT");
-            result.Add(ReadModel(stack, record, "head-addon", "MODL", "MODS", "MODD", 0, null));
+            var part = ReadModel(stack, record, "head-addon", "MODL", "MODS", "MODD", 0, null);
+            if (part.ModelPath is not null) result.Add(part);
             foreach (var row in record.ReadSubrecords().Where(row => row.Signature == "HNAM"))
                 AddHeadParts(stack, record.Plugin.AdjustFormId(UInt32(row.Data.Span, record, "HNAM")), result, added, ancestors);
         }

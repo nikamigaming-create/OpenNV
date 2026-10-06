@@ -12,11 +12,14 @@ public partial class NativeReferenceEventsAudit
     {
         static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
         var data = new byte[36]; data[0] = 1; data[1] = 10;
-        return Record("SOUN", 0xb60, Field("EDID", Text("FixtureFiniteSound")),
+        var spatial = Record("SOUN", 0xb60, Field("EDID", Text("FixtureFiniteSound")),
             Field("FNAM", Text("fixture/finite.wav")), Field("SNDD", data));
+        var flatData = (byte[])data.Clone(); flatData[4] = (byte)FalloutSoundFlags.TwoDimensional;
+        return spatial.Concat(Record("SOUN", 0xb61, Field("EDID", Text("FixtureFlatFiniteSound")),
+            Field("FNAM", Text("fixture/finite.wav")), Field("SNDD", flatData))).ToArray();
     }
 
-    private async Task FiniteSoundLifetime(FalloutPluginStack records)
+    private async Task FiniteSoundLifetime(FalloutPluginStack records, bool completionEdge = false)
     {
         using var world = new FalloutReferenceWorld(records);
         var root = new Node3D(); AddChild(root);
@@ -38,45 +41,68 @@ public partial class NativeReferenceEventsAudit
             var node = new Node3D { Position = new(2.5f, 3, -4) };
             node.SetMeta("opennv_reference_form_key", reference.ToString()); root.AddChild(node); return node;
         }
-        (AudioStreamPlayer3D Node, FalloutAnimationSoundEvents Ledger, long Generation,
-            NativeOwnedFiniteSoundHost.Attachment Attachment) Start(Node3D emitter, FalloutFormKey reference, bool followEmitter = true)
+        (Node Node, FalloutAnimationSoundEvents Ledger, long Generation,
+            NativeOwnedFiniteSoundHost.Attachment Attachment) Start(Node3D emitter, FalloutFormKey reference, bool followEmitter = true, bool flat = false)
         {
             var ledger = world.Get(reference).AnimationSoundEvents;
-            var selected = FalloutAnimationSound.Select(source, [source.LogicalPath], random, true, true);
-            var generation = ledger.Begin(records, selected, "Sound: FixtureFiniteSound", true, [source.LogicalPath]);
+            var descriptor = flat ? FalloutSoundRecordReader.Read(records, Key(0xb61)) : source;
+            var selected = FalloutAnimationSound.Select(descriptor, [descriptor.LogicalPath], random, true, true);
+            var generation = ledger.Begin(records, selected, "Sound: " + descriptor.EditorId, true, [descriptor.LogicalPath]);
             ledger.BindMedia(generation, stream.GetMeta("opennv_owned_media_sha256").AsString());
-            var node = new AudioStreamPlayer3D { Stream = stream, AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.Disabled };
+            Node node = flat ? new AudioStreamPlayer { Stream = stream } :
+                new AudioStreamPlayer3D { Stream = stream, AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.Disabled };
             var nativeEmitter = emitter.GetInstanceId();
             var receipt = new OpenNV.Runtime.Content.FalloutFiniteSoundVoice(nativeEmitter, reference,
-                generation, source.FormKey, ledger.Events.Last().SoundSha256, selected.Path!, ledger.Events.Last().MediaSha256!);
+                generation, descriptor.FormKey, ledger.Events.Last().SoundSha256, selected.Path!, ledger.Events.Last().MediaSha256!);
             NativeOwnedFiniteSoundHost.Attachment? attachment = null; IDisposable? registration = null;
+            FalloutFiniteSoundCompletionWait? completion = null;
             var settled = false;
             void Release()
             {
                 registration?.Dispose(); attachment?.Dispose();
-                if (GodotObject.IsInstanceValid(node)) { node.Stream = null; node.QueueFree(); }
+                if (!GodotObject.IsInstanceValid(node)) return;
+                if (node is AudioStreamPlayer3D spatial) spatial.Stream = null;
+                else ((AudioStreamPlayer)node).Stream = null;
+                node.QueueFree();
             }
+            void Stop() { if (node is AudioStreamPlayer3D spatial) spatial.Stop(); else ((AudioStreamPlayer)node).Stop(); }
             void Cancel()
             {
                 if (settled) return; settled = true; cancellations++;
                 ledger.Cancel(generation, "Synthetic actual native voice retired.");
-                if (GodotObject.IsInstanceValid(node)) node.Stop(); Release();
+                if (GodotObject.IsInstanceValid(node)) Stop(); Release();
             }
             attachment = NativeOwnedFiniteSoundHost.Attach(records, ledger, generation, node, emitter,
-                FalloutSoundLoop.Read(source), Cancel, () => { }, followEmitter); leases.Add(attachment);
-            registration = records.SoundVoices.Register(source.FormKey, followEmitter ? reference : null, "synthetic-native-lifetime", () =>
-                GodotObject.IsInstanceValid(node) && node.Playing, () =>
+                FalloutSoundLoop.Read(descriptor), Cancel, () => { }, followEmitter); leases.Add(attachment);
+            FalloutFiniteSoundVoice? Pending()
+            {
+                if (settled || !GodotObject.IsInstanceValid(node) || attachment?.Alive != true || !node.CanProcess()) return null;
+                var playback = NativeFinitePlayback(node);
+                var paused = node is AudioStreamPlayer3D spatial ? spatial.StreamPaused : ((AudioStreamPlayer)node).StreamPaused;
+                return paused || playback is null ? null :
+                    completion?.Observe(receipt, node.GetInstanceId(), playback.GetInstanceId(), stream.GetInstanceId(),
+                        NativeFinitePlaying(node), node is AudioStreamPlayer3D ? Engine.GetPhysicsFrames() : Engine.GetProcessFrames(), Time.GetTicksMsec());
+            }
+            registration = records.SoundVoices.Register(descriptor.FormKey, !flat && followEmitter ? reference : null, "synthetic-native-lifetime", () =>
+                GodotObject.IsInstanceValid(node) && NativeFinitePlaying(node), () =>
                 {
                     if (settled) return; settled = true; sourceStops++;
-                    node.Stop(); ledger.Complete(generation, FalloutAnimationSoundEnd.SourceStopped); Release();
-                }, Cancel, reference, () => !settled && GodotObject.IsInstanceValid(node) && node.Playing ? receipt : null); leases.Add(registration);
+                    Stop(); ledger.Complete(generation, FalloutAnimationSoundEnd.SourceStopped); Release();
+                }, Cancel, reference, Pending, () => completion?.State); leases.Add(registration);
             node.TreeExiting += Cancel;
-            node.Finished += () =>
+            void Finished()
             {
                 if (settled) return; settled = true; nativeFinished++;
                 ledger.Complete(generation, FalloutAnimationSoundEnd.NativeFinished); Release();
-            };
-            node.Play(); return (node, ledger, generation, attachment);
+            }
+            if (node is AudioStreamPlayer3D positioned) { positioned.Finished += Finished; positioned.Play(); }
+            else { var unpositioned = (AudioStreamPlayer)node; unpositioned.Finished += Finished; unpositioned.Play(); }
+            if (NativeFinitePlayback(node) is { } initial)
+            {
+                completion = new(receipt, node.GetInstanceId(), initial.GetInstanceId(), stream.GetInstanceId());
+                _ = Pending();
+            }
+            return (node, ledger, generation, attachment);
         }
         async Task Finish(FalloutAnimationSoundEvents ledger, long generation)
         {
@@ -88,12 +114,25 @@ public partial class NativeReferenceEventsAudit
         }
         try
         {
+            if (completionEdge)
+            {
+                var proofs = new List<object>();
+                foreach (var flat in new[] { false, true })
+                {
+                    var edgeEmitter = Emitter(Key(0x901)); var edge = Start(edgeEmitter, Key(0x901), flat: flat);
+                    proofs.Add(new { flat, proof = await ProveFiniteCompletionEdge(records, world, [edge.Node], "synthetic-native-fixture") });
+                }
+                Require(nativeFinished == 2 && sourceStops == 0 && cancellations == 0,
+                    "Native completion-edge fixture fabricated, repeated or cancelled a completion.");
+                GD.Print("OPENNV_NATIVE_FINITE_COMPLETION_EDGE_PASS " + JsonSerializer.Serialize(proofs));
+                return;
+            }
             var emitter = Emitter(Key(0x901)); var active = Start(emitter, Key(0x901));
             var last = new Vector3(3.25f, 4.5f, -2); emitter.GlobalPosition = last;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             root.RemoveChild(emitter); emitter.Free();
             Require(active.Attachment.EmitterRetired && active.Attachment.Alive && active.Node.IsInsideTree() &&
-                active.Node.GlobalPosition == last && active.Attachment.LastRealPosition == last &&
+                ((AudioStreamPlayer3D)active.Node).GlobalPosition == last && active.Attachment.LastRealPosition == last &&
                 active.Ledger.Events.Last().End == FalloutAnimationSoundEnd.Active && !active.Ledger.CanCapture &&
                 world.PendingAnimationSoundFiniteVoiceWait() is { Count: 1 },
                 "Emitter retirement cancelled, completed or moved the actual finite source voice.");
@@ -111,7 +150,7 @@ public partial class NativeReferenceEventsAudit
             positionEmitter.GlobalPosition += new Vector3(3, 2, 1);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             records.SoundVoices.Stop(source.FormKey, Key(0x901));
-            Require(!positional.Attachment.FollowEmitter && positional.Node.GlobalPosition == initial &&
+            Require(!positional.Attachment.FollowEmitter && ((AudioStreamPlayer3D)positional.Node).GlobalPosition == initial &&
                 positional.Ledger.Events.Last().End == FalloutAnimationSoundEnd.Active && sourceStops == 0,
                 "Positional-only finite voice followed a root or falsely matched a node-reference stop.");
             positionEmitter.Free();

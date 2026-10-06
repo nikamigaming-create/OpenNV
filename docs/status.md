@@ -15,6 +15,20 @@ No new complete checkpoint, vault exit or campaign/parity completion is claimed.
 See [ordinary campaign attempts](ordinary-campaign-bot.md) and
 [current work](current-work.md).
 
+Later ordinary user input reaches Escape stage 150 in exterior CELL 0010c1 at
+107 HP, but no complete later save is verified. The reported persistent whiteout
+retains the original ten-second DEMOEyeAdjustISFX at zero elapsed while an
+unrelated appearance failure stops the old driver clock. Independent image-space
+lifetime and authored model-less head-part admission now pass focused native,
+pause/fault and unchanged owned-source checks; final exterior-view replay and
+complete saving remain unverified. See [image-space ownership](image-space-lifetime-owner.md).
+
+The fresh source-bound vault audit retains all 7,155 winning references across
+ten selected interiors and successfully joins the unchanged complete checkpoint.
+There are still 101 reference issues and 34 failed resource declarations;
+zero package error bindings is not procedure or gameplay completion. No native
+snapshot or whole room/loot/inventory/door acceptance is inferred from this audit.
+
 Ordinary TTW input genuinely reaches Escape stage 140 and the final vault cave
 chamber (CELL 024512): actual pistol hits defeat the guard, ordinary inventory
 actions acquire the office key/password, and the original terminal/XTEL tunnel
@@ -37,8 +51,9 @@ Fresh ordinary F5 and source cell-stop policy remain independent.
 Sound and F5 input
 diagnostics build and their focused contracts pass. The complete armed stage-18 v43 checkpoint
 remains preserved and verified through cold Continue and ordinary in-process
-Load. G.O.A.T. does not need replay. Vault exit, Megaton and train/Mojave remain
-unreached. Shared GetInSameCell condition 32 now has binary/cold contracts;
+Load. G.O.A.T. does not need replay. Later ordinary exit has the separate
+unsaved/whiteout boundary above; Megaton and train/Mojave remain unreached.
+Shared GetInSameCell condition 32 now has binary/cold contracts;
 IsCombatTarget, selected GetCombatTarget, authored Flee and NPC portal transfer
 still prevent the Holden residents' original cue.
 
