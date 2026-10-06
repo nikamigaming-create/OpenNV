@@ -11,7 +11,9 @@ Equipped corpse item transfer, exterior and other actor/physics/procedure
 continuations remain independent; no capture exemption is added.
 The independent authored aggressive/key route additionally reaches Escape
 stage 140 and writes a complete cave slot at 115 HP and 8/14 rounds. That slot's
-cold Continue and exterior remain unverified; the consumed nested GetDetected
+cold Continue is verified, and actual ordinary input exits at stage 150 in
+CELL 0010c1. Exterior F5 still refuses genuine unowned dust-devil loop voices;
+no complete exterior cold checkpoint is claimed. The consumed nested GetDetected
 failure remains visible, not a conversation or whole-quest completion claim.
 An actually ended pending ForceSave now has pure/native
 original-source-then-manual ordering and both cold component captures; the
@@ -38,9 +40,12 @@ Later ordinary user input reaches Escape stage 150 in exterior CELL 0010c1 at
 107 HP, but no complete later save is verified. The reported persistent whiteout
 retains the original ten-second DEMOEyeAdjustISFX at zero elapsed while an
 unrelated appearance failure stops the old driver clock. Independent image-space
-lifetime and authored model-less head-part admission now pass focused native,
-pause/fault and unchanged owned-source checks; final exterior-view replay and
-complete saving remain unverified. See [image-space ownership](image-space-lifetime-owner.md).
+lifetime and authored model-less head-part admission pass focused native,
+pause/fault and unchanged owned-source checks. Fresh ordinary exit now verifies
+the original ten-second effect advancing and expiring, and the inspected final
+native viewport is no longer whitewashed. Temporary frames are deleted.
+Complete exterior saving and matched retail pixels remain unverified.
+See [image-space ownership](image-space-lifetime-owner.md).
 
 The fresh source-bound vault audit retains all 7,155 winning references across
 ten selected interiors and successfully joins the unchanged complete checkpoint.

@@ -315,5 +315,9 @@ monotonic clock after command dispatch rather than reusing its earlier frame
 timestamp. A forced snapshot therefore cannot immediately collide with a
 periodic write that was already due. Exact 249/250 ms and reset boundaries,
 clock-regression refusal and native recorded-input runs with zero publication
-losses cover this owner. Genuine still-pending writer deadlines, atomic I/O
+losses cover this owner. A forced request overlapping a still-pending writer
+within that same 250 ms deadline is counted and published on the next native
+phase after the original immutable write settles; it neither replaces the
+pending payload nor claims that a fresh snapshot already committed.
+Genuine still-pending writer deadlines, atomic I/O
 failures and loss reporting remain unchanged.

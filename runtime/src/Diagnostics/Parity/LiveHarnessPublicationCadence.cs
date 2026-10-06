@@ -16,4 +16,10 @@ internal sealed class LiveHarnessPublicationCadence
         if (now < _lastScheduled) throw new InvalidDataException("Live-state publication schedule regressed.");
         _lastScheduled = now;
     }
+
+    internal static bool WithinPendingDeadline(ulong now, ulong started)
+    {
+        if (now < started) throw new InvalidDataException("Pending publication clock regressed.");
+        return now - started < IntervalMilliseconds;
+    }
 }

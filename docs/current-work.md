@@ -22,8 +22,12 @@ and 107 HP. The user closed that unsaved session after reporting persistent
 whiteout. Its original ten-second DEMOEyeAdjustISFX had elapsed zero because an
 unrelated appearance failure stopped the former driver clock. The general
 independent, pause-respecting clock and authored model-less head-part fix pass
-native/fault/pause/unchanged-owned-source checks. Final exterior pixels and a
-complete exterior checkpoint still require an ordinary replay.
+native/fault/pause/unchanged-owned-source checks. A fresh ordinary replay now
+reaches that actual exterior at 115 HP and 8/14 rounds. The original modifier
+advances from 0.566 to 9.624 seconds, then expires at its authored ten-second
+boundary. The final native viewport shows terrain, weapon, HUD and night sky
+without persistent whiteout. Selected temporary frames are deleted; recording
+is off. Matched retail pixels and a complete exterior checkpoint remain separate.
 
 The current shared explicit F5/menu save-preparation owner freezes actual
 world/input/source producers, drains only the exact already-proven finite
@@ -61,7 +65,14 @@ remains retained, not replayed or treated as a working conversation branch.
 Paused Create New Save writes complete v45 cave slot
 8d5b7e5dbccf4554b357c80811354405 at 115 HP and 8/14 rounds.
 SHA256: 7B4D9B56E28E87D2591F414F9A56FE29D43AE6D552BF5B4076B5C2948448B513.
-The cave slot's ordinary cold Continue and exterior progression are next.
+Ordinary cold Continue verifies that cave slot's exact cell/stage/115 HP/8-14
+rounds. The campaign planner independently chooses original exit 024720.
+Actual source Finished and recommended post-review controls, followed by
+ordinary exit activation, reach the exterior without injected state.
+Original ForceSave slot 70b401ec68b54df99245ef1dcf75ebc3 also commits through its
+original GUID/writer/site/hash/ended invocation at stage 150 in the cave, not
+the exterior. SHA256:
+CBF68ABFC5AC5113F76908A29CDE04EF4F69FBF2D382E35F87E0921D74EB5C5B.
 
 One actually ended pending original ForceSave can precede the manual slot
 under the same exact quiescent preparation lease. Pure contracts and 21 native
@@ -96,7 +107,14 @@ expression; no predicate value or consumed prefix is invented. The authored
 aggressive/key route progresses independently without a conversation claim.
 Equipped corpse
 Take All/item removal still needs its settled attachment/handling retirement
-owner. An isolated worker owns that tightly coupled transfer capability.
+owner. A checked isolated followup proposal is ready for parent integration.
+
+Exterior F5 currently refuses genuine active AMBDustDevilLPM source voices:
+0039af, 0039b1 and 022d00 use original SOUN 052188 and dust-devil media.
+Additional opaque histories 0c7b39/0c7b3a remain visible. There is no accepted
+exterior manual slot or cold checkpoint. The save worker owns general
+loop/envelope/source-voice persistence; stopping, inventing Finished or exempting
+these voices cannot establish complete saving.
 
 The source-bound whole-vault audit retains all 7,155 winning references across
 ten selected interiors and restores the unchanged complete checkpoint against
@@ -129,6 +147,15 @@ A forced snapshot previously collided with an already-due periodic publication;
 the shared unchanged 250 ms cadence now resets on each accepted snapshot and
 uses the post-dispatch clock. Three native input regressions retain zero
 publication losses; genuine I/O/deadline failures remain visible.
+PR 155's remote gate exposed the opposite overlap: a forced request while its
+healthy original immutable writer remains pending. A counted request now waits
+only within the same exact 250 ms deadline, then publishes fresh state on a
+native phase after completion. Six native sixteen-query batches prove fresh
+ordinals and zero loss; the full required local gate and selected unchanged
+owned control/corpse checks pass. Exact remote publication gating of that
+followup remains in progress. The campaign still needs offered-message handling while its
+reference skill awaits review, and source door-animation replacement remains
+an independently visible bot boundary.
 Complete ordinary equipped-item retirement, resolve reached source query
 owners and replay the genuine exit, inspect expiry of the
 original ten-second eye effect and cold-verify a complete exterior save.
@@ -140,8 +167,7 @@ required after packaging capability checks.
 ## Private continuation
 
 Run: tmp/development-lab/ttw-bot-health-20261006. No game is currently running.
-Resume through ordinary Continue from the new complete cave slot and verify
-its cold state before onward input; preserve
+Resume through ordinary Continue from the complete cave/source slots; preserve
 every immutable slot and failed request receipt. The original canonical v43
 slot 5f9792be93bb43319f7672eb74787dd6 in
 tmp/development-lab/ttw-post-goat-checkpoint-20261004 remains intact at Escape
