@@ -1,5 +1,23 @@
 # Source activation and rendered menus
 
+The reverse XAPR graph indexes every nondeleted winning child declaration,
+including missing, deleted and foreign parent endpoints. Diagnostics retain those
+source issues. Arming validates only the reached directed component, including
+all parent bindings of its reachable children and recursive paths, before
+creating an instance or changing a relay. An unrelated DLC endpoint cannot stop
+a healthy door; reaching the invalid component still refuses. Saved relays use
+the same component validation during cold restoration. Malformed binary XAPR
+layouts still refuse graph construction.
+
+Synthetic checks cover component independence, invalid endpoint/cycle refusal
+without mutation, explicit issue retention, genuine source delays and cold
+receipts. Independent owned FNV/FO3/TTW/combined checks retain FO3's 15 missing
+Zeta links while its playpen door arms normally. Ordinary fresh FO3 input walks
+to Dad and completes the gate's native source Open sequence at CG01 stage 14.
+Original door/loot HUD strings come from typed inline allocation declarations,
+including the first exception-frame allocation, with no hardcoded label.
+This does not establish the whole opening or matched retail presentation.
+
 Object activation evaluates the winning SCPT OnActivate program with its own
 compiled reference bindings. Quest stage, displayed/completed objectives and
 qualified quest variables read authoritative shared state. A false source

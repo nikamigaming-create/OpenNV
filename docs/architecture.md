@@ -193,6 +193,14 @@ retains its cumulative native voice/line generations without INFO selection,
 audio, result callbacks or RNG consumption. Active voices and opaque callbacks
 require their own continuations before save admission.
 
+[Activation dispatch](activation-lifecycle.md) retains the complete reverse XAPR
+graph and explicit invalid winning endpoints. Validation follows the reached
+component before arming its source relay; unrelated DLC graph failures do not
+become door activation authority. Saved relays validate against the same source
+component. Executable strings also admit typed inline heap descriptors, including
+the first exception-frame allocation, while retaining constructor precedence and
+unrelated typed static defaults.
+
 [Reference script sounds and stopped instructions](script-sound-continuation.md)
 bind PlaySound3D to the actual reference, source SOUN and native owned WAV. A
 stopped quest resumes its consumed invocation at a validated source instruction;

@@ -11,11 +11,6 @@ internal static partial class FalloutExecutableStringTable
 
     internal static IReadOnlyList<StaticSetting> ReadStaticSettings(byte[] bytes) => ReadStaticSettings(Load(bytes).Image);
 
-    private static IReadOnlyDictionary<string, string> StaticStrings(Image image)
-        => ReadStaticSettings(image).Where(row => row.Collection == SettingCollection.Game && row.Name[0] == 's')
-            .ToDictionary(row => row.Name, row => image.Literal(row.Payload) ??
-                throw new NotSupportedException($"Owned static string setting has no admitted literal: {row.Name}."), StringComparer.OrdinalIgnoreCase);
-
     private static IEnumerable<StaticSetting> StaticNumbers(Image image, char kind, bool gameSettingsOnly)
         => ReadStaticSettings(image).Where(row => row.Name[0] == kind && (!gameSettingsOnly || row.Collection == SettingCollection.Game));
 
@@ -96,7 +91,7 @@ internal static partial class FalloutExecutableStringTable
             (section.SectionCharacteristics & (SectionCharacteristics.MemRead | SectionCharacteristics.MemWrite | SectionCharacteristics.MemExecute)) == SectionCharacteristics.MemRead &&
             address >= Base && address - Base >= section.VirtualAddress && (ulong)(address - Base) + (uint)count <= (ulong)section.VirtualAddress + (uint)section.SizeOfRawData);
 
-        private bool IsExecutableExtent(uint address) => IsFileExtent(address, 1) && headers.SectionHeaders.Any(section =>
+        internal bool IsExecutableExtent(uint address) => IsFileExtent(address, 1) && headers.SectionHeaders.Any(section =>
             (section.SectionCharacteristics & SectionCharacteristics.MemExecute) != 0 && address >= Base &&
             address - Base >= section.VirtualAddress && (ulong)(address - Base) < (ulong)section.VirtualAddress + (uint)section.SizeOfRawData);
     }

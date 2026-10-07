@@ -19,6 +19,20 @@ internal static class ActivationParentContracts
             var cell = FalloutCellSceneReader.Read(records, Key(0x800));
             using var world = new FalloutReferenceWorld(records); world.LoadCell(cell);
             var player = records.RuntimeFormKey(0x14); var parent = Key(0x900); var child = Key(0x901);
+            Require(world.ActivationParentIssues.Count == 3 && world.ActivationParentIssues.Any(issue => issue.Error == "missing parent") &&
+                world.ActivationParentIssues.Any(issue => issue.Error == "deleted winning parent") &&
+                world.ActivationParentIssues.Any(issue => issue.Error == "parent has non-reference type ACTI"),
+                "Broken winning XAPR endpoints disappeared from the source graph.");
+            var unchanged = JsonSerializer.Serialize(world.Capture());
+            foreach (var root in new uint[] { 0x912, 0x913, 0x916, 0x917, 0xa00, 1 })
+            {
+                Reject(() => world.ArmActivationChildren(Key(root), player));
+                Require(JsonSerializer.Serialize(world.Capture()) == unchanged,
+                    "Invalid or recursive activation component mutated gameplay before refusing.");
+            }
+            world.ArmActivationChildren(Key(0x902), player);
+            Require(JsonSerializer.Serialize(world.Capture()) == unchanged,
+                "An unrelated door acquired state from another component's broken XAPR.");
             var effects = new List<FalloutReferenceScriptEffect>();
             FalloutReferenceScripts Scripts(FalloutReferenceWorld owner) => new(records, owner, new(records),
                 new((_, _) => false, effects.Add));
@@ -46,6 +60,8 @@ internal static class ActivationParentContracts
             world.ArmActivationChildren(parent, player); world.AdvanceActivationRelays(.25f);
             var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
             using var cold = new FalloutReferenceWorld(records); cold.Restore(saved); cold.LoadCell(cell);
+            Require(JsonSerializer.Serialize(cold.ActivationParentIssues) == JsonSerializer.Serialize(world.ActivationParentIssues),
+                "Cold loading lost the explicit source graph issues.");
             Require(JsonSerializer.Serialize(cold.Get(parent).ActivationRelay) == JsonSerializer.Serialize(world.Get(parent).ActivationRelay),
                 "Cold loading changed the authored thresholds, generation or elapsed clock.");
             var coldReady = cold.AdvanceActivationRelays(.25f).Single();
@@ -76,7 +92,8 @@ internal static class ActivationParentContracts
             Require(rejected.InstanceCount == 0 && hash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(path))),
                 "Source-drift refusal mutated the world or owned bytes.");
             Console.WriteLine("OPENNV_ACTIVATION_PARENT_CONTRACT_PASS sourceDelay=true parentAction=true sameCycleRearm=true " +
-                "noReplay=true newerMarkPreserved=true cold=true unloadedClockSuspended=true faultRetained=true sourceDriftRefused=true");
+                "noReplay=true newerMarkPreserved=true cold=true unloadedClockSuspended=true faultRetained=true sourceDriftRefused=true " +
+                "independentComponents=true brokenEndpointsVisible=true invalidComponentAtomic=true");
         }
         finally { Directory.Delete(directory, true); }
     }
@@ -88,7 +105,17 @@ internal static class ActivationParentContracts
         var children = Join(Record("REFR", 0x900, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24])),
             Record("REFR", 0x901, Parent(0x900, .5f)),
             Record("REFR", 0x902, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24])),
-            Record("REFR", 0x903, Parent(0x900, .75f)));
+            Record("REFR", 0x903, Parent(0x900, .75f)),
+            Record("REFR", 0x910, Parent(0xa00, 0), Field("XAPR", Join(BitConverter.GetBytes(0x912u), BitConverter.GetBytes(0f)))),
+            Record("REFR", 0x911, Parent(1, 0), Field("XAPR", Join(BitConverter.GetBytes(0x913u), BitConverter.GetBytes(0f)))),
+            Record("REFR", 0x912, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24])),
+            Record("REFR", 0x913, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24])),
+            Record("REFR", 0x914, Parent(0x915, 0), Field("XAPR", Join(BitConverter.GetBytes(0x916u), BitConverter.GetBytes(0f)))),
+            Deleted(0x915),
+            Record("REFR", 0x916, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24])),
+            Record("REFR", 0x917, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24])),
+            Record("REFR", 0x918, Parent(0x919, 0), Field("XAPR", Join(BitConverter.GetBytes(0x917u), BitConverter.GetBytes(0f)))),
+            Record("REFR", 0x919, Parent(0x918, 0)));
         var group = new byte[24 + children.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
         UInt(group, 4, (uint)group.Length); UInt(group, 8, 0x800); UInt(group, 12, 6); children.CopyTo(group, 24);
         var scriptHeader = new byte[20]; UInt(scriptHeader, 12, 1);
@@ -100,6 +127,10 @@ internal static class ActivationParentContracts
             Record("CELL", 0x800, Field("DATA", [1])), group);
     }
     private static FalloutFormKey Key(uint id) => new("Parents.esm", id);
+    private static byte[] Deleted(uint id)
+    {
+        var bytes = Record("REFR", id); UInt(bytes, 8, 0x20); return bytes;
+    }
     private static void Require(bool value, string error) { if (!value) throw new InvalidDataException(error); }
     private static void Reject(Action action)
     {

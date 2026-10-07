@@ -58,6 +58,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         pendingHitReferences = _world.HitEvents.PendingReferences.Select(reference => reference.ToString()).ToArray(),
         triggers = _bindings.Values.Count(value => value.Trigger is not null),
         activationRelays = _world.ActivationRelayState,
+        activationParentIssues = _world.ActivationParentIssues.Select(value => new
+        { child = value.Child.ToString(), parent = value.Parent.ToString(), error = value.Error }).ToArray(),
         activationRelayErrors = _activationRelayErrors.Select(value => new { reference = value.Key.ToString(), error = value.Value }).ToArray(),
         activationRelayBoundary = "source parent-shared delay/action/cold receipts; immediate activation uses the native frame queue; source sibling registration order and off-cell execution remain unbound",
         errors = _bindings.Values.Where(value => value.Instance.ScriptError is not null)

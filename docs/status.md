@@ -21,8 +21,14 @@ completes CG00 birth and enters CG01 toddler stage 10. Its first automatic save
 and an ordinary manual v48 checkpoint now retain the actual deferred off-cell
 package and ended-radio history. Another process cold-Continues that partial
 opening at 100 HP with both inventory entries, revision 1 and unchanged save bytes.
-Active speech/callback continuation, unrelated activation-parent graph failures, a FO3 door-action
-HUD label and full opening/save acceptance remain pending.
+Activation dispatch now isolates reached components while retaining all missing
+source endpoints. FO3's optimized inline string descriptors bind its original
+door/loot labels. A fresh ordinary opening walks to Dad, opens the playpen gate
+and reaches CG01 stage 14; inspected pixels show Dr. Li and Dad's body/outfit.
+The next manual checkpoint cold-Continues in another process at stage 14 with
+the walked position, 100 HP, both inventory entries, visible Dad and unchanged
+save bytes. Active speech/callback continuation and full
+opening/save acceptance remain open. Exact retail color/final pixels are unverified.
 The reported red placement-marker meshes are excluded from gameplay and a native
 frame confirms their absence. Clean-system fresh
 FO3/FNV/TTW New Game, combined-stack acceptance, Megaton and full game completion
@@ -36,8 +42,8 @@ reject. FO3 source input defaults, weather and scalar HUD/subtitle declarations
 now bind. FO3's partial toddler checkpoint has the independent save/Continue
 check above. FNV's ordinary
 opening writes a partial CG01 stage-55 checkpoint. Ordinary menu resave and cold
-Continue verify v47 at 100 HP with all 19 inventory entries and unchanged save
-bytes. Native OpenXR simulator controller input independently writes a manual
+Continue verify v47 and a later v48 checkpoint at 100 HP with all 19 inventory
+entries and unchanged save bytes. Native OpenXR simulator controller input independently writes a manual
 v47 slot and another process cold-Continues it with all 19 inventory entries
 and unchanged save bytes. Inspected final-eye interior and save-menu images
 remain simulator evidence; physical-headset acceptance is pending. The opening

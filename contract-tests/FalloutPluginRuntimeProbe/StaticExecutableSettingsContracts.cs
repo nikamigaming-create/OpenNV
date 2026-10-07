@@ -70,10 +70,58 @@ internal static class StaticExecutableSettingsContracts
                 var floats = FalloutExecutableStringTable.ReadFloatDefaults(path);
                 Require(floats.Count == 1 && floats["fConstructed"] == 7.5f,
                     "Static storage replaced an admitted constructor default.");
+
+                foreach (var receiver in new[] { 3, 6, 7 })
+                {
+                    var inline = new Fixture(origin); inline.EmitInlineString("sInline", "Owned inline value", receiver);
+                    File.WriteAllBytes(path, inline.Bytes);
+                    var strings = FalloutExecutableStringTable.Read(path);
+                    Require(strings.Count == 2 && strings["sInline"] == "Owned inline value" && strings["sSynthetic"] == "Synthetic\nvalue",
+                        "An inline allocation lost its receiver/value or unrelated static defaults.");
+                }
+                var first = new Fixture(origin); first.EmitInlineString("sFirst", "First allocation", first: true);
+                File.WriteAllBytes(path, first.Bytes);
+                Require(FalloutExecutableStringTable.Read(path)["sFirst"] == "First allocation",
+                    "The first inline allocation lost its exception-frame owner.");
+                first.Bytes[0x240 - 36 + 30] = 0x65; File.WriteAllBytes(path, first.Bytes);
+                Require(!FalloutExecutableStringTable.Read(path).ContainsKey("sFirst"),
+                    "A foreign exception frame admitted an unowned first allocation.");
+                first = new Fixture(origin); first.EmitInlineString("sFirst", "First allocation", first: true);
+                first.Bytes[0x240 - 18] = 0x53; File.WriteAllBytes(path, first.Bytes);
+                Require(!FalloutExecutableStringTable.Read(path).ContainsKey("sFirst"),
+                    "An unrelated saved receiver became the first constructor owner.");
+                foreach (var (offset, replacement) in new (int, byte)[]
+                {
+                    (1, 16), (26, 0xf8), (38, 0xff), (40, 38), (43, 4), (50, 8), (70, 0x57),
+                    (75, 0xe8), (79, 3), (81, 0xff), (83, 16), (97, 0x3d)
+                })
+                {
+                    var malformed = new Fixture(origin); malformed.EmitInlineString("sInline", "Ignored");
+                    malformed.Bytes[0x240 + offset] = replacement; File.WriteAllBytes(path, malformed.Bytes);
+                    Require(!FalloutExecutableStringTable.Read(path).ContainsKey("sInline"),
+                        "A foreign receiver, extent, branch or registration became an inline setting.");
+                }
+                var foreignCollection = new Fixture(origin); foreignCollection.EmitInlineString("sInline", "Ignored");
+                foreignCollection.Write(0x240 + 61, foreignCollection.Address(0x450)); File.WriteAllBytes(path, foreignCollection.Bytes);
+                Require(!FalloutExecutableStringTable.Read(path).ContainsKey("sInline"), "An INI descriptor became a game string.");
+                var unownedCall = new Fixture(origin); unownedCall.EmitInlineString("sInline", "Ignored");
+                unownedCall.Write(0x240 + 21, 0x2000); File.WriteAllBytes(path, unownedCall.Bytes);
+                Require(!FalloutExecutableStringTable.Read(path).ContainsKey("sInline"), "A non-code allocation target became a constructor.");
+                var duplicateInline = new Fixture(origin); duplicateInline.EmitInlineString("sInline", "First");
+                duplicateInline.EmitInlineString("sInline", "Second", at: 0x2c0); File.WriteAllBytes(path, duplicateInline.Bytes);
+                Reject(() => FalloutExecutableStringTable.Read(path));
+                var initialized = new Fixture(origin); initialized.Write(0xc04, origin + 0x3100);
+                initialized.EmitInlineString("sSynthetic", "Constructed value"); File.WriteAllBytes(path, initialized.Bytes);
+                Require(FalloutExecutableStringTable.Read(path)["sSynthetic"] == "Constructed value",
+                    "Pre-construction static storage replaced the actual inline default.");
+                var missingInline = new Fixture(origin); missingInline.EmitInlineString("sInline", "Source value");
+                missingInline.Write(0x240 + 51, origin + 0x3100); File.WriteAllBytes(path, missingInline.Bytes);
+                Reject(() => FalloutExecutableStringTable.Read(path));
             }
         }
         finally { Directory.Delete(directory, true); }
-        Console.WriteLine("OPENNV_STATIC_EXECUTABLE_SETTINGS_PASS relocated=true typedCollections=true malformedRejected=true constructorPrecedence=true synthetic=true");
+        Console.WriteLine("OPENNV_STATIC_EXECUTABLE_SETTINGS_PASS relocated=true typedCollections=true malformedRejected=true " +
+            "constructorPrecedence=true inlineAllocation=true receiverAndBranches=true staticRemainder=true synthetic=true");
     }
 
     private sealed class Fixture
@@ -121,12 +169,42 @@ internal static class StaticExecutableSettingsContracts
             Write(0x700, unchecked((uint)BitConverter.SingleToInt32Bits(value)));
             Write(0x206, Address(0x700)); Write(0x20e, Literal(name)); Write(0x213, _origin + 0x3100);
         }
+        internal void EmitInlineString(string name, string value, int receiver = 6, int at = 0x240, bool first = false)
+        {
+            var row = new byte[102];
+            void BytesAt(int offset, params byte[] bytes) => bytes.CopyTo(row, offset);
+            void Dword(int offset, uint payload) => BinaryPrimitives.WriteUInt32LittleEndian(row.AsSpan(offset), payload);
+            var absolute = (byte)(5 | receiver << 3); var same = (byte)(0xc0 | receiver << 3 | receiver);
+            BytesAt(0, 0x6a, 12, 0xb9); Dword(3, _origin + 0x3180);
+            BytesAt(7, 0xc7, 0x45, 0xfc, 0xff, 0xff, 0xff, 0xff);
+            BytesAt(14, 0x89, absolute); Dword(16, _origin + 0x31e0);
+            row[20] = 0xe8; Dword(21, unchecked((uint)(0x200 - at - 25)));
+            BytesAt(25, 0x8b, (byte)(0xc0 | receiver << 3), 0x89, (byte)(0x45 | receiver << 3), 0xf0);
+            BytesAt(30, 0xc7, 0x45, 0xfc); Dword(33, 2);
+            BytesAt(37, 0x85, same, 0x74, 39, 0xc7, (byte)(0x40 | receiver), 8); Dword(44, Literal(name));
+            BytesAt(48, 0xc7, (byte)(0x40 | receiver), 4); Dword(51, Literal(value));
+            BytesAt(55, 0xc6, 0x45, 0xfc, 3, 0xc7, (byte)receiver); Dword(61, Address(0x440));
+            row[65] = 0xe8; Dword(66, unchecked((uint)(0x201 - at - 70)));
+            BytesAt(70, (byte)(0x50 + receiver), 0x8b, 0xc8, 0x8b, 0x10, 0xff, 0x52, 4, 0xeb, 2, 0x33, same, 0x6a, 12, 0xb9);
+            Dword(85, _origin + 0x3180); BytesAt(89, 0xc7, 0x45, 0xfc, 0xff, 0xff, 0xff, 0xff);
+            BytesAt(96, 0x89, absolute); Dword(98, _origin + 0x31f0);
+            if (first)
+            {
+                byte[] frame = [0x55, 0x8b, 0xec, 0x6a, 0xff, 0x68, 0, 0, 0, 0, 0x64, 0xa1, 0, 0, 0, 0, 0x50, 0x51,
+                    (byte)(0x50 + receiver), 0xa1, 0, 0, 0, 0, 0x33, 0xc5, 0x50, 0x8d, 0x45, 0xf4, 0x64, 0xa3, 0, 0, 0, 0];
+                frame.CopyTo(Bytes, at - frame.Length); Write(at - 30, _origin + 0x1000); Write(at - 16, _origin + 0x3190);
+                row = row[..7].Concat(row[20..]).ToArray();
+                BinaryPrimitives.WriteUInt32LittleEndian(row.AsSpan(8), unchecked((uint)(0x200 - at - 12)));
+                BinaryPrimitives.WriteUInt32LittleEndian(row.AsSpan(53), unchecked((uint)(0x201 - at - 57)));
+            }
+            row.CopyTo(Bytes, at);
+        }
         private uint Literal(string text)
         {
             var at = _literal; var encoded = Encoding.ASCII.GetBytes(text + '\0'); encoded.CopyTo(Bytes, at);
             _literal += encoded.Length; return Address(at);
         }
-        private uint Address(int at) => _origin + (uint)(at < 0xc00 ? 0x2000 + at - 0x400 : 0x3000 + at - 0xc00);
+        internal uint Address(int at) => _origin + (uint)(at < 0xc00 ? 0x2000 + at - 0x400 : 0x3000 + at - 0xc00);
         private void Section(int at, string name, uint rva, uint raw, uint count, uint flags)
         {
             Encoding.ASCII.GetBytes(name).CopyTo(Bytes, at); Write(at + 8, count); Write(at + 12, rva);

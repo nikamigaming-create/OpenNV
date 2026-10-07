@@ -6,6 +6,7 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record FalloutActivationParent(FalloutFormKey Parent, float DelaySeconds);
+internal sealed record FalloutActivationParentIssue(FalloutFormKey Child, FalloutFormKey Parent, string Error);
 internal sealed record FalloutActivationRelayChild(FalloutFormKey Reference, string SourceSha256,
     float DelaySeconds, FalloutFormKey ActionReference, long Revision, bool Due);
 internal sealed record FalloutActivationRelaySnapshot(string SourceSha256, float ElapsedSeconds, long Revision,
@@ -63,26 +64,35 @@ internal static class FalloutActivationParents
 internal sealed partial class FalloutReferenceWorld
 {
     private Dictionary<FalloutFormKey, List<(FalloutFormKey Child, float Delay)>>? _activationChildren;
+    private IReadOnlyList<FalloutActivationParentIssue> _activationParentIssues = [];
     private Dictionary<FalloutFormKey, List<(FalloutFormKey Child, float Delay)>> ActivationChildren
     {
         get
         {
             if (_activationChildren is { } known) return known;
             var children = new Dictionary<FalloutFormKey, List<(FalloutFormKey, float)>>();
+            var issues = new List<FalloutActivationParentIssue>();
             foreach (var reference in new[] { "REFR", "ACHR", "ACRE", "PGRE", "PMIS" }.SelectMany(records.EffectiveRecords))
             {
                 if (reference.IsDeleted) continue;
                 foreach (var declaration in FalloutActivationParents.Read(reference))
                 {
-                    var parent = records.GetEffective(declaration.Parent);
-                    if (parent.IsDeleted || parent.Signature is not ("REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS"))
-                        throw new InvalidDataException($"Reference {reference.FormKey} XAPR does not name a winning placed reference.");
+                    var error = !records.TryGetWinner(declaration.Parent, out var parent) ? "missing parent" :
+                        parent.IsDeleted ? "deleted winning parent" :
+                        !Placed(parent) ? $"parent has non-reference type {parent.Signature}" : null;
+                    if (error is not null) issues.Add(new(reference.FormKey, declaration.Parent, error));
                     if (!children.TryGetValue(declaration.Parent, out var values)) children.Add(declaration.Parent, values = []);
                     values.Add((reference.FormKey, declaration.DelaySeconds));
                 }
             }
+            _activationParentIssues = Array.AsReadOnly(issues.ToArray());
             _activationChildren = children; return children;
         }
+    }
+    private static bool Placed(FalloutPluginRecord record) => record.Signature is "REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS";
+    internal IReadOnlyList<FalloutActivationParentIssue> ActivationParentIssues
+    {
+        get { _ = ActivationChildren; return _activationParentIssues; }
     }
     internal bool IsActivationParent(FalloutFormKey child, FalloutFormKey parent) =>
         FalloutActivationParents.Read(records.GetEffective(child)).Any(value => value.Parent == parent);
@@ -92,17 +102,8 @@ internal sealed partial class FalloutReferenceWorld
         .Select(instance => new { parent = instance.Reference.ToString(), state = instance.ActivationRelay }).ToArray();
     internal void ArmActivationChildren(FalloutFormKey parent, FalloutFormKey action)
     {
+        RequireActivationComponent(parent);
         if (!ActivationChildren.TryGetValue(parent, out var children)) return;
-        var seen = new HashSet<FalloutFormKey>(); var path = new HashSet<FalloutFormKey>();
-        void RequireAcyclic(FalloutFormKey key)
-        {
-            if (path.Contains(key)) throw new NotSupportedException("Recursive activation-parent graph has no bounded source dispatch owner.");
-            if (!seen.Add(key)) return;
-            path.Add(key);
-            foreach (var next in ActivationChildren.GetValueOrDefault(key) ?? []) RequireAcyclic(next.Child);
-            path.Remove(key);
-        }
-        RequireAcyclic(parent);
         var instance = Get(parent);
         var previous = instance.ActivationRelay;
         var revision = checked((previous?.Revision ?? 0) + 1);
@@ -113,6 +114,27 @@ internal sealed partial class FalloutReferenceWorld
             FalloutActivationParents.Hash(records.GetEffective(child.Child)), child.Delay,
             child.Delay <= 0 && intrinsicWrapper ? action : parent, revision, child.Delay <= 0)).ToArray();
         instance.ActivationRelay = new(FalloutActivationParents.Hash(records.GetEffective(parent)), elapsed, revision, marks);
+    }
+    private void RequireActivationComponent(FalloutFormKey parent)
+    {
+        var children = ActivationChildren;
+        var seen = new HashSet<FalloutFormKey>(); var path = new HashSet<FalloutFormKey>();
+        void RequireAcyclic(FalloutFormKey key)
+        {
+            if (path.Contains(key)) throw new NotSupportedException("Recursive activation-parent graph has no bounded source dispatch owner.");
+            if (!seen.Add(key)) return;
+            if (!records.TryGetEffective(key, out var reference) || !Placed(reference))
+                throw new InvalidDataException($"Activation-parent target {key} is not a winning placed reference.");
+            // Keep every declared edge in the index. A broken endpoint stays a
+            // source divergence and refuses its causal component, without making
+            // unrelated doors depend on every DLC's reference completeness.
+            if (_activationParentIssues.FirstOrDefault(issue => issue.Child == key) is { } issue)
+                throw new InvalidDataException($"Reference {issue.Child} XAPR {issue.Parent}: {issue.Error}.");
+            path.Add(key);
+            foreach (var next in children.GetValueOrDefault(key) ?? []) RequireAcyclic(next.Child);
+            path.Remove(key);
+        }
+        RequireAcyclic(parent);
     }
     internal IReadOnlyList<FalloutActivationRelayDelivery> AdvanceActivationRelays(float seconds)
     {
@@ -150,6 +172,7 @@ internal sealed partial class FalloutReferenceWorld
     internal void ValidateActivationRelay(FalloutFormKey parent, FalloutActivationRelaySnapshot snapshot)
     {
         snapshot.Validate();
+        RequireActivationComponent(parent);
         if (!snapshot.SourceSha256.Equals(FalloutActivationParents.Hash(records.GetEffective(parent)), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Saved activation-parent source changed.");
         foreach (var mark in snapshot.Children)
