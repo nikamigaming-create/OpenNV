@@ -2,9 +2,11 @@ using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
 
+internal record FalloutHudMessageLayout(int SafeZoneScale, int XInset, int YInset,
+    IReadOnlyDictionary<int, int> TextTraits);
 internal sealed record FalloutHudMessageDeclarations(int SafeZoneScale, int XInset, int YInset,
     IReadOnlyDictionary<int, int> TextTraits, string ItemIcon, float ItemSeconds,
-    string SingleItemFormat, string MultipleItemFormat);
+    string SingleItemFormat, string MultipleItemFormat) : FalloutHudMessageLayout(SafeZoneScale, XInset, YInset, TextTraits);
 
 internal static partial class FalloutExecutableStringTable
 {
@@ -20,6 +22,20 @@ internal static partial class FalloutExecutableStringTable
 
     internal static FalloutHudMessageDeclarations ReadHudMessageDeclarations(ReadOnlySpan<byte> code,
         Func<uint, string?> literal, IReadOnlyDictionary<uint, string> settings, Func<uint, float> scalar)
+    {
+        var layout = ReadHudMessageLayout(code, literal);
+        var item = ReadHudItemNotice(code, literal, settings, scalar);
+        return new(layout.SafeZoneScale, layout.XInset, layout.YInset, layout.TextTraits,
+            item.Icon, item.Seconds, item.Single, item.Multiple);
+    }
+
+    internal static FalloutHudMessageLayout ReadHudMessageLayout(string path)
+    {
+        var (code, image) = Load(path);
+        return ReadHudMessageLayout(code, image.Literal);
+    }
+
+    internal static FalloutHudMessageLayout ReadHudMessageLayout(ReadOnlySpan<byte> code, Func<uint, string?> literal)
     {
         var names = new Dictionary<uint, string?>();
         string? Name(uint address)
@@ -39,11 +55,36 @@ internal static partial class FalloutExecutableStringTable
         // Y = inset + 2*safeY. Reject another compiler expression shape.
         var x = placement.IndexOf(new byte[] { 0x8d, 0x0c, 0x50, 0x51, 0x68, 0xa1, 0x0f, 0, 0 });
         var y = placement.IndexOf(new byte[] { 0x8d, 0x4c, 0x00 });
-        if (x < 16 || y < 0 || y + 10 > placement.Length || placement[x - 16] != 0xc7 || placement[x - 15] != 0x45 ||
-            !placement.Slice(y + 4, 6).SequenceEqual(new byte[] { 0x51, 0x68, 0xa2, 0x0f, 0, 0 }))
-            throw new NotSupportedException("Owned HUD safe-zone declaration is unbound.");
-        var xInset = BinaryPrimitives.ReadInt32LittleEndian(placement[(x - 13)..]);
-        var yInset = unchecked((sbyte)placement[y + 3]);
+        var scale = 2;
+        int xInset, yInset;
+        if (x >= 16 && y >= 0 && y + 10 <= placement.Length && placement[x - 16] == 0xc7 && placement[x - 15] == 0x45 &&
+            placement.Slice(y + 4, 6).SequenceEqual(new byte[] { 0x51, 0x68, 0xa2, 0x0f, 0, 0 }))
+        {
+            xInset = BinaryPrimitives.ReadInt32LittleEndian(placement[(x - 13)..]);
+            yInset = unchecked((sbyte)placement[y + 3]);
+        }
+        else
+        {
+            // A four-time-sample engine build converts one safe-zone integer
+            // plus its authored inset through the same scalar tile setter.
+            var setters = new Dictionary<uint, (int Inset, byte Local, int Target)>();
+            for (var at = 0; at <= placement.Length - 29; ++at)
+            {
+                var row = placement[at..];
+                if (row[0] != 0x8b || row[1] != 0x45 || row[2] < 0x80 ||
+                    !row.Slice(3, 3).SequenceEqual(new byte[] { 0x83, 0xc0, row[5] }) ||
+                    !row.Slice(6, 14).SequenceEqual(new byte[] { 0x51, 0x66, 0x0f, 0x6e, 0xc0, 0x0f, 0x5b, 0xc0, 0xf3, 0x0f, 0x11, 0x04, 0x24, 0x68 }) ||
+                    row[24] != 0xe8) continue;
+                var trait = U32(row, 20);
+                if (trait is not (4001 or 4002)) continue;
+                var target = checked(message + at + 29 + BinaryPrimitives.ReadInt32LittleEndian(row[25..]));
+                if (target < 0 || target >= code.Length || !setters.TryAdd(trait, (unchecked((sbyte)row[5]), row[2], target)))
+                    throw new InvalidDataException("Owned HUD scalar placement setter is invalid or ambiguous.");
+            }
+            if (setters.Count != 2 || setters[4001].Target != setters[4002].Target || setters[4002].Local - setters[4001].Local != 4)
+                throw new NotSupportedException("Owned HUD safe-zone declaration is unbound.");
+            scale = 1; xInset = setters[4001].Inset; yInset = setters[4002].Inset;
+        }
         var traits = new Dictionary<int, int>();
         var textCode = code[textStart..bracket];
         for (var at = 0; at < textCode.Length; at++)
@@ -54,8 +95,33 @@ internal static partial class FalloutExecutableStringTable
             if (trait is not (4001 or 4002 or 4003 or 4009 or 4013 or 4026)) continue;
             if (!traits.TryAdd(trait, value)) throw new InvalidDataException("HUD text trait declaration is ambiguous.");
         }
+        if (traits.Count == 0)
+        {
+            for (var at = 0; at <= textCode.Length - 24; ++at)
+            {
+                var row = textCode[at..];
+                if (!row[..6].SequenceEqual(new byte[] { 0x6a, 1, 0x51, 0xc7, 0x04, 0x24 }) || row[10] != 0x8b) continue;
+                var push = row[11] == 0x48 ? 13 : row[11] == 0x88 ? 16 : -1;
+                if (push < 0 || row[push] != 0x68 || row[push + 5] != 0xe8) continue;
+                var trait = checked((int)U32(row, push + 1));
+                if (trait is not (4001 or 4002 or 4003 or 4009 or 4013 or 4026)) continue;
+                var value = BitConverter.Int32BitsToSingle(unchecked((int)U32(row, 6)));
+                if (!float.IsFinite(value) || value != MathF.Truncate(value) || value < int.MinValue || value >= int.MaxValue ||
+                    !traits.TryAdd(trait, (int)value))
+                    throw new InvalidDataException("HUD scalar text trait is invalid or ambiguous.");
+            }
+        }
         if (traits.Count != 6) throw new NotSupportedException("Owned HUD text setters are incomplete.");
 
+        return new(scale, xInset, yInset, traits);
+    }
+
+    private static (string Icon, float Seconds, string Single, string Multiple) ReadHudItemNotice(ReadOnlySpan<byte> code,
+        Func<uint, string?> literal, IReadOnlyDictionary<uint, string> settings, Func<uint, float> scalar)
+    {
+        var pushes = new List<(int At, string Name)>();
+        for (var at = 0; at <= code.Length - 5; ++at)
+            if (code[at] == 0x68 && literal(U32(code, at + 1)) is { } name) pushes.Add((at, name));
         var itemContracts = new List<(string Icon, float Seconds, string Single, string Multiple)>();
         for (var at = 0; at <= code.Length - 10; at++)
         {
@@ -87,7 +153,7 @@ internal static partial class FalloutExecutableStringTable
         }
         var items = itemContracts.Distinct().ToArray();
         if (items.Length != 1) throw new NotSupportedException("Owned inventory notice declaration is missing or ambiguous.");
-        return new(2, xInset, yInset, traits, items[0].Icon, items[0].Seconds, items[0].Single, items[0].Multiple);
+        return items[0];
     }
 
     private static bool TryPushInteger(ReadOnlySpan<byte> code, int at, out int value, out int next)

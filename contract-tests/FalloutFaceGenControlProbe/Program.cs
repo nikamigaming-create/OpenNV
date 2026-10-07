@@ -28,6 +28,7 @@ using (var output = new BinaryWriter(buffer, Encoding.Latin1, true))
 var bytes = buffer.ToArray();
 var model = FalloutCtlFile.Read(bytes);
 FaceControlContracts.Run();
+InputDefaultsContracts.Run();
 Require(model.GeometryBasisVersion == 123 && model.TextureBasisVersion == 456 && model.Controls[1].Count == 1 && model.Controls[3].Count == 0,
     "CTL header, asymmetric controls or an empty source domain changed.");
 Require(BitConverter.SingleToInt32Bits(model.Controls[0][0].Axis[0]) == unchecked((int)0x80000000) && model.Controls[0][0].Axis[1] == 1.5f,

@@ -30,6 +30,14 @@ internal static class PlayerMoveContracts
                 Record("QUST", 0x630, Field("EDID", Text("FailedStartup")), Field("DATA", new byte[8]), Field("SCRI", BitConverter.GetBytes(0x530u))),
                 Record("SCPT", 0x530, Field("SCHR", LocalHeader(1)), Local(1, "prefix"),
                     Field("SCTX", Text("short prefix\nbegin MenuMode\nset prefix to prefix + 1\nUnboundOperation\nend"))),
+                Record("QUST", 0x640, Field("EDID", Text("PackageStartup")), Field("DATA", new byte[8]),
+                    Field("INDX", new byte[2]), Field("QSDT", [0]), Field("SCRO", BitConverter.GetBytes(0x14u)),
+                    Field("SCRO", BitConverter.GetBytes(0x710u)), Field("SCRO", BitConverter.GetBytes(0x901u)),
+                    Field("SCRO", BitConverter.GetBytes(0x640u)),
+                    Field("SCTX", Text("Player.AddScriptPackage BootstrapPose\nSetStage PackageStartup 5\nPlayer.MoveTo ArrivalREF")),
+                    Field("INDX", BitConverter.GetBytes((short)5)), Field("QSDT", [0]),
+                    Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Text("Player.RemoveScriptPackage"))),
+                Record("PACK", 0x710, Field("EDID", Text("BootstrapPose")), Field("PKDT", [0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0])),
                 Record("QUST", 0x600, Field("EDID", Text("MoveQuest")), Field("DATA", [1, 0, 0, 0, 0, 0, 0, 0]),
                     Field("SCRI", BitConverter.GetBytes(0x500u))),
                 Record("SCPT", 0x500, Field("SCHR", header), Local(1, "target"), Local(2, "prefix"),
@@ -136,6 +144,21 @@ internal static class PlayerMoveContracts
         stage.Start(); Require(blocked && calls == 1 && stage.Placement() is null && stageQuests.StageDone(Key(0x620), 0), "Stage zero skipped its blocking source presentation.");
         stage.Advance(0, [4]); Require(calls == 1 && stage.Placement() is null, "Blocked stage replayed or advanced its prefix.");
         blocked = false; stage.Advance(0, [4]); Require(calls == 1 && stage.Placement()?.Cell == Key(0x801), "Stage zero did not resume its source continuation.");
+        stageWorld.PlayerMoves.Complete(stageWorld.PlayerMoves.Next!);
+        var packages = new FalloutNewGameBootstrap(records, FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "00000640")]),
+            stageQuests, stageScripts, stageWorld, (_, _, _, _) => throw new NotSupportedException("Unexpected startup command."),
+            _ => throw new NotSupportedException("Player package escaped its ordered startup handoff."), () => true);
+        packages.Start();
+        Require(packages.Placement()?.Cell == Key(0x801) && stageQuests.StageDone(Key(0x640), 0) && stageQuests.StageDone(Key(0x640), 5),
+            "Player package blocked the authored nested startup stages or placement.");
+        var handed = new List<FalloutReferenceScriptEffect>();
+        Reject(() => packages.AttachPlayerPackages(_ => throw new NotSupportedException("Native owner rejected assignment.")));
+        packages.AttachPlayerPackages(handed.Add);
+        packages.AttachPlayerPackages(_ => throw new InvalidOperationException("Startup assignment replayed."));
+        Require(handed.Count == 2 && handed[0].Argument == Key(0x710) && handed[1].Argument is null &&
+            handed.All(effect => effect.Kind == FalloutReferenceEffectKind.ScriptPackage && effect.Target == Key(0x14)) &&
+            packages.CaptureStageResults().Count == 2,
+            "Startup package order, rejected prefix or stage-result handoff was lost.");
         stageWorld.PlayerMoves.Complete(stageWorld.PlayerMoves.Next!);
         var failed = new FalloutNewGameBootstrap(records, FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "00000630")]),
             stageQuests, stageScripts, stageWorld, (_, _, _, _) => throw new NotSupportedException("Reached startup command."), _ => { }, () => true);

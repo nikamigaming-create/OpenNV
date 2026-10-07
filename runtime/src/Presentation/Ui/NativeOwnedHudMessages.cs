@@ -13,7 +13,8 @@ internal sealed partial class NativeOwnedHudMessages : Control
     private readonly FalloutHudNotifications _queue;
     private readonly Func<bool> _shown;
     private readonly Func<bool> _loading;
-    private readonly FalloutHudMessageDeclarations _declaration;
+    private readonly FalloutHudMessageLayout _declaration;
+    private FalloutHudMessageDeclarations? _itemDeclaration;
     private readonly FalloutInstallationSettings _settings;
     private readonly NativeOwnedMenuTree _tiles;
     private readonly XElement _messages, _icon, _text, _bracket;
@@ -56,8 +57,8 @@ internal sealed partial class NativeOwnedHudMessages : Control
             throw new NotSupportedException("Quest reminder has an unsupported fade/hold clock.");
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned HUD source is absent.");
         _settings = FalloutInstallationSettings.Read(source);
-        _declaration = FalloutExecutableStringTable.ReadHudMessageDeclarations(
-            Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"));
+        _declaration = FalloutExecutableStringTable.ReadHudMessageLayout(
+            source.FalloutExecutablePath);
         var sourceMenu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/main/hud_main_menu.xml")).Elements("menu").Single();
         var menu = new XElement(sourceMenu.Name, sourceMenu.Attributes(),
             sourceMenu.Elements().Where(element => element.Attribute("name") is null).Select(element => new XElement(element)));
@@ -202,12 +203,17 @@ internal sealed partial class NativeOwnedHudMessages : Control
         var record = _records.GetEffective(value.Source);
         if (value.Kind is FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved)
         {
+            // Bind a reached notice independently of the common HUD layout.
+            // An unsupported item consumer remains a visible HUD failure; it
+            // must not prevent unrelated startup scripts or messages from running.
+            _itemDeclaration ??= FalloutExecutableStringTable.ReadHudMessageDeclarations(
+                (RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Item HUD source is absent.")).FalloutExecutablePath);
             var name = FalloutDialogueTopic.Text(record.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             var added = FalloutGameSettingStrings.Read(_records, value.Kind == FalloutHudEventKind.ItemAdded ? "sAddItemtoInventory" : "sRemoveItemfromInventory");
             result = (value.Count == 1
-                ? Format(_declaration.SingleItemFormat, [name, added])
-                : Format(_declaration.MultipleItemFormat, [value.Count.ToString(CultureInfo.InvariantCulture), name,
-                    FalloutGameSettingStrings.Read(_records, "sPlural"), added]), _declaration.ItemIcon, _declaration.ItemSeconds);
+                ? Format(_itemDeclaration.SingleItemFormat, [name, added])
+                : Format(_itemDeclaration.MultipleItemFormat, [value.Count.ToString(CultureInfo.InvariantCulture), name,
+                    FalloutGameSettingStrings.Read(_records, "sPlural"), added]), _itemDeclaration.ItemIcon, _itemDeclaration.ItemSeconds);
         }
         else if (value.Kind == FalloutHudEventKind.Message)
         {
@@ -228,7 +234,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
             var station = FalloutRadioStation.Read(_records, record);
             var name = FalloutDialogueTopic.Text(_records.GetEffective(station.Base).ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Radio HUD has no owned source.");
-            _radioDeclaration ??= FalloutExecutableStringTable.ReadRadioHudDeclaration(Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"));
+            _radioDeclaration ??= FalloutExecutableStringTable.ReadRadioHudDeclaration(source.FalloutExecutablePath);
             result = (Format(FalloutGameSettingStrings.Read(_records, "sRadioStationDiscovered"), [name]), _radioDeclaration.Icon, _radioDeclaration.Seconds);
         }
         else if (IsObjective(value))
@@ -238,7 +244,7 @@ internal sealed partial class NativeOwnedHudMessages : Control
             var challenge = FalloutChallengeDefinition.Read(record);
             var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Challenge HUD source is absent.");
             _challengeDeclaration ??= FalloutExecutableStringTable.ReadChallengeHudDeclaration(
-                Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"));
+                source.FalloutExecutablePath);
             result = (Format(_challengeDeclaration.Format, [challenge.Name, value.Count.ToString(CultureInfo.InvariantCulture),
                 challenge.Threshold.ToString(CultureInfo.InvariantCulture), challenge.Description]), challenge.Icon, _challengeDeclaration.Seconds);
         }

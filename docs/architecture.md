@@ -13,6 +13,18 @@ section spelling. Constructor defaults retain precedence over initial storage.
 String fallback uses the record stack's owned installation, including when an
 unrelated ambient source is present.
 
+FNV and FO3 share campaign initialization, source-selected starting quests and
+cells, ordered bootstrap player packages, canonical skill identities, world
+owners and persistence. Compiler-specific declarations remain owned input:
+static executable input bindings, scalar tile setters, cached integer screen
+dimensions and Float32 subtitle arithmetic have explicit readers and refusal
+boundaries. Inactive HUD item notices or subtitles do not eagerly bind unrelated
+unsupported consumers. Selected driver initialization is an explicit call within
+the transactional load; Godot's callback exception logging cannot accept a failed
+critical owner. A failed character menu is removed before publishing its state.
+Engine placement statics retain reference/script ownership without drawing their
+editor meshes in either game.
+
 Source hit callbacks use a process-owned registration owner and the current
 world's leased source executor. Native actor/player damage paths emit before
 defense/damage; post-damage OnHit/OnHitWith receipts retain their separate owner.
@@ -51,6 +63,10 @@ samples, fractional clock, loop count and release envelope. Source hashes,
 emitter paths and accompanying automatic object animation clocks validate cold
 without a selection draw or replayed text key. Unsupported audio lanes and
 historical faults remain visible.
+Save v47 gives engine player reference 14 a package-independent sound-history
+owner, including original faults and RNG state. Native package state and the
+audio owner must agree on their random continuation. It requires no placed ACHR;
+missing old history and an unowned native emitter remain visible limitations.
 Independent selected IDLE clocks and residual bone components compose with a
 failed package begin; active speech, sound, attachments and physical poses keep
 their own capture requirements.

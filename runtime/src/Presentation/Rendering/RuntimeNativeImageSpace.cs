@@ -25,6 +25,11 @@ internal partial class RuntimeNativeImageSpace : Node
         _source = source; _state = state; _effect = effect; _gameTime = gameTime;
         SetMeta("opennv_image_space_program_source", effect.SourceProgramIdentity);
         SetMeta("opennv_image_space_kernel_sha256", effect.SourceKernelSha256);
+        if (effect.DoubleVisionPhaseError is { } error)
+        {
+            SetMeta("opennv_image_space_phase_unbound", error);
+            GD.PushError($"OPENNV_IMAGE_SPACE_PHASE_UNBOUND {error}");
+        }
         Publish(0);
     }
 

@@ -130,7 +130,7 @@ internal sealed class FalloutSkyLightingState
         RequireBound();
         RequireRegion(region);
         var weather = Weather(ForcedWeather ?? _regions.GetValueOrDefault(region, DefaultWeather));
-        return weather.Sample(FalloutWeatherTimeWeights.Sample(_climate, gameHour, _daytimeExtension));
+        return weather.Sample(FalloutWeatherTimeWeights.Sample(_climate, gameHour, _daytimeExtension, weather.TimeSamples));
     }
 
     private FalloutWeatherLighting Weather(FalloutFormKey key)

@@ -93,8 +93,6 @@ internal partial class RuntimeNativeNpc
     internal void ConfigureHeadTracking(FalloutPluginStack records, RuntimeLiveContentSource source,
         Func<FalloutFormKey, Vector3?> targetPoint, FalloutReferenceInstance? referenceState = null)
     {
-        if (source.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
-            throw new NotSupportedException("This engine's humanoid head-tracking bootstrap is unbound.");
         // Ordinary NPCs use the engine's default humanoid body-part form. The
         // winning BPTD owns the actual node, flags and cone, including overrides.
         _headRecords = records;

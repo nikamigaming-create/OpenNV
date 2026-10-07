@@ -2,8 +2,9 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutNewVegasBuiltinForms
 {
-    // FNV's native TESObjectSTAT::IsInternal predicate compares these engine
-    // bootstrap forms. Match runtime identity, not EDID, model path, or color:
+    // The native TESObjectSTAT::IsInternal predicate compares these engine
+    // bootstrap forms, also used by the owned FO3 graph. Match runtime identity,
+    // not EDID, model path, or color:
     // overriding a builtin's model does not turn it into visible world art.
     internal static bool IsInternalStatic(string signature, uint runtimeFormId) =>
         signature == "STAT" && runtimeFormId is

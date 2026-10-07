@@ -7,9 +7,10 @@ namespace OpenNV.Runtime.Presentation.Ui;
 // Background SayTo speech uses HUDMainMenu, independently of activation prompts.
 internal sealed partial class NativeOwnedSubtitles : Control
 {
-    private readonly NativeOwnedMenuTree _tiles;
-    private readonly XElement _branch, _text, _info;
-    private readonly FalloutHudSubtitleDeclarations _declaration;
+    private NativeOwnedMenuTree? _tiles;
+    private XElement _branch = null!, _text = null!, _info = null!;
+    private FalloutHudSubtitleDeclarations _declaration = null!;
+    private readonly FalloutPluginStack _records;
     private readonly FalloutInstallationSettings _settings;
     private readonly Func<FalloutSpeechSubtitle?> _speech;
     private readonly Func<bool> _shown;
@@ -33,10 +34,17 @@ internal sealed partial class NativeOwnedSubtitles : Control
     {
         Name = "HUDMainMenuSubtitles"; MouseFilter = MouseFilterEnum.Ignore; ProcessMode = ProcessModeEnum.Always;
         _speech = speech; _shown = shown; _scriptUi = scriptUi; Visible = false;
+        _records = records;
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned subtitle source is absent.");
         _settings = FalloutInstallationSettings.Read(source);
+    }
+
+    private void BindSource()
+    {
+        if (_tiles is not null) return;
+        var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned subtitle source is absent.");
         _declaration = FalloutExecutableStringTable.ReadHudSubtitleDeclarations(
-            Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"));
+            source.FalloutExecutablePath);
         var sourceMenu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/main/hud_main_menu.xml")).Elements("menu").Single();
         var menu = new XElement(sourceMenu.Name, sourceMenu.Attributes(),
             sourceMenu.Elements().Where(element => element.Attribute("name") is null).Select(element => new XElement(element)));
@@ -47,18 +55,28 @@ internal sealed partial class NativeOwnedSubtitles : Control
         _text = new XElement(sourceMenu.Elements("template").Single(element =>
             (string?)element.Attribute("name") == _declaration.TextTemplate).Elements().Single());
         _branch.Add(_text); menu.Add(_info, _branch);
-        _tiles = new(menu, setting => FalloutGameSettingStrings.Read(records, setting), scriptUi);
+        _tiles = new(menu, setting => FalloutGameSettingStrings.Read(_records, setting), _scriptUi);
         _tiles.Bind(menu, "visible", 1); _tiles.Bind(_info, "visible", 0);
         _tiles.Bind(_branch, "locus", 1); _tiles.Bind(_branch, "visible", 1);
         _tiles.Bind(_text, "visible", 1); _tiles.Bind(_text, "alpha", 255);
+        Layout();
     }
 
     internal void Prepare(FalloutSpeechSubtitle subtitle)
     {
         if (Error is not null) throw new InvalidOperationException(Error);
         if (!Admitted(subtitle)) return;
-        _tiles.Text[_text] = subtitle.Text;
-        _tiles.ValidateDrawing();
+        try
+        {
+            BindSource();
+            _tiles!.Text[_text] = subtitle.Text;
+            _tiles.ValidateDrawing();
+        }
+        catch (Exception error)
+        {
+            Error = error.Message;
+            throw;
+        }
     }
     private bool Admitted(FalloutSpeechSubtitle? subtitle) => subtitle is not null &&
         (subtitle.Forced || _settings.Boolean("GamePlay", "bGeneralSubtitles"));
@@ -67,6 +85,7 @@ internal sealed partial class NativeOwnedSubtitles : Control
     public override void _Ready() => Layout();
     private void Layout()
     {
+        if (_tiles is null) return;
         var size = GetViewportRect().Size;
         var scale = size.Y / 960;
         Scale = Vector2.One * scale; Size = _tiles.Screen = size / scale; _tiles.ResolutionConverter = 1 / scale;
@@ -86,6 +105,8 @@ internal sealed partial class NativeOwnedSubtitles : Control
         {
             var next = _speech();
             Visible = _shown() && Admitted(next);
+            if (Admitted(next)) BindSource();
+            if (_tiles is null) return;
             if (_scriptUi is not null && _uiRevision != _scriptUi.Revision)
             {
                 _uiRevision = _scriptUi.Revision; Layout();
@@ -102,5 +123,5 @@ internal sealed partial class NativeOwnedSubtitles : Control
             GD.PushError($"OPENNV_SUBTITLE_DIVERGENCE {Error}");
         }
     }
-    public override void _Draw() => _tiles.Draw(this);
+    public override void _Draw() => _tiles?.Draw(this);
 }

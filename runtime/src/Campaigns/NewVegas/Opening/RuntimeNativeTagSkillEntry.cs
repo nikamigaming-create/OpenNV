@@ -15,7 +15,7 @@ internal partial class RuntimeNativeTagSkillEntry : CanvasLayer
     internal event Action<Exception>? Failed;
     internal event Action? Released;
 
-    internal void Configure(FalloutPluginStack records, FalloutNativeTagSkillContract contract,
+    internal void Configure(FalloutPluginStack records, FalloutNativeTagSkillChoices contract,
         IReadOnlyList<FalloutNativeSkillIdentity> current, Func<FalloutNativeSkillIdentity, float> liveValue,
         bool showInitialTaggedSkills = true)
     {

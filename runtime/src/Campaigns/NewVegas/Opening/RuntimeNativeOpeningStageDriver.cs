@@ -16,12 +16,12 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private string _sourceQuestEditorId = string.Empty;
     private FalloutPlayerControlState _sourceControls = FalloutPlayerControlState.AllEnabled;
     private bool _configured;
-    private FalloutOpeningInventoryGrant _openingGrant = null!;
     private FalloutNativeRaceSexContract _raceSexContract = null!;
-    private FalloutNativeVigorContract _vigorContract = null!;
+    private FalloutNativeVigorContract? _vigorContract;
     private FalloutNativeVigorContract? _specialMenuContract;
-    private FalloutNativeTagSkillContract _tagSkillContract = null!;
-    private FalloutNativeTraitFarewellContract _traitFarewellContract = null!;
+    private FalloutNativeTagSkillContract? _tagSkillContract;
+    private IReadOnlyList<FalloutNativeSkillIdentity> _skillCatalog = [];
+    private FalloutNativeTraitFarewellContract? _traitFarewellContract;
     private FalloutPluginStack _pluginStack = null!;
     private string _savePath = string.Empty;
     private string _saveCompatibilityId = string.Empty;
@@ -46,7 +46,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private RuntimeNativeVigorEntry? _vigorEntry;
     private RuntimeNativeTagSkillEntry? _tagSkillEntry;
     private FalloutTagSkillMenuRequest? _tagMenuRequest;
-    private FalloutNativeTagSkillContract? _activeTagSkillContract;
+    private FalloutNativeTagSkillChoices? _activeTagSkillContract;
     private RuntimeNativeTraitEntry? _traitEntry;
     private bool _stage200Saved;
     private FalloutOpeningControlGraph _controls = null!;
@@ -55,6 +55,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FaceGenLipConfiguration _lipConfiguration = null!;
     private string? _speechStage;
     private RuntimeNativePlayerPackage? _playerPackage;
+    private FalloutPlayerPackageAudioSnapshot? _restorePlayerPackageAudio;
     private FalloutImageSpaceState _imageSpaceState = null!;
     private FalloutQuestState _quests = null!;
     private FalloutQuestScripts _scripts = null!;
@@ -128,11 +129,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         FalloutOpeningStageTransitionGraph transitions,
         FalloutOpeningControlGraph controls,
         RuntimeNativePlayer player,
-        FalloutOpeningInventoryGrant openingGrant,
         FalloutNativeRaceSexContract raceSexContract,
-        FalloutNativeVigorContract vigorContract,
-        FalloutNativeTagSkillContract tagSkillContract,
-        FalloutNativeTraitFarewellContract traitFarewellContract,
+        FalloutNativeVigorContract? vigorContract,
+        FalloutNativeTagSkillContract? tagSkillContract,
+        FalloutNativeTraitFarewellContract? traitFarewellContract,
         FalloutPluginStack pluginStack,
         string savePath,
         string saveCompatibilityId,
@@ -149,18 +149,18 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         FalloutSkyLightingState? skyLighting,
         Func<RuntimeNativeImageSpace> imageSpacePresenter,
         string initialQuestEditorId,
-        short initialStage, FalloutPlayerControlState? initialControls = null)
+        short initialStage, FalloutPlayerControlState? initialControls = null,
+        IReadOnlyList<FalloutQuestStageResultSnapshot>? bootstrapStageResults = null)
     {
         if (_configured)
             throw new InvalidOperationException("Native opening stage driver was already configured.");
         _configured = true;
         _player = player ?? throw new ArgumentNullException(nameof(player));
-        _openingGrant = openingGrant ?? throw new ArgumentNullException(nameof(openingGrant));
         _raceSexContract = raceSexContract ?? throw new ArgumentNullException(nameof(raceSexContract));
-        _vigorContract = vigorContract ?? throw new ArgumentNullException(nameof(vigorContract));
-        _tagSkillContract = tagSkillContract ?? throw new ArgumentNullException(nameof(tagSkillContract));
-        _traitFarewellContract = traitFarewellContract ??
-            throw new ArgumentNullException(nameof(traitFarewellContract));
+        _vigorContract = vigorContract;
+        _tagSkillContract = tagSkillContract;
+        _traitFarewellContract = traitFarewellContract;
+        _skillCatalog = tagSkillContract?.Skills ?? FalloutNativeTagSkillResolver.ResolveSkills(pluginStack);
         _pluginStack = pluginStack ?? throw new ArgumentNullException(nameof(pluginStack));
         _controls = controls;
         _transitions = new(transitions.Transitions.Where(transition => transition.Kind != "stage-script" || transition.Blockers.Count != 0)
@@ -174,16 +174,14 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             : saveCompatibilityId;
         _activeCell = restore?.State.ActiveCell ?? initialCell;
         _stage200Saved = restore?.State.CharacterCreationComplete == true;
-        _playerName = restore?.State.PlayerName ?? FalloutDialogueTopic.Text(
-            FalloutDialogueTopic.Find(pluginStack, "GMST", "sDefaultPlayerName")
-                .ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span);
+        _playerName = restore?.State.PlayerName ?? FalloutGameSettingStrings.Read(pluginStack, "sDefaultPlayerName");
         _character = restore?.State.Character ?? raceSexContract.Initial;
         FalloutNativeRaceSexResolver.Validate(raceSexContract, _character);
         _playerActorValues = new(pluginStack, restore?.State.PlayerActorValues,
             restore?.State.PlayerActorValues is null ? restore?.State.Special : null);
-        _tagSkills = new(pluginStack, tagSkillContract, restore?.State.TagSkillSlots, restore?.State.TagSkills);
+        _tagSkills = new(pluginStack, _skillCatalog, tagSkillContract?.RequiredCount, restore?.State.TagSkillSlots, restore?.State.TagSkills);
         _traits = restore?.State.Traits ?? [];
-        FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, _traits);
+        FalloutNativeCampaignSave.ValidateTraits(traitFarewellContract, _traits);
         _lipConfiguration = lipConfiguration;
         _imageSpaceState = imageSpaceState;
         _quests = quests;
@@ -192,9 +190,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _scripts.References!.BindActorAlert(_pluginStack.RuntimeFormKey(0x14), _player.Activity);
         _restoreFinishedSpeech = restore?.State.FinishedSpeech;
         _restoreFinishedSpeechStage = restore?.State.FinishedSpeechStage;
-        _restoreStageResults = restore?.State.QuestStageResults;
+        _restoreStageResults = restore?.State.QuestStageResults ?? bootstrapStageResults;
         _restoreStageResultFailure = restore?.State.StageResultFailure;
         _restoreTerminalResults = restore?.State.TerminalResults;
+        _restorePlayerPackageAudio = restore?.State.PlayerPackageAudio;
         _inventory = inventory;
         _globals = globals;
         _scripts.References!.BindPlayerAppearance(() => PlayerCreationState);
@@ -277,7 +276,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         if (_vigorEntry is not null || _specialBookEntry is not null || BlockingExecutionError is not null)
             throw new InvalidOperationException("SPECIAL menu cannot open while its owner is busy or failed.");
-        _specialMenuContract = _vigorContract with { RequiredTotal = total };
+        var contract = _vigorContract ?? throw new NotSupportedException("SPECIAL tester menu has no source device contract.");
+        _specialMenuContract = contract with { RequiredTotal = total };
         _vigorEntry = new RuntimeNativeVigorEntry();
         AddChild(_vigorEntry);
         _vigorEntry.Accepted += AcceptSpecial;
@@ -285,7 +285,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_VIGOR_OPEN stage={Stage} total={total} " +
-            $"reference={_vigorContract.TesterReference.FormKey} " +
+            $"reference={contract.TesterReference.FormKey} " +
             "source=live-player-vigor-scripts presentation=owned-love-tester-menu parity=unverified");
     }
 
@@ -323,9 +323,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
     }
 
-    public override void _Ready()
+    internal void InitializeOwnedState()
     {
-        _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell);
+        _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell,
+            _restorePlayerPackageAudio);
         _scripts.References!.UnloadedPackages = new(_pluginStack, _scripts.References, _quests, _gameTime,
             _globals, ExecutePackageEvent, () => SourcePlayerLevel);
         _speech = new RuntimeNativeSpeech();
@@ -518,11 +519,21 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         _raceMenuCommand = sourceCommand ?? pendingCommand ?? "showracemenu";
         var modelPath = RaceMenuModel(_raceMenuCommand);
-        _raceSexEntry = new RuntimeNativeRaceSexEntry();
-        AddChild(_raceSexEntry);
-        _raceSexEntry.Accepted += AcceptCharacter;
-        _raceSexEntry.Failed += error => ExecutionError = error.Message;
-        _raceSexEntry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter(), modelPath);
+        var entry = new RuntimeNativeRaceSexEntry();
+        AddChild(entry);
+        entry.Accepted += AcceptCharacter;
+        entry.Failed += error => ExecutionError = error.Message;
+        try
+        {
+            entry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter(), modelPath);
+            _raceSexEntry = entry;
+        }
+        catch
+        {
+            entry.ReleasePause();
+            entry.QueueFree();
+            throw;
+        }
         GD.Print(
             $"OPENNV_NATIVE_RACESEX_OPEN quest={QuestEditorId} stage={Stage} " +
             $"race={_character.RaceEditorId}/{_character.RaceRuntimeFormId:x8} " +
@@ -568,7 +579,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private void AcceptSpecialCore(FalloutNativeSpecialState state)
     {
-        FalloutNativeVigorResolver.Validate(_specialMenuContract ?? _vigorContract, state);
+        FalloutNativeVigorResolver.Validate(_specialMenuContract ?? _vigorContract ??
+            throw new NotSupportedException("SPECIAL tester acceptance has no source contract."), state);
         for (var index = 0; index < state.Values.Count; index++) _playerActorValues.WriteBaseInteger(index + 5, state.Values[index]);
         _ = Vitals;
         if (_vigorEntry is not null)
@@ -609,8 +621,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         AddChild(_tagSkillEntry);
         _tagSkillEntry.Accepted += AcceptTagSkills;
         _tagSkillEntry.Failed += error => ExecutionError = error.Message;
-        var request = _tagMenuRequest ?? new(_tagSkillContract.RequiredCount, true);
-        _activeTagSkillContract = _tagSkillContract with { RequiredCount = request.TotalCount };
+        var request = _tagMenuRequest ?? new(_tagSkillContract?.RequiredCount ??
+            throw new NotSupportedException("Tag menu has no source SetTagSkills request."), true);
+        _activeTagSkillContract = new(_skillCatalog, request.TotalCount);
         _tagSkillEntry.Configure(_pluginStack, _activeTagSkillContract, _tagSkills.Selection,
             skill => _playerSkills.Value(FalloutNativeTagSkillResolver.ActorValueName(_pluginStack, skill)), request.ShowInitialTaggedSkills);
         var releaseModalInput = _player.AcquireModalInput();
@@ -621,7 +634,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         };
         GD.Print(
             $"OPENNV_NATIVE_TAG_SKILLS_OPEN stage={Stage} " +
-            $"choices={_tagSkillContract.Skills.Count} required={request.TotalCount} initial={request.ShowInitialTaggedSkills} " +
+            $"choices={_skillCatalog.Count} required={request.TotalCount} initial={request.ShowInitialTaggedSkills} " +
             "source=live-settagskills-avif presentation=menus/chargen/char_gen_menu.xml");
     }
 
@@ -661,22 +674,23 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         if (_traitEntry is not null)
             return;
+        var contract = _traitFarewellContract ?? throw new NotSupportedException("Trait menu has no source creation contract.");
         _traitEntry = new RuntimeNativeTraitEntry();
         AddChild(_traitEntry);
         _traitEntry.Accepted += AcceptTraits;
         _traitEntry.Failed += error => ExecutionError = error.Message;
-        _traitEntry.Configure(_pluginStack, _traitFarewellContract, _traits);
+        _traitEntry.Configure(_pluginStack, contract, _traits);
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_TRAITS_OPEN stage={Stage} " +
-            $"choices={_traitFarewellContract.Traits.Count} maximum=" +
-            $"{_traitFarewellContract.MaximumTraits} " +
+            $"choices={contract.Traits.Count} maximum=" +
+            $"{contract.MaximumTraits} " +
             "source=live-showtraitmenu-perk presentation=menus/trait_menu.xml");
     }
 
     private void AcceptTraits(IReadOnlyList<FalloutNativeTraitIdentity> selection)
     {
-        FalloutNativeTraitFarewellResolver.ValidateTraits(_traitFarewellContract, selection);
+        FalloutNativeCampaignSave.ValidateTraits(_traitFarewellContract, selection);
         _traits = selection.OrderBy(value => value.RuntimeFormId).ToArray();
         if (_traitEntry is not null)
         {

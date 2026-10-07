@@ -379,9 +379,9 @@ internal static partial class FalloutExecutableStringTable
             }
             if (execute is null) throw new NotSupportedException($"Owned script command has no declaration: {name}.");
             var offset = checked((int)(execute.Value - codeBase));
-            var body = code.AsSpan(offset);
-            if (!body.StartsWith(new byte[] { 0x55, 0x8b, 0xec }))
-                throw new NotSupportedException("Owned script command entry is unbound.");
+            // Typed descriptors also point to legitimate frameless native
+            // handlers. The command-specific reader admits its reached body;
+            // an EBP prologue is not part of the descriptor format.
             return offset;
         }
 

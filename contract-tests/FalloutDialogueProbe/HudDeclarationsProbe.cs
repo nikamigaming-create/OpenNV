@@ -62,6 +62,49 @@ internal static class HudDeclarationsProbe
         }
         catch (NotSupportedException) { failed = true; }
         Require(failed, "Conflicting inventory notice declarations were admitted.");
+        Require(FalloutExecutableStringTable.ReadHudMessageLayout(code, address => literals.GetValueOrDefault(address)).XInset == 19,
+            "An unrelated notice ambiguity prevented binding the HUD layout.");
+        ScalarLayout();
+    }
+
+    private static void ScalarLayout()
+    {
+        var code = Enumerable.Repeat((byte)0x90, 600).ToArray();
+        var names = new Dictionary<uint, string> { [1] = "Messages", [2] = "template_message_icon",
+            [3] = "template_justify_left_text", [4] = "template_message_bracket" };
+        void Word(int at, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(code.AsSpan(at), value);
+        void Push(int at, uint value) { code[at] = 0x68; Word(at + 1, value); }
+        Push(32, 1); Push(120, 2); Push(140, 3); Push(360, 4);
+        void Placement(int at, byte local, sbyte inset, uint trait)
+        {
+            new byte[] { 0x8b, 0x45, local, 0x83, 0xc0, unchecked((byte)inset), 0x51, 0x66, 0x0f, 0x6e,
+                0xc0, 0x0f, 0x5b, 0xc0, 0xf3, 0x0f, 0x11, 0x04, 0x24, 0x68 }.CopyTo(code, at);
+            Word(at + 20, trait); code[at + 24] = 0xe8; Word(at + 25, (uint)(500 - at - 29));
+        }
+        Placement(50, 0xc0, -7, 4001); Placement(80, 0xc4, 29, 4002);
+        var traits = new[] { 4001, 4002, 4003, 4009, 4013, 4026 };
+        for (var index = 0; index < traits.Length; ++index)
+        {
+            var at = 150 + 32 * index;
+            new byte[] { 0x6a, 1, 0x51, 0xc7, 4, 0x24 }.CopyTo(code, at);
+            Word(at + 6, BitConverter.SingleToUInt32Bits(index + 1));
+            new byte[] { 0x8b, 0x48, 4 }.CopyTo(code, at + 10); Push(at + 13, (uint)traits[index]);
+            code[at + 18] = 0xe8; Word(at + 19, (uint)(500 - at - 23));
+        }
+        FalloutHudMessageLayout Read(byte[] bytes) => FalloutExecutableStringTable.ReadHudMessageLayout(bytes,
+            address => names.GetValueOrDefault(address));
+        var layout = Read(code);
+        Require(layout.SafeZoneScale == 1 && layout.XInset == -7 && layout.YInset == 29 && layout.TextTraits[4026] == 6,
+            "HUD scalar placement lost its source inset, conversion or text values.");
+        void Reject(byte[] invalid)
+        {
+            try { Read(invalid); } catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }
+            throw new InvalidDataException("Malformed HUD scalar declaration was admitted.");
+        }
+        var invalid = code.ToArray(); invalid[105]++; Reject(invalid);
+        invalid = code.ToArray(); invalid[82]++; Reject(invalid);
+        foreach (var value in new[] { float.NaN, .5f })
+        { invalid = code.ToArray(); BinaryPrimitives.WriteSingleLittleEndian(invalid.AsSpan(156), value); Reject(invalid); }
     }
     private static void Require(bool condition, string message)
     {

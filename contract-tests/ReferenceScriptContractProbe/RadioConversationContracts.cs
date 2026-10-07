@@ -40,6 +40,10 @@ internal static class RadioConversationContracts
             radio.CompleteLine();
             Require(!radio.Active && radio.CompletedLines == 2 && !world.GetBroadcastState(Key(900)), "Goodbye changed mode or lost completion.");
             Reject(() => radio.CompleteLine());
+            phase = 0; radio.Start(Key(900)); phase = 2; radio.CompleteLine();
+            Require(!radio.Active && radio.CompletedLines == 3 && !world.GetBroadcastState(Key(900)),
+                "An exhausted, fully evaluated link set faulted instead of ending its original radio request.");
+            Reject(() => radio.CompleteLine());
             world.SetBroadcastState(Key(900), 1);
             Reject(() => radio.Start(Key(900)));
             Require(!radio.Active && world.GetBroadcastState(Key(900)), "Missing continuous owner changed mode.");

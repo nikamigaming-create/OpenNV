@@ -38,7 +38,7 @@ internal static partial class FalloutExecutableStringTable
             if (image.IsWritableObject(descriptor) && image.Literal(name) is { } text && !descriptors.TryAdd(descriptor, text))
                 throw new InvalidDataException("Owned setting descriptor has multiple initializers.");
         }
-        return descriptors;
+        return descriptors.Count != 0 ? descriptors : ReadStaticSettings(image).ToDictionary(row => row.Descriptor, row => row.Name);
     }
 
     internal static IReadOnlyList<string> ReadCreationHeaders(string path)

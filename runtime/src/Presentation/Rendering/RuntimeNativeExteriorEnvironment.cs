@@ -88,7 +88,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
     {
         var hour = _lastHour = _hour();
         var weather = _sky.ActiveWeather;
-        var weights = FalloutWeatherTimeWeights.Sample(_sky.Climate, hour, _sky.DaytimeExtension);
+        var weights = FalloutWeatherTimeWeights.Sample(_sky.Climate, hour, _sky.DaytimeExtension, weather.TimeSamples);
         Color ColorAt(int kind) { var rgb = weather.Sample(weights, kind); return new(rgb[0], rgb[1], rgb[2]); }
         var ambient = ColorAt(3); var fog = ColorAt(1);
         _layers.Sample(_records, weather, weights, ImageSpace?.RawTraits[8] ?? 1f);

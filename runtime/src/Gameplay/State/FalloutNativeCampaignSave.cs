@@ -12,6 +12,7 @@ internal sealed record FalloutNativeSavedItem(
     int Count,
     IReadOnlyList<FalloutItemVariant>? Variants = null, bool UnequipLocked = false);
 internal sealed record FalloutFinishedSpeechStageScope(FalloutFormKey Quest, short Stage);
+internal sealed record FalloutPlayerPackageAudioSnapshot(FalloutAnimationSoundEventsSnapshot Events, ulong RandomState);
 
 internal sealed record FalloutNativeCampaignState(
     string Schema,
@@ -48,7 +49,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutFinishedSpeechStageScope? FinishedSpeechStage = null,
     IReadOnlyList<FalloutQuestStageResultSnapshot>? QuestStageResults = null,
     FalloutQuestStageDriverFailure? StageResultFailure = null,
-    IReadOnlyList<FalloutTerminalClosedSnapshot>? TerminalResults = null);
+    IReadOnlyList<FalloutTerminalClosedSnapshot>? TerminalResults = null,
+    FalloutPlayerPackageAudioSnapshot? PlayerPackageAudio = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -56,7 +58,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v46";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v47";
+    internal const string ObjectPcmSchema = "opennv-native-fnv-campaign-save/v46";
     internal const string CorpseTransferSchema = "opennv-native-fnv-campaign-save/v45";
     internal const string ActivationRelaySchema = "opennv-native-fnv-campaign-save/v44";
     internal const string NativeSoundHistorySchema = "opennv-native-fnv-campaign-save/v43";
@@ -113,11 +116,11 @@ internal static class FalloutNativeCampaignSave
         FalloutOpeningInventoryGrant grant,
         string playerName,
         FalloutNativeRaceSexSelection character,
-        FalloutNativeVigorContract vigorContract,
+        FalloutNativeVigorContract? vigorContract,
         FalloutNativeSpecialState special,
-        FalloutNativeTagSkillContract tagSkillContract,
+        FalloutNativeTagSkillContract? tagSkillContract,
         IReadOnlyList<FalloutNativeSkillIdentity> tagSkills,
-        FalloutNativeTraitFarewellContract traitFarewellContract,
+        FalloutNativeTraitFarewellContract? traitFarewellContract,
         IReadOnlyList<FalloutNativeTraitIdentity> traits,
         FalloutPlayerControlState playerControls,
         IReadOnlyList<float> playerPosition,
@@ -136,19 +139,24 @@ internal static class FalloutNativeCampaignSave
         FalloutFinishedSpeechStageScope? finishedSpeechStage = null,
         IReadOnlyList<FalloutQuestStageResultSnapshot>? questStageResults = null,
         FalloutQuestStageDriverFailure? stageResultFailure = null,
-        IReadOnlyList<FalloutTerminalClosedSnapshot>? terminalResults = null)
+        IReadOnlyList<FalloutTerminalClosedSnapshot>? terminalResults = null,
+        IReadOnlyList<FalloutNativeSkillIdentity>? skillCatalog = null,
+        FalloutPlayerPackageAudioSnapshot? playerPackageAudio = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
-        if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract, special, allowUnspent: !characterCreationComplete);
+        if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract ??
+            throw new NotSupportedException("Legacy player values require their source creation contract."), special, allowUnspent: !characterCreationComplete);
         if (tagSkillSlots is null)
-            FalloutNativeTagSkillResolver.Validate(tagSkillContract, tagSkills, allowUnspent: !characterCreationComplete);
+            FalloutNativeTagSkillResolver.Validate(tagSkillContract ??
+                throw new NotSupportedException("Legacy player tags require their source creation contract."), tagSkills, allowUnspent: !characterCreationComplete);
         tagSkillSlots ??= FalloutPlayerTagSkills.FromLegacy(tagSkills);
         FalloutPlayerTagSkills.Validate(tagSkillSlots, tagSkills);
-        if (tagSkillSlots.Slots.Any(skill => skill is not null && !tagSkillContract.Skills.Contains(skill)))
+        skillCatalog ??= tagSkillContract?.Skills ?? throw new NotSupportedException("Player tags have no winning skill catalog.");
+        if (tagSkillSlots.Slots.Any(skill => skill is not null && !skillCatalog.Contains(skill)))
             throw new InvalidDataException("Captured player tag slot differs from its winning AVIF identity.");
-        FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, traits);
+        ValidateTraits(traitFarewellContract, traits);
         var state = new FalloutNativeCampaignState(
-            references is not null ? ExpectedSchema : skyLighting is not null ? QuestClockSchema : globals is null ? QuestScriptsSchema : GlobalClockSchema,
+            references is not null ? playerPackageAudio is null ? ObjectPcmSchema : ExpectedSchema : skyLighting is not null ? QuestClockSchema : globals is null ? QuestScriptsSchema : GlobalClockSchema,
             saveCompatibilityId,
             activeCell,
             questEditorId,
@@ -180,7 +188,7 @@ internal static class FalloutNativeCampaignSave
             PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : [], PlayerActorValues: playerActorValues,
             TagSkillSlots: tagSkillSlots, FactionRelations: [], DetectionEvents: detectionEvents, FinishedSpeech: finishedSpeech,
             FinishedSpeechStage: finishedSpeechStage, QuestStageResults: questStageResults, StageResultFailure: stageResultFailure,
-            TerminalResults: references is null ? terminalResults : terminalResults ?? []);
+            TerminalResults: references is null ? terminalResults : terminalResults ?? [], PlayerPackageAudio: playerPackageAudio);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -198,10 +206,10 @@ internal static class FalloutNativeCampaignSave
         string path,
         string expectedSaveCompatibilityId,
         FalloutPluginStack stack,
-        FalloutNativeVigorContract vigorContract,
-        FalloutNativeTagSkillContract tagSkillContract,
-        FalloutOpeningInventoryGrant openingGrant,
-        FalloutNativeTraitFarewellContract traitFarewellContract)
+        FalloutNativeVigorContract? vigorContract,
+        FalloutNativeTagSkillContract? tagSkillContract,
+        FalloutOpeningInventoryGrant? openingGrant,
+        FalloutNativeTraitFarewellContract? traitFarewellContract)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(stack);
@@ -210,6 +218,8 @@ internal static class FalloutNativeCampaignSave
                 File.ReadAllText(fullPath)) ??
             throw new InvalidDataException($"Native campaign save is empty: {fullPath}");
         Validate(state, expectedSaveCompatibilityId);
+        if (state.PlayerPackageAudio is { } playerAudio)
+            FalloutAnimationSoundEvents.ValidateSource(playerAudio.Events, stack, stack.RuntimeFormKey(0x14));
         var activeCell = stack.GetEffective(state.ActiveCell);
         if (activeCell.Signature != "CELL")
             throw new InvalidDataException(
@@ -230,20 +240,23 @@ internal static class FalloutNativeCampaignSave
         }
         if (state.PlayerActorValues is null)
         {
-            FalloutNativeVigorResolver.Validate(vigorContract, state.Special, allowUnspent: !state.CharacterCreationComplete);
+            FalloutNativeVigorResolver.Validate(vigorContract ??
+                throw new NotSupportedException("Legacy player values require their source creation contract."), state.Special, allowUnspent: !state.CharacterCreationComplete);
             // Legacy saves held only seven BASE integers. Runtime modifiers
             // start at zero; current winning source abilities are re-evaluated.
             state = state with { PlayerActorValues = new FalloutPlayerActorValues(stack, legacy: state.Special).Capture() };
         }
         else _ = new FalloutPlayerActorValues(stack, state.PlayerActorValues);
         if (state.TagSkillSlots is null)
-            FalloutNativeTagSkillResolver.Validate(tagSkillContract, state.TagSkills, allowUnspent: !state.CharacterCreationComplete);
-        var tags = new FalloutPlayerTagSkills(stack, tagSkillContract, state.TagSkillSlots, state.TagSkills);
+            FalloutNativeTagSkillResolver.Validate(tagSkillContract ??
+                throw new NotSupportedException("Legacy player tags require their source creation contract."), state.TagSkills, allowUnspent: !state.CharacterCreationComplete);
+        var tags = new FalloutPlayerTagSkills(stack, tagSkillContract?.Skills ?? FalloutNativeTagSkillResolver.ResolveSkills(stack),
+            tagSkillContract?.RequiredCount, state.TagSkillSlots, state.TagSkills);
         state = state with { TagSkillSlots = tags.Capture() };
-        FalloutNativeTraitFarewellResolver.ValidateTraits(traitFarewellContract, state.Traits);
+        ValidateTraits(traitFarewellContract, state.Traits);
         var expectedGrant = state.Scripts is not null ? null : FalloutNativeTraitFarewellResolver.ResolveGrant(
-            traitFarewellContract,
-            openingGrant,
+            traitFarewellContract ?? throw new NotSupportedException("Legacy inventory requires its source farewell contract."),
+            openingGrant ?? throw new NotSupportedException("Legacy inventory requires its source opening grant."),
             state.TagSkills);
         var inventory = FalloutCampaignInventoryResolver.Resolve(
             stack,
@@ -320,21 +333,27 @@ internal static class FalloutNativeCampaignSave
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
             if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
-        if (state.Schema is CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ExpectedSchema };
-        if (state.Schema != ExpectedSchema && state.References is not null)
+        if (state.Schema is CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ObjectPcmSchema };
+        if (state.Schema is not (ExpectedSchema or ObjectPcmSchema) && state.References is not null)
             state = state with
             {
-                Schema = state.Schema is DeathHistorySchema or ProcedureSchema ? ExpectedSchema : state.Schema,
+                Schema = state.Schema is DeathHistorySchema or ProcedureSchema ? ObjectPcmSchema : state.Schema,
                 References = RestoreLegacyDeathCounts(state),
                 FactionRelations = []
             };
-        if (state.Schema == ExpectedSchema && state.References is not null)
+        if (state.Schema is ExpectedSchema or ObjectPcmSchema && state.References is not null)
             state = state with { QuestStageResults = state.QuestStageResults ?? [], TerminalResults = state.TerminalResults ?? [] };
         return new FalloutNativeCampaignRestore(state, inventory);
     }
 
+    internal static void ValidateTraits(FalloutNativeTraitFarewellContract? contract, IReadOnlyList<FalloutNativeTraitIdentity> traits)
+    {
+        if (contract is not null) FalloutNativeTraitFarewellResolver.ValidateTraits(contract, traits);
+        else if (traits.Count != 0) throw new InvalidDataException("Saved traits have no source creation contract.");
+    }
+
     private static IReadOnlyList<FalloutReferenceSnapshot>? RestoreLegacyDeathCounts(FalloutNativeCampaignState state) =>
-        state.Schema is ExpectedSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
+        state.Schema is ExpectedSchema or ObjectPcmSchema or CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
         { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray();
 
     private static void ValidateQuestValueHandles(FalloutPluginStack stack,
@@ -365,7 +384,7 @@ internal static class FalloutNativeCampaignSave
         Validate(state, state.SaveCompatibilityId);
         var updated = state with
         {
-            Schema = state.References is not null ? ExpectedSchema : state.SkyLighting is not null ? QuestClockSchema : state.Globals is null ? QuestScriptsSchema : GlobalClockSchema,
+            Schema = state.References is not null ? state.PlayerPackageAudio is null ? ObjectPcmSchema : ExpectedSchema : state.SkyLighting is not null ? QuestClockSchema : state.Globals is null ? QuestScriptsSchema : GlobalClockSchema,
             ActiveCell = activeCell,
             PlayerPosition = playerPosition.ToArray(),
             PlayerRotation = playerRotation.ToArray(),
@@ -419,6 +438,15 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
+        if (state.Schema != ExpectedSchema && state.PlayerPackageAudio is not null)
+            throw new InvalidDataException("Legacy campaign schema contains future player package sound history.");
+        if (state.Schema == ExpectedSchema && state.References is not null && state.PlayerPackageAudio is null)
+            throw new InvalidDataException("Saved campaign is missing its player package sound owner.");
+        state.PlayerPackageAudio?.Events.Validate();
+        if (state.PlayerPackageAudio is { } playerAudio && state.Scripts?.Session?.PlayerPackage?.SoundRandomState is { } packageRandom &&
+            playerAudio.RandomState != packageRandom)
+            throw new InvalidDataException("Player package and audio random state disagree.");
+        if (state.Schema == ObjectPcmSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.DoorMotion?.ScriptSequence is not null) == true)
             throw new InvalidDataException("Legacy campaign schema contains future scripted door animation state.");
         if (state.Schema != ExpectedSchema && state.References?.Any(reference =>

@@ -8,7 +8,8 @@ internal readonly record struct FalloutControlBinding([property: JsonRequired] b
 
 // Control settings belong to the selected user profile, rather than a campaign
 // snapshot. The source INIs are read-only; a separate overlay survives sessions.
-internal sealed class FalloutInputControls(Func<string, string> source, string? profilePath = null, bool newVegas = true)
+internal sealed class FalloutInputControls(Func<string, string?> source, string? profilePath = null, bool newVegas = true,
+    Func<string, FalloutControlBinding>? defaults = null)
 {
     private FalloutControlBinding[]? _bindings;
     private bool _dirty;
@@ -28,7 +29,7 @@ internal sealed class FalloutInputControls(Func<string, string> source, string? 
         dirty = _dirty,
         bindings = _bindings?.Select((value, control) => new { control, keyboard = Code(value.Keyboard, 0), mouse = Code(value.Mouse, 1) }).ToArray(),
         persistence = "user-profile-overlay",
-        unbound = "joystick,gamepad,executable-default-bindings"
+        unbound = "joystick,gamepad"
     };
 
     internal int Get(uint control, uint type = 0)
@@ -93,7 +94,10 @@ internal sealed class FalloutInputControls(Func<string, string> source, string? 
         // by its mouse byte. Other device fields are not interpreted here.
         var rows = Names.Select(name =>
         {
-            var text = source(name).Trim();
+            var input = source(name);
+            if (input is null) return defaults?.Invoke(name) ??
+                throw new NotSupportedException($"Owned control binding has no source default: {name}.");
+            var text = input.Trim();
             if (text.Length != 8 || !uint.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var word))
                 throw new InvalidDataException($"Owned control binding is malformed: {name}.");
             return new FalloutControlBinding((byte)((word >> 16) & 255), (byte)((word >> 8) & 255));

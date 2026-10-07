@@ -25,6 +25,12 @@ internal static class InputControlContracts
                 };
             }
             var controls = new FalloutInputControls(Source, profile);
+            var defaultReads = 0;
+            var fresh = new FalloutInputControls(name => name == "Forward" ? "002AFF00" : null,
+                defaults: _ => { defaultReads++; return new(61, 255); });
+            Require(fresh.Get(0) == 42 && fresh.Get(1) == 61 && defaultReads == 27,
+                "An absent control failed to read its source default, or a file override lost precedence.");
+            Reject(() => new FalloutInputControls(_ => null).Get(0));
             Require(controls.Get(0) == 17 && controls.Get(1) == 31 && controls.Get(4) == -1 &&
                 controls.Get(4, 1) == 256 && controls.Get(16) == -1 && controls.Get(28) == -1 && reads == 28,
                 "Source control bytes, unassigned sentinel or source table count differ.");

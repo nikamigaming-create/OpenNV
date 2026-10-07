@@ -75,6 +75,45 @@ internal static class PlayerTagSkillContracts
                 "sourceBonus=true membershipOnce=true sharedAndFallbackScripts=true cold=true legacy=true menuCountRetained=true atomicInvalid=true");
         }
         finally { foreach (var path in Directory.EnumerateFiles(directory)) File.Delete(path); Directory.Delete(directory); }
+        Fallout3Skills();
+    }
+
+    private static void Fallout3Skills()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "opennv-fo3-skills-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var names = Names.Append("BigGuns").ToArray();
+            File.WriteAllBytes(Path.Combine(directory, "Fallout3.esm"), Join(Header(),
+                Join(names.Select((name, index) => Record("AVIF", (uint)(0x100 + index),
+                    Field("EDID", Text("AV" + name)), Field("FULL", Text(name)))).ToArray()),
+                Record("NPC_", 7, Field("ACBS", new byte[24])), Record("RACE", 8),
+                Setting(0x200, "fAVDSkillBigGunsBase", 3), Setting(0x201, "fAVDSkillSmallGunsBase", 4),
+                Setting(0x202, "fAVDSkillPrimaryBonusMult", 2), Setting(0x203, "fAVDSkillLuckBonusMult", .5f),
+                Setting(0x204, "fAVDTagSkillBonus", 11)));
+            using var records = FalloutPluginStack.Load(directory, ["Fallout3.esm"]);
+            var catalog = FalloutNativeTagSkillResolver.ResolveSkills(records);
+            Require(catalog.Count == 13 && catalog.Any(skill => skill.EditorId == "AVBigGuns") &&
+                catalog.All(skill => skill.EditorId != "AVThrowing"), "FO3 inherited New Vegas's active skill slots.");
+            var tags = new FalloutPlayerTagSkills(records, catalog);
+            var skills = new FalloutPlayerSkills(records, () => new(5, 5, 5, 5, 5, 5, 5), tags.IsTagged, () => [], null,
+                new(), new("Fallout3.esm", 7), () => new("Fallout3.esm", 8), () => false);
+            var baseline = skills.Value("SmallGuns");
+            tags.Set("SmallGuns", 3);
+            Require(tags.IsTagged("SmallGuns") && !tags.IsTagged("Guns") && skills.Value(41) == baseline + 11 &&
+                skills.Value("BigGuns") == skills.Value(33), "FO3 skill aliases or source tag bonuses were replaced.");
+            Reject(() => tags.Set("Survival", 0));
+            Reject(() => tags.Set("Throwing", 0));
+            Reject(() => skills.Value("Guns"));
+            Reject(() => tags.AcceptMenu(catalog.Take(3).ToArray()));
+            tags.AcceptMenu(catalog.Take(2).ToArray(), 2);
+            var cold = new FalloutPlayerTagSkills(records, catalog, snapshot: tags.Capture());
+            Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(tags.Capture()),
+                "FO3 cold tag slots required a New Vegas creation-stage contract.");
+            Console.WriteLine("OPENNV_FO3_SKILLS_CONTRACT_PASS activeSlots=true aliases=true sourceBonus=true explicitMenuCount=true cold=true");
+        }
+        finally { foreach (var path in Directory.EnumerateFiles(directory)) File.Delete(path); Directory.Delete(directory); }
     }
 
     private static byte[] Fixture()

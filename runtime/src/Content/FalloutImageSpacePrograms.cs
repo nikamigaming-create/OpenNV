@@ -7,8 +7,9 @@ namespace OpenNV.Runtime.Content;
 /// <summary>Selected owned shader programs and executable filter declarations for image-space blur.</summary>
 internal sealed record FalloutImageSpacePrograms(FalloutImageSpaceKernels Kernels,
     FalloutD3D9PixelProgram Prefilter, IReadOnlyList<FalloutD3D9PixelProgram> Blur,
-    FalloutD3D9PixelProgram DoubleVision, FalloutDoubleVisionPhase DoubleVisionPhase, string SourceIdentity)
+    FalloutD3D9PixelProgram DoubleVision, FalloutDoubleVisionPhase? DoubleVisionPhase, string SourceIdentity)
 {
+    internal string? DoubleVisionPhaseError { get; init; }
     internal static FalloutImageSpacePrograms Read(RuntimeLiveContentSource source)
     {
         var settings = FalloutInstallationSettings.Read(source);
@@ -16,11 +17,17 @@ internal sealed record FalloutImageSpacePrograms(FalloutImageSpaceKernels Kernel
         if (!source.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException(path);
         var executable = Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
             source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe");
-        return Decode(bytes, FalloutImageSpaceKernels.Read(executable), FalloutExecutableStringTable.ReadDoubleVisionPhase(executable), identity);
+        FalloutDoubleVisionPhase? phase = null;
+        string? phaseError = null;
+        try { phase = FalloutExecutableStringTable.ReadDoubleVisionPhase(executable); }
+        catch (NotSupportedException error) { phaseError = error.Message; }
+        // An unreached effect cannot reject the whole world. Preserve its
+        // independent binding error; a reached VNAM remains unbound in Compose.
+        return Decode(bytes, FalloutImageSpaceKernels.Read(executable), phase, identity) with { DoubleVisionPhaseError = phaseError };
     }
 
     internal static FalloutImageSpacePrograms Decode(byte[] package, FalloutImageSpaceKernels kernels,
-        FalloutDoubleVisionPhase phase, string identity)
+        FalloutDoubleVisionPhase? phase, string identity)
     {
         var shaders = FalloutShaderPackage.Read(package);
         FalloutD3D9PixelProgram Program(string name, int[] constants, int[]? samplers = null)
