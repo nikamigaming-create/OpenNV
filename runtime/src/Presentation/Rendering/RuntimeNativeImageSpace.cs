@@ -46,9 +46,7 @@ internal partial class RuntimeNativeImageSpace : Node
     {
         if (_menuBackground is not null) throw new InvalidOperationException("Another static menu background already owns the world capture.");
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Menu background has no owned content source.");
-        var executable = Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
-            source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe");
-        var declarations = FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(executable);
+        var declarations = FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(source.FalloutExecutablePath);
         var modifier = FalloutImageSpaceModifierReader.Read(records.GetEffective(records.RuntimeFormKey(declarations.Form(kind))));
         var frame = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase, modifier);
         var serial = checked(++_menuSerial);

@@ -41,6 +41,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private RuntimeNativePlayerNameEntry? _nameEntry;
     private RuntimeNativeRaceSexEntry? _raceSexEntry;
     private FalloutRaceMenuDevices? _raceMenuDevices;
+    private string? _raceMenuDefaultModel;
     private bool _raceMenuDevicesRead;
     private string _raceMenuCommand = "showracemenu";
     private RuntimeNativeVigorEntry? _vigorEntry;
@@ -491,10 +492,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Race menu has no owned source.");
             if (source.TryRead("nvse/plugins/ttw_nvse.dll", null, out var plugin, out _))
                 _raceMenuDevices = FalloutExecutableStringTable.ReadTtwRaceMenuDevices(
-                    Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"), plugin);
+                    source.FalloutExecutablePath, plugin);
+            else _raceMenuDefaultModel = FalloutExecutableStringTable.ReadNativeRaceMenuModel(source.FalloutExecutablePath);
             _raceMenuDevicesRead = true;
         }
-        return _raceMenuDevices?.ModelFor(command) ?? (command == "showracemenu" ? "meshes/terminals/nv_reflectron_ui.nif" :
+        return _raceMenuDevices?.ModelFor(command) ?? (command == "showracemenu" ? _raceMenuDefaultModel! :
             throw new NotSupportedException("Gene projector has no selected owned TTW plugin declaration."));
     }
 

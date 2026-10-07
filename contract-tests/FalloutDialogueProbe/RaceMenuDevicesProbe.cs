@@ -5,6 +5,7 @@ internal static class RaceMenuDevicesProbe
 {
     internal static void Run()
     {
+        NativeRaceMenuModelContracts.Run();
         const uint pluginBase = 1000, nativeBase = 4000, nativeHandler = 4020, buffer = 2500, copy = 2100, protect = 2200;
         var code = Enumerable.Repeat((byte)0x90, 600).ToArray();
         var native = Enumerable.Repeat((byte)0x90, 128).ToArray();

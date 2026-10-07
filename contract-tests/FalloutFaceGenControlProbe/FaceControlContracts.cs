@@ -6,6 +6,7 @@ internal static class FaceControlContracts
 {
     internal static void Run()
     {
+        PooledFaceControlContracts.Run();
         var npc = Floats(1, 2); var race = Floats(3, -1);
         Require(FalloutFaceGenControls.Project(npc, race, [2, 3]) == 11, "Projection must use NPC plus race without normalizing the axis.");
         var edited = FalloutFaceGenControls.SetControl(npc, race, [2, 3], 12);

@@ -25,6 +25,16 @@ critical owner. A failed character menu is removed before publishing its state.
 Engine placement statics retain reference/script ownership without drawing their
 editor meshes in either game.
 
+Character menus read the selected executable's aggregate or pooled assignment
+declarations, retaining hidden geometry indices, typed cached limits and tone
+getter/page associations. Creation headers preserve their source frame order.
+The native race-menu command's modes and argument forwarding select the model
+consumer; unrelated barber/surgery arms cannot replace that model. Inline
+copies validate their complete source/destination extent and terminator.
+Menu backgrounds admit both frame-local and optimized register selectors with
+the same ordered branches, source forms and shared resolver. Extra statistical
+model axes do not become invented menu controls.
+
 Source hit callbacks use a process-owned registration owner and the current
 world's leased source executor. Native actor/player damage paths emit before
 defense/damage; post-damage OnHit/OnHitWith receipts retain their separate owner.
