@@ -14,21 +14,27 @@ internal static partial class FalloutExecutableStringTable
     {
         var (code, image) = Load(path);
         var result = ReadInitializers(code, image.Literal, image.IsWritableObject);
+        if (result.Count == 0) result = StaticStrings(image);
         if (result.Count == 0) throw new NotSupportedException("Owned executable setting initializers are unbound.");
         return result;
     }
 
-    internal static IReadOnlyDictionary<string, float> ReadFloatDefaults(string path)
+    internal static IReadOnlyDictionary<string, float> ReadFloatDefaults(string path, bool gameSettingsOnly = false)
     {
         var (code, image) = Load(path);
-        return ReadFloatInitializers(code, image.Literal, image.IsWritableObject,
+        var result = ReadFloatInitializers(code, image.Literal, image.IsWritableObject,
             address => BitConverter.Int32BitsToSingle(unchecked((int)U32(image.Read(address, 4), 0))));
+        return result.Count == 0 ? StaticNumbers(image, 'f', gameSettingsOnly).ToDictionary(row => row.Name,
+            row => BitConverter.Int32BitsToSingle(unchecked((int)row.Payload)), StringComparer.OrdinalIgnoreCase) :
+            gameSettingsOnly ? result.Where(row => !row.Key.Contains(':')).ToDictionary(StringComparer.OrdinalIgnoreCase) : result;
     }
 
-    internal static IReadOnlyDictionary<string, uint> ReadIntegerDefaults(string path)
+    internal static IReadOnlyDictionary<string, uint> ReadIntegerDefaults(string path, bool gameSettingsOnly = false)
     {
         var (code, image) = Load(path);
         var result = ReadIntegerInitializers(code, image.Literal, image.IsWritableObject);
+        if (result.Count == 0) result = StaticNumbers(image, 'i', gameSettingsOnly).ToDictionary(row => row.Name,
+            row => row.Payload, StringComparer.OrdinalIgnoreCase);
         if (result.Count == 0) throw new NotSupportedException("Owned executable integer setting initializers are unbound.");
         return result;
     }
@@ -36,7 +42,9 @@ internal static partial class FalloutExecutableStringTable
     internal static IReadOnlyDictionary<string, bool> ReadBooleanDefaults(string path)
     {
         var (code, image) = Load(path);
-        return ReadBooleanInitializers(code, image.Literal, image.IsWritableObject);
+        var result = ReadBooleanInitializers(code, image.Literal, image.IsWritableObject);
+        return result.Count == 0 ? StaticNumbers(image, 'b', false).ToDictionary(row => row.Name,
+            row => row.Payload != 0, StringComparer.OrdinalIgnoreCase) : result;
     }
 
     internal static IReadOnlyDictionary<string, bool> ReadBooleanInitializers(ReadOnlySpan<byte> code,
@@ -307,7 +315,7 @@ internal static partial class FalloutExecutableStringTable
         return BinaryPrimitives.ReadUInt32LittleEndian(bytes[offset..]);
     }
 
-    private sealed class Image(byte[] bytes, PEHeaders headers)
+    private sealed partial class Image(byte[] bytes, PEHeaders headers)
     {
         internal uint Base { get; } = checked((uint)headers.PEHeader!.ImageBase);
         internal uint CodeBase => checked(Base + (uint)headers.SectionHeaders.Single(section => section.Name == ".text").VirtualAddress);

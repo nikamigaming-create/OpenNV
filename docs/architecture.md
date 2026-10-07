@@ -3,6 +3,16 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Executable defaults admit either constructor associations or preinitialized
+Win32 setting descriptors. Static descriptors require backed writable storage,
+read-only virtual tables/locators, executable virtual methods and an exact typed
+collection declaration. Mutable MSVC type-info storage retains its own file
+extent. Game settings exclude independently declared INI owners; Main,
+preferences and renderer ownership comes from the source type rather than the
+section spelling. Constructor defaults retain precedence over initial storage.
+String fallback uses the record stack's owned installation, including when an
+unrelated ambient source is present.
+
 Source hit callbacks use a process-owned registration owner and the current
 world's leased source executor. Native actor/player damage paths emit before
 defense/damage; post-damage OnHit/OnHitWith receipts retain their separate owner.

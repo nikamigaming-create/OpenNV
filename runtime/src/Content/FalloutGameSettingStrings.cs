@@ -26,7 +26,7 @@ internal static class FalloutGameSettingStrings
         if (overrides.Length > 1) throw new InvalidDataException($"Multiple winning GMST identities have EDID {name}.");
         if (overrides.Length == 1)
             return FalloutDialogueTopic.Text(overrides[0].ReadSubrecords().Single(field => field.Signature == "DATA").Data.Span);
-        var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned game settings are unavailable.");
+        var source = records.OwnedSource ?? RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned game settings are unavailable.");
         var defaults = Defaults.GetValue(source, ReadDefaults);
         return defaults.TryGetValue(name, out var value) ? value :
             throw new NotSupportedException($"Owned executable default setting is unbound: {name}.");
@@ -34,9 +34,8 @@ internal static class FalloutGameSettingStrings
 
     private static IReadOnlyDictionary<string, string> ReadDefaults(RuntimeLiveContentSource source)
     {
-        if (source.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
-            throw new NotSupportedException("This engine's executable default-string layout has not been admitted.");
-        var path = Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe");
+        var path = Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
+            source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe");
         return FalloutExecutableStringTable.Read(path);
     }
 

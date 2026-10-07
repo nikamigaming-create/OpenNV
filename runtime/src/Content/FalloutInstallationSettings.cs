@@ -40,9 +40,8 @@ internal sealed class FalloutInstallationSettings
 
     private FalloutNumericIniSettings ReadNumericIni(RuntimeLiveContentSource source)
     {
-        if (source.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
-            throw new NotSupportedException("This engine's executable INI-setting layout has not been admitted.");
-        var executable = Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe");
+        var executable = Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
+            source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe");
         var bytes = File.ReadAllBytes(executable);
         var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
         return new(FalloutExecutableStringTable.ReadIniDeclarations(bytes), _iniLayers, source.StackId + ":" + executable + ":" + hash);

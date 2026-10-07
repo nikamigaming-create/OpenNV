@@ -13,6 +13,12 @@ source-stack matrix. Standalone FO3 remains a preview; clean-system fresh
 FO3/FNV/TTW New Game, combined-stack acceptance, Megaton and full game completion
 remain unverified.
 
+Standalone FO3 executable defaults now bind their original typed static
+descriptors. New Vegas constructor defaults retain precedence. Independent
+FNV/FO3/TTW/combined source checks pass numeric/string winner selection, original
+player values and layered INI ownership; malformed relocated synthetic images
+reject. Shared FO3 gameplay startup and ordinary save/Continue remain unimplemented.
+
 The reported barren exterior is a real runtime divergence: the reached grid
 has 565 missing owned SpeedTree references. Their resource paths now resolve the
 present source files, but the procedural geometry decoder remains unbound.

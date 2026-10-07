@@ -9,6 +9,22 @@ internal static partial class FalloutExecutableStringTable
     internal static IReadOnlyList<FalloutIniDeclaration> ReadIniDeclarations(byte[] bytes)
     {
         var (code, image) = Load(bytes);
+        var descriptors = ReadStaticSettings(image);
+        if (descriptors.Count != 0)
+        {
+            // Preinitialized SettingT descriptors retain their declared
+            // collection in RTTI. Do not infer it from an INI section name.
+            var declarations = descriptors.Where(row => row.Collection is SettingCollection.Main or SettingCollection.Prefs or SettingCollection.Renderer)
+                .Select(row => new FalloutIniDeclaration(row.Name, row.Collection switch
+                {
+                    SettingCollection.Main => FalloutIniCollection.Main,
+                    SettingCollection.Prefs => FalloutIniCollection.Prefs,
+                    _ => FalloutIniCollection.Renderer,
+                }, row.Payload)).ToArray();
+            if (!declarations.Any(row => row.Collection == FalloutIniCollection.Main) || !declarations.Any(row => row.Collection == FalloutIniCollection.Prefs))
+                throw new NotSupportedException("Owned static INI declarations have no complete admitted collection owner.");
+            return Array.AsReadOnly(declarations);
+        }
         return ReadIniDeclarations(code, image.CodeBase, image.Literal, image.Read, image.IsWritableExtent, image.IsFileExtent);
     }
 
