@@ -40,7 +40,29 @@ internal static class ImageEffectsDeclarationsProbe
         Expect<InvalidDataException>(() => FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(selector.Concat(selector).ToArray(), Literal));
         Word(selector, 145 + 6, 0);
         Expect<NotSupportedException>(() => FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(selector, Literal));
-        Console.WriteLine("OPENNV_IMAGE_EFFECT_DECLARATIONS_PASS phaseConstants=true sourceMenuForms=true ambiguousRejected=true");
+        var direct = new byte[139];
+        Store(direct, 0, [0x56, 0xe8]); Store(direct, 6, [0x8b, 0xf0, 0xa1]);
+        Store(direct, 13, [0x85, 0xc0, 0x74, 24, 0xf6, 0x80]); direct[23] = 1; Store(direct, 24, [0x74, 15]);
+        Store(direct, 41, [0x8b, 0x0d]); direct[47] = 0xe8; Store(direct, 52, [0x84, 0xc0, 0x74, 15]);
+        Store(direct, 71, [0x81, 0xfe]); Word(direct, 73, 1800); Store(direct, 77, [0x75, 15]);
+        Store(direct, 94, [0x8b, 0x0d]); direct[100] = 0x68; Word(direct, 101, 0x4321);
+        Store(direct, 105, [0x8b, 0x89]); direct[111] = 0xe8; Store(direct, 116, [0x85, 0xc0, 0x75, 15]);
+        Store(direct, 135, [0x33, 0xc0, 0x5e, 0xc3]);
+        foreach (var (offset, form) in new[] { (26, 0x510u), (56, 0x520u), (79, 0x530u), (120, 0x540u) })
+        {
+            direct[offset] = 0x68; Word(direct, offset + 1, form); direct[offset + 5] = 0xe8;
+            Word(direct, offset + 6, checked((uint)(3000 - offset - 10)));
+            Store(direct, offset + 10, [0x83, 0xc4, 4, 0x5e, 0xc3]);
+        }
+        menus = FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(direct, Literal);
+        Require(menus.Popup == 0x540 && menus.Interface == 0x530 && menus.Pause == 0x510 && menus.PipBoy == 0x520 && menus.InterfaceMenu == 1800,
+            "Register selector must retain its source predicates, forms and selected menu.");
+        Expect<InvalidDataException>(() => FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(direct.Concat(direct).ToArray(), Literal));
+        direct[119]++; Expect<NotSupportedException>(() => FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(direct, Literal)); direct[119]--;
+        Word(direct, 126, 0); Expect<NotSupportedException>(() => FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(direct, Literal));
+        Word(direct, 126, 2870); Word(direct, 80, 0); Expect<InvalidDataException>(() => FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(direct, Literal));
+        Expect<NotSupportedException>(() => FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(direct[..^1], Literal));
+        Console.WriteLine("OPENNV_IMAGE_EFFECT_DECLARATIONS_PASS phaseConstants=true sourceMenuForms=true registerSelector=true predicateTargets=true directReturns=true ambiguousRejected=true");
     }
     private static void Store(byte[] bytes, int at, byte[] value) => value.CopyTo(bytes, at);
     private static void Word(byte[] bytes, int at, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(at), value);

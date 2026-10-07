@@ -88,15 +88,32 @@ a focused native frame confirms the reported red arrows/planes are absent.
 Their source identities independently agree in FNV, FO3, TTW and the combined
 stack. This frame is not retail parity or campaign acceptance.
 
-FO3's pooled face-control/header declarations and race-menu model consumer are
-the next character-creation owners. Partial menu initialization now cleans up
-before publishing state; the reached failure cannot leave broken telemetry.
+FO3's pooled face-control/header declarations, source-selected race-menu model
+and optimized menu-background selector now bind independently of FNV's layouts.
+Independent owned-file checks pass all 43 exposed sliders, the 55-row geometry
+aggregate, 20 headers, the original model and all four background forms in FNV,
+FO3, TTW essentials and the combined stack. The statistical model contains
+additional axes outside the source menu. Synthetic checks reject malformed
+assignments, limits, argument forwarding, selected model extents and foreign
+branch/resolver associations. Live FO3 creation acceptance is the next check.
+Partial menu initialization cleans up before publishing state; a reached failure
+cannot break telemetry.
 FO3 has no accepted settled manual save or cold Continue yet. Its unbound
 double-vision phase, convex-list/phantom collision and modeled emergency lights
 remain visible. Known exhausted radio links end their conversation; unknown
 conditions still reject. Standalone FNV reaches ordinary character acceptance
-and CG01 stage 55 and writes a partial v46 checkpoint; its cold Continue and
-complete opening remain unverified. The combined stack needs independent
+and CG01 stage 55 and writes a partial v46 checkpoint. Ordinary cold Continue
+restores it, a menu resave writes v47, and another process cold-restores stage 55,
+100 HP and all 19 inventory entries with unchanged save bytes. The original
+reference-script parse failure remains visible. This verifies that partial
+opening checkpoint; the complete opening remains unverified. The same partial
+FNV v47 checkpoint also cold-loads in the native OpenXR simulator. Tracked
+controller menu input writes another manual v47 slot, and another process
+cold-Continues it with all 19 inventory entries and unchanged save bytes.
+Inspected final-eye interior and menu images show the NPC and readable save
+controls; temporary images are deleted and recording is off. This verifies the
+simulator checkpoint path; physical-headset acceptance remains pending.
+The combined stack needs independent
 ordinary play/save checks. A TTW save cannot certify another stack.
 
 The engine player's package audio now has an independent persistent owner;
@@ -124,7 +141,7 @@ clean-system FO3/FNV/TTW New Game.
 ## Next owner and outcome
 
 Primary owns serial builds, live input, save verification and checked
-publication. Complete the reached FO3 character-creation declarations and the
+publication. Complete ordinary FO3 character creation and the
 independent flat/OpenXR source-stack loading/saving matrix. Keep native vegetation decoding and upload
 timing as active exterior owners. Continue the complete vault/world denominator and
 ordinary Megaton/train/Mojave route without bypassing source conditions.
@@ -137,3 +154,6 @@ SHA256: D9654D35DB7BB3CD3731ED5C4F72E06DA985D62D07665A7CA6924D8545F8F13B.
 The original exterior, cave and post-loot saves remain immutable. Preserve needed
 failed-load diagnostics and ordinary input
 receipts. Owned files, private saves, helpers and logs stay out of publication.
+Standalone FNV run: tmp/development-lab/loading-saving-fnv-20261007. Its current
+partial v47 slot is fc13c871fc244908bbdcd326813112ee, cold-verified at stage 55.
+SHA256: F89A78C54282777D249E1BD16F3F498D9EC35746FE27EC3374E4CCC25491EF01.

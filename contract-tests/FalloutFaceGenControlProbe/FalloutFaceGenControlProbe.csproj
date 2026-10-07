@@ -5,6 +5,7 @@
     <Compile Include="../../runtime/src/Content/FalloutExecutableInputControls.cs" Link="FalloutExecutableInputControls.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Static.cs" Link="FalloutExecutableStringTable.Static.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableControlTable.cs" Link="FalloutExecutableControlTable.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutExecutableControlTable.Pooled.cs" Link="FalloutExecutableControlTable.Pooled.cs" />
     <Compile Include="../../runtime/src/Formats/FaceGen/FalloutCtlFile.cs" Link="FalloutCtlFile.cs" />
     <Compile Include="../../runtime/src/Formats/FaceGen/FalloutFaceGenControls.cs" Link="FalloutFaceGenControls.cs" />
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />

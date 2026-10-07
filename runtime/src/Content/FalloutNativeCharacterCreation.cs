@@ -30,12 +30,16 @@ internal sealed class FalloutNativeCharacterCreation
         _records = records; _contract = contract; _settings = settings;
         FalloutNativeRaceSexResolver.Validate(contract, current);
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Character creation has no owned content source.");
-        var executable = Path.Combine(Path.GetDirectoryName(content.ContentRoot)!,
-            content.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe");
-        Controls = FalloutExecutableStringTable.ReadFaceControls(executable);
-        Headers = FalloutExecutableStringTable.ReadCreationHeaders(executable);
+        var executable = content.FalloutExecutablePath;
         if (!content.TryRead("facegen/si.ctl", null, out var ctl, out _)) throw new FileNotFoundException("facegen/si.ctl");
         _model = FalloutCtlFile.Read(ctl);
+        Controls = FalloutExecutableStringTable.ReadFaceControls(executable);
+        Headers = FalloutExecutableStringTable.ReadCreationHeaders(executable);
+        // The executable declares the menu's axes. The statistical model can
+        // contain additional controls that this menu does not expose.
+        if (Controls.GeometryCount <= 0 || Controls.GeometryCount > _model.Controls[0].Count ||
+            Controls.Controls.Any(row => row.Group == 0 && (row.Index < 0 || row.Index >= Controls.GeometryCount)))
+            throw new InvalidDataException("Creation aggregate exceeds the owned geometry control domain.");
         Selection = current;
         if (current.Face is null)
         {

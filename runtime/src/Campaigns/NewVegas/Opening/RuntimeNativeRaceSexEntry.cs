@@ -86,14 +86,15 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
     };
 
     internal void Configure(FalloutNativeRaceSexContract contract, FalloutNativeRaceSexSelection current, FalloutPluginStack records,
-        RuntimeNativeImageSpace? imageSpace = null, string modelPath = "meshes/terminals/nv_reflectron_ui.nif")
+        RuntimeNativeImageSpace? imageSpace = null, string? modelPath = null)
     {
         Name = "NativeRaceSexEntry"; Layer = 120; ProcessMode = ProcessModeEnum.Always;
         _records = records;
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Creation has no owned content source.");
         _settings = FalloutInstallationSettings.Read(source);
         _creation = new(records, contract, current, _settings);
-        _device = new(modelPath, _settings) { Size = GetViewport().GetVisibleRect().Size };
+        _device = new(modelPath ?? FalloutExecutableStringTable.ReadNativeRaceMenuModel(source.FalloutExecutablePath), _settings)
+        { Size = GetViewport().GetVisibleRect().Size };
         AddChild(_device);
         _screen = new(_device, records, _settings, Fail); AddChild(_screen);
         _screen.Menu.Navigate += Navigate;

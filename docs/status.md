@@ -10,8 +10,10 @@ Continue on failure, including a verified native rejected-load rollback.
 The required runtime gate and native fractional-sample/pause checks pass.
 See [current work](current-work.md) for the reusable checkpoint and remaining
 source-stack matrix. Standalone FO3 now enters its authored birth CELL through
-the shared campaign owners and ordinary sex/name entry reaches CG00 stage 42;
-face-control/header and race-menu model declarations block further creation.
+the shared campaign owners and ordinary sex/name entry reaches CG00 stage 42.
+Its pooled face controls/headers, source-selected creation model and optimized
+menu-background declarations pass independent owned-file checks across FNV,
+FO3, TTW and the combined stack; live creation acceptance remains pending.
 The reported red placement-marker meshes are excluded from gameplay and a native
 frame confirms their absence. Clean-system fresh
 FO3/FNV/TTW New Game, combined-stack acceptance, Megaton and full game completion
@@ -23,7 +25,13 @@ FNV/FO3/TTW/combined source checks pass numeric/string winner selection, origina
 player values and layered INI ownership; malformed relocated synthetic images
 reject. FO3 source input defaults, weather and scalar HUD/subtitle declarations
 now bind. Ordinary FO3 settled save/Continue remains unverified. FNV's ordinary
-opening writes a partial CG01 stage-55 checkpoint; cold Continue remains pending.
+opening writes a partial CG01 stage-55 checkpoint. Ordinary menu resave and cold
+Continue verify v47 at 100 HP with all 19 inventory entries and unchanged save
+bytes. Native OpenXR simulator controller input independently writes a manual
+v47 slot and another process cold-Continues it with all 19 inventory entries
+and unchanged save bytes. Inspected final-eye interior and save-menu images
+remain simulator evidence; physical-headset acceptance is pending. The opening
+remains incomplete and its reference-script parse fault is retained.
 Save v47 independently retains the engine player's package sound history after
 its package ends and rejects mismatched package/audio random state. Existing
 v46 state remains readable; missing historical data is not invented.

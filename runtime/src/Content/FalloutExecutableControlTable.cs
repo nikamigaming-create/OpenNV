@@ -11,7 +11,7 @@ internal sealed record FalloutFaceControlBinding(int Group, int Index, int Page,
     FalloutControlLimit Minimum, FalloutControlLimit Maximum);
 
 internal sealed record FalloutFaceControlTable(IReadOnlyList<FalloutFaceControlBinding> Controls,
-    IReadOnlyList<int> TextureOrder);
+    IReadOnlyList<int> TextureOrder, int GeometryCount);
 
 internal static partial class FalloutExecutableStringTable
 {
@@ -44,28 +44,42 @@ internal static partial class FalloutExecutableStringTable
     internal static IReadOnlyList<string> ReadCreationHeaders(string path)
     {
         var (code, image) = Load(path);
-        var settings = ControlDescriptors(code, image);
-        List<string>? result = null;
-        for (var at = 0; at <= code.Length - 13; at++)
+        return ReadCreationHeaders(code, ControlDescriptors(code, image));
+    }
+
+    internal static IReadOnlyList<string> ReadCreationHeaders(ReadOnlyMemory<byte> code, IReadOnlyDictionary<uint, string> settings)
+        => CreationHeaders(code.Span, settings).Labels;
+
+    private sealed record CreationHeaderDeclaration(int Position, IReadOnlyList<string> Labels);
+
+    private static CreationHeaderDeclaration CreationHeaders(ReadOnlySpan<byte> code, IReadOnlyDictionary<uint, string> settings)
+    {
+        CreationHeaderDeclaration? result = null;
+        for (var at = 0; at <= code.Length - 8; at++)
         {
-            var input = code.AsSpan(at);
-            if (input[0] != 0xb9 || input[5] != 0xe8 || input[10] != 0x89 || input[11] != 0x45 ||
-                !settings.TryGetValue(U32(input, 1), out var label) || label != "sRSMCustomize") continue;
-            var labels = new List<string>(); var stack = unchecked((sbyte)input[12]);
-            var getter = at + 10 + BinaryPrimitives.ReadInt32LittleEndian(input[6..]);
+            var input = code[at..];
+            var direct = input[0] == 0xa1 && input[5] == 0x89 && input[6] == 0x45;
+            var called = input.Length >= 13 && input[0] == 0xb9 && input[5] == 0xe8 && input[10] == 0x89 && input[11] == 0x45;
+            var operand = U32(input, 1);
+            if ((!direct && !called) || !settings.TryGetValue(direct ? operand - 4 : operand, out var label) || label != "sRSMCustomize") continue;
+            var width = direct ? 8 : 13;
+            var labels = new List<string>(); var stack = unchecked((sbyte)input[width - 1]);
+            var getter = direct ? 0 : at + 10 + BinaryPrimitives.ReadInt32LittleEndian(input[6..]);
             for (var index = 0; index < 16; index++)
             {
-                var offset = at + index * 13;
-                if (offset > code.Length - 13) break;
-                var row = code.AsSpan(offset);
-                if (row[0] != 0xb9 || row[5] != 0xe8 || row[10] != 0x89 || row[11] != 0x45 ||
-                    unchecked((sbyte)row[12]) != stack + index * 4 ||
-                    offset + 10 + BinaryPrimitives.ReadInt32LittleEndian(row[6..]) != getter || !settings.TryGetValue(U32(row, 1), out var name)) break;
+                var offset = at + index * width;
+                if (offset > code.Length - width) break;
+                var row = code[offset..];
+                if (direct ? row[0] != 0xa1 || row[5] != 0x89 || row[6] != 0x45 :
+                    row[0] != 0xb9 || row[5] != 0xe8 || row[10] != 0x89 || row[11] != 0x45 ||
+                    offset + 10 + BinaryPrimitives.ReadInt32LittleEndian(row[6..]) != getter) break;
+                if (unchecked((sbyte)row[width - 1]) != stack + index * 4 ||
+                    !settings.TryGetValue(direct ? U32(row, 1) - 4 : U32(row, 1), out var name) || !name.StartsWith('s')) break;
                 labels.Add(name);
             }
             if (labels.Count != 16) continue;
             if (result is not null) throw new InvalidDataException("Owned creation page declaration is ambiguous.");
-            result = ["sRSMSex", "sRSMRace", "sRSMFace", "sRSMHair", .. labels];
+            result = new(at, ["sRSMSex", "sRSMRace", "sRSMFace", "sRSMHair", .. labels]);
         }
         return result ?? throw new NotSupportedException("Owned creation page headers have no admitted declaration.");
     }
@@ -87,12 +101,13 @@ internal static partial class FalloutExecutableStringTable
             while (reader.TryRow(out var next)) rows.Add(next);
             end = reader.Position;
         }
-        if (rows is null || rows.Count == 0) throw new NotSupportedException("Owned face-control initializer layout is unbound.");
+        if (rows is null || rows.Count == 0) return ReadPooledFaceControls(code, settings, constant);
         var result = new List<FalloutFaceControlBinding>();
         var group = 0; var index = 0; var previous = rows[0].Offset - 16;
+        var geometryCount = 0;
         foreach (var row in rows)
         {
-            if (row.Offset != previous + 16) { group += 2; index = 0; }
+            if (row.Offset != previous + 16) { geometryCount = index; group += 2; index = 0; }
             if (group > 2) throw new NotSupportedException("Owned control aggregate has another domain.");
             if (row.Setting is not null)
             {
@@ -127,7 +142,7 @@ internal static partial class FalloutExecutableStringTable
         if (order.Count == 0 || result.Where(row => row.Group == 2).Any(row => !order.Contains(row.Index)) ||
             order.Any(index => !result.Any(row => row.Group == 2 && row.Index == index)))
             throw new NotSupportedException("Owned texture control order is incomplete.");
-        return new(result, order);
+        return new(result, order, geometryCount);
     }
 
     private sealed record ControlInitializer(int Offset, int Page, string? Setting, FalloutControlLimit Minimum, FalloutControlLimit Maximum);

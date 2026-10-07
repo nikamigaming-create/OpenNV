@@ -41,11 +41,18 @@ internal static partial class FalloutExecutableStringTable
         Func<uint, string?> literal)
     {
         FalloutMenuBackgroundDeclarations? result = null;
-        for (var at = 117; at <= code.Length - 51; at++)
+        for (var at = 100; at <= code.Length - 39; at++)
         {
             if (code[at] != 0x68) continue;
             var excluded = literal(U32(code, at + 1));
             if (excluded != "Player Name Entry Menu") continue;
+            if (ReadRegisterMenuBackground(code, at, excluded) is { } registerSelector)
+            {
+                if (result is not null) throw new InvalidDataException("Owned menu-background selector is ambiguous.");
+                result = registerSelector;
+                continue;
+            }
+            if (at < 117 || at > code.Length - 51) continue;
             var declaration = code.Slice(at - 117, 168);
             // The admitted selector has three conditional form lookups, then
             // a tile-absence branch. Every returned identity and the interface
@@ -74,12 +81,53 @@ internal static partial class FalloutExecutableStringTable
                 if (offset + 10 + unchecked((int)U32(declaration, offset + 6)) != resolver)
                     throw new NotSupportedException("Owned menu-background branches do not share their form resolver.");
             if (result is not null) throw new InvalidDataException("Owned menu-background selector is ambiguous.");
-            var source = new[] { popup, menu, pause, pipBoy, interfaceMenu }.SelectMany(BitConverter.GetBytes)
-                .Concat(Encoding.UTF8.GetBytes(excluded)).ToArray();
-            result = new(popup, menu, pause, pipBoy, interfaceMenu, excluded,
-                Convert.ToHexString(SHA256.HashData(source)).ToLowerInvariant());
+            result = MenuBackground(popup, menu, pause, pipBoy, interfaceMenu, excluded);
         }
         return result ?? throw new NotSupportedException("Owned menu-background selector is absent.");
+    }
+
+    // Optimized selectors retain the selected menu in a register and return
+    // each resolved form directly. Follow the same ordered predicates and
+    // tile-absence branch; the four identities still come from owned operands.
+    private static FalloutMenuBackgroundDeclarations? ReadRegisterMenuBackground(ReadOnlySpan<byte> code, int tile, string excluded)
+    {
+        var body = code.Slice(tile - 100, 139);
+        if (body[0] != 0x56 || body[1] != 0xe8 || !body.Slice(6, 3).SequenceEqual(new byte[] { 0x8b, 0xf0, 0xa1 }) ||
+            !body.Slice(13, 3).SequenceEqual(new byte[] { 0x85, 0xc0, 0x74 }) ||
+            !body.Slice(17, 2).SequenceEqual(new byte[] { 0xf6, 0x80 }) || body[23] != 1 || body[24] != 0x74 ||
+            !body.Slice(41, 2).SequenceEqual(new byte[] { 0x8b, 0x0d }) || body[47] != 0xe8 ||
+            !body.Slice(52, 3).SequenceEqual(new byte[] { 0x84, 0xc0, 0x74 }) ||
+            !body.Slice(71, 2).SequenceEqual(new byte[] { 0x81, 0xfe }) || body[77] != 0x75 ||
+            !body.Slice(94, 2).SequenceEqual(new byte[] { 0x8b, 0x0d }) ||
+            !body.Slice(105, 2).SequenceEqual(new byte[] { 0x8b, 0x89 }) || body[111] != 0xe8 ||
+            !body.Slice(116, 3).SequenceEqual(new byte[] { 0x85, 0xc0, 0x75 }) ||
+            !body.Slice(135, 4).SequenceEqual(new byte[] { 0x33, 0xc0, 0x5e, 0xc3 })) return null;
+        foreach (var (branch, target) in new[] { (15, 41), (24, 41), (54, 71), (77, 94), (118, 135) })
+            if (branch + 2 + unchecked((sbyte)body[branch + 1]) != target)
+                throw new NotSupportedException("Owned menu-background predicate targets a foreign branch.");
+        var forms = new uint[4]; int? resolver = null;
+        var offsets = new[] { 26, 56, 79, 120 };
+        for (var index = 0; index < offsets.Length; index++)
+        {
+            var offset = offsets[index]; var branch = body[offset..];
+            if (branch[0] != 0x68 || branch[5] != 0xe8 ||
+                !branch.Slice(10, 5).SequenceEqual(new byte[] { 0x83, 0xc4, 4, 0x5e, 0xc3 }))
+                throw new NotSupportedException("Owned menu-background direct return is unbound.");
+            var target = offset + 10 + unchecked((int)U32(branch, 6));
+            if (resolver is not null && resolver != target)
+                throw new NotSupportedException("Owned menu-background branches do not share their form resolver.");
+            resolver = target; forms[index] = U32(branch, 1);
+            if (forms[index] == 0) throw new InvalidDataException("Owned menu-background declaration has an empty form.");
+        }
+        return MenuBackground(forms[3], forms[2], forms[0], forms[1], U32(body, 73), excluded);
+    }
+
+    private static FalloutMenuBackgroundDeclarations MenuBackground(uint popup, uint menu, uint pause, uint pipBoy, uint interfaceMenu, string excluded)
+    {
+        var source = new[] { popup, menu, pause, pipBoy, interfaceMenu }.SelectMany(BitConverter.GetBytes)
+            .Concat(Encoding.UTF8.GetBytes(excluded)).ToArray();
+        return new(popup, menu, pause, pipBoy, interfaceMenu, excluded,
+            Convert.ToHexString(SHA256.HashData(source)).ToLowerInvariant());
     }
 
     internal static FalloutDoubleVisionPhase ReadDoubleVisionPhase(string path)
