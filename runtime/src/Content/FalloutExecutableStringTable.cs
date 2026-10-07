@@ -13,8 +13,13 @@ internal static partial class FalloutExecutableStringTable
     internal static IReadOnlyDictionary<string, string> Read(string path)
     {
         var (code, image) = Load(path);
-        var result = ReadInitializers(code, image.Literal, image.IsWritableObject);
-        if (result.Count == 0) result = StaticStrings(image);
+        var result = new Dictionary<string, string>(ReadInitializers(code, image.Literal, image.IsWritableObject), StringComparer.OrdinalIgnoreCase);
+        foreach (var row in ReadInlineStringInitializers(code, image.CodeBase, image.Literal, image.StaticSettingCollection,
+                     image.IsWritableObject, image.IsExecutableExtent))
+            if (!result.TryAdd(row.Key, row.Value)) throw new InvalidDataException($"Multiple source initializers declare {row.Key}.");
+        foreach (var row in ReadStaticSettings(image).Where(row => row.Collection == SettingCollection.Game && row.Name[0] == 's'))
+            if (!result.ContainsKey(row.Name)) result.Add(row.Name, image.Literal(row.Payload) ??
+                throw new NotSupportedException($"Owned static string setting has no admitted literal: {row.Name}."));
         if (result.Count == 0) throw new NotSupportedException("Owned executable setting initializers are unbound.");
         return result;
     }

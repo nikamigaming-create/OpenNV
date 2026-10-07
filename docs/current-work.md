@@ -113,16 +113,27 @@ and revision 1 without inventing arrival. Ended radio retains its actual station
 topic and cumulative completion/voice history without replaying its source results.
 Resident handoff still requires the native procedure; active speech and opaque
 callbacks remain save blockers. This is a partial opening checkpoint, not complete
-creation/campaign acceptance. Ordinary toddler navigation reaches the father but
-its playpen-gate activation is stopped by unrelated missing DLC activation parents
-in the global reverse graph. Cold play also
-reaches an unbound FO3 door-action HUD label. These interaction owners and its unbound
+creation/campaign acceptance. The reverse activation graph now retains all source
+edges and explicit missing/deleted/foreign endpoints, while validating the reached
+component before changing relay state. FO3's 15 missing Zeta parent links remain
+visible without blocking unrelated Vault doors. Its optimized inline executable
+string descriptors retain their typed allocation, receiver, null branch and
+collection registration; original Open/Take labels bind without fallback text.
+Independent FNV/FO3/TTW/combined source checks and malformed synthetic checks pass.
+A fresh ordinary FO3 opening now walks to the father, opens the playpen gate through
+its source animation and reaches CG01 stage 14. Inspected birth/toddler pixels show
+Dr. Li and Dad's body/outfit. A subsequent ordinary menu save and another process's
+14.4-second cold Continue retain stage 14, the walked position, 100 HP and both
+inventory entries with unchanged save bytes; Dad stays visible. The previous save's
+historical gate failure stays retained. The continuing opening and its unbound
 double-vision phase, convex-list/phantom collision and modeled emergency lights
 remain visible. Known exhausted radio links end their conversation; unknown
 conditions still reject. Standalone FNV reaches ordinary character acceptance
 and CG01 stage 55 and writes a partial v46 checkpoint. Ordinary cold Continue
 restores it, a menu resave writes v47, and another process cold-restores stage 55,
-100 HP and all 19 inventory entries with unchanged save bytes. The original
+100 HP and all 19 inventory entries with unchanged save bytes. A subsequent ordinary
+v48 menu save and another process cold-Continue retain the same state and bytes.
+The original
 reference-script parse failure remains visible. This verifies that partial
 opening checkpoint; the complete opening remains unverified. The same partial
 FNV v47 checkpoint also cold-loads in the native OpenXR simulator. Tracked
@@ -159,8 +170,8 @@ clean-system FO3/FNV/TTW New Game.
 ## Next owner and outcome
 
 Primary owns serial builds, live input, save verification and checked
-publication. Publish the deferred package and ended-radio persistence fixes,
-repair activation-parent graph isolation, the FO3 door HUD and active-speech save owners, then complete
+publication. Continue the source FO3 package/stage handoff and repair active-speech
+save owners, then complete
 the independent flat/OpenXR source-stack loading/saving matrix. Keep native vegetation decoding and upload
 timing as active exterior owners. Continue the complete vault/world denominator and
 ordinary Megaton/train/Mojave route without bypassing source conditions.
@@ -174,8 +185,13 @@ The original exterior, cave and post-loot saves remain immutable. Preserve neede
 failed-load diagnostics and ordinary input
 receipts. Owned files, private saves, helpers and logs stay out of publication.
 Standalone FNV run: tmp/development-lab/loading-saving-fnv-20261007. Its current
-partial v47 slot is fc13c871fc244908bbdcd326813112ee, cold-verified at stage 55.
-SHA256: F89A78C54282777D249E1BD16F3F498D9EC35746FE27EC3374E4CCC25491EF01.
+partial v48 slot is c7649cb012c94082b4015ddc640afb03, cold-verified at stage 55.
+SHA256: BD4967D0B64C061A51CF154F6177B3C436EB027DB821E038E171B0DC6A1DBA1F.
 Standalone FO3 run: tmp/development-lab/loading-saving-fo3-20261007. Its partial
 v48 manual slot is 91f2a6a4eda54ff9878cb3aca0ee3b52, cold-verified at CG01 stage 10.
 SHA256: 1DB5A80996C2DF742CEBDB599B608237D0228B8014A36F2F43337BB245250251.
+Its fresh stage-14 manual slot is 5341c6a0d9f146ddb7f141a4b1237961.
+SHA256: 340C3CC918A528BBCE18FE18F276C4D3CD8F81C5F3965F2922DF46845BEAC012.
+The actual ordinary gate animation and inspected actor pixels precede this slot;
+another process cold-Continues stage 14, the walked position, 100 HP and both
+inventory entries with unchanged save bytes. Matched retail color/final pixels remain unverified.
