@@ -11,10 +11,12 @@ internal static class NativeExteriorDetailBlend
 {
     internal const string ShaderSource = """
         global uniform vec4 opennv_detail_region;
-        float opennv_detail_coverage(vec2 world_xz) {
-            if (opennv_detail_region.w <= 0.0) return 1.0;
-            float distance_xz = length(world_xz - opennv_detail_region.xy);
-            return 1.0 - smoothstep(opennv_detail_region.z, opennv_detail_region.w, distance_xz);
+        global uniform vec4 opennv_object_detail_region;
+        float opennv_detail_coverage(vec2 world_xz, bool terrain) {
+            vec4 region = terrain ? opennv_detail_region : opennv_object_detail_region;
+            if (region.w <= 0.0) return 1.0;
+            float distance_xz = length(world_xz - region.xy);
+            return 1.0 - smoothstep(region.z, region.w, distance_xz);
         }
         float opennv_bayer2(vec2 p) { return 2.0 * p.x + 3.0 * p.y - 4.0 * p.x * p.y; }
         float opennv_detail_threshold(vec2 pixel) {
@@ -24,26 +26,28 @@ internal static class NativeExteriorDetailBlend
         """;
     internal const string NearDeclarations = ShaderSource + """
 
-        instance uniform bool opennv_detail_enabled : instance_index(6) = false;
+        instance uniform int opennv_detail_kind : instance_index(6) = 0;
         varying vec2 opennv_detail_world;
         """;
     internal const string NearVertex = "opennv_detail_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;";
-    internal const string NearFragment = "if (opennv_detail_enabled && opennv_detail_coverage(opennv_detail_world) <= opennv_detail_threshold(FRAGCOORD.xy)) discard;";
+    internal const string NearFragment = "if (opennv_detail_kind != 0 && opennv_detail_coverage(opennv_detail_world, opennv_detail_kind == 1) <= opennv_detail_threshold(FRAGCOORD.xy)) discard;";
 
-    internal static void Bind(Node root)
+    internal static void Bind(Node root, bool terrain)
     {
         foreach (var mesh in root.FindChildren("*", "", true, false).OfType<MeshInstance3D>())
         {
             if (Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).All(index => mesh.GetActiveMaterial(index)?.ResourceName is
                 NativeNifLightingMaterial.ResourceIdentity or RuntimeNativeLandscapeTransportBuilder.MaterialIdentity))
-                mesh.SetInstanceShaderParameter("opennv_detail_enabled", true);
+                mesh.SetInstanceShaderParameter("opennv_detail_kind", terrain ? 1 : 2);
         }
     }
 
-    internal static void SetRegion(Vector3 camera, float cellWidth, int radius, bool covered)
+    internal static void SetRegion(Vector3 camera, float cellWidth, int radius, bool terrainCovered, bool objectsCovered)
     {
         var outer = radius * cellWidth;
         RenderingServer.GlobalShaderParameterSet("opennv_detail_region",
-            covered ? new Vector4(camera.X, camera.Z, Math.Max(0, outer - cellWidth * .5f), outer) : Vector4.Zero);
+            terrainCovered ? new Vector4(camera.X, camera.Z, Math.Max(0, outer - cellWidth * .5f), outer) : Vector4.Zero);
+        RenderingServer.GlobalShaderParameterSet("opennv_object_detail_region",
+            objectsCovered ? new Vector4(camera.X, camera.Z, Math.Max(0, outer - cellWidth * .5f), outer) : Vector4.Zero);
     }
 }

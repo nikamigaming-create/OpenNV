@@ -103,8 +103,9 @@ internal static class FalloutCellSceneReader
     private const int DirectionalFadeOffset = 28;
     private const int FogClipDistanceOffset = 32;
     private const int FogPowerOffset = 36;
-    private const string DataMeshesPrefix = "data\\meshes\\";
+    private const string DataPrefix = "data\\";
     private const string MeshesPrefix = "meshes\\";
+    private const string TreesPrefix = "trees\\";
     private const uint InitiallyDisabledFlag = 0x0000_0800;
     private const uint KnownLightingInheritanceFlags = 0x0000_01ff;
     private static readonly HashSet<string> ReferenceTypes =
@@ -242,7 +243,7 @@ internal static class FalloutCellSceneReader
             }
             var values = Values(record);
             var model = OptionalSingle(values, "MODL", record);
-            var modelPath = model is null ? null : NormalizeModelPath(Text(model));
+            var modelPath = model is null ? null : NormalizeModelPath(Text(model), record.Signature);
             if (model is not null && modelPath!.Length == 0)
                 throw Error(record, "MODL has an empty model path");
             var light = record.Signature == "LIGH" ? ReadLight(values, record) : null;
@@ -453,14 +454,13 @@ internal static class FalloutCellSceneReader
         return Encoding.UTF8.GetString(data, 0, end < 0 ? data.Length : end);
     }
 
-    private static string NormalizeModelPath(string value)
+    internal static string NormalizeModelPath(string value, string signature)
     {
-        var path = value.Replace('/', '\\').TrimStart('\\');
-        if (path.StartsWith(DataMeshesPrefix, StringComparison.OrdinalIgnoreCase))
-            path = path[DataMeshesPrefix.Length..];
-        else if (path.StartsWith(MeshesPrefix, StringComparison.OrdinalIgnoreCase))
-            path = path[MeshesPrefix.Length..];
-        return $"meshes\\{path}".ToLowerInvariant();
+        var path = FalloutBsaArchive.CanonicalPath(value.Trim().TrimStart('\\', '/'));
+        if (path.StartsWith(DataPrefix, StringComparison.OrdinalIgnoreCase)) path = path[DataPrefix.Length..];
+        if (path.StartsWith(MeshesPrefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(TreesPrefix, StringComparison.OrdinalIgnoreCase))
+            return path;
+        return (signature == "TREE" && path.EndsWith(".spt", StringComparison.OrdinalIgnoreCase) ? TreesPrefix : MeshesPrefix) + path;
     }
 
     private static float ReadFiniteSingle(

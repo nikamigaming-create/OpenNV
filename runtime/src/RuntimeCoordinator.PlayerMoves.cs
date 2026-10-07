@@ -64,6 +64,11 @@ public partial class RuntimeCoordinator
             AddChild(root);
             if (scene.Cell.Lighting is not null) AddNativeCellEnvironment(root, scene);
             else AddExteriorEnvironment(root, scene.Cell);
+            if (grid is not null)
+            {
+                SetLoadingStatus("Preparing the distant world");
+                await root.GetChildren().OfType<Presentation.Rendering.RuntimeNativeExteriorLod>().Single().PrepareInitialSelection(transform.Origin);
+            }
             CommitNativeWorldTransfer(current, active, root, scene, transform);
         }
         catch

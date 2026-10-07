@@ -105,7 +105,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         geometry.SetMeta("opennv_land_impact_unbound_triangles", faceMaterials.Count(material => material < 0));
         collision.AddChild(collisionShape);
         root.AddChild(collision);
-        NativeExteriorDetailBlend.Bind(root);
+        NativeExteriorDetailBlend.Bind(root, terrain: true);
         return root;
     }
 

@@ -46,6 +46,14 @@ opennv_detail_region={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)
 }
+opennv_object_detail_region={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+opennv_lod_camera_xz={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
 
 [xr]
 

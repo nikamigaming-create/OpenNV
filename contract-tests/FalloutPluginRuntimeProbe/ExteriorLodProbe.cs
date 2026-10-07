@@ -48,6 +48,14 @@ internal static class ExteriorLodProbe
         if (lod.ResidentCover(near, lod.Blocks.Where(block => block != failedChild).ToHashSet()) is not [{ Level: 8 }] ||
             lod.ResidentCover([coarse], near.ToHashSet()).Count != 4)
             throw new InvalidOperationException("LOD discarded resident coverage during a failed split or pending coarsening.");
+        var terrainReady = lod.Blocks.ToHashSet();
+        var objectReady = near.Where(block => block.Objects is not null).ToHashSet();
+        if (!lod.HasCompleteCover(near, terrainReady) || lod.HasCompleteCover(near, objectReady) ||
+            lod.HasCompleteCover(near, near.Where(block => block != failedChild).ToHashSet()) ||
+            !lod.HasCompleteCover([coarse], near.ToHashSet()) || lod.HasCompleteCover([], terrainReady))
+            throw new InvalidOperationException("A missing or empty LOD lane borrowed another lane's complete coverage.");
+        if (!lod.HasCompleteCover(near.Where(block => block.Objects is not null).ToArray(), objectReady))
+            throw new InvalidOperationException("An admitted object companion lost its independent source coverage.");
         if (lod.Select(60000, 0) is not [{ Level: 8 }] || lod.Select(1000000, 0).Count != 0)
             throw new InvalidOperationException("LOD coarsening or source load distance is invalid.");
         var partial = new FalloutExteriorLod(world, paths.Where(path => path != Path(4, 2, 3)).ToArray(), 125000, .75f, .7f);

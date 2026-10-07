@@ -104,6 +104,13 @@ internal sealed class FalloutExteriorLod
         }
     }
 
+    internal bool HasCompleteCover(IReadOnlyList<FalloutLodBlock> selected, IReadOnlySet<FalloutLodBlock> available)
+    {
+        var cover = ResidentCover(selected, available).ToHashSet();
+        return selected.Count != 0 && selected.All(block => cover.Any(parent => parent.Contains(block)) ||
+            ResidentCover([block], cover).Count != 0);
+    }
+
     internal IReadOnlyList<FalloutLodBlock> PreparationOrder(IReadOnlyList<FalloutLodBlock> selected,
         IReadOnlySet<FalloutLodBlock> available, float x, float y)
     {
