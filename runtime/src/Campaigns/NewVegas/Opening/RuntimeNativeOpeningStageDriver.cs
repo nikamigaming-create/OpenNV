@@ -231,7 +231,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
             ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: _playerActorValues.Change,
             Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
-            Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: value => _experience.Reward(value));
+            Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: value => _experience.Reward(value), GameTime: gameTime);
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,

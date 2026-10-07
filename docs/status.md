@@ -49,6 +49,14 @@ the authored name entry still needs a general ordinary confirmation policy.
 The separate source door-animation and exterior complete-save failures remain
 unwaived. This is not unattended review, train travel or mod-completion proof.
 
+Shared source-calendar commands now pass typed/reference/shared/fallback/
+function and cold pending-hour contracts, including full multi-month/year carry.
+The unchanged owned train time-statement component reads the actual complete
+cave clock and verifies its original hour/date-expression writes and identical
+cold next ticks without changing source files or the checkpoint. Whole travel
+execution, forced Hardcore-needs updates, original SCDA/DLL authority and
+ordinary Union Station/Mojave progress remain independent and unaccepted.
+
 Later ordinary user input reaches Escape stage 150 in exterior CELL 0010c1 at
 107 HP, but no complete later save is verified. The reported persistent whiteout
 retains the original ten-second DEMOEyeAdjustISFX at zero elapsed while an

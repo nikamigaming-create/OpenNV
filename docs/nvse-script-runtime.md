@@ -67,6 +67,33 @@ comments cannot authorize migration. Existing locals,
 quest progression and clocks are retained. Current-version saves still require
 all admitted owners, and previously faulted executions are not silently retried.
 
+## Game time
+
+`SetGameHour` and `GetGameDaysPassed` share the existing source-calendar,
+reserved-global and saved simulation-clock owner in reference/results/functions,
+shared and fallback quests, and native New Game bootstrap. The hour setter
+stores the original Float32 target and wraps an earlier requested hour once;
+the simulation tick, not the command, normalizes every crossed month/year.
+Pending raw hours retain their previous-hour/reconciliation state through cold
+restoration. Ordinary package schedules and presentation keep reading that same
+clock; no travel-only date or quest owner is introduced.
+
+The optional signed date arguments, one-based months, default epoch and
+month/year/future-date query quirks are bound to the
+[public JIP author contract, revision 5a30ac4](https://github.com/jazzisparis/JIP-LN-NVSE/blob/5a30ac4356ea0e93b9ff357b5031b1e420240a4d/functions_jip/jip_fn_miscellaneous.h)
+and its date helper. Gregorian arithmetic and the separate GameDaysPassed
+counter are not substitutes. Unknown clocks, invalid inputs and active Hardcore
+mode without the original forced-needs consumer stop visibly before the hour
+write; registering a function does not waive that consumer.
+
+Focused contracts cover typed/default arguments, exact Float32 writes,
+inactive branches, source prefix/fault retention, shared/fallback/function
+dispatch, multi-year rollover and pending-hour cold ticks. The owned component
+reads original selected train time statements against the immutable complete
+cave clock, retaining source/checkpoint hashes and exact next-tick restoration.
+It does not execute the whole train script, compiled SCDA or original DLL,
+native movies, world/inventory/control transitions or ordinary train travel.
+
 ## Functions, loops and events
 
 Named [user functions](https://geckwiki.com/index.php/User_Defined_Function)

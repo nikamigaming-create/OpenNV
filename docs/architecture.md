@@ -3,6 +3,13 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Source game-time commands](nvse-script-runtime.md#game-time) use the existing
+calendar/globals/saved clock across bootstrap, quest, reference and result
+execution. Source hour writes stay pending until the ordinary simulation tick,
+including multi-year carry and exact cold continuation. Date-query extension
+quirks and unowned forced Hardcore-needs updates remain explicit; they are not
+replaced with a travel-specific clock or an original-DLL compatibility claim.
+
 [Image-space lifetime](image-space-lifetime-owner.md) uses one independent C#
 gameplay-clock owner across interior/exterior presentation. Finite source
 modifiers expire at their authored durations despite an unrelated script,

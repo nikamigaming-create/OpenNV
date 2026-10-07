@@ -71,8 +71,51 @@ internal static class GameTimeProbe
         Require(new FalloutPackageSchedule(-1, 4, 0, 22, 49).IsActive(clock), "A multi-day window lost its original starting day.");
         SetTime(8, 26, 6, 23);
         Require(!new FalloutPackageSchedule(-1, 4, 0, 22, 49).IsActive(clock), "A multi-day window missed its exclusive end.");
+        CalendarTravel(calendar, sources, bindings);
         Console.WriteLine("OPENNV_PACKAGE_SCHEDULE_CONTRACT_PASS hourBoundaries=true overnight=true weekdays=true sourceCalendar=true multiDay=true missingClockRejected=true");
         Console.WriteLine("OPENNV_GAME_TIME_CONTRACT_PASS sourceGlobals=true float32=true sourceCalendar=true coldRestore=true simulationClockOnly=true");
+    }
+
+    private static void CalendarTravel(FalloutCalendar calendar, FalloutGlobal[] sources, FalloutGameTimeBindings bindings)
+    {
+        var globals = new FalloutGlobalState(sources);
+        globals.Set(bindings.Year, 2277); globals.Set(bindings.Month, 8); globals.Set(bindings.Day, 1);
+        globals.Set(bindings.Hour, 12); globals.Set(bindings.DaysPassed, 777.25f);
+        var clock = new FalloutGameTime(globals, bindings, calendar); clock.InitializeNewGame();
+        Require(clock.GetDaysPassed(2277, 8, 18) == 13.5f, "Source date-query month boundary offset changed.");
+        var requested = (1521.5f - clock.GetDaysPassed(2277, 8, 18)) * 24 + clock.Hour;
+        clock.SetHour(requested);
+        Require(clock.Hour == requested && globals.Get(bindings.Year) == 2277 && globals.Get(bindings.Month) == 8,
+            "SetGameHour normalized time before the simulation clock.");
+        var saved = globals.Capture(); var savedClock = clock.Capture();
+        var coldGlobals = new FalloutGlobalState(sources); coldGlobals.Restore(saved);
+        var cold = new FalloutGameTime(coldGlobals, bindings, calendar); cold.Restore(savedClock);
+        clock.AdvanceSimulation(0); cold.AdvanceSimulation(0);
+        Require(clock.Hour == 12 && globals.Get(bindings.Year) == 2281 && globals.Get(bindings.Month) == 9 &&
+            globals.Get(bindings.Day) == 19 && clock.GetDaysPassed(2277, 8, 18) == 1521.5f,
+            "Authored multi-year hour arithmetic did not roll every source month and year.");
+        Require(globals.Capture().Values.SequenceEqual(coldGlobals.Capture().Values) && clock.Capture() == cold.Capture(),
+            "A raw pending travel hour lost exact cold continuation.");
+        for (var step = 0; step < 19; ++step) { clock.AdvanceSimulation(1f / 60); cold.AdvanceSimulation(1f / 60); }
+        Require(globals.Capture().Values.SequenceEqual(coldGlobals.Capture().Values),
+            "Cold multi-year travel clock drifted on following simulation ticks.");
+        clock.SetHour(8);
+        Require(clock.Hour == 32, "An earlier requested hour did not retain the source next-day wrap.");
+        clock.AdvanceSimulation(0);
+        Require(clock.Hour == 8 && globals.Get(bindings.Day) == 20, "A wrapped requested hour advanced the wrong date.");
+        var before = globals.Capture(); var beforeClock = clock.Capture();
+        foreach (var invalid in new[] { double.NaN, double.PositiveInfinity, double.MaxValue, -1 })
+            Reject<InvalidDataException>(() => clock.SetHour(FalloutGameTime.SourceHour(invalid)));
+        Require(before.Values.SequenceEqual(globals.Capture().Values) && beforeClock == clock.Capture(),
+            "Invalid source hours partially changed the global or clock owners.");
+        globals.Set(bindings.Year, 2281); globals.Set(bindings.Month, 9); globals.Set(bindings.Day, 13); globals.Set(bindings.Hour, 6);
+        Require(clock.GetDaysPassed() == .25f, "Default date-query epoch differs.");
+        globals.Set(bindings.Month, 1); globals.Set(bindings.Day, 1); globals.Set(bindings.Hour, 12);
+        Require(clock.GetDaysPassed(2281, 1, 31) == .5f && clock.GetDaysPassed(2282, 3, 1) == .5f,
+            "Source month/future-date quirks were replaced with Gregorian arithmetic.");
+        Reject<InvalidDataException>(() => clock.GetDaysPassed(2281, 0, 1));
+        Reject<InvalidDataException>(() => clock.GetDaysPassed(2281, 13, 1));
+        Console.WriteLine("OPENNV_GAME_TIME_TRAVEL_PASS sourceHour=true multiYear=true typedDateQuirks=true pendingClockCold=true invalidAtomic=true");
     }
 
     internal static void Owned(string dataRoot)

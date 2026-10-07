@@ -80,6 +80,17 @@ The selected unchanged owned campaign-goal audit and required Release/Debug,
 formatting/analyzers, contract, launcher and native Godot gate pass. These
 bounded checks do not establish the remaining modal policies or onward route.
 
+The source calendar owner additionally passes typed reference/shared/
+fallback/function commands, pending-hour cold ticks and full multi-year carry.
+The owned component executes all three original train hour-statement components
+after restoring the immutable cave clock, with source/checkpoint hashes
+unchanged. Its authored date expression writes raw hour 36540 and the actual
+simulation clock rolls to year 2281/month 9/day 18. This is isolated clock proof,
+not reached train travel, a whole script, compiled SCDA or original-DLL proof.
+The forced Hardcore-needs consumer is unowned and refuses before the hour write.
+The full required Release/Debug, formatting/analyzers, contract, launcher and
+native Godot gate passes for this calendar block.
+
 Exterior F5 refuses actual AMBDustDevilLPM source voices: 0039af, 0039b1 and
 022d00 use original SOUN 052188, EnvelopeFast flags 0x1200 and PCM16/32 kHz media.
 Opaque histories 0c7b39/0c7b3a remain unwaived. No exterior manual slot or cold
@@ -100,9 +111,10 @@ The current user scope includes TTW, every JAM module, JIP LN, JohnnyGuitar and
 the current guides' complete dependency behavior. The owned package inventory
 is bound to the current essentials list in [mod compatibility](mod-compatibility.md);
 loaded files are not complete compatibility. The source train owner map retains
-the original reactor/primer, caps/ticket gates and travel scripts. SetGameHour,
-GetGameDaysPassed, wasteland functions and authored movie/control/inventory
-continuation require their general owners before train/Mojave acceptance.
+the original reactor/primer, caps/ticket gates and travel scripts. The remaining
+forced Hardcore-needs, last exterior door, RestoreActorValue/CIOS/addiction,
+TTW_EnableRadioFix, numeric INI consumer and authored movie/control/inventory
+continuation owners remain required before train/Mojave acceptance.
 
 The source-bound vault audit retains all 7,155 winning references across ten
 selected interiors, with 101 reference issues, 34 resource declarations and 51
@@ -119,8 +131,8 @@ accepted from those component tests.
 ## Next owner and outcome
 
 Primary owns serial builds/native checks, ordinary input and checked publication.
-The isolated public GDExtension PCM callback bridge owner is investigating the
-supported AudioStreamPlayback interface; it has no accepted loop-save proof yet.
+Primary owns the supported public GDExtension PCM callback interface and exact
+first-party sampler/checkpoint custody; no bridge or loop-save proof is accepted.
 Resolve first-party looping sampler/checkpoint custody before
 exterior cold-save or onward route claims. Reuse retained first-party work.
 Complete the whole vault room/loot/inventory/door denominator before Megaton and

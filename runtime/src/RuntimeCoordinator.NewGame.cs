@@ -24,7 +24,7 @@ public partial class RuntimeCoordinator
         var scripts = _nativeQuestScripts ?? throw new InvalidOperationException("New Game has no quest clock owner.");
         var content = RuntimeLiveContentSource.Current!;
         _nativeBootstrap = new(_nativePluginStack!, FalloutInstallationSettings.Read(content), _nativeQuestState!, scripts.Scripts,
-            _nativeReferences!, BootstrapNativeCommand, BootstrapNativeEffect, () => !_nativeBootstrapMovie, _nativeGlobals);
+            _nativeReferences!, BootstrapNativeCommand, BootstrapNativeEffect, () => !_nativeBootstrapMovie, _nativeGlobals, _nativeGameTime);
         _nativeBootstrap.Start();
         scripts.Bootstrap = _nativeBootstrap;
         GD.Print($"OPENNV_NEW_GAME_QUEST_START source={_nativeStartingQuest!.FormKey} winner={_nativeStartingQuest.Plugin.Name}");
