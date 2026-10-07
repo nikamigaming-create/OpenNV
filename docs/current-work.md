@@ -114,7 +114,8 @@ topic and cumulative completion/voice history without replaying its source resul
 Resident handoff still requires the native procedure; active speech and opaque
 callbacks remain save blockers. This is a partial opening checkpoint, not complete
 creation/campaign acceptance. Ordinary toddler navigation reaches the father but
-its playpen-gate activation reports a missing source sound form. Cold play also
+its playpen-gate activation is stopped by unrelated missing DLC activation parents
+in the global reverse graph. Cold play also
 reaches an unbound FO3 door-action HUD label. These interaction owners and its unbound
 double-vision phase, convex-list/phantom collision and modeled emergency lights
 remain visible. Known exhausted radio links end their conversation; unknown
@@ -159,7 +160,7 @@ clean-system FO3/FNV/TTW New Game.
 
 Primary owns serial builds, live input, save verification and checked
 publication. Publish the deferred package and ended-radio persistence fixes,
-repair the reached FO3 gate sound/HUD and active-speech save owners, then complete
+repair activation-parent graph isolation, the FO3 door HUD and active-speech save owners, then complete
 the independent flat/OpenXR source-stack loading/saving matrix. Keep native vegetation decoding and upload
 timing as active exterior owners. Continue the complete vault/world denominator and
 ordinary Megaton/train/Mojave route without bypassing source conditions.

@@ -21,7 +21,7 @@ completes CG00 birth and enters CG01 toddler stage 10. Its first automatic save
 and an ordinary manual v48 checkpoint now retain the actual deferred off-cell
 package and ended-radio history. Another process cold-Continues that partial
 opening at 100 HP with both inventory entries, revision 1 and unchanged save bytes.
-Active speech/callback continuation, playpen-gate sound identity, a FO3 door-action
+Active speech/callback continuation, unrelated activation-parent graph failures, a FO3 door-action
 HUD label and full opening/save acceptance remain pending.
 The reported red placement-marker meshes are excluded from gameplay and a native
 frame confirms their absence. Clean-system fresh
