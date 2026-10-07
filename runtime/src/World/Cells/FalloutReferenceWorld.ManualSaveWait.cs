@@ -19,7 +19,7 @@ internal sealed partial class FalloutReferenceWorld
         {
             var voices = instance.PendingPackageBindingFiniteVoices?.Invoke();
             if (voices is not { Count: > 0 } || !instance.AnimationSoundEvents.CanAwaitNativeCompletion ||
-                voices.Count != instance.AnimationSoundEvents.Events.Count(entry => entry.End == FalloutAnimationSoundEnd.Active)) return null;
+                voices.Count != instance.AnimationSoundEvents.PendingNativeCompletion.Count()) return null;
             foreach (var voice in voices)
             {
                 voice.Validate();

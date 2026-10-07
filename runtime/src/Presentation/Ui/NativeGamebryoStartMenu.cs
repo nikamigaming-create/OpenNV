@@ -147,6 +147,7 @@ internal sealed partial class NativeGamebryoStartMenu : Control
     internal void ShowLoading(bool savedGame)
     {
         foreach (var button in _buttons) { button.Disabled = true; button.Hide(); }
+        _loadStatus?.QueueFree();
         _loadStatus = new Label
         {
             Name = "LoadStatus",
@@ -162,11 +163,19 @@ internal sealed partial class NativeGamebryoStartMenu : Control
         Layout();
     }
 
-    internal void ShowLoadFailure()
+    internal void ShowLoadFailure(string error, bool canRetry)
     {
-        _loadStatus!.Text = "The game could not be loaded. Close the game and check the log for details.";
-        var quit = _buttons[_actions.ToList().IndexOf("sQuit")];
-        quit.Disabled = false; quit.Show(); quit.GrabFocus();
+        if (_loadStatus is null) ShowLoading(savedGame: true);
+        _loadStatus!.Text = "The game could not be loaded. " + error;
+        _canvas.Show();
+        RefreshEnabled();
+        for (var index = 0; index < _buttons.Count; ++index)
+        {
+            var button = _buttons[index];
+            button.Visible = canRetry || _actions[index] == "sQuit";
+            if (!canRetry) button.Disabled = _actions[index] != "sQuit";
+        }
+        _buttons[_actions.ToList().IndexOf(canRetry ? "sLoad" : "sQuit")].GrabFocus();
     }
 
     private void RefreshEnabled()

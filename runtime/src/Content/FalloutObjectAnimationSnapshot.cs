@@ -1,7 +1,7 @@
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutObjectAnimationSnapshot(int Controller, string Sha256, string Sequence,
-    double ElapsedSeconds, bool StartPending, string? PendingSequence = null)
+    double ElapsedSeconds, bool StartPending, string? PendingSequence = null, bool ScriptSelected = true)
 {
     internal void Validate()
     {

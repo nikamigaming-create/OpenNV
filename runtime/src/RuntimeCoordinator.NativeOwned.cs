@@ -259,6 +259,17 @@ public partial class RuntimeCoordinator
 
     private async void LoadNativeLiveStack()
     {
+        try { await LoadNativeLiveStackAsync(); }
+        catch (Exception failure)
+        {
+            if (_pendingSaveActivation is not null) RejectNativePendingLoad(failure);
+            GD.PushError($"OPENNV_GODOT_RUNTIME_FAIL {failure}");
+            GetTree().Quit(1);
+        }
+    }
+
+    private async Task LoadNativeLiveStackAsync()
+    {
         var source = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was not configured.");
         SetLoadingStatus("Reading game data");
@@ -268,6 +279,7 @@ public partial class RuntimeCoordinator
             await _nativeMenuRead;
             if (_options.ContainsKey("new-game"))
             {
+                InitializeNativePlayerInventory();
                 if (!NativeUsesOpeningStart)
                 {
                     CreateNativeQuestScripts();
@@ -384,13 +396,6 @@ public partial class RuntimeCoordinator
                 throw new InvalidOperationException("Native initial CELL was not decoded.");
             var stack = _nativePluginStack ??
                 throw new InvalidOperationException("Native plugin stack was not indexed.");
-            var transition = RuntimeLiveContentSource.Current?.Campaign ==
-                RuntimeLiveContentSource.FalloutNewVegasGame
-                ? FalloutDoorTransitionResolver.ResolveInteriorExits(stack, initialCell).Single()
-                : null;
-            // Continue does not need an unused new-game house and actor build.
-            if (_nativeOpeningRestore is null && NativeUsesOpeningStart)
-                _nativePrewarmedInitialCellRoot = await BuildNativeCellRootResponsive(initialCell, transition, sourceSide: true);
             if (_nativeOpeningControls is not null) CreateNativeQuestScripts();
             menu.SetReady(stack, _nativeOpeningRestore is not null);
             if (_continueAfterRestart && _nativeOpeningRestore is not null)
@@ -398,12 +403,19 @@ public partial class RuntimeCoordinator
                 _continueAfterRestart = false; _nativeStartingGame = true; _nativeContinueOpening = true;
                 await StartNativeGameFromMenu(menu.GetParent<CanvasLayer>(), "sLoad");
             }
-            else DismissLoadingScreen();
+            else
+            {
+                if (_continueAfterRestart)
+                    _sessionLoadFailure = RejectNativePendingLoad(new InvalidDataException("The selected save could not be restored from this source stack."));
+                DismissLoadingScreen();
+                if (_sessionLoadFailure is { } failure) menu.ShowLoadFailure(failure, canRetry: true);
+            }
         }
         catch (Exception exception)
         {
-            GD.PushError($"OPENNV_NATIVE_STACK_FAIL {exception}");
-            GetTree().Quit(1);
+            var failure = RejectNativePendingLoad(exception);
+            DismissLoadingScreen();
+            menu.ShowLoadFailure(failure, canRetry: false);
         }
     }
 
@@ -459,14 +471,18 @@ public partial class RuntimeCoordinator
         }
         catch (Exception error)
         {
-            GD.PushError($"OPENNV_NATIVE_MENU_LOAD_FAIL {error}");
-            DismissLoadingScreen();
-            menu.ShowLoadFailure();
+            _nextSessionLoadFailure = RejectNativePendingLoad(error);
+            // Reload from clean owners before offering another load. This task
+            // cannot await itself while retiring the failed partial world.
+            _nativeMenuRead = null;
+            menu.ShowLoadFailure(_nextSessionLoadFailure, canRetry: false);
+            RestartNativeSession(false);
         }
     }
 
     private async Task LoadNativeInitialCell()
     {
+        _pendingSaveActivation?.RequireSelected(Path.GetFullPath(RequireOption(_options, "save-path")));
         var wasPaused = GetTree().Paused;
         GetTree().Paused = true;
         try
@@ -487,6 +503,7 @@ public partial class RuntimeCoordinator
         }
         _restoredNativeCheckpoint = _pendingCheckpointRestore;
         _pendingCheckpointRestore = null;
+        _pendingSaveActivation?.Commit(); _pendingSaveActivation = null;
         DismissLoadingScreen();
     }
 
@@ -604,6 +621,8 @@ public partial class RuntimeCoordinator
         }
         if (grid is not null) AddExteriorLandscape(root, grid);
         AddChild(root);
+        foreach (var sounds in root.FindChildren("*", "", true, false).OfType<NativeOwnedAnimationSoundPlayer>())
+            sounds.RequirePcmRestored();
         if (!fallout3 && (restore is null || restore.State.Scripts is not null))
         {
             // New Game retains the timers already running behind StartMenu.

@@ -1,5 +1,12 @@
 # Gameplay, playtest and release plan
 
+October 7 direction: prioritize functional loading and saving, then the reached
+exterior completeness/LOD/performance failures. Verify standalone New Vegas,
+standalone Fallout 3, TTW and the combined mod stack independently, and verify
+shared behavior across them. Keep required checks concise; repeated proof
+production is not the implementation objective. Preserve source conditions,
+complete cold state and the clean-system ordinary New Game acceptance below.
+
 October 2 resumed direction: complete the combined TTW campaign from Fallout 3's
 opening through Vault 101 and Megaton, use the Fallout bot's ordinary
 movement/activation/menu adapters from the toddler checkpoint to reach the authored

@@ -11,8 +11,18 @@ Save v43 retains completed animation sound history and stopped pure hit-reaction
 query history. Cold validation checks source identity and consumed selection on
 an independent random-state copy. Native sound binding additionally validates
 the owned media. It resumes no finished voice and removes no partial audio lane.
-Active, cancelled, failed and unreceipted requests retain visible save refusals.
-Older saves supply no invented completion history.
+Cancelled and unreceipted requests retain visible save refusals. Older saves
+supply no invented completion history.
+
+Save v46 additionally retains active decoded PCM loops through the first-party
+raw playback adapter. C# owns the fractional next sample, source/output rates,
+loop region/count, pending native Start and release state. Cold binding checks
+the actual SOUN/media hashes and emitter path, restores the matching automatic
+object clock and resumes one native voice without replaying the start key.
+Godot mixer/output effects remain an independent presentation lane; sampler
+custody does not establish retail output parity. Genuine consumed fault keys
+and their exact causes can persist visibly without an invented completion or
+retry. Unknown faults still refuse capture.
 
 A finite source voice keeps its actual native node under the persistent source
 scene owner. It follows its real emitter while resident, then retains the last

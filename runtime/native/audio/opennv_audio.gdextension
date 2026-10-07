@@ -1,0 +1,8 @@
+[configuration]
+entry_symbol = "opennv_audio_init"
+compatibility_minimum = "4.7"
+reloadable = false
+
+[libraries]
+windows.debug.x86_64 = "res://generated/native/opennv_audio.dll"
+windows.release.x86_64 = "res://generated/native/opennv_audio.dll"

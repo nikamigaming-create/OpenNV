@@ -14,6 +14,10 @@ public partial class RuntimeCoordinator
     private static bool _nextSessionContinue;
     private static bool _nextSessionPauseAfterCheckpointLoad;
     private static RuntimeSaveSlotMetadata? _nextSessionCheckpoint;
+    private static RuntimeSaveSlotActivation? _nextSessionActivation;
+    private RuntimeSaveSlotActivation? _pendingSaveActivation;
+    private static string? _nextSessionLoadFailure;
+    private string? _sessionLoadFailure;
     private static string? _scriptEventSourceIdentity;
     private static FalloutScriptEvents? _scriptEvents;
     private bool _continueAfterRestart;
@@ -149,11 +153,24 @@ public partial class RuntimeCoordinator
     private void LoadNativeSelectedSlot(RuntimeSaveSlotMetadata slot)
         => SelectNativeSave(slot, pauseAfterLoad: false);
 
+    private string RejectNativePendingLoad(Exception failure)
+    {
+        try { _pendingSaveActivation?.Dispose(); }
+        catch (Exception rollback) { failure = new AggregateException("Load failed and Continue recovery also failed.", failure, rollback); }
+        _pendingSaveActivation = null;
+        _pendingCheckpointRestore = null;
+        _continueAfterRestart = false;
+        GD.PushError($"OPENNV_NATIVE_LOAD_REJECTED {failure}");
+        return failure.Message;
+    }
+
     private void SelectNativeSave(RuntimeSaveSlotMetadata slot, bool pauseAfterLoad)
     {
+        if (_nativeSessionTransitioning || _nativeDoorLoading || _retiringNativeSession)
+            throw new InvalidOperationException("Another native loading transition is already active.");
         // Validate the complete source-bound state before replacing Continue.
         _ = ReadNativeSave(slot.Path);
-        NativeSaveSlots().Activate(slot.Id, preserveCurrent: true);
+        _pendingSaveActivation = NativeSaveSlots().BeginActivation(slot.Id);
         GD.Print($"OPENNV_NATIVE_SAVE_SLOT_SELECTED id={slot.Id}");
         RestartNativeSession(true, pauseAfterLoad, slot);
     }
@@ -173,6 +190,7 @@ public partial class RuntimeCoordinator
             _nextSessionContinue = continueSave;
             _nextSessionPauseAfterCheckpointLoad = continueSave && pauseAfterLoad;
             _nextSessionCheckpoint = continueSave ? checkpoint : null;
+            _nextSessionActivation = continueSave ? _pendingSaveActivation : null;
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             _retiringNativeSession = true;
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
@@ -180,17 +198,20 @@ public partial class RuntimeCoordinator
             GetTree().Paused = false;
             var error = GetTree().ReloadCurrentScene();
             if (error != Error.Ok) throw new InvalidOperationException($"Session reload failed: {error}.");
+            _pendingSaveActivation = null;
         }
         catch (Exception error)
         {
             _nextSessionOptions = null; _nextSessionContinue = false; _nextSessionPauseAfterCheckpointLoad = false;
             _nextSessionCheckpoint = null;
+            _nextSessionActivation = null;
+            var failure = RejectNativePendingLoad(error);
             _retiringNativeSession = false;
             _nativeSessionTransitioning = false;
             GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {error}");
             DismissLoadingScreen();
             GetTree().Paused = true;
-            _nativeSessionMenu?.ShowFailure(error.Message);
+            _nativeSessionMenu?.ShowFailure(failure);
         }
     }
 
@@ -220,6 +241,7 @@ public partial class RuntimeCoordinator
         {
             await DrainNativeSourceReaders();
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            if (_pendingSaveActivation is not null) RejectNativePendingLoad(new OperationCanceledException("Selected load was cancelled by quitting."));
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");

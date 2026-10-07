@@ -7,6 +7,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
 {
     private sealed record Voice(Node3D Emitter, bool FollowEmitter, FalloutSoundLoop Loop, AudioStream? OwnedStream, Action? Completed, long? Generation)
     {
+        internal NativeOwnedPcmStream? Pcm { get; init; }
         internal bool Releasing { get; set; }
         internal IDisposable? Registration { get; set; }
         internal NativeOwnedFiniteSoundHost.Attachment? Attachment { get; set; }
@@ -44,7 +45,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
         {
-            _events?.Fail(null, error.Message);
+            _events?.Fail(null, error.Message, text);
             _unbound.Add(text + ":" + error.Message);
             LastEvent = new { ordinal = ++_eventCount, textKey = text, disposition = "unbound-source-sound", error = error.Message };
             ObserveEvent();
@@ -55,10 +56,11 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     internal (Node3D Emitter, bool FollowEmitter) ResolveEmitter(string name, bool sourceLoop = false)
         => RuntimeNativeNifSoundEmitters.Resolve(_actor, name, sourceLoop, _emitters);
 
-    private void TrackVoice(Node voice, Node3D emitter, FalloutSoundLoop loop, FalloutFormKey sound, Action? completed, long? generation, bool followEmitter)
+    private void TrackVoice(Node voice, Node3D emitter, FalloutSoundLoop loop, FalloutFormKey sound, Action? completed, long? generation, bool followEmitter,
+        NativeOwnedPcmStream? pcm = null)
     {
         var stream = voice is AudioStreamPlayer3D spatial ? spatial.Stream : ((AudioStreamPlayer)voice).Stream;
-        var state = new Voice(emitter, followEmitter, loop, loop.Mode == FalloutSoundLoopMode.None ? null : stream, completed, generation);
+        var state = new Voice(emitter, followEmitter, loop, loop.Mode == FalloutSoundLoopMode.None ? null : stream, completed, generation) { Pcm = pcm };
         var entry = generation is { } boundGeneration ? _events!.Events.Single(value => value.Generation == boundGeneration) : null;
         var retain = loop.Mode == FalloutSoundLoopMode.None && entry is { End: FalloutAnimationSoundEnd.Active, Played: true } &&
             stream is not null && double.IsFinite(stream.GetLength()) && stream.GetLength() > 0 &&
@@ -81,7 +83,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             () => { StopVoice(voice); FinishVoice(voice, FalloutAnimationSoundEnd.SourceStopped); },
             () => { StopVoice(voice); FinishVoice(voice, FalloutAnimationSoundEnd.Cancelled); },
             _events?.Reference, () => ReadFiniteVoice(voice, state), () => state.CompletionWait?.State,
-            () => PrepareFiniteSaveDrain(voice, state));
+            () => PrepareFiniteSaveDrain(voice, state),
+            pcm is null ? null : () => CapturePcmVoice(voice, state).Samples is not null);
         _voices.Add(voice, state);
         // Unexpected retirement of the actual audio node remains cancellation.
         // Retiring only its finite source attachment does not emit this signal.
@@ -109,15 +112,9 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             stopped++;
             if (voice.Loop.Mode is FalloutSoundLoopMode.EnvelopeFast or FalloutSoundLoopMode.EnvelopeSlow)
             {
-                var stream = (AudioStreamWav)voice.OwnedStream!;
-                stream.LoopMode = AudioStreamWav.LoopModeEnum.Disabled;
+                voice.Pcm!.ReleaseEnvelope();
                 voice.Releasing = true;
                 node.SetMeta("opennv_sound_envelope_releasing", true);
-                if (voice.Loop.ReleasePosition(checked((uint)stream.MixRate)) is { } position)
-                {
-                    if (node is AudioStreamPlayer3D spatial) spatial.Play((float)position);
-                    else ((AudioStreamPlayer)node).Play((float)position);
-                }
             }
             else
             {

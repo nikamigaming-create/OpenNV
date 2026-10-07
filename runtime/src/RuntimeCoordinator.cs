@@ -84,6 +84,8 @@ public partial class RuntimeCoordinator : Node3D
             _continueAfterRestart = _nextSessionContinue;
             _pauseAfterCheckpointLoad = _nextSessionPauseAfterCheckpointLoad;
             _pendingCheckpointRestore = _nextSessionCheckpoint;
+            _pendingSaveActivation = _nextSessionActivation; _nextSessionActivation = null;
+            _sessionLoadFailure = _nextSessionLoadFailure; _nextSessionLoadFailure = null;
             _nextSessionOptions = null; _nextSessionContinue = false; _nextSessionPauseAfterCheckpointLoad = false;
             _nextSessionCheckpoint = null;
             if (_options.TryGetValue("parity-channel", out var parityChannel))
@@ -175,6 +177,7 @@ public partial class RuntimeCoordinator : Node3D
         }
         catch (Exception exception)
         {
+            if (_pendingSaveActivation is not null) RejectNativePendingLoad(exception);
             GD.PushError($"OPENNV_GODOT_RUNTIME_FAIL {exception}");
             GetTree().Quit(1);
         }

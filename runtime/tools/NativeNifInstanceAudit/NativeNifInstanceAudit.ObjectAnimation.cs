@@ -37,6 +37,28 @@ public partial class NativeNifInstanceAudit
         }
         try
         {
+            RuntimeNifControllerPlayer Automatic()
+            {
+                var player = new RuntimeNifControllerPlayer { SourceController = 8, SourceSha256 = hash };
+                player.Configure([new("Idle", 0, 1, 0, 3, [])
+                    { TextKeys = [new(0, "Sound: OriginalLoop"), new(2, "Enum: StopSounds")] }]);
+                root.AddChild(player); player.ProcessMode = ProcessModeEnum.Disabled;
+                return player;
+            }
+            var automatic = Automatic(); var automaticCold = Automatic();
+            var automaticKeys = new List<string>(); var automaticColdKeys = new List<string>();
+            automatic.TextKeyHandler = key => { automaticKeys.Add(key.Text); return "audit-bound"; };
+            automaticCold.TextKeyHandler = key => { automaticColdKeys.Add(key.Text); return "audit-bound"; };
+            automatic._Process(.75);
+            var automaticState = JsonSerializer.Deserialize<FalloutObjectAnimationSnapshot>(JsonSerializer.Serialize(automatic.CaptureObjectState()))!;
+            automaticCold.RestoreObjectState(automaticState);
+            Require(!automaticState.ScriptSelected && automaticCold.CaptureScriptState() is null,
+                "Restored automatic animation invented a source command.");
+            automatic._Process(3); automaticCold._Process(3);
+            Require(automaticKeys.SequenceEqual(["Sound: OriginalLoop", "Enum: StopSounds", "Sound: OriginalLoop"]) &&
+                automaticColdKeys.SequenceEqual(["Enum: StopSounds", "Sound: OriginalLoop"]) &&
+                automatic.CaptureObjectState() == automaticCold.CaptureObjectState(),
+                "Cold automatic animation replayed its consumed sound key or changed its next cycle.");
             var first = Make(time => firstSample = time);
             var second = Make(time => secondSample = time);
             Require(first.ActiveSequence is null && second.ActiveSequence is null, "Multiple loops invented an automatic group.");

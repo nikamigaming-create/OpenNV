@@ -11,6 +11,8 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         else
         { var flat = (AudioStreamPlayer)node; flat.Finished += () => FinishVoice(node); flat.Play(); }
         var voice = _voices[node];
+        if (voice.Pcm is not null && voice.Generation is { } pcmGeneration)
+            _events!.BindPlayback(pcmGeneration, () => CapturePcmVoice(node, voice));
         if (voice.Attachment is null || voice.Generation is not { } generation) return;
         var playback = ReadPlayback(node);
         var stream = node is AudioStreamPlayer3D positioned ? positioned.Stream : ((AudioStreamPlayer)node).Stream;
@@ -32,7 +34,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         if (voice.SaveDrain is { } prepared) return prepared.PendingVoice;
         if (_lostCaptureAtRetirement || _retiredCaptureDiagnostic is not null ||
             _events?.CanAwaitNativeCompletion != true ||
-            _unbound.Except(_events.PartialLanes, StringComparer.Ordinal).Any() ||
+            _unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any() ||
             !_voices.TryGetValue(node, out var bound) || !ReferenceEquals(bound, voice) ||
             voice.Generation is not { } generation || voice.Loop.Mode != FalloutSoundLoopMode.None || voice.Releasing ||
             voice.CompletionWait is null || !GodotObject.IsInstanceValid(node) || !node.IsInsideTree() || !node.CanProcess() ||
@@ -58,7 +60,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     private NativeOwnedFiniteSoundSaveDrain PrepareFiniteSaveDrain(Node node, Voice voice)
     {
         bool Bound() => !_lostCaptureAtRetirement && _retiredCaptureDiagnostic is null &&
-            !_unbound.Except(_events!.PartialLanes, StringComparer.Ordinal).Any() &&
+            !_unbound.Except(_events!.OwnedLanes, StringComparer.Ordinal).Any() &&
             _voices.TryGetValue(node, out var current) && ReferenceEquals(current, voice) &&
             voice.Loop.Mode == FalloutSoundLoopMode.None && !voice.Releasing && voice.Completed is null &&
             voice.Attachment is { Alive: true };
@@ -85,6 +87,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             var voices = new List<FalloutFiniteSoundVoice>();
             foreach (var (node, voice) in _voices)
             {
+                if (voice.Pcm is not null && CapturePcmVoice(node, voice).Samples is not null) continue;
                 if (ReadFiniteVoice(node, voice) is not { } proof) return null;
                 voices.Add(proof);
             }
@@ -93,7 +96,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     }
 
     internal IReadOnlyList<FalloutFiniteSoundVoice>? PendingFiniteVoices =>
-        _events?.Events.Count(entry => entry.End == FalloutAnimationSoundEnd.Active) == _voices.Count
+        _events?.PendingNativeCompletion.Count() == _voices.Values.Count(voice => voice.Pcm is null)
             ? PendingOwnFiniteVoices : null;
 
     // Empty local voices do not mean completion. This only allows a parent to
@@ -101,7 +104,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     // finite media; its source/native registry must prove every active generation.
     internal bool CanAwaitFiniteCompletion => _events?.CanAwaitNativeCompletion == true &&
         !_lostCaptureAtRetirement && _retiredCaptureDiagnostic is null &&
-        !_unbound.Except(_events.PartialLanes, StringComparer.Ordinal).Any() &&
+        !_unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any() &&
         !_spatial.Keys.Any(node => !_voices.ContainsKey(node)) &&
-        (_voices.Count == 0 || PendingOwnFiniteVoices?.Count == _voices.Count);
+        (_voices.Count == 0 || PendingOwnFiniteVoices?.Count == _voices.Values.Count(voice => voice.Pcm is null));
 }

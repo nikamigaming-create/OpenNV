@@ -44,15 +44,22 @@ internal sealed partial class RuntimeNifControllerPlayer
         }
     }
 
-    internal FalloutObjectAnimationSnapshot? CaptureScriptState() => !_scriptSelected || _active is null ? null :
-        new(SourceController, SourceSha256, _active.Name, _elapsedSeconds, _includeStart, _pendingSequence);
+    internal FalloutObjectAnimationSnapshot? CaptureScriptState() => !_scriptSelected ? null : CaptureObjectState();
+
+    internal FalloutObjectAnimationSnapshot? CaptureObjectState() => _active is null ? null :
+        new(SourceController, SourceSha256, _active.Name, _elapsedSeconds, _includeStart, _pendingSequence, _scriptSelected);
 
     internal void RestoreScriptState(FalloutObjectAnimationSnapshot state)
     {
-        state.Validate();
         ValidateScriptState(state);
+        RestoreObjectState(state);
+    }
+
+    internal void RestoreObjectState(FalloutObjectAnimationSnapshot state)
+    {
+        ValidateObjectState(state);
         PlaySourceSequence(state.Sequence);
-        _scriptSelected = true;
+        _scriptSelected = state.ScriptSelected;
         _elapsedSeconds = state.ElapsedSeconds;
         _includeStart = state.StartPending;
         _pendingSequence = state.PendingSequence;
@@ -61,6 +68,12 @@ internal sealed partial class RuntimeNifControllerPlayer
     }
 
     internal void ValidateScriptState(FalloutObjectAnimationSnapshot state)
+    {
+        if (!state.ScriptSelected) throw new InvalidDataException("Saved animation was not selected by a source command.");
+        ValidateObjectState(state);
+    }
+
+    internal void ValidateObjectState(FalloutObjectAnimationSnapshot state)
     {
         state.Validate();
         if (SourceController < 0 || state.Controller != SourceController ||

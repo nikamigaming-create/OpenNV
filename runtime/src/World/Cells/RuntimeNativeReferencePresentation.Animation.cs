@@ -20,20 +20,26 @@ internal partial class RuntimeNativeReferencePresentation
         if (managed.GroupBy(controller => (controller.SourceSha256, controller.SourceController)).Any(group => group.Count() != 1))
             throw new NotSupportedException($"Reference {key} has ambiguous source animation controllers.");
         var instance = _world.Get(key);
-        var restored = (instance.CaptureObjectAnimations?.Invoke() ?? instance.ObjectAnimations ?? []).Select(state =>
+        var saved = instance.CaptureObjectAnimations?.Invoke() ?? instance.ObjectAnimations ?? [];
+        if (managed.Any(controller => controller.HasTextKeys && controller.CaptureObjectState() is not null &&
+                !saved.Any(state => state.Controller == controller.SourceController &&
+                    state.Sha256.Equals(controller.SourceSha256, StringComparison.OrdinalIgnoreCase))) &&
+            instance.AnimationSoundEvents.Events.Any(entry => entry.Playback is not null))
+            throw new InvalidDataException($"Reference {key} has saved audio without its source animation clock.");
+        var restored = saved.Select(state =>
         {
             var controller = managed.SingleOrDefault(value => value.SourceController == state.Controller &&
                 value.SourceSha256.Equals(state.Sha256, StringComparison.OrdinalIgnoreCase)) ??
                 throw new NotSupportedException($"Reference {key} saved animation differs from its winning model.");
-            controller.ValidateScriptState(state);
+            controller.ValidateObjectState(state);
             return (Controller: controller, State: state);
         }).ToArray();
-        foreach (var (controller, state) in restored) controller.RestoreScriptState(state);
+        foreach (var (controller, state) in restored) controller.RestoreObjectState(state);
         _objectControllers[key] = controllers;
         _animationInstances[key] = instance;
         if (managed.Length != 0)
         {
-            IReadOnlyList<FalloutObjectAnimationSnapshot> Capture() => managed.Select(controller => controller.CaptureScriptState())
+            IReadOnlyList<FalloutObjectAnimationSnapshot> Capture() => managed.Select(controller => controller.CaptureObjectState())
                 .OfType<FalloutObjectAnimationSnapshot>().ToArray();
             _animationCaptures.Add(key, Capture);
             instance.BindObjectAnimationCapture(Capture);
@@ -65,7 +71,10 @@ internal partial class RuntimeNativeReferencePresentation
     {
         var matching = ObjectControllers(key).Where(controller => controller.SourceController >= 0 && controller.HasSequence(group)).ToArray();
         if (matching.Length != 1) throw new NotSupportedException($"Reference {key} has no unique source animation group {group}.");
+        var motion = _nodes[key].GetChildren().OfType<RuntimeNativeDoorMotion>().SingleOrDefault();
+        motion?.RequireScriptSelection(matching[0]);
         matching[0].RequestSourceSequence(group, initialization);
+        motion?.ScriptSelected(matching[0]);
     }
 
     internal bool IsAnimPlaying(FalloutFormKey key, string? group)

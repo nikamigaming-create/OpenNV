@@ -53,18 +53,21 @@ internal sealed class RuntimeSaveSlotCatalog
 
     internal RuntimeSaveSlotMetadata Create(Guid slotId, Action writeAuthoritativeSave)
     {
+        if (slotId == Guid.Empty) throw new ArgumentException("Save-slot identity is empty.", nameof(slotId));
         ArgumentNullException.ThrowIfNull(writeAuthoritativeSave);
         var target = SlotPath(slotId);
         if (File.Exists(target)) throw new InvalidOperationException("Save-slot identity already exists.");
         var previous = File.Exists(_canonicalSavePath) ? File.ReadAllBytes(_canonicalSavePath) : null;
         var previousWrittenUtc = previous is null ? (DateTime?)null : File.GetLastWriteTimeUtc(_canonicalSavePath);
+        var committed = false;
         try
         {
             writeAuthoritativeSave();
             var bytes = File.ReadAllBytes(_canonicalSavePath);
             using var validated = Validate(bytes);
             Directory.CreateDirectory(_slotDirectory);
-            AtomicWrite(target, bytes);
+            RuntimeAtomicSaveFile.Write(target, bytes, overwrite: false);
+            committed = true;
             return ReadMetadata(target);
         }
         catch (Exception failure)
@@ -80,7 +83,7 @@ internal sealed class RuntimeSaveSlotCatalog
                 }
             }
             catch (Exception rollback) { rollbackErrors.Add(rollback); }
-            try { File.Delete(target); }
+            try { if (committed) File.Delete(target); }
             catch (Exception rollback) { rollbackErrors.Add(rollback); }
             if (rollbackErrors.Count != 0)
                 throw new IOException("Complete save failed and its previous Continue/slot rollback also failed.",
@@ -102,9 +105,36 @@ internal sealed class RuntimeSaveSlotCatalog
         var bytes = File.ReadAllBytes(source);
         using var validated = Validate(bytes);
         if (preserveCurrent && File.Exists(_canonicalSavePath) && !File.ReadAllBytes(_canonicalSavePath).AsSpan().SequenceEqual(bytes))
-            Create(() => { });
+        {
+            var previous = File.ReadAllBytes(_canonicalSavePath);
+            var valid = true;
+            try { using var current = Validate(previous); }
+            catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException)
+            {
+                valid = false;
+                // A damaged Continue must not prevent recovery from a valid
+                // selected slot. Retain the exact rejected bytes separately.
+                RuntimeAtomicSaveFile.Write(Path.Combine(_slotDirectory, Guid.NewGuid().ToString("N") + ".rejected"), previous, overwrite: false);
+            }
+            if (valid) Create(() => { });
+        }
         AtomicWrite(_canonicalSavePath, bytes);
         return ReadMetadata(source);
+    }
+
+    internal RuntimeSaveSlotActivation BeginActivation(string slotId, bool preserveCurrent = true)
+    {
+        var previous = File.Exists(_canonicalSavePath) ? File.ReadAllBytes(_canonicalSavePath) : null;
+        var written = previous is null ? (DateTime?)null : File.GetLastWriteTimeUtc(_canonicalSavePath);
+        var slot = Activate(slotId, preserveCurrent);
+        var selected = File.ReadAllBytes(_canonicalSavePath);
+        return new(slot, selected, () =>
+        {
+            if (!File.Exists(_canonicalSavePath) || !File.ReadAllBytes(_canonicalSavePath).AsSpan().SequenceEqual(selected))
+                throw new IOException("Continue changed while a selected load was pending; the newer save was preserved.");
+            if (previous is null) File.Delete(_canonicalSavePath);
+            else { AtomicWrite(_canonicalSavePath, previous); File.SetLastWriteTimeUtc(_canonicalSavePath, written!.Value); }
+        });
     }
 
     private RuntimeSaveSlotMetadata ReadMetadata(string path)
@@ -175,14 +205,18 @@ internal sealed class RuntimeSaveSlotCatalog
             : null;
 
     private static void AtomicWrite(string path, byte[] bytes)
+        => RuntimeAtomicSaveFile.Write(path, bytes);
+}
+
+internal sealed class RuntimeSaveSlotActivation(RuntimeSaveSlotMetadata slot, byte[] selected, Action rollback) : IDisposable
+{
+    private bool _settled;
+    internal RuntimeSaveSlotMetadata Slot => slot;
+    internal void RequireSelected(string canonicalPath)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllBytes(temporary, bytes);
-            File.Move(temporary, path, true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        if (_settled || !File.ReadAllBytes(canonicalPath).AsSpan().SequenceEqual(selected))
+            throw new InvalidDataException("Selected save changed before its native world was restored.");
     }
+    internal void Commit() => _settled = true;
+    public void Dispose() { if (_settled) return; rollback(); _settled = true; }
 }
