@@ -78,18 +78,36 @@ coverage. Source water/degenerate semantics and whole-reference upload spikes
 remain unresolved. The selected FNV performance results do not establish Fallout
 3/TTW exterior performance.
 
-Standalone Fallout 3 still uses a bounded preview path rather than shared
-campaign gameplay/save owners. Its preinitialized executable settings now read
-through their typed source descriptors, with game, Main, preferences and renderer
-collections kept distinct. New Vegas retains constructor-owned defaults. Separate
-FNV, FO3, TTW and combined-stack checks verify winning numeric/string settings,
-source player values and layered INI queries without changing owned files.
-Relocated synthetic PE checks reject malformed descriptors and preserve constructor
-precedence. These settings checks do not establish ordinary gameplay or saves.
-Source-owned opening menus/state and ordinary New Game/save/cold Continue must
-be implemented and independently checked. Standalone FNV and the combined
-JAM/TTW/NMC stack also need current exported ordinary-path checks; a TTW save
-cannot certify either stack.
+Standalone Fallout 3 now enters its genuine configured CG00 birth CELL through
+the shared campaign, quest, player, world and save owners. Ordinary New Game
+reaches sex selection and player-name acceptance at stage 42. Owned executable
+input defaults, scalar HUD declarations, Float32 subtitle placement and the
+four-sample weather palette bind independently of FNV's compiler layouts.
+The shared engine-static predicate excludes the original placement markers;
+a focused native frame confirms the reported red arrows/planes are absent.
+Their source identities independently agree in FNV, FO3, TTW and the combined
+stack. This frame is not retail parity or campaign acceptance.
+
+FO3's pooled face-control/header declarations and race-menu model consumer are
+the next character-creation owners. Partial menu initialization now cleans up
+before publishing state; the reached failure cannot leave broken telemetry.
+FO3 has no accepted settled manual save or cold Continue yet. Its unbound
+double-vision phase, convex-list/phantom collision and modeled emergency lights
+remain visible. Known exhausted radio links end their conversation; unknown
+conditions still reject. Standalone FNV reaches ordinary character acceptance
+and CG01 stage 55 and writes a partial v46 checkpoint; its cold Continue and
+complete opening remain unverified. The combined stack needs independent
+ordinary play/save checks. A TTW save cannot certify another stack.
+
+The engine player's package audio now has an independent persistent owner;
+it does not require a placed ACHR or disappear when the package ends. Save v47
+retains its original sound faults, PCM history and random state, with package
+and audio RNG agreement checked before writing/restoring. Synthetic cold checks
+pass ended/fault history and malformed-owner rejection; existing v46 saves
+remain readable. Missing historical player sound data in an older save cannot
+be reconstructed, and unowned player sound emitters remain explicit failures.
+Driver initialization runs inside the load transaction so failed restoration
+cannot silently commit Continue through a swallowed Godot callback exception.
 
 JAM source hit registrations and the composed calendar hosts pass their
 managed contracts. Native callback context/timing, compiled SCDA, unchanged
@@ -106,8 +124,8 @@ clean-system FO3/FNV/TTW New Game.
 ## Next owner and outcome
 
 Primary owns serial builds, live input, save verification and checked
-publication. Implement shared standalone FO3 initialization and the independent
-source-stack loading/saving matrix. Keep native vegetation decoding and upload
+publication. Complete the reached FO3 character-creation declarations and the
+independent flat/OpenXR source-stack loading/saving matrix. Keep native vegetation decoding and upload
 timing as active exterior owners. Continue the complete vault/world denominator and
 ordinary Megaton/train/Mojave route without bypassing source conditions.
 

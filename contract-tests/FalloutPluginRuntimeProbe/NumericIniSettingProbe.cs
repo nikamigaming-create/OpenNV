@@ -36,6 +36,11 @@ internal static partial class NumericIniSettingProbe
         };
         var owner = new FalloutNumericIniSettings(declarations, layers, "synthetic-executable");
         values.Clear();
+        var installation = FalloutInstallationSettings.ReadIniLayers(() => declarations, layers, "synthetic-executable");
+        Require(installation.Unsigned("General", "uUnsigned") == uint.MaxValue,
+            "Unsigned installation default lost canonical bits or required a file override.");
+        Reject(() => installation.Unsigned("General", "iSigned"));
+        Reject(() => installation.Unsigned("General", "uMissing"));
         Require(owner.Get("BBOOLEAN:GENERAL") == 1 && owner.Get("ISIGNED:GENERAL") == -123 &&
             owner.Get("UUNSIGNED:GENERAL") == uint.MaxValue && owner.Get("fFloat:Display") == (double)0.1f,
             "Canonical types or Float32 widening changed with caller case.");

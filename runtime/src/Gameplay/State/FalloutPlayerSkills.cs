@@ -14,6 +14,7 @@ internal sealed class FalloutPlayerSkills
     private readonly FalloutPluginStack _records;
     private readonly Func<FalloutNativeSpecialState> _special;
     private readonly FalloutPlayerActorValues? _actorValues;
+    private readonly (int Value, string Name, string Setting, int Attribute)[] _skills;
     private readonly Func<string, bool> _tagged;
     private readonly Func<IReadOnlyList<FalloutNativeTraitIdentity>> _traits;
     private readonly FalloutGlobalState? _globals;
@@ -46,6 +47,11 @@ internal sealed class FalloutPlayerSkills
         _inventory = inventory; _abilities = new(records); _actor = actor; _race = race; _hardcore = hardcore;
         _acquiredPerks = acquiredPerks ?? (() => []);
         _actorValues = actorValues;
+        _skills = FalloutNativeTagSkillResolver.UsesFallout3Skills(records)
+            ? Skills.Where(skill => skill.Value != 44).Select(skill => skill.Value == 41
+                ? (skill.Value, "SmallGuns", skill.Setting, skill.Attribute) : skill)
+                .Append((33, "BigGuns", "BigGuns", 7)).ToArray()
+            : Skills;
     }
 
     internal float Value(string name)
@@ -53,7 +59,7 @@ internal sealed class FalloutPlayerSkills
         if (name.Equals("RadResist", StringComparison.OrdinalIgnoreCase) || name.Equals("RadiationResist", StringComparison.OrdinalIgnoreCase)) return Value(20);
         var attribute = FalloutNativeVigorResolver.AttributeNames.ToList().FindIndex(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (attribute >= 0) return Value(attribute + 5);
-        var skill = Skills.SingleOrDefault(skill => skill.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        var skill = _skills.SingleOrDefault(skill => skill.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         return skill.Name is not null ? Value(skill.Value) : throw new NotSupportedException($"Player value {name} is unbound.");
     }
 
@@ -79,7 +85,7 @@ internal sealed class FalloutPlayerSkills
             else if (value == 20) initial = (Value(7) + Setting("fAVDRadResistEnduranceOffset")) * Setting("fAVDRadResistEnduranceMult");
             else
             {
-                var skill = Skills.SingleOrDefault(skill => skill.Value == value);
+                var skill = _skills.SingleOrDefault(skill => skill.Value == value);
                 if (skill.Name is null) throw new NotSupportedException($"Player value {value} is unbound.");
                 initial = Setting("fAVDSkill" + skill.Setting + "Base") +
                     MathF.Floor(Setting("fAVDSkillPrimaryBonusMult") * Value(skill.Attribute)) +

@@ -37,7 +37,7 @@ internal sealed partial class NativeOwnedTagSkillMenu : Control
         unbound = "permanent-versus-current-actor-values,native-list-sort-ties,scrollbar-drag,focus-and-click-sounds,exact-layout-timing,retail-and-XR-pixels"
     };
 
-    internal NativeOwnedTagSkillMenu(FalloutPluginStack records, FalloutNativeTagSkillContract contract,
+    internal NativeOwnedTagSkillMenu(FalloutPluginStack records, FalloutNativeTagSkillChoices contract,
         IReadOnlyList<FalloutNativeSkillIdentity> current, Func<FalloutNativeSkillIdentity, float> liveValue,
         Action<IReadOnlyList<FalloutNativeSkillIdentity>> accepted, Action<Exception> failed, bool showInitialTaggedSkills = true)
     {

@@ -9,18 +9,25 @@ internal sealed record FalloutPlayerTagSkillsSnapshot(IReadOnlyList<FalloutNativ
 internal sealed class FalloutPlayerTagSkills
 {
     internal const int SlotCount = 4;
-    private readonly FalloutNativeTagSkillContract _contract;
+    private readonly int? _requiredCount;
+    private readonly IReadOnlyList<FalloutNativeSkillIdentity> _catalog;
     private readonly Dictionary<string, FalloutNativeSkillIdentity> _skills;
     private readonly FalloutNativeSkillIdentity?[] _slots;
 
     internal FalloutPlayerTagSkills(FalloutPluginStack records, FalloutNativeTagSkillContract contract,
         FalloutPlayerTagSkillsSnapshot? snapshot = null, IReadOnlyList<FalloutNativeSkillIdentity>? legacy = null)
+        : this(records, contract.Skills, contract.RequiredCount, snapshot, legacy) { }
+
+    internal FalloutPlayerTagSkills(FalloutPluginStack records, IReadOnlyList<FalloutNativeSkillIdentity> catalog,
+        int? requiredCount = null, FalloutPlayerTagSkillsSnapshot? snapshot = null,
+        IReadOnlyList<FalloutNativeSkillIdentity>? legacy = null)
     {
-        _contract = contract;
-        _skills = contract.Skills.ToDictionary(skill => FalloutPlayerSkills.SkillName(records, skill), StringComparer.OrdinalIgnoreCase);
+        _catalog = catalog;
+        _requiredCount = requiredCount;
+        _skills = catalog.ToDictionary(skill => FalloutPlayerSkills.SkillName(records, skill), StringComparer.OrdinalIgnoreCase);
         snapshot ??= FromLegacy(legacy ?? []);
         Validate(snapshot);
-        if (snapshot.Slots.Any(skill => skill is not null && !contract.Skills.Contains(skill)))
+        if (snapshot.Slots.Any(skill => skill is not null && !catalog.Contains(skill)))
             throw new InvalidDataException("Player tag slot differs from its winning AVIF identity.");
         _slots = snapshot.Slots.ToArray();
     }
@@ -41,9 +48,9 @@ internal sealed class FalloutPlayerTagSkills
 
     internal void AcceptMenu(IReadOnlyList<FalloutNativeSkillIdentity> selection, int? requiredCount = null)
     {
-        var count = requiredCount ?? _contract.RequiredCount;
+        var count = requiredCount ?? _requiredCount ?? throw new NotSupportedException("Tag menu has no source selection count.");
         if (count is < 1 or > SlotCount) throw new NotSupportedException("Tag acceptance requires an owned count from one through four.");
-        FalloutNativeTagSkillResolver.Validate(_contract with { RequiredCount = count }, selection);
+        FalloutNativeTagSkillResolver.Validate(new(_catalog, count), selection);
         var snapshot = FromLegacy(selection);
         Array.Copy(snapshot.Slots.ToArray(), _slots, SlotCount);
     }
@@ -70,9 +77,9 @@ internal sealed class FalloutPlayerTagSkills
             throw new InvalidDataException("Saved indexed player tags differ from their skill membership projection.");
     }
 
-    private static string SkillName(string name)
+    private string SkillName(string name)
     {
         if (name.Length >= 2 && name[0] == '"' && name[^1] == '"') name = name[1..^1];
-        return name.Equals("SmallGuns", StringComparison.OrdinalIgnoreCase) ? "Guns" : name;
+        return name.Equals("SmallGuns", StringComparison.OrdinalIgnoreCase) && _skills.ContainsKey("Guns") ? "Guns" : name;
     }
 }

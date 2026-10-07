@@ -51,7 +51,10 @@ internal sealed class FalloutRadioConversation(FalloutPluginStack records, Fallo
             Topic = link; Info = info; ++CompletedLines;
             return;
         }
-        throw new NotSupportedException($"Radio INFO {completed.Record.FormKey} has no eligible source continuation.");
+        // A fully evaluated link set can have no currently eligible INFO.
+        // That ends this request, just as an empty initial selection does.
+        // Unknown conditions and malformed links still throw before retirement.
+        Info = null; ++CompletedLines;
     }
 
     internal FalloutDialogueSpeaker VoiceIdentity() => VoiceIdentity(

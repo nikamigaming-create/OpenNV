@@ -9,7 +9,11 @@ gameplay flags. Atomic writes and transactional loads preserve the previous
 Continue on failure, including a verified native rejected-load rollback.
 The required runtime gate and native fractional-sample/pause checks pass.
 See [current work](current-work.md) for the reusable checkpoint and remaining
-source-stack matrix. Standalone FO3 remains a preview; clean-system fresh
+source-stack matrix. Standalone FO3 now enters its authored birth CELL through
+the shared campaign owners and ordinary sex/name entry reaches CG00 stage 42;
+face-control/header and race-menu model declarations block further creation.
+The reported red placement-marker meshes are excluded from gameplay and a native
+frame confirms their absence. Clean-system fresh
 FO3/FNV/TTW New Game, combined-stack acceptance, Megaton and full game completion
 remain unverified.
 
@@ -17,7 +21,12 @@ Standalone FO3 executable defaults now bind their original typed static
 descriptors. New Vegas constructor defaults retain precedence. Independent
 FNV/FO3/TTW/combined source checks pass numeric/string winner selection, original
 player values and layered INI ownership; malformed relocated synthetic images
-reject. Shared FO3 gameplay startup and ordinary save/Continue remain unimplemented.
+reject. FO3 source input defaults, weather and scalar HUD/subtitle declarations
+now bind. Ordinary FO3 settled save/Continue remains unverified. FNV's ordinary
+opening writes a partial CG01 stage-55 checkpoint; cold Continue remains pending.
+Save v47 independently retains the engine player's package sound history after
+its package ends and rejects mismatched package/audio random state. Existing
+v46 state remains readable; missing historical data is not invented.
 
 The reported barren exterior is a real runtime divergence: the reached grid
 has 565 missing owned SpeedTree references. Their resource paths now resolve the

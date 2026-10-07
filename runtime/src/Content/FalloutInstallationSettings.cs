@@ -11,6 +11,7 @@ internal sealed class FalloutInstallationSettings
     private Lazy<FalloutRendererConfiguration> _renderer = null!;
     private readonly List<FalloutIniLayer> _iniLayers = [];
     private Lazy<FalloutNumericIniSettings> _numericIni = null!;
+    private Lazy<IReadOnlyDictionary<string, (byte Keyboard, byte Mouse)>>? _controlDefaults;
     internal FalloutRendererConfiguration Renderer => _renderer.Value;
     internal FalloutNumericIniSettings NumericIni => _numericIni.Value;
 
@@ -19,6 +20,7 @@ internal sealed class FalloutInstallationSettings
     private static FalloutInstallationSettings ReadInstallation(RuntimeLiveContentSource source)
     {
         var settings = new FalloutInstallationSettings();
+        settings._controlDefaults = new(() => FalloutExecutableStringTable.ReadControlDefaults(source.FalloutExecutablePath));
         settings._floatDefaults = new(() => FalloutExecutableStringTable.ReadFloatDefaults(
             Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
                 source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
@@ -89,7 +91,16 @@ internal sealed class FalloutInstallationSettings
         return _floatDefaults.Value.TryGetValue(key + ":" + section, out var number)
             ? number : throw new NotSupportedException($"Owned float setting has no admitted default: [{section}] {key}.");
     }
-    internal uint Unsigned(string section, string key) => uint.Parse(Require(section, key), CultureInfo.InvariantCulture);
+    internal uint Unsigned(string section, string key)
+    {
+        if (_values.TryGetValue(section + "/" + key, out var value)) return uint.Parse(value, CultureInfo.InvariantCulture);
+        var identity = key + ":" + section;
+        var declaration = NumericIni.Find(FalloutIniCollection.Prefs, identity) ?? NumericIni.Find(FalloutIniCollection.Main, identity);
+        if (declaration is not { Declaration.Kind: 'u', Number: { } number } || !double.IsFinite(number) ||
+            number < 0 || number > uint.MaxValue || number != Math.Truncate(number))
+            throw new NotSupportedException($"Owned unsigned setting has no admitted default: [{section}] {key}.");
+        return checked((uint)number);
+    }
     internal bool Boolean(string section, string key)
     {
         if (_values.TryGetValue(section + "/" + key, out var value))
@@ -98,6 +109,9 @@ internal sealed class FalloutInstallationSettings
             ? enabled : throw new NotSupportedException($"Owned Boolean setting has no admitted default: [{section}] {key}.");
     }
     internal bool Contains(string section, string key) => _values.ContainsKey(section + "/" + key);
+    internal (byte Keyboard, byte Mouse) ControlDefault(string key) =>
+        _controlDefaults?.Value.TryGetValue(key, out var value) == true ? value :
+            throw new NotSupportedException($"Owned input default is unbound: {key}.");
     internal float Number(string identity)
     {
         var separator = identity.LastIndexOf(':');

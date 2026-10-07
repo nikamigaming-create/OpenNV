@@ -262,7 +262,7 @@ internal sealed partial class NativeStartMenuConfirmation : Control
         _font = NativeBitmapFontAsset.Read(settings, checked((int)FalloutMenuXml.Number(_question.Element("font")!, Unbound)));
         _questionX = FalloutMenuXml.Number(_question.Element("x")!, Unbound);
         _questionY = FalloutMenuXml.Number(_question.Element("y")!, (_, trait) => trait == "user5" ? 0 : throw new NotSupportedException(trait));
-        var wrapWidth = FalloutMenuXml.Number(_question.Element("wrapwidth")!, Unbound);
+        var wrapWidth = _question.Element("wrapwidth") is { } wrap ? FalloutMenuXml.Number(wrap, Unbound) : float.MaxValue;
         _lines = Wrap(FalloutGameSettingStrings.Read(records, questionSetting), wrapWidth).ToArray();
         _choices = [Choice("sYes", true), Choice("sNo", false)];
         SetMeta("opennv_ui_source", "menus/options/start_menu.xml#confirm_container");

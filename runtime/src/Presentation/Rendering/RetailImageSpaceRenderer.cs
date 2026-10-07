@@ -363,6 +363,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
     internal string SourceProgramIdentity => _sourceEffects?.SourceIdentity ?? "unbound";
     internal string SourceKernelSha256 => _sourceEffects?.Kernels.SourceSha256 ?? "unbound";
     internal FalloutDoubleVisionPhase? DoubleVisionPhase => _sourceEffects?.DoubleVisionPhase;
+    internal string? DoubleVisionPhaseError => _sourceEffects?.DoubleVisionPhaseError;
 
     internal void SetSourceFrame(FalloutImageSpaceFrame frame, float deltaSeconds)
         => Volatile.Write(ref _parameters, Parameters(frame, deltaSeconds));

@@ -12,10 +12,8 @@ internal static class FalloutTagMenuDefaults
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned tag menu declarations are unavailable.");
         return Declarations.GetValue(source, content =>
         {
-            if (content.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
-                throw new NotSupportedException("This engine's tag menu declaration is unbound.");
             return FalloutExecutableStringTable.ReadTagMenuDeclarations(
-                Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe"));
+                content.FalloutExecutablePath);
         });
     }
 }

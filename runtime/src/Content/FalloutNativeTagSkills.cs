@@ -9,12 +9,16 @@ internal sealed record FalloutNativeSkillIdentity(
     string EditorId,
     string DisplayName);
 
+internal record FalloutNativeTagSkillChoices(
+    IReadOnlyList<FalloutNativeSkillIdentity> Skills,
+    int RequiredCount);
+
 internal sealed record FalloutNativeTagSkillContract(
     IReadOnlyList<FalloutNativeSkillIdentity> Skills,
     int RequiredCount,
     short PsychStage,
     short PsychCompletedStage,
-    short TagMenuStage);
+    short TagMenuStage) : FalloutNativeTagSkillChoices(Skills, RequiredCount);
 
 internal static partial class FalloutNativeTagSkillResolver
 {
@@ -29,6 +33,18 @@ internal static partial class FalloutNativeTagSkillResolver
     ];
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack, Dictionary<uint, string>> Slots = new();
 
+    internal static bool UsesFallout3Skills(FalloutPluginStack records) => records.OwnedSource is { } source
+        ? source.Game == RuntimeLiveContentSource.Fallout3Game
+        : records.Plugins[0].Plugin.Name.Equals("Fallout3.esm", StringComparison.OrdinalIgnoreCase);
+
+    internal static IReadOnlyList<FalloutNativeSkillIdentity> ResolveSkills(FalloutPluginStack records) =>
+        SlotBindings(records).Select(slot =>
+        {
+            var winner = records.GetEffective(records.RuntimeFormKey(slot.Key));
+            if (winner.Signature != "AVIF") throw new InvalidDataException("Built-in skill winner is not AVIF.");
+            return new FalloutNativeSkillIdentity(slot.Key, ReadEditorId(winner), ReadText(winner, "FULL"));
+        }).OrderBy(skill => skill.RuntimeFormId).ToArray();
+
     // Built-in actor-value slots retain the base master's form identity. A later
     // override can rename the AVIF; FULL and ANAM are presentation strings.
     internal static string ActorValueName(FalloutPluginStack stack, FalloutNativeSkillIdentity skill) =>
@@ -37,17 +53,19 @@ internal static partial class FalloutNativeTagSkillResolver
 
     private static Dictionary<uint, string> SlotBindings(FalloutPluginStack stack) => Slots.GetValue(stack, records =>
     {
+        var fallout3 = UsesFallout3Skills(records);
+        var ids = fallout3 ? SkillEditorIds.Where(id => id != "AVThrowing").Append("AVBigGuns").ToArray() : SkillEditorIds;
         var definitions = records.Plugins[0].Plugin.Records.Where(record => record.Signature == "AVIF")
             .Select(record => (Record: record, EditorId: ReadEditorId(record)))
-            .Where(value => SkillEditorIds.Contains(value.EditorId, StringComparer.OrdinalIgnoreCase))
+            .Where(value => ids.Contains(value.EditorId, StringComparer.OrdinalIgnoreCase))
             .GroupBy(value => value.EditorId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Select(value => value.Record).ToArray(), StringComparer.OrdinalIgnoreCase);
         var result = new Dictionary<uint, string>();
-        foreach (var id in SkillEditorIds)
+        foreach (var id in ids)
         {
             if (!definitions.TryGetValue(id, out var matching) || matching.Length != 1)
                 throw new InvalidDataException($"Base master actor-value slot {id} has no unique AVIF definition.");
-            var name = id switch { "AVSmallGuns" => "Guns", "AVThrowing" => "Survival", _ => id[2..] };
+            var name = fallout3 ? id[2..] : id switch { "AVSmallGuns" => "Guns", "AVThrowing" => "Survival", _ => id[2..] };
             result.Add(records.RuntimeFormId(matching[0].FormKey), name);
         }
         return result;
@@ -108,7 +126,7 @@ internal static partial class FalloutNativeTagSkillResolver
     }
 
     internal static void Validate(
-        FalloutNativeTagSkillContract contract,
+        FalloutNativeTagSkillChoices contract,
         IReadOnlyList<FalloutNativeSkillIdentity> selection, bool allowUnspent = false)
     {
         ArgumentNullException.ThrowIfNull(contract);

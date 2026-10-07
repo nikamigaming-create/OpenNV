@@ -434,8 +434,9 @@ public partial class RuntimeCoordinator
     {
         if (cell.Lighting is { } lighting) return ByteColor(lighting.AmbientRgb);
         var sky = _nativeSkyLighting ?? throw new InvalidOperationException("Exterior ambient has no sky owner.");
-        var weights = FalloutWeatherTimeWeights.Sample(sky.Climate, _nativeGameTime!.Hour, sky.DaytimeExtension);
-        var rgb = sky.ActiveWeather.Sample(weights, 3);
+        var weather = sky.ActiveWeather;
+        var weights = FalloutWeatherTimeWeights.Sample(sky.Climate, _nativeGameTime!.Hour, sky.DaytimeExtension, weather.TimeSamples);
+        var rgb = weather.Sample(weights, 3);
         return new(rgb[0], rgb[1], rgb[2]);
     }
 }

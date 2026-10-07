@@ -26,7 +26,7 @@ internal sealed record FalloutTagSkillMenuRequest(int TotalCount, bool ShowIniti
 internal sealed class FalloutTagSkillMenuSelection
 {
     private readonly FalloutPluginStack _records;
-    private readonly FalloutNativeTagSkillContract _contract;
+    private readonly FalloutNativeTagSkillChoices _contract;
     private readonly HashSet<FalloutNativeSkillIdentity> _initial;
     private readonly List<FalloutNativeSkillIdentity> _selected;
     private readonly Func<FalloutNativeSkillIdentity, float> _liveValue;
@@ -36,7 +36,7 @@ internal sealed class FalloutTagSkillMenuSelection
     internal int Remaining => Required - _selected.Count;
     internal bool Complete => Remaining == 0;
 
-    internal FalloutTagSkillMenuSelection(FalloutPluginStack records, FalloutNativeTagSkillContract contract,
+    internal FalloutTagSkillMenuSelection(FalloutPluginStack records, FalloutNativeTagSkillChoices contract,
         IReadOnlyList<FalloutNativeSkillIdentity> current, Func<FalloutNativeSkillIdentity, float> liveValue,
         bool showInitialTaggedSkills = true)
     {

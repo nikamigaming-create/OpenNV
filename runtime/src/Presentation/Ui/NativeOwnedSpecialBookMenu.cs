@@ -66,7 +66,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             var source = FalloutNifFile.Read(bytes);
             var sequences = source.Blocks.Where(block => block.TypeName == "NiControllerSequence")
                 .Select(block => (FalloutNifControllerSequence)source.ReadObject(block.Index)).ToArray();
-            _declaration = FalloutExecutableStringTable.ReadSpecialBook(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe"),
+            _declaration = FalloutExecutableStringTable.ReadSpecialBook(content.FalloutExecutablePath,
                 sequences.Select(sequence => sequence.Name).ToArray());
             if (!string.Equals(_declaration.AnimatedModel.Replace('\\', '/'), ModelPath, StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException("SPECIAL book executable and winning model binding disagree.");

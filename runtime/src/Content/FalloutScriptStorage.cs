@@ -22,8 +22,10 @@ internal sealed class FalloutScriptStorage
     internal static FalloutScriptStorage Open(RuntimeLiveContentSource source, string overlayRoot)
     {
         return new(new FalloutScriptIniStore(source, overlayRoot), controls: new(
-            name => FalloutInstallationSettings.Read(source).Require("Controls", name),
-            Path.Combine(overlayRoot, "input-controls.json"), source.Game == RuntimeLiveContentSource.FalloutNewVegasGame));
+            name => FalloutInstallationSettings.Read(source) is var settings && settings.Contains("Controls", name)
+                ? settings.Require("Controls", name) : null,
+            Path.Combine(overlayRoot, "input-controls.json"), source.Game == RuntimeLiveContentSource.FalloutNewVegasGame,
+            name => { var value = FalloutInstallationSettings.Read(source).ControlDefault(name); return new(value.Keyboard, value.Mouse); }));
     }
 }
 

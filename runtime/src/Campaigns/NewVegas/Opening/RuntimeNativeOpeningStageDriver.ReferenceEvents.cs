@@ -31,7 +31,14 @@ internal partial class RuntimeNativeOpeningStageDriver
     }
     internal OpenNV.Runtime.Gameplay.State.FalloutPipBoyState PipBoy => _pipBoy ?? throw new InvalidOperationException("Pip-Boy state is absent.");
     internal FalloutQuestState Quests => _quests;
-    internal IReadOnlyList<FalloutNativeSkillIdentity> Skills => _tagSkillContract.Skills;
+    internal IReadOnlyList<FalloutNativeSkillIdentity> Skills => _skillCatalog;
+
+    internal void AttachBootstrapPlayerPackage(FalloutReferenceScriptEffect effect)
+    {
+        if (effect.Kind != FalloutReferenceEffectKind.ScriptPackage || effect.Target != _pluginStack.RuntimeFormKey(0x14))
+            throw new InvalidDataException("Startup handoff is not a typed player package assignment.");
+        ApplyReferenceEffect(effect);
+    }
     internal IReadOnlyList<FalloutNativeSkillIdentity> Tags => _tagSkills.Selection;
     internal FalloutPlayerTagSkills PlayerTagSkills => _tagSkills;
     internal IReadOnlyList<FalloutNativeTraitIdentity> Traits => _traits;
@@ -93,7 +100,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         {
             var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Radio discovery has no owned content source.");
             _radioHudDeclaration ??= FalloutExecutableStringTable.ReadRadioHudDeclaration(
-                Path.Combine(Path.GetDirectoryName(source.ContentRoot)!, "FalloutNV.exe"));
+                Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
+                    source.Game == RuntimeLiveContentSource.Fallout3Game ? "Fallout3.exe" : "FalloutNV.exe"));
             _scripts.Sounds.Play(_pluginStack.RuntimeFormKey(0x14),
                 FalloutDialogueTopic.Find(_pluginStack, "SOUN", _radioHudDeclaration.SoundEditorId).FormKey);
         };

@@ -21,9 +21,9 @@ internal sealed record FalloutClimateLighting(FalloutFormKey Form, float Sunrise
 
 internal readonly record struct FalloutWeatherTimeWeights(int First, int Second, float FirstWeight, float SecondWeight)
 {
-    internal static FalloutWeatherTimeWeights Sample(FalloutClimateLighting climate, float hour, float daytimeExtension)
+    internal static FalloutWeatherTimeWeights Sample(FalloutClimateLighting climate, float hour, float daytimeExtension, int timeSamples = 6)
     {
-        if (!float.IsFinite(hour) || hour < 0 || hour > 24 || !float.IsFinite(daytimeExtension) || daytimeExtension < 0)
+        if (timeSamples is not (4 or 6) || !float.IsFinite(hour) || hour < 0 || hour > 24 || !float.IsFinite(daytimeExtension) || daytimeExtension < 0)
             throw new InvalidDataException("Sky time or daytime colour extension is invalid.");
         var start = MathF.Max(0, climate.SunriseStart - daytimeExtension);
         var end = MathF.Min(24, climate.SunsetEnd + daytimeExtension);
@@ -41,6 +41,8 @@ internal readonly record struct FalloutWeatherTimeWeights(int First, int Second,
                 ? Blend(0, 3, (float)(1.0 - (middle - (double)hour) / half))
                 : Blend(0, 1, (float)(1.0 - (hour - (double)middle) / half));
         }
+        if (timeSamples == 4 && hour >= climate.SunriseEnd && hour <= climate.SunsetStart)
+            return Blend(1, 1, 1);
         if (hour >= climate.SunriseEnd && hour <= noon)
             return Blend(4, 1, (float)(1.0 - (noon - (double)hour) / (noon - climate.SunriseEnd)));
         if (hour >= noon && hour <= climate.SunsetStart)
@@ -60,13 +62,16 @@ internal readonly record struct FalloutWeatherTimeWeights(int First, int Second,
 internal sealed record FalloutWeatherLighting(FalloutFormKey Form, byte[] SunlightRgba, string SourceSha256)
 {
     internal byte[] Colors { get; init; } = [];
+    internal int TimeSamples => SunlightRgba.Length / 4;
     internal static FalloutWeatherLighting Read(FalloutPluginRecord record)
     {
         if (record.Signature != "WTHR") throw new InvalidDataException("Sky weather does not resolve to WTHR.");
         var data = record.ReadSubrecords().Single(field => field.Signature == "NAM0").Data;
-        // FNV NAM0 stores ten colour classes, each with six RGBA time samples.
-        if (data.Length != 10 * 6 * 4) throw new NotSupportedException("Weather NAM0 colour layout is unbound.");
-        return new(record.FormKey, data.Slice(4 * 6 * 4, 6 * 4).ToArray(),
+        // FO3 has four authored time samples per class; FNV adds noon/midnight.
+        // Preserve the original stride and bytes rather than expanding a palette.
+        if (data.Length is not (160 or 240)) throw new NotSupportedException("Weather NAM0 colour layout is unbound.");
+        var stride = data.Length / 10;
+        return new(record.FormKey, data.Slice(4 * stride, stride).ToArray(),
             Convert.ToHexString(SHA256.HashData(data.Span)).ToLowerInvariant())
         { Colors = data.ToArray() };
     }
@@ -76,14 +81,16 @@ internal sealed record FalloutWeatherLighting(FalloutFormKey Form, byte[] Sunlig
 
     internal float[] Sample(FalloutWeatherTimeWeights weights, int colorClass)
     {
-        if (Colors.Length != 240 || colorClass is < 0 or > 9)
+        if (Colors.Length is not (160 or 240) || colorClass is < 0 or > 9)
             throw new InvalidDataException("Weather colour class is absent or invalid.");
-        return SampleColor(Colors.AsSpan(colorClass * 24, 24), weights);
+        var stride = Colors.Length / 10;
+        return SampleColor(Colors.AsSpan(colorClass * stride, stride), weights);
     }
 
     private static float[] SampleColor(ReadOnlySpan<byte> samples, FalloutWeatherTimeWeights weights)
     {
-        if (samples.Length != 24 || weights.First is < 0 or > 5 || weights.Second is < 0 or > 5 ||
+        if (samples.Length is not (16 or 24) || weights.First < 0 || weights.First >= samples.Length / 4 ||
+            weights.Second < 0 || weights.Second >= samples.Length / 4 ||
             !float.IsFinite(weights.FirstWeight) || !float.IsFinite(weights.SecondWeight) ||
             weights.FirstWeight < 0 || weights.SecondWeight < 0)
             throw new InvalidDataException("Weather sunlight samples or weights are invalid.");

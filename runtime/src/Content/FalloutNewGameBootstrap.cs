@@ -20,6 +20,19 @@ internal sealed class FalloutNewGameBootstrap
     internal FalloutPlayerControlState Controls { get; private set; } = FalloutPlayerControlState.AllEnabled;
     internal FalloutQuestScriptHost Host { get; }
     internal object State => new { quest = Quest.FormKey, started = _started, controls = Controls, stages = _stages.Errors };
+    private readonly List<FalloutReferenceScriptEffect> _playerPackages = [];
+    internal IReadOnlyList<FalloutQuestStageResultSnapshot> CaptureStageResults() => _stages.CaptureResults();
+
+    internal void AttachPlayerPackages(Action<FalloutReferenceScriptEffect> apply)
+    {
+        // Consume only after the native owner accepts the original assignment.
+        // A rejected request keeps its source prefix and cannot release loading.
+        while (_playerPackages.Count != 0)
+        {
+            apply(_playerPackages[0]);
+            _playerPackages.RemoveAt(0);
+        }
+    }
 
     internal static FalloutPluginRecord StartingQuest(FalloutPluginStack records, FalloutInstallationSettings settings)
     {
@@ -78,6 +91,10 @@ internal sealed class FalloutNewGameBootstrap
                     break;
                 case FalloutReferenceEffectKind.PlayerYouth:
                     scripts.Session.SetPlayerYoung(change.Enable);
+                    break;
+                case FalloutReferenceEffectKind.ScriptPackage when change.Target == records.RuntimeFormKey(0x14):
+                    if (change.Argument is { } package) _ = FalloutScriptPackage.Read(records.GetEffective(package));
+                    _playerPackages.Add(change);
                     break;
                 case FalloutReferenceEffectKind.Message:
                     var owner = records.GetEffective(change.Source);

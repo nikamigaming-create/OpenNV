@@ -31,17 +31,37 @@ internal sealed class RuntimeNativePlayerPackage
     private readonly Dictionary<FalloutFormKey, CameraClip> _clips = [];
     private NativeOwnedAnimationSoundPlayer? _sounds;
     private FalloutSoundRandomState? _soundRandom;
+    private readonly FalloutAnimationSoundEvents _soundEvents;
     private readonly List<object> _textKeyEvents = [];
     private readonly SortedSet<string> _unboundTextKeys = new(StringComparer.Ordinal);
 
     internal RuntimeNativePlayerPackage(FalloutPluginStack stack, RuntimeNativePlayer player,
-        FalloutScriptSession session, FalloutReferenceWorld world, Func<FalloutFormKey> cell)
+        FalloutScriptSession session, FalloutReferenceWorld world, Func<FalloutFormKey> cell,
+        FalloutPlayerPackageAudioSnapshot? audio = null)
     {
         _stack = stack; _player = player; _session = session; _world = world; _cell = cell;
+        // The engine player reference exists independently of placed ACHR
+        // records. Its audio history outlives every individual package.
+        _soundEvents = new(stack.RuntimeFormKey(0x14));
         if (session.PlayerPackage is { } saved) Restore(saved);
+        if (audio is not null)
+        {
+            if (_soundRandom is not null && _soundRandom.State != audio.RandomState)
+                throw new InvalidDataException("Player package and audio random state disagree.");
+            _soundRandom = new(audio.RandomState);
+            _soundEvents.Restore(audio.Events, stack);
+            if (_soundEvents.Events.Count != 0 || _soundEvents.OwnedLanes.Any()) EnsureSounds();
+        }
     }
 
     internal FalloutFormKey? CurrentPackage => _package?.Form;
+    internal FalloutPlayerPackageAudioSnapshot CaptureAudio()
+    {
+        if (_sounds is not null && !_sounds.CanCaptureSilent)
+            throw new NotSupportedException("Player package audio requires its native playback continuation.");
+        _soundRandom ??= new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
+        return new(_soundEvents.Capture(), _soundRandom.State);
+    }
 
     internal object State => new
     {
@@ -418,13 +438,7 @@ internal sealed class RuntimeNativePlayerPackage
                 if (!structural && (value.StartsWith("Sound:", StringComparison.OrdinalIgnoreCase) ||
                     value.StartsWith("Enum: StopSounds", StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (_sounds is null)
-                    {
-                        _soundRandom ??= new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
-                        _sounds = new(_stack, RuntimeLiveContentSource.Current!, _player, _player.UnitsToMeters, _soundRandom);
-                        _player.AddChild(_sounds);
-                    }
-                    disposition = _sounds.Dispatch(new FalloutNifTextKeyEvent(_playback!.CompletedRepeats, index, key.Time, value));
+                    disposition = EnsureSounds().Dispatch(new FalloutNifTextKeyEvent(_playback!.CompletedRepeats, index, key.Time, value));
                 }
                 if (disposition.Contains("unbound", StringComparison.Ordinal)) _unboundTextKeys.Add(value);
                 _textKeyEvents.Add(new
@@ -440,4 +454,15 @@ internal sealed class RuntimeNativePlayerPackage
     }
 
     private void ApplySample(float sourceTime) => _player.ApplyCameraPath(_animation!, sourceTime);
+
+    private NativeOwnedAnimationSoundPlayer EnsureSounds()
+    {
+        if (_sounds is not null) return _sounds;
+        _soundRandom ??= new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
+        _sounds = new(_stack, RuntimeLiveContentSource.Current!, _player, _player.UnitsToMeters,
+            _soundRandom, _soundEvents);
+        _player.AddChild(_sounds);
+        _sounds.RequirePcmRestored();
+        return _sounds;
+    }
 }

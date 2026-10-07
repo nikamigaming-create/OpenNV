@@ -83,6 +83,12 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     internal IReadOnlyList<string> CleanRoomSemanticCapabilities { get; }
     internal string Campaign { get; }
     internal string ContentRoot { get; }
+    internal string FalloutExecutablePath => Path.Combine(Path.GetDirectoryName(ContentRoot)!, Game switch
+    {
+        FalloutNewVegasGame => "FalloutNV.exe",
+        Fallout3Game => "Fallout3.exe",
+        _ => throw new NotSupportedException("Owned executable declarations require a Fallout 3/New Vegas source."),
+    });
     internal IReadOnlyList<string> ContentRoots => _layers.Roots;
     internal IReadOnlyList<FalloutInstallationSetting> Settings { get; }
     internal Task ArchiveWarmup { get; }

@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Content;
 internal static partial class FalloutExecutableStringTable
 {
     internal enum SettingCollection { Game, Main, Prefs, Renderer, Blend, Registry }
-    internal sealed record StaticSetting(string Name, SettingCollection Collection, uint Payload);
+    internal sealed record StaticSetting(string Name, SettingCollection Collection, uint Payload, uint Descriptor = 0);
 
     internal static IReadOnlyList<StaticSetting> ReadStaticSettings(byte[] bytes) => ReadStaticSettings(Load(bytes).Image);
 
@@ -24,7 +24,7 @@ internal static partial class FalloutExecutableStringTable
         var result = new List<StaticSetting>();
         var names = new HashSet<(SettingCollection, string)>();
         var types = new Dictionary<uint, SettingCollection?>();
-        foreach (var bytes in image.StaticDescriptorSections())
+        foreach (var (address, bytes) in image.StaticDescriptorSections())
         {
             for (var at = 0; at <= bytes.Length - 12; at += 4)
             {
@@ -37,7 +37,7 @@ internal static partial class FalloutExecutableStringTable
                 if (name[0] == 'f' && !float.IsFinite(BitConverter.Int32BitsToSingle(unchecked((int)payload))) || name[0] == 'b' && payload > 1)
                     throw new InvalidDataException($"Owned static setting has an invalid canonical payload: {name}.");
                 if (!names.Add((owner, name.ToUpperInvariant()))) throw new InvalidDataException($"Multiple owned static settings declare {name} in {owner}.");
-                result.Add(new(name, owner, payload));
+                result.Add(new(name, owner, payload, checked(address + (uint)at)));
             }
         }
         return Array.AsReadOnly(result.ToArray());
@@ -45,7 +45,7 @@ internal static partial class FalloutExecutableStringTable
 
     private sealed partial class Image
     {
-        internal IEnumerable<byte[]> StaticDescriptorSections()
+        internal IEnumerable<(uint Address, byte[] Data)> StaticDescriptorSections()
         {
             foreach (var section in headers.SectionHeaders.Where(section =>
                          (section.SectionCharacteristics & SectionCharacteristics.MemWrite) != 0 &&
@@ -54,7 +54,7 @@ internal static partial class FalloutExecutableStringTable
                 var count = Math.Min(section.VirtualSize, section.SizeOfRawData);
                 if (count < 0 || section.PointerToRawData < 0 || section.PointerToRawData > bytes.Length - count)
                     throw new InvalidDataException("Owned static setting section exceeds its file extent.");
-                yield return bytes.AsSpan(section.PointerToRawData, count).ToArray();
+                yield return (checked(Base + (uint)section.VirtualAddress), bytes.AsSpan(section.PointerToRawData, count).ToArray());
             }
         }
 
