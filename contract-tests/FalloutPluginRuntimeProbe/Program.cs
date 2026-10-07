@@ -65,6 +65,11 @@ if (args is ["--test-numeric-ini"])
     NumericIniSettingProbe.Run();
     return;
 }
+if (args is ["--test-static-settings"])
+{
+    StaticExecutableSettingsContracts.Run();
+    return;
+}
 if (args is ["--test-hit-handlers"])
 {
     NvseEventProbe.HitHandlers();
@@ -114,6 +119,7 @@ ScriptExpressionProbe.Run();
 ScriptPostfixProbe.Run();
 ScriptSourceStringProbe.Run();
 NumericIniSettingProbe.Run();
+StaticExecutableSettingsContracts.Run();
 ScriptValueProbe.Run();
 ScriptArrayProbe.Run();
 ScriptStorageProbe.Run();

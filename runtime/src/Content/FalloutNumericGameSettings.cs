@@ -141,12 +141,11 @@ internal sealed class FalloutNumericGameSettings(FalloutPluginStack records, Run
         }
         else if (ownedSource is { } content)
         {
-            if (content.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
-                throw new NotSupportedException("This engine's executable numeric-setting layout has not been admitted.");
-            var executable = Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe");
-            if (name.Length != 0 && char.ToLowerInvariant(name[0]) == 'f' && FloatDefaults.GetValue(content, _ => FalloutExecutableStringTable.ReadFloatDefaults(executable)).TryGetValue(name, out var number))
+            var executable = Path.Combine(Path.GetDirectoryName(content.ContentRoot)!,
+                content.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe");
+            if (name.Length != 0 && char.ToLowerInvariant(name[0]) == 'f' && FloatDefaults.GetValue(content, _ => FalloutExecutableStringTable.ReadFloatDefaults(executable, gameSettingsOnly: true)).TryGetValue(name, out var number))
                 declaration = new(name, 'f', number);
-            else if (name.Length != 0 && char.ToLowerInvariant(name[0]) == 'i' && IntegerDefaults.GetValue(content, _ => FalloutExecutableStringTable.ReadIntegerDefaults(executable)).TryGetValue(name, out var bits))
+            else if (name.Length != 0 && char.ToLowerInvariant(name[0]) == 'i' && IntegerDefaults.GetValue(content, _ => FalloutExecutableStringTable.ReadIntegerDefaults(executable, gameSettingsOnly: true)).TryGetValue(name, out var bits))
                 declaration = new(name, 'i', unchecked((int)bits));
         }
         _declarations.Add(name, declaration);

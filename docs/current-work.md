@@ -79,9 +79,14 @@ remain unresolved. The selected FNV performance results do not establish Fallout
 3/TTW exterior performance.
 
 Standalone Fallout 3 still uses a bounded preview path rather than shared
-campaign gameplay/save owners. Its executable defaults use a source layout
-different from FNV's constructor-associated defaults. General default reading,
-source-owned opening menus/state and ordinary New Game/save/cold Continue must
+campaign gameplay/save owners. Its preinitialized executable settings now read
+through their typed source descriptors, with game, Main, preferences and renderer
+collections kept distinct. New Vegas retains constructor-owned defaults. Separate
+FNV, FO3, TTW and combined-stack checks verify winning numeric/string settings,
+source player values and layered INI queries without changing owned files.
+Relocated synthetic PE checks reject malformed descriptors and preserve constructor
+precedence. These settings checks do not establish ordinary gameplay or saves.
+Source-owned opening menus/state and ordinary New Game/save/cold Continue must
 be implemented and independently checked. Standalone FNV and the combined
 JAM/TTW/NMC stack also need current exported ordinary-path checks; a TTW save
 cannot certify either stack.
