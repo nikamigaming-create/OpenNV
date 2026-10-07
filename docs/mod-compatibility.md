@@ -170,6 +170,36 @@ the [required extension packages](https://thebestoftimes.moddinglinked.com/essen
 TTW NVSE, xNVSE and the other installed extensions require their own runtime
 behavior; a present library is not an implemented extension.
 
+### Current TTW essentials denominator
+
+The October 6, 2026 read of the current
+[Best of Times essentials](https://thebestoftimes.moddinglinked.com/essentials.html)
+binds the following packages to the acceptance scope. Installed versions below
+come from the selected owned package inventory, not a claim that those versions
+are the latest or that their original DLLs execute correctly.
+
+| Guide/package group | Owned packages | Remaining acceptance |
+| --- | --- | --- |
+| Extension framework | xNVSE 6.4.9; TTW NVSE 3.3.3b; JIP LN 57.30 and settings | Original interfaces, callbacks, object access, used hooks and every reached function, with unchanged scripts and cold saves |
+| Extra extension behavior | ShowOff 1.84 and settings; Stewie Tweaks 10.00 and selected INI | Actual configured engine/gameplay effects and persistent settings; presence or version queries are insufficient |
+| Animation and UI | kNVSE 37; UIO 2.30 | Source animation selection and compatible original HUD/menu composition, input and retirement |
+| JAM's additional dependency scope | JohnnyGuitar 5.28; MCM 1.5.1; JAM 4.6 | All nine modules, real configuration and native/gameplay consumers; do not enable the separate all-tweaks preset implicitly |
+| Engine fixes/performance recommendations | NVTF, Stewie Engine Optimizations, Combat Lag Fix, VATS Lag Fix, ActorCause Save Bloat Fix, FNV Mod Limit Fix are absent from the current owned inventory | Bind corresponding behavior to first-party timing, combat/VATS, persistence and resource owners; retail executable patching is not an OpenNV implementation or a reason to waive those outcomes |
+| Diagnostic recommendations | Yvile's Crash Logger, Improved Console and Console Paste Support are absent from the current owned inventory | Diagnostics and command/input behavior remain independent of campaign playability and cannot provide gameplay authority |
+
+The guide also names the retail 4GB/Epic patchers and xNVSE loader installation.
+Retail executable patchers are not OpenNV launch inputs. That distinction does
+not remove the required original extension interface/guest execution work or
+permit invented native-plugin success.
+
+The [Wasteland Survival Guide](https://wastelandsurvival.guide/docs/intro) is
+modular and requires the completed Best of Times setup first. Its optional
+packages, MCM additions, presets and mutually exclusive variants need a reviewed
+selection and source winners; enabling every download together is not a perfect
+TTW profile. Standalone YUP cannot replace TTW's YUPTTW integration. Complete
+TTW/JAM/JIP/JohnnyGuitar compatibility remains unaccepted until the actual
+unchanged dependency and ordinary-input outcomes pass.
+
 The private inventory contains JAM 4.6, TTW 3.4, YUP 13.9.1, JSawyer 5.6.3,
 Uncut Wasteland plus NPCs 0.91b, Living Desert 2.7.3, NMC Small 1.0 with all-pack,
 naval-chair and water-tower patches, EVE 1.19 Alternate, Nevada Skies 2281 Rework

@@ -40,6 +40,15 @@ No complete exterior checkpoint or campaign/parity completion is claimed.
 See [ordinary campaign attempts](ordinary-campaign-bot.md) and
 [current work](current-work.md).
 
+The current campaign-menu repair also delivers actual offered source controls
+while its own reference skill awaits interaction/player control. Focused tests
+retain foreign-owner and current-fault refusal, no repeated unchanged choices
+and bounded unoffered/stalled modal waits. An unchanged ordinary cave replay
+verifies the real source exit-review message delivery during the active skill;
+the authored name entry still needs a general ordinary confirmation policy.
+The separate source door-animation and exterior complete-save failures remain
+unwaived. This is not unattended review, train travel or mod-completion proof.
+
 Later ordinary user input reaches Escape stage 150 in exterior CELL 0010c1 at
 107 HP, but no complete later save is verified. The reported persistent whiteout
 retains the original ten-second DEMOEyeAdjustISFX at zero elapsed while an
