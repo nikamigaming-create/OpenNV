@@ -25,15 +25,10 @@ internal static partial class FalloutExecutableStringTable
         Func<uint, string?> literal, int command)
     {
         var code = source.Span;
-        var headers = CreationHeaders(code, settings);
-        var start = code[..headers.Position].LastIndexOf(new byte[] { 0x55, 0x8b, 0xec });
-        if (start < 0) throw new NotSupportedException("Race-menu creation constructor is unbound.");
-        var tail = code[headers.Position..];
-        var extent = tail.IndexOf(new byte[] { 0x8b, 0x4d, 0xf4, 0x64, 0x89, 0x0d, 0, 0, 0, 0 });
-        if (extent < 0) throw new NotSupportedException("Race-menu creation constructor has no admitted boundary.");
-        var body = code[start..(headers.Position + extent)];
+        var constructor = CreationConstructor(code, settings);
+        var body = code[constructor.Start..constructor.End];
         var (modes, dispatcher) = RaceMenuCommandModes(code, command);
-        if (!RaceMenuForwardsArgument(code, dispatcher, start, []))
+        if (!RaceMenuForwardsArgument(code, dispatcher, constructor.Start, []))
             throw new NotSupportedException("Race-menu command does not forward its mode to the creation constructor.");
         var arm = RaceMenuModelArm(body, modes);
         body = body[arm.Start..arm.End];

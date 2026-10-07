@@ -96,13 +96,20 @@ FO3, TTW essentials and the combined stack. The statistical model contains
 additional axes outside the source menu. Synthetic checks reject malformed
 assignments, limits, argument forwarding, selected model extents and foreign
 branch/resolver associations. A fresh ordinary FO3 run opens the original
-Gene Projector and accepts sex/race-page navigation at CG00 stage 61. Its frame
-was inspected and temporary pixels deleted. The face page still requests FNV's
-unbound age label; the source declaration for that optional control is the next
-owner. Full FO3 creation acceptance remains unverified.
-Partial menu initialization cleans up before publishing state; a reached failure
-cannot break telemetry.
-FO3 has no accepted settled manual save or cold Continue yet. Its unbound
+Gene Projector. Its frame was inspected and temporary pixels deleted. Optional
+age controls now follow the selected constructor: FO3 declares none, while FNV,
+TTW and the combined stack retain their original slider and interval. Synthetic
+checks reject unrelated labels, foreign getters/pages and malformed consumers.
+A fresh ordinary FO3 run accepts sex, race, face, hair and final confirmation,
+completes CG00 stage 100 and starts the authored CG01 toddler chapter at stage 10.
+Menu execution failures release their input/pause owner and retain the error.
+This verifies creation navigation and acceptance, not retail presentation or the
+whole opening.
+FO3 has no accepted settled manual save or cold Continue yet. Its first source
+automatic save is blocked by an off-cell actor's selected package with no native
+procedure continuation. The ordinary manual menu save retains the resulting
+concurrent-auto-save refusal. Deferred assignment persistence is the next owner;
+unknown procedure behavior must remain visible. Its unbound
 double-vision phase, convex-list/phantom collision and modeled emergency lights
 remain visible. Known exhausted radio links end their conversation; unknown
 conditions still reject. Standalone FNV reaches ordinary character acceptance
@@ -145,8 +152,8 @@ clean-system FO3/FNV/TTW New Game.
 ## Next owner and outcome
 
 Primary owns serial builds, live input, save verification and checked
-publication. Bind FO3's source creation-control availability, complete ordinary
-character creation and the
+publication. Persist the actually selected, not-yet-started off-cell package
+continuation, verify FO3's first manual save and cold Continue, then complete the
 independent flat/OpenXR source-stack loading/saving matrix. Keep native vegetation decoding and upload
 timing as active exterior owners. Continue the complete vault/world denominator and
 ordinary Megaton/train/Mojave route without bypassing source conditions.

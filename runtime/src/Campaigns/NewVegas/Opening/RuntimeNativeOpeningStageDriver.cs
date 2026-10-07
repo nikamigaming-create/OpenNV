@@ -524,7 +524,14 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         var entry = new RuntimeNativeRaceSexEntry();
         AddChild(entry);
         entry.Accepted += AcceptCharacter;
-        entry.Failed += error => ExecutionError = error.Message;
+        entry.Failed += error =>
+        {
+            ExecutionError = error.Message;
+            if (!ReferenceEquals(_raceSexEntry, entry)) return;
+            _raceSexEntry = null;
+            entry.ReleasePause();
+            entry.QueueFree();
+        };
         try
         {
             entry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter(), modelPath);

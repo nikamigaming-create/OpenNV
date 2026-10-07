@@ -12,6 +12,7 @@ internal sealed record FalloutFaceControlBinding(int Group, int Index, int Page,
 
 internal sealed record FalloutFaceControlTable(IReadOnlyList<FalloutFaceControlBinding> Controls,
     IReadOnlyList<int> TextureOrder, int GeometryCount);
+internal sealed record FalloutCreationAgeControl(string Setting, int Minimum, int Maximum);
 
 internal static partial class FalloutExecutableStringTable
 {
@@ -51,6 +52,58 @@ internal static partial class FalloutExecutableStringTable
         => CreationHeaders(code.Span, settings).Labels;
 
     private sealed record CreationHeaderDeclaration(int Position, IReadOnlyList<string> Labels);
+
+    internal static FalloutCreationAgeControl? ReadCreationAgeControl(string path)
+    {
+        var (code, image) = Load(path);
+        return ReadCreationAgeControl(code, ControlDescriptors(code, image));
+    }
+
+    internal static FalloutCreationAgeControl? ReadCreationAgeControl(ReadOnlyMemory<byte> source, IReadOnlyDictionary<uint, string> settings)
+    {
+        var code = source.Span;
+        var constructor = CreationConstructor(code, settings);
+        // This optional source setting and its consumer are absent in the
+        // earlier menu. An unrelated generic age string does not add a slider.
+        var descriptors = settings.Where(row => row.Value == "sRSMAge").Select(row => row.Key).ToArray();
+        if (descriptors.Length == 0) return null;
+        if (descriptors.Length != 1) throw new InvalidDataException("Creation age setting has multiple descriptors.");
+        var body = code[constructor.Start..constructor.End];
+        FalloutCreationAgeControl? result = null;
+        var getters = new HashSet<int>();
+        for (var at = 0; at <= body.Length - 11; at++)
+            if (body[at] == 0xb9 && settings.GetValueOrDefault(U32(body, at + 1)) == "sRSMRandomize" && body[at + 5] == 0xe8 && body[at + 10] == 0x50)
+                getters.Add(constructor.Start + at + 10 + I32(body, at + 6));
+        if (getters.Count != 1) throw new NotSupportedException("Creation widget label getter is unbound or ambiguous.");
+        var getter = getters.Single();
+        for (var at = 11; at <= body.Length - 27; at++)
+        {
+            var input = body[at..];
+            if (input[0] != 0xb9 || U32(input, 1) != descriptors[0]) continue;
+            var prefix = body.Slice(at - 11, 11);
+            if (prefix[0] != 0x68 || U32(prefix, 1) != 0x80000001 || prefix[5] != 0x6a || prefix[7] != 0x6a || prefix[9] != 0x6a ||
+                input[5] != 0xe8 || input[10] != 0x50 || !input.Slice(11, 2).SequenceEqual(new byte[] { 0x8b, 0x95 }) ||
+                !input.Slice(17, 3).SequenceEqual(new byte[] { 0x8b, 0x4a, 0x30 }) || input[20] != 0xe8 ||
+                !input.Slice(25, 2).SequenceEqual(new byte[] { 0x89, 0x85 }) ||
+                constructor.Start + at + 10 + I32(input, 6) != getter)
+                throw new NotSupportedException("Creation age setting has no admitted slider consumer.");
+            var minimum = unchecked((sbyte)prefix[8]); var maximum = unchecked((sbyte)prefix[6]);
+            if (minimum >= maximum) throw new InvalidDataException("Creation age slider has an invalid source interval.");
+            if (result is not null) throw new InvalidDataException("Creation age slider has multiple consumers.");
+            result = new("sRSMAge", minimum, maximum);
+        }
+        return result ?? throw new NotSupportedException("Declared creation age control has no source consumer.");
+    }
+
+    private static (int Start, int End) CreationConstructor(ReadOnlySpan<byte> code, IReadOnlyDictionary<uint, string> settings)
+    {
+        var headers = CreationHeaders(code, settings);
+        var start = code[..headers.Position].LastIndexOf(new byte[] { 0x55, 0x8b, 0xec });
+        if (start < 0) throw new NotSupportedException("Creation constructor is unbound.");
+        var extent = code[headers.Position..].IndexOf(new byte[] { 0x8b, 0x4d, 0xf4, 0x64, 0x89, 0x0d, 0, 0, 0, 0 });
+        if (extent < 0) throw new NotSupportedException("Creation constructor has no admitted boundary.");
+        return (start, headers.Position + extent);
+    }
 
     private static CreationHeaderDeclaration CreationHeaders(ReadOnlySpan<byte> code, IReadOnlyDictionary<uint, string> settings)
     {
