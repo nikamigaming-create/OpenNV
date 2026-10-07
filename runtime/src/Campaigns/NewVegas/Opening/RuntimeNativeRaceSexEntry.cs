@@ -148,7 +148,8 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
         rows.Add(Link(4));
         rows.Add(new(Text("sRSMRandomize"), false, () => Confirm("sRSMConfirmRandomize", () =>
             throw new NotSupportedException("Native FaceGen random distribution and random stream are not yet bound.")), Selectable: false));
-        rows.Add(Slider("sRSMAge", 1, 10, 3, () => _creation.AgeValue, _creation.SetAge));
+        if (_creation.AgeControl is { } age)
+            rows.Add(Slider(age.Setting, age.Minimum, age.Maximum, 3, () => _creation.AgeValue, _creation.SetAge));
         return rows;
     }
     private IReadOnlyList<NativeRaceSexChoice> HairColorRows()

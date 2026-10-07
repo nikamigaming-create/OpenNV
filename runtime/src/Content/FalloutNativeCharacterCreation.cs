@@ -15,6 +15,7 @@ internal sealed class FalloutNativeCharacterCreation
     internal FalloutNativeRaceSexSelection Selection { get; private set; }
     internal FalloutFaceControlTable Controls { get; }
     internal IReadOnlyList<string> Headers { get; }
+    internal FalloutCreationAgeControl? AgeControl { get; }
     internal int PresetIndex { get; private set; } = 1;
     internal int Revision { get; private set; }
     internal int AgeValue { get; private set; } = 1;
@@ -35,6 +36,7 @@ internal sealed class FalloutNativeCharacterCreation
         _model = FalloutCtlFile.Read(ctl);
         Controls = FalloutExecutableStringTable.ReadFaceControls(executable);
         Headers = FalloutExecutableStringTable.ReadCreationHeaders(executable);
+        AgeControl = FalloutExecutableStringTable.ReadCreationAgeControl(executable);
         // The executable declares the menu's axes. The statistical model can
         // contain additional controls that this menu does not expose.
         if (Controls.GeometryCount <= 0 || Controls.GeometryCount > _model.Controls[0].Count ||
@@ -132,7 +134,8 @@ internal sealed class FalloutNativeCharacterCreation
 
     internal void SetAge(int value)
     {
-        if (value is < 1 or > 10) throw new InvalidDataException("Creation age slider is outside the native interval.");
+        var control = AgeControl ?? throw new NotSupportedException("The source creation menu declares no age control.");
+        if (value < control.Minimum || value > control.Maximum) throw new InvalidDataException("Creation age slider is outside the native interval.");
         var source = Appearance();
         FalloutCtlAffineAxis[] Axes(int domain) => [_model.AffineAxes[0][0][domain], _model.AffineAxes[0][1][domain]];
         var geometryAxes = Axes(0); var textureAxes = Axes(1);

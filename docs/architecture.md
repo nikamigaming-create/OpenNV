@@ -33,7 +33,10 @@ consumer; unrelated barber/surgery arms cannot replace that model. Inline
 copies validate their complete source/destination extent and terminator.
 Menu backgrounds admit both frame-local and optimized register selectors with
 the same ordered branches, source forms and shared resolver. Extra statistical
-model axes do not become invented menu controls.
+model axes do not become invented menu controls. Optional creation age controls
+require their original label, source interval and constructor widget consumer;
+an unrelated generic age setting cannot add a slider. A failed published menu
+releases its own pause/input lease while retaining the execution error.
 
 Source hit callbacks use a process-owned registration owner and the current
 world's leased source executor. Native actor/player damage paths emit before
