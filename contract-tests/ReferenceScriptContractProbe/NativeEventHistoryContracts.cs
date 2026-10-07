@@ -71,6 +71,33 @@ internal static class NativeEventHistoryContracts
         stoppedVoice.BindMedia(stopGeneration, new string('a', 64)); stoppedVoice.Complete(stopGeneration, FalloutAnimationSoundEnd.SourceStopped);
         Require(stoppedVoice.Capture().Events[0].End == FalloutAnimationSoundEnd.SourceStopped, "Authored stop lost its distinct source receipt.");
         var failed = new FalloutAnimationSoundEvents(caller); failed.Fail(null, "Missing source emitter."); Reject(() => failed.Capture());
+        var ownedPcm = new FalloutAnimationSoundEvents(caller);
+        var pcmGeneration = ownedPcm.Begin(records, selected, "Sound: FixturePartial", true, [source.LogicalPath]);
+        ownedPcm.BindMedia(pcmGeneration, new string('a', 64));
+        var samples = new FalloutPcmPlaybackSnapshot(120, 32000, 1, 48000, FalloutSoundLoop.Read(source), 33.25, 0, true, false);
+        var playback = new FalloutAnimationSoundPlaybackSnapshot(samples, "OriginalEmitter", true);
+        ownedPcm.BindPlayback(pcmGeneration, () => playback);
+        var activePcm = JsonSerializer.Deserialize<FalloutAnimationSoundEventsSnapshot>(JsonSerializer.Serialize(ownedPcm.Capture()))!;
+        var coldPcm = new FalloutAnimationSoundEvents(caller); coldPcm.Restore(activePcm, records);
+        Require(!coldPcm.CanCapture && coldPcm.PendingNativeCompletion.Count() == 1,
+            "Saved PCM data was mistaken for a rebuilt native playback owner.");
+        coldPcm.BindPlayback(pcmGeneration, () => playback);
+        Require(JsonSerializer.Serialize(coldPcm.Capture()) == JsonSerializer.Serialize(activePcm),
+            "Cold PCM ownership changed its fractional source clock or selected history.");
+        Reject(() => (activePcm with { Events = [activePcm.Events[0] with
+            { Playback = playback with { EmitterPath = "../DifferentEmitter" } }] }).Validate());
+        Reject(() => (activePcm with { Events = [activePcm.Events[0] with
+            { Playback = playback with { Samples = samples with { Position = double.NaN } } }] }).Validate());
+        var sourceFault = new FalloutAnimationSoundEvents(caller);
+        var faultGeneration = sourceFault.Begin(records, selected, "Sound: FixturePartial", true, [source.LogicalPath]);
+        sourceFault.Fail(faultGeneration, "Original decoder failed.", "Sound: FixturePartial");
+        var failedSnapshot = sourceFault.Capture();
+        var coldFault = new FalloutAnimationSoundEvents(caller); coldFault.Restore(failedSnapshot, records);
+        Require(coldFault.CanCapture && coldFault.OwnedLanes.Contains("Sound: FixturePartial:Original decoder failed.") &&
+            JsonSerializer.Serialize(coldFault.Capture()) == JsonSerializer.Serialize(failedSnapshot),
+            "A consumed source failure was erased or replayed while restoring.");
+        Reject(() => (failedSnapshot with { Faults = [new("Sound: DifferentEvent", "Original decoder failed.")] }).Validate());
+        Reject(() => (failedSnapshot with { Events = [failedSnapshot.Events[0] with { MediaSha256 = "invalid" }] }).Validate());
         state.HitReactionFaultCaptureBlocker = "Opaque post-selection pose failure.";
         Reject(() => world.Capture());
         Console.WriteLine("OPENNV_NATIVE_EVENT_HISTORY_CONTRACT_PASS activeRefused=true missingReceiptRefused=true finishedOnce=true partialRetained=true cancelledRefused=true sourceStop=true sourceHash=true coldNoReplay=true rng=true failedRead=true invalidAtomic=true opaqueRefused=true parity=unverified");

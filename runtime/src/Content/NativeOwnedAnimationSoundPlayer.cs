@@ -27,8 +27,9 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     private FalloutAnimationSoundCaptureDiagnostic ReadCaptureDiagnostic(bool retired) => new(CanCaptureSilent, retired,
         _lostCaptureAtRetirement, _spatial.Count, _voices.Count, _eventCount, Array.AsReadOnly(_unbound.ToArray()));
     private bool HasUnreceiptedFault => _events is null ? _unbound.Count != 0 :
-        !_events.CanCapture || _unbound.Except(_events.PartialLanes, StringComparer.Ordinal).Any();
-    internal bool CanCaptureSilent => !_lostCaptureAtRetirement && _spatial.Count == 0 && _voices.Count == 0 && !HasUnreceiptedFault;
+        !_events.CanCapture || _unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any();
+    internal bool CanCaptureSilent => !_lostCaptureAtRetirement &&
+        _voices.Values.All(voice => voice.Pcm is not null && voice.Completed is null) && !HasUnreceiptedFault;
     internal IReadOnlyCollection<string> Unbound => _unbound;
     internal IEnumerable<FalloutSoundRecord> Sources => _descriptors.Values.Select(entry => entry.Source);
     internal static Action<object>? SoundObserver { get; set; }
@@ -62,7 +63,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         if (_events is not null)
         {
             _events.ValidateMedia(content);
-            _unbound.UnionWith(_events.PartialLanes);
+            _unbound.UnionWith(_events.OwnedLanes);
         }
         Name = "OwnedAnimationSounds";
     }
@@ -94,6 +95,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
             foreach (var lane in selected.Unbound) _unbound.Add(selected.Source.FormKey + ":" + lane);
             var disposition = selected.Play ? selected.Unbound.Count == 0 ? "source-sound-playing" : "source-sound-dry-playing-partial" : "source-sound-chance-skipped";
             AudioStream? stream = null;
+            NativeOwnedPcmStream? pcm = null;
             if (selected.Play)
             {
                 if (!_streams.TryGetValue(selected.Path!, out stream))
@@ -105,11 +107,15 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                 if (generation is { } mediaGeneration)
                     _events!.BindMedia(mediaGeneration, stream!.GetMeta("opennv_owned_media_sha256").AsString());
                 var loop = FalloutSoundLoop.Read(selected.Source);
-                if (loop.Mode != FalloutSoundLoopMode.None) stream = NativeOwnedSoundPlayback.CreateLoopStream(stream, loop);
+                if (loop.Mode != FalloutSoundLoopMode.None)
+                {
+                    if (stream is not AudioStreamWav wav) throw new NotSupportedException("Source PCM loops require decoded owned WAV samples.");
+                    pcm = new(wav, loop); stream = pcm.Stream;
+                }
                 if (selected.Source.IsTwoDimensional)
                 {
                     var voice = new AudioStreamPlayer { Stream = stream, PitchScale = selected.PitchScale, VolumeDb = selected.GainDb };
-                    TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed, generation, followEmitter);
+                    TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed, generation, followEmitter, pcm);
                     PlayVoice(voice);
                 }
                 else
@@ -123,7 +129,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
                         AreaMask = 0
                     };
                     _spatial.Add(voice, selected);
-                    TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed, generation, followEmitter);
+                    TrackVoice(voice, emitter, loop, selected.Source.FormKey, completed, generation, followEmitter, pcm);
                     ApplyListener(voice, selected); PlayVoice(voice);
                 }
             }
@@ -144,7 +150,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
         {
-            _events?.Fail(generation, error.Message);
+            _events?.Fail(generation, error.Message, textKey);
             _unbound.Add(textKey + ":" + error.Message);
             LastEvent = new { ordinal = ++_eventCount, textKey, disposition = "unbound-source-sound", error = error.Message };
             ObserveEvent();

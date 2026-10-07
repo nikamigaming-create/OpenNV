@@ -25,13 +25,19 @@ Model-less HDPT selections retain their source identity/extra-part graph
 without inventing geometry.
 
 [Source animation history](source-animation-event-history.md) retains genuine
-finished sound generations and stopped pure hit-query prefixes through save v43.
+finished sound generations and stopped pure hit-query prefixes. Save v46 also
+retains source-bound active PCM loops and consumed sound-fault histories. A
+first-party public-GDExtension adapter exposes raw mixing; C# owns the decoded
+samples, fractional clock, loop count and release envelope. Source hashes,
+emitter paths and accompanying automatic object animation clocks validate cold
+without a selection draw or replayed text key. Unsupported audio lanes and
+historical faults remain visible.
 Independent selected IDLE clocks and residual bone components compose with a
 failed package begin; active speech, sound, attachments and physical poses keep
 their own capture requirements.
 Finite source sounds keep their native lifetime outside model retirement;
-all-retained source/native/media receipts admit live save waiting without
-admitting active audio into a checkpoint. Source writer failures retain their
+all-retained source/native/media receipts admit live save waiting. Unowned
+active audio still refuses capture. Source writer failures retain their
 own historical/capture boundary while later unrelated script frames continue.
 Assembled actor skeletons and parts retain complete source string domains.
 Named sound bones use the actual posed skeleton; a proven absent name uses the
@@ -481,7 +487,11 @@ menus, unsettled transfers and death remain rejected. RuntimeSaveSlotCatalog
 protects existing GUID identities, derives metadata from saved state and looks
 up a selected slot independently of unrelated corrupt files. RuntimeCoordinator
 validates the complete selected save before preserving Continue and draining
-readers for an in-process scene reload. Diagnostic checkpoint loading may open
+readers for an in-process scene reload. Atomic flushed writes protect slot
+identities. A load transaction preserves the previous Continue bytes and
+timestamp until native restoration succeeds; failure rolls back and returns
+to clean title owners. Concurrent newer replacement cannot be overwritten by
+rollback. Diagnostic checkpoint loading may open
 the shared pause menu before world gameplay advances. The live harness reports
 the last completed restored slot separately from command delivery; checkpoint
 requests remain diagnostic preparation, followed by ordinary flat/XR input.

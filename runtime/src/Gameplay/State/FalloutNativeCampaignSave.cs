@@ -56,7 +56,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v45";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v46";
+    internal const string CorpseTransferSchema = "opennv-native-fnv-campaign-save/v45";
     internal const string ActivationRelaySchema = "opennv-native-fnv-campaign-save/v44";
     internal const string NativeSoundHistorySchema = "opennv-native-fnv-campaign-save/v43";
     internal const string TerminalResultsSchema = "opennv-native-fnv-campaign-save/v42";
@@ -189,22 +190,8 @@ internal static class FalloutNativeCampaignSave
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(state);
         Validate(state, state.SaveCompatibilityId);
-        var fullPath = Path.GetFullPath(path);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        var temporary = $"{fullPath}.{Guid.NewGuid():N}.tmp";
-        try
-        {
-            File.WriteAllText(
-                temporary,
-                JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }) +
-                    System.Environment.NewLine);
-            File.Move(temporary, fullPath, true);
-        }
-        finally
-        {
-            if (File.Exists(temporary))
-                File.Delete(temporary);
-        }
+        RuntimeAtomicSaveFile.Write(path, System.Text.Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine));
     }
 
     internal static FalloutNativeCampaignRestore Read(
@@ -333,7 +320,7 @@ internal static class FalloutNativeCampaignSave
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
             if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
-        if (state.Schema is ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema is CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References is not null)
             state = state with
             {
@@ -432,6 +419,16 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.DoorMotion?.ScriptSequence is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema contains future scripted door animation state.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference =>
+            reference.ObjectAnimations?.Any(clock => !clock.ScriptSelected) == true) == true)
+            throw new InvalidDataException("Legacy campaign schema contains future automatic object animation state.");
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference =>
+            reference.AnimationSoundEvents is { } sounds && (sounds.OpaqueError is not null || sounds.Faults is not null ||
+                sounds.Events.Any(entry => entry.Playback is not null))) == true)
+            throw new InvalidDataException("Legacy campaign schema contains future PCM or source-fault continuation.");
+        if (state.Schema == CorpseTransferSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.CorpseEquipment is not null) == true)
             throw new InvalidDataException("Legacy campaign schema contains future corpse equipment continuation.");
         if (state.Schema == ActivationRelaySchema) state = state with { Schema = ExpectedSchema };

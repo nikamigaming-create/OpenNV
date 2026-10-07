@@ -53,7 +53,7 @@ internal partial class RuntimeNativeDoorMotion : Node
             var clock = clocks!.Single(value => value.Controller == saved.Controller &&
                 value.Sha256.Equals(saved.Sha256, StringComparison.OrdinalIgnoreCase));
             _controller.RestoreScriptState(clock);
-            if (!saved.Moving && (_controller.Playing || clock.StartPending))
+            if (saved.ScriptSequence is null && !saved.Moving && (_controller.Playing || clock.StartPending))
                 throw new InvalidDataException("Saved settled door has an unfinished source animation.");
             return;
         }
@@ -85,6 +85,21 @@ internal partial class RuntimeNativeDoorMotion : Node
         _state.DoorOpen = open;
         _state.DoorMotion = requested;
     }
+
+    internal void RequireScriptSelection(RuntimeNifControllerPlayer controller)
+    {
+        if (controller != _controller) return;
+        if (_state.DoorMotion?.Moving == true)
+            throw new NotSupportedException("Replacing an unfinished door movement requires its interrupted motion owner.");
+    }
+
+    internal void ScriptSelected(RuntimeNifControllerPlayer controller)
+    {
+        if (controller != _controller) return;
+        var state = _state.DoorMotion ?? throw new InvalidOperationException("Door source state is absent.");
+        var clock = _controller.CaptureScriptState() ?? throw new InvalidDataException("Scripted door has no retained source animation.");
+        _state.DoorMotion = state with { ScriptSequence = clock.Sequence };
+    }
     public override void _Process(double delta)
     {
         Synchronize();
@@ -93,6 +108,14 @@ internal partial class RuntimeNativeDoorMotion : Node
     internal void Synchronize()
     {
         var state = _state.DoorMotion ?? throw new InvalidOperationException("Door source state is absent.");
+        if (state.ScriptSequence is not null)
+        {
+            // A source PlayGroup changes presentation without inventing a
+            // gameplay Open/Close transition. Its saved object clock also owns
+            // any queued successor and its actual completion.
+            ScriptSelected(_controller);
+            return;
+        }
         if (!_controller.ActiveSequence!.Equals(state.Open ? _open : _close, StringComparison.OrdinalIgnoreCase))
             throw new NotSupportedException("Another animation command replaced the door's source motion.");
         if (!state.Moving || _controller.Playing) return;

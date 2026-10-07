@@ -18,11 +18,11 @@ $output = Join-Path $repo "local/releases/$name"
 if (Test-Path -LiteralPath $output) { throw "Package directory already exists: $output" }
 $runtimeData = @(Get-ChildItem -LiteralPath $export -Directory -Filter 'data_OpenNV_windows_x86_64')
 if ($runtimeData.Count -ne 1) { throw 'Expected exactly one official exported .NET runtime directory.' }
-foreach ($file in @('OpenNV.exe', 'OpenNV.pck', 'runtime-manifest.json')) {
+foreach ($file in @('OpenNV.exe', 'OpenNV.pck', 'runtime-manifest.json', 'opennv_audio.dll')) {
     if (!(Test-Path -LiteralPath (Join-Path $export $file) -PathType Leaf)) { throw "Missing export: $file" }
 }
 New-Item -ItemType Directory -Path $output | Out-Null
-foreach ($file in @('OpenNV.exe', 'OpenNV.pck', 'runtime-manifest.json')) {
+foreach ($file in @('OpenNV.exe', 'OpenNV.pck', 'runtime-manifest.json', 'opennv_audio.dll')) {
     Copy-Item -LiteralPath (Join-Path $export $file) -Destination $output
 }
 foreach ($file in Get-ChildItem -LiteralPath $runtimeData[0].FullName -Recurse -File) {

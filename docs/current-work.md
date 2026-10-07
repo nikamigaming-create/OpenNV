@@ -2,163 +2,99 @@
 
 ## Active objective
 
-Complete ordinary TTW input from Vault 101 through Megaton, the authored Union
-Station power/ticket/train connection and Mojave, with complete reusable saves
-and 1:1 retail behavior. The Benny/JAM, dependency, compiled SCDA, unchanged x86
-native-plugin and retail comparison scope in [implementation-plan.md](implementation-plan.md)
-remains active. All 36 broad requirements remain open; no overall completion
-percentage follows from component checks or record counts.
+Make loading, saving and ordinary play reliable in standalone FNV, standalone
+Fallout 3, TTW and the combined mod stack, with each source stack verified
+independently. Continue the ordinary TTW route from Vault 101 through Megaton,
+the authored Union Station connection and Mojave. Preserve the Benny/JAM,
+compiled SCDA, unchanged x86 plugin and retail comparison requirements in
+[implementation-plan.md](implementation-plan.md). All 36 broad requirements
+remain open; component checks do not establish a completion percentage.
 
 ## Verified state
 
-Published F5/menu preparation,
-original ForceSave ordering, terminal XLKR, independent actor queries, corpse
-equipment and source-bot slices retain focused/full gate evidence.
+Ordinary TTW input completes the aggressive/key route, defeats the guards,
+acquires the actual office key/password and crosses the authored terminal,
+tunnel and vault exit. The complete stage-140 cave checkpoint remains immutable
+and cold-verified at 115 HP and 8/14 rounds. Settled corpse Take All and its
+complete cold checkpoint conserve the source baton/armor without recreating
+removed equipment. The consumed GetDetected fault remains visible.
 
-Ordinary input defeats both actual guards and paused Create New Save writes
-complete v45 slot ccaf9f6be7bb4220bbd5b1847f842cb6 at Escape stage 35 in CELL
-024511, 120 HP and 2/24 rounds. Ordinary quit/cold Continue verifies both original
-dead guards, native equipment without errors and exact cell/stage/health/ammo.
-SHA256: FF60BAB249DE3D16F1DF8C0975D7B8BD3D5F9BBB0F0FF55F9BF06051FB35E7AB.
-The original stage-18 menu/F5 and canonical pre-portal checkpoints remain intact.
+Ordinary exit reaches stage 150 in exterior CELL 0010c1. Paused Create New Save
+now writes complete v46 exterior slot 42b49a55cf1043c4b54f0e3d52b7d98e.
+SHA256: 3CAFFC5E15DB5135DEEACD9B255E943F2116A96BEF9D005C03BEF46191AD3C19.
+The actual exported executable cold-Continues that slot at 115 HP and 8/14
+rounds with its inventory and original source histories. Each dust-devil owner
+restores one genuine PCM voice at generation 3 rather than replaying its start
+event. A subsequent ordinary menu save completes. Megaton arrival and onward
+train/Mojave traversal are not verified.
 
-The authored aggressive/key route uses ordinary aim/fire, actual corpse key/
-password offers, the source office door/computer, tunnel and control panel.
-It reaches Escape stage 140 in CELL 024512, 115 HP and 8/14 rounds. Complete v45
-cave slot 8d5b7e5dbccf4554b357c80811354405 is verified through ordinary cold
-Continue. SHA256:
-7B4D9B56E28E87D2591F414F9A56FE29D43AE6D552BF5B4076B5C2948448B513.
-The consumed nested GetDetected terminal failure remains visible and is not a
-working conversation or complete quest-branch claim.
+The first-party native bridge uses Godot's public raw playback interface; C#
+owns samples, fractional position, loop count and release state. Native checks
+pass exact fractional sample suffixes, original envelope tails, pending Start,
+real mixing and paused flat/spatial playback. Automatic managed object clocks
+now accompany their audio histories. Actual source-selected door animation is
+saved independently of gameplay open/closed flags. Fault histories remain
+visible and source/media bindings are validated cold.
 
-The campaign planner independently chooses original exit 024720. Actual source
-Finished and recommended post-review controls, then ordinary exit activation,
-reach exterior CELL 0010c1 at stage 150, 115 HP and 8/14 rounds.
-Original ForceSave 70b401ec68b54df99245ef1dcf75ebc3 commits through its original
-GUID/writer/site/hash/ended invocation at stage 150 in the cave, not the exterior.
-SHA256: CBF68ABFC5AC5113F76908A29CDE04EF4F69FBF2D382E35F87E0921D74EB5C5B.
+Save writes use flushed atomic same-folder replacement. Selected loads retain
+the previous Continue bytes and timestamp until all owners restore, then
+commit. Contract checks cover failed writers, empty identities, damaged files,
+rollback and concurrent replacement. An actual invalid exterior load rejects
+audio without its source clock, restores the previous Continue exactly and
+returns to a fresh usable title menu. The required Release/Debug,
+formatting/analyzer, contract, launcher and native Godot gate passes.
 
-The reported whiteout is reproduced to its original owner and fixed: actual
-ten-second modifier 0213fe advances from 0.566 to 9.624 seconds, then expires.
-The final inspected native viewport shows terrain, weapon, HUD and night sky
-without persistent whiteout. Temporary PNG/pixels/frame metadata are deleted;
-recording is off. Matched retail pixels remain independent.
-
-## Verified settled corpse transfer
-
-Settled corpse item removal now uses staged inventory publication followed by
-reversible source equipment commits and final native retirement. Pure current/
-cold/item/ammo/condition/ownership/rollback tests pass. The unchanged owned
-saved-corpse native component passes real default/Take All UI, finite audio,
-pending/moving/opaque negatives, rollback, node/material order and cold receipts.
-Living presented equipment, partial equipped stacks and drop physics stay open.
-
-Actual ordinary Take All from original corpse 064913 adds one police baton and
-one source armor item, with other counts, 120 HP and 2/24 rounds unchanged.
-Paused Create New Save commits complete v45 slot
-f9e3e528fc094dadb2350dedae663766. Ordinary quit/cold Continue verifies both
-transferred items, the retained original corpse fault and no recreated weapon
-attachment/handling.
-SHA256: 50F0751D0D06D17BC51C5B1582F9E7C58D67DA3889BE8B29D28A5B278FCFE105.
-The full required Release/Debug, formatting/analyzers, contract, launcher and
-native gate passes, as does the final selected unchanged owned transfer audit.
-Checked PR 156 publishes this verified transfer.
+The original finite image-space whiteout expires at its authored ten-second
+duration. Recording is off; temporary reviewed frames are deleted. Neither
+these checks nor the exported checkpoint establish matched retail pixels,
+physical-headset acceptance or a clean-system fresh New Game.
 
 ## Current divergence owners
 
-The current JAM source hit-callback block passes managed source commands,
-actor/global/FLST filters, actual caller/effects, typed omitted arguments,
-mutation order, fault-prefix/no-retry, cold effects and dispatcher lease tests.
-Published calendar host contracts still pass on the composed tree.
-The unchanged owned initialization evidence advances JBT to
-SetOnFireWeaponEventHandler and JHI to SetOnHealthDamageEventHandler.
-Three registrations with zero native hit invocations are not module gameplay.
-The full required Release/Debug, formatting/analyzers, contract, launcher and
-native Godot gate passes for this composed source-event block.
-Native pre-damage adapter wiring still needs its native contact/timing proof;
-GetHit* context, SCDA, original DLL, MCM and nine-module outcomes remain open.
+The user's exterior recording has missing vegetation, patchy LOD and poor
+performance. In the reached 49-cell grid, 565 missing references declare owned
+SpeedTree files. The files exist under trees/; the current model reader prefixes
+meshes/ and has no native SpeedTree decoder. Source-backed decoding and real
+geometry are required, without proxy scenery.
 
-The current campaign-menu owner passes focused ownership, source choice,
-no-replay and stalled-modal contracts. An unchanged owned ordinary replay from
-the cold-verified stage-140 cave slot selects source exit objective 80 and
-delivers the actual message choice while its reference skill remains in
-awaiting-interaction. The resulting authored name entry is visible; the bot
-does not invent name-entry input or claim complete unattended review support.
-Ordinary offered review controls and exit activation again reach exterior
-0010c1 at stage 150 with 115 HP. Source door-animation replacement and the
-original exterior audio save refusal remain visible. The run quits normally,
-recording stays off and the immutable cave/post-loot hashes remain unchanged.
-The selected unchanged owned campaign-goal audit and required Release/Debug,
-formatting/analyzers, contract, launcher and native Godot gate pass. These
-bounded checks do not establish the remaining modal policies or onward route.
+Near static detail currently fades from terrain coverage even when its own
+distant object mesh failed admission. Terrain and object coverage need separate
+ownership. Some owned terrain LOD geometry has no material property; source
+water/degenerate geometry semantics remain unresolved. Whole-reference uploads
+can exceed the frame budget. The selected FNV performance results do not
+establish Fallout 3/TTW exterior performance.
 
-The source calendar owner additionally passes typed reference/shared/
-fallback/function commands, pending-hour cold ticks and full multi-year carry.
-The owned component executes all three original train hour-statement components
-after restoring the immutable cave clock, with source/checkpoint hashes
-unchanged. Its authored date expression writes raw hour 36540 and the actual
-simulation clock rolls to year 2281/month 9/day 18. This is isolated clock proof,
-not reached train travel, a whole script, compiled SCDA or original-DLL proof.
-The forced Hardcore-needs consumer is unowned and refuses before the hour write.
-The full required Release/Debug, formatting/analyzers, contract, launcher and
-native Godot gate passes for this calendar block.
+Standalone Fallout 3 still uses a bounded preview path rather than shared
+campaign gameplay/save owners. Its executable defaults use a source layout
+different from FNV's constructor-associated defaults. General default reading,
+source-owned opening menus/state and ordinary New Game/save/cold Continue must
+be implemented and independently checked. Standalone FNV and the combined
+JAM/TTW/NMC stack also need current exported ordinary-path checks; a TTW save
+cannot certify either stack.
 
-Exterior F5 refuses actual AMBDustDevilLPM source voices: 0039af, 0039b1 and
-022d00 use original SOUN 052188, EnvelopeFast flags 0x1200 and PCM16/32 kHz media.
-Opaque histories 0c7b39/0c7b3a remain unwaived. No exterior manual slot or cold
-checkpoint is accepted. Native WAV position omits retained resampler/read-buffer
-state; the installed GodotSharp API also lacks callable C# _Mix/_MixResampled
-overrides. Two isolated compile/native feasibility checks confirm that missing
-contract. A supported native checkpoint/mixing bridge or equivalent first-party
-sampler custody is needed; Stop, Seek, fake Finished or a silence exemption is
-not an exact continuation. Diagnostic proposals stay private and unintegrated.
-The recovered direct public-GDExtension prototype builds against the declared
-installed SDK. Moving AudioServer lookup out of extension registration resolves
-the original early-singleton failure, but native editor import still exits with
-access violation 0xC0000005. No raw callback/rate/lifetime or loop-save proof
-follows from that build. The prototype and exact diagnostic stay private.
+JAM source hit registrations and the composed calendar hosts pass their
+managed contracts. Native callback context/timing, compiled SCDA, unchanged
+DLL execution, MCM and all nine module outcomes remain open. Train travel still
+requires source power/ticket gates, forced Hardcore-needs, radio fixes and the
+movie/control/inventory continuation owners. Live GetDetected, Flee/NPC portal,
+modeled lights, full packages/IDLE, level allocation and complete world rendering
+remain divergences.
 
-Live conversations/source predicates still need the original GetDetected owner.
-The campaign still needs complete ordinary character-review policies and the
-source door-animation replacement owner.
-Whole sensory/Flee/NPC portal, modeled lights, full package/IDLE, compiled SCDA,
-level allocation, unchanged DLL and original mod outcomes remain open.
-
-The current user scope includes TTW, every JAM module, JIP LN, JohnnyGuitar and
-the current guides' complete dependency behavior. The owned package inventory
-is bound to the current essentials list in [mod compatibility](mod-compatibility.md);
-loaded files are not complete compatibility. The source train owner map retains
-the original reactor/primer, caps/ticket gates and travel scripts. The remaining
-forced Hardcore-needs, last exterior door, RestoreActorValue/CIOS/addiction,
-TTW_EnableRadioFix, numeric INI consumer and authored movie/control/inventory
-continuation owners remain required before train/Mojave acceptance.
-
-The source-bound vault audit retains all 7,155 winning references across ten
-selected interiors, with 101 reference issues, 34 resource declarations and 51
-NAVM samples without packed/box support. These are not native room/draw/pixel or
-every loot/inventory/door acceptance.
-
-Portable movie-decoder proposals have empty-PATH/fresh-profile generated-media
-tests and a genuine pinned private helper pair. Complete upstream notices/
-corresponding-source/relink materials and responsible redistribution review are
-still unavailable; the manifest stays unverified and export refuses it.
-The proposal is not integrated and clean-system FO3/FNV/TTW New Game is not
-accepted from those component tests.
+Portable movie-decoder proposals still lack complete redistribution materials;
+their manifest remains unverified. Fresh-profile component tests do not accept
+clean-system FO3/FNV/TTW New Game.
 
 ## Next owner and outcome
 
-Primary owns serial builds/native checks, ordinary input and checked publication.
-Primary owns the supported public GDExtension PCM callback interface and exact
-first-party sampler/checkpoint custody; no bridge or loop-save proof is accepted.
-Resolve first-party looping sampler/checkpoint custody before
-exterior cold-save or onward route claims. Reuse retained first-party work.
-Complete the whole vault room/loot/inventory/door denominator before Megaton and
-authored train/Mojave acceptance.
+Primary owns serial builds, live input, save verification and checked
+publication. Fix general exterior resource/LOD admission and upload timing,
+then shared standalone FO3 initialization and the independent source-stack
+loading/saving matrix. Continue the complete vault/world denominator and
+ordinary Megaton/train/Mojave route without bypassing source conditions.
 
 ## Private continuation
 
-Run: tmp/development-lab/ttw-bot-health-20261006. No game is running. Current
-Continue is the complete post-loot Atrium slot; the source/cave slots remain
-selectable through ordinary Load. Preserve every immutable complete slot,
-failed request and needed diagnostic. User/fresh exterior observations are not
-saves. Owned files, helpers, neutral contracts and logs remain private.
+Run: tmp/development-lab/loading-saving-ttw-20261007. The exported cold session
+quit normally. The complete exterior slot and original cave/post-loot saves
+remain immutable. Preserve needed failed-load diagnostics and ordinary input
+receipts. Owned files, private saves, helpers and logs stay out of publication.

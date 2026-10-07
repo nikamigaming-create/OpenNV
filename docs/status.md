@@ -1,5 +1,25 @@
 # Product status
 
+Current loading/saving fixes support a genuine complete v46 TTW exterior
+checkpoint at Escape stage 150, CELL 0010c1, 115 HP and 8/14 rounds. The actual
+exported executable cold-Continues it and completes a subsequent ordinary menu
+save. Source-bound PCM loops and automatic object clocks restore without
+replaying sound starts; actual selected door groups survive independently of
+gameplay flags. Atomic writes and transactional loads preserve the previous
+Continue on failure, including a verified native rejected-load rollback.
+The required runtime gate and native fractional-sample/pause checks pass.
+See [current work](current-work.md) for the reusable checkpoint and remaining
+source-stack matrix. Standalone FO3 remains a preview; clean-system fresh
+FO3/FNV/TTW New Game, combined-stack acceptance, Megaton and full game completion
+remain unverified.
+
+The reported barren exterior is a real runtime divergence: the reached grid
+has 565 missing owned SpeedTree references, incorrect model path normalization
+and no native SpeedTree decoder. Nearby detail can also fade based on terrain
+coverage while its distant object draw is missing. Property-free LOD semantics,
+whole-reference upload spikes and broader world presentation remain open;
+selected FNV performance does not establish FO3/TTW performance.
+
 The shared JAM source hit-callback owner passes managed typed registration,
 actor/global/FLST filters, actual caller/state effects, mutation/fault-prefix
 rules and cold/process-world lease contracts. The composed published calendar
@@ -25,13 +45,13 @@ Whole loot, living equipment and drop physics remain open.
 The independent authored aggressive/key route additionally reaches Escape
 stage 140 and writes a complete cave slot at 115 HP and 8/14 rounds. That slot's
 cold Continue is verified, and actual ordinary input exits at stage 150 in
-CELL 0010c1. Exterior F5 still refuses genuine unowned dust-devil loop voices;
-no complete exterior cold checkpoint is claimed. The consumed nested GetDetected
+CELL 0010c1. The complete v46 exterior checkpoint above now retains genuine
+dust-devil PCM voices. The consumed nested GetDetected
 failure remains visible, not a conversation or whole-quest completion claim.
 An actually ended pending ForceSave now has pure/native
 original-source-then-manual ordering and both cold component captures; the
-ordinary exterior source request still needs its own proof. No exterior
-checkpoint or whole-campaign saving is accepted from this bounded result.
+ordinary exterior source request still needs its own proof. The complete
+exterior manual checkpoint does not establish whole-campaign saving.
 
 The current source-driven campaign bot chooses displayed winning objective
 targets and directed source portal actions instead of requiring an operator to
@@ -45,7 +65,8 @@ erase the selected target; native aim uses an actual admitted source binding.
 The explicit audio preparation now permits the actual post-portal menu/F5
 checkpoint above. The general source-bound corpse continuation additionally
 permits the independently cold-verified post-combat slot.
-No complete exterior checkpoint or campaign/parity completion is claimed.
+The later complete exterior checkpoint does not establish campaign/parity
+completion.
 See [ordinary campaign attempts](ordinary-campaign-bot.md) and
 [current work](current-work.md).
 
@@ -55,8 +76,9 @@ retain foreign-owner and current-fault refusal, no repeated unchanged choices
 and bounded unoffered/stalled modal waits. An unchanged ordinary cave replay
 verifies the real source exit-review message delivery during the active skill;
 the authored name entry still needs a general ordinary confirmation policy.
-The separate source door-animation and exterior complete-save failures remain
-unwaived. This is not unattended review, train travel or mod-completion proof.
+The source-selected door-animation and exterior loop-save owners now have the
+checks above. This is not unattended review, train travel or mod-completion
+proof.
 
 Shared source-calendar commands now pass typed/reference/shared/fallback/
 function and cold pending-hour contracts, including full multi-month/year carry.
@@ -74,7 +96,8 @@ lifetime and authored model-less head-part admission pass focused native,
 pause/fault and unchanged owned-source checks. Fresh ordinary exit now verifies
 the original ten-second effect advancing and expiring, and the inspected final
 native viewport is no longer whitewashed. Temporary frames are deleted.
-Complete exterior saving and matched retail pixels remain unverified.
+The later complete exterior save is independently verified above; matched
+retail pixels remain unverified.
 See [image-space ownership](image-space-lifetime-owner.md).
 
 The fresh source-bound vault audit retains all 7,155 winning references across

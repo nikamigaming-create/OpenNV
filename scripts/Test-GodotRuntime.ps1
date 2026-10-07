@@ -40,6 +40,8 @@ if (-not (Test-Path -LiteralPath $Godot -PathType Leaf)) {
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 $env:DOTNET_NOLOGO = "1"
 
+& (Join-Path $PSScriptRoot 'Build-NativeAudio.ps1') -Godot $Godot
+
 & dotnet build $solution --configuration Release --nologo
 if ($LASTEXITCODE -ne 0) { throw "OpenNV Release build failed." }
 & dotnet format $solution --verify-no-changes --no-restore --verbosity minimal
@@ -108,6 +110,13 @@ $text = $output | Out-String
 if ($LASTEXITCODE -ne 0 -or $text -match "(?m)^ERROR:") {
     throw "OpenNV Godot startup failed:`n$text"
 }
+
+$pcmOutput = & $Godot --headless --path $runtime res://tools/NativePcmPlaybackAudit/NativePcmPlaybackAudit.tscn 2>&1
+$pcmText = $pcmOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $pcmText -match "(?m)^ERROR:" -or $pcmText -notmatch "OPENNV_NATIVE_PCM_PLAYBACK_PASS") {
+    throw "OpenNV native PCM continuation failed:`n$pcmText"
+}
+Write-Output "OPENNV_NATIVE_PCM_PLAYBACK_PASS fractionalCold=true envelope=true mixer=true pause=true"
 
 $instanceOutput = & $Godot --headless --path $runtime res://tools/NativeNifInstanceAudit/NativeNifInstanceAudit.tscn 2>&1
 $instanceText = $instanceOutput | Out-String

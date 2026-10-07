@@ -19,7 +19,7 @@ internal sealed partial class FalloutReferenceWorld
             var events = instance.AnimationSoundEvents;
             if (!events.CanAwaitNativeCompletion || records.SoundVoices.PendingFiniteSourceVoices(instance.Reference) is not { Count: > 0 } voices)
                 return null;
-            var active = events.Events.Where(entry => entry.End == FalloutAnimationSoundEnd.Active)
+            var active = events.PendingNativeCompletion
                 .ToDictionary(entry => entry.Generation);
             if (voices.Count != active.Count) return null;
             foreach (var proof in voices)

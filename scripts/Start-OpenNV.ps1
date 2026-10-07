@@ -89,6 +89,8 @@ foreach ($requiredFile in @(
     }
 }
 
+& (Join-Path $PSScriptRoot 'Build-NativeAudio.ps1') -Godot $versionCheckPath
+
 if ($Configuration -eq "Release") {
     # The editor's --path runner always loads Debug OpenNV and GodotSharp.
     # ExportRelease compiles both against the optimized runtime and produces
@@ -99,6 +101,9 @@ if ($Configuration -eq "Release") {
     & $versionCheckPath --headless --path $runtimeRoot --xr-mode off --export-release "Windows Experimental" $exportExecutable
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exportExecutable -PathType Leaf)) {
         throw "OpenNV release export failed. Install the matching Godot 4.7.2 Mono export templates."
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $exportRoot 'opennv_audio.dll') -PathType Leaf)) {
+        throw 'Godot did not export the native audio extension.'
     }
     $exportManifest = Get-Content -LiteralPath (Join-Path $runtimeRoot "runtime-manifest.json") -Raw | ConvertFrom-Json
     $exportManifest.runtime | Add-Member -NotePropertyName executables -NotePropertyValue @{ win32 = "OpenNV.exe" } -Force

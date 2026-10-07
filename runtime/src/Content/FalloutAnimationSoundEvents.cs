@@ -3,24 +3,29 @@ using System.Security.Cryptography;
 namespace OpenNV.Runtime.Content;
 
 internal enum FalloutAnimationSoundEnd { Active, NativeFinished, SourceStopped, ChanceSkipped, Cancelled, Faulted }
+internal sealed record FalloutAnimationSoundPlaybackSnapshot(FalloutPcmPlaybackSnapshot Samples, string EmitterPath, bool FollowEmitter);
+internal sealed record FalloutAnimationSoundFault(string TextKey, string Error);
 
 internal sealed record FalloutAnimationSoundEvent(long Generation, FalloutFormKey Sound, string SoundSha256,
     string TextKey, string LogicalPath, IReadOnlyList<string> Variants, bool Played, string? Path, string? MediaSha256, float PitchScale,
     ulong RandomBefore, ulong RandomAfter, bool StereoOutput, IReadOnlyList<string> PartialLanes,
-    FalloutAnimationSoundEnd End, string? Error = null)
+    FalloutAnimationSoundEnd End, string? Error = null, FalloutAnimationSoundPlaybackSnapshot? Playback = null)
 {
     internal FalloutAnimationSoundEvent Copy() => this with
     { PartialLanes = Array.AsReadOnly(PartialLanes.ToArray()), Variants = Array.AsReadOnly(Variants.ToArray()) };
 }
 
 internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutFormKey Reference, long Generation,
-    IReadOnlyList<FalloutAnimationSoundEvent> Events)
+    IReadOnlyList<FalloutAnimationSoundEvent> Events, string? OpaqueError = null, IReadOnlyList<FalloutAnimationSoundFault>? Faults = null)
 {
     internal void Validate()
     {
         if (string.IsNullOrWhiteSpace(Reference.OwnerPlugin) || Reference.ObjectId is 0 or > FalloutFormKey.ObjectIdMask ||
             Generation < 0 || Events is null || Events.Count != Generation)
             throw new InvalidDataException("Saved animation sound history has invalid owner or generations.");
+        if (Faults?.Any(fault => fault is null || string.IsNullOrWhiteSpace(fault.TextKey) || string.IsNullOrWhiteSpace(fault.Error)) == true ||
+            OpaqueError is not null && Faults?.Any(fault => fault.Error == OpaqueError) != true)
+            throw new InvalidDataException("Saved animation sound failure has no original source event.");
         long previous = 0;
         foreach (var entry in Events)
         {
@@ -30,11 +35,27 @@ internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutFormKey Refere
                 entry.Variants.Any(path => !Path(path)) || entry.Variants.Distinct(StringComparer.OrdinalIgnoreCase).Count() != entry.Variants.Count ||
                 !float.IsFinite(entry.PitchScale) || entry.PitchScale <= 0 ||
                 entry.PartialLanes is null || entry.PartialLanes.Any(string.IsNullOrWhiteSpace) ||
-                entry.PartialLanes.Distinct(StringComparer.Ordinal).Count() != entry.PartialLanes.Count || entry.Error is not null ||
-                (entry.Played ? entry.End is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped) ||
-                    !Hash(entry.MediaSha256) || !Path(entry.Path) || !entry.Variants.Contains(entry.Path, StringComparer.OrdinalIgnoreCase) :
+                entry.PartialLanes.Distinct(StringComparer.Ordinal).Count() != entry.PartialLanes.Count ||
+                !Enum.IsDefined(entry.End) ||
+                (entry.End is FalloutAnimationSoundEnd.Cancelled or FalloutAnimationSoundEnd.Faulted
+                    ? string.IsNullOrWhiteSpace(entry.Error) : entry.Error is not null) ||
+                (entry.Played ? !Path(entry.Path) || !entry.Variants.Contains(entry.Path, StringComparer.OrdinalIgnoreCase) ||
+                    (entry.MediaSha256 is not null && !Hash(entry.MediaSha256)) ||
+                    (entry.End != FalloutAnimationSoundEnd.Faulted && entry.MediaSha256 is null) ||
+                    entry.End is FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.Cancelled :
                     entry.End != FalloutAnimationSoundEnd.ChanceSkipped || entry.Path is not null || entry.MediaSha256 is not null))
                 throw new InvalidDataException("Saved animation sound lacks a genuine settled source receipt.");
+            if (entry.End == FalloutAnimationSoundEnd.Faulted &&
+                Faults?.Any(fault => fault.TextKey == entry.TextKey && fault.Error == entry.Error) != true)
+                throw new InvalidDataException("Failed sound has no matching original source event.");
+            if (entry.End == FalloutAnimationSoundEnd.Active)
+            {
+                if (entry.Playback is not { } playback || string.IsNullOrWhiteSpace(playback.EmitterPath) ||
+                    playback.EmitterPath.StartsWith('/') || playback.EmitterPath.Split('/').Contains(".."))
+                    throw new InvalidDataException("Active sound has no complete PCM/emitter continuation.");
+                playback.Samples.Validate();
+            }
+            else if (entry.Playback is not null) throw new InvalidDataException("Ended sound retains active PCM continuation.");
         }
     }
 
@@ -50,21 +71,47 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference)
     private readonly List<FalloutAnimationSoundEvent> _events = [];
     private long _generation;
     private string? _opaqueError;
+    private readonly List<FalloutAnimationSoundFault> _faults = [];
+    private readonly Dictionary<long, Func<FalloutAnimationSoundPlaybackSnapshot>> _playbackCaptures = [];
     internal FalloutFormKey Reference => reference;
     internal FalloutAnimationSoundHistoryDiagnostic CaptureDiagnostic => new(reference, _generation, CanCapture, _opaqueError,
         _events.Where(entry => entry.End is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped))
             .Select(entry => new FalloutAnimationSoundCaptureBlocker(entry.Generation, entry.Sound, entry.SoundSha256,
                 entry.TextKey, entry.Path, entry.MediaSha256, entry.End, entry.Error)).ToArray());
-    internal bool CanCapture => _opaqueError is null && _events.All(entry =>
-        entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped);
+    internal bool CanCapture => (_opaqueError is null || _faults.Any(fault => fault.Error == _opaqueError)) &&
+        _events.All(entry => entry.End switch
+        {
+            FalloutAnimationSoundEnd.Active => CanCapturePlayback(entry.Generation),
+            FalloutAnimationSoundEnd.Faulted => _faults.Any(fault => fault.TextKey == entry.TextKey && fault.Error == entry.Error),
+            FalloutAnimationSoundEnd.Cancelled => false,
+            _ => entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped
+        });
     internal IReadOnlyList<FalloutAnimationSoundEvent> Events => _events.AsReadOnly();
     // This is admission to wait in the live session, never admission to capture.
-    internal bool CanAwaitNativeCompletion => _opaqueError is null &&
+    internal bool CanAwaitNativeCompletion => (_opaqueError is null || _faults.Any(fault => fault.Error == _opaqueError)) &&
         _events.Any(entry => entry.End == FalloutAnimationSoundEnd.Active) &&
-        _events.All(entry => entry.Error is null && (entry.End == FalloutAnimationSoundEnd.Active
-            ? entry.Played && FalloutAnimationSoundEventsSnapshot.Hash(entry.MediaSha256)
-            : entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped));
+        _events.All(entry => entry.End switch
+        {
+            FalloutAnimationSoundEnd.Active => entry.Played && FalloutAnimationSoundEventsSnapshot.Hash(entry.MediaSha256),
+            FalloutAnimationSoundEnd.Faulted => _faults.Any(fault => fault.TextKey == entry.TextKey && fault.Error == entry.Error),
+            _ => entry.Error is null && entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped
+        });
+    internal IEnumerable<FalloutAnimationSoundEvent> PendingNativeCompletion =>
+        _events.Where(entry => entry.End == FalloutAnimationSoundEnd.Active && !CanCapturePlayback(entry.Generation));
     internal IEnumerable<string> PartialLanes => _events.SelectMany(entry => entry.PartialLanes.Select(lane => entry.Sound + ":" + lane)).Distinct(StringComparer.Ordinal);
+    internal IEnumerable<string> OwnedLanes => PartialLanes.Concat(_faults.Select(fault => fault.TextKey + ":" + fault.Error));
+
+    internal void BindPlayback(long generation, Func<FalloutAnimationSoundPlaybackSnapshot> capture)
+    {
+        if (Find(generation).End != FalloutAnimationSoundEnd.Active || !_playbackCaptures.TryAdd(generation, capture))
+            throw new InvalidDataException("PCM continuation has no unique active source generation.");
+    }
+    private bool CanCapturePlayback(long generation)
+    {
+        if (!_playbackCaptures.TryGetValue(generation, out var capture)) return false;
+        try { capture().Samples.Validate(); return true; }
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException) { return false; }
+    }
 
     internal long Begin(FalloutPluginStack records, FalloutAnimationSoundSelection selected, string textKey, bool stereoOutput,
         IReadOnlyList<string> variants)
@@ -107,9 +154,10 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference)
         Replace(entry with { End = FalloutAnimationSoundEnd.Cancelled, Error = error });
     }
 
-    internal void Fail(long? generation, string error)
+    internal void Fail(long? generation, string error, string? textKey = null)
     {
         _opaqueError = error;
+        if (!string.IsNullOrWhiteSpace(textKey)) _faults.Add(new(textKey, error));
         if (generation is { } id && Find(id) is { End: FalloutAnimationSoundEnd.Active } entry)
             Replace(entry with { End = FalloutAnimationSoundEnd.Faulted, Error = error });
     }
@@ -124,7 +172,9 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference)
                 (first is null ? $"opaque={_opaqueError}" : $"generation={first.Generation} sound={first.Sound} end={first.End} " +
                     $"sourceSha256={first.SoundSha256} error={first.Error ?? _opaqueError ?? "none"} unsettled={diagnostic.Unsettled.Count}"));
         }
-        var snapshot = new FalloutAnimationSoundEventsSnapshot(reference, _generation, _events.Select(entry => entry.Copy()).ToArray());
+        var snapshot = new FalloutAnimationSoundEventsSnapshot(reference, _generation, _events.Select(entry => entry.Copy() with
+        { Playback = entry.End == FalloutAnimationSoundEnd.Active ? _playbackCaptures[entry.Generation]() : null }).ToArray(),
+            _opaqueError, _faults.Count == 0 ? null : _faults.ToArray());
         snapshot.Validate(); return snapshot;
     }
 
@@ -134,6 +184,7 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference)
             throw new InvalidDataException("Cannot replace an existing animation sound history.");
         ValidateSource(snapshot, records, reference);
         _events.AddRange(snapshot.Events.Select(entry => entry.Copy())); _generation = snapshot.Generation;
+        _opaqueError = snapshot.OpaqueError; _faults.AddRange(snapshot.Faults ?? []);
     }
 
     internal static void ValidateSource(FalloutAnimationSoundEventsSnapshot snapshot, FalloutPluginStack records, FalloutFormKey reference)
@@ -154,12 +205,14 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference)
             if (selected.Play != entry.Played || selected.Path != entry.Path || selected.PitchScale != entry.PitchScale ||
                 selected.RandomAfter != entry.RandomAfter || !selected.Unbound.SequenceEqual(entry.PartialLanes))
                 throw new InvalidDataException("Saved audio selection or partial lanes differ from the consumed source request.");
+            if (entry.Playback is { } playback && playback.Samples.Loop != FalloutSoundLoop.Read(source))
+                throw new InvalidDataException("Saved PCM loop differs from its original SOUN.");
         }
     }
 
     internal void ValidateMedia(RuntimeLiveContentSource content)
     {
-        foreach (var entry in _events.Where(entry => entry.Played).DistinctBy(entry => (entry.Path, entry.MediaSha256)))
+        foreach (var entry in _events.Where(entry => entry.Played && entry.MediaSha256 is not null).DistinctBy(entry => (entry.Path, entry.MediaSha256)))
             if (!content.TryRead(entry.Path!, null, out var bytes, out _) ||
                 !Convert.ToHexString(SHA256.HashData(bytes)).Equals(entry.MediaSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Saved animation sound media differs from its owned resource.");

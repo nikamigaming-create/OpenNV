@@ -67,6 +67,20 @@ internal static class DoorMotionContracts
                 using var rejected = new FalloutReferenceWorld(records);
                 Reject(() => rejected.Restore([invalid])); Require(rejected.InstanceCount == 0, "Corrupt door restoration partially committed.");
             }
+            var scripted = snapshots.Single() with
+            {
+                DoorMotion = instance.DoorMotion! with { Moving = false, ScriptSequence = "Forward" },
+                ObjectAnimations = [new(3, hash, "Forward", .73, false, "Close")],
+            };
+            using var scriptedCold = new FalloutReferenceWorld(records);
+            scriptedCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(new[] { scripted }))!);
+            scriptedCold.LoadCell(cell);
+            Require(scriptedCold.Get(Key(0x90)).DoorMotion!.OpenState == 3 &&
+                scriptedCold.Get(Key(0x90)).ObjectAnimations!.Single() == scripted.ObjectAnimations.Single(),
+                "A source PlayGroup lost its separate gameplay target or queued cold animation clock.");
+            Require(scripted.DoorMotion!.Request(true).ScriptSequence is null, "New Open/Close kept an obsolete script selection.");
+            using var wrongScript = new FalloutReferenceWorld(records);
+            Reject(() => wrongScript.Restore([scripted with { ObjectAnimations = [new(3, hash, "Other", .73, false)] }]));
             Console.WriteLine("OPENNV_DOOR_MOTION_STATE_PASS typedTarget=true states=1,2,3,4 duplicateNoRestart=true noActivation=true prefix=true coldPhase=true corruptAtomic=true reversal=unbound sourcePose=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }

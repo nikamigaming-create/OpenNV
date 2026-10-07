@@ -68,6 +68,41 @@ try
     catch (InvalidOperationException) { }
     if (!File.ReadAllBytes(canonical).SequenceEqual(before)) throw new Exception("Rejected load changed Continue.");
 
+    Write(9, "Continue before rejected load");
+    var oldContinue = File.ReadAllBytes(canonical);
+    var oldTimestamp = File.GetLastWriteTimeUtc(canonical);
+    using (var activation = catalog.BeginActivation(first.Id))
+    {
+        activation.RequireSelected(canonical);
+        if (!File.ReadAllBytes(canonical).SequenceEqual(slotBefore)) throw new Exception("Pending load did not select its complete slot.");
+    }
+    if (!File.ReadAllBytes(canonical).SequenceEqual(oldContinue) || File.GetLastWriteTimeUtc(canonical) != oldTimestamp)
+        throw new Exception("Rejected world load did not restore the original Continue and timestamp.");
+    using (var activation = catalog.BeginActivation(first.Id)) { activation.RequireSelected(canonical); activation.Commit(); }
+    if (!File.ReadAllBytes(canonical).SequenceEqual(slotBefore)) throw new Exception("Accepted world load was rolled back.");
+    var damaged = "{incomplete-continue"u8.ToArray();
+    File.WriteAllBytes(canonical, damaged);
+    using (var activation = catalog.BeginActivation(first.Id)) { activation.RequireSelected(canonical); activation.Commit(); }
+    if (!File.ReadAllBytes(canonical).SequenceEqual(slotBefore) ||
+        !Directory.EnumerateFiles(canonical + RuntimeSaveSlotCatalog.SlotDirectorySuffix, "*.rejected")
+            .Any(path => File.ReadAllBytes(path).SequenceEqual(damaged)))
+        throw new Exception("A damaged Continue prevented recovery or its rejected bytes were lost.");
+    using (var activation = catalog.BeginActivation(first.Id))
+    {
+        Write(11, "Newer concurrent Continue");
+        try { activation.RequireSelected(canonical); throw new Exception("Changed selected save accepted."); }
+        catch (InvalidDataException) { }
+        try { activation.Dispose(); throw new Exception("Concurrent Continue was overwritten during rollback."); }
+        catch (IOException) { }
+        activation.Commit();
+    }
+    using (var current = JsonDocument.Parse(File.ReadAllBytes(canonical)))
+        if (current.RootElement.GetProperty("playerHitPoints").GetInt32() != 11) throw new Exception("Rejected load lost a newer save.");
+    var emptyCalled = false;
+    try { catalog.Create(Guid.Empty, () => emptyCalled = true); throw new Exception("Empty checkpoint ID accepted."); }
+    catch (ArgumentException) { }
+    if (emptyCalled) throw new Exception("Rejected empty checkpoint called its writer.");
+
     var native = new RuntimeSaveSlotCatalog(Path.Combine(directory, "native.json"), root =>
     {
         if (root.GetProperty("Schema").GetString() != "opennv-native-fnv-campaign-save/v18")
@@ -80,7 +115,7 @@ try
         native.ReadSlots(true).Count != 2)
         throw new InvalidOperationException("Native metadata/current save did not survive the catalog.");
 
-    Console.WriteLine("OPENNV_RUNTIME_SAVE_SLOT_PASS classic=true native=true select=true preserveContinue=true malformedIsolated=true metadata=actual-save");
+    Console.WriteLine("OPENNV_RUNTIME_SAVE_SLOT_PASS classic=true native=true select=true preserveContinue=true failedLoadRollback=true damagedContinueRecovery=true concurrentSavePreserved=true malformedIsolated=true metadata=actual-save");
 }
 finally
 {
