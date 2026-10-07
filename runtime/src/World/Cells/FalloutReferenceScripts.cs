@@ -474,6 +474,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length == 1 && operation == "getdeadcount")
                 return new([FalloutScriptArgumentKind.Value], arguments => world.GetDeadCount(arguments[0].Value.FormKey(records)))
                 { ReadOnly = true };
+            if (parts.Length == 1 && operation == "setonhiteventhandler")
+                return FalloutScriptHitHandlers.RegistrationFunction(records, () => Events().Hits);
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => (host.LocationSpecificLoadScreensOnly ??
                     throw new NotSupportedException("Loading-screen policy query has no session owner."))() ? 1 : 0)
@@ -776,7 +778,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     Function, UserFunction);
                 return;
             }
-            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed")
+            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values,
                     Function, UserFunction);

@@ -25,6 +25,7 @@ internal sealed class FalloutScriptEvents
     private readonly HashSet<int> _pressed = [];
     private bool _loaded;
     private bool _rendering;
+    internal FalloutScriptHitHandlers Hits { get; } = new();
     internal object State => new
     {
         restartConsumers = _restartConsumed.Count,
@@ -32,6 +33,7 @@ internal sealed class FalloutScriptEvents
         mainLoop = _mainLoop.Values.Select(Describe).ToArray(),
         keys = _keys.Select(pair => new { pair.Key.Key, pair.Key.Down, callback = Describe(pair.Value) }).ToArray(),
         render = _renderOrder.Select(Describe).ToArray(),
+        hit = Hits.State,
     };
     private static object Describe(Callback value) => new
     {

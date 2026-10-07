@@ -95,6 +95,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutActorDefenseResolver? _incomingDefense;
     internal void DamagePlayer(FalloutWeaponDamage damage, byte part)
     {
+        _scripts.References?.BeforeActorHit(_pluginStack.RuntimeFormKey(0x14));
         _incomingDefense ??= new(_pluginStack);
         var armor = _inventory.Equipped.Select(_pluginStack.RuntimeFormKey)
             .Where(key => _pluginStack.GetEffective(key).Signature == "ARMO").ToArray();

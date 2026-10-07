@@ -32,6 +32,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
     internal Action<string> ReportDivergence { get; set; } = message => GD.PushError(message);
     private FalloutReferenceScripts _scripts = null!;
     private FalloutReferenceScriptHost _host = null!;
+    private IDisposable? _hitDispatcher;
     private readonly Dictionary<FalloutFormKey, Binding> _bindings = [];
     private readonly Dictionary<ulong, FalloutFormKey> _nodeReferences = [];
     private long _frames, _executedBlocks, _recoveredReadFaults, _recoveredCommandFaults;
@@ -80,6 +81,20 @@ internal partial class RuntimeNativeReferenceEvents : Node
         _scripts = new(records, world, quests, _host);
         _transform = transform; _unitsToMeters = unitsToMeters; _collisionMask = collisionMask;
         SetResidency(cell, root);
+        ActivateHitCallbacks();
+    }
+
+    internal void ActivateHitCallbacks()
+    {
+        _hitDispatcher?.Dispose();
+        _hitDispatcher = _host.Events is not null ? _world.BindHitDispatcher(DispatchHitCallbacks) : null;
+    }
+
+    private void DispatchHitCallbacks(FalloutFormKey actor)
+    {
+        foreach (var result in _scripts.DispatchHitCallbacks(actor, GetProcessDeltaTime()))
+            if (result.Error is { } error)
+                ReportDivergence($"OPENNV_NATIVE_HIT_CALLBACK_FAILED script={result.Script} actor={actor} {error}");
     }
 
     internal void SetResidency(FalloutCellScene cell, Node3D root)
@@ -161,6 +176,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
 
     public override void _ExitTree()
     {
+        _hitDispatcher?.Dispose();
+        _hitDispatcher = null;
         if (_presentation is not null) _presentation.Materialized -= BindMaterialized;
     }
 

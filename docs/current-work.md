@@ -66,6 +66,18 @@ Checked PR 156 publishes this verified transfer.
 
 ## Current divergence owners
 
+The current JAM source hit-callback block passes managed source commands,
+actor/global/FLST filters, actual caller/effects, typed omitted arguments,
+mutation order, fault-prefix/no-retry, cold effects and dispatcher lease tests.
+Published calendar host contracts still pass on the composed tree.
+The unchanged owned initialization evidence advances JBT to
+SetOnFireWeaponEventHandler and JHI to SetOnHealthDamageEventHandler.
+Three registrations with zero native hit invocations are not module gameplay.
+The full required Release/Debug, formatting/analyzers, contract, launcher and
+native Godot gate passes for this composed source-event block.
+Native pre-damage adapter wiring still needs its native contact/timing proof;
+GetHit* context, SCDA, original DLL, MCM and nine-module outcomes remain open.
+
 The current campaign-menu owner passes focused ownership, source choice,
 no-replay and stalled-modal contracts. An unchanged owned ordinary replay from
 the cold-verified stage-140 cave slot selects source exit objective 80 and
@@ -100,6 +112,11 @@ overrides. Two isolated compile/native feasibility checks confirm that missing
 contract. A supported native checkpoint/mixing bridge or equivalent first-party
 sampler custody is needed; Stop, Seek, fake Finished or a silence exemption is
 not an exact continuation. Diagnostic proposals stay private and unintegrated.
+The recovered direct public-GDExtension prototype builds against the declared
+installed SDK. Moving AudioServer lookup out of extension registration resolves
+the original early-singleton failure, but native editor import still exits with
+access violation 0xC0000005. No raw callback/rate/lifetime or loop-save proof
+follows from that build. The prototype and exact diagnostic stay private.
 
 Live conversations/source predicates still need the original GetDetected owner.
 The campaign still needs complete ordinary character-review policies and the

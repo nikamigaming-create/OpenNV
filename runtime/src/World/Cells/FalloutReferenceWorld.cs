@@ -826,6 +826,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     public void Dispose()
     {
         UnloadedPackages = null;
+        _beforeActorHit = null;
         _sounds?.Clear();
         _pipBoyRadio?.Off();
         _screenBlood?.Clear();

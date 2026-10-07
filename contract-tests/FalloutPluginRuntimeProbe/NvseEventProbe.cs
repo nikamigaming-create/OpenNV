@@ -10,6 +10,7 @@ internal static partial class NvseEventProbe
     internal static void Run()
     {
         Loops();
+        HitHandlers();
         var directory = Path.Combine(Path.GetTempPath(), $"opennv-script-events-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
