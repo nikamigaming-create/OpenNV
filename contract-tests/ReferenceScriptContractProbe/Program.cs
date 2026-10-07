@@ -4,6 +4,16 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--game-time-command-contracts"])
+{
+    GameTimeCommandContracts.Run();
+    return;
+}
+if (args.Length >= 7 && args[0] == "--audit-owned-game-time")
+{
+    OwnedGameTimeCommandProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6], args[7..]);
+    return;
+}
 if (args is ["--corpse-equipped-loot-contracts"])
 {
     CorpseEquipmentContracts.Run(lootOnly: true);
@@ -856,6 +866,7 @@ ActivationParentContracts.Run();
 DefaultActivationContracts.Run();
 ScriptManualSaveContracts.Run();
 HardcoreQueryContracts.Run();
+GameTimeCommandContracts.Run();
 ActorAlertContracts.Run();
 StageConditionScopeContracts.Run();
 PlayerSkillContracts.Run();

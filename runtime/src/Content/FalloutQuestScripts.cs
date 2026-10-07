@@ -204,7 +204,8 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
-    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Action<double>? RewardXp = null);
+    Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Action<double>? RewardXp = null,
+    FalloutGameTime? GameTime = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -801,6 +802,8 @@ internal sealed partial class FalloutQuestScripts
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(_records, operation) is { } iniSettingFunction)
                 return iniSettingFunction;
+            if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host?.GameTime, () => Session.Hardcore) is { } timeFunction)
+                return timeFunction;
             if (parts.Length == 1 && FalloutModQueryCommands.Function(_records, operation) is { } modQueryFunction)
                 return modQueryFunction;
             if (parts.Length == 1 && operation is "getinifloat" or "getinistring")
@@ -878,7 +881,7 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
-            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject")
+            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
                 return;

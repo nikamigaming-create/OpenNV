@@ -36,7 +36,7 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Func<bool>? IsHardcore = null,
-    Action<double>? RewardXp = null);
+    Action<double>? RewardXp = null, FalloutGameTime? GameTime = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -465,6 +465,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(records, operation) is { } iniSettingFunction)
                 return iniSettingFunction;
+            if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host.GameTime, host.IsHardcore) is { } timeFunction)
+                return timeFunction;
             if (parts.Length == 1 && FalloutModQueryCommands.Function(records, operation) is { } modQueryFunction)
                 return modQueryFunction;
             if (parts.Length == 1 && operation == "menumode")
@@ -774,7 +776,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     Function, UserFunction);
                 return;
             }
-            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject")
+            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values,
                     Function, UserFunction);

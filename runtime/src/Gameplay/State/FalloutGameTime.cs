@@ -53,6 +53,43 @@ internal sealed class FalloutGameTime
         _globals.Set(_forms.DaysPassed, (float)(DaysPassed + Hour / 24.0));
         _previousHour = Hour; _reconcileDaysPassed = true;
     }
+    internal static float SourceHour(double value)
+    {
+        var hour = (float)value;
+        if (!double.IsFinite(value) || !float.IsFinite(hour) || hour < 0)
+            throw new InvalidDataException("SetGameHour requires a finite non-negative source Float32 hour.");
+        return hour;
+    }
+    internal void SetHour(float hour)
+    {
+        hour = SourceHour(hour);
+        Validate();
+        _globals.Set(_forms.Hour, Hour <= hour ? hour : 24.0f + hour);
+    }
+    internal float GetDaysPassed(int year = 2281, int month = 10, int day = 13)
+    {
+        Validate();
+        if (month is < 1 or > 12)
+            throw new InvalidDataException("GetGameDaysPassed requires a one-based month within the source calendar.");
+        var currentYear = DatePart(_globals.Get(_forms.Year));
+        var currentMonth = (int)_globals.Get(_forms.Month);
+        var currentDay = DatePart(_globals.Get(_forms.Day));
+        var startMonth = month - 1;
+        long days = (long)currentDay - day;
+        // The extension retains an offset across forward month/year boundaries,
+        // and does not subtract future years or months. Do not replace its query
+        // with Gregorian date arithmetic or the separate GameDaysPassed global.
+        if (currentYear > year || startMonth < currentMonth)
+            days += (currentYear > year ? ((long)currentYear - year) * CalendarDays : 0) +
+                _calendar.MonthDays.Take(currentMonth).Sum(value => value) -
+                _calendar.MonthDays.Take(startMonth).Sum(value => value) - 1;
+        if (days is < int.MinValue or > int.MaxValue)
+            throw new NotSupportedException("GetGameDaysPassed exceeds its source signed 32-bit date span.");
+        return (float)days + Hour * (1.0f / 24.0f);
+    }
+    private static int DatePart(float value) => value >= int.MinValue && (double)value <= int.MaxValue
+        ? (int)value : throw new NotSupportedException("Game date has no source signed 32-bit query representation.");
+
     internal FalloutGameTimeSnapshot Capture() => new(_previousHour, _reconcileDaysPassed, _calendar.SourceSha256);
     internal void Restore(FalloutGameTimeSnapshot snapshot)
     {
@@ -77,7 +114,6 @@ internal sealed class FalloutGameTime
         var day = _globals.Get(_forms.Day);
         if (hour > 24)
         {
-            var monthLength = _calendar.MonthDays[(int)month];
             while (hour > 24)
             {
                 var nextHour = hour - 24;
@@ -86,10 +122,16 @@ internal sealed class FalloutGameTime
                     throw new InvalidDataException("Calendar advance exceeds Float32 clock/day resolution.");
                 hour = nextHour; day = nextDay;
             }
-            if (day > monthLength)
+            while (day > _calendar.MonthDays[(int)month])
             {
-                day -= monthLength; month += 1;
-                if (month >= 12) { month -= 12; year += 1; }
+                day -= _calendar.MonthDays[(int)month]; month += 1;
+                if (month >= 12)
+                {
+                    var nextYear = year + 1;
+                    if (!float.IsFinite(nextYear) || nextYear <= year)
+                        throw new InvalidDataException("Calendar advance exceeds Float32 year resolution.");
+                    month -= 12; year = nextYear;
+                }
             }
         }
         daysPassed = (float)(daysPassed + increment / 24.0);
