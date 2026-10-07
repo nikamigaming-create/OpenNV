@@ -14,11 +14,18 @@ FO3/FNV/TTW New Game, combined-stack acceptance, Megaton and full game completio
 remain unverified.
 
 The reported barren exterior is a real runtime divergence: the reached grid
-has 565 missing owned SpeedTree references, incorrect model path normalization
-and no native SpeedTree decoder. Nearby detail can also fade based on terrain
-coverage while its distant object draw is missing. Property-free LOD semantics,
-whole-reference upload spikes and broader world presentation remain open;
-selected FNV performance does not establish FO3/TTW performance.
+has 565 missing owned SpeedTree references. Their resource paths now resolve the
+present source files, but the procedural geometry decoder remains unbound.
+Terrain/object LOD reads and coverage are independent; nearby object fading
+requires its authored distant flag and admitted object coverage. Loading waits
+for the selected LOD queue, and cache eviction retains demanded children through
+refinement. Property-free LOD semantics, whole-reference upload spikes and broader
+world presentation remain open; selected FNV performance does not establish
+FO3/TTW performance.
+The native exterior menu save/cold Continue independently retains health, ammo
+and inventory after LOD preparation. Separate FNV/FO3/TTW/combined owned-source
+checks resolve their actual tree and selected LOD files; these do not certify
+their independent ordinary gameplay/save paths.
 
 The shared JAM source hit-callback owner passes managed typed registration,
 actor/global/FLST filters, actual caller/state effects, mutation/fault-prefix

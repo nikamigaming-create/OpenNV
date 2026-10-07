@@ -10,6 +10,15 @@ The [script event contract](nvse-script-runtime.md#functions-loops-and-events)
 retains actual callers, source filters, callback-once/fault boundaries and cold
 effects without claiming native/JAM acceptance from registrations.
 
+Exterior LOD retains terrain and object source failures, admitted roots and
+coverage independently. Empty roots and omitted property-free draws cannot
+certify complete coverage. Near objects require their authored distant flag
+before participating in the handoff. Loading pumps the same bounded upload queue
+at the destination view while gameplay remains paused; demanded children stay
+resident through sibling refinement. Camera morph position is one shared shader
+parameter. TREE SpeedTree paths resolve under their original resource root, but
+their procedural geometry still requires its own decoder.
+
 [Source game-time commands](nvse-script-runtime.md#game-time) use the existing
 calendar/globals/saved clock across bootstrap, quest, reference and result
 execution. Source hour writes stay pending until the ordinary simulation tick,

@@ -12,6 +12,10 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--exterior-detail-gpu"])
+            {
+                await ExerciseExteriorDetailPixels(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--actor-sound-emitters"])
             {
                 ExerciseActorSoundEmitters(); GetTree().Quit(); return;

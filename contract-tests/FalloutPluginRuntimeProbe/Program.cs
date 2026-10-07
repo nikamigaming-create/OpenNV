@@ -125,6 +125,7 @@ NvseEventProbe.Run();
 QuestScriptExecutionProbe.Run();
 if (args is ["--script-contracts"]) return;
 ExteriorLodProbe.Run();
+CellModelPathContracts.Run();
 LoadOrderContracts.Run();
 WeatherMotionProbe.Run();
 CellLightingContracts.Run();

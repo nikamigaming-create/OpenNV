@@ -649,6 +649,12 @@ public partial class RuntimeCoordinator
             _nativeReferences.PlayerMoves.Complete(_nativeReferences.PlayerMoves.Next ??
                 throw new InvalidOperationException("Initial player placement lost its queued source request."));
         if (!fallout3) AddNativeGameplayHud();
+        if (grid is not null)
+        {
+            SetLoadingStatus("Preparing the distant world");
+            await root.GetChildren().OfType<RuntimeNativeExteriorLod>().Single()
+                .PrepareInitialSelection(GetViewport().GetCamera3D().GlobalPosition);
+        }
         GD.Print(
             $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
             $"restored={(restore is not null)} sourceSide={sourceSide}");
@@ -974,6 +980,8 @@ public partial class RuntimeCoordinator
             GD.Print(
                 $"OPENNV_NATIVE_NIF_LOADING model={baseObject.ModelPath} source={nifSource} " +
                 $"base={baseObject.FormKey}");
+            if (baseObject.ModelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException($"Owned SpeedTree model {baseObject.ModelPath} is present at {nifSource}; its procedural geometry decoder is unbound.");
             prototype = preparedModel is null ? new RuntimeNativeNifPrototype(nif, _configuration.World.GameUnitsToMeters) :
                 new RuntimeNativeNifPrototype(preparedModel, _configuration.World.GameUnitsToMeters);
             var built = prototype.Scene;
@@ -993,8 +1001,9 @@ public partial class RuntimeCoordinator
         root.AddChild(instance);
         RuntimeNativeDestructible.Attach(instance, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
             _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
-        if (cell.Cell.Worldspace is not null && baseObject.Signature is "STAT" or "SCOL" or "TREE")
-            NativeExteriorDetailBlend.Bind(instance);
+        if (cell.Cell.Worldspace is not null && (baseObject.Signature is "STAT" or "SCOL" or "TREE") &&
+            (reference.Flags & 0x00008000) != 0)
+            NativeExteriorDetailBlend.Bind(instance, terrain: false);
         AddNativeReferenceEmittance(instance, reference);
         var controllers = instance.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
         if (controllers.Any(controller => controller.HasTextKeys))
@@ -1129,7 +1138,13 @@ public partial class RuntimeCoordinator
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
                 PlaceDoorFollowers(targetRoot, targetScene, grid?.Cells, entry, followers);
             }
-            CommitNativeWorldTransfer(current, active, targetRoot, targetScene, TeleportTransform(entry));
+            var arrival = TeleportTransform(entry);
+            if (grid is not null)
+            {
+                SetLoadingStatus("Preparing the distant world");
+                await targetRoot.GetChildren().OfType<RuntimeNativeExteriorLod>().Single().PrepareInitialSelection(arrival.Origin);
+            }
+            CommitNativeWorldTransfer(current, active, targetRoot, targetScene, arrival);
         }
         catch
         {

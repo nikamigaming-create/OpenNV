@@ -70,7 +70,7 @@ internal static class NativeNifLodMaterial
             uniform bool detail_mask_enabled = false;
             uniform sampler2D detail_mask : filter_nearest, repeat_disable;
             uniform vec4 detail_bounds;
-            uniform vec2 lod_camera_xz;
+            global uniform vec2 opennv_lod_camera_xz;
             uniform vec2 morph_range = vec2(1e10, 1e11);
             {{NativeNifMaterialEnvironment.ShaderSource}}
             varying vec2 source_world_xz;
@@ -81,7 +81,7 @@ internal static class NativeNifLodMaterial
             void vertex() {
                 vec4 world = MODEL_MATRIX * vec4(VERTEX, 1.0);
                 if (landscape) {
-                    float distance_xz = max(abs(world.x - lod_camera_xz.x), abs(world.z - lod_camera_xz.y));
+                    float distance_xz = max(abs(world.x - opennv_lod_camera_xz.x), abs(world.z - opennv_lod_camera_xz.y));
                     float morph = smoothstep(morph_range.x, morph_range.y, distance_xz);
                     VERTEX.y = mix(VERTEX.y, UV2.x, morph);
                 }
@@ -93,7 +93,7 @@ internal static class NativeNifLodMaterial
                 vec2 detail_uv = (source_world_xz - detail_bounds.xy) / max(detail_bounds.zw - detail_bounds.xy, vec2(0.001));
                 if (detail_mask_enabled && all(greaterThanEqual(detail_uv, vec2(0.0))) && all(lessThan(detail_uv, vec2(1.0))) &&
                     texture(detail_mask, detail_uv).r > 0.5 &&
-                    opennv_detail_coverage(source_world_xz) > opennv_detail_threshold(FRAGCOORD.xy)) discard;
+                    opennv_detail_coverage(source_world_xz, landscape) > opennv_detail_threshold(FRAGCOORD.xy)) discard;
                 vec4 atlas = texture(base_map, UV);
                 // The LOD building pass uses the atlas's transparent holes
                 // even without a NiAlphaProperty (for example tree cards).

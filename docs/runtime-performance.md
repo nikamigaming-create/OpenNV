@@ -23,6 +23,15 @@ backpressure. Obsolete grid requests and departing scene owners cancel queued
 work. Already-running source reads finish at a cancellation boundary. Startup
 plugin-header and archive-index scans each use the same bounded budget.
 
+Initial exterior loading, door travel and source MoveTo drain that same LOD
+queue at the destination view before releasing gameplay. Selected fine children
+cannot be evicted while siblings are still staged behind a coarse parent. The
+512 MiB LOD cache target applies to its conservative resource estimate; active
+and staged demand can exceed it, while dormant entries are evicted. Terrain and
+object reads/coverage remain independent, and camera morph position uses one
+shared shader update rather than one call per resident material. These changes
+do not establish a frame-rate improvement; whole-model uploads remain indivisible.
+
 Workers read and prepare owned data. The main thread owns scene publication,
 gameplay and physics interaction. The operating system and .NET schedule the
 jobs across available cores; there are no hard-coded P-core/E-core indices or

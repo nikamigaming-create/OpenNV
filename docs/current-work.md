@@ -49,20 +49,34 @@ duration. Recording is off; temporary reviewed frames are deleted. Neither
 these checks nor the exported checkpoint establish matched retail pixels,
 physical-headset acceptance or a clean-system fresh New Game.
 
+The native TTW exterior cold load now drains the selected LOD queue before
+returning control: all 121 selected tiles remain resident, rather than losing
+staged fine children to cache eviction. A subsequent ordinary menu save and cold
+Continue retain 115 HP, 8/14 rounds and all nine inventory entries.
+Focused D3D12 pixels verify independent terrain/object fading and ordinary
+near-object retention. Separate owned-source audits resolve the actual tree and
+selected LOD files in standalone FNV, standalone FO3, TTW essentials and the
+combined JAM/TTW/NMC stack. Those source checks are not independent campaign or
+save acceptance. Property-free draws remain explicit failures; recording is off.
+
 ## Current divergence owners
 
 The user's exterior recording has missing vegetation, patchy LOD and poor
 performance. In the reached 49-cell grid, 565 missing references declare owned
-SpeedTree files. The files exist under trees/; the current model reader prefixes
-meshes/ and has no native SpeedTree decoder. Source-backed decoding and real
-geometry are required, without proxy scenery.
+SpeedTree files. Model normalization now preserves their trees/ resource root,
+including source-leading separators, and reports the actual present source
+identity. The procedural SpeedTree geometry decoder remains unbound.
+Source-backed decoding and real geometry are required, without proxy scenery.
 
-Near static detail currently fades from terrain coverage even when its own
-distant object mesh failed admission. Terrain and object coverage need separate
-ownership. Some owned terrain LOD geometry has no material property; source
-water/degenerate geometry semantics remain unresolved. Whole-reference uploads
-can exceed the frame budget. The selected FNV performance results do not
-establish Fallout 3/TTW exterior performance.
+Terrain and object LOD retain independent reads, admitted roots and coverage.
+Near-object fading requires the source distant flag and complete object coverage;
+an unrelated terrain admission cannot enable it. Initial/door/source-MoveTo
+loading drains the original bounded LOD queue before releasing gameplay, and
+demanded fine tiles stay resident while their siblings finish. Property-free
+terrain geometry remains visible as a missing-draw divergence and cannot certify
+coverage. Source water/degenerate semantics and whole-reference upload spikes
+remain unresolved. The selected FNV performance results do not establish Fallout
+3/TTW exterior performance.
 
 Standalone Fallout 3 still uses a bounded preview path rather than shared
 campaign gameplay/save owners. Its executable defaults use a source layout
@@ -87,14 +101,16 @@ clean-system FO3/FNV/TTW New Game.
 ## Next owner and outcome
 
 Primary owns serial builds, live input, save verification and checked
-publication. Fix general exterior resource/LOD admission and upload timing,
-then shared standalone FO3 initialization and the independent source-stack
-loading/saving matrix. Continue the complete vault/world denominator and
+publication. Implement shared standalone FO3 initialization and the independent
+source-stack loading/saving matrix. Keep native vegetation decoding and upload
+timing as active exterior owners. Continue the complete vault/world denominator and
 ordinary Megaton/train/Mojave route without bypassing source conditions.
 
 ## Private continuation
 
-Run: tmp/development-lab/loading-saving-ttw-20261007. The exported cold session
-quit normally. The complete exterior slot and original cave/post-loot saves
-remain immutable. Preserve needed failed-load diagnostics and ordinary input
+Run: tmp/development-lab/loading-saving-ttw-20261007. The latest complete exterior
+resave is 5e24f48be6604a26b50c52e81c8715e7, cold-verified in the native runtime.
+SHA256: D9654D35DB7BB3CD3731ED5C4F72E06DA985D62D07665A7CA6924D8545F8F13B.
+The original exterior, cave and post-loot saves remain immutable. Preserve needed
+failed-load diagnostics and ordinary input
 receipts. Owned files, private saves, helpers and logs stay out of publication.
