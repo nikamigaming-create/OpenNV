@@ -12,10 +12,11 @@ internal static class CampaignBotContracts
     {
         SourceGoalSelection();
         SourceMenus();
+        ActiveSkillMenus();
         WrittenCheckpoint();
         StartupAndSafety();
         AttemptOwnedSkills();
-        Console.WriteLine("Campaign bot: source goal/portal selection, no fake primitive completion, offered paused menus, real save receipts, startup, binding/fault/stale/missing-objective refusal PASS.");
+        Console.WriteLine("Campaign bot: source goal/portal selection, no fake primitive completion, offered paused menus during owned skills, bounded modal waits, real save receipts, startup, binding/fault/stale/missing-objective refusal PASS.");
     }
 
     private static void AttemptOwnedSkills()
@@ -110,6 +111,63 @@ internal static class CampaignBotContracts
         Require(bot.Tick(failed, Idle, .2f).Kind == BotCampaignCommandKind.Pause && !bot.Active &&
             bot.Error!.Contains("unowned actor pose", StringComparison.Ordinal),
             "A complete-save refusal became success or lost its exact engine owner.");
+    }
+
+    private static void ActiveSkillMenus()
+    {
+        foreach (var kind in new[] { "message", "terminal", "dialogue" })
+        {
+            var bot = new ReactiveCampaignBot(); bot.Start();
+            Require(bot.Tick(State(), Idle, .2f).Reference == "door-a", "Menu fixture did not start its own reference skill.");
+            var active = new BotCampaignSkill(true, "awaiting-interaction", null, null);
+            var offered = State(2) with
+            {
+                Paused = true, ModalInput = true, CanSave = true, Goals = [],
+                Choices = [new("0", "offered-path", "Localized source caption", kind, "source-form")]
+            };
+            Require(bot.Tick(offered, active, .2f).Path == "offered-path" && bot.Active,
+                "An owned reference skill starved an actual offered source menu.");
+            Require(bot.Tick(offered with { Sample = 3 }, active, .2f).Kind == BotCampaignCommandKind.None &&
+                bot.Phase == "awaiting-menu-result", "An unchanged menu replayed its consumed choice during a skill.");
+            var next = offered with
+            {
+                Sample = 4, Choices = [new("0", "next-path", "Another source caption", kind, "next-source-form")]
+            };
+            Require(bot.Tick(next, active, .2f).Path == "next-path",
+                "A source menu handoff did not deliver its actually offered next control during a skill.");
+            var closed = State(5, 2) with { CanSave = true, Goals = [] };
+            Require(bot.Tick(closed, active, .2f).Kind == BotCampaignCommandKind.None &&
+                bot.Phase == "executing-skill", "Closing a source menu replaced an active skill or requested a save.");
+            Require(bot.Tick(closed with { Sample = 6 }, Idle, .2f).Kind == BotCampaignCommandKind.Save,
+                "A genuinely completed skill did not return to normal checkpoint policy.");
+
+            var foreign = new ReactiveCampaignBot(); foreign.Start();
+            Require(foreign.Tick(offered, active, .2f).Kind == BotCampaignCommandKind.None &&
+                foreign.FailureKind == "input-owner" && !foreign.Active,
+                "An offered menu adopted a foreign active reference skill.");
+            var failed = new ReactiveCampaignBot(); failed.Start(); failed.Tick(State(), Idle, .2f);
+            Require(failed.Tick(offered, active with { Error = "Original skill fault.", FailureKind = "engine-owner" },
+                .2f).Kind == BotCampaignCommandKind.None && failed.Error == "Original skill fault." && !failed.Active,
+                "An offered source choice hid an owned skill failure.");
+            var faulted = new ReactiveCampaignBot(); faulted.Start(); faulted.Tick(State(), Idle, .2f);
+            Require(faulted.Tick(offered with { Error = "Current source fault." }, active, .2f).Kind ==
+                BotCampaignCommandKind.None && faulted.Error == "Current source fault." && !faulted.Active,
+                "A paused source menu waived a current authoritative execution fault.");
+        }
+
+        foreach (var choices in new IReadOnlyList<BotCampaignChoice>[]
+        {
+            [new("0", "stalled-path", "Unchanged source caption", "message", "source-form")], []
+        })
+        {
+            var bot = new ReactiveCampaignBot(); bot.Start(); bot.Tick(State(), Idle, .2f);
+            var active = new BotCampaignSkill(true, "waiting-for-player-control", null, null);
+            for (var sample = 2; sample <= 94 && bot.Active; ++sample)
+                bot.Tick(State(sample) with { Paused = true, ModalInput = true, Choices = choices }, active, 1);
+            Require(!bot.Active && bot.FailureKind == "bot-policy" &&
+                bot.Error!.Contains("progress", StringComparison.Ordinal),
+                "A stalled or unoffered modal became an unbounded active-skill wait.");
+        }
     }
 
     private static void StartupAndSafety()

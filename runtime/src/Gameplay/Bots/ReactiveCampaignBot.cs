@@ -136,8 +136,9 @@ internal sealed class ReactiveCampaignBot
             return Fail(skill.FailureKind ?? "bot-policy", skillError, !observation.Paused);
         if (_goal is null && skill.Active)
             return Fail("input-owner", "An active reference skill belongs to a different campaign attempt.", !observation.Paused);
-        if (skill.Active) { Phase = "executing-skill"; return new(BotCampaignCommandKind.None); }
-        if (observation.Paused && observation.Choices.Count == 0)
+        if (skill.Active && _pendingChoice is null && observation.Choices.Count == 0 && !observation.ModalInput)
+        { Phase = "executing-skill"; return new(BotCampaignCommandKind.None); }
+        if (observation.Paused && observation.Choices.Count == 0 && !observation.ModalInput)
         { Phase = "paused"; return new(BotCampaignCommandKind.None); }
         _idle += seconds;
         if (_idle > ProgressLimitSeconds)
@@ -172,6 +173,7 @@ internal sealed class ReactiveCampaignBot
             return new(BotCampaignCommandKind.Choice, Path: choice.Path);
         }
         if (observation.ModalInput) { Phase = "awaiting-source-modal"; return new(BotCampaignCommandKind.None); }
+        if (skill.Active) { Phase = "executing-skill"; return new(BotCampaignCommandKind.None); }
         if (observation.CanSave && _savedProgress >= 0 &&
             (observation.Progress != _savedProgress || observation.Scene != _savedScene))
         {

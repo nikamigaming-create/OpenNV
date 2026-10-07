@@ -11,8 +11,6 @@ percentage follows from component checks or record counts.
 
 ## Verified state
 
-Checked PR 156 is merged with all five checks passing. Local main and origin/main
-were verified equal and clean, with no outstanding task pull requests.
 Published F5/menu preparation,
 original ForceSave ordering, terminal XLKR, independent actor queries, corpse
 equipment and source-bot slices retain focused/full gate evidence.
@@ -68,6 +66,20 @@ Checked PR 156 publishes this verified transfer.
 
 ## Current divergence owners
 
+The current campaign-menu owner passes focused ownership, source choice,
+no-replay and stalled-modal contracts. An unchanged owned ordinary replay from
+the cold-verified stage-140 cave slot selects source exit objective 80 and
+delivers the actual message choice while its reference skill remains in
+awaiting-interaction. The resulting authored name entry is visible; the bot
+does not invent name-entry input or claim complete unattended review support.
+Ordinary offered review controls and exit activation again reach exterior
+0010c1 at stage 150 with 115 HP. Source door-animation replacement and the
+original exterior audio save refusal remain visible. The run quits normally,
+recording stays off and the immutable cave/post-loot hashes remain unchanged.
+The selected unchanged owned campaign-goal audit and required Release/Debug,
+formatting/analyzers, contract, launcher and native Godot gate pass. These
+bounded checks do not establish the remaining modal policies or onward route.
+
 Exterior F5 refuses actual AMBDustDevilLPM source voices: 0039af, 0039b1 and
 022d00 use original SOUN 052188, EnvelopeFast flags 0x1200 and PCM16/32 kHz media.
 Opaque histories 0c7b39/0c7b3a remain unwaived. No exterior manual slot or cold
@@ -79,10 +91,18 @@ sampler custody is needed; Stop, Seek, fake Finished or a silence exemption is
 not an exact continuation. Diagnostic proposals stay private and unintegrated.
 
 Live conversations/source predicates still need the original GetDetected owner.
-The campaign needs offered-message handling while a reference skill awaits
-review; source door-animation replacement is independently visible.
+The campaign still needs complete ordinary character-review policies and the
+source door-animation replacement owner.
 Whole sensory/Flee/NPC portal, modeled lights, full package/IDLE, compiled SCDA,
 level allocation, unchanged DLL and original mod outcomes remain open.
+
+The current user scope includes TTW, every JAM module, JIP LN, JohnnyGuitar and
+the current guides' complete dependency behavior. The owned package inventory
+is bound to the current essentials list in [mod compatibility](mod-compatibility.md);
+loaded files are not complete compatibility. The source train owner map retains
+the original reactor/primer, caps/ticket gates and travel scripts. SetGameHour,
+GetGameDaysPassed, wasteland functions and authored movie/control/inventory
+continuation require their general owners before train/Mojave acceptance.
 
 The source-bound vault audit retains all 7,155 winning references across ten
 selected interiors, with 101 reference issues, 34 resource declarations and 51
@@ -99,7 +119,9 @@ accepted from those component tests.
 ## Next owner and outcome
 
 Primary owns serial builds/native checks, ordinary input and checked publication.
-Resolve the supported looping audio checkpoint/mixer interface before
+The isolated public GDExtension PCM callback bridge owner is investigating the
+supported AudioStreamPlayback interface; it has no accepted loop-save proof yet.
+Resolve first-party looping sampler/checkpoint custody before
 exterior cold-save or onward route claims. Reuse retained first-party work.
 Complete the whole vault room/loot/inventory/door denominator before Megaton and
 authored train/Mojave acceptance.

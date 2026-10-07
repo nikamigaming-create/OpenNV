@@ -27,6 +27,13 @@ non-Goodbye/Back alternatives, remembers attempted choices within the same
 observed menu and waits for an actual changed menu before proceeding. This is
 an exploration policy, not proof of an optimal narrative branch.
 
+An owned reference skill does not starve source menus while awaiting an
+interaction or player control. The campaign delivers only actually offered
+source controls, waits for a changed menu and then resumes the same skill.
+It does not replace that skill, save during it, match localized captions or
+waive current faults. Stalled and unoffered modal input retain the campaign's
+progress bound; foreign active skills remain refused.
+
 Navigation can take over into the reusable resident-threat combat skill.
 That skill currently admits magazine-fed single instant-ray weapons, verifies
 posed BPNT/ray/source/ammunition/health/death receipts and ordinary reload
