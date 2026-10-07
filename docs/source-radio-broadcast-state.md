@@ -1,5 +1,20 @@
 # Source radio broadcast state
 
+Campaign save v48 retains ended scripted conversations separately from station
+mode. The original station/reference/base/topic, winning record hashes and
+cumulative completed lines validate against native speaker generations. Cold
+restoration selects no INFO, plays no audio, calls no result script and consumes
+no random draw. A later authored Start uses the same history. An ended native
+voice releases only its own radio lease; its station history remains visible.
+
+Save admission checks the actual native continuation fields, including opaque
+callbacks, rather than relying only on the active INFO flag. Active radio,
+speech and unowned callback suffixes still refuse capture. Synthetic cold and
+source-drift checks pass, along with the ordinary FO3 partial manual checkpoint
+and fresh-process Continue. Older v47/v46 saves stay readable without inventing
+missing ended-radio history. These checks do not establish continuous broadcast,
+reception/attenuation or matched retail audio.
+
 SetBroadcastState and GetBroadcastState share a mutable continuous-broadcast
 flag on the winning placed radio reference. Its initial value comes from the
 TACT Continuous Broadcast flag. Independent placements of one base station

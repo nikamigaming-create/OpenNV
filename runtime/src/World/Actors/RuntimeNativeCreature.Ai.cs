@@ -69,7 +69,10 @@ internal sealed partial class RuntimeNativeCreature
         world.BindActorAlert(Appearance.Reference!.Value, Activity);
         _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
         _packageEvents = new(DispatchPackageEvent);
-        world.UnloadedPackages?.BindNative(Appearance.Reference!.Value, _packageEvents);
+        if (world.UnloadedPackages is { } unloaded)
+            unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
+        else if (_aiState.DeferredPackageContinuation is { } deferred)
+            deferred.BindNative(records, _aiState, _packageEvents);
         _aiState.CapturePackageAssignment = _packageAssignmentCapture = () => _initialPackageSelected
             ? FalloutActorPackageAssignment.Capture(records, _packageEvents) : _aiState.PackageAssignment;
         RestoreEventIdle();

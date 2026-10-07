@@ -1513,6 +1513,26 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(JsonSerializer.Serialize(playerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio),
         "Ended player package lost its persistent sound fault or RNG state cold.");
+    var priorPlayerAudioSave = playerAudioSave with { Schema = FalloutNativeCampaignSave.PlayerAudioSchema };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, priorPlayerAudioSave);
+    var priorPlayerAudioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(priorPlayerAudioRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+        JsonSerializer.Serialize(priorPlayerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio) &&
+        JsonSerializer.Serialize(priorPlayerAudioRestore.State.References) == JsonSerializer.Serialize(playerAudioSave.References),
+        "The v47 migration changed native reference state or player sound history.");
+    var deferredAssignment = new FalloutActorPackageAssignment(new("Synthetic.esm", 1), new('a', 64), false);
+    var deferredReference = new FalloutReferenceSnapshot(new("Synthetic.esm", 2), new("Synthetic.esm", 3),
+        new("Synthetic.esm", 4), null, null, new Dictionary<uint, double>(), null, PackageAssignment: deferredAssignment,
+        DeferredPackageContinuation: new(new("Synthetic.esm", 2), deferredAssignment, 1));
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorPlayerAudioSave with
+    {
+        References = [deferredReference]
+    }), "future deferred actor packages");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorPlayerAudioSave with
+    {
+        FinishedSpeech = new([], 0, 0, 0, 0, 0, null, FinishedRadio: [])
+    }), "future ended radio history");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { PlayerPackageAudio = null }),
         "player package sound owner");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { Schema = FalloutNativeCampaignSave.ObjectPcmSchema }),

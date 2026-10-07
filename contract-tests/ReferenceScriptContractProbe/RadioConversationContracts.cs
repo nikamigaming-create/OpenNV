@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
@@ -31,6 +32,7 @@ internal static class RadioConversationContracts
             Reject(() => radio.Start(Key(900), Key(201)));
             Require(radio.Station is null && !radio.Active, "Invalid radio topic changed the transmitter.");
             radio.Start(Key(900));
+            Reject(() => radio.CaptureFinishedState());
             Require(radio.Info?.Record.FormKey == Key(301) && radio.VoiceIdentity().Actor == Key(10),
                 "Radio lost station predicate identity, default topic or remote voice actor.");
             Reject(() => radio.Start(Key(900)));
@@ -39,6 +41,7 @@ internal static class RadioConversationContracts
             Require(radio.Info?.Record.FormKey == Key(302) && radio.CompletedLines == 1, "Radio reselected against stale source state.");
             radio.CompleteLine();
             Require(!radio.Active && radio.CompletedLines == 2 && !world.GetBroadcastState(Key(900)), "Goodbye changed mode or lost completion.");
+            CheckFinishedCold(records, world, quests, radio.CaptureFinishedState());
             Reject(() => radio.CompleteLine());
             phase = 0; radio.Start(Key(900)); phase = 2; radio.CompleteLine();
             Require(!radio.Active && radio.CompletedLines == 3 && !world.GetBroadcastState(Key(900)),
@@ -48,9 +51,41 @@ internal static class RadioConversationContracts
             Reject(() => radio.Start(Key(900)));
             Require(!radio.Active && world.GetBroadcastState(Key(900)), "Missing continuous owner changed mode.");
             Console.WriteLine("OPENNV_RADIO_CONVERSATION_PASS fullReader=true stationPredicates=true remoteVoice=true defaultTopic=true " +
-                "sourceLinks=true freshConditions=true goodbye=true modePreserved=true interruptionAtomic=true continuousRefused=true");
+                "sourceLinks=true freshConditions=true goodbye=true endedCold=true sourceBound=true noReplay=true activeCaptureRefused=true " +
+                "modePreserved=true interruptionAtomic=true continuousRefused=true");
         }
         finally { foreach (var path in Directory.EnumerateFiles(directory)) File.Delete(path); Directory.Delete(directory); }
+    }
+    private static void CheckFinishedCold(FalloutPluginStack records, FalloutReferenceWorld world, FalloutQuestState quests,
+        FalloutFinishedRadioConversationSnapshot snapshot)
+    {
+        var restored = JsonSerializer.Deserialize<FalloutFinishedRadioConversationSnapshot>(JsonSerializer.Serialize(snapshot))!;
+        var restoring = true;
+        var cold = new FalloutRadioConversation(records, world, quests,
+            (_, _) => throw new InvalidDataException("Ended restoration replayed a source condition."),
+            _ => restoring ? throw new InvalidDataException("Ended restoration reselected INFO.") : 0,
+            new HashSet<FalloutFormKey>(), _ => throw new InvalidDataException("Ended restoration consumed RNG."));
+        cold.RestoreFinishedState(restored);
+        Require(!cold.Active && cold.Info is null && cold.CompletedLines == 2 &&
+            JsonSerializer.Serialize(cold.CaptureFinishedState()) == JsonSerializer.Serialize(snapshot),
+            "Ended radio lost its exact station/topic/history or restarted audio.");
+        Reject(() => cold.RestoreFinishedState(restored));
+        restoring = false; cold.Start(Key(900)); cold.CompleteLine();
+        Require(cold.Active && cold.CompletedLines == 3, "A later source Start lost cumulative cold radio history.");
+        Reject(() => cold.CaptureFinishedState());
+        foreach (var invalid in new[]
+        {
+            restored with { CompletedLines = -1 }, restored with { CompletedLines = long.MaxValue },
+            restored with { ReferenceSha256 = new('0', 64) }, restored with { BaseSha256 = new('0', 64) },
+            restored with { TopicSha256 = new('0', 64) }, restored with { Topic = Key(201) },
+            restored with { Station = restored.Station with { Continuous = true } }
+        })
+        {
+            var rejected = new FalloutRadioConversation(records, world, quests, (_, _) => 0, _ => 0, new HashSet<FalloutFormKey>());
+            Reject(() => rejected.RestoreFinishedState(invalid));
+            Require(rejected.Station is null && rejected.Topic is null && !rejected.Active && rejected.CompletedLines == 0,
+                "Rejected ended radio partially changed its source/history.");
+        }
     }
     private static byte[] Info(uint id, int phase, byte flags)
     {

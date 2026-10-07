@@ -152,6 +152,7 @@ internal partial class RuntimeNativeSpeech : Node
                 lastDisabledParticipant = _lastDisabledParticipant?.ToString(),
                 emptyCompletions = _emptyCompletions.State,
                 finishedFailureCapturable = CanCaptureFinishedFailure,
+                finishedStateCapturable = CanCaptureFinishedState,
                 finishedFailureReceipt = _emptyCompletions.FinishedFailureReceipt,
                 lastCompletedFailure = _lastCompletedFailure,
                 voiceBinding = voice?.Binding,
@@ -596,7 +597,11 @@ internal partial class RuntimeNativeSpeech : Node
             if (radio.Info is { } next)
                 StartCore(voice.Command!, _stack.GetEffective(voice.Reference), radio.Topic!.Value, null,
                     selectedInfo: next, radio: radio);
-            else GD.Print($"OPENNV_NATIVE_RADIO_END station={voice.Reference} lines={radio.CompletedLines} owner=source-links-audio-results");
+            else
+            {
+                if (voice.Generation == completedGeneration && ReferenceEquals(voice.Radio, radio)) voice.Radio = null;
+                GD.Print($"OPENNV_NATIVE_RADIO_END station={voice.Reference} lines={radio.CompletedLines} owner=source-links-audio-results");
+            }
         }
         else if (voice.NpcExchange is { } exchange)
         {

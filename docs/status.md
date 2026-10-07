@@ -18,9 +18,11 @@ Projector and accepts ordinary sex/race/face/hair navigation and final
 confirmation. Its source constructor has no age slider; the shared menu now
 follows that declaration while FNV/TTW retain their original control. FO3
 completes CG00 birth and enters CG01 toddler stage 10. Its first automatic save
-still waits on an off-cell package continuation, and the ordinary manual save
-refuses that concurrent source request. Full opening and settled save/Continue
-acceptance remain pending.
+and an ordinary manual v48 checkpoint now retain the actual deferred off-cell
+package and ended-radio history. Another process cold-Continues that partial
+opening at 100 HP with both inventory entries, revision 1 and unchanged save bytes.
+Active speech/callback continuation, playpen-gate sound identity, a FO3 door-action
+HUD label and full opening/save acceptance remain pending.
 The reported red placement-marker meshes are excluded from gameplay and a native
 frame confirms their absence. Clean-system fresh
 FO3/FNV/TTW New Game, combined-stack acceptance, Megaton and full game completion
@@ -31,7 +33,8 @@ descriptors. New Vegas constructor defaults retain precedence. Independent
 FNV/FO3/TTW/combined source checks pass numeric/string winner selection, original
 player values and layered INI ownership; malformed relocated synthetic images
 reject. FO3 source input defaults, weather and scalar HUD/subtitle declarations
-now bind. Ordinary FO3 settled save/Continue remains unverified. FNV's ordinary
+now bind. FO3's partial toddler checkpoint has the independent save/Continue
+check above. FNV's ordinary
 opening writes a partial CG01 stage-55 checkpoint. Ordinary menu resave and cold
 Continue verify v47 at 100 HP with all 19 inventory entries and unchanged save
 bytes. Native OpenXR simulator controller input independently writes a manual

@@ -9,10 +9,7 @@ internal sealed partial class FalloutReferenceWorld
     // the same live native binding owner and only its finite audio is unfinished.
     internal IReadOnlyList<FalloutFiniteSoundVoice>? PendingProcedureFiniteVoiceWait()
     {
-        var pending = _instances.Values.Where(instance => instance.ProcedureCaptureBlocker is not null &&
-            !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady &&
-            !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady &&
-            !instance.PendingPackageSelectionCaptureReady).ToArray();
+        var pending = _instances.Values.Where(PendingProcedureCapture).ToArray();
         if (pending.Length == 0) return null;
         var result = new List<FalloutFiniteSoundVoice>();
         foreach (var instance in pending)

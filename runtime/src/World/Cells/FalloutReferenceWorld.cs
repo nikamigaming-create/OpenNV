@@ -33,7 +33,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutAnimationSoundEventsSnapshot? AnimationSoundEvents = null,
     FalloutHitReactionFaultsSnapshot? HitReactionFaults = null,
     FalloutActivationRelaySnapshot? ActivationRelay = null,
-    FalloutActorCorpseEquipment? CorpseEquipment = null)
+    FalloutActorCorpseEquipment? CorpseEquipment = null,
+    FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -81,6 +82,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved attack randomness differs between reference and active engagement.");
             snapshot.PackageMotion?.Validate();
             snapshot.PackageAssignment?.Validate();
+            snapshot.DeferredPackageContinuation?.ValidateShape(snapshot);
             snapshot.PackageBindingFailure?.Validate();
             snapshot.SelectionFailure?.Validate();
             snapshot.PendingPackageSelection?.Validate();
@@ -169,6 +171,7 @@ internal sealed class FalloutReferenceInstance
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
     internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
+    internal FalloutActorDeferredPackageContinuation? DeferredPackageContinuation { get; set; }
     internal Func<FalloutActorPackageAssignment?>? CapturePackageAssignment { get; set; }
     internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
     internal Func<bool>? CanCapturePackageBindingFailure { get; set; }
@@ -225,6 +228,7 @@ internal sealed class FalloutReferenceInstance
     private FalloutHitReactionFaults? _hitReactionFaults;
     internal FalloutHitReactionFaults HitReactionFaults => _hitReactionFaults ??= new(Reference);
     internal string? CurrentHitReactionError => _hitReactionFaults?.CurrentError;
+    internal bool HasHitReactionHistory => _hitReactionFaults is not null;
     internal string? HitReactionFaultCaptureBlocker { get; set; }
     internal FalloutSoundRandomState SoundRandom => _soundRandom ??= new(
         BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(sizeof(ulong))));
@@ -327,7 +331,8 @@ internal sealed class FalloutReferenceInstance
         var hitReactionFaults = _hitReactionFaults?.Capture();
         var failureReady = bindingOverride is not null || PackageBindingFailureCaptureReady;
         var selectionReady = selectionOverride is not null || SelectionFailureCaptureReady;
-        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady)
+        if (ProcedureCaptureBlocker is { } blocker && !failureReady && !FurnitureCaptureReady && !selectionReady && !DialogueCaptureReady && !PendingPackageSelectionCaptureReady &&
+            DeferredPackageContinuation?.CanCapture(this) != true)
             throw new NotSupportedException($"Reference {Reference} cannot save: {blocker}");
         var bindingFailure = bindingOverride?.Copy() ?? (failureReady ? CapturePackageBindingFailure is { } captureFailure
             ? captureFailure() : PackageBindingFailure?.Copy() : null);
@@ -351,7 +356,8 @@ internal sealed class FalloutReferenceInstance
             PendingPackageSelection: PendingPackageSelectionCaptureReady ? CapturePendingPackageSelection is { } capturePending
                 ? capturePending() : PendingPackageSelection?.Copy() : null,
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
-            CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy());
+            CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
+            DeferredPackageContinuation: DeferredPackageContinuation);
     }
 }
 
@@ -513,8 +519,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         instance.BindTemplateScript(definition);
     }
 
-    internal int PendingProcedureCaptureCount => _instances.Values.Count(instance =>
-        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady);
+    private bool PendingProcedureCapture(FalloutReferenceInstance instance) =>
+        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady &&
+        !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady &&
+        (IsResident(instance.Reference) || instance.DeferredPackageContinuation?.CanCapture(instance) != true);
+    internal int PendingProcedureCaptureCount => _instances.Values.Count(PendingProcedureCapture);
     internal int StoppedPackageBindingCount => _instances.Values.Count(instance => instance.PackageBindingFailureCaptureReady);
     internal int PendingAnimationSoundCaptureCount => _instances.Values.Count(instance => !instance.AnimationSoundsCaptureReady);
     internal object PendingAnimationSoundCaptures => _instances.Values.Where(instance => !instance.AnimationSoundsCaptureReady)
@@ -525,8 +534,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             resident = IsResident(instance.Reference),
             history = instance.AnimationSoundCaptureDiagnostic
         }).ToArray();
-    internal object PendingProcedureCaptures => _instances.Values.Where(instance =>
-        instance.ProcedureCaptureBlocker is not null && !instance.PackageBindingFailureCaptureReady && !instance.FurnitureCaptureReady && !instance.SelectionFailureCaptureReady && !instance.DialogueCaptureReady && !instance.PendingPackageSelectionCaptureReady)
+    internal object PendingProcedureCaptures => _instances.Values.Where(PendingProcedureCapture)
         .Select(instance => new
         {
             reference = instance.Reference.ToString(),
@@ -548,6 +556,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         PlayerMoves.RequireSettled();
         if (PendingHitEventCount != 0)
             throw new NotSupportedException("Saving pending reference hit events requires their continuation state.");
+        if (_instances.Values.Any(instance => instance.DeferredPackageContinuation is not null && IsResident(instance.Reference)))
+            throw new NotSupportedException("Resident deferred package requires its actual native handoff before saving.");
         foreach (var actor in _packageEvents?.PendingActors ?? []) _ = Get(actor);
         return _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
             .Select(instance => instance.Capture() with
@@ -653,6 +663,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 if (package.Signature != "PACK" || !RecordHash(package).Equals(assignment.Sha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Saved actor assignment differs from its winning package.");
                 instance.PackageAssignment = assignment;
+            }
+            if (snapshot.DeferredPackageContinuation is { } deferred)
+            {
+                deferred.Validate(records, snapshot);
+                instance.DeferredPackageContinuation = deferred;
+                instance.ProcedureCaptureBlocker = FalloutUnloadedActorPackages.ContinuationBlocker;
             }
             if (snapshot.PackageBindingFailure is { } bindingFailure)
             {
