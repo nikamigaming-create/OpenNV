@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
@@ -45,11 +46,25 @@ internal static class ModInstallationContracts
             {
                 schema = "opennv-mod-script-execution-audit/v1", setup.Id,
                 plugins = records.Plugins.Select(plugin => new { name = plugin.Plugin.Name, plugin.Sha256 }),
+                scriptSources = records.EffectiveRecords("SCPT").Where(script => script.Plugin.Name == setup.EntryPlugin)
+                    .Select(script => new
+                    {
+                        script = script.FormKey.ToString(),
+                        fields = script.ReadSubrecords().Where(field => field.Signature is "SCTX" or "SCDA")
+                            .Select(field => new
+                            {
+                                field.Signature,
+                                bytes = field.Data.Length,
+                                sha256 = Convert.ToHexString(SHA256.HashData(field.Data.Span)).ToLowerInvariant(),
+                            }).ToArray(),
+                    }).ToArray(),
                 scripts = scripts.State,
                 ui = ui.State,
                 perks = records.PerkParameters.State,
                 controls = storage.Controls?.State,
-                boundary = "Owned initialization through shared quest/reference/function/event owners. Headless presentation and player input are absent; no gameplay acceptance.",
+                boundary = "360 headless frames of entry-plugin attached quest initialization through shared owners. " +
+                    "Dependency quests, render/hit contacts, presentation and player input are absent. " +
+                    "SCTX/SCDA hashes are source identity, not compiled execution, native DLL or gameplay acceptance.",
             }));
         }
         finally

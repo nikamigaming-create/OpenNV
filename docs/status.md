@@ -1,5 +1,14 @@
 # Product status
 
+The shared JAM source hit-callback owner passes managed typed registration,
+actor/global/FLST filters, actual caller/state effects, mutation/fault-prefix
+rules and cold/process-world lease contracts. The composed published calendar
+hosts retain their focused contracts. Unchanged headless JAM initialization
+advances JBT to fire-weapon registration and JHI to health-damage registration;
+three registrations with zero native hit delivery are not ordinary module
+acceptance. Native contact timing/GetHit* context, SCDA, original DLL execution,
+MCM and all nine gameplay outcomes remain open.
+
 The explicit player/menu save transaction now writes an actual complete stage-18
 Atrium slot while source world/input/producers stay paused and its original
 finite audio reaches native Finished. Ordinary quit/cold Continue restores

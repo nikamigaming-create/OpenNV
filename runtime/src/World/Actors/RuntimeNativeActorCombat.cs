@@ -146,6 +146,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         try
         {
             var part = HitPart(collider);
+            _world.BeforeActorHit(_state.Reference);
             var defense = _world.Defense(_state.Reference, level, globals);
             var amount = defense.Absorb(damage.Amount, FalloutGameSettingFloats.Read(_records, "fMinDamMultiplier"), damage.AmmoEffects);
             var health = _world.Health(_state.Reference);

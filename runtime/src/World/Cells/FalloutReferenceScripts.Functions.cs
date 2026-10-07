@@ -19,12 +19,22 @@ internal sealed partial class FalloutReferenceScripts
         IReadOnlyList<double> arguments, double seconds) =>
         InvokeFunctionValue(script, caller, arguments.Select(value => (FalloutScriptValue)value).ToArray(), seconds).Number;
 
+    internal IReadOnlyList<FalloutScriptHitHandlerResult> DispatchHitCallbacks(FalloutFormKey actor, double seconds)
+    {
+        if (!double.IsFinite(seconds) || seconds < 0)
+            throw new InvalidDataException("Hit callback frame time must be finite and nonnegative.");
+        return (host.Events ?? throw new NotSupportedException("Hit callbacks have no process event owner.")).Hits
+            .Dispatch(records, actor, (script, caller) =>
+                _ = InvokeFunctionValue(script, caller, [], seconds, defaultParameters: true));
+    }
+
     private FalloutScriptValue InvokeFunctionValue(FalloutFormKey script, FalloutFormKey? caller,
         IReadOnlyList<FalloutScriptValue> arguments, double seconds,
-        FalloutScriptExecutionBudget? suppliedBudget = null)
+        FalloutScriptExecutionBudget? suppliedBudget = null, bool defaultParameters = false)
     {
         var definition = UserFunction(script);
-        if (arguments.Count != definition.Parameters.Count)
+        if (arguments.Count > definition.Parameters.Count ||
+            arguments.Count != definition.Parameters.Count && !defaultParameters)
             throw new InvalidDataException("Function argument count differs from its declaration.");
         if (_functionDepth >= 30) throw new NotSupportedException("User function recursion exceeds 30 calls.");
         if (caller is { } reference && records.RuntimeFormId(reference) != 0x14 &&

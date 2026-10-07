@@ -96,6 +96,32 @@ native movies, world/inventory/control transitions or ordinary train travel.
 
 ## Functions, loops and events
 
+`SetOnHitEventHandler` retains process-owned source UDF registrations with
+global, actual-actor and source-adjusted FLST filters. The struck actor is the
+callback's `this`, with zero explicit arguments and existing typed defaults for
+omitted function parameters. Global and filtered scopes remain independent.
+Duplicate registration is idempotent; additions wait for the next contact,
+removals suppress pending callbacks, and malformed registrations fail atomically.
+Failed scopes retain the attempted invocation and consumed source prefix without
+retry until explicit removal/re-registration. Other callbacks and damage are
+independent of that retained failure.
+
+Native actor/player damage owners emit before defense/damage and use the active
+world's leased dispatcher and process-frame delta. Warm-cell rebinding replaces
+the dispatcher; retirement of an old lease cannot disconnect its replacement.
+Registrations do not retain retired executors or become campaign snapshots.
+Cold process initialization must register again; callback-authored quest,
+auxiliary and actor effects use their ordinary saved owners.
+
+Managed contracts cover filters/calling identity, real actor effects, once-only
+arguments, lazy inactive branches, mutation order, fault retention, cold effects
+and dispatcher leases. The unchanged owned JAM audit advances JBT's reached
+failure from hit registration to fire-weapon registration, and JHI to
+health-damage registration. Three admitted registrations and zero delivered hits
+are headless initialization evidence only. Native hit/GetHit* context, retail
+timing, compiled SCDA, original DLL execution and ordinary JAM gameplay remain
+unaccepted.
+
 Named [user functions](https://geckwiki.com/index.php/User_Defined_Function)
 resolve through compiled SCRO bindings and winning SCPT records. Object-type
 Function blocks validate parameters against declared slots. Numeric, reference

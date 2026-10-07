@@ -78,6 +78,7 @@ public partial class RuntimeCoordinator
         if (root.GetChildren().OfType<RuntimeNativeReferenceEvents>().SingleOrDefault() is { } existing)
         {
             _nativeReferenceEvents = existing;
+            existing.ActivateHitCallbacks();
             existing.SetProcess(true);
             return;
         }

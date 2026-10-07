@@ -130,6 +130,15 @@ The shared interpreter now executes typed scalar/array expressions and user func
 integer operators, loops and per-script lifecycle/frame/key/render events.
 MCM's full in-game configuration
 is required by the requested product scope and remains in implementation.
+The shared source hit-callback owner now admits actual actor/global/FLST
+registrations, typed source UDF delivery, real state effects and process-world
+rebinding, with focused mutation/fault/cold/lease contracts. The unchanged
+headless JAM audit advances JBT's reached missing call to
+SetOnFireWeaponEventHandler and JHI's to SetOnHealthDamageEventHandler; JHM
+retains 360 clean initializer invocations. Its three registrations and zero hit
+invocations do not establish native contact delivery or working module behavior.
+GetHit* context, original SCDA/DLL authority, MCM and ordinary JAM outcomes remain
+independent.
 The [typed postfix reference-call owner](nvse-postfix-reference-calls.md) admits
 46 of JAM's 52 source scripts, previously 41. It retains typed calling identity,
 once-only evaluation, compiled bindings, lazy inactive arguments and cold state.

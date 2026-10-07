@@ -3,6 +3,13 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Source hit callbacks use a process-owned registration owner and the current
+world's leased source executor. Native actor/player damage paths emit before
+defense/damage; post-damage OnHit/OnHitWith receipts retain their separate owner.
+The [script event contract](nvse-script-runtime.md#functions-loops-and-events)
+retains actual callers, source filters, callback-once/fault boundaries and cold
+effects without claiming native/JAM acceptance from registrations.
+
 [Source game-time commands](nvse-script-runtime.md#game-time) use the existing
 calendar/globals/saved clock across bootstrap, quest, reference and result
 execution. Source hour writes stay pending until the ordinary simulation tick,

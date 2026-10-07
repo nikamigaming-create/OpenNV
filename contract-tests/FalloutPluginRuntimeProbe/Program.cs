@@ -65,6 +65,11 @@ if (args is ["--test-numeric-ini"])
     NumericIniSettingProbe.Run();
     return;
 }
+if (args is ["--test-hit-handlers"])
+{
+    NvseEventProbe.HitHandlers();
+    return;
+}
 if (args.Length >= 3 && args[0] == "--audit-jdc-game-settings")
 {
     ScriptSourceStringProbe.Owned(args[1], args[2], args[3..]);

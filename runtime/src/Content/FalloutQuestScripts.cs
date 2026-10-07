@@ -664,6 +664,8 @@ internal sealed partial class FalloutQuestScripts
                     (References ?? throw new NotSupportedException("GetDeadCount has no shared death history."))
                     .GetDeadCount(arguments[0].Value.FormKey(_records)))
                 { ReadOnly = true };
+            if (parts.Length == 1 && operation == "setonhiteventhandler")
+                return FalloutScriptHitHandlers.RegistrationFunction(_records, () => Events.Hits);
             if (parts.Length == 1 && operation == "getlocationspecificloadscreensonly")
                 return new([], _ => Session.LocationSpecificLoadScreensOnly ? 1 : 0) { ReadOnly = true };
             if (parts.Length == 1 && operation == "ishardcore")
@@ -881,7 +883,7 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
-            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed")
+            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
                 return;
