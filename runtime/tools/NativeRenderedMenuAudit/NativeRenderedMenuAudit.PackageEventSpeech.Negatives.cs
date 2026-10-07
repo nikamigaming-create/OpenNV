@@ -62,6 +62,7 @@ public partial class NativeRenderedMenuAudit
                     FinishedSpeechVoiceField(voice, "ResponseCompleted").GetValue(voice) is not null,
                     native.Error ?? "Old package retirement cleared its reentrant native response generation.");
                 RejectFinished(() => native.CaptureFinishedState(), "Reentrant response audio/opaque callback was saved as ended speech.");
+                RequireFinished(!native.CanCaptureFinishedState, "Active native response was admitted before save capture.");
                 await WaitFinishedSpeech(native, allowFailure: false);
                 var settled = native.CaptureFinishedState();
                 RequireFinished(nextEnded == 1 && callbackPrefix == 1 && infos == 1 && results == 0 && sourceCompletions == 0 &&
@@ -78,6 +79,7 @@ public partial class NativeRenderedMenuAudit
                     FinishedSpeechVoiceField(voice, "PackageEvent").GetValue(voice) is not null && !native.CanCaptureFinishedFailure,
                     "Failed package callback was erased or promoted into a fully owned stopped source receipt.");
                 RejectFinished(() => native.CaptureFinishedState(), "Incomplete package callback was saved without continuation state.");
+                RequireFinished(!native.CanCaptureFinishedState, "Ended but opaque package callback was admitted before save capture.");
                 native._Process(0); native._Process(0);
                 RequireFinished(callbackPrefix == 1 && native.Error == callbackError && results == 0 && sourceCompletions == 0 &&
                     random == JsonSerializer.Serialize(world.ScriptValues.Capture()),

@@ -58,7 +58,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v47";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v48";
+    internal const string PlayerAudioSchema = "opennv-native-fnv-campaign-save/v47";
     internal const string ObjectPcmSchema = "opennv-native-fnv-campaign-save/v46";
     internal const string CorpseTransferSchema = "opennv-native-fnv-campaign-save/v45";
     internal const string ActivationRelaySchema = "opennv-native-fnv-campaign-save/v44";
@@ -333,6 +334,7 @@ internal static class FalloutNativeCampaignSave
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
             if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
+        if (state.Schema == PlayerAudioSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema is CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ObjectPcmSchema };
         if (state.Schema is not (ExpectedSchema or ObjectPcmSchema) && state.References is not null)
             state = state with
@@ -353,7 +355,7 @@ internal static class FalloutNativeCampaignSave
     }
 
     private static IReadOnlyList<FalloutReferenceSnapshot>? RestoreLegacyDeathCounts(FalloutNativeCampaignState state) =>
-        state.Schema is ExpectedSchema or ObjectPcmSchema or CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
+        state.Schema is ExpectedSchema or PlayerAudioSchema or ObjectPcmSchema or CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema or DeathHistorySchema ? state.References : state.References?.Select(reference => reference with
         { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray();
 
     private static void ValidateQuestValueHandles(FalloutPluginStack stack,
@@ -438,15 +440,19 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
-        if (state.Schema != ExpectedSchema && state.PlayerPackageAudio is not null)
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.DeferredPackageContinuation is not null) == true)
+            throw new InvalidDataException("Legacy campaign schema contains future deferred actor packages.");
+        if (state.Schema != ExpectedSchema && state.FinishedSpeech?.FinishedRadio is not null)
+            throw new InvalidDataException("Legacy campaign schema contains future ended radio history.");
+        if (state.Schema is not (ExpectedSchema or PlayerAudioSchema) && state.PlayerPackageAudio is not null)
             throw new InvalidDataException("Legacy campaign schema contains future player package sound history.");
-        if (state.Schema == ExpectedSchema && state.References is not null && state.PlayerPackageAudio is null)
+        if (state.Schema is ExpectedSchema or PlayerAudioSchema && state.References is not null && state.PlayerPackageAudio is null)
             throw new InvalidDataException("Saved campaign is missing its player package sound owner.");
         state.PlayerPackageAudio?.Events.Validate();
         if (state.PlayerPackageAudio is { } playerAudio && state.Scripts?.Session?.PlayerPackage?.SoundRandomState is { } packageRandom &&
             playerAudio.RandomState != packageRandom)
             throw new InvalidDataException("Player package and audio random state disagree.");
-        if (state.Schema == ObjectPcmSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema is PlayerAudioSchema or ObjectPcmSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.DoorMotion?.ScriptSequence is not null) == true)
             throw new InvalidDataException("Legacy campaign schema contains future scripted door animation state.");
         if (state.Schema != ExpectedSchema && state.References?.Any(reference =>

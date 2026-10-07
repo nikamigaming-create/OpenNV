@@ -212,6 +212,8 @@ internal partial class RuntimeNativeNpc
         _packageEvents = new(DispatchPackageEvent);
         if (world?.UnloadedPackages is { } unloaded)
             unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
+        else if (_aiReferenceState?.DeferredPackageContinuation is { } deferred)
+            deferred.BindNative(stack, _aiReferenceState, _packageEvents);
         else if (_aiReferenceState?.PackageAssignment is { } retained && _aiReferenceState.PackageMotion?.Package != retained.Package)
             retained.Bind(stack, _packageEvents);
         RestoreMarkerTravelLifecycleBeforeSelection();

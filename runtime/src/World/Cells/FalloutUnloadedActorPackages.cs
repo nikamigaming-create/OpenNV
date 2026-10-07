@@ -34,6 +34,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
     internal const string ContinuationBlocker = "Unloaded actor package assignment awaits its native procedure continuation.";
     private readonly Dictionary<FalloutFormKey, FalloutPackageEvents> _actors = [];
     private readonly HashSet<FalloutFormKey> _evaluating = [];
+    private readonly HashSet<FalloutFormKey> _deferred = [];
 
     internal object State => _actors.Select(value => new
     {
@@ -42,6 +43,8 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         value.Value.Done,
         value.Value.Error,
         value.Value.LastEvent,
+        value.Value.Revision,
+        deferred = world.Get(value.Key).DeferredPackageContinuation,
         procedure = "deferred-to-resident-native-owner"
     }).ToArray();
 
@@ -58,8 +61,15 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (!_actors.TryGetValue(actor, out var events))
         {
             _actors.Add(actor, events = new((package, kind) => Dispatch(actor, package, kind)));
-            if (state.PackageAssignment is { } retained)
+            if (state.DeferredPackageContinuation is { } deferred)
+            {
+                deferred.Assignment.Bind(records, events);
+                events.RestoreHistory(deferred.Revision, "POBA", deferred.Assignment.Package);
+                _deferred.Add(actor);
+            }
+            else if (state.PackageAssignment is { } retained)
                 retained.Bind(records, events);
+            else _deferred.Add(actor);
         }
         if (!_evaluating.Add(actor)) return events.Active?.Form;
         try
@@ -67,7 +77,13 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
             var selected = FalloutAiPackages.Select(records, state.Base, condition => Evaluate(actor, condition),
                 templates, clock, evaluateRunOn: true,
                 eligible: package => world.PackageEligible(actor, package, clock, events.Active?.Form, events.Done));
-            events.Change(selected is null ? null : FalloutScriptPackage.Read(selected));
+            try { events.Change(selected is null ? null : FalloutScriptPackage.Read(selected)); }
+            catch
+            {
+                state.DeferredPackageContinuation = null;
+                state.ProcedureCaptureBlocker = ContinuationBlocker;
+                throw;
+            }
             Remember(actor, events);
             if (events.Active is { } active && state.PackageMotion?.Package != active.Form && state.FurnitureContinuation?.Assignment.Package != active.Form && state.DialogueContinuation?.Assignment.Package != active.Form)
                 state.ProcedureCaptureBlocker = ContinuationBlocker;
@@ -84,12 +100,20 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (events.Error is { } failure) world.Get(actor).ScriptError ??= failure;
         else if (events.Active is { } active) retained.Restore(active, events.Done);
         _actors.Add(actor, retained);
+        _deferred.Remove(actor);
+        world.Get(actor).DeferredPackageContinuation = null;
         Remember(actor, retained);
     }
 
     internal void BindNative(FalloutFormKey actor, FalloutPackageEvents events)
     {
         var state = world.Get(actor);
+        if (state.DeferredPackageContinuation is { } deferred)
+        {
+            deferred.BindNative(records, state, events);
+            _actors.Remove(actor); _deferred.Remove(actor);
+            return;
+        }
         FalloutScriptPackage? active;
         bool done;
         if (_actors.Remove(actor, out var previous))
@@ -106,6 +130,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         // procedure owner. A newly selected assignment has no motion yet.
         if (active is not null && state.PackageMotion?.Package != active.Form && state.FurnitureContinuation?.Assignment.Package != active.Form && state.DialogueContinuation?.Assignment.Package != active.Form)
             events.Restore(active, done);
+        _deferred.Remove(actor);
         if (state.ProcedureCaptureBlocker == ContinuationBlocker) state.ProcedureCaptureBlocker = null;
     }
 
@@ -133,8 +158,13 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         };
     }
 
-    private void Remember(FalloutFormKey actor, FalloutPackageEvents events) =>
-        world.Get(actor).PackageAssignment = FalloutActorPackageAssignment.Capture(records, events);
+    private void Remember(FalloutFormKey actor, FalloutPackageEvents events)
+    {
+        var state = world.Get(actor);
+        state.PackageAssignment = FalloutActorPackageAssignment.Capture(records, events);
+        state.DeferredPackageContinuation = _deferred.Contains(actor)
+            ? FalloutActorDeferredPackageContinuation.Capture(records, state, events) : null;
+    }
 
     private void Dispatch(FalloutFormKey actor, FalloutScriptPackage package, string kind)
     {

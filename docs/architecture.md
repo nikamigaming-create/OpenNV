@@ -187,6 +187,11 @@ turning and bind package head suppression independently of script Look targets.
 [Radio broadcast state](source-radio-broadcast-state.md) retains per-reference
 continuous/scripted mode across source commands, queries and cold restoration.
 Station mode remains independent of reception, the receiver and audio timelines.
+Ended scripted radio has a separate v48 speech-history owner, bound to its
+original station/reference/base/topic and winning hashes. Cold restoration
+retains its cumulative native voice/line generations without INFO selection,
+audio, result callbacks or RNG consumption. Active voices and opaque callbacks
+require their own continuations before save admission.
 
 [Reference script sounds and stopped instructions](script-sound-continuation.md)
 bind PlaySound3D to the actual reference, source SOUN and native owned WAV. A
@@ -209,6 +214,10 @@ protection, carried weight and session persistence use the same C# owner.
 initialization and Guard approach separately from active procedures. Shared
 reference state preserves source selection, consumed retirement and actual
 motion without supplying missing procedure behavior or replaying results.
+Save v48 also retains a selected off-cell package whose source Start finished
+before native procedure initialization. Its explicit assignment/hash and lifecycle
+revision validate without native clocks or prior physical history. Residency
+requires a real native handoff; deferred assignment cannot certify motion or arrival.
 
 [Actor procedure checkpoints](actor-procedure-checkpoints.md) retain source
 Furniture phases, stopped predicate selection, declared idle collections and

@@ -20,7 +20,12 @@ internal static class UnloadedActorPackageContracts
         world.PackageEvents.Consume(firstReceipt);
         Check(world.CurrentPackage(actor) == Key(0x8f5) && world.PendingPackageEventCount == 0,
             "Repeated query replayed package-start effects.");
-        Reject(() => world.Capture());
+        var deferred = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
+        var deferredActor = deferred.Single(snapshot => snapshot.Reference == actor);
+        Check(deferredActor.DeferredPackageContinuation is { Revision: 1 } &&
+            deferredActor.PackageAssignment is { Done: false } && deferredActor.Animation is null && world.PendingProcedureCaptureCount == 0,
+            "Deferred source Start lost its owned boundary or invented native progress.");
+        CheckDeferredCold(records, quests, actor, deferred);
         quests.EnterStage(Key(0x871), 1);
         Check(world.CurrentPackage(actor) == Key(0x8f6), "Unloaded package query retained stale quest eligibility.");
         var secondReceipt = world.PackageEvents.SnapshotPending(actor);
@@ -32,6 +37,8 @@ internal static class UnloadedActorPackageContracts
         native.Change(FalloutScriptPackage.Read(records.GetEffective(Key(0x8f6))));
         Check(native.Active?.Form == Key(0x8f6) && !native.Done && world.PendingPackageEventCount == 0,
             "Native handoff invented completion or repeated start.");
+        Check(native.Revision == 3 && native.LastEvent == "POBA" && world.Get(actor).DeferredPackageContinuation is null,
+            "Native handoff lost consumed transition history or retained the deferred owner.");
         var state = world.Get(actor);
         state.CapturePackageAssignment = () => FalloutActorPackageAssignment.Capture(records, native);
         var snapshots = world.Capture();
@@ -73,7 +80,61 @@ internal static class UnloadedActorPackageContracts
         state.QueryCurrentPackage = () => native.Active?.Form;
         Check(world.CurrentPackage(actor) == Key(0x8f6), "Resident package query did not use the actual native owner.");
         Reject(() => world.CurrentPackage(Key(0x903)));
-        Console.WriteLine("OPENNV_UNLOADED_PACKAGE_CONTRACT_PASS sourceSelection=true liveQuest=true sourceEvents=true noArrival=true nativeHandoff=true earlyNativeCompleted=true coldAssignment=true sourceDriftRefused=true missingResidentOwnerRefused=true fixture=assignment-native-lifecycle-no-body");
+        Console.WriteLine("OPENNV_UNLOADED_PACKAGE_CONTRACT_PASS sourceSelection=true liveQuest=true sourceEvents=true noArrival=true deferredCold=true deferredHistory=true residentBoundary=true nativeHandoff=true earlyNativeCompleted=true coldAssignment=true sourceDriftRefused=true missingResidentOwnerRefused=true fixture=assignment-native-lifecycle-no-body");
+    }
+
+    private static void CheckDeferredCold(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey actor,
+        FalloutReferenceSnapshot[] snapshots)
+    {
+        using var cold = new FalloutReferenceWorld(records);
+        cold.Restore(snapshots);
+        cold.UnloadedPackages = new(records, cold, quests, null, null,
+            (_, _) => throw new InvalidDataException("Cold deferred Start replayed source effects."), () => 1);
+        var retained = snapshots.Single(snapshot => snapshot.Reference == actor).DeferredPackageContinuation!;
+        Check(cold.CurrentPackage(actor) == retained.Assignment.Package && cold.PendingPackageEventCount == 0 &&
+            JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(snapshots),
+            "Cold deferred assignment changed its revision, source state or consumed effects.");
+        var state = cold.Get(actor);
+        state.DeferredPackageContinuation = null;
+        Check(cold.PendingProcedureCaptureCount == 1, "Missing deferred ownership became saveable.");
+        Reject(() => cold.Capture());
+        state.DeferredPackageContinuation = retained;
+        cold.LoadCell(FalloutCellSceneReader.Read(records, new("Actors.esm", 0x880)));
+        Check(cold.PendingProcedureCaptureCount == 1, "Resident deferred actor was accepted without its native owner.");
+        Reject(() => cold.Capture());
+        var native = new FalloutPackageEvents((_, _) => throw new InvalidDataException("Cold native handoff replayed source effects."));
+        cold.UnloadedPackages.BindNative(actor, native);
+        Check(native.Active?.Form == retained.Assignment.Package && !native.Done && native.Revision == retained.Revision &&
+            native.LastEvent == "POBA" && cold.PendingPackageEventCount == 0 && state.DeferredPackageContinuation is null,
+            "Cold native handoff lost its Start boundary or invented completion.");
+        foreach (var invalid in new[]
+        {
+            retained with { Reference = new("Actors.esm", 0x903) }, retained with { Revision = 0 },
+            retained with { Assignment = retained.Assignment with { Done = true } },
+            retained with { Assignment = retained.Assignment with { Sha256 = new('0', 64) } }
+        })
+        {
+            using var rejected = new FalloutReferenceWorld(records);
+            Reject(() => rejected.Restore(snapshots.Select(value => value.Reference == actor ? value with
+            { DeferredPackageContinuation = invalid, PackageAssignment = invalid.Assignment } : value).ToArray()));
+            Check(rejected.InstanceCount == 0, "Invalid deferred boundary partially mutated the world.");
+        }
+        using var mixed = new FalloutReferenceWorld(records);
+        Reject(() => mixed.Restore(snapshots.Select(value => value.Reference == actor ? value with
+        { Animation = new("meshes/fixture/idle.kf", new('a', 64), 0, true) } : value).ToArray()));
+        Check(mixed.InstanceCount == 0, "Deferred ownership accepted an already-started native clock.");
+        using var mixedObjects = new FalloutReferenceWorld(records);
+        Reject(() => mixedObjects.Restore(snapshots.Select(value => value.Reference == actor ? value with
+        { ObjectAnimations = [] } : value).ToArray()));
+        Check(mixedObjects.InstanceCount == 0, "Deferred ownership accepted an initialized native object-animation owner.");
+        using var priorNative = new FalloutReferenceWorld(records);
+        priorNative.Get(actor).Animation.Change("meshes/fixture/idle.kf", new('a', 64));
+        priorNative.UnloadedPackages = new(records, priorNative, quests, null, null,
+            (program, _) => program.RequireEmptyScript(), () => 1);
+        _ = priorNative.CurrentPackage(actor);
+        Check(priorNative.Get(actor).DeferredPackageContinuation is null && priorNative.PendingProcedureCaptureCount == 1,
+            "Prior native state was replaced with a deferred-initialization receipt.");
+        Reject(() => priorNative.Capture());
     }
 
     internal static byte[] StageCondition(uint quest)

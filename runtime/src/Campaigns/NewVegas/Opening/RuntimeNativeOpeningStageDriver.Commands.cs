@@ -21,7 +21,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveContinuationBlocker =>
         _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
-        _conversation?.Active == true ? "conversation" : _speech?.Active == true && !_speech.CanCaptureFinishedFailure ? "speech" :
+        _conversation?.Active == true ? "conversation" : _speech is { CanCaptureFinishedState: false } ? "speech" :
         _nameEntry is not null ? "name-menu" : _raceSexEntry is not null ? "race-menu" :
         _specialBookEntry is not null ? "special-book-menu" :
         _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :

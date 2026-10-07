@@ -1,5 +1,19 @@
 # Actor package continuation
 
+Campaign save v48 also owns a source-selected off-cell assignment that has not
+started a native procedure. It retains the winning PACK/hash, consumed Start
+revision and unfinished state. Cold queries and fresh native handoff retain that
+revision without re-emitting Start/Change/End or inventing arrival. Source event
+receipts remain independent and are restored only when genuinely pending.
+
+The deferred boundary rejects animation, physical/procedure continuations and
+prior sound/hit histories. A resident actor still requires its real native owner;
+missing or mismatched deferred state remains uncapturable. Synthetic cold checks
+cover exact revision history, changed assignments, early/native handoff, mixed
+owners and atomic malformed/source-drift refusal. The ordinary standalone FO3
+partial toddler save/cold Continue retains Mister Burke's actual off-cell
+assignment at revision 1. This does not implement his force-greeting procedure.
+
 Campaign save v32 adds two explicit reference-owned continuations. Older v31
 files remain readable without rewriting them or inventing these new lanes.
 

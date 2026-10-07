@@ -105,11 +105,18 @@ completes CG00 stage 100 and starts the authored CG01 toddler chapter at stage 1
 Menu execution failures release their input/pause owner and retain the error.
 This verifies creation navigation and acceptance, not retail presentation or the
 whole opening.
-FO3 has no accepted settled manual save or cold Continue yet. Its first source
-automatic save is blocked by an off-cell actor's selected package with no native
-procedure continuation. The ordinary manual menu save retains the resulting
-concurrent-auto-save refusal. Deferred assignment persistence is the next owner;
-unknown procedure behavior must remain visible. Its unbound
+FO3 now writes its first genuine automatic save and an ordinary manual v48
+checkpoint after creation. Another process cold-Continues CG00 stage 100 and
+CG01 toddler stage 10 at 100 HP with both original inventory entries and unchanged
+save bytes. The off-cell package retains its winning assignment, consumed Start
+and revision 1 without inventing arrival. Ended radio retains its actual station,
+topic and cumulative completion/voice history without replaying its source results.
+Resident handoff still requires the native procedure; active speech and opaque
+callbacks remain save blockers. This is a partial opening checkpoint, not complete
+creation/campaign acceptance. Ordinary toddler navigation reaches the father but
+its playpen-gate activation is stopped by unrelated missing DLC activation parents
+in the global reverse graph. Cold play also
+reaches an unbound FO3 door-action HUD label. These interaction owners and its unbound
 double-vision phase, convex-list/phantom collision and modeled emergency lights
 remain visible. Known exhausted radio links end their conversation; unknown
 conditions still reject. Standalone FNV reaches ordinary character acceptance
@@ -152,9 +159,9 @@ clean-system FO3/FNV/TTW New Game.
 ## Next owner and outcome
 
 Primary owns serial builds, live input, save verification and checked
-publication. Persist the actually selected, not-yet-started off-cell package
-continuation, verify FO3's first manual save and cold Continue, then complete the
-independent flat/OpenXR source-stack loading/saving matrix. Keep native vegetation decoding and upload
+publication. Publish the deferred package and ended-radio persistence fixes,
+repair activation-parent graph isolation, the FO3 door HUD and active-speech save owners, then complete
+the independent flat/OpenXR source-stack loading/saving matrix. Keep native vegetation decoding and upload
 timing as active exterior owners. Continue the complete vault/world denominator and
 ordinary Megaton/train/Mojave route without bypassing source conditions.
 
@@ -169,3 +176,6 @@ receipts. Owned files, private saves, helpers and logs stay out of publication.
 Standalone FNV run: tmp/development-lab/loading-saving-fnv-20261007. Its current
 partial v47 slot is fc13c871fc244908bbdcd326813112ee, cold-verified at stage 55.
 SHA256: F89A78C54282777D249E1BD16F3F498D9EC35746FE27EC3374E4CCC25491EF01.
+Standalone FO3 run: tmp/development-lab/loading-saving-fo3-20261007. Its partial
+v48 manual slot is 91f2a6a4eda54ff9878cb3aca0ee3b52, cold-verified at CG01 stage 10.
+SHA256: 1DB5A80996C2DF742CEBDB599B608237D0228B8014A36F2F43337BB245250251.

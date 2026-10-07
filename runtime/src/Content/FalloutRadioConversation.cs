@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Content;
 
 // A transmitter selects INFO against its own reference, while ANAM identifies
 // the remote actor supplying a particular line's voice. Neither is a proxy NPC.
-internal sealed class FalloutRadioConversation(FalloutPluginStack records, FalloutReferenceWorld world,
+internal sealed partial class FalloutRadioConversation(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutQuestState quests, Func<FalloutFormKey, FalloutCondition, float> evaluate,
     Func<FalloutFormKey, float> stage, IReadOnlySet<FalloutFormKey> said, Func<uint, uint>? random = null)
 {
@@ -37,7 +37,7 @@ internal sealed class FalloutRadioConversation(FalloutPluginStack records, Fallo
         var station = Station ?? throw new InvalidOperationException("Radio lost its source station.");
         if ((completed.Flags & 1) != 0)
         {
-            Info = null; ++CompletedLines;
+            Info = null; CompletedLines = checked(CompletedLines + 1);
             return;
         }
         IReadOnlyList<FalloutFormKey> links = completed.Choices.Count != 0 ? completed.Choices :
@@ -48,13 +48,13 @@ internal sealed class FalloutRadioConversation(FalloutPluginStack records, Fallo
             var info = Select(station, link);
             if (info is null) continue;
             _ = VoiceIdentity(station, info);
-            Topic = link; Info = info; ++CompletedLines;
+            Topic = link; Info = info; CompletedLines = checked(CompletedLines + 1);
             return;
         }
         // A fully evaluated link set can have no currently eligible INFO.
         // That ends this request, just as an empty initial selection does.
         // Unknown conditions and malformed links still throw before retirement.
-        Info = null; ++CompletedLines;
+        Info = null; CompletedLines = checked(CompletedLines + 1);
     }
 
     internal FalloutDialogueSpeaker VoiceIdentity() => VoiceIdentity(
