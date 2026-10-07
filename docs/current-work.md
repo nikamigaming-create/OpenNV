@@ -95,7 +95,11 @@ aggregate, 20 headers, the original model and all four background forms in FNV,
 FO3, TTW essentials and the combined stack. The statistical model contains
 additional axes outside the source menu. Synthetic checks reject malformed
 assignments, limits, argument forwarding, selected model extents and foreign
-branch/resolver associations. Live FO3 creation acceptance is the next check.
+branch/resolver associations. A fresh ordinary FO3 run opens the original
+Gene Projector and accepts sex/race-page navigation at CG00 stage 61. Its frame
+was inspected and temporary pixels deleted. The face page still requests FNV's
+unbound age label; the source declaration for that optional control is the next
+owner. Full FO3 creation acceptance remains unverified.
 Partial menu initialization cleans up before publishing state; a reached failure
 cannot break telemetry.
 FO3 has no accepted settled manual save or cold Continue yet. Its unbound
@@ -141,7 +145,8 @@ clean-system FO3/FNV/TTW New Game.
 ## Next owner and outcome
 
 Primary owns serial builds, live input, save verification and checked
-publication. Complete ordinary FO3 character creation and the
+publication. Bind FO3's source creation-control availability, complete ordinary
+character creation and the
 independent flat/OpenXR source-stack loading/saving matrix. Keep native vegetation decoding and upload
 timing as active exterior owners. Continue the complete vault/world denominator and
 ordinary Megaton/train/Mojave route without bypassing source conditions.

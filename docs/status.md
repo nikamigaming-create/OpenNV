@@ -13,7 +13,9 @@ source-stack matrix. Standalone FO3 now enters its authored birth CELL through
 the shared campaign owners and ordinary sex/name entry reaches CG00 stage 42.
 Its pooled face controls/headers, source-selected creation model and optimized
 menu-background declarations pass independent owned-file checks across FNV,
-FO3, TTW and the combined stack; live creation acceptance remains pending.
+FO3, TTW and the combined stack. A fresh ordinary FO3 run displays the Gene
+Projector and accepts sex/race-page navigation. The face page still requests an
+unbound age label; complete creation acceptance remains pending.
 The reported red placement-marker meshes are excluded from gameplay and a native
 frame confirms their absence. Clean-system fresh
 FO3/FNV/TTW New Game, combined-stack acceptance, Megaton and full game completion
