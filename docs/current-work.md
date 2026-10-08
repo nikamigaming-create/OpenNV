@@ -7,6 +7,10 @@ Fallout 3, TTW and the combined stack, verified independently in flat/OpenXR.
 Repair reached physics, actors, vegetation, LOD and performance, then deliver the
 requested loading/walking showcases for all three games. Standalone FO3 must
 reach the exterior and look toward Megaton through ordinary saved play.
+The latest immediate priority is genuine OpenXR footage of all three, including
+tracked hands, wrist UI, weapons and an ordinary-input kill. The user accepts the
+FO3 toddler scene for this showcase; its tenth-birthday Pip-Boy and the later
+Megaton route retain their separate source progression requirements.
 Preserve the complete TTW Megaton/Union Station/Mojave/Benny route, JAM,
 compiled SCDA, unchanged x86 plugins and retail comparison requirements in
 [implementation-plan.md](implementation-plan.md). All 36 broad requirements
@@ -101,9 +105,21 @@ New Game/campaign claim is accepted from these component checks.
 
 Primary owns serial builds, live input, save verification and checked publication.
 The bounded source-hinge fix is merged through the required runtime gate and
-checked PR. Publish the bounded native NPC route/ownership repair, implement the
-reached active-speech save owner, and continue the genuine FO3 opening toward the vault exit/Megaton,
-and finish the requested FO3 video from a cold save. Keep vegetation decoding and
+checked PR. The native NPC route/ownership repair is also merged. Finish the
+priority three-game OpenXR showcases and repair reached controller failures.
+XR fire/reload previously synthesized desktop events and depended on that event
+map. Semantic action events now enter the same weapon owner; the native owned
+fixture passes reload, single fire/release and the source fighting gate with
+empty desktop bindings. A fresh ordinary FNV OpenXR simulator process now
+cold-Continues Goodsprings, equips the owned laser pistol through the wrist
+inventory, reloads, walks along the porch and kills a resident source crow
+through tracked trigger input. Final-eye footage includes the weapon, both
+hands and the fallen body. The complete runtime gate passes; checked publication
+and the FO3/TTW clips are pending. This single-eye capture does not certify
+physical-headset acceptance, stereo, complete rendering or retail combat parity.
+Resume the preserved active-radio save implementation, continue the genuine FO3
+opening toward the vault exit/Megaton, and finish its later exterior video.
+Keep vegetation decoding and
 upload timing active, complete the independent flat/OpenXR stack matrix and
 continue the authored TTW train/Mojave/Benny route without bypassing conditions.
 

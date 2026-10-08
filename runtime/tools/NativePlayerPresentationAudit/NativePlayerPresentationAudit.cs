@@ -18,7 +18,7 @@ public partial class NativePlayerPresentationAudit : Node3D
                 GetTree().Quit(); return;
             }
             if (args.Length != 2 && !(args.Length == 4 && args[2] == "--weapon-coverage") &&
-                !(args.Length == 3 && args[2] == "--combat-controls"))
+                !(args.Length == 3 && args[2] is "--combat-controls" or "--xr-weapon-controls"))
                 throw new ArgumentException("Expected owned Data, a real native checkpoint and optional --weapon-coverage output.jsonl.");
             RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
             using var content = RuntimeLiveContentSource.Current!;
@@ -26,7 +26,7 @@ public partial class NativePlayerPresentationAudit : Node3D
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(args[1]))!;
             if (args.Length == 3)
             {
-                await AuditCombatControls(records, content, saved);
+                await AuditCombatControls(records, content, saved, args[2] == "--xr-weapon-controls");
                 GetTree().Quit(); return;
             }
             if (args.Length == 4)

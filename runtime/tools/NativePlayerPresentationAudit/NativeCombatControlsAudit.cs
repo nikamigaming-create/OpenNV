@@ -8,7 +8,7 @@ using OpenNV.Runtime.World.Cells;
 
 public partial class NativePlayerPresentationAudit
 {
-    private async Task AuditCombatControls(FalloutPluginStack records, RuntimeLiveContentSource content, FalloutNativeCampaignState saved)
+    private async Task AuditCombatControls(FalloutPluginStack records, RuntimeLiveContentSource content, FalloutNativeCampaignState saved, bool xrOnly = false)
     {
         var inventory = new FalloutPlayerInventory();
         var grenade = records.RuntimeFormKey(0x4330);
@@ -54,6 +54,11 @@ public partial class NativePlayerPresentationAudit
             player.ConfigureCombat(records, FalloutGlobalState.Read(records), () => 1, value => value < 32 ? 5 : 100, () => [], _ => 0, (_, _) => { });
             player.ConfigureExplosionExposure(() => saved.ActiveCell, amount => vitals.Publish(vitals.State with { RadiationRads = vitals.State.RadiationRads + amount }), new());
             for (var frame = 0; frame < 5; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (xrOnly)
+            {
+                await AuditXrWeaponControls(records, player, inventory, config);
+                return;
+            }
             using var press = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true };
             using var release = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false };
             player._UnhandledInput(press);
