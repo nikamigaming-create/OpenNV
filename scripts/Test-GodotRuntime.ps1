@@ -131,7 +131,7 @@ if ($LASTEXITCODE -ne 0) { throw "Desktop launcher syntax checks failed." }
 & npm test --prefix (Join-Path $repository "desktop")
 if ($LASTEXITCODE -ne 0) { throw "Desktop launcher tests failed." }
 
-$godotFailurePattern = '(?im)^(?:ERROR:|WARNING:.*(?:leaked at exit|ObjectDB.*leak|RIDs? .*not freed|resources still in use))'
+$godotFailurePattern = '(?im)^(?:ERROR:|SCRIPT ERROR:|WARNING:.*(?:leaked at exit|ObjectDB.*leak|RIDs? .*not freed|resources still in use))'
 $output = & $Godot --headless --verbose --editor --quit --path $runtime 2>&1
 $text = $output | Out-String
 if ($LASTEXITCODE -ne 0 -or $text -match $godotFailurePattern) {
@@ -152,6 +152,14 @@ if ($LASTEXITCODE -ne 0 -or $instanceText -match $godotFailurePattern -or
     throw "OpenNV native instance binding failed:`n$instanceText"
 }
 Write-Output "OPENNV_NIF_INSTANCE_AUDIT_PASS controllers=independent targets=instance-owned prototype=unchanged"
+
+$convexOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeNifInstanceAudit/NativeNifInstanceAudit.tscn -- --convex-lists 2>&1
+$convexText = $convexOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $convexText -match $godotFailurePattern -or
+    $convexText -notmatch "OPENNV_NATIVE_CONVEX_LIST_CONTRACT_PASS") {
+    throw "OpenNV source compound convex collision failed:`n$convexText"
+}
+Write-Output "OPENNV_NATIVE_CONVEX_LIST_CONTRACT_PASS source=authored actualContacts=true independentOwners=true"
 
 $referenceOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeReferenceEventsAudit/NativeReferenceEventsAudit.tscn 2>&1
 $referenceText = $referenceOutput | Out-String

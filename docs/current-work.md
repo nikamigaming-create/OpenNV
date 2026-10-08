@@ -2,242 +2,148 @@
 
 ## Active objective
 
-Complete standalone FNV, standalone Fallout 3, TTW, every selected DLC/mod and
-their combined behavior in flat/OpenXR. The user explicitly requires all nine
-JAM modules, JIP, JohnnyGuitar and JFP. JFP's package identity remains unresolved.
-Every source entity, runtime effect, save owner, audio/UI/draw/frame and final
-pixel belongs to the acceptance denominator. [implementation-plan.md](implementation-plan.md)
-defines the complete source graph, parallel ownership, ordinary campaigns, cold
-continuation, matched retail evidence and checked publication. All 36 broad
-requirements remain open; component checks establish no completion percentage.
+Complete standalone FNV, standalone Fallout 3, TTW, all selected DLCs/mods and
+their combined behavior in flat/OpenXR. The user requires all nine JAM modules,
+JIP, JohnnyGuitar and JFP. JFP's package identity remains unresolved. Every
+winning source entity, gameplay effect, save/audio/UI owner, draw, frame and
+final pixel belongs to acceptance. [implementation-plan.md](implementation-plan.md)
+defines the complete graph, ordinary campaigns, cold continuation, matched
+retail evidence and checked publication. All 36 broad requirements remain open;
+component checks establish no completion percentage.
 
-Use all four available owners. Primary serially integrates, builds, plays,
-checks saves and publishes. The other owners prepare the compiled SCDA/result
-and save boundary, real x86 execution and source Eat procedure, and OpenXR
-session/worker lifetime repairs. Reassign finished owners to the next reached
-campaign or rendering failure. C# remains authoritative; owned files are read-only
-inputs and private observations never become gameplay authority.
+All four owners remain active. Primary integrates, builds, plays and publishes
+serially. The user now prioritizes complete data/scene/selection audits before
+broad repeated gameplay. Parallel owners extend the existing corpus, quest and
+cell graph denominators after freezing their compiled/native/OpenXR proposals.
+Primary fixes the reproduced black FO3 text through shared source color binding.
+C# remains authoritative;
+owned files are read-only inputs and private observations never become gameplay
+authority. Recording and trace stay off outside a specific visual check.
 
 ## Verified state
 
-Independent source corpus/quest audits cover FNV, FO3, TTW and the combined
-stack. The exact launcher selection is now audited with its own ordered plugins,
-dependencies and settings identity. Its corpus retains 17 failures among 27,889
-source programs; its quest lane retains 17 failures, 5,332 unbound statements and
-90,030 uninspected commands. All 155,200 program rows are accounted for, including
+Independent source/quest audits cover FNV, FO3, TTW and the exact combined
+launcher selection. The combined corpus retains 17 failures among 27,889 source
+programs; the quest lane retains 17 failures, 5,332 unbound statements and 90,030
+uninspected commands. All 155,200 program rows are accounted for, including
 27,057 with compiled bytes and seven compiled-only programs. There are zero
-compiled execution owners. The quest lane exits with failure; enumeration does
-not certify script effects, native DLL execution or campaign support.
+promoted compiled execution owners. Failed audits remain failures.
 
-Ordinary FNV creation reaches stage 200, accepts the source farewell/Hardcore
+Ordinary FNV creation reaches stage 200, accepts the original farewell/Hardcore
 choice and exits to Goodsprings. Its complete v48 checkpoint cold-Continues in
-another process with the walked position, 120 HP, 27 inventory entries and
-unchanged bytes. Simulator wrist/controller input equips and reloads the source
-pistol, selects Easy Pete's voiced dialogue and kills two resident coyotes.
-Creature routing, full combat and matched retail presentation remain open.
+another process with the walked position, 120 HP, 27 entries and unchanged bytes.
+Simulator wrist/controller input equips/reloads the source pistol, selects Easy
+Pete's voiced dialogue and kills resident source coyotes. Sunny/Cheyenne,
+complete combat, creatures, world/campaign coverage and retail parity remain open.
 
-Standalone FO3's genuine immutable stage-14 checkpoint cold-restores at 100 HP
-with both inventory entries. Shared NPC door ownership and capsule navigation
-let Dad complete the source playpen/room route to stages 16, 18 and 20. Ordinary
-activation opens the gate and player movement reaches stage 30. The book's owned
-FO3 transform/light/projection and all 25 texture declarations now bind without
-substituting FNV compiler layout. Independent FNV/FO3/TTW/combined source audits
-and fresh FO3/TTW native menu checks pass.
+Standalone FO3's immutable stage-14 checkpoint cold-restores at 100 HP with both
+inventory entries. Source NPC door access and complete capsule navigation let
+Dad finish the playpen/room route. Ordinary activation/movement reaches the
+SPECIAL book; geometry pointer input allocates its original 40 points as
+6/6/6/5/6/6/5. Dad's actual bookshelf package, dialogue and escort reach CG01
+stage 100. The original age/equipment/movie handoff reaches CG02 birthday stage
+12. Source optimized inventory/radio notices, dialogue speaker admission before
+quest priority and GetSitting's actual declared subject are independently checked.
+Ordinary replay reaches Amata's source-package greeting, selects two original
+responses, receives the skill-book gift and reaches stage 21 without a blocking
+driver error. Both processes quit naturally with code zero and a clean footer.
+The automatic save remains deferred by six unchanged legacy birth loops; the
+manual attempt fails concurrent-auto-save without writing either checkpoint.
+Later childhood/vault exit/Megaton and complete cold checkpoints remain open.
+Paul's actual FO3 Eat procedure remains unbound; TTW independently overrides
+that package to Travel. Food election, used-item idle, consumption/effect timing
+and genuine procedure completion need owners.
 
-A fresh ordinary FO3 process activates the actual book, enters stage 50 with
-the source 40-point budget and uses its geometry pointer controls to allocate
-6/6/6/5/6/6/5. Source Done releases pause/input. Dad's bookshelf package now
-retains its existing arrival radius after the required source corridor, rather
-than first demanding a colliding exact endpoint. Native full-capsule checks
-retain wall, floor, intermediate-portal and unknown-residency refusals. Ordinary
-play independently advances stages 70, 72, 73, 74, 75, 80, 90 and 100, then the
-original movie/age/equipment handoff reaches CG02 birthday stage 12. The actual
-party actors/cake/balloons are visible in a selected inspected frame. No quest
-stage, source geometry or checkpoint was edited. The reached FO3 optimized
-inventory/radio notice declarations now pass independent synthetic refusals and
-owned FNV/FO3/TTW/combined media checks. Fresh ordinary birthday replay emits
-the actual Vault 101 radio discovery notice and permits the previously blocked
-Amata interaction. That action reaches a new dialogue failure: priority sorting
-reads an unrelated The Pitt line's absent quest before the source speaker check
-can exclude that line. Its owned GetIsID condition cannot match Amata. General
-speaker admission before priority sorting now passes fresh Debug/Release
-contracts, including eligible missing-owner refusals. Ordinary replay reaches
-the original Paul package using the Overseer's actual occupied state rather
-than Paul's own standing state. The Eat procedure remains unbound. A separate
-automatic-save capture failure then stops the driver before Amata can talk.
-Shared sound admission now retains missing/looping history as a visible save
-blocker alongside finite native voice waiting. A fresh ordinary replay reaches
-Amata's source-package greeting, selects two original replies, receives the
-skill-book gift and advances CG02 to stage 21 without a blocking driver error.
-The requested automatic save remains deferred by the six unchanged birth-loop
-generations. The ordinary manual attempt fails concurrent-auto-save without
-writing either checkpoint. Complete
-childhood, the vault exit, Megaton and later cold checkpoint acceptance remain open.
-
-Save v49 supports bounded active source-radio continuation. Its fresh-owner
-native check preserves 257 exact samples and the fractional clock, including
-paused startup and initially Disabled new/restored voices, without replaying
-the prefix or completing a line twice. Real mixer-fault checks refuse both
-Finished and Stop completion without emitting success callbacks. Native playback
-release frees its context once. Opaque callbacks and independently unowned
-speech/SOUN/IDLE continuations remain refused. Raw sample continuation does not
-establish retail decoding, mixing, speaker output or device-buffer parity.
-
-Typed primary source-bone continuation now retains reference, NIF identity/hash,
-bone block/name and fractional PCM clock. A fresh parsed native skeleton
-recreates one canonical adapter before any key, preserves 257 exact samples and
-refuses source drift, independent ANIO and authoritative disabled owners.
-The bone fixture's eight native audio owners and the owned radio fixture's 18
-owners disappear before clean verbose shutdown. Native validity checks acquire
-no bindings or references; real wall time bounds stalled-mixer retirement.
-An actual living TTW creature passes finite source-key/native-finish and cold
-skeleton reconstruction against its immutable checkpoint. Its full 8,496-reference
-graph, script values, saved enable parent and prior event history remain intact.
-The dead creature independently refuses equip dispatch, and the fresh disabled
-source graph remains refused. This establishes no looping or complete save lane.
-
-Ordinary FO3 saves at stages 20 and 30 still refuse animation-sound-continuation:
-six active legacy birth loops lack restored native emitter owners. Their actor
-is effectively disabled through its saved XESP parent; materializing it or
-inventing loop completion would change authoritative state. The immutable
-stage-14 entry remains playable but is not a complete later checkpoint.
-
-TTW ordinary input completes the source key/combat/terminal/tunnel route and
+TTW ordinary input completes the original key/combat/terminal/tunnel route and
 vault exit to stage 150. Its immutable walked exterior checkpoint cold-Continues
 at the saved position with 115 HP, 8/14 rounds, nine entries and unchanged bytes.
-All 121 selected LOD tiles remain resident with pending zero. A simulator run
-walks around the canyon colliders and kills the source molerat with ordinary
-trigger shots. Megaton/Union Station/Mojave/Benny and all campaign branches remain
-open. A fresh TTW XR Continue/menu Quit against the explicit pinned engine
-candidate exits both processes naturally with code zero, retires all 396
-prototypes/source owners and reaches a clean resource footer.
+All 121 selected LOD tiles remain resident with pending zero. Simulator input
+walks around canyon colliders and kills the resident molerat. Megaton/Union
+Station/Mojave/Benny, return travel, full campaigns and DLCs remain open.
 
-Failed source collision construction now owns its detached body and partial
-shapes through rejection. Native synthetic static/dynamic failure checks and
-the actual FO3 vault door/operating light and TTW Megaton ramp refusals pass
-without orphan-node growth or shutdown leaks. Their unsupported source shapes
-remain visible. Mesh/skin/hinge construction now releases detached roots on the
-corresponding
-failure boundaries. Native repeated construction checks preserve independent
-skins, meshes, bodies, joints and source poses with no resource growth. Injected
-joint-configuration exceptions remain untriggered; fresh complete session
-retirement remains its own gate.
+Save v49 retains bounded active source-radio PCM continuation. Typed primary
+source-bone continuation retains source reference/NIF/bone identity and the
+fractional clock, rebuilds the canonical adapter before any key, and preserves
+257 exact samples without replay. Native mixer faults refuse Finished/Stop
+success. Genuine living TTW creature source-key completion and cold skeleton
+reconstruction pass with its complete unchanged reference/enable/script graph;
+dead and effectively disabled owners refuse dispatch. Anonymous legacy birth
+loops, independent ANIO and disabled/off-cell emitter semantics remain unowned.
+A separate terminal capture-delegate lifetime repair is source-only and unrun.
+No missing history is cleared or retroactively completed. Save ordering requires
+a persistent request owner; clearing the pending-auto flag is not a repair.
 
-The fresh stage-21 FO3 birthday replay naturally quits both processes with exit
-code zero, preserves the original and cloned save hashes and has a clean full
-resource footer. Recording and trace remain off. It retains 39 distinct source
-diagnostics, including unsupported collision shapes/phantoms/emergency lights,
-double-vision, NPC guard/editor-travel/patrol/Eat procedures and unowned save
-continuations. The separate bot request times out while the source-initiated
-conversation awaits a choice; no bot activation success is claimed. These remain
-independently failed evidence lanes;
-source quest advancement does not certify the whole scene or every actor.
+Failed mesh/skin/collision/hinge construction retires its detached partial native
+graph. Native static/dynamic failures, independent instances, source poses and
+clean resource checks pass. Source convex lists now retain their complete ordered
+declarations and create separate convex leaves under one original body. Actual
+Debug/Release readers, authored transformed/nested/gap/256-leaf contacts and
+original FO3 vault-door/light whole-model checks pass with unchanged source bytes
+and clean natural retirement. The full required runtime gate passes. A fresh
+ordinary FO3 replay traverses the playpen door, completes the original 40-point
+book, Dad's route and CG01 stage 100, and reaches birthday stage 12 and Amata's
+source greeting. Existing source/model/AI/save errors and modal bot timeout
+remain visible; this is not a complete scene or campaign pass. Ordinary motion
+of the selected convex door/light and matched physics remain unverified. See
+[source convex lists](source-convex-list-collision.md).
 
-The requested 2:04 three-game simulator showcase is exported. Full-duration
-audio/video decoding succeeds for all eight source clips and the final edit.
-Timeline inspection retains approximately 14-19 distinct submitted images per
-second in 30 fps exports and startup repeats up to 17 seconds. The dark TTW
-view and unverified child hands/device remain failures. This single-eye edit
-does not establish stereo, physical-headset acceptance or matched retail parity.
-Recording is off; selected temporary inspection frames have been deleted.
+Winning-NIF discovery inspects 17,153 of 17,163 FO3 models, finding 71 convex
+lists in 66 models and retaining ten unsupported headers. FNV inspects 20,532
+of 20,542 with zero lists found and ten refusals. Exact TTW and combined
+selections independently inspect 32,518 of 32,537 with zero lists found and 19
+refusals. Every source audit exits with failure. Unknown older/UserVersion2/LOD
+layouts prevent complete absence or format-support claims; implement their
+actual layouts rather than deleting reader guards. Other phantom/light,
+material/filter/query/dynamics and source model failures remain open.
 
-## Current divergence owners
+The pinned engine candidate repairs actual interaction-profile and unsupported
+marker retirement errors. A fresh TTW XR Continue/menu Quit naturally retires
+both processes with code zero, all 396 prototypes and a clean resource footer.
+Its original door-controller and 565 missing SpeedTree refusals remain visible.
+The separate actual worker regression reproduces exactly three shutdown failures
+in the unrepaired engine. The repaired engine passes all ten assertions,
+including no failure cleanup, and naturally exits zero. This establishes the
+selected worker owner only. Repeated same-interface XR sessions, language TLS
+detach, extension/provider/consumer retirement, creation epochs and future
+completion callbacks remain independent gates. The installed engine is unchanged.
+Core/typed/creation/future proposals are not native acceptance.
 
-The general dialogue admission, GetSitting source-subject and complete sound
-save-admission block is merged through checked PR #174. Clean local main
-equalled origin/main at d029c23 with no open task PRs before the fresh native
-execution-domain branch began.
-The general dialogue admission and GetSitting source-subject capabilities are
-integrated. Debug/Release authored checks and native
-NPC/creature/player physical/cold checks pass. Ordinary FO3 selects Paul's
-original Eat package with the actual different physical subject; food,
-furniture, idle, inventory and procedure completion remain unbound. An
-automatic save must admit every unsettled audio ledger before attempting a
-complete capture. The missing birth-loop owner stays visible in save state
-while its unrelated gameplay continues; the fresh ordinary stage-21 replay
-verifies that boundary. Follow with the retained collision/phantom/light, double-vision and
-remaining AI owners.
-Disabled, anonymous legacy and independently unowned ANIO continuations remain
-explicit audio boundaries. Retail Disable/loop semantics still require
-independent evidence; the immutable birth-loop history must not be rewritten.
+The x64 C# to x86 Windows execution domain is checked and published. Actual
+Debug/Release authored loader/TLS/import/entry, scalar cdecl/stdcall/thiscall,
+nested callbacks, correlated/malformed faults, quotas/deadlines and native
+retirement pass. The build preserves its parent environment and excludes binary
+objects from Godot imports. Selected original xNVSE/JIP/JohnnyGuitar source-memory
+audits preserve unchanged DLL hashes without loading those DLLs. Original NVSE
+interfaces, game-object projection, Query/Load/PostLoad, used hooks and
+serialization remain absent. JAM's nine ordinary outcomes, MCM, JFP and complete
+combined-stack behavior remain open. No managed replacement or registration
+check establishes unchanged-DLL compatibility.
 
-Two pinned Godot OpenXR owners have separate defects: allocated interaction
-profiles never enter their retiring RID collection, and unsupported spatial
-marker tracking disconnects a signal it never connected. An isolated exact-tag
-engine candidate builds from the exact installed tag. A minimal simulator check
-passes actual controller press/release and distinct-profile retirement with a
-clean footer; the same check on the installed engine reproduces both defects.
-A second initialization exposes another failed engine owner: Uninitialize leaves
-the native session alive. A separate fresh candidate TTW Continue/menu Quit
-hangs before renderer/XR retirement: all 28 workers sleep with empty task queues,
-while the worker-pool PRE_EXIT idle count remains eight. Read-only stack and
-counter observations identify missed peer accounting after low-priority backlog
-promotion. The separate general peer-wake repair builds and repeats ordinary
-TTW Continue/controller-menu/Quit with natural exit and the complete footer.
-Prior profile/marker/Jolt diagnostics are absent. Door motion now admits all
-deterministic source/clock failures before allocating a native Node. Eighty
-repeated native refusals and cold restoration pass without node/state/history
-growth or key replay. A fresh ordinary TTW candidate session naturally quits
-with a clean full footer; the original three unsupported door-controller
-refusals remain visible. Its 705 distinct source diagnostics include all 565
-missing SpeedTree references. The actual-owner backlog regression and repeated
-same-interface session lifecycle remain unexecuted. Supported
-marker tracking and broad engine acceptance remain open. The installed engine
-is unchanged; the earlier debugger-tainted hang is not used as causal proof.
-
-The reached TTW exterior has 565 missing owned SpeedTree references despite
-resolved resource paths. Procedural geometry, property-free material draws,
-water/degenerate semantics, nearby fade coverage and whole-reference upload
-spikes remain unbound. Reached FNV material omissions and source-reference
-errors remain visible. Creature pursuit and melee routes, child hand/device
-presentation, generic loose-object physical persistence and remaining joint
-types retain independent owners.
-
-JAM source hit/calendar contracts do not certify its nine ordinary outcomes,
-native callback delivery or unchanged dependencies. Complete compiled SCDA,
-the real x86 CPU/PE/import/TLS/ABI/hook/serialization host, MCM and combined-stack
-ordinary play/save acceptance are early architecture work. Preserve compiled-only
-programs and the complete winning graph; do not replace downloaded DLLs with a
-managed compatibility claim.
-
-The fresh native execution-domain branch passes actual x64 C# to x86 Windows
-Debug/Release authored loader/TLS/import/entry, scalar ABI and nested callbacks.
-Actual ABI/thread/quota/owner faults, complete transaction watchdogs, stale
-capabilities, native unload and child retirement pass. Seven actual child fault
-envelopes verify generation and waiting-request correlation before native codes
-are trusted. The build restores its parent environment. Original selected
-xNVSE/JIP/JohnnyGuitar source-memory audits pass without changed DLL bytes or
-loading them. NVSE runtime interfaces, native game-object/arena projection,
-original Query/Load/PostLoad, used engine hooks and serialization remain absent.
-Compiled SCDA scheduling/result authority is still unpromoted; its early SCTX
-parse, absent-host fallback and legacy cursor ownership need explicit admission.
-The parallel Eat review retains actual FO3 food/default-list/idle declarations
-and TTW's independent Travel override. Save ordering needs a persisted request
-owner; clearing the pending-auto flag or disabled loop history is not a repair.
+Reached rendering/navigation errors include SpeedTree procedural geometry,
+property-free draws, water/degenerate materials, fade/LOD completeness, upload
+spikes, creature pursuit/melee, child hands/wrist presentation, generic loose
+object persistence and remaining joints. The requested three-game simulator
+MP4 decodes cleanly and has been played/inspected. Dark/missing presentation,
+stereo, physical headset and matched retail acceptance remain open.
 
 ## Next owner and outcome
 
-The integrated general source-menu/audio/resource block passes the full required
-runtime gate against installed Godot 4.7.2, including Release/Debug, analyzers,
-contract/launcher and verbose native door/navigation checks. Selected independent
-owned audits and fresh ordinary FO3/TTW replay results are retained above.
-The required full runtime gate passed for the published dialogue admission,
-GetSitting subject and complete sound admission. Native execution now passes
-the full required gate, including both real native configurations, startup,
-runtime owners and launcher checks. Checked publication is next. Ordinary FO3
-replay from the unchanged toddler checkpoint verifies the original Amata
-conversation through CG02 stage 21 and retains all remaining failures. The
-unchanged subject condition has reached its original Eat-procedure refusal.
-Promote the reviewed compiled-authority proposal through the shared
-quest/reference/result owners alongside an early genuine plugin-host proof.
-Continue the original FO3 and TTW campaign routes without bypassing conditions.
-Every newly reached source/runtime/audio/UI/frame error needs an owner and
-reproduction; none is converted to success by reducing the denominator.
+Publish the checked convex-list block, then use a fresh feature branch for the
+shared FO3 color repair and exhaustive existing-lab audit corrections. Corpus
+coverage must retain deleted winners and complete winning loose/BSA bytes;
+quest coverage must account for orphan/empty/compiled/deleted program bodies;
+cell coverage must include exterior/worldspace and disabled/alternative source
+graphs. Unknown or uninspected owners and failed rows cannot return readiness.
+Valid mod selections and settings remain independent coverage dimensions.
+Fix the retained audit failures before broad repeated gameplay. The reviewed
+compiled-authority, audio lifetime, native arena and XR proposals remain queued
+source-only until integrated and executed. Selected checks, the required gate
+and checked publication remain mandatory; static parsing alone cannot establish
+runtime, save or final-pixel acceptance.
 
 ## Private continuation
 
-Owned inputs, immutable saves, captures, helpers and logs remain private and
-outside publication. Reuse only cloned checkpoints; never overwrite originals.
+Owned inputs, saves, media and diagnostics remain private. Use cloned checkpoints.
 
 - FNV Goodsprings: tmp/development-lab/loading-saving-fnv-20261007, slot
   100c5809e3aa4af5b4fe7801cfbd954a, SHA256
@@ -245,24 +151,20 @@ outside publication. Reuse only cloned checkpoints; never overwrite originals.
 - FO3 toddler: tmp/development-lab/loading-saving-fo3-20261007, slot
   5341c6a0d9f146ddb7f141a4b1237961, SHA256
   340C3CC918A528BBCE18FE18F276C4D3CD8F81C5F3965F2922DF46845BEAC012.
-- TTW walked exterior: tmp/development-lab/loading-saving-ttw-20261007, slot
+- TTW exterior: tmp/development-lab/loading-saving-ttw-20261007, slot
   f657f146263a477a889668cc57b6f136, SHA256
   99A3A0D51E88DB36B7D35030AB45FC2FA8E825EC5E5102EF930DE35472D930F0.
 
-Current integration evidence is under
-tmp/development-lab/full-scope-audit-20261007; ordinary FO3 replay is
-ordinary-fo3-dialogue-save-admission-20261008. Prior failed Amata/save replay is
-ordinary-fo3-dialogue-sitting-20261008. Fresh TTW natural clean XR quit is
+Latest ordinary FO3 evidence:
+tmp/development-lab/full-scope-audit-20261007/ordinary-fo3-dialogue-save-admission-20261008.
+Fresh clean TTW XR quit:
 tmp/development-lab/full-scope-xr-ttw-door-lifetime-20261008.
-Actual integrated native execution/source-memory evidence is under
-tmp/development-lab/native-plugin-domain-next/root-integrated-20261008.
-The independent unrepaired worker test build is under
-tmp/development-lab/openxr-repeat-session-next/worker-engine-test-20261008;
-its first macro-guarded fixture compilation failure is retained. The narrow
-test-only correction compiles and links the exact pinned engine, and the
-unrepaired actual-owner test is running. No worker assertion or repeated-session
-acceptance is claimed yet.
-The requested MP4 is
+Integrated native host and collision evidence respectively:
+tmp/development-lab/native-plugin-domain-next/root-integrated-20261008 and
+tmp/development-lab/convex-list-next/root-integrated-20261008.
+Actual worker baseline/repaired results:
+tmp/development-lab/openxr-repeat-session-next/worker-regression.
+Requested MP4:
 local/recordings/showcase-20261007/opennv-three-games-vr-showcase.mp4.
-Its original input mapping/timing remains private. Preserve only immutable
-checkpoints, requested deliverables and diagnostics still needed by active owners.
+Keep immutable checkpoints, requested deliverables and diagnostics needed by
+active owners; temporary frame recordings must not accumulate.

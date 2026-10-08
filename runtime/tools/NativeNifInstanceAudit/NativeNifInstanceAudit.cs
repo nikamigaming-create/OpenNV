@@ -12,6 +12,18 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--convex-list-sources", var sourceRoot, .. var sourceOptions])
+            {
+                AuditConvexListSources(sourceRoot, sourceOptions); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--convex-lists"])
+            {
+                await ExerciseConvexLists(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-convex-lists", var convexRoot, var convexModel, .. var convexOptions])
+            {
+                await ExerciseOwnedConvexLists(convexRoot, convexModel, convexOptions); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--collision-lifetime"])
             {
                 await ExerciseCollisionLifetime(); GetTree().Quit(); return;

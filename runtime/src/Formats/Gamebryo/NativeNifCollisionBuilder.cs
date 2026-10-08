@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal sealed record RuntimeNativeNifCollision(Node3D Body, int Shapes, int Triangles);
 
-internal static class NativeNifCollisionBuilder
+internal static partial class NativeNifCollisionBuilder
 {
     // Equipped geometry follows its animation attachment. Its dropped-object
     // Havok declaration remains inspectable, but cannot publish a world pose.
@@ -73,6 +73,8 @@ internal static class NativeNifCollisionBuilder
             result.SetMeta("opennv_nif_collision_object", attachment.Block.Index);
             result.SetMeta("opennv_nif_collision_body", body.Block.Index);
             result.SetMeta("opennv_collision_havok_layer", body.Filter.Layer);
+            result.SetMeta("opennv_collision_havok_filter", (uint)body.Filter.Layer | ((uint)body.Filter.Flags << 8) | ((uint)body.Filter.Group << 16));
+            result.SetMeta("opennv_collision_havok_info_filter", (uint)body.InfoFilter.Layer | ((uint)body.InfoFilter.Flags << 8) | ((uint)body.InfoFilter.Group << 16));
             result.SetMeta("opennv_nif_collision_mass", body.Mass);
             result.SetMeta("opennv_nif_body_flags", body.BodyFlags);
             result.SetMeta("opennv_nif_collision_motion_system", body.MotionSystem);
@@ -113,7 +115,8 @@ internal static class NativeNifCollisionBuilder
         PhysicsBody3D owner,
         List<CollisionShape3D> output,
         ref int triangles,
-        HashSet<int> active)
+        HashSet<int> active,
+        bool convexOnly = false)
     {
         if (!active.Add(reference))
             throw new InvalidDataException($"NIF collision shape graph contains a cycle at block {reference}.");
@@ -123,9 +126,11 @@ internal static class NativeNifCollisionBuilder
             {
                 case FalloutNifMoppShape mopp:
                     BuildShape(source, mopp.Child, unitsToMetres, mass, localTransform,
-                        owner, output, ref triangles, active);
+                        owner, output, ref triangles, active, convexOnly);
                     break;
                 case FalloutNifPackedShape packed:
+                    if (convexOnly)
+                        throw new NotSupportedException($"NIF convex list contains non-convex packed shape {packed.Block.Index}.");
                     if (mass != 0.0f)
                         throw new NotSupportedException(
                             $"NIF packed triangle shape {packed.Block.Index} is non-static; concave dynamics fail closed.");
@@ -205,12 +210,16 @@ internal static class NativeNifCollisionBuilder
                         throw new InvalidDataException($"NIF list shape {list.Block.Index} is empty.");
                     foreach (var child in list.Children)
                         BuildShape(source, child, unitsToMetres, mass, localTransform,
-                            owner, output, ref triangles, active);
+                            owner, output, ref triangles, active, convexOnly);
+                    break;
+                case FalloutNifConvexListShape convexList:
+                    BuildConvexList(source, convexList, unitsToMetres, mass, localTransform,
+                        owner, output, ref triangles, active);
                     break;
                 case FalloutNifConvexTransformShape transformed:
                     BuildShape(source, transformed.Child, unitsToMetres, mass,
                         localTransform * MatrixTransform(transformed, unitsToMetres),
-                        owner, output, ref triangles, active);
+                        owner, output, ref triangles, active, convexOnly);
                     break;
                 default:
                     throw new NotSupportedException(
@@ -232,6 +241,7 @@ internal static class NativeNifCollisionBuilder
             node.Name = $"NifCollisionShape{blockIndex}";
             node.Shape = shape;
             node.Transform = transform;
+            node.SetMeta("opennv_nif_shape_block", blockIndex);
             if (material is { } value) node.SetMeta("opennv_havok_material", value);
             owner.AddChild(node);
             output.Add(node);
@@ -262,6 +272,7 @@ internal static class NativeNifCollisionBuilder
         if (collision["collider"].AsGodotObject() is not CollisionObject3D body)
             throw new NotSupportedException("Hit collider has no source material owner.");
         var shape = body.ShapeOwnerGetOwner(body.ShapeFindOwner(collision["shape"].AsInt32())) as CollisionShape3D;
+        RequireCompoundMaterial(shape);
         if (shape?.HasMeta("opennv_havok_material") == true)
             return shape.GetMeta("opennv_havok_material").AsUInt32();
         if (shape?.HasMeta("opennv_havok_face_materials") == true && collision.TryGetValue("face_index", out var face))

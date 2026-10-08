@@ -8,6 +8,14 @@ explicit chapters preserve the whole submitted left-eye image. The full MP4
 decodes cleanly. All three immutable checkpoint hashes are unchanged. This
 showcase does not establish complete games, retail parity or headset acceptance.
 
+Source convex lists now decode their complete ordered fields and construct
+separate native leaves without filling the gaps. Debug/Release readers, authored
+native contacts and independent original FO3 vault-door/light whole-model checks
+pass with clean retirement. Winning-resource discovery preserves ten unsupported
+header rows in each standalone game and 19 in each TTW/combined selection.
+Broader model, controller, gameplay and physics parity remain open. See
+[source convex lists](source-convex-list-collision.md).
+
 The native x86 execution domain now passes actual x64 C# to x86 Windows
 Debug/Release checks: real TLS/import/entry, scalar cdecl/stdcall/thiscall,
 nested callbacks, loader/ABI/thread faults, quotas/deadlines and retirement.
@@ -88,8 +96,10 @@ candidate now exit both processes with code zero and a clean full resource
 footer. Rejected source door construction admits its deterministic failures
 before allocating a native Node. Its original three controller refusals and
 all 565 missing SpeedTree references remain visible. The official installed
-engine is unchanged; repeated same-interface XR sessions, broad engine
-acceptance and the actual-worker backlog regression remain open.
+engine is unchanged. The actual-worker backlog regression reproduces three
+failures in the unrepaired engine; the repaired engine passes all ten assertions
+and exits naturally with code zero. Repeated same-interface XR sessions,
+language TLS detach, extension lifetime and broad engine acceptance remain open.
 Source creature terrain routes and child hand/device presentation retain their
 own acceptance gates; flat progression does not certify independent XR play.
 

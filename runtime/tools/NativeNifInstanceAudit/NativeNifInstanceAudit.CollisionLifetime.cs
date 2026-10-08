@@ -15,7 +15,7 @@ public partial class NativeNifInstanceAudit
             var refused = new (byte[] Bytes, string Error)[]
             {
                 (CollisionLifetimeFixture(dynamic, secondRadius: -1), "sphere radius"),
-                (CollisionLifetimeFixture(dynamic, unsupportedSecond: true), "bhkConvexListShape"),
+                (CollisionLifetimeFixture(dynamic, unsupportedSecond: true), "bhkUnownedCollisionShape"),
                 (CollisionLifetimeFixture(dynamic, children: []), "list shape 3 is empty"),
                 (CollisionLifetimeFixture(dynamic, children: [4, 3]), "cycle at block 3"),
                 (CollisionLifetimeFixture(dynamic, missingShape: true), "has no shape"),
@@ -111,7 +111,7 @@ public partial class NativeNifInstanceAudit
         var refused = new List<(FalloutNifFile Source, string Error)>();
         foreach (var dynamic in new[] { false, true })
         {
-            refused.Add((FalloutNifFile.Read(GeometryCollisionLifetimeFixture(dynamic, unsupportedSecond: true)), "bhkConvexListShape"));
+            refused.Add((FalloutNifFile.Read(GeometryCollisionLifetimeFixture(dynamic, unsupportedSecond: true)), "bhkUnownedCollisionShape"));
             refused.Add((FalloutNifFile.Read(GeometryCollisionLifetimeFixture(dynamic, secondRadius: -1)), "sphere radius"));
         }
         // Warm the shared immutable shader before measuring native resources.
@@ -226,7 +226,7 @@ public partial class NativeNifInstanceAudit
                 writer.Write(0U); writer.Write(new byte[24]); writer.Write(0);
             })),
             ("bhkSphereShape", Bytes(writer => { writer.Write(0U); writer.Write(1f); })),
-            (unsupportedSecond ? "bhkConvexListShape" : "bhkSphereShape",
+            (unsupportedSecond ? "bhkUnownedCollisionShape" : "bhkSphereShape",
                 unsupportedSecond ? [] : Bytes(writer => { writer.Write(0U); writer.Write(secondRadius); })),
         };
         return CollisionLifetimeFile(blocks, ["LifetimeCollision"]);
