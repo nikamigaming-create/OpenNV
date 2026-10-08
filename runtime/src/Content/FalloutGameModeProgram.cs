@@ -174,7 +174,11 @@ internal sealed partial class FalloutGameModeProgram
             }
             if (command == "end")
             {
-                if (lines is null || tokens.Length != 1 || nesting.Count != 0) throw new InvalidDataException("Invalid script block end.");
+                // A closing event label names the existing block; it does not
+                // select a new event, filter or invocation.
+                if (lines is null || nesting.Count != 0 || tokens.Length is < 1 or > 2 ||
+                    tokens.Length == 2 && !tokens[1].Equals(eventName, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Invalid script block end.");
                 events.Add(new(eventName!, filter, new(lines), parameters));
                 lines = null;
                 continue;

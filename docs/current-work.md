@@ -12,11 +12,12 @@ retail evidence and checked publication. All 36 broad requirements remain open;
 component checks establish no completion percentage.
 
 All four owners remain active. Primary integrates, builds, plays and publishes
-serially. The user now prioritizes complete data/scene/selection audits before
-broad repeated gameplay. Parallel owners extend the existing corpus, quest and
-cell graph denominators after freezing their compiled/native/OpenXR proposals.
-Primary integrates and executes the complete audit lanes after the checked
-shared source color binding that fixes the reproduced black FO3 text.
+serially. The user prioritizes complete data/scene/selection audits before broad
+repeated gameplay. Parallel owners trace incoming animation declarations,
+classify the completed scene failures and establish xNVSE pair-expression
+grammar. Primary executes the complete audit lanes and integrates general
+source owners. The shared source color binding fixes the reproduced black FO3
+text.
 C# remains authoritative;
 owned files are read-only inputs and private observations never become gameplay
 authority. Recording and trace stay off outside a specific visual check.
@@ -31,12 +32,22 @@ all raw program fields and source bodies have dispositions.
 
 | Selection | Winning records | Deleted winners | Winning resources | Corpus / quest failures |
 | --- | ---: | ---: | ---: | ---: |
-| FNV | 628,463 | 68 | 181,963 | 55 / 58 |
+| FNV | 628,463 | 68 | 181,963 | 55 / 52 |
 | FO3 | 930,306 | 62 | 159,163 | 36 / 37 |
-| TTW | 1,556,615 | 0 | 330,173 | 11 / 11 |
-| Combined | 1,556,976 | 0 | 330,362 | 17 / 17 |
+| TTW | 1,556,615 | 0 | 330,173 | 11 / 5 |
+| Combined | 1,556,976 | 0 | 330,362 | 17 / 11 |
 
-The combined quest lane retains 5,332 unbound statements and 90,030 uninspected
+Corpus rows bind the checked archive owner; quest rows bind the newer matching
+event-label parser owner. Their independent binaries and original receipts
+remain retained. Six original matching-label scripts now parse independently
+in FNV, TTW and combined, with identical source bytes and complete raw-field
+report hashes. All unrelated failures are unchanged. Fresh complete corpus and
+configured-subset reads under that parser remain pending; no failed historical
+receipt is rewritten. Bare End or an optional exact matching event name shares
+the existing scope checks. Debug/Release contracts retain nine malformed-scope
+refusals. Parsing neither invokes an event nor admits compiled execution.
+
+The combined quest lane retains 5,332 unbound statements and 90,052 uninspected
 commands. Its 155,200 program rows include 27,057 with compiled bytes and seven
 compiled-only programs. Compiled execution ownership remains unmeasured; static
 inspection makes no owner-count claim. Failed audits remain failures, and every
@@ -64,10 +75,11 @@ TTW and TTW+NMC without JAM refuse the missing JohnnyGuitar and Stewie roots.
 Those refusals keep unknown winning denominators. These byte reads also bind the
 prior archive reader. Unconfigured packages, arbitrary orders/settings, JAM
 toggles and native behavior remain independent coverage dimensions.
-Fresh strict Release quest scans finish against all four exact selections with
-zero unread winners, complete raw-field/body dispositions, zero admitted world
-instances and the same 58/37/11/17 failures. Every process exits naturally with
-failure, retaining unchanged binaries and false runtime readiness.
+Fresh matching-label Release quest scans finish against all four exact selections
+with zero unread winners, complete raw-field/body dispositions, zero admitted
+world instances and 52/37/5/11 failures. Every process exits naturally with
+failure, retaining unchanged binaries and false runtime readiness. Expression
+call counts and compiled execution owners remain null, not zero.
 Focused corpus/quest/cell and final default contracts pass in Debug and Release;
 the full required runtime gate also passes after dependency integration.
 Direct statement
@@ -213,11 +225,21 @@ catalog, unused model roots, typed resource roles, cached cycles, 68 authored
 cases and a deep graph. Sound contracts retain every original key/segment/time
 bit and all unselected winning variants without claiming audio decode or native
 emitter admission. Final default contracts pass in both configurations.
-Complete owned scene sweeps are running against immutable Release binaries;
-new-reader selection subsets remain unverified. The full required runtime gate
-passes, including native project loading, and the diff check is clean.
-Parallel owners are closing implicit actor KF/IDLE/ANIO declarations and typed
-controller links, and tracing source-selected startup. A read-only implementation
+The complete FNV scene sweep finishes all 44,517 cells and 520,570 winning graph
+rows under immutable Release binaries. It exits naturally with failure, retaining
+895 source graph failure events and false source/runtime readiness. Resource,
+alternative and selected-reference failures are separate retained lanes; 895 is
+not their combined total. The 520,503 unverified runtime-owner rows are not
+playable entities. Graph/hash invariants pass without certifying native scenes.
+Standalone FO3 is still scanning all 50,755 selected cells; TTW and combined
+remain queued. New-reader selection subsets remain unverified.
+The full required runtime gate passes, including native project loading, and
+the diff check is clean.
+Implicit actor KF/IDLE/ANIO and typed controller proposals are frozen but unbuilt
+and unexecuted. Integrate their add-only files and narrow shared hooks after an
+actual old-owner regression, then run Debug/Release and original-data checks.
+Incoming PACK/IDLM/INFO animation links and xNVSE pair-expression syntax remain
+separate source owners. A read-only implementation
 review retains fixed bootstrap-cell, eager named opening-contract, source-comment
 and named autosave dependencies as open data-driven runtime divergences.
 The general archive encoding owner passes the selected original members and all
@@ -251,6 +273,8 @@ Shared source UI colors:
 tmp/development-lab/source-ui-colors-20261008.
 Complete source denominator integration and four corpus/quest results:
 tmp/development-lab/complete-source-denominators-root-20261008.
+Matching event-label regression and original-field verification:
+tmp/development-lab/source-event-end-labels-root-20261008.
 New complete scene/subset outputs:
 C:/Users/nbrys/AppData/Local/OpenNV/private-audits/complete-source-denominators-20261008.
 Fresh clean TTW XR quit:

@@ -4,8 +4,8 @@ The expanded corpus/quest audits finish independently for FNV, FO3, TTW and
 the exact combined selection. All winning/deleted payload layouts and discovered
 winning loose/BSA reads retain identities and individual outcomes, and every
 raw script field/source body has an accounting disposition. Corpus failures are
-55/36/11/17 under the rebuilt archive owner and quest failures 58/37/11/17
-respectively; all four remain failed
+55/36/11/17 under the rebuilt archive owner and quest failures 52/37/5/11
+under the newer matching event-label parser respectively; all four remain failed
 with runtime readiness false. Fresh Release record scans retain zero unread
 winning payloads and unchanged failures under envelope/input-completion checks.
 The shared record/BSA owner validates exact final DEFLATE extent, output/history
@@ -17,26 +17,35 @@ pass. Four selected original members pass exact mode/decoded-byte/hash checks
 with unchanged containers. Fresh complete corpus scans finish with byte evidence
 for every winning resource, unchanged binaries and natural failed exits retaining
 the counts above. The preceding strict encoding refusals retain their original
-receipts. New-reader subset and full scene dependency reads remain pending.
+receipts. Fresh complete corpus and subset reads under the matching-label parser
+remain pending and cannot replace the earlier failed receipts.
 The configured JAM/TTW/NMC sweep visits all eight on/off subsets under the prior
 archive reader: six retain source failures, and TTW/TTW+NMC without JAM refuse
-missing JohnnyGuitar/Stewie roots with unknown denominators. Strict-reader
-subset reads, complete scene execution and publication remain pending.
+missing JohnnyGuitar/Stewie roots with unknown denominators. New-reader subset
+reads and complete scene execution remain pending.
 Focused corpus/quest/cell and final default contracts pass in Debug and Release.
 Addon-model and NIF sound declaration omissions independently reproduce before
 repair. The selected full ADDN catalog, unused models, typed roles, cached cycles
 and all original text-key/sound variant declarations now have source audit
 owners. Native instances, composed collision, emitters and audio decoding remain
 independent unverified owners. Implicit actor KF/IDLE/ANIO dependencies and typed
-controller joins remain open. Full scene sweeps are running under immutable
-Release binaries; the full required runtime gate and diff check pass. Direct statement
+controller joins remain open. The immutable FNV full scene sweep finishes all
+44,517 cells and 520,570 winning graph rows with 895 retained graph failure
+events, natural failure exit and false readiness. Resource and reference failures
+remain separate lanes. Graph/hash invariants do not certify the 520,503
+unverified runtime-owner rows. Standalone FO3 is scanning all 50,755 cells, with
+TTW and combined queued. The full required runtime gate and diff check pass. Direct statement
 name counts exclude expression/legacy-argument calls; those inventories remain
 unknown while source exists or layouts are unread. Compiled execution coverage
 stays independently unknown.
-Fresh strict Release quest scans finish with zero unread winners, complete
-raw-field/body dispositions, zero world admission and the same retained failures
-in all four selections. Binaries remain unchanged and natural failed exits keep
-readiness false. Counts do not certify decoding, effects or whole-game support.
+Fresh matching-label Release quest scans finish with zero unread winners,
+complete raw-field/body dispositions and zero world admission in all four
+selections. Six original FNV scripts now parse independently in FNV, TTW and
+combined. Their source hashes and complete raw-field reports are unchanged;
+every unrelated failure remains retained. Binaries remain unchanged and natural
+failed exits keep readiness false. Nine malformed closing scopes still refuse
+in Debug/Release. Parsing supplies no event invocation, compiled execution,
+save migration or whole-game support.
 
 Shared source palette binding fixes the reproduced black FO3 dialogue text:
 absent packed overrides use original INI RGB components, while explicit packed
