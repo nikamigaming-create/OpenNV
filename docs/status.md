@@ -1,5 +1,13 @@
 # Product status
 
+The requested single 2:04 OpenXR simulator edit is exported and inspected. It
+includes all three cold-loading handoffs, FNV walking/Easy Pete dialogue/two
+coyote kills, standalone FO3 Dad/childhood and TTW night walking/a molerat kill/
+Pip-Boy. Original colors, real-time excerpts and native audio are retained;
+explicit chapters preserve the whole submitted left-eye image. The full MP4
+decodes cleanly. All three immutable checkpoint hashes are unchanged. This
+showcase does not establish complete games, retail parity or headset acceptance.
+
 OpenXR weapon input now uses semantic fire/reload actions in the existing
 authoritative weapon owner. The native fixture passes with empty desktop
 bindings, including the source fighting refusal and one consumed round. A fresh
@@ -29,7 +37,11 @@ stages 16, 18 and 20, and ordinary player movement reaches stage 30. Its previou
 stage-14 save remains cold-verified. Saving the later state currently refuses
 active background radio speech; the active voice/result continuation is the next
 owner. See [native NPC door access](native-npc-door-access.md). The continuing
-opening, Megaton and full loading/saving acceptance remain open.
+opening, Megaton and full loading/saving acceptance remain open. Another native
+OpenXR process reaches CG01 stage 40 through ordinary movement. Activating the
+source SPECIAL book reaches stage 73 and fails closed on its unbound owned
+transform/light/projection layout. Source creature terrain routes and child
+hand/device presentation remain separate divergence owners.
 
 Current loading/saving fixes support a genuine complete v46 TTW exterior
 checkpoint at Escape stage 150, CELL 0010c1, 115 HP and 8/14 rounds. The actual

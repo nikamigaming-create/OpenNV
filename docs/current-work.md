@@ -7,8 +7,10 @@ Fallout 3, TTW and the combined stack, verified independently in flat/OpenXR.
 Repair reached physics, actors, vegetation, LOD and performance, then deliver the
 requested loading/walking showcases for all three games. Standalone FO3 must
 reach the exterior and look toward Megaton through ordinary saved play.
-The latest immediate priority is genuine OpenXR footage of all three, including
-tracked hands, wrist UI, weapons and an ordinary-input kill. The user accepts the
+The latest immediate priority is one edited OpenXR video of all three, including
+walking, conversation, tracked hands, wrist UI and genuine hostile encounters.
+The requested 2:04 cut is exported and inspected; gameplay timing, native audio
+and the original colors are retained within each selected excerpt. The user accepts the
 FO3 toddler scene for this showcase; its tenth-birthday Pip-Boy and the later
 Megaton route retain their separate source progression requirements.
 Preserve the complete TTW Megaton/Union Station/Mojave/Benny route, JAM,
@@ -28,6 +30,14 @@ The earlier stage-110 checkpoint cold-restores 120 HP with unchanged bytes.
 The earlier stage-55 v47/v48 checkpoints also cold-restore in flat; native OpenXR
 simulator controller input saves and another process cold-restores that partial
 opening. Physical-headset acceptance remains pending.
+
+Fresh OpenXR simulator play cold-Continues Goodsprings, equips and reloads the
+source Weathered 10mm pistol through ordinary wrist/controller input, walks into
+town and selects Easy Pete's original voiced dialogue. After walking outside
+town, tracked trigger input kills two resident source coyotes. One attacks twice
+before dying; the other dies without an attack. Inspected submitted-eye footage
+shows the held weapon, hands, creatures and damage/death presentation. This does
+not certify complete AI, corpse physics, rendering or retail combat parity.
 
 The reported FNV runaway globes now bind their actual source model hinges.
 The previous constrained-body static substitution has been removed. Separate
@@ -55,6 +65,13 @@ later state has no new cold checkpoint: manual saves fail on active background
 radio speech. The immutable stage-14 checkpoint remains reusable. See
 [native NPC door access](native-npc-door-access.md).
 
+A fresh standalone FO3 OpenXR process repeats Dad's original route, leaves the
+playpen through controller locomotion and reaches CG01 stage 40. Ordinary
+activation of SPECIAL book 02ecc0 advances to stage 73, then fails closed because
+its owned transform/light/projection layout is unbound. The selected video shows
+the actual loading handoff, Dad, toddler room and initial walk; later opening
+progression and source child hand/device presentation retain their own owners.
+
 TTW ordinary input completes the aggressive/key route, defeats the guards,
 loots the source office key/password and crosses the authored terminal, tunnel
 and vault exit to stage 150. The complete cave, post-loot and exterior checkpoints
@@ -65,6 +82,14 @@ inventory entries. Another process cold-Continues it in 43.1 seconds at the walk
 position with 115 HP, 8/14 rounds, nine entries and unchanged bytes. The requested TTW
 loading/short-walk MP4 is delivered with actual game time, audio and stalls.
 Megaton/train/Mojave traversal and physical-headset acceptance remain open.
+
+Another independent TTW OpenXR process cold-Continues the immutable walked
+checkpoint, walks around the actual canyon colliders and kills resident source
+molerat 0601e7 with the equipped 10mm pistol. Four ordinary trigger shots consume
+ammunition; three resolve source damage and the last kills. The creature
+approaches but records no attack. The selected night footage includes loading,
+walking, the encounter and the live wrist Pip-Boy. Native route failures remain
+visible rather than being bypassed by teleporting or edited save state.
 
 Atomic flushed same-folder saves and transactional load rollback preserve
 Continue on failed writes/restores. Source PCM loop position/release state,
@@ -80,7 +105,16 @@ Active background radio speech blocks an ordinary FO3 save at the reached stage
 identity and audio sample clock need persistent owners. Ended speech/radio
 history cannot substitute for active continuation. Preserve opaque-callback
 refusals while implementing the reached source-owned speech capability. The next
-ordinary tutorial target is source SPECIAL book 02ecc0, after a reusable save.
+ordinary tutorial blocker is the source SPECIAL book's presentation consumer,
+reached at CG01 stage 73. Bind its owned transform/light/projection declaration
+in FalloutSpecialBookPresentation without substituting FNV layout or inventing
+character allocation. The earlier checkpoint remains the reusable entry point.
+
+Source creature pursuit/capsule routes fail on reached exterior terrain. FNV's
+selected coyote can attack when ordinary player movement reaches melee range;
+TTW's selected molerat approaches but never attacks during the recorded take.
+These observations do not establish general AI completion. Headshot corpse
+presentation and source child hand/device visibility also remain unverified.
 
 The reached TTW exterior has 565 missing owned SpeedTree references. Paths now
 resolve their original trees/ resources; procedural geometry decoding remains
@@ -105,22 +139,20 @@ New Game/campaign claim is accepted from these component checks.
 
 Primary owns serial builds, live input, save verification and checked publication.
 The bounded source-hinge fix is merged through the required runtime gate and
-checked PR. The native NPC route/ownership repair is also merged. Finish the
-priority three-game OpenXR showcases and repair reached controller failures.
-XR fire/reload previously synthesized desktop events and depended on that event
-map. Semantic action events now enter the same weapon owner; the native owned
-fixture passes reload, single fire/release and the source fighting gate with
-empty desktop bindings. A fresh ordinary FNV OpenXR simulator process now
-cold-Continues Goodsprings, equips the owned laser pistol through the wrist
-inventory, reloads, walks along the porch and kills a resident source crow
-through tracked trigger input. Final-eye footage includes the weapon, both
-hands and the fallen body. The complete runtime gate passes; checked publication
-and the FO3/TTW clips are pending. This single-eye capture does not certify
+checked PR. The native NPC route/ownership and semantic XR weapon-action repairs
+are also merged through the full runtime gate and owned controller fixture.
+The single three-game edit includes FNV town dialogue and two coyote kills,
+standalone FO3 Dad/childhood and TTW's night walk, molerat kill and Pip-Boy.
+The 1920x1080 MP4 retains each whole square eye image, original timing and colors,
+native audio and explicit chapter cuts. Full audio/video decode and selected
+source/final frames pass inspection. Recording is off and all three game
+processes are closed. This single-eye capture does not certify
 physical-headset acceptance, stereo, complete rendering or retail combat parity.
-Resume the preserved active-radio save implementation, continue the genuine FO3
+Bind FO3's reached SPECIAL-book presentation and resume the preserved active-radio
+save implementation, continue the genuine FO3
 opening toward the vault exit/Megaton, and finish its later exterior video.
-Keep vegetation decoding and
-upload timing active, complete the independent flat/OpenXR stack matrix and
+Keep creature routing, vegetation decoding and upload timing active, complete
+the independent flat/OpenXR stack matrix and
 continue the authored TTW train/Mojave/Benny route without bypassing conditions.
 
 ## Private continuation
@@ -143,5 +175,9 @@ Prior cold-verified exterior slot: 5e24f48be6604a26b50c52e81c8715e7.
 SHA256: D9654D35DB7BB3CD3731ED5C4F72E06DA985D62D07665A7CA6924D8545F8F13B.
 Requested clips: local/recordings/showcase-20261007/ttw-loading-walk-01.mp4 and
 local/recordings/showcase-20261007/fnv-loading-walk-01.mp4.
+Single requested edit: local/recordings/showcase-20261007/opennv-three-games-vr-showcase.mp4.
+Its private JSON maps source excerpts and chapter times; runtime source is
+61ea88c7a4eea6424713d18b30f82ec6b22e5590, with an optimized Debug build.
+All three immutable checkpoint hashes above are unchanged after these takes.
 Preserve original saves and selected active diagnostics. Temporary recording
 frames are deleted; recording remains off outside a specific visual check.
