@@ -193,16 +193,25 @@ public partial class RuntimeCoordinator
 
     public override void _ExitTree()
     {
+        if (_retiringNativeSession) GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=enter");
         CancelNativeManualSave("Native session retired before the pending manual save could commit.");
         GetWindow().CloseRequested -= OnNativeCloseRequested;
         CancelNativeGridRead();
         if (!_retiringNativeSession) return;
         // Session retirement has drained source workers. Detached prototypes are outside
         // the scene tree and must be released with the retired record owners.
-        foreach (var prototype in _nativeNifPrototypes.Values) prototype.Scene.Root.Free();
+        var retired = 0;
+        foreach (var (path, prototype) in _nativeNifPrototypes)
+        {
+            if (_options.ContainsKey("live-harness") && retired % 16 == 0)
+                GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototype index={retired} source={path}");
+            prototype.Scene.Root.Free(); retired++;
+        }
+        GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototypes-freed count={retired}");
         _nativeNifPrototypes.Clear();
         _nativePrewarmedInitialCellRoot?.Free(); _nativePrewarmedInitialCellRoot = null;
         _nativeReferences?.Dispose(); _nativePluginStack?.Dispose();
+        GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
     }
 
     private void StageNativeExteriorGrid(PreparedExteriorGrid prepared)

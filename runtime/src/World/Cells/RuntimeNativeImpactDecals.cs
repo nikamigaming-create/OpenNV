@@ -28,7 +28,7 @@ internal sealed partial class RuntimeNativeImpactDecals : Node
     internal RuntimeNativeImpactDecals(FalloutPluginStack records, float units)
     {
         Name = "SourceImpactDecals"; _units = units;
-        _lifetime = FalloutGameSettingFloats.Read(records, "fDecalLifetime:Display");
+        _lifetime = records.IniSettings.Float("fDecalLifetime:Display");
         if (_lifetime <= 0) throw new InvalidDataException("Source decal lifetime must be positive.");
     }
 

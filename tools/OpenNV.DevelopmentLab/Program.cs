@@ -7,13 +7,6 @@ if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInterac
 if (args is ["cell-review", var reviewSource, var reviewSnapshot]) return CellReview.Run(reviewSource, reviewSnapshot);
 if (args.Length >= 5 && args[0] == "weapon-loadout") return WeaponLoadout.Run(args[1], args[2], args[3], args[4..]);
 if (args.Length >= 1 && args[0] == "cell-graph") return CellGraphAudit.RunCommand(args[1..]);
-if (args.Length >= 6 && args[0] == "quest-graph" && args[3] == "--mod")
-{
-    var auditSelection = new FalloutModStackSelection([new(args[4], args[5], args[6..])]).Resolve(args[1]);
-    using var auditContent = auditSelection.OpenSource();
-    using var auditRecords = FalloutPluginStack.Load(auditContent.PluginSources);
-    return QuestGraphAudit.Run(auditRecords, auditContent, args[2]);
-}
 
 if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[0] is not ("route" or "classic-items" or "classic-campaign-start" or "classic-script" or "classic-item-systems" or "classic-inventory" or "classic-resource" or "classic-frm" or "classic-assets" or "classic-scenery" or "classic-movement" or "classic-player" or "cells" or "exterior" or "actors" or "script" or "record" or "settings" or "dialogue" or "replay" or "lifecycle" or "corpus" or "quest-graph" or "resources" or "resource" or "nif" or "menu"))
 {
@@ -21,7 +14,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "cells <installation-or-source-stack> <CELL editor ID or name fragment> [...]\n" +
         "route <installation-or-source-stack> <request.json: world runtime hex, start/end game units>\n" +
         "cell-review <installation-or-source-stack> <native detailed state.json>\n" +
-        "cell-graph <installation-or-source-stack> <fresh-output-directory> --seed <plugin:hex-object> --runtime-config <path> [--metadata <EDID substring>] [--checkpoint <path>] [--snapshot <path>] [--sample-native <x> <y> <z>] [--mod <id> <root> <dependency-root> ... last]\n" +
+        "cell-graph <installation-or-source-stack> <fresh-output-directory> --seed <plugin:hex-object> --runtime-config <path> [--metadata <EDID substring>] [--checkpoint <path>] [--snapshot <path>] [--sample-native <x> <y> <z>] [--mod-stack <launcher-mod-list.json> [--mod-order automatic|manual] | --mod <id> <root> <dependency-root> ... last]\n" +
         "weapon-loadout <installation-or-source-stack> <checkpoint> <new-private-output> <WEAP runtime hex> [...]\n" +
         "exterior <installation-or-source-stack> <CELL runtime hex ID> [grid diameter]\n" +
         "actors <installation-or-source-stack> <NPC name fragment> [...]\n" +
@@ -44,12 +37,12 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "replay <installation-or-source-stack> <scenario.json>\n" +
         "lifecycle <installation-or-source-stack> <CELL editor ID> [...] (or --all)\n" +
         "corpus <installation-or-source-stack> <fresh-output-directory>\n" +
-        "quest-graph <installation-or-source-stack> <fresh-output-directory> [--mod <id> <root> <dependency-root> ...]\n" +
+        "quest-graph <installation-or-source-stack> <fresh-output-directory> [source options]\n" +
         "resources <installation-or-source-stack> <logical-directory>\n" +
         "resource <installation-or-source-stack> <logical-path> [private-output-file]\n" +
         "nif <installation-or-source-stack> <logical-path>\n" +
         "menu <installation-or-source-stack> <logical-path> [tile-name]\n" +
-        "Owned-data commands also accept --mod <id> <root> <dependency-root> ... last.");
+        "Owned-data commands also accept --mod-stack <launcher-mod-list.json> [--mod-order automatic|manual] or --mod <id> <root> <dependency-root> ... last. Standalone sources retain their detected game.");
     return 2;
 }
 
@@ -159,17 +152,15 @@ if (args[0] == "classic-frm")
 if (args[0] == "classic-scenery") return ClassicSceneryInventory.Run(args[1], args[2]);
 if (args[0] == "classic-assets") return ClassicAssetInventory.Run(args[1..]);
 if (args[0] == "classic-movement") return ClassicMovementProbe.Run(args[1]);
-var sourceModIndex = Array.IndexOf(args, "--mod");
-if (sourceModIndex >= 0)
+var sourceCommand = DevelopmentLabSource.ParseCommand(args);
+args = sourceCommand.Arguments;
+if (args[0] is "corpus" or "quest-graph")
 {
-    if (sourceModIndex < 3 || args.Length < sourceModIndex + 3)
-        throw new ArgumentException("Owned source selection needs --mod <id> <root> followed by dependency roots.");
-    var selection = new FalloutModStackSelection([new(args[sourceModIndex + 1], args[sourceModIndex + 2], args[(sourceModIndex + 3)..])]).Resolve(args[1]);
-    RuntimeLiveContentSource.Configure(args[1], RuntimeLiveContentSource.FalloutNewVegasGame,
-        selection.ContentRoots.Skip(1).ToArray(), selection.ActivePlugins, selection.Settings);
-    args = args[..sourceModIndex];
+    using var auditContent = DevelopmentLabSource.Open(args[1], sourceCommand.Selection);
+    using var auditRecords = FalloutPluginStack.Load(auditContent.PluginSources);
+    return args[0] == "corpus" ? CorpusInventory.Run(auditRecords, auditContent, args[2]) : QuestGraphAudit.Run(auditRecords, auditContent, args[2]);
 }
-else RuntimeLiveContentSource.Configure(args[1], RuntimeLiveContentSource.FalloutNewVegasGame);
+DevelopmentLabSource.Configure(args[1], sourceCommand.Selection);
 using var content = RuntimeLiveContentSource.Current!;
 using var records = FalloutPluginStack.Load(content.PluginSources);
 var json = new JsonSerializerOptions { WriteIndented = true };
@@ -288,8 +279,6 @@ if (args[0] == "record")
 }
 if (args[0] == "actors") return ActorInventory.Run(records, args[2..]);
 if (args[0] == "route") return WorldRoute.Run(records, args[2]);
-if (args[0] == "corpus") return CorpusInventory.Run(records, content, args[2]);
-if (args[0] == "quest-graph") return QuestGraphAudit.Run(records, content, args[2]);
 if (args[0] == "replay") return ReferenceReplay.Run(records, args[2]);
 if (args[0] == "lifecycle") return ReferenceReplay.Lifecycle(records, args[2..]);
 if (args[0] == "script")

@@ -58,7 +58,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v48";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v49";
+    internal const string FinishedRadioSchema = "opennv-native-fnv-campaign-save/v48";
     internal const string PlayerAudioSchema = "opennv-native-fnv-campaign-save/v47";
     internal const string ObjectPcmSchema = "opennv-native-fnv-campaign-save/v46";
     internal const string CorpseTransferSchema = "opennv-native-fnv-campaign-save/v45";
@@ -219,6 +220,7 @@ internal static class FalloutNativeCampaignSave
                 File.ReadAllText(fullPath)) ??
             throw new InvalidDataException($"Native campaign save is empty: {fullPath}");
         Validate(state, expectedSaveCompatibilityId);
+        if (state.Schema == FinishedRadioSchema) state = state with { Schema = ExpectedSchema };
         if (state.PlayerPackageAudio is { } playerAudio)
             FalloutAnimationSoundEvents.ValidateSource(playerAudio.Events, stack, stack.RuntimeFormKey(0x14));
         var activeCell = stack.GetEffective(state.ActiveCell);
@@ -440,19 +442,25 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId)
     {
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
-        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.DeferredPackageContinuation is not null) == true)
+        if (state.Schema != ExpectedSchema && state.FinishedSpeech?.ActiveRadio is not null)
+            throw new InvalidDataException("Legacy campaign schema contains future active radio continuation.");
+        if (state.Schema != ExpectedSchema && (state.References?.Any(reference =>
+                reference.AnimationSoundEvents?.Events.Any(entry => entry.Playback?.SourceBone is not null) == true) == true ||
+                state.PlayerPackageAudio?.Events.Events.Any(entry => entry.Playback?.SourceBone is not null) == true))
+            throw new InvalidDataException("Legacy campaign schema contains future source sound bone continuation.");
+        if (state.Schema is not (ExpectedSchema or FinishedRadioSchema) && state.References?.Any(reference => reference.DeferredPackageContinuation is not null) == true)
             throw new InvalidDataException("Legacy campaign schema contains future deferred actor packages.");
-        if (state.Schema != ExpectedSchema && state.FinishedSpeech?.FinishedRadio is not null)
+        if (state.Schema is not (ExpectedSchema or FinishedRadioSchema) && state.FinishedSpeech?.FinishedRadio is not null)
             throw new InvalidDataException("Legacy campaign schema contains future ended radio history.");
-        if (state.Schema is not (ExpectedSchema or PlayerAudioSchema) && state.PlayerPackageAudio is not null)
+        if (state.Schema is not (ExpectedSchema or FinishedRadioSchema or PlayerAudioSchema) && state.PlayerPackageAudio is not null)
             throw new InvalidDataException("Legacy campaign schema contains future player package sound history.");
-        if (state.Schema is ExpectedSchema or PlayerAudioSchema && state.References is not null && state.PlayerPackageAudio is null)
+        if (state.Schema is ExpectedSchema or FinishedRadioSchema or PlayerAudioSchema && state.References is not null && state.PlayerPackageAudio is null)
             throw new InvalidDataException("Saved campaign is missing its player package sound owner.");
         state.PlayerPackageAudio?.Events.Validate();
         if (state.PlayerPackageAudio is { } playerAudio && state.Scripts?.Session?.PlayerPackage?.SoundRandomState is { } packageRandom &&
             playerAudio.RandomState != packageRandom)
             throw new InvalidDataException("Player package and audio random state disagree.");
-        if (state.Schema is PlayerAudioSchema or ObjectPcmSchema) state = state with { Schema = ExpectedSchema };
+        if (state.Schema is FinishedRadioSchema or PlayerAudioSchema or ObjectPcmSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.DoorMotion?.ScriptSequence is not null) == true)
             throw new InvalidDataException("Legacy campaign schema contains future scripted door animation state.");
         if (state.Schema != ExpectedSchema && state.References?.Any(reference =>

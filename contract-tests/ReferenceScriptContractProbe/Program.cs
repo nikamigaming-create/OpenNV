@@ -368,6 +368,12 @@ if (args is ["--radio-contracts"])
     RadioContracts.Run();
     return;
 }
+if (args.Length >= 2 && args[0] == "--audit-radio-hud")
+{
+    RadioHudDeclarationContracts.Run();
+    OwnedRadioHudProbe.Run(args[1], args[2..]);
+    return;
+}
 if (args.Length >= 5 && args[0] == "--audit-radio-refresh")
 {
     OwnedRadioProbe.Run(args[1], args[2], args[3], args[4], args[5..]);

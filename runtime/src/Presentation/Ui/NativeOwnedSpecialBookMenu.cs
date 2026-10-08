@@ -12,6 +12,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     private readonly FalloutPluginStack _records;
     private readonly FalloutSpecialAllocationSession _session;
     private readonly FalloutSpecialBookPresentation _declaration;
+    private readonly FalloutSpecialBookTextures _textures;
     private readonly NativeOwnedNifMenuSurface _surface;
     private readonly RuntimeNifControllerPlayer _animation;
     private readonly Action _accepted;
@@ -39,6 +40,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
         turning = _turning,
         submitted = _submitted,
         permanentReadBaseWriteOwner = _session.Owner,
+        textureDeclarations = _textures.Paths,
         error = Error,
         pointerGeometry = _surface.LastPicked,
         animation = _animation.Observation,
@@ -50,7 +52,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             target.InFront
         }),
         integration = "explicit-permanent-read-and-base-write-binding;host-owns-command-menu-and-save-policy",
-        unbound = "PC-shortcut-repeat,fade-and-postprocessing,clip-plane-and-animated-bound-fitting,language-remapping,matched-retail-and-XR-pixels"
+        unbound = "PC-shortcut-repeat,texture-input-mode-switching,fade-and-postprocessing,clip-plane-and-animated-bound-fitting,language-remapping,matched-retail-and-XR-pixels"
     };
 
     internal NativeOwnedSpecialBookMenu(FalloutPluginStack records, FalloutSpecialAllocationBinding binding, int? budget,
@@ -68,6 +70,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
                 .Select(block => (FalloutNifControllerSequence)source.ReadObject(block.Index)).ToArray();
             _declaration = FalloutExecutableStringTable.ReadSpecialBook(content.FalloutExecutablePath,
                 sequences.Select(sequence => sequence.Name).ToArray());
+            _textures = _declaration.Textures ?? throw new NotSupportedException("Owned SPECIAL book texture declarations are absent.");
             if (!string.Equals(_declaration.AnimatedModel.Replace('\\', '/'), ModelPath, StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException("SPECIAL book executable and winning model binding disagree.");
             foreach (var sequence in sequences)
@@ -90,7 +93,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             _surface = new([new(_declaration.AnimatedModel, source, pose)], new(camera,
                 _ => _declaration.HorizontalSlope(settings.Number("Display", "fDefaultFOV")), 1, 5000,
                 _declaration.LightRadiusMultiple, Vector3.One * _declaration.LightIntensity));
-            AddChild(_surface); _animation = _surface.Animation;
+            AddChild(_surface); _surface.PreloadTextures(_textures.Paths); _animation = _surface.Animation;
             _animation.TextKeyHandler = _ => "structural-sequence-boundary";
             var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read(MenuPath)).Elements("menu").Single();
             if ((string?)menu.Attribute("name") != "SPECIALBookMenu" || menu.Element("alpha")?.Value.Trim() != "0" ||
@@ -217,9 +220,9 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             _surface.Geometry(prefix + "_Increase_Btn:0").Visible = remaining > 0 && value < FalloutSpecialAllocationSession.Maximum;
             _surface.Geometry(prefix + "_Decrease_Btn:0").Visible = value > FalloutSpecialAllocationSession.Minimum;
             Remaining(prefix, remaining);
-            _surface.SetTexture(prefix + "_RT_Btn:0", "textures/terminals/PC/BBRTOff.dds");
-            _surface.SetTexture(prefix + "_LT_Btn:0", "textures/terminals/PC/BBLTOff.dds");
-            _surface.SetTexture(prefix + "_Message:0", "textures/terminals/ENGLISH/BBMessage0" + (remaining > 1 ? "2" : remaining == 1 ? "3" : "4") + ".dds");
+            _surface.SetTexture(prefix + "_RT_Btn:0", _textures.Buttons["BBRTOff"]);
+            _surface.SetTexture(prefix + "_LT_Btn:0", _textures.Buttons["BBLTOff"]);
+            _surface.SetTexture(prefix + "_Message:0", _textures.Message(remaining));
         }
         for (var index = 0; index < _values.Count; index++)
         {
@@ -229,10 +232,10 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             _surface.Geometry(prefix + "Decrease_Btn:0").Visible = _index == index + 1 && value > FalloutSpecialAllocationSession.Minimum;
         }
         Remaining("Index", remaining);
-        _surface.SetTexture("Index_Message:0", "textures/terminals/ENGLISH/BBMessage0" + (remaining > 1 ? "2" : remaining == 1 ? "3" : "4") + ".dds");
-        _surface.SetTexture("LookInside_Btn:0", "textures/terminals/PC/BBRTOff.dds");
-        _surface.SetTexture("Index_LT_Btn:0", "textures/terminals/PC/BBLTOn.dds");
-        _surface.SetTexture("AllDone_Btn:0", "textures/terminals/PC/BBX" + (remaining > 0 ? "On" : "Off") + ".dds");
+        _surface.SetTexture("Index_Message:0", _textures.Message(remaining));
+        _surface.SetTexture("LookInside_Btn:0", _textures.Buttons["BBRTOff"]);
+        _surface.SetTexture("Index_LT_Btn:0", _textures.Buttons["BBLTOn"]);
+        _surface.SetTexture("AllDone_Btn:0", _textures.Buttons[remaining > 0 ? "BBXOn" : "BBXOff"]);
     }
     private void Remaining(string prefix, int remaining)
     {
@@ -241,7 +244,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
         if (tens.Visible) Number(prefix + "_PointsRemainDigit1:0", remaining / 10);
         if (ones.Visible) Number(prefix + "_PointsRemainDigit2:0", remaining % 10);
     }
-    private void Number(string geometry, int value) => _surface.SetTexture(geometry, "textures/terminals/BBNumber" + value.ToString(CultureInfo.InvariantCulture) + ".dds");
+    private void Number(string geometry, int value) => _surface.SetTexture(geometry, _textures.Digits[value]);
     private bool IsActiveTarget(string name, MeshInstance3D mesh) => _targetPages.TryGetValue(name, out var page) && page == _page && mesh.IsVisibleInTree();
     private void Play(string editorId)
     {

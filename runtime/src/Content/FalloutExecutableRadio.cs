@@ -35,6 +35,7 @@ internal static partial class FalloutExecutableStringTable
                 throw new NotSupportedException("Owned radio discovery notice declaration is unbound.");
             declarations.Add(new(resources[0], seconds, sounds[0]));
         }
+        declarations.AddRange(ReadDirectRadioHudDeclarations(code, literal, settings));
         var unique = declarations.Distinct().ToArray();
         return unique.Length == 1 ? unique[0] : throw new NotSupportedException("Radio discovery declaration is absent or ambiguous.");
     }

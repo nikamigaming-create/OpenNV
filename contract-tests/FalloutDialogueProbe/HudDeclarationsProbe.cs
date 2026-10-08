@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using OpenNV.Runtime.Content;
 
-internal static class HudDeclarationsProbe
+internal static partial class HudDeclarationsProbe
 {
     internal static void Run()
     {
@@ -65,6 +65,7 @@ internal static class HudDeclarationsProbe
         Require(FalloutExecutableStringTable.ReadHudMessageLayout(code, address => literals.GetValueOrDefault(address)).XInset == 19,
             "An unrelated notice ambiguity prevented binding the HUD layout.");
         ScalarLayout();
+        DirectItemNotice();
     }
 
     private static void ScalarLayout()

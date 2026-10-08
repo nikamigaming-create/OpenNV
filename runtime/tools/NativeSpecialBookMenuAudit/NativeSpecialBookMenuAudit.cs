@@ -14,26 +14,48 @@ public partial class NativeSpecialBookMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
-            if (args.Length < 4) throw new ArgumentException("Owned installation, mod, mod root and private diagnostic path are required.");
-            await Verify(args[0], args[1], args[2], args[3], args[4..]); GetTree().Quit();
+            if (args is ["--standalone", var root, var diagnostic]) await Verify(root, null, null, diagnostic, []);
+            else
+            {
+                if (args.Length < 4) throw new ArgumentException("Use --standalone <owned-installation> <private-diagnostic>, or <owned-installation> <mod> <mod-root> <private-diagnostic> [dependencies].");
+                await Verify(args[0], args[1], args[2], args[3], args[4..]);
+            }
+            GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
     }
 
-    private async Task Verify(string baseRoot, string mod, string modRoot, string diagnostic, string[] dependencies)
+    private async Task Verify(string baseRoot, string? mod, string? modRoot, string diagnostic, string[] dependencies)
     {
         if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("SPECIAL book pixels require a native renderer.");
-        if (!Path.IsPathFullyQualified(diagnostic) || Path.GetFullPath(diagnostic).StartsWith(
-            Path.GetFullPath(ProjectSettings.GlobalizePath("res://../")), StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("SPECIAL book visual diagnostic must be outside the repository.");
-        var installation = new FalloutModStackSelection([new(mod, modRoot, dependencies)]).Resolve(baseRoot);
-        RuntimeLiveContentSource.Configure(baseRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
-            installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
+        var protectedRoots = new List<string> { ProjectSettings.GlobalizePath("res://../"), baseRoot };
+        protectedRoots.AddRange(dependencies);
+        if (modRoot is not null) protectedRoots.Add(modRoot);
+        if (mod is null)
+        {
+            var installation = NativeGameInstallation.Detect(baseRoot);
+            protectedRoots.Add(installation.InstallRoot);
+            var game = installation.Game switch
+            {
+                NativeGame.Fallout3 => RuntimeLiveContentSource.Fallout3Game,
+                NativeGame.FalloutNewVegas => RuntimeLiveContentSource.FalloutNewVegasGame,
+                _ => throw new NotSupportedException("SPECIAL book audit requires an owned Fallout 3/New Vegas installation."),
+            };
+            RuntimeLiveContentSource.Configure(baseRoot, game);
+        }
+        else
+        {
+            var installation = new FalloutModStackSelection([new(mod, modRoot!, dependencies)]).Resolve(baseRoot);
+            protectedRoots.Add(installation.BaseInstallation.InstallRoot);
+            RuntimeLiveContentSource.Configure(baseRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+                installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
+        }
         RuntimeNativeSpecialAllocationEntry? entry = null; Godot.Timer? clock = null;
-        var priorPause = GetTree().Paused; var priorMouse = Input.MouseMode; var success = false;
+        var priorPause = GetTree().Paused; var priorMouse = Input.MouseMode; var success = false; var diagnosticCreated = false;
         try
         {
             var source = RuntimeLiveContentSource.Current!; using var records = FalloutPluginStack.Load(source.PluginSources);
+            diagnostic = DiagnosticPath(diagnostic, protectedRoots.Concat(source.ContentRoots));
             var sourcePaths = new[] { NativeOwnedSpecialBookMenu.MenuPath, "meshes/terminals/babybook02.nif" };
             var identities = new List<string>(); var hashes = new List<byte[]>();
             foreach (var path in sourcePaths)
@@ -121,7 +143,8 @@ public partial class NativeSpecialBookMenuAudit : Control
 
             Input.MouseMode = Input.MouseModeEnum.Captured;
             var book = Open(null); var cover = await Pixels(book); var pausedTicks = ticks;
-            Check(book.Declaration.DefaultBudget == 35 && State(book).GetProperty("budget").GetInt32() == 35, "Book default budget was replaced by TTW's explicit parameter.");
+            var defaultBudget = book.Declaration.DefaultBudget;
+            Check(State(book).GetProperty("budget").GetInt32() == defaultBudget, "Book default budget did not follow its owned executable.");
             Check(Page(book) == 0 && book.Animation.SourceTimeSeconds == book.Animation.SequenceRange(book.Animation.ActiveSequence!).StartTime &&
                 !book.Animation.IsProcessing(), "Owned book skipped its source cover page.");
             Check(GetTree().Paused && modal && ticks == pausedTicks && cover.Any(value => value != 0), "Book cover did not pause gameplay or render pixels.");
@@ -135,32 +158,71 @@ public partial class NativeSpecialBookMenuAudit : Control
             world.LoadCell(FalloutCellSceneReader.Read(records, cell));
             var quest = FalloutDialogueTopic.Find(records, "QUST", "CG01").FormKey;
             var quests = new FalloutQuestState(records); quests.EnterStage(quest, 30);
+            var declaredOrder = new List<string>(); short? declaredStage = null; int? declaredBudget = null;
+            string? declaredCommand = null; string[]? declaredArguments = null;
             using (var rejectedWorld = new FalloutReferenceWorld(records))
             {
                 rejectedWorld.LoadCell(FalloutCellSceneReader.Read(records, cell));
                 var rejectedQuests = new FalloutQuestState(records); rejectedQuests.EnterStage(quest, 30); var attempts = 0;
                 var rejectedScripts = new FalloutReferenceScripts(records, rejectedWorld, rejectedQuests, new((_, _) => false,
-                    effect => rejectedQuests.EnterStage(effect.Target!.Value, effect.Stage), Command: (_, _, _, _) =>
-                    { attempts++; throw new NotSupportedException("unbound-source-book-menu-owner"); }));
+                    effect =>
+                    {
+                        Check(effect.Kind == FalloutReferenceEffectKind.SetStage && effect.Target == quest && declaredStage is null,
+                            "Source book has an unbound activation-prefix effect.");
+                        declaredStage = AdmittedQuestStage(effect.Stage); declaredOrder.Add("SetStage" + effect.Stage);
+                        rejectedQuests.EnterStage(effect.Target!.Value, effect.Stage);
+                    }, Command: (_, _, command, arguments) =>
+                    {
+                        Check(declaredCommand is null, "Source book dispatched overlapping menu commands.");
+                        declaredCommand = command; declaredArguments = arguments.ToArray();
+                        declaredBudget = command.ToLowerInvariant() switch
+                        {
+                            "ssbmp" or "showspecialbookmenuparams" when arguments.Count == 1 =>
+                                int.Parse(arguments[0], System.Globalization.CultureInfo.InvariantCulture),
+                            "ssbm" or "showspecialbookmenu" when arguments.Count == 0 => null,
+                            _ => throw new NotSupportedException("Source book allocation command is unbound."),
+                        };
+                        declaredOrder.Add(command + string.Join(",", arguments)); attempts++;
+                        throw new NotSupportedException("unbound-source-book-menu-owner");
+                    }));
                 var rejection = rejectedScripts.Activate(reference, records.RuntimeFormKey(0x14));
-                Check(rejection.Error is not null && rejectedQuests.StageDone(quest, 50) && attempts == 1,
+                Check(rejection.Error is not null && declaredStage is { } stage && rejectedQuests.StageDone(quest, stage) && attempts == 1,
                     "Unsupported source book command rolled back its executed stage prefix.");
-                Check(rejectedScripts.Activate(reference, records.RuntimeFormKey(0x14)).Error is null && attempts == 1,
-                    "Source stage guard was bypassed to reopen an unsupported menu.");
+                var stopped = JsonSerializer.Serialize(rejectedWorld.Get(reference).Capture());
+                var repeated = rejectedScripts.Activate(reference, records.RuntimeFormKey(0x14));
+                Check(repeated.Error == rejection.Error && repeated.Blocks == 0 && attempts == 1 &&
+                    JsonSerializer.Serialize(rejectedWorld.Get(reference).Capture()) == stopped,
+                    "Repeating activation cleared or replayed the unsupported source invocation.");
+                // A stopped invocation retains its error before evaluating any
+                // new source guard. Prove the actual completed-stage predicate
+                // separately without clearing that fault or changing quest state.
+                using var guardedWorld = new FalloutReferenceWorld(records);
+                guardedWorld.LoadCell(FalloutCellSceneReader.Read(records, cell));
+                var guardedEffects = 0; var guardedCommands = 0;
+                var guardedScripts = new FalloutReferenceScripts(records, guardedWorld, rejectedQuests,
+                    new((_, _) => false, _ => guardedEffects++, Command: (_, _, _, _) => guardedCommands++));
+                var guarded = guardedScripts.Activate(reference, records.RuntimeFormKey(0x14));
+                Check(guarded.Error is null && guardedEffects == 0 && guardedCommands == 0 &&
+                    declaredStage is { } guardedStage && rejectedQuests.StageDone(quest, guardedStage),
+                    "Completed source stage guard dispatched another activation effect or menu.");
             }
+            var sourceStage = declaredStage ?? throw new InvalidDataException("Source book did not declare a stage prefix.");
+            var sourceBudget = declaredBudget ?? defaultBudget;
+            Check(declaredCommand is not null && declaredArguments is not null && declaredOrder.Count == 2,
+                "Source book did not declare one stage and one menu request.");
             var order = new List<string>(); NativeOwnedSpecialBookMenu? activated = null;
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
                 effect =>
                 {
-                    Check(effect.Kind == FalloutReferenceEffectKind.SetStage && effect.Target == quest && effect.Stage == 50, "Book activation guessed another source effect.");
-                    order.Add("SetStage50"); quests.EnterStage(quest, effect.Stage);
+                    Check(effect.Kind == FalloutReferenceEffectKind.SetStage && effect.Target == quest && effect.Stage == sourceStage, "Book activation guessed another source effect.");
+                    order.Add("SetStage" + effect.Stage); quests.EnterStage(quest, effect.Stage);
                 }, Command: (_, _, command, arguments) =>
                 {
-                    Check(command.Equals("ssbmp", StringComparison.OrdinalIgnoreCase) && arguments.SequenceEqual(new[] { "40" }), "Winning book command/parameter changed.");
-                    order.Add("ssbmp40"); activated = Open(int.Parse(arguments[0], System.Globalization.CultureInfo.InvariantCulture));
+                    Check(command.Equals(declaredCommand, StringComparison.OrdinalIgnoreCase) && arguments.SequenceEqual(declaredArguments!), "Winning book command/parameter changed.");
+                    order.Add(command + string.Join(",", arguments)); activated = Open(declaredBudget);
                 }));
             var result = scripts.Activate(reference, records.RuntimeFormKey(0x14));
-            Check(result.Error is null && order.SequenceEqual(new[] { "SetStage50", "ssbmp40" }) && quests.StageDone(quest, 50),
+            Check(result.Error is null && order.SequenceEqual(declaredOrder) && quests.StageDone(quest, sourceStage),
                 "Actual winning book source did not preserve its stage-before-menu prefix: " + result.Error);
             book = activated ?? throw new InvalidDataException("Winning book activation did not reach its isolated menu callback.");
             var reopenedCover = await Pixels(book); pausedTicks = ticks;
@@ -172,16 +234,19 @@ public partial class NativeSpecialBookMenuAudit : Control
             Pad(JoyButton.RightShoulder); Check(Page(book) == 1, "Next-page input bypassed the source animation lock.");
             await FinishTurn(book);
             Check(Page(book) == 1, "Look Inside did not open the first authored attribute.");
-            var first = await Pixels(book); var before = values[0];
+            if (values.Sum() >= sourceBudget) { Key(Godot.Key.Left); await Pixels(book); }
+            Check(values.Sum() < sourceBudget, "Source book could not retain an ordinary decrease before the increase fixture.");
+            var first = await Pixels(book); var before = values[0]; var initialWrites = baseWrites.Count;
             Key(Godot.Key.Right); var changed = await Pixels(book);
-            Check(values[0] == before + 1 && baseWrites.Count == 1 && !first.AsSpan().SequenceEqual(changed), "Native key input did not change the source digit and immediate base owner.");
+            Check(values[0] == before + 1 && baseWrites.Count == initialWrites + 1 && !first.AsSpan().SequenceEqual(changed), "Native key input did not change the source digit and immediate base owner.");
             Key(Godot.Key.Left); var restoredPixels = await Pixels(book);
             Check(values[0] == before && first.AsSpan().SequenceEqual(restoredPixels), "Native reverse input did not restore the owned digit pixels.");
             Click(book, "P1_Increase_Btn:0"); await Pixels(book); Check(values[0] == before + 1, "Source pointer increase did not mutate the base owner.");
             Retire(); Check(values[0] == before + 1 && !GetTree().Paused && !modal, "Cancelling rolled back an already-written SPECIAL value.");
-            book = Open(40); await Pixels(book); pausedTicks = ticks;
+            book = Open(sourceBudget); await Pixels(book); pausedTicks = ticks;
             Check(Page(book) == 0 && State(book).GetProperty("values")[0].GetInt32() == before + 1, "New book session lost the live owner or cover semantics.");
             Click(book, "LookInside_Btn:0"); await FinishTurn(book);
+            if (values.Sum() >= sourceBudget) { Key(Godot.Key.Left); await Pixels(book); }
             for (var page = 2; page <= 9; page++)
             {
                 Pad(JoyButton.RightShoulder); transitions.Add(book.Animation.ActiveSequence!); await FinishTurn(book);
@@ -203,15 +268,27 @@ public partial class NativeSpecialBookMenuAudit : Control
             Check(State(book).GetProperty("index").GetInt32() == 2, "Source index navigation did not select Perception.");
             Click(book, "Index_PerceptionIncrease_Btn:0"); await Pixels(book);
             Key(Godot.Key.Up); await Pixels(book);
-            var session = new FalloutSpecialAllocationSession(40, binding);
-            while (session.Remaining > 0) { Key(Godot.Key.Right); await Pixels(book); }
-            Check(ticks == pausedTicks && order.Count == 2 && quests.Stage(quest) == 50, "Menu input advanced paused gameplay or guessed source stage completion.");
+            var session = new FalloutSpecialAllocationSession(sourceBudget, binding);
+            var allocationInputs = 0;
+            while (session.Remaining > 0)
+            {
+                Check(++allocationInputs <= FalloutSpecialAllocationSession.AttributeCount * FalloutSpecialAllocationSession.Maximum,
+                    "Source book allocation did not consume its bounded ordinary inputs.");
+                var available = Enumerable.Range(0, values.Length).FirstOrDefault(index => values[index] < FalloutSpecialAllocationSession.Maximum, -1);
+                Check(available >= 0, "Source book has remaining points without an admissible attribute.");
+                Click(book, "Index_" + FalloutNativeVigorResolver.AttributeNames[available] + "Increase_Btn:0"); await Pixels(book);
+            }
+            Check(ticks == pausedTicks && order.Count == 2 && quests.Stage(quest) == sourceStage, "Menu input advanced paused gameplay or guessed source stage completion.");
             using (var image = GetViewport().GetTexture().GetImage())
-                Check(image.SavePng(diagnostic) == Godot.Error.Ok, "SPECIAL diagnostic write failed.");
+            {
+                var png = image.SavePngToBuffer(); Check(png.Length > 0, "SPECIAL diagnostic encoding failed.");
+                using var output = CreateDiagnostic(diagnostic);
+                diagnosticCreated = true; output.Write(png);
+            }
             var beforeDoneWrites = baseWrites.Count; Click(book, "AllDone_Btn:0"); await Pixels(book, false);
             Pad(JoyButton.X); await Pixels(book, false);
             Check(accepted == 1 && baseWrites.Count == beforeDoneWrites && !GetTree().Paused && !modal && Input.MouseMode == Input.MouseModeEnum.Captured &&
-                order.Count == 2 && quests.Stage(quest) == 50, "Done committed a draft, repeated acceptance, changed a quest, or leaked input.");
+                order.Count == 2 && quests.Stage(quest) == sourceStage, "Done committed a draft, repeated acceptance, changed a quest, or leaked input.");
             Retire();
             for (var frame = 0; frame < 6; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Check(ticks > pausedTicks, "Done did not resume the gameplay clock.");
@@ -221,7 +298,7 @@ public partial class NativeSpecialBookMenuAudit : Control
                 {
                     GetTree().Paused = pause; modal = priorModal; var initialMouse = priorModal ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
                     Input.MouseMode = initialMouse; var initialReleases = released;
-                    book = Open(40); await Pixels(book); Retire();
+                    book = Open(sourceBudget); await Pixels(book); Retire();
                     Check(GetTree().Paused == pause && modal == priorModal && Input.MouseMode == initialMouse && released == initialReleases + 1,
                         "Tree retirement lost a prior pause, modal or mouse state.");
                     var active = new RuntimeNativeSpecialAllocationEntry(); entry = active; AddChild(active);
@@ -240,7 +317,7 @@ public partial class NativeSpecialBookMenuAudit : Control
                         NativeOwnedSpecialBookMenu? failedBook = null;
                         active.Configure((accept, fail) =>
                         {
-                            failedBook = new(records, binding, 40, accept, fail);
+                            failedBook = new(records, binding, sourceBudget, accept, fail);
                             return new(failedBook, () => failedBook.State);
                         }, () => modal, value => modal = value);
                         if (failureKind != "constructor-read")
@@ -280,8 +357,13 @@ public partial class NativeSpecialBookMenuAudit : Control
                 all18SourceTransitions = true,
                 coverPage0 = true,
                 backCoverPage9 = true,
-                default35Explicit40 = true,
-                sourceActivationPrefix50Before40 = true,
+                source.Game,
+                defaultBudget,
+                sourceBudget,
+                sourceStage,
+                sourceCommand = declaredCommand,
+                sourceArguments = declaredArguments,
+                sourceActivationOrder = declaredOrder,
                 sourceNoReset = true,
                 pointer = true,
                 keyAxes = true,
@@ -297,6 +379,8 @@ public partial class NativeSpecialBookMenuAudit : Control
                 failedSurfaceNodesFreed = true,
                 failureTelemetryReadable = true,
                 unsupportedActivationPrefixRetained = true,
+                unsupportedActivationLatched = true,
+                completedStageGuard = true,
                 failureVisible = true,
                 sourceReadonly = true,
                 recording = false,
@@ -306,7 +390,7 @@ public partial class NativeSpecialBookMenuAudit : Control
         finally
         {
             entry?.Free(); clock?.Free(); GetTree().Paused = priorPause; Input.MouseMode = priorMouse; RuntimeLiveContentSource.Clear();
-            if (!success && File.Exists(diagnostic)) File.Delete(diagnostic);
+            if (!success && diagnosticCreated) File.Delete(diagnostic);
         }
     }
     private static void VerifyFailedSurface(RuntimeLiveContentSource content)
@@ -335,5 +419,7 @@ public partial class NativeSpecialBookMenuAudit : Control
             "Unsupported source visual root did not retain its construction failure.");
         Check(Performance.GetMonitor(Performance.Monitor.ObjectOrphanNodeCount) == nodes, "Failed owned menu surface orphaned native nodes.");
     }
+    private static short AdmittedQuestStage(int stage) => stage is >= short.MinValue and <= short.MaxValue
+        ? checked((short)stage) : throw new InvalidDataException("Source book stage exceeds the admitted quest-stage extent.");
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidDataException(message); }
 }

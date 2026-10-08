@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.Content;
 
@@ -18,7 +19,12 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         var stream = node is AudioStreamPlayer3D spatial ? spatial.Stream : ((AudioStreamPlayer)node).Stream;
         if (stream != voice.Pcm.Stream || ReadPlayback(node) is null)
             throw new NotSupportedException("PCM continuation lost its original native playback.");
-        return new(voice.Pcm.Capture(), _actor.GetPathTo(voice.Emitter).ToString(), voice.FollowEmitter);
+        var path = _actor.GetPathTo(voice.Emitter).ToString();
+        var bone = RuntimeNativeNifSoundEmitters.CaptureBone(_actor, voice.Emitter, _events?.Reference);
+        if (bone is not null) _events!.RequireEnabledSourceEmitter();
+        else if (RuntimeNativeNifSoundEmitters.HasAnonymousPath(path))
+            throw new NotSupportedException("Anonymous source sound emitter has no typed continuation identity.");
+        return new(voice.Pcm.Capture(), path, voice.FollowEmitter, bone);
     }
 
     public override void _Ready()
@@ -34,8 +40,20 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             if (entry.Playback is not { } saved) throw new InvalidDataException("Cold active sound has no PCM continuation.");
             var source = FalloutSoundRecordReader.Read(_records, entry.Sound) with { LogicalPath = entry.LogicalPath };
             var selected = FalloutAnimationSound.Select(source, entry.Variants, new(entry.RandomBefore), true, entry.StereoOutput);
-            var emitter = _actor.GetNodeOrNull<Node3D>(saved.EmitterPath) ??
-                throw new InvalidDataException("Cold PCM sound has no original source emitter.");
+            Node3D emitter;
+            if (saved.SourceBone is { } bone)
+            {
+                _events!.RequireEnabledSourceEmitter();
+                emitter = RuntimeNativeNifSoundEmitters.RestoreBone(_actor, _events.Reference, bone, _emitters);
+            }
+            else
+            {
+                if (RuntimeNativeNifSoundEmitters.HasAnonymousPath(saved.EmitterPath))
+                    throw new NotSupportedException("Legacy anonymous sound emitter has no provable source continuation.");
+                emitter = _actor.GetNodeOrNull<Node3D>(saved.EmitterPath) ??
+                    throw new InvalidDataException("Cold PCM sound has no original source emitter.");
+                RuntimeNativeNifSoundEmitters.RequireNoAnimationObject(_actor, emitter);
+            }
             if (!_streams.TryGetValue(entry.Path!, out var media))
             {
                 media = NativeOwnedMediaLoader.LoadAudio(entry.Path!); _streams.Add(entry.Path!, media);

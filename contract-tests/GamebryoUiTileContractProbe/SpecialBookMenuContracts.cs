@@ -6,6 +6,8 @@ internal static class SpecialBookMenuContracts
     internal static void Run()
     {
         Declarations();
+        SpecialBookExecutableContracts.Run();
+        SpecialBookTextureContracts.Run();
         var values = Enumerable.Repeat(5, FalloutSpecialAllocationSession.AttributeCount).ToArray();
         var modifiers = new float[values.Length]; var writes = new List<(int Slot, int Value)>();
         var binding = new FalloutSpecialAllocationBinding("synthetic-base-and-permanent-owner", slot => values[slot - 5] + modifiers[slot - 5],
@@ -40,6 +42,7 @@ internal static class SpecialBookMenuContracts
         Reject(() => failing.Change(5, -1));
         Check(values[0] == 4, "A failed source write mutated a hidden menu draft.");
         Console.WriteLine("PASS SPECIAL source declarations, all eighteen transitions, live permanent/base editing, default/explicit budgets, retained cancellation and unbound-owner rejection.");
+        SpecialBookExecutableContracts.Owned(Environment.GetCommandLineArgs()[1..]);
     }
 
     private static void Declarations()

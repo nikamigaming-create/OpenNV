@@ -31,6 +31,7 @@ internal sealed class RuntimeNativeNifSkeleton
             Node.SetMeta("opennv_nif_source_bones", _boneIndices.Count);
             Node.SetMeta("opennv_nif_controller_owner", "external-gameplay-animation");
             Node.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
+            Node.SetMeta("opennv_nif_source_sha256", source.Sha256);
             Node.SetMeta("opennv_nif_source_root_blocks", source.Roots.ToArray());
             Node.SetMeta("opennv_nif_geometry_attachments",
                 _geometryAttachments.Select(value => value.Geometry.Block.Index).ToArray());

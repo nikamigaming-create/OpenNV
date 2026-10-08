@@ -26,6 +26,7 @@ internal sealed class FalloutPcmPlayback
     private double _position;
     private long _loops;
     private bool _playing, _releasing, _restored;
+    private bool _suspended;
     private bool _startPending = true;
     internal string? Error { get; private set; }
 
@@ -57,6 +58,13 @@ internal sealed class FalloutPcmPlayback
             state.Validate(); return state;
         }
     }
+
+    internal void RequireHealthy()
+    {
+        lock (_gate)
+            if (Error is not null) throw new InvalidDataException("PCM mixer failed: " + Error);
+    }
+    internal void SetSuspended(bool suspended) { lock (_gate) _suspended = suspended; }
 
     internal double Query(int operation, double value)
     {
@@ -108,6 +116,11 @@ internal sealed class FalloutPcmPlayback
             throw new InvalidDataException("Native PCM mix has an invalid buffer or rate.");
         lock (_gate)
         {
+            if (_playing && Error is null && _suspended)
+            {
+                for (var index = 0; index < count * 2; index++) stereo[index] = 0;
+                return count;
+            }
             var written = 0;
             var step = (double)_sourceRate / _outputRate * rateScale;
             var end = _loop.End == 0 ? _frames : checked((int)_loop.End);

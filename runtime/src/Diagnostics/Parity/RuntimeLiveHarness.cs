@@ -603,11 +603,13 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     public override void _ExitTree()
     {
+        GD.Print($"OPENNV_LIVE_HARNESS_RETIRE phase=enter stateWritePending={_stateWrite is not null}");
         _bot?.Stop();
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
         FinishInputRecording("Recording ended with its runtime owner.");
         try { CompleteStateWrite(); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }
+        GD.Print("OPENNV_LIVE_HARNESS_RETIRE phase=state-write-settled");
         GetTree().NodeAdded -= TrackNode;
         GetTree().NodeRemoved -= UntrackNode;
         _controls.Clear();
@@ -620,5 +622,6 @@ internal sealed partial class RuntimeLiveHarness : Node
         _liveFrames?.Dispose();
         _liveFrames = null;
         ReleaseAll();
+        GD.Print("OPENNV_LIVE_HARNESS_RETIRE phase=callbacks-retired");
     }
 }

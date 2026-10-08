@@ -12,6 +12,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal readonly FalloutFormKey Reference = reference;
         internal readonly AudioStreamPlayer Player = player;
         internal NativeOwnedAnimationSoundPlayer? ResponseSound;
+        internal NativeOwnedPcmStream? Pcm;
         internal FalloutSayToCommand? Command;
         internal string? CommandKind;
         internal long CompletedCommands, Generation;
@@ -153,6 +154,7 @@ internal partial class RuntimeNativeSpeech : Node
                 emptyCompletions = _emptyCompletions.State,
                 finishedFailureCapturable = CanCaptureFinishedFailure,
                 finishedStateCapturable = CanCaptureFinishedState,
+                stateCapturable = CanCaptureState,
                 finishedFailureReceipt = _emptyCompletions.FinishedFailureReceipt,
                 lastCompletedFailure = _lastCompletedFailure,
                 voiceBinding = voice?.Binding,
@@ -249,6 +251,7 @@ internal partial class RuntimeNativeSpeech : Node
         _said = saidInfos ?? [];
         _voiceIndex = null;
         Name = "SourceSpeech";
+        ProcessMode = ProcessModeEnum.Pausable;
     }
 
     private Voice Channel(FalloutFormKey speaker)
@@ -451,7 +454,7 @@ internal partial class RuntimeNativeSpeech : Node
         voice.Identity = SpeakerIdentity(speaker.FormKey);
     }
 
-    private void PlayResponse(Voice voice)
+    private void PlayResponse(Voice voice, FalloutActiveRadioVoiceSnapshot? cold = null, bool start = true)
     {
         var info = voice.Info ?? throw new InvalidOperationException("Source INFO was lost.");
         var response = info.Responses[voice.ResponseIndex];
@@ -459,6 +462,7 @@ internal partial class RuntimeNativeSpeech : Node
             (PrepareSubtitle ?? throw new NotSupportedException("SayTo has no subtitle presentation owner."))(subtitle);
         if (SubtitleCandidates().Length > 1 && _unbound.Add("concurrent-subtitle-selection"))
             GD.PushWarning("OPENNV_NATIVE_SPEECH_UNBOUND concurrent-subtitle-selection candidates=retained-in-telemetry");
+        RetireRadioPcm(voice);
         voice.Binding = null; voice.LipSha256 = null; voice.Advance = false;
         voice.Lip = null; voice.LipWeights = [];
         ClearResponseSound(voice);
@@ -502,9 +506,26 @@ internal partial class RuntimeNativeSpeech : Node
         else _unbound.Add("missing-source-lip:" + lipPath);
         if (voice.Creature is not null) _unbound.Add("creature-speech-face:" + voice.Reference);
         if (voice.TalkingActivator && voice.Lip is not null) _unbound.Add("talking-activator-lip-animation:" + voice.Reference);
-        voice.Player.Stream = NativeOwnedMediaLoader.LoadAudio(voice.Binding.AudioPath);
+        if (voice.Radio is not null)
+        {
+            var data = RadioPcm(voice.Binding.AudioPath);
+            if (cold is not null && (cold.Binding != voice.Binding || cold.DecodedSha256 != data.Sha256 ||
+                cold.AudioSha256 != data.MediaSha256 || cold.LipSha256 != voice.LipSha256))
+                throw new InvalidDataException("Cold radio voice differs from its original owned audio, LIP or decoded samples.");
+            voice.Pcm = new(data, new(FalloutSoundLoopMode.None, 0, 0), cold?.Samples, !CanProcess());
+            voice.Player.Stream = voice.Pcm.Stream;
+            voice.Player.ProcessMode = ProcessModeEnum.Pausable;
+            _unbound.Add("radio-decoder-output-and-retail-mix-unmatched");
+        }
+        else voice.Player.Stream = NativeOwnedMediaLoader.LoadAudio(voice.Binding.AudioPath);
+        if (cold is not null)
+        {
+            voice.Advance = cold.Advance || !cold.Samples.Playing && !cold.Samples.StartPending;
+            voice.Lip?.Sample(cold.Samples.Position / cold.Samples.SourceRate, voice.LipWeights);
+        }
+        if (!start) return;
         voice.Player.Play();
-        GD.Print($"OPENNV_NATIVE_SPEECH_BEGIN info={info.Record.FormKey} response={response.Number} " +
+        GD.Print($"OPENNV_NATIVE_SPEECH_{(cold is null ? "BEGIN" : "RESTORE")} info={info.Record.FormKey} response={response.Number} " +
             $"speaker={voice.Command!.SpeakerEditorId} voice={voice.Binding.AudioPath} lip={lipPath} voiceType={voice.Binding.VoiceType} " +
             $"speakerIdle={response.SpeakerAnimation} lipLoaded={voice.Lip is not null} facePose={(voice.TalkingActivator ? "talking-activator-unbound" : voice.Speaker is null ? "creature-unbound" : !IsInstanceValid(voice.Speaker) ? "speaker-presentation-unloaded" : "owned-tri-lip-morphs")} headMotion=unbound spatialAudio=unbound parity=unmeasured");
     }
@@ -542,6 +563,8 @@ internal partial class RuntimeNativeSpeech : Node
 
     private void ProcessVoice(Voice voice)
     {
+        // A native mixer failure cannot turn into a successful source line end.
+        voice.Pcm?.RequireHealthy();
         if (voice.Lip is not null)
         {
             voice.Lip.Sample(voice.Player.GetPlaybackPosition(), voice.LipWeights);
@@ -550,6 +573,7 @@ internal partial class RuntimeNativeSpeech : Node
         if (!voice.Advance) return;
         voice.Advance = false;
         ClearResponseSound(voice);
+        RetireRadioPcm(voice);
         EndListenerAnimation(voice);
         if (IsInstanceValid(voice.Speaker)) voice.Speaker!.EndResponseAnimation();
         if (voice.ResponseCompleted is { } completion)
@@ -640,7 +664,7 @@ internal partial class RuntimeNativeSpeech : Node
         _npcDialogueParticipants.Clear();
         foreach (var voice in _channels.Values)
         {
-            voice.Player.Stop(); ClearResponseSound(voice);
+            voice.Player.Stop(); ClearResponseSound(voice); RetireRadioPcm(voice);
             EndListenerAnimation(voice);
             if (IsInstanceValid(voice.Speaker))
             {
@@ -660,6 +684,15 @@ internal partial class RuntimeNativeSpeech : Node
     {
         if (IsInstanceValid(voice.ResponseSound)) voice.ResponseSound!.Free();
         voice.ResponseSound = null;
+    }
+
+    private static void RetireRadioPcm(Voice voice)
+    {
+        if (voice.Pcm is not { } pcm) return;
+        voice.Player.Stop();
+        if (voice.Player.Stream == pcm.Stream) voice.Player.Stream = null;
+        voice.Pcm = null;
+        pcm.Dispose();
     }
 
     private static void EndListenerAnimation(Voice voice)

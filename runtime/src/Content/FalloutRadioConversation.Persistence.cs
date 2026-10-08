@@ -4,12 +4,19 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutFinishedRadioConversationSnapshot(FalloutRadioStation Station,
     string ReferenceSha256, string BaseSha256, FalloutFormKey Topic, string TopicSha256, long CompletedLines);
+internal sealed record FalloutActiveRadioConversationSnapshot(FalloutFinishedRadioConversationSnapshot Identity,
+    FalloutFormKey Info, string InfoSha256);
 
 internal sealed partial class FalloutRadioConversation
 {
     internal FalloutFinishedRadioConversationSnapshot CaptureFinishedState()
     {
         if (Active) throw new NotSupportedException("Active radio requires its audio/result continuation.");
+        return CaptureIdentity();
+    }
+
+    private FalloutFinishedRadioConversationSnapshot CaptureIdentity()
+    {
         var station = Station ?? throw new InvalidOperationException("Ended radio has no original station.");
         var topic = Topic ?? throw new InvalidOperationException("Ended radio has no original topic.");
         var snapshot = new FalloutFinishedRadioConversationSnapshot(station,
@@ -18,6 +25,39 @@ internal sealed partial class FalloutRadioConversation
             FalloutActorFurnitureContinuation.RecordHash(records.GetEffective(topic)), CompletedLines);
         ValidateFinishedState(records, snapshot);
         return snapshot;
+    }
+
+    internal FalloutActiveRadioConversationSnapshot CaptureActiveState()
+    {
+        var info = Info ?? throw new InvalidOperationException("Active radio has no selected line.");
+        var snapshot = new FalloutActiveRadioConversationSnapshot(CaptureIdentity(), info.Record.FormKey,
+            FalloutActorFurnitureContinuation.RecordHash(info.Record));
+        ValidateActiveState(records, snapshot);
+        return snapshot;
+    }
+
+    internal static FalloutDialogueInfo ValidateActiveState(FalloutPluginStack records, FalloutActiveRadioConversationSnapshot snapshot)
+    {
+        if (snapshot.Identity is null || !FalloutActorFurnitureContinuation.ValidKey(snapshot.Info))
+            throw new InvalidDataException("Active radio lost its retained station history or selected INFO.");
+        ValidateFinishedState(records, snapshot.Identity);
+        var record = records.GetEffective(snapshot.Info);
+        var parent = record.Groups.Where(group => group.Type == 7).ToArray();
+        if (record.IsDeleted || record.Signature != "INFO" || parent.Length != 1 ||
+            record.Plugin.AdjustFormId(parent[0].LabelAsUInt32) != snapshot.Identity.Topic || !HashMatches(record, snapshot.InfoSha256))
+            throw new InvalidDataException("Active radio differs from its selected winning INFO or topic.");
+        var info = FalloutDialogueTopic.Decode(record);
+        _ = FalloutDialogueSpeaker.Read(records, info.Speaker ?? snapshot.Identity.Station.Base);
+        return info;
+    }
+
+    internal void RestoreActiveState(FalloutActiveRadioConversationSnapshot snapshot)
+    {
+        var info = ValidateActiveState(records, snapshot);
+        RestoreFinishedState(snapshot.Identity);
+        // The selection and result prefix already happened. Conditions and RNG
+        // are only consulted for the next link after this line finishes.
+        Info = info;
     }
 
     internal static void ValidateFinishedState(FalloutPluginStack records, FalloutFinishedRadioConversationSnapshot snapshot)

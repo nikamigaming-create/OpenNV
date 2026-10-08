@@ -65,6 +65,11 @@ if (args is ["--test-numeric-ini"])
     NumericIniSettingProbe.Run();
     return;
 }
+if (args.Length >= 3 && args[0] == "--audit-numeric-ini")
+{
+    NumericIniSettingProbe.Owned(args[1], args[2], args[3..]);
+    return;
+}
 if (args is ["--test-static-settings"])
 {
     StaticExecutableSettingsContracts.Run();
@@ -1514,6 +1519,17 @@ try
     Require(JsonSerializer.Serialize(playerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio),
         "Ended player package lost its persistent sound fault or RNG state cold.");
     var priorPlayerAudioSave = playerAudioSave with { Schema = FalloutNativeCampaignSave.PlayerAudioSchema };
+    var priorRadioSave = playerAudioSave with { Schema = FalloutNativeCampaignSave.FinishedRadioSchema };
+    FalloutNativeCampaignSave.Write(syntheticSavePath, priorRadioSave);
+    var priorRadioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(priorRadioRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+        JsonSerializer.Serialize(priorRadioRestore.State.References) == JsonSerializer.Serialize(playerAudioSave.References),
+        "The v48 migration changed source reference state.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorRadioSave with
+    {
+        FinishedSpeech = new([], 0, 0, 0, 0, 0, null, ActiveRadio: [])
+    }), "future active radio continuation");
     FalloutNativeCampaignSave.Write(syntheticSavePath, priorPlayerAudioSave);
     var priorPlayerAudioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);

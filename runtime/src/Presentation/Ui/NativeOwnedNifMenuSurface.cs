@@ -107,6 +107,11 @@ internal sealed partial class NativeOwnedNifMenuSurface : Control
 
     internal MeshInstance3D Geometry(string name) => _geometry.TryGetValue(name, out var mesh) ? mesh :
         throw new InvalidDataException($"Owned menu geometry is absent: {name}.");
+    internal void PreloadTextures(IEnumerable<string> paths)
+    {
+        foreach (var path in paths)
+            if (!_textures.ContainsKey(path)) _textures.Add(path, NativeOwnedMediaLoader.LoadTexture(path));
+    }
     internal void SetTexture(string name, string path)
     {
         var mesh = Geometry(name);

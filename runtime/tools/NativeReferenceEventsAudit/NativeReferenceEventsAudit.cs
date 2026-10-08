@@ -46,6 +46,15 @@ public partial class NativeReferenceEventsAudit : Node
                     firstCreatureSound, secondCreatureSound, creatureSoundKf, creatureSoundDependencies);
                 GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--creature-sound-emitters-checkpoint", var checkpointCreatureRoot,
+                var checkpointCreatureMod, var checkpointCreatureModRoot, var creatureCheckpoint,
+                var checkpointCreature, var checkpointCreatureKf, .. var checkpointCreatureDependencies])
+            {
+                await ExerciseOwnedCreatureSoundEmittersCheckpoint(checkpointCreatureRoot, checkpointCreatureMod,
+                    checkpointCreatureModRoot, creatureCheckpoint, checkpointCreature, checkpointCreatureKf,
+                    checkpointCreatureDependencies);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--sound-emitters", var soundRoot, var soundMod, var soundModRoot,
                 var firstSoundReference, var secondSoundReference, .. var soundDependencies])
             {

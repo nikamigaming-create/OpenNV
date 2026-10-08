@@ -10,6 +10,7 @@ public partial class NativeReferenceEventsAudit
 {
     private void AnimatedActivators(FalloutPluginStack records)
     {
+        DoorMotionConstructionLifetime(records);
         using var world = new FalloutReferenceWorld(records);
         var sourceCell = FalloutCellSceneReader.Read(records, Key(0x800));
         var cell = sourceCell with { References = sourceCell.References.Where(value => value.FormKey.ObjectId is >= 0xb40 and <= 0xb47).ToArray() };
@@ -37,12 +38,12 @@ public partial class NativeReferenceEventsAudit
                 instance.BindObjectAnimationCapture(capture); captures.Add((instance, capture));
                 if (id is not (0xb43 or 0xb44))
                 {
-                    var motion = new RuntimeNativeDoorMotion(instance, [controller], () => changes++);
-                    node.AddChild(motion); motion.SetProcess(false);
+                    var motion = RuntimeNativeDoorMotion.Attach(node, instance, [controller], () => changes++);
+                    motion.SetProcess(false);
                     if (id == 0xb47)
                     {
-                        var duplicate = new RuntimeNativeDoorMotion(instance, [controller], () => changes++);
-                        node.AddChild(duplicate); duplicate.SetProcess(false);
+                        var duplicate = RuntimeNativeDoorMotion.Attach(node, instance, [controller], () => changes++);
+                        duplicate.SetProcess(false);
                     }
                 }
                 nodes[key] = node; controllers[key] = controller;
@@ -153,14 +154,14 @@ public partial class NativeReferenceEventsAudit
         .Concat(Record("SCPT", 0x582, Local(1, "prefix"), Field("SCTX", Encoding.ASCII.GetBytes(
             "short prefix\nbegin OnActivate\nset prefix to prefix + 1\nActivate\nset prefix to 99\nend")))).ToArray();
 
-    private static byte[] AnimatedActivatorNifFixture()
+    private static byte[] AnimatedActivatorNifFixture(bool loopingOpen = false)
     {
         static byte[] Emit(Action<BinaryWriter> emit)
         { using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream); emit(writer); return stream.ToArray(); }
         void Time(BinaryWriter w, int next, ushort flags = 0x004c)
         { w.Write(next); w.Write(flags); w.Write(1f); w.Write(0f); w.Write(float.MaxValue); w.Write(float.MinValue); w.Write(0); }
         byte[] Sequence(int name, int keys) => Emit(w =>
-        { w.Write(name); w.Write(0); w.Write(0); w.Write(1f); w.Write(keys); w.Write(2U); w.Write(1f); w.Write(0f); w.Write(.2f); w.Write(1); w.Write(0); w.Write((ushort)0); });
+        { w.Write(name); w.Write(0); w.Write(0); w.Write(1f); w.Write(keys); w.Write(loopingOpen && name == 1 ? 0U : 2U); w.Write(1f); w.Write(0f); w.Write(.2f); w.Write(1); w.Write(0); w.Write((ushort)0); });
         byte[] Keys() => Emit(w => { w.Write(-1); w.Write(2); w.Write(0f); w.Write(3); w.Write(.2f); w.Write(4); });
         (string Type, byte[] Data)[] blocks =
         [

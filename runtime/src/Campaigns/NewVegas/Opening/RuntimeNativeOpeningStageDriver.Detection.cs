@@ -40,7 +40,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             var result = _resultScripts!.ResumeSpeechCompletion(receipt);
             if (result.Error is { } error) throw new NotSupportedException($"Source SayToDone actor {receipt.Speaker} failed: {error}");
         };
-        _speech.RestoreFinishedState(_restoreFinishedSpeech);
+        _speech.RestoreState(_restoreFinishedSpeech);
         if (_restoreFinishedSpeechStage is { } stage)
         {
             var fields = _pluginStack.GetEffective(stage.Quest).ReadSubrecords().Where(field => field.Signature == "EDID").ToArray();

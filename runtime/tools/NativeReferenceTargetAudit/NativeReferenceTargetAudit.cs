@@ -224,7 +224,7 @@ public partial class NativeReferenceTargetAudit : Node3D
                 Require(isDoor, "Owned door geometry requires an actual source DOOR.");
                 var controllers = target.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
                 doorController = controllers.Single(controller => controller.HasSequence("Open") && controller.HasSequence("Close"));
-                doorMotion = new(world.Get(key), controllers, () => { }); target.AddChild(doorMotion);
+                doorMotion = RuntimeNativeDoorMotion.Attach(target, world.Get(key), controllers, () => { });
                 doorMotion.SetProcess(false); await Sync();
             }
             var doorApproach = isDoor && !doorGeometry;

@@ -2,182 +2,219 @@
 
 ## Active objective
 
-Make ordinary loading, saving and play reliable in standalone FNV, standalone
-Fallout 3, TTW and the combined stack, verified independently in flat/OpenXR.
-Repair reached physics, actors, vegetation, LOD and performance, then deliver the
-requested loading/walking showcases for all three games. Standalone FO3 must
-reach the exterior and look toward Megaton through ordinary saved play.
-The latest immediate priority is one edited OpenXR video of all three, including
-walking, conversation, tracked hands, wrist UI and genuine hostile encounters.
-The requested 2:04 cut is exported and inspected; gameplay timing, native audio
-and the original colors are retained within each selected excerpt. The user accepts the
-FO3 toddler scene for this showcase; its tenth-birthday Pip-Boy and the later
-Megaton route retain their separate source progression requirements.
-Preserve the complete TTW Megaton/Union Station/Mojave/Benny route, JAM,
-compiled SCDA, unchanged x86 plugins and retail comparison requirements in
-[implementation-plan.md](implementation-plan.md). All 36 broad requirements
-remain open; component checks do not establish a completion percentage.
+Complete standalone FNV, standalone Fallout 3, TTW, every selected DLC/mod and
+their combined behavior in flat/OpenXR. The user explicitly requires all nine
+JAM modules, JIP, JohnnyGuitar and JFP. JFP's package identity remains unresolved.
+Every source entity, runtime effect, save owner, audio/UI/draw/frame and final
+pixel belongs to the acceptance denominator. [implementation-plan.md](implementation-plan.md)
+defines the complete source graph, parallel ownership, ordinary campaigns, cold
+continuation, matched retail evidence and checked publication. All 36 broad
+requirements remain open; component checks establish no completion percentage.
+
+Use all four available owners. Primary serially integrates, builds, plays,
+checks saves and publishes. The other owners handle source menus/navigation,
+audio/save continuation and source/resource lifetime failures. Reassign finished
+owners to compiled SCDA, unchanged x86 plugin execution and the next reached
+campaign/rendering failure. C# remains authoritative; owned files are read-only
+inputs and private observations never become gameplay authority.
 
 ## Verified state
 
-FNV's ordinary creation now reaches stage 200, accepts the source farewell and
-Hardcore choice and crosses the actual house door into Goodsprings. An ordinary
-menu save writes a complete v48 checkpoint at 120 HP with 27 inventory entries
-and CharacterCreationComplete=true. Another process cold-Continues that exterior
-checkpoint in 35.7 seconds with the original position, 120 HP, all 27 entries and
-unchanged save bytes. Its requested daytime loading/walk/pan MP4 is delivered.
-The earlier stage-110 checkpoint cold-restores 120 HP with unchanged bytes.
-The earlier stage-55 v47/v48 checkpoints also cold-restore in flat; native OpenXR
-simulator controller input saves and another process cold-restores that partial
-opening. Physical-headset acceptance remains pending.
+Independent source corpus/quest audits cover FNV, FO3, TTW and the combined
+stack. The exact launcher selection is now audited with its own ordered plugins,
+dependencies and settings identity. Its corpus retains 17 failures among 27,889
+source programs; its quest lane retains 17 failures, 5,332 unbound statements and
+90,030 uninspected commands. All 155,200 program rows are accounted for, including
+27,057 with compiled bytes and seven compiled-only programs. There are zero
+compiled execution owners. The quest lane exits with failure; enumeration does
+not certify script effects, native DLL execution or campaign support.
 
-Fresh OpenXR simulator play cold-Continues Goodsprings, equips and reloads the
-source Weathered 10mm pistol through ordinary wrist/controller input, walks into
-town and selects Easy Pete's original voiced dialogue. After walking outside
-town, tracked trigger input kills two resident source coyotes. One attacks twice
-before dying; the other dies without an attack. Inspected submitted-eye footage
-shows the held weapon, hands, creatures and damage/death presentation. This does
-not certify complete AI, corpse physics, rendering or retail combat parity.
+Ordinary FNV creation reaches stage 200, accepts the source farewell/Hardcore
+choice and exits to Goodsprings. Its complete v48 checkpoint cold-Continues in
+another process with the walked position, 120 HP, 27 inventory entries and
+unchanged bytes. Simulator wrist/controller input equips and reloads the source
+pistol, selects Easy Pete's voiced dialogue and kills two resident coyotes.
+Creature routing, full combat and matched retail presentation remain open.
 
-The reported FNV runaway globes now bind their actual source model hinges.
-The previous constrained-body static substitution has been removed. Separate
-source checks pass the globe/bucket frames in FNV, FO3, TTW and the combined stack.
-Native independent instances fall, rotate about their declared axis and settle
-without driving their sibling or changing their prototype. The rebuilt ordinary
-room retains both globes on their stands with the spinning stopped; inspected
-pixels and source-bound velocities agree. Recording is off and temporary frames
-are deleted. See [source model hinges](source-model-hinges.md) for boundaries.
+Standalone FO3's genuine immutable stage-14 checkpoint cold-restores at 100 HP
+with both inventory entries. Shared NPC door ownership and capsule navigation
+let Dad complete the source playpen/room route to stages 16, 18 and 20. Ordinary
+activation opens the gate and player movement reaches stage 30. The book's owned
+FO3 transform/light/projection and all 25 texture declarations now bind without
+substituting FNV compiler layout. Independent FNV/FO3/TTW/combined source audits
+and fresh FO3/TTW native menu checks pass.
 
-Standalone FO3 completes ordinary CG00 creation and reaches CG01 toddler stage
-14 by walking to Dad and opening the source playpen gate. Its independent manual
-v48 checkpoint cold-Continues in another process at 100 HP, the walked position
-and both inventory entries with unchanged bytes. Inspected pixels show Dr. Li
-and Dad's body/outfit; the red placement-marker meshes are excluded. Source
-executable defaults, creation menus and activation labels bind independently of
-FNV. Matched retail color/final pixels and the complete opening remain unverified.
+A fresh ordinary FO3 process activates the actual book, enters stage 50 with
+the source 40-point budget and uses its geometry pointer controls to allocate
+6/6/6/5/6/6/5. Source Done releases pause/input. Dad's bookshelf package now
+retains its existing arrival radius after the required source corridor, rather
+than first demanding a colliding exact endpoint. Native full-capsule checks
+retain wall, floor, intermediate-portal and unknown-residency refusals. Ordinary
+play independently advances stages 70, 72, 73, 74, 75, 80, 90 and 100, then the
+original movie/age/equipment handoff reaches CG02 birthday stage 12. The actual
+party actors/cake/balloons are visible in a selected inspected frame. No quest
+stage, source geometry or checkpoint was edited. The reached FO3 optimized
+inventory/radio notice declarations now pass independent synthetic refusals and
+owned FNV/FO3/TTW/combined media checks. Fresh ordinary birthday replay emits
+the actual Vault 101 radio discovery notice and permits the previously blocked
+Amata interaction. That action reaches a new dialogue failure: priority sorting
+reads an unrelated The Pitt line's absent quest before the source speaker check
+can exclude that line. Its owned GetIsID condition cannot match Amata. General
+speaker admission before priority sorting owns the next fix; eligible missing
+owners must still fail. Complete
+childhood, the vault exit, Megaton and later cold checkpoint acceptance remain open.
 
-The shared finer capsule grid now lets Dad complete his original close-gate
-package and advance stage 16. His room door declares that NPC's base as owner;
-the native interaction admits him without unlocking it for another caller. Dad
-opens it once, walks through, and original completion scripts advance stages 18
-and 20. Ordinary player movement leaves the playpen and reaches stage 30. The
-later state has no new cold checkpoint: manual saves fail on active background
-radio speech. The immutable stage-14 checkpoint remains reusable. See
-[native NPC door access](native-npc-door-access.md).
+Save v49 supports bounded active source-radio continuation. Its fresh-owner
+native check preserves 257 exact samples and the fractional clock, including
+paused startup and initially Disabled new/restored voices, without replaying
+the prefix or completing a line twice. Real mixer-fault checks refuse both
+Finished and Stop completion without emitting success callbacks. Native playback
+release frees its context once. Opaque callbacks and independently unowned
+speech/SOUN/IDLE continuations remain refused. Raw sample continuation does not
+establish retail decoding, mixing, speaker output or device-buffer parity.
 
-A fresh standalone FO3 OpenXR process repeats Dad's original route, leaves the
-playpen through controller locomotion and reaches CG01 stage 40. Ordinary
-activation of SPECIAL book 02ecc0 advances to stage 73, then fails closed because
-its owned transform/light/projection layout is unbound. The selected video shows
-the actual loading handoff, Dad, toddler room and initial walk; later opening
-progression and source child hand/device presentation retain their own owners.
+Typed primary source-bone continuation now retains reference, NIF identity/hash,
+bone block/name and fractional PCM clock. A fresh parsed native skeleton
+recreates one canonical adapter before any key, preserves 257 exact samples and
+refuses source drift, independent ANIO and authoritative disabled owners.
+The bone fixture's eight native audio owners and the owned radio fixture's 18
+owners disappear before clean verbose shutdown. Native validity checks acquire
+no bindings or references; real wall time bounds stalled-mixer retirement.
+An actual living TTW creature passes finite source-key/native-finish and cold
+skeleton reconstruction against its immutable checkpoint. Its full 8,496-reference
+graph, script values, saved enable parent and prior event history remain intact.
+The dead creature independently refuses equip dispatch, and the fresh disabled
+source graph remains refused. This establishes no looping or complete save lane.
 
-TTW ordinary input completes the aggressive/key route, defeats the guards,
-loots the source office key/password and crosses the authored terminal, tunnel
-and vault exit to stage 150. The complete cave, post-loot and exterior checkpoints
-remain immutable and cold-verified at 115 HP and 8/14 rounds. Native exterior
-cold Continue drains the original selected LOD queue: all 121 selected tiles
-remain resident, pending zero. A subsequent walked v48 checkpoint retains nine
-inventory entries. Another process cold-Continues it in 43.1 seconds at the walked
-position with 115 HP, 8/14 rounds, nine entries and unchanged bytes. The requested TTW
-loading/short-walk MP4 is delivered with actual game time, audio and stalls.
-Megaton/train/Mojave traversal and physical-headset acceptance remain open.
+Ordinary FO3 saves at stages 20 and 30 still refuse animation-sound-continuation:
+six active legacy birth loops lack restored native emitter owners. Their actor
+is effectively disabled through its saved XESP parent; materializing it or
+inventing loop completion would change authoritative state. The immutable
+stage-14 entry remains playable but is not a complete later checkpoint.
 
-Another independent TTW OpenXR process cold-Continues the immutable walked
-checkpoint, walks around the actual canyon colliders and kills resident source
-molerat 0601e7 with the equipped 10mm pistol. Four ordinary trigger shots consume
-ammunition; three resolve source damage and the last kills. The creature
-approaches but records no attack. The selected night footage includes loading,
-walking, the encounter and the live wrist Pip-Boy. Native route failures remain
-visible rather than being bypassed by teleporting or edited save state.
+TTW ordinary input completes the source key/combat/terminal/tunnel route and
+vault exit to stage 150. Its immutable walked exterior checkpoint cold-Continues
+at the saved position with 115 HP, 8/14 rounds, nine entries and unchanged bytes.
+All 121 selected LOD tiles remain resident with pending zero. A simulator run
+walks around the canyon colliders and kills the source molerat with ordinary
+trigger shots. Megaton/Union Station/Mojave/Benny and all campaign branches remain
+open. A fresh TTW XR Continue/menu Quit against the explicit pinned engine
+candidate exits both processes naturally with code zero, retires all 396
+prototypes/source owners and reaches a clean resource footer.
 
-Atomic flushed same-folder saves and transactional load rollback preserve
-Continue on failed writes/restores. Source PCM loop position/release state,
-automatic object clocks, door groups and ended player-package/radio histories
-retain their independent owners. Contract and native fractional-sample/pause
-checks pass; active speech/opaque callback continuation still blocks saving.
-The finite authored image-space whiteout expires rather than accumulating.
+Failed source collision construction now owns its detached body and partial
+shapes through rejection. Native synthetic static/dynamic failure checks and
+the actual FO3 vault door/operating light and TTW Megaton ramp refusals pass
+without orphan-node growth or shutdown leaks. Their unsupported source shapes
+remain visible. Mesh/skin/hinge construction now releases detached roots on the
+corresponding
+failure boundaries. Native repeated construction checks preserve independent
+skins, meshes, bodies, joints and source poses with no resource growth. Injected
+joint-configuration exceptions remain untriggered; fresh complete session
+retirement remains its own gate.
+
+The fresh FO3 birthday replay naturally quits both processes with exit code zero, preserves the
+original save hash and reports no prior body/ObjectDB shutdown leak warnings.
+It retains 39 distinct source/runtime errors: unsupported collision shapes and
+phantoms, modeled emergency lights, double-vision phase, dialogue selection,
+NPC guard/editor-travel/patrol/procedure and condition-subject ownership, and
+unowned save continuations. These remain independently failed evidence lanes;
+source quest advancement does not certify the whole scene or every actor.
+
+The requested 2:04 three-game simulator showcase is exported. Full-duration
+audio/video decoding succeeds for all eight source clips and the final edit.
+Timeline inspection retains approximately 14-19 distinct submitted images per
+second in 30 fps exports and startup repeats up to 17 seconds. The dark TTW
+view and unverified child hands/device remain failures. This single-eye edit
+does not establish stereo, physical-headset acceptance or matched retail parity.
+Recording is off; selected temporary inspection frames have been deleted.
 
 ## Current divergence owners
 
-Active background radio speech blocks an ordinary FO3 save at the reached stage
-30. Its current voice, response/link/result cursor, generation, source/media
-identity and audio sample clock need persistent owners. Ended speech/radio
-history cannot substitute for active continuation. Preserve opaque-callback
-refusals while implementing the reached source-owned speech capability. The next
-ordinary tutorial blocker is the source SPECIAL book's presentation consumer,
-reached at CG01 stage 73. Bind its owned transform/light/projection declaration
-in FalloutSpecialBookPresentation without substituting FNV layout or inventing
-character allocation. The earlier checkpoint remains the reusable entry point.
+Finish the current general save/resource block and its required runtime gate.
+The FO3 direct GMST/Float32 radio notice advances under ordinary birthday input;
+repair the newly traced dialogue admission/priority order through source ownership.
+Follow with the retained source AI/condition,
+collision/phantom/light and double-vision owners. Promote the reviewed general
+GetSitting source-subject capability on the next fresh branch; the separate
+Eat procedure still needs its actual food/furniture/idle/inventory lifecycle.
+Disabled, anonymous legacy and independently unowned ANIO continuations remain
+explicit audio boundaries. Retail Disable/loop semantics still require
+independent evidence; the immutable birth-loop history must not be rewritten.
 
-Source creature pursuit/capsule routes fail on reached exterior terrain. FNV's
-selected coyote can attack when ordinary player movement reaches melee range;
-TTW's selected molerat approaches but never attacks during the recorded take.
-These observations do not establish general AI completion. Headshot corpse
-presentation and source child hand/device visibility also remain unverified.
+Two pinned Godot OpenXR owners have separate defects: allocated interaction
+profiles never enter their retiring RID collection, and unsupported spatial
+marker tracking disconnects a signal it never connected. An isolated exact-tag
+engine candidate builds from the exact installed tag. A minimal simulator check
+passes actual controller press/release and distinct-profile retirement with a
+clean footer; the same check on the installed engine reproduces both defects.
+A second initialization exposes another failed engine owner: Uninitialize leaves
+the native session alive. A separate fresh candidate TTW Continue/menu Quit
+hangs before renderer/XR retirement: all 28 workers sleep with empty task queues,
+while the worker-pool PRE_EXIT idle count remains eight. Read-only stack and
+counter observations identify missed peer accounting after low-priority backlog
+promotion. The separate general peer-wake repair builds and repeats ordinary
+TTW Continue/controller-menu/Quit with natural exit and the complete footer.
+Prior profile/marker/Jolt diagnostics are absent. Door motion now admits all
+deterministic source/clock failures before allocating a native Node. Eighty
+repeated native refusals and cold restoration pass without node/state/history
+growth or key replay. A fresh ordinary TTW candidate session naturally quits
+with a clean full footer; the original three unsupported door-controller
+refusals remain visible. Its 705 distinct source diagnostics include all 565
+missing SpeedTree references. The actual-owner backlog regression and repeated
+same-interface session lifecycle remain unexecuted. Supported
+marker tracking and broad engine acceptance remain open. The installed engine
+is unchanged; the earlier debugger-tainted hang is not used as causal proof.
 
-The reached TTW exterior has 565 missing owned SpeedTree references. Paths now
-resolve their original trees/ resources; procedural geometry decoding remains
-unbound. Terrain/object LOD have independent coverage, and nearby fading needs
-the source distant flag plus actual object coverage. Property-free material draws,
-water/degenerate semantics and whole-reference upload spikes remain open. FNV's
-reached Goodsprings view reports 16 missing material draws despite its drained
-LOD queue. The original FNV/TTW reference-script failures remain visible.
+The reached TTW exterior has 565 missing owned SpeedTree references despite
+resolved resource paths. Procedural geometry, property-free material draws,
+water/degenerate semantics, nearby fade coverage and whole-reference upload
+spikes remain unbound. Reached FNV material omissions and source-reference
+errors remain visible. Creature pursuit and melee routes, child hand/device
+presentation, generic loose-object physical persistence and remaining joint
+types retain independent owners.
 
-Generic loose-object physics poses have no complete persistent owner yet.
-Source model hinges fix runaway motion, not save/retail solver parity. Other
-joint kinds and nonuniform scale remain explicit unsupported behavior.
-
-Combined-stack ordinary play/save acceptance, independent FO3 XR acceptance,
-active speech saving, modeled emergency lights, complete packages/IDLE,
-GetDetected, Flee/NPC portals, level allocation and complete world rendering
-remain open. JAM source hit/calendar contracts do not establish native callback
-or unchanged-DLL behavior. No matched retail parity or clean-system complete
-New Game/campaign claim is accepted from these component checks.
+JAM source hit/calendar contracts do not certify its nine ordinary outcomes,
+native callback delivery or unchanged dependencies. Complete compiled SCDA,
+the real x86 CPU/PE/import/TLS/ABI/hook/serialization host, MCM and combined-stack
+ordinary play/save acceptance are early architecture work. Preserve compiled-only
+programs and the complete winning graph; do not replace downloaded DLLs with a
+managed compatibility claim.
 
 ## Next owner and outcome
 
-Primary owns serial builds, live input, save verification and checked publication.
-The bounded source-hinge fix is merged through the required runtime gate and
-checked PR. The native NPC route/ownership and semantic XR weapon-action repairs
-are also merged through the full runtime gate and owned controller fixture.
-The single three-game edit includes FNV town dialogue and two coyote kills,
-standalone FO3 Dad/childhood and TTW's night walk, molerat kill and Pip-Boy.
-The 1920x1080 MP4 retains each whole square eye image, original timing and colors,
-native audio and explicit chapter cuts. Full audio/video decode and selected
-source/final frames pass inspection. Recording is off and all three game
-processes are closed. This single-eye capture does not certify
-physical-headset acceptance, stereo, complete rendering or retail combat parity.
-Bind FO3's reached SPECIAL-book presentation and resume the preserved active-radio
-save implementation, continue the genuine FO3
-opening toward the vault exit/Megaton, and finish its later exterior video.
-Keep creature routing, vegetation decoding and upload timing active, complete
-the independent flat/OpenXR stack matrix and
-continue the authored TTW train/Mojave/Benny route without bypassing conditions.
+The integrated general source-menu/audio/resource block passes the full required
+runtime gate against installed Godot 4.7.2, including Release/Debug, analyzers,
+contract/launcher and verbose native door/navigation checks. Selected independent
+owned audits and fresh ordinary FO3/TTW replay results are retained above.
+Primary publishes its checked PR and verifies clean
+local main equals origin/main. Start the next bounded block on a fresh codex/
+branch with the traced dialogue admission/priority fix. Promote the reviewed compiled-authority proposal through the shared
+quest/reference/result owners alongside an early genuine plugin-host proof.
+Continue the original FO3 and TTW campaign routes without bypassing conditions.
+Every newly reached source/runtime/audio/UI/frame error needs an owner and
+reproduction; none is converted to success by reducing the denominator.
 
 ## Private continuation
 
-Owned files, saves, captures, helpers and logs remain private and out of publication.
-Standalone FNV run: tmp/development-lab/loading-saving-fnv-20261007.
-Goodsprings v48 slot: 100c5809e3aa4af5b4fe7801cfbd954a, cold verified.
-SHA256: A4F3B58394F7326A56D7E96821DAB2A79A77FC7996C07B98ECEE26B5011A6C3A.
-Earlier stage-110 slot: 356328b8de2046d989d7aa39db85c799, cold verified.
-SHA256: 6D858F2A980247BE14EB352C781A929C92FF9E2CFC366990ACA672D570E06528.
+Owned inputs, immutable saves, captures, helpers and logs remain private and
+outside publication. Reuse only cloned checkpoints; never overwrite originals.
 
-Standalone FO3 run: tmp/development-lab/loading-saving-fo3-20261007.
-Stage-14 v48 slot: 5341c6a0d9f146ddb7f141a4b1237961, cold verified.
-SHA256: 340C3CC918A528BBCE18FE18F276C4D3CD8F81C5F3965F2922DF46845BEAC012.
+- FNV Goodsprings: tmp/development-lab/loading-saving-fnv-20261007, slot
+  100c5809e3aa4af5b4fe7801cfbd954a, SHA256
+  A4F3B58394F7326A56D7E96821DAB2A79A77FC7996C07B98ECEE26B5011A6C3A.
+- FO3 toddler: tmp/development-lab/loading-saving-fo3-20261007, slot
+  5341c6a0d9f146ddb7f141a4b1237961, SHA256
+  340C3CC918A528BBCE18FE18F276C4D3CD8F81C5F3965F2922DF46845BEAC012.
+- TTW walked exterior: tmp/development-lab/loading-saving-ttw-20261007, slot
+  f657f146263a477a889668cc57b6f136, SHA256
+  99A3A0D51E88DB36B7D35030AB45FC2FA8E825EC5E5102EF930DE35472D930F0.
 
-TTW run: tmp/development-lab/loading-saving-ttw-20261007.
-Walked v48 slot: f657f146263a477a889668cc57b6f136, latest cold verified.
-SHA256: 99A3A0D51E88DB36B7D35030AB45FC2FA8E825EC5E5102EF930DE35472D930F0.
-Prior cold-verified exterior slot: 5e24f48be6604a26b50c52e81c8715e7.
-SHA256: D9654D35DB7BB3CD3731ED5C4F72E06DA985D62D07665A7CA6924D8545F8F13B.
-Requested clips: local/recordings/showcase-20261007/ttw-loading-walk-01.mp4 and
-local/recordings/showcase-20261007/fnv-loading-walk-01.mp4.
-Single requested edit: local/recordings/showcase-20261007/opennv-three-games-vr-showcase.mp4.
-Its private JSON maps source excerpts and chapter times; runtime source is
-61ea88c7a4eea6424713d18b30f82ec6b22e5590, with an optimized Debug build.
-All three immutable checkpoint hashes above are unchanged after these takes.
-Preserve original saves and selected active diagnostics. Temporary recording
-frames are deleted; recording remains off outside a specific visual check.
+Current integration evidence is under
+tmp/development-lab/full-scope-audit-20261007; ordinary FO3 replay is
+ordinary-fo3-source-notices-20261008. Fresh TTW natural clean XR quit is
+tmp/development-lab/full-scope-xr-ttw-door-lifetime-20261008.
+The requested MP4 is
+local/recordings/showcase-20261007/opennv-three-games-vr-showcase.mp4.
+Its original input mapping/timing remains private. Preserve only immutable
+checkpoints, requested deliverables and diagnostics still needed by active owners.

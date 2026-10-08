@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
@@ -6,6 +7,81 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 // nodes. A sound attachment reads the same real pose as the skin/contact owners.
 internal static class RuntimeNativeNifSoundEmitters
 {
+    internal static FalloutAnimationSoundBoneEmitterSnapshot? CaptureBone(Node3D actor, Node3D emitter,
+        FalloutFormKey? reference)
+    {
+        RequireNoAnimationObject(actor, emitter);
+        if (emitter is not BoneAttachment3D bone || !bone.HasMeta("opennv_nif_sound_bone_emitter")) return null;
+        if (reference is not { } owner)
+            throw new NotSupportedException("Source sound bone has no original reference history owner.");
+        var skeleton = PrimarySkeleton(actor, owner);
+        var index = bone.BoneIdx;
+        if (index < 0 || index >= skeleton.GetBoneCount() || !skeleton.HasBoneMeta(index, "opennv_nif_block"))
+            throw new NotSupportedException("Source sound bone lost its original primary skeleton block.");
+        var snapshot = new FalloutAnimationSoundBoneEmitterSnapshot(owner,
+            FalloutBsaArchive.CanonicalPath(skeleton.GetMeta("opennv_source_model", "").AsString()),
+            skeleton.GetMeta("opennv_nif_source_sha256", "").AsString(),
+            skeleton.GetBoneMeta(index, "opennv_nif_block").AsInt32(), skeleton.GetBoneName(index).ToString());
+        snapshot.Validate(owner);
+        RequireBoneBinding(bone, skeleton, snapshot);
+        return snapshot;
+    }
+
+    internal static Node3D RestoreBone(Node3D actor, FalloutFormKey reference,
+        FalloutAnimationSoundBoneEmitterSnapshot snapshot, Dictionary<string, Node3D> cache)
+    {
+        snapshot.Validate(reference);
+        var skeleton = PrimarySkeleton(actor, reference);
+        if (FalloutBsaArchive.CanonicalPath(skeleton.GetMeta("opennv_source_model", "").AsString()) != snapshot.SkeletonPath ||
+            !skeleton.GetMeta("opennv_nif_source_sha256", "").AsString().Equals(snapshot.SkeletonSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Cold sound bone differs from its winning source skeleton.");
+        var matching = Enumerable.Range(0, skeleton.GetBoneCount()).Where(index =>
+            skeleton.HasBoneMeta(index, "opennv_nif_block") &&
+            skeleton.GetBoneMeta(index, "opennv_nif_block").AsInt32() == snapshot.Block).ToArray();
+        if (matching.Length != 1 || skeleton.GetBoneName(matching[0]).ToString() != snapshot.Name)
+            throw new InvalidDataException("Cold sound bone has no unique original source block and name.");
+        // The real source skeleton and pose already exist. Recreate only the
+        // canonical adapter; resolving another key would replay source work.
+        var bone = BindBone(skeleton, matching[0], cache);
+        RequireNoAnimationObject(actor, bone);
+        RequireBoneBinding((BoneAttachment3D)bone, skeleton, snapshot);
+        return bone;
+    }
+
+    private static Skeleton3D PrimarySkeleton(Node3D actor, FalloutFormKey reference)
+    {
+        var skeleton = actor.HasMeta("opennv_nif_actor_skeleton")
+            ? actor.GetNodeOrNull<Skeleton3D>(actor.GetMeta("opennv_nif_actor_skeleton").AsNodePath()) : null;
+        if (actor.GetMeta("opennv_reference_form_key", "").AsString() != reference.ToString() ||
+            skeleton is null || skeleton.GetParent() != actor || !actor.HasMeta("opennv_nif_fixed_strings") ||
+            !skeleton.HasMeta("opennv_nif_fixed_strings") || !skeleton.HasMeta("opennv_nif_source_root_blocks"))
+            throw new NotSupportedException("Source sound bone has no complete original reference/skeleton owner.");
+        return skeleton;
+    }
+
+    private static void RequireBoneBinding(BoneAttachment3D bone, Skeleton3D skeleton,
+        FalloutAnimationSoundBoneEmitterSnapshot snapshot)
+    {
+        if (bone.OverridePose || bone.GetSkeleton() != skeleton ||
+            bone.GetMeta("opennv_nif_block", -1).AsInt32() != snapshot.Block ||
+            bone.GetMeta("opennv_nif_source_name", "").AsString() != snapshot.Name ||
+            skeleton.GetChildren().OfType<BoneAttachment3D>().Count(node =>
+                node.HasMeta("opennv_nif_sound_bone_emitter") && node.BoneIdx == bone.BoneIdx) != 1)
+            throw new InvalidDataException("Source sound bone adapter differs from its actual posed block.");
+    }
+
+    internal static void RequireNoAnimationObject(Node3D actor, Node3D emitter)
+    {
+        for (Node? node = emitter; node is not null; node = node.GetParent())
+        {
+            if (node.HasMeta("opennv_animation_object_form"))
+                throw new NotSupportedException("Source ANIO sound emitter requires its independent object/animation continuation.");
+            if (node == actor) break;
+        }
+    }
+
+    internal static bool HasAnonymousPath(string path) => path.Split('/').Any(part => part.StartsWith('@'));
+
     internal static (Node3D Emitter, bool FollowEmitter) Resolve(Node3D actor, string name,
         bool sourceLoop, Dictionary<string, Node3D> cache)
     {

@@ -96,6 +96,6 @@ internal partial class RuntimeNativeSpeech
             PhysicalRadioListeners(source.Base).Select(form => form.ToString()).ToArray() : [],
         continuousGeneration = "unbound",
         interruption = "unbound",
-        activeSave = "unbound"
+        activeSave = _channels.TryGetValue(pair.Key, out var voice) && CanCaptureRadioVoice(voice) ? "source-pcm-response" : "unbound"
     }).ToArray();
 }

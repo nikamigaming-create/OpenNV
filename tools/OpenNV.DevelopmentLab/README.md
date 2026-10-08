@@ -38,14 +38,30 @@ simulation of every possible game state. See [the audit contract](../../docs/que
 ```powershell
 dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- quest-graph $owned tmp/lab-quests-01
 dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- quest-graph $owned tmp/lab-ttw-quests-01 --mod ttw D:\OwnedMods\TTW D:\OwnedMods\xNVSE D:\OwnedMods\JIP
+dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- corpus $owned tmp/lab-selected-corpus-01 --mod-stack tmp/launcher-mods.private.json
+dotnet run --project tools/OpenNV.DevelopmentLab -c Release -- quest-graph $owned tmp/lab-selected-quests-01 --mod-stack tmp/launcher-mods.private.json --mod-order manual
 ```
 
-The explicit mod/dependency roots use the launcher's normal in-process source
-selection; they do not generate a persistent launch input. Reports include
+`--mod-stack` reads the launcher's existing JSON list of mod identities, roots
+and additional roots through the same selection, dependency, order and settings
+owners as launch. Use the same list for every audit of a selected game. The
+default order is `automatic`; pass `--mod-order manual` when the launcher uses
+manual order. These source options follow each command's positional arguments
+and also work with `cell-graph`. Legacy `--mod` and its dependency roots remain
+supported as the last arguments; combining it with `--mod-stack`, repeating a
+source option or omitting a value is refused. Standalone sources retain their
+detected Fallout 3 or New Vegas engine identity.
+
+The explicit selections do not generate a persistent launch input. Reports include
 source-stack hashes, per-program compiled hashes, all statements/predicate
 outcomes and separate decoding/declaration failures. Keep outputs private in a
 fresh ignored directory. Exit 1 retains structural failures; it does not stop
 enumeration or turn recorded failures into passes.
+
+Compare `SaveCompatibilityId` in the corpus/quest summaries and cell component
+report with the selected launcher's source identity before interpreting their
+results. Equal mod names without equal selected source identities do not bind
+an audit to that launch.
 
 `lifecycle` admits all references, including model-less and initially disabled
 objects, to the real world state owner. It assigns distinct disposable local

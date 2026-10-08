@@ -41,6 +41,12 @@ internal static class NativeOwnedMediaLoader
         stream.SetMeta("opennv_owned_media_source", source);
         stream.SetMeta("opennv_owned_media_path", logicalPath);
         stream.SetMeta("opennv_owned_media_sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)));
+        if (extension == OggExtension)
+        {
+            var format = NativeOwnedMediaFormat.OggFormat(payload);
+            stream.SetMeta("opennv_owned_media_rate", format.Rate);
+            stream.SetMeta("opennv_owned_media_channels", format.Channels);
+        }
         return stream;
     }
 
@@ -59,7 +65,7 @@ internal static class NativeOwnedMediaLoader
 
     private static AudioStreamOggVorbis? LoadOgg(byte[] payload)
     {
-        NativeOwnedMediaFormat.ValidateOgg(payload);
+        _ = NativeOwnedMediaFormat.OggFormat(payload);
         return AudioStreamOggVorbis.LoadFromBuffer(payload);
     }
 

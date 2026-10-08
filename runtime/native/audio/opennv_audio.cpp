@@ -28,6 +28,7 @@ struct Instance {
 GDExtensionClassLibraryPtr library;
 GDExtensionInterfaceClassdbConstructObject3 construct;
 GDExtensionInterfaceObjectSetInstance set_instance;
+GDExtensionInterfaceObjectDestroy destroy_object;
 GDExtensionInterfaceObjectGetInstanceId instance_id;
 GDExtensionInterfaceObjectGetInstanceFromId from_id;
 GDExtensionInterfaceObjectGetInstanceBinding get_binding;
@@ -54,8 +55,10 @@ bool equals(GDExtensionConstStringNamePtr name, const Name &expected) {
     return result != 0;
 }
 void unref(GDExtensionObjectPtr object) {
-    GDExtensionBool unused = false;
-    ptrcall(unreference, object, nullptr, &unused);
+    GDExtensionBool last_reference = false;
+    ptrcall(unreference, object, nullptr, &last_reference);
+    // unreference reports deletion eligibility; the caller performs deletion.
+    if (last_reference) destroy_object(object);
 }
 void *binding_create(void *, void *) { return nullptr; }
 void binding_free(void *, void *, void *) {}
@@ -200,6 +203,7 @@ EXPORT GDExtensionBool opennv_audio_init(GDExtensionInterfaceGetProcAddress get,
 #define LOAD(variable, type, name) variable = reinterpret_cast<type>(get(name)); if (!variable) return false
     LOAD(construct, GDExtensionInterfaceClassdbConstructObject3, "classdb_construct_object3");
     LOAD(set_instance, GDExtensionInterfaceObjectSetInstance, "object_set_instance");
+    LOAD(destroy_object, GDExtensionInterfaceObjectDestroy, "object_destroy");
     LOAD(instance_id, GDExtensionInterfaceObjectGetInstanceId, "object_get_instance_id");
     LOAD(from_id, GDExtensionInterfaceObjectGetInstanceFromId, "object_get_instance_from_id");
     LOAD(get_binding, GDExtensionInterfaceObjectGetInstanceBinding, "object_get_instance_binding");

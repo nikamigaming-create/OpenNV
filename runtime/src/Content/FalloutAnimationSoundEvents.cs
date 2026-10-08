@@ -3,7 +3,23 @@ using System.Security.Cryptography;
 namespace OpenNV.Runtime.Content;
 
 internal enum FalloutAnimationSoundEnd { Active, NativeFinished, SourceStopped, ChanceSkipped, Cancelled, Faulted }
-internal sealed record FalloutAnimationSoundPlaybackSnapshot(FalloutPcmPlaybackSnapshot Samples, string EmitterPath, bool FollowEmitter);
+internal sealed record FalloutAnimationSoundBoneEmitterSnapshot(FalloutFormKey Reference,
+    string SkeletonPath, string SkeletonSha256, int Block, string Name)
+{
+    internal void Validate(FalloutFormKey reference)
+    {
+        if (Reference != reference || string.IsNullOrWhiteSpace(Reference.OwnerPlugin) ||
+            Reference.ObjectId is 0 or > FalloutFormKey.ObjectIdMask || Block < 0 ||
+            string.IsNullOrWhiteSpace(Name) || !FalloutAnimationSoundEventsSnapshot.Hash(SkeletonSha256) ||
+            string.IsNullOrWhiteSpace(SkeletonPath) ||
+            FalloutBsaArchive.CanonicalPath(SkeletonPath) != SkeletonPath ||
+            !SkeletonPath.StartsWith("meshes\\", StringComparison.OrdinalIgnoreCase) ||
+            !SkeletonPath.EndsWith(".nif", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Saved sound bone has an invalid source skeleton identity.");
+    }
+}
+internal sealed record FalloutAnimationSoundPlaybackSnapshot(FalloutPcmPlaybackSnapshot Samples, string EmitterPath,
+    bool FollowEmitter, FalloutAnimationSoundBoneEmitterSnapshot? SourceBone = null);
 internal sealed record FalloutAnimationSoundFault(string TextKey, string Error);
 
 internal sealed record FalloutAnimationSoundEvent(long Generation, FalloutFormKey Sound, string SoundSha256,
@@ -54,6 +70,7 @@ internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutFormKey Refere
                     playback.EmitterPath.StartsWith('/') || playback.EmitterPath.Split('/').Contains(".."))
                     throw new InvalidDataException("Active sound has no complete PCM/emitter continuation.");
                 playback.Samples.Validate();
+                playback.SourceBone?.Validate(Reference);
             }
             else if (entry.Playback is not null) throw new InvalidDataException("Ended sound retains active PCM continuation.");
         }
@@ -66,7 +83,7 @@ internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutFormKey Refere
 
 // Native Finished and authored Stop are independent from a zero voice count.
 // The ledger schedules no playback and never executes a saved request.
-internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference)
+internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func<bool>? referenceEnabled = null)
 {
     private readonly List<FalloutAnimationSoundEvent> _events = [];
     private long _generation;
@@ -74,6 +91,13 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference)
     private readonly List<FalloutAnimationSoundFault> _faults = [];
     private readonly Dictionary<long, Func<FalloutAnimationSoundPlaybackSnapshot>> _playbackCaptures = [];
     internal FalloutFormKey Reference => reference;
+    internal void RequireEnabledSourceEmitter()
+    {
+        if (referenceEnabled is null)
+            throw new NotSupportedException("Source sound bone has no authoritative reference enable owner.");
+        if (!referenceEnabled())
+            throw new NotSupportedException("Disabled source sound bone requires its independent emitter continuation.");
+    }
     internal FalloutAnimationSoundHistoryDiagnostic CaptureDiagnostic => new(reference, _generation, CanCapture, _opaqueError,
         _events.Where(entry => entry.End is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped))
             .Select(entry => new FalloutAnimationSoundCaptureBlocker(entry.Generation, entry.Sound, entry.SoundSha256,

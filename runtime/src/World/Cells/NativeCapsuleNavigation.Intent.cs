@@ -10,8 +10,9 @@ internal sealed record NativeNavigationProjectionRegion(Vector3 Requested, Vecto
 internal static partial class NativeCapsuleNavigation
 {
     // A nearby reference can still sit across a wall or another floor. Follow
-    // the source prefix first; refine its reference region only after the
-    // entire source corridor is already within the endpoint arrival tolerance.
+    // required source portals before refining its reference region. A final
+    // source segment that ends at that same goal retains the caller's radius;
+    // requiring its exact endpoint first would contradict that arrival region.
     internal static NativeNavigationIntent Intent(Vector3 start, IReadOnlyList<Vector3> path,
         Vector3? referenceTarget = null, float referenceRadius = 0, float length = 8,
         NativeNavigationProjectionRegion? projection = null)
@@ -29,6 +30,20 @@ internal static partial class NativeCapsuleNavigation
         foreach (var point in corridor) { remaining += previous.DistanceTo(point); previous = point; }
         if (referenceTarget is { } reference && resume == path.Count && remaining <= .2f)
             return new(reference, resume, referenceRadius, true, []);
+        if (projection is null && referenceTarget is { } terminal && referenceRadius > 0 &&
+            resume == path.Count && terminal == path[^1] &&
+            Math.Abs(start.Y - terminal.Y) < SourceHeightTolerance)
+        {
+            var required = path.Take(path.Count - 1).ToArray();
+            previous = start;
+            var requiredDistance = 0f;
+            foreach (var point in required) { requiredDistance += previous.DistanceTo(point); previous = point; }
+            // Keep the existing source-prefix handoff threshold. Endpoint
+            // proximity alone cannot consume an untraversed folded corridor.
+            if (requiredDistance <= .2f) return new(terminal, resume, referenceRadius, true, []);
+            (target, resume) = CorridorPrefix(start, required, length);
+            return new(target, resume, 0, false, required.Take(resume).Append(target).ToArray());
+        }
         return new(target, resume, 0, false, corridor, resume == path.Count ? projection : null);
     }
 }

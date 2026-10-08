@@ -12,13 +12,23 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--collision-lifetime"])
+            {
+                await ExerciseCollisionLifetime(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--owned-collision-lifetime", var collisionRoot,
+                var collisionModel, var collisionError, .. var collisionOptions])
+            {
+                await ExerciseOwnedCollisionLifetime(collisionRoot, collisionModel, collisionError, collisionOptions);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--exterior-detail-gpu"])
             {
                 await ExerciseExteriorDetailPixels(); GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--actor-sound-emitters"])
             {
-                ExerciseActorSoundEmitters(); GetTree().Quit(); return;
+                await ExerciseActorSoundEmitters(); GetTree().Quit(); return;
             }
             if (OS.GetCmdlineUserArgs() is ["--head-persistence-contracts"])
             {
@@ -134,9 +144,10 @@ public partial class NativeNifInstanceAudit : Node
                 GetTree().Quit();
                 return;
             }
+            await ExerciseCollisionLifetime();
             ExerciseReferenceAngles();
             ExerciseActorSkinRoot();
-            ExerciseActorSoundEmitters();
+            await ExerciseActorSoundEmitters();
             await ExerciseFaceGenAttachment();
             await ExerciseHeadEquipmentAttachment();
             ExerciseObjectAnimation();

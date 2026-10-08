@@ -222,7 +222,11 @@ internal sealed class FalloutReferenceInstance
     internal FalloutReferenceEnableParent? EnableParent { get; }
     private FalloutSoundRandomState? _soundRandom;
     private FalloutAnimationSoundEvents? _animationSoundEvents;
-    internal FalloutAnimationSoundEvents AnimationSoundEvents => _animationSoundEvents ??= new(Reference);
+    internal FalloutAnimationSoundEvents AnimationSoundEvents => _animationSoundEvents ??= new(Reference, QueryReferenceEnabled);
+    private Func<bool>? _referenceEnabled;
+    private bool QueryReferenceEnabled() => (_referenceEnabled ??
+        throw new NotSupportedException("Source sound emitter has no authoritative reference enable owner."))();
+    internal void BindReferenceEnableQuery(Func<bool> query) => _referenceEnabled = query;
     internal bool AnimationSoundsCaptureReady => _animationSoundEvents?.CanCapture != false;
     internal FalloutAnimationSoundHistoryDiagnostic? AnimationSoundCaptureDiagnostic => _animationSoundEvents?.CaptureDiagnostic;
     private FalloutHitReactionFaults? _hitReactionFaults;
@@ -267,11 +271,13 @@ internal sealed class FalloutReferenceInstance
         if (!_objectAnimationCaptures.Remove(capture)) throw new InvalidOperationException("Object animation capture was not bound.");
     }
 
-    internal FalloutReferenceInstance(FalloutPluginRecord reference, FalloutReferenceScriptDefinition? script)
+    internal FalloutReferenceInstance(FalloutPluginRecord reference, FalloutReferenceScriptDefinition? script,
+        Func<bool>? referenceEnabled = null)
     {
         if (reference.Signature is not ("REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS"))
             throw new InvalidDataException($"{reference.FormKey} is not a placed reference.");
         Reference = reference.FormKey;
+        _referenceEnabled = referenceEnabled;
         Cell = FalloutCellSceneReader.ParentCell(reference) ??
             throw new InvalidDataException($"Reference {Reference} has no source CELL.");
         Base = FalloutDialogueTopic.RequiredForm(reference, "NAME");
@@ -488,7 +494,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         FalloutReferenceScriptDefinition? definition = null;
         if (script is not null && !_definitions.TryGetValue(script.FormKey, out definition))
             _definitions.Add(script.FormKey, definition = new(script));
-        instance = new(record, definition);
+        instance = new(record, definition, () => IsEnabled(key));
         _instances.Add(key, instance);
         return instance;
     }
@@ -832,6 +838,9 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         validated._packageEvents = null;
         foreach (var (key, instance) in validated._instances)
         {
+            // Validation owns a temporary world. Retained sound ledgers must
+            // query the destination owner after the successful atomic transfer.
+            instance.BindReferenceEnableQuery(() => IsEnabled(key));
             _instances.Add(key, instance);
             BindInventoryRemoval(instance);
         }

@@ -7,6 +7,42 @@ the model resource, scale, axis rotation, depth, projection factors, conditional
 fallback light, default allocation total and ordered forward/backward tables.
 It executes no owned native code and retains no extracted launch asset.
 
+The executable reader distinguishes x87 declarations from optimized Win32 SSE
+declarations. The latter binds the actual model receiver, Float32 scale and
+magnitude mask, immediate depth/angle slots, complete axis-rotation stores,
+model-bound light radius, paired red/green and immediate blue channels, and
+the camera's source frustum slots and sign mask. Its projection retains the
+source Float32 multiplication order before the double tangent and Float32
+slope write. A default-budget factory must declare menu1060, publish the same
+menu object and call the admitted model and camera owners. An explicit-budget
+factory remains separate; a second XML caller cannot supply a guessed default.
+Changed masks, receiver/slot flow, channels, type IDs, calls and ambiguous
+declarations remain refusals.
+
+Dynamic texture paths come from the texture callee reached by the book's own
+model constructor. Its formatter buffers, optional buffer copies, native loader
+and manager, same receiver, indexed digit/message extents and button slots must
+agree. A similarly named Love Tester factory cannot supply the book's paths.
+Enabled left/right arrows use the declared direct folder; disabled arrows and
+Done textures use the source platform format. Numeric and message folders remain
+source data. The declaration audit resolves and hashes all 25 paths in the PC
+keyboard/pointer branch. Native construction admits all these DDS resources
+through the rendered surface's existing in-process texture cache, including
+alternatives that do not appear in the initial frame. Missing/invalid resources
+and changed associations remain errors; source input-mode switching is a
+separate, unverified behavior.
+
+The declaration probe accepts an explicitly selected owned installation with
+`--audit-special-book <owned-root> <fallout-3|fallout-new-vegas>` and an optional
+launcher mod-stack JSON list. It joins that executable's declarations to the
+winning NIF sequences and reports source hashes. The existing native fixture
+also accepts `--standalone <owned-root> <private-diagnostic>`; its mod CLI is
+retained. The standalone entry detects the owned game rather than substituting
+New Vegas. The native fixture reads its expected stage, command and optional
+allocation total by executing the winning activation program in its isolated
+source host. These entry points require independent source/native validation;
+declaration admission does not establish ordinary progression or parity.
+
 The XML is an invisible input protocol for a 3D menu. It declares eight proxy
 IDs: next, previous, increase, decrease, Done, pointer, index up and index down.
 There is no Reset action. The book starts on page 0 at the first source pose.
@@ -62,9 +98,12 @@ stage prefix and guard. Constructor/live getter, base-writer and acceptance
 callback failures retain readable errors and restore each prior input state on
 retirement. A privately altered in-memory source root additionally verifies that
 failed surface construction retains its error and frees all native nodes, using
-debug orphan-node telemetry; owned bytes remain unchanged. Its one private PNG is for selected visual
-inspection; the caller deletes it in `finally`, including failed runs. Recording
-remains off.
+debug orphan-node telemetry; owned bytes remain unchanged. Its one private PNG is
+for selected visual inspection. The path must be fresh, absolute, outside the
+repository and every supplied/resolved owned root, and have no linked directory.
+Creation uses an exclusive create-new file handle. Failure cleanup deletes only
+the diagnostic created by this run; the caller deletes a retained successful
+diagnostic in `finally` after inspection. Recording remains off.
 
 The production `ssbmp`/`ShowSPECIALBookMenuParams` dispatch binds the shared
 engine-created player's SPECIAL pools. The permanent getter and integer BASE
