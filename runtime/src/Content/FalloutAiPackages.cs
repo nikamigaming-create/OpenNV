@@ -5,6 +5,20 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutAiPackages
 {
+    internal static float Sitting(FalloutPluginStack records, FalloutCondition condition,
+        FalloutFormKey caller, Func<FalloutFormKey, int>? query, FalloutFormKey? target = null)
+    {
+        if (condition.Function != 159 || condition.Argument1 != 0 || condition.Argument2 != 0)
+            throw new InvalidDataException("Sitting condition differs from the source GetSitting declaration.");
+        var subject = ConditionSubject(condition, caller, target);
+        if (records.RuntimeFormId(subject) != 0x14 &&
+            (!records.TryGetEffective(subject, out var source) || source.Signature is not ("ACHR" or "ACRE")))
+            throw new InvalidDataException("GetSitting condition subject is not a placed actor.");
+        var phase = (query ?? throw new NotSupportedException("GetSitting condition has no physical furniture owner."))(subject);
+        return phase is >= 0 and <= 4 ? phase :
+            throw new InvalidDataException("GetSitting condition owner returned an invalid physical phase.");
+    }
+
     internal static float QuestRunning(FalloutCondition condition, FalloutQuestState quests)
     {
         if (condition.Function != 56)

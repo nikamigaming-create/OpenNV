@@ -300,7 +300,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             RefreshRadioStations();
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
-            if (_saveRequested && SaveContinuationBlocker is null && SourceFiniteAudioSaveBlocker is null &&
+            if (_saveRequested && SaveContinuationBlocker is null && SourceAnimationSoundSaveBlocker is null &&
                 !_scripts.References!.PlayerMoves.Pending)
                 SaveCurrentState();
             _playerPackage?.Advance(delta);
@@ -329,7 +329,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell,
             _restorePlayerPackageAudio);
         _scripts.References!.UnloadedPackages = new(_pluginStack, _scripts.References, _quests, _gameTime,
-            _globals, ExecutePackageEvent, () => SourcePlayerLevel);
+            _globals, ExecutePackageEvent, () => SourcePlayerLevel, ActorSitting);
         _speech = new RuntimeNativeSpeech();
         _speech.PrepareSubtitle = subtitle => (PrepareSubtitle ??
             throw new NotSupportedException("Source subtitle presentation is absent."))(subtitle);

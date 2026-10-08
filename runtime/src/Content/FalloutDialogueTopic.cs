@@ -120,11 +120,16 @@ internal sealed partial class FalloutDialogueTopic
         bool conversation = false, Func<uint, uint>? random = null, bool npcConversation = false,
         bool immediateResults = false, bool radio = false)
     {
-        IEnumerable<FalloutDialogueInfo> candidates = questPriority is null ? Infos : Infos.OrderByDescending(info => questPriority(info.Quest));
+        // A line excluded by its source speaker/SayOnce gate cannot own a
+        // quest-priority query in this request. Retain uncertain OR/random and
+        // unbound speaker restrictions, so their reached owners still fail.
+        IEnumerable<FalloutDialogueInfo> candidates = Infos.Where(info =>
+            EligibleSpeaker(info, speakerBase, said, context, radio));
+        if (questPriority is not null) candidates = candidates.OrderByDescending(info => questPriority(info.Quest));
         List<FalloutDialogueInfo>? pool = null;
         foreach (var info in candidates)
         {
-            if (!Eligible(info, speakerBase, said, questStage, context, questEligible, radio)) continue;
+            if (!EligibleAfterSpeaker(info, speakerBase, questStage, context, questEligible)) continue;
             if ((info.Flags & 2) == 0 && pool is not null) return Choose();
             RequireFlags(info, conversation, randomSelection: true, npcConversation: npcConversation,
                 immediateResults: immediateResults, radio: radio);
@@ -287,8 +292,17 @@ internal sealed partial class FalloutDialogueTopic
     internal static bool Eligible(FalloutDialogueInfo info, FalloutFormKey speaker, IReadOnlySet<FalloutFormKey> said,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context,
         Func<FalloutFormKey, bool>? questEligible = null, bool radio = false) =>
+        EligibleSpeaker(info, speaker, said, context, radio) &&
+        EligibleAfterSpeaker(info, speaker, questStage, context, questEligible);
+
+    private static bool EligibleSpeaker(FalloutDialogueInfo info, FalloutFormKey speaker, IReadOnlySet<FalloutFormKey> said,
+        Func<FalloutCondition, float>? context, bool radio) =>
         !((info.Flags & 4) != 0 && said.Contains(info.Record.FormKey)) &&
-        (radio || info.Speaker is null || info.Speaker == speaker) && AdmitsSpeaker(info, speaker, context) &&
+        (radio || info.Speaker is null || info.Speaker == speaker) && AdmitsSpeaker(info, speaker, context);
+
+    private static bool EligibleAfterSpeaker(FalloutDialogueInfo info, FalloutFormKey speaker,
+        Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context,
+        Func<FalloutFormKey, bool>? questEligible) =>
         (questEligible is null || questEligible(info.Quest)) && ConditionsPass(info, speaker, questStage, context);
 
     private static bool AdmitsSpeaker(FalloutDialogueInfo info, FalloutFormKey speaker, Func<FalloutCondition, float>? context)

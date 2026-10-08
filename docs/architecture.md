@@ -3,6 +3,26 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Dialogue admits the source speaker and SayOnce restrictions before asking for
+quest priority. Pure self GetIsID exclusions cannot query an unrelated quest;
+uncertain OR/random/run-on and unowned trait restrictions remain candidates
+with their original failures. Priority, winning overrides, quest and full
+condition evaluation keep their existing order after that admission.
+
+GetSitting conditions share the declared self/target/explicit-reference subject
+resolver across dialogue and loaded/unloaded NPC/creature packages. The actual
+placed actor or reserved player owns its physical phase; another actor's phase
+cannot replace it. Source arguments, master scope, missing native/retained
+owners and invalid phases remain refusals. This query does not implement Eat,
+creature furniture motion or complete player-furniture saving.
+
+Automatic and source save readiness covers every unsettled animation-sound
+ledger. Exact retained finite native voices defer until Finished; unowned loops,
+cancelled or opaque histories retain the continuation blocker. The automatic
+writer cannot turn an unready capture into failure of unrelated player-package
+execution. Genuine complete capture and save ordering remain required; no
+missing sound history is cleared or retroactively completed.
+
 [XR weapon actions](xr-weapon-actions.md) enter the existing native weapon owner
 as named fire/reload events, preserving source gates and ammunition/animation
 state independently of remapped or absent desktop input events.

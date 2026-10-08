@@ -339,6 +339,7 @@ if (args.Length >= 6 && args[0] == "--audit-vampire-query")
 if (args is ["--conversation-contracts"])
 {
     ConversationContracts.Run();
+    ConversationSpeakerAdmissionContracts.Run();
     return;
 }
 if (args.Length >= 3 && args[0] == "--audit-ttw-immediate-dialogue")
@@ -853,6 +854,7 @@ finally
 }
 
 ConversationContracts.Run();
+ConversationSpeakerAdmissionContracts.Run();
 ActorSourceContracts.Run();
 FactionRelationContracts.Run();
 EncounterZoneContracts.Run();

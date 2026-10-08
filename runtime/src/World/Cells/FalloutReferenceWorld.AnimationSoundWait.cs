@@ -5,6 +5,12 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
+    // Every unsettled ledger blocks a complete save. Only exact retained
+    // finite native voices may wait for Finished; an absent or looping owner
+    // remains a visible continuation refusal without stopping later gameplay.
+    internal string? AnimationSoundSaveBlocker => PendingAnimationSoundCaptureCount == 0 ? null :
+        PendingAnimationSoundFiniteVoiceWait() is { Count: > 0 } ? "source-finite-audio" : "animation-sound-continuation";
+
     // Read-only wait admission covers every retained ledger, including doors,
     // cameras, off-cell instances and multiple native sound owners per ref.
     // It never relaxes complete capture or interprets elapsed time as Finished.

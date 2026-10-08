@@ -12,10 +12,10 @@ continuation, matched retail evidence and checked publication. All 36 broad
 requirements remain open; component checks establish no completion percentage.
 
 Use all four available owners. Primary serially integrates, builds, plays,
-checks saves and publishes. The other owners handle source menus/navigation,
-audio/save continuation and source/resource lifetime failures. Reassign finished
-owners to compiled SCDA, unchanged x86 plugin execution and the next reached
-campaign/rendering failure. C# remains authoritative; owned files are read-only
+checks saves and publishes. The other owners prepare the compiled SCDA/result
+and save boundary, real x86 execution and source Eat procedure, and OpenXR
+session/worker lifetime repairs. Reassign finished owners to the next reached
+campaign or rendering failure. C# remains authoritative; owned files are read-only
 inputs and private observations never become gameplay authority.
 
 ## Verified state
@@ -60,8 +60,18 @@ the actual Vault 101 radio discovery notice and permits the previously blocked
 Amata interaction. That action reaches a new dialogue failure: priority sorting
 reads an unrelated The Pitt line's absent quest before the source speaker check
 can exclude that line. Its owned GetIsID condition cannot match Amata. General
-speaker admission before priority sorting owns the next fix; eligible missing
-owners must still fail. Complete
+speaker admission before priority sorting now passes fresh Debug/Release
+contracts, including eligible missing-owner refusals. Ordinary replay reaches
+the original Paul package using the Overseer's actual occupied state rather
+than Paul's own standing state. The Eat procedure remains unbound. A separate
+automatic-save capture failure then stops the driver before Amata can talk.
+Shared sound admission now retains missing/looping history as a visible save
+blocker alongside finite native voice waiting. A fresh ordinary replay reaches
+Amata's source-package greeting, selects two original replies, receives the
+skill-book gift and advances CG02 to stage 21 without a blocking driver error.
+The requested automatic save remains deferred by the six unchanged birth-loop
+generations. The ordinary manual attempt fails concurrent-auto-save without
+writing either checkpoint. Complete
 childhood, the vault exit, Megaton and later cold checkpoint acceptance remain open.
 
 Save v49 supports bounded active source-radio continuation. Its fresh-owner
@@ -113,12 +123,14 @@ skins, meshes, bodies, joints and source poses with no resource growth. Injected
 joint-configuration exceptions remain untriggered; fresh complete session
 retirement remains its own gate.
 
-The fresh FO3 birthday replay naturally quits both processes with exit code zero, preserves the
-original save hash and reports no prior body/ObjectDB shutdown leak warnings.
-It retains 39 distinct source/runtime errors: unsupported collision shapes and
-phantoms, modeled emergency lights, double-vision phase, dialogue selection,
-NPC guard/editor-travel/patrol/procedure and condition-subject ownership, and
-unowned save continuations. These remain independently failed evidence lanes;
+The fresh stage-21 FO3 birthday replay naturally quits both processes with exit
+code zero, preserves the original and cloned save hashes and has a clean full
+resource footer. Recording and trace remain off. It retains 39 distinct source
+diagnostics, including unsupported collision shapes/phantoms/emergency lights,
+double-vision, NPC guard/editor-travel/patrol/Eat procedures and unowned save
+continuations. The separate bot request times out while the source-initiated
+conversation awaits a choice; no bot activation success is claimed. These remain
+independently failed evidence lanes;
 source quest advancement does not certify the whole scene or every actor.
 
 The requested 2:04 three-game simulator showcase is exported. Full-duration
@@ -131,13 +143,19 @@ Recording is off; selected temporary inspection frames have been deleted.
 
 ## Current divergence owners
 
-Finish the current general save/resource block and its required runtime gate.
-The FO3 direct GMST/Float32 radio notice advances under ordinary birthday input;
-repair the newly traced dialogue admission/priority order through source ownership.
-Follow with the retained source AI/condition,
-collision/phantom/light and double-vision owners. Promote the reviewed general
-GetSitting source-subject capability on the next fresh branch; the separate
-Eat procedure still needs its actual food/furniture/idle/inventory lifecycle.
+The general source-menu/audio/resource block is merged through checked PR #173;
+clean local main equalled origin/main at 87c63aa with no open task PRs before
+the fresh dialogue/furniture-subject feature branch began.
+The general dialogue admission and GetSitting source-subject capabilities are
+integrated on the fresh branch. Debug/Release authored checks and native
+NPC/creature/player physical/cold checks pass. Ordinary FO3 selects Paul's
+original Eat package with the actual different physical subject; food,
+furniture, idle, inventory and procedure completion remain unbound. An
+automatic save must admit every unsettled audio ledger before attempting a
+complete capture. The missing birth-loop owner stays visible in save state
+while its unrelated gameplay continues; the fresh ordinary stage-21 replay
+verifies that boundary. Follow with the retained collision/phantom/light, double-vision and
+remaining AI owners.
 Disabled, anonymous legacy and independently unowned ANIO continuations remain
 explicit audio boundaries. Retail Disable/loop semantics still require
 independent evidence; the immutable birth-loop history must not be rewritten.
@@ -187,9 +205,12 @@ The integrated general source-menu/audio/resource block passes the full required
 runtime gate against installed Godot 4.7.2, including Release/Debug, analyzers,
 contract/launcher and verbose native door/navigation checks. Selected independent
 owned audits and fresh ordinary FO3/TTW replay results are retained above.
-Primary publishes its checked PR and verifies clean
-local main equals origin/main. Start the next bounded block on a fresh codex/
-branch with the traced dialogue admission/priority fix. Promote the reviewed compiled-authority proposal through the shared
+The required full runtime gate passes for dialogue admission, GetSitting subject
+selection and complete audio save admission; checked publication is next. Ordinary FO3
+replay from the unchanged toddler checkpoint verifies the original Amata
+conversation through CG02 stage 21 and retains all remaining failures. The
+unchanged subject condition has reached its original Eat-procedure refusal.
+Promote the reviewed compiled-authority proposal through the shared
 quest/reference/result owners alongside an early genuine plugin-host proof.
 Continue the original FO3 and TTW campaign routes without bypassing conditions.
 Every newly reached source/runtime/audio/UI/frame error needs an owner and
@@ -212,7 +233,8 @@ outside publication. Reuse only cloned checkpoints; never overwrite originals.
 
 Current integration evidence is under
 tmp/development-lab/full-scope-audit-20261007; ordinary FO3 replay is
-ordinary-fo3-source-notices-20261008. Fresh TTW natural clean XR quit is
+ordinary-fo3-dialogue-save-admission-20261008. Prior failed Amata/save replay is
+ordinary-fo3-dialogue-sitting-20261008. Fresh TTW natural clean XR quit is
 tmp/development-lab/full-scope-xr-ttw-door-lifetime-20261008.
 The requested MP4 is
 local/recordings/showcase-20261007/opennv-three-games-vr-showcase.mp4.

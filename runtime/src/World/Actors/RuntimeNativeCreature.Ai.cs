@@ -100,7 +100,10 @@ internal sealed partial class RuntimeNativeCreature
 
     private Func<FalloutFormKey, FalloutFormKey, double>? _aiItemCount;
 
-    internal float PackageCondition(FalloutCondition condition) => condition.Function == 47
+    internal float PackageCondition(FalloutCondition condition) => condition.Function == 159
+        ? FalloutAiPackages.Sitting(_aiRecords ?? throw new NotSupportedException("Creature sitting query has no source owner."),
+            condition, Appearance.Reference!.Value, PackageSitting)
+        : condition.Function == 47
         ? OpenNV.Runtime.Gameplay.State.FalloutActorInventoryConditions.ItemCount(condition, Appearance.Reference!.Value, _aiItemCount)
         : condition.Function is 1 or 14 or 32
         ? ReferenceCondition(condition)
@@ -137,6 +140,14 @@ internal sealed partial class RuntimeNativeCreature
             300 when condition.RunOn == 0 => _aiWorld!.IsInInterior(Appearance.Reference!.Value) ? 1 : 0,
             _ => throw new NotSupportedException($"Creature package condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
         };
+
+    private int PackageSitting(FalloutFormKey subject)
+    {
+        var records = _aiRecords ?? throw new NotSupportedException("Creature sitting query has no source owner.");
+        return records.RuntimeFormId(subject) == 0x14
+            ? (Combat?.PackagePlayer ?? throw new NotSupportedException("Creature player sitting query has no native furniture owner.")).SittingState
+            : (_aiWorld ?? throw new NotSupportedException("Creature sitting query has no shared reference world.")).GetSitting(subject);
+    }
 
     private float ReferenceCondition(FalloutCondition condition)
     {

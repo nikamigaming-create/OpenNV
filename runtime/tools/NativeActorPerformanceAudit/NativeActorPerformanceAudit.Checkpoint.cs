@@ -109,6 +109,8 @@ public partial class NativeActorPerformanceAudit
                 resumed.SittingState != warm.SittingState || resumed.CurrentPackage != warm.CurrentPackage ||
                 JsonSerializer.Serialize(cold.Get(caller).Capture()) != JsonSerializer.Serialize(world.Get(caller).Capture()))
                 throw new InvalidDataException("Native cold NPC assembly changed its pose, source fault, random queue or procedure state.");
+            if (actorState.FurnitureContinuation is { Phase: 3 })
+                NativePackageSitting(warm, resumed, records, world, cold, caller, actorState.FurnitureContinuation);
             if (expected == "furniture-idle")
                 FurnitureIdleSuffix(warm, resumed, world, cold, caller, actorState);
             foreach (var delta in new[] { 0d, .01, .125, .25 })
@@ -244,6 +246,7 @@ public partial class NativeActorPerformanceAudit
         {
             creature.SetProcess(false); creature.SetPhysicsProcess(false); fixture.AddChild(creature);
             creature.ConfigureAi(records, quests, world);
+            NativeCreaturePackageSitting(actor, creature, records, world, caller, conditions[0].Owner);
             foreach (var condition in conditions)
             {
                 var original = quests.Capture().SingleOrDefault(value => value.Quest == condition.FormArgument1)?.Running ??
