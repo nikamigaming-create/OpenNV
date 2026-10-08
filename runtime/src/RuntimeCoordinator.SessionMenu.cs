@@ -244,8 +244,10 @@ public partial class RuntimeCoordinator
             if (_pendingSaveActivation is not null) RejectNativePendingLoad(new OperationCanceledException("Selected load was cancelled by quitting."));
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
+            StopNativeOpenXr();
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
             GetTree().Quit();
+            GD.Print("OPENNV_NATIVE_SESSION_QUIT_FLAG_SET");
         }
         catch (Exception error)
         {

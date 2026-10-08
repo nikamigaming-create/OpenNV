@@ -8,7 +8,8 @@ internal sealed record FalloutNativeFinishedSpeechSnapshot(IReadOnlyList<Fallout
     long CompletedCommands, long CompletedPackages, long RequestedPackageEventTopics, long CompletedPackageEventTopics,
     long DisabledCommands, FalloutFormKey? LastDisabledParticipant, FalloutSpeechCompletionHistory? SettledHistory = null,
     FalloutFinishedSpeechFailureSnapshot? Failure = null, FalloutFinishedSpeechFailureSnapshot? LastCompletedFailure = null,
-    IReadOnlyList<FalloutFinishedRadioConversationSnapshot>? FinishedRadio = null);
+    IReadOnlyList<FalloutFinishedRadioConversationSnapshot>? FinishedRadio = null,
+    IReadOnlyList<FalloutActiveRadioVoiceSnapshot>? ActiveRadio = null);
 
 internal partial class RuntimeNativeSpeech
 {
@@ -28,13 +29,18 @@ internal partial class RuntimeNativeSpeech
     {
         if (!CanCaptureFinishedState)
             throw new NotSupportedException("Saving speech requires its active voice, result or opaque callback continuation.");
+        return CaptureHistory();
+    }
+
+    private FalloutNativeFinishedSpeechSnapshot CaptureHistory()
+    {
         var voices = new Dictionary<FalloutFormKey, FalloutNativeVoiceHistory>(_restoredVoiceHistory);
         foreach (var voice in _channels.Values) voices[voice.Reference] = new(voice.Reference, voice.Generation, voice.CompletedCommands);
         return new(voices.Values.OrderBy(value => value.Speaker.ToString(), StringComparer.Ordinal).ToArray(), _completedCommands,
             _completedPackages, _requestedPackageEventTopics, _completedPackageEventTopics, _disabledCommands, _lastDisabledParticipant,
             CanCaptureFinishedFailure ? null : _emptyCompletions.CaptureHistory(),
             CanCaptureFinishedFailure ? _emptyCompletions.CaptureFinishedFailure() : null, _lastCompletedFailure,
-            _radioConversations.OrderBy(pair => pair.Key.ToString(), StringComparer.Ordinal)
+            _radioConversations.Where(pair => !pair.Value.Active).OrderBy(pair => pair.Key.ToString(), StringComparer.Ordinal)
                 .Select(pair => pair.Value.CaptureFinishedState()).ToArray());
     }
 
@@ -50,7 +56,7 @@ internal partial class RuntimeNativeSpeech
             throw new InvalidDataException("Saved native speech has absent or conflicting finite history.");
         var voices = new Dictionary<FalloutFormKey, FalloutNativeVoiceHistory>();
         foreach (var voice in snapshot.Voices)
-            if (voice is null || !speakers.Contains(voice.Speaker) || voice.Generation < 0 || voice.CompletedCommands < 0 ||
+            if (voice is null || !speakers.Contains(voice.Speaker) || voice.Generation < 0 || voice.Generation == long.MaxValue || voice.CompletedCommands < 0 ||
                 voice.CompletedCommands > voice.Generation || !voices.TryAdd(voice.Speaker, voice))
                 throw new InvalidDataException("Saved native voice generation is duplicated or outside its source owner.");
         if (snapshot.FinishedRadio is { } radios)
@@ -85,11 +91,14 @@ internal partial class RuntimeNativeSpeech
             if (!history.Any(value => value.Speaker == last.Receipt.Speaker && value.Generation >= last.Receipt.Generation))
                 throw new InvalidDataException("Saved recovered speech lacks its once-only committed generation.");
         }
+        ValidateActiveRadio(records, world, snapshot, voices);
     }
 
     internal void RestoreFinishedState(FalloutNativeFinishedSpeechSnapshot? snapshot)
     {
         if (snapshot is null) return;
+        if (snapshot.ActiveRadio is { Count: > 0 })
+            throw new InvalidDataException("Active radio requires the complete native speech restoration owner.");
         if (_channels.Count != 0 || Active || _restoredVoiceHistory.Count != 0 || _radioConversations.Count != 0)
             throw new InvalidOperationException("Native finished speech restoration needs a fresh inactive owner.");
         var world = _references ?? throw new InvalidOperationException("Saved speech has no shared world.");

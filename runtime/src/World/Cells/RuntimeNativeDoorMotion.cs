@@ -9,23 +9,55 @@ internal partial class RuntimeNativeDoorMotion : Node
     private readonly Action _changed;
     private readonly RuntimeNifControllerPlayer _controller;
     private readonly string _open, _close;
+    private Exception? _readyFailure;
 
     internal static bool HasOpenClose(IReadOnlyList<RuntimeNifControllerPlayer> controllers) => controllers.Any(controller =>
         controller.HasSequence("Open") || controller.HasSequence("Close"));
 
-    internal RuntimeNativeDoorMotion(FalloutReferenceInstance state, IReadOnlyList<RuntimeNifControllerPlayer> controllers, Action changed)
+    private RuntimeNativeDoorMotion(FalloutReferenceInstance state, RuntimeNifControllerPlayer controller,
+        string open, string close, Action changed)
     {
-        _state = state; _changed = changed;
+        _state = state; _changed = changed; _controller = controller; _open = open; _close = close;
+    }
+
+    internal static RuntimeNativeDoorMotion Attach(Node parent, FalloutReferenceInstance state,
+        IReadOnlyList<RuntimeNifControllerPlayer> controllers, Action changed)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(controllers);
+        ArgumentNullException.ThrowIfNull(changed);
+        if (!GodotObject.IsInstanceValid(parent) || parent.IsQueuedForDeletion())
+            throw new InvalidOperationException("Door motion has no live attachment owner.");
+        // A Godot Node already exists when its managed constructor runs. Admit
+        // every deterministic source/clock refusal before allocating that Node.
         var candidates = controllers.Where(controller =>
             controller.SequenceNames.Any(name => name.Equals("Open", StringComparison.OrdinalIgnoreCase)) &&
             controller.SequenceNames.Any(name => name.Equals("Close", StringComparison.OrdinalIgnoreCase))).ToArray();
         if (candidates.Length != 1) throw new NotSupportedException("Door has no unique source Open/Close controller.");
-        _controller = candidates[0];
-        _open = _controller.SequenceNames.Single(name => name.Equals("Open", StringComparison.OrdinalIgnoreCase));
-        _close = _controller.SequenceNames.Single(name => name.Equals("Close", StringComparison.OrdinalIgnoreCase));
-        _controller.RequireManagedFiniteSequence(_open);
-        _controller.RequireManagedFiniteSequence(_close);
-        RequireSavedSourceMatch(_state, _controller);
+        var controller = candidates[0];
+        var open = controller.SequenceNames.Single(name => name.Equals("Open", StringComparison.OrdinalIgnoreCase));
+        var close = controller.SequenceNames.Single(name => name.Equals("Close", StringComparison.OrdinalIgnoreCase));
+        controller.RequireManagedFiniteSequence(open);
+        controller.RequireManagedFiniteSequence(close);
+        RequireSavedSourceMatch(state, controller);
+        var motion = new RuntimeNativeDoorMotion(state, controller, open, close, changed);
+        try
+        {
+            parent.AddChild(motion);
+            if (motion.GetParent() != parent)
+                throw new InvalidOperationException("Door motion attachment was rejected by its native parent.");
+            // An attached live parent enters Ready during AddChild. Retain its
+            // real callback failure instead of accepting Godot's log alone.
+            if (motion._readyFailure is { } error)
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+            return motion;
+        }
+        catch
+        {
+            if (GodotObject.IsInstanceValid(motion)) motion.Free();
+            throw;
+        }
     }
 
     internal static void RequireSavedSourceMatch(FalloutReferenceInstance state, RuntimeNifControllerPlayer controller)
@@ -37,11 +69,20 @@ internal partial class RuntimeNativeDoorMotion : Node
             if (saved.Controller != controller.SourceController ||
                 !saved.Sha256.Equals(controller.SourceSha256, StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException("Saved door motion differs from its winning model controller.");
-            controller.ValidateScriptState(clocks!.Single(value => value.Controller == saved.Controller &&
-                value.Sha256.Equals(saved.Sha256, StringComparison.OrdinalIgnoreCase)));
+            var clock = clocks!.Single(value => value.Controller == saved.Controller &&
+                value.Sha256.Equals(saved.Sha256, StringComparison.OrdinalIgnoreCase));
+            controller.ValidateScriptState(clock);
+            if (saved.ScriptSequence is null && !saved.Moving && (controller.IsPlayingState(clock) || clock.StartPending))
+                throw new InvalidDataException("Saved settled door has an unfinished source animation.");
         }
     }
     public override void _Ready()
+    {
+        try { InitializeAtReady(); }
+        catch (Exception error) { _readyFailure = error; throw; }
+    }
+
+    private void InitializeAtReady()
     {
         if (_state.DoorMotion is { } saved)
         {

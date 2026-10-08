@@ -156,12 +156,15 @@ internal static partial class RuntimeNativeNifMeshBuilder
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0.0f)
             throw new ArgumentOutOfRangeException(
                 nameof(unitsToMetres), "NIF-to-Godot scale must be finite and positive.");
-        var root = new Node3D { Name = "NativeNif" };
-        root.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
-        var state = new BuildState(source, unitsToMetres, preferredTextureArchive, externalSkeleton: externalTransformTargets is not null, contentSource: contentSource)
-        { UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
+        var root = new Node3D();
         try
         {
+            // Source discovery can reject before any subtree is returned.
+            // Keep the detached native root owned through that work too.
+            root.Name = "NativeNif";
+            root.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
+            var state = new BuildState(source, unitsToMetres, preferredTextureArchive, externalSkeleton: externalTransformTargets is not null, contentSource: contentSource)
+            { UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
             foreach (var rootIndex in source.Roots)
                 if (unboundPropertyFreeLod is not null && source.Blocks[rootIndex].TypeName is ("NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape") &&
                     source.ReadGeometry(rootIndex) is { } unbound && unbound.Properties.All(index => index == -1))
@@ -576,18 +579,18 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 throw new NotSupportedException(
                     $"NIF node {source.Block.Index} has unsupported dynamic effects.");
             var result = CreateNode(source.Name, source.Block.Index, source.Transform, source.Flags);
-            if (source.Block.TypeName == "BSFadeNode") result.SetMeta("opennv_nif_fade_node", true);
-            if (source.Range is { } range)
-            {
-                result.SetMeta("opennv_nif_range", new int[] { range.Minimum, range.Maximum, range.Current });
-                result.SetMeta("opennv_nif_range_type", source.Block.TypeName);
-                if (range.Minimum > range.Maximum) throw new InvalidDataException("NIF damage range is inverted.");
-                result.Visible = range.Current >= range.Minimum && range.Current <= range.Maximum;
-                result.ProcessMode = result.Visible ? Node.ProcessModeEnum.Inherit : Node.ProcessModeEnum.Disabled;
-            }
             var inheritedEditorMarkers = _omitInheritedEditorMarkers;
             try
             {
+                if (source.Block.TypeName == "BSFadeNode") result.SetMeta("opennv_nif_fade_node", true);
+                if (source.Range is { } range)
+                {
+                    result.SetMeta("opennv_nif_range", new int[] { range.Minimum, range.Maximum, range.Current });
+                    result.SetMeta("opennv_nif_range_type", source.Block.TypeName);
+                    if (range.Minimum > range.Maximum) throw new InvalidDataException("NIF damage range is inverted.");
+                    result.Visible = range.Current >= range.Minimum && range.Current <= range.Maximum;
+                    result.ProcessMode = result.Visible ? Node.ProcessModeEnum.Inherit : Node.ProcessModeEnum.Disabled;
+                }
                 if (RigidFaceBind is not null)
                 {
                     if (source.Controller != -1 || source.CollisionObject != -1)
@@ -1565,51 +1568,60 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 BuildMorphArrays(mesh, source, data, arrays, Enumerable.Range(0, data.Vertices.Length).ToArray()));
             var material = BuildMaterial(source);
             mesh.SurfaceSetMaterial(0, material);
-            var result = new MeshInstance3D
+            var result = new MeshInstance3D();
+            try
             {
-                Name = SourceName(source.Name, source.Block.Index),
-                Transform = ConvertTransform(source.Transform),
-                Visible = (source.Flags & HiddenFlag) == 0,
-                Mesh = mesh,
+                result.Name = SourceName(source.Name, source.Block.Index);
+                result.Transform = ConvertTransform(source.Transform);
+                result.Visible = (source.Flags & HiddenFlag) == 0;
+                result.Mesh = mesh;
                 // A retained export shape without a shader has no runtime
                 // draw pass. Keep its source geometry and identity; Godot's
                 // default material must not turn it into a visible solid.
-                Layers = material.HasMeta("opennv_nif_no_render_shader") ? 0u : 1u,
-            };
-            result.SetMeta("opennv_nif_geometry_block", source.Block.Index);
-            if (geometryMorph is not null) RegisterManagedMorph(source, geometryMorph, result);
-            if (morph is not null) result.SetMeta("opennv_landscape_morph_targets", morph.Heights.Length);
-            result.SetMeta("opennv_nif_source_name", source.Name);
-            if (RigidFaceBind is { } faceBind)
-            {
-                if (skinBinding is not null)
-                    throw new NotSupportedException("Rigid FaceGen shape must be unskinned.");
-                // FaceGen uses the head's model basis, including its scale.
-                // Component export rotation/scale are not applied again; owned
-                // mouth/eye exports also contain non-unit rounding residues.
-                result.Transform = faceBind * new Transform3D(Basis.Identity,
-                    ConvertVector(source.Transform.Translation) * _unitsToMetres);
+                result.Layers = material.HasMeta("opennv_nif_no_render_shader") ? 0u : 1u;
+                result.SetMeta("opennv_nif_geometry_block", source.Block.Index);
+                if (geometryMorph is not null) RegisterManagedMorph(source, geometryMorph, result);
+                if (morph is not null) result.SetMeta("opennv_landscape_morph_targets", morph.Heights.Length);
+                result.SetMeta("opennv_nif_source_name", source.Name);
+                if (RigidFaceBind is { } faceBind)
+                {
+                    if (skinBinding is not null)
+                        throw new NotSupportedException("Rigid FaceGen shape must be unskinned.");
+                    // FaceGen uses the head's model basis, including its scale.
+                    // Component export rotation/scale are not applied again; owned
+                    // mouth/eye exports also contain non-unit rounding residues.
+                    result.Transform = faceBind * new Transform3D(Basis.Identity,
+                        ConvertVector(source.Transform.Translation) * _unitsToMetres);
+                }
+                _nodes.Add(source.Block.Index, result);
+                if (skinBinding is not null && skinBone is not null)
+                {
+                    var boneName = SourceName(skinBone.Name, skinBone.Block.Index);
+                    var skin = new Skin();
+                    skin.SetBindCount(1);
+                    skin.SetBindBone(0, 0);
+                    skin.SetBindName(0, boneName);
+                    skin.SetBindPose(0, ConvertTransform(skinBinding.InverseBind));
+                    result.Skin = skin;
+                    result.Skeleton = new NodePath($"../{boneName}");
+                    result.SetMeta("opennv_nif_skin_instance", source.SkinInstance);
+                }
+                PreserveCollisionMetadata(result, collision);
+                AddCollision(result, collision);
+                NodeCount++;
+                SurfaceCount++;
+                VertexCount += vertices.Length;
+                TriangleCount += indices.Length / 3;
+                return result;
             }
-            _nodes.Add(source.Block.Index, result);
-            if (skinBinding is not null && skinBone is not null)
+            catch
             {
-                var boneName = SourceName(skinBone.Name, skinBone.Block.Index);
-                var skin = new Skin();
-                skin.SetBindCount(1);
-                skin.SetBindBone(0, 0);
-                skin.SetBindName(0, boneName);
-                skin.SetBindPose(0, ConvertTransform(skinBinding.InverseBind));
-                result.Skin = skin;
-                result.Skeleton = new NodePath($"../{boneName}");
-                result.SetMeta("opennv_nif_skin_instance", source.SkinInstance);
+                // Geometry remains detached until Build returns it to its
+                // visual parent. Own its skin, mesh and attached collision
+                // through every late binding or source rejection.
+                result.Free();
+                throw;
             }
-            PreserveCollisionMetadata(result, collision);
-            AddCollision(result, collision);
-            NodeCount++;
-            SurfaceCount++;
-            VertexCount += vertices.Length;
-            TriangleCount += indices.Length / 3;
-            return result;
         }
 
         private Color[] VertexColors(FalloutNifGeometry geometry, FalloutNifMeshData data)
@@ -1889,8 +1901,17 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     first.GetMeta("opennv_nif_collision_pinned").AsBool() || second.GetMeta("opennv_nif_collision_pinned").AsBool())
                     throw new NotSupportedException("Source hinge has no independent pair of model bodies.");
                 var joint = new RuntimeNifHingeJoint();
-                joint.Configure(source, first, second, _unitsToMetres);
-                root.AddChild(joint);
+                try
+                {
+                    joint.Configure(source, first, second, _unitsToMetres);
+                    root.AddChild(joint);
+                }
+                catch
+                {
+                    // The scene owns the joint only after AddChild succeeds.
+                    joint.Free();
+                    throw;
+                }
             }
         }
 

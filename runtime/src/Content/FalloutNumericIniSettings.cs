@@ -24,7 +24,7 @@ internal sealed record FalloutIniLayer(string Source, FalloutIniCollection? Coll
     IReadOnlyList<FalloutInstallationSetting> Values);
 internal sealed record FalloutIniValue(FalloutIniDeclaration Declaration, double? Number, string Origin);
 
-internal sealed class FalloutNumericIniSettings
+internal sealed partial class FalloutNumericIniSettings
 {
     private readonly IReadOnlyDictionary<FalloutIniCollection, IReadOnlyDictionary<string, FalloutIniValue>> _collections;
     internal string Source { get; }
@@ -70,8 +70,7 @@ internal sealed class FalloutNumericIniSettings
     {
         // NVSE's real lookup has no section grammar precheck. A nonnumeric
         // preferences declaration is a found result and blocks the main one.
-        if (_collections[FalloutIniCollection.Prefs].TryGetValue(name, out var prefs)) return prefs.Number ?? -1;
-        return _collections[FalloutIniCollection.Main].TryGetValue(name, out var main) ? main.Number ?? -1 : -1;
+        return Resolve(name)?.Number ?? -1;
     }
 
     internal FalloutIniValue? Find(FalloutIniCollection collection, string name) => _collections[collection].GetValueOrDefault(name);

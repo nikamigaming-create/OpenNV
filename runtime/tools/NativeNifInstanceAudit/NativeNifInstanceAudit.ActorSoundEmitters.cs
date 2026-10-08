@@ -3,8 +3,9 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 public partial class NativeNifInstanceAudit
 {
-    private void ExerciseActorSoundEmitters()
+    private async Task ExerciseActorSoundEmitters()
     {
+        await ExerciseSoundEmitterPersistence();
         foreach (var joint in new[] { "Joint", "AttachSound" })
         {
             var actor = new Node3D

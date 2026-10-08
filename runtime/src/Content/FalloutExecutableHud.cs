@@ -151,9 +151,104 @@ internal static partial class FalloutExecutableStringTable
                 itemContracts.Add((resource.Name, seconds, single, multiple));
             }
         }
+        itemContracts.AddRange(ReadDirectHudItemNotices(code, literal, settings));
         var items = itemContracts.Distinct().ToArray();
         if (items.Length != 1) throw new NotSupportedException("Owned inventory notice declaration is missing or ambiguous.");
         return items[0];
+    }
+
+    private static IReadOnlyList<(string Icon, float Seconds, string Single, string Multiple)> ReadDirectHudItemNotices(
+        ReadOnlySpan<byte> code, Func<uint, string?> literal, IReadOnlyDictionary<uint, string> settings)
+    {
+        var result = new List<(string Icon, float Seconds, string Single, string Multiple)>();
+        for (var at = 3; at <= code.Length - 21; at++)
+        {
+            // The optimized owner shares its added-item label before branching
+            // on the count. Settings remain descriptor identities, not strings
+            // found elsewhere in this function or another inventory consumer.
+            if (code[at] != 0xff || code[at + 1] != 0x35 || U32(code, at + 2) < 4 ||
+                settings.GetValueOrDefault(U32(code, at + 2) - 4) != "sAddItemtoInventory") continue;
+            var begin = code[..at].LastIndexOf(new byte[] { 0x55, 0x8b, 0xec });
+            var end = at + 6;
+            while (end < code.Length - 4 && !(HudBytes(code, end, [0x8b, 0xe5, 0x5d, -1]) && code[end + 3] is 0xc2 or 0xc3)) end++;
+            if (begin < 0 || end >= code.Length - 4) Refuse();
+            var formats = new List<(int At, string Value)>();
+            var icons = new List<(int At, string Value)>();
+            for (var position = begin; position <= end - 5; position++)
+            {
+                if (code[position] != 0x68 || literal(U32(code, position + 1)) is not { } name) continue;
+                if (name.Contains('%')) formats.Add((position, name));
+                if (name.EndsWith(".dds", StringComparison.OrdinalIgnoreCase)) icons.Add((position, name));
+            }
+            // Menu/barter consumers have more format alternatives. They are
+            // independent owners and cannot supply a reached item notice.
+            if (formats.Count != 2) continue;
+            if (!HudBytes(code, at - 3, [0x83, 0x38, 1]) ||
+                !HudBytes(code, at + 6, [0xc7, 0x45, -1, -1, -1, -1, -1, 0x7e, -1])) Refuse();
+            var multiple = at + 15; var single = multiple + 42; var joined = single + 32;
+            if (joined > end || !HudBytes(code, multiple,
+                [0xff, 0x35, -1, -1, -1, -1, 0xff, 0x70, 4, 0xe8, -1, -1, -1, -1,
+                    0x8b, 0x75, -1, 0x83, 0xc4, 4, 0x50, 0xff, 0x36, 0x8d, 0x45, -1,
+                    0x68, -1, -1, -1, -1, 0x50, 0xe8, -1, -1, -1, -1, 0x83, 0xc4, 24, 0xeb, -1]) ||
+                !HudBytes(code, single, [0xff, 0x70, 4, 0xe8, -1, -1, -1, -1, 0x83, 0xc4, 4, 0x50,
+                    0x8d, 0x45, -1, 0x68, -1, -1, -1, -1, 0x50, 0xe8, -1, -1, -1, -1, 0x8b, 0x75, -1, 0x83, 0xc4, 16]) ||
+                HudShortBranch(code, at + 13) != single || HudShortBranch(code, multiple + 40) != joined ||
+                U32(code, multiple + 2) < 4 || settings.GetValueOrDefault(U32(code, multiple + 2) - 4) != "sPlural" ||
+                HudCallTarget(code, multiple + 9) != HudCallTarget(code, single + 3) ||
+                HudCallTarget(code, multiple + 32) != HudCallTarget(code, single + 21) ||
+                code[multiple + 16] != code[single + 28] || code[multiple + 25] != code[single + 14]) Refuse();
+            var buffer = code[multiple + 25]; var source = code[multiple + 16];
+            var sourceLoads = 0;
+            for (var position = Math.Max(begin, at - 128); position < at - 3; position++)
+                if (HudBytes(code, position, [0x8b, 0x45, source])) sourceLoads++;
+            if (sourceLoads != 1 || (sbyte)buffer >= 0 || (sbyte)source >= 0 || buffer == source ||
+                !HudBytes(code, joined, [0x8b, 0x4e, 4, 0x8b, 0x75, buffer])) Refuse();
+            var singleFormat = formats.SingleOrDefault(row => row.At == single + 15).Value;
+            var multipleFormat = formats.SingleOrDefault(row => row.At == multiple + 26).Value;
+            if (singleFormat is null || multipleFormat is null || !HudItemFormat(singleFormat, false) || !HudItemFormat(multipleFormat, true) || icons.Count == 0) Refuse();
+            int? queue = null;
+            foreach (var icon in icons)
+            {
+                if (icon.At < joined + 6 || !HudBytes(code, icon.At - 9, [0x51, 0xc7, 4, 0x24, -1, -1, -1, -1, 0x50]) ||
+                    !HudBytes(code, icon.At + 5, [0x6a, 0, 0x56, 0xe8, -1, -1, -1, -1, 0x83, 0xc4, 20])) Refuse();
+                var seconds = BitConverter.Int32BitsToSingle(unchecked((int)U32(code, icon.At - 5)));
+                var target = HudCallTarget(code, icon.At + 8);
+                if (!float.IsFinite(seconds) || seconds <= 0 || queue is not null && queue != target) Refuse();
+                queue = target; result.Add((icon.Value, seconds, singleFormat!, multipleFormat!));
+            }
+        }
+        return result;
+        static void Refuse() => throw new NotSupportedException("Owned direct inventory-notice transport is unbound.");
+    }
+
+    private static bool HudBytes(ReadOnlySpan<byte> code, int at, int[] pattern)
+    {
+        if (at < 0 || at > code.Length - pattern.Length) return false;
+        for (var index = 0; index < pattern.Length; index++)
+            if (pattern[index] >= 0 && code[at + index] != pattern[index]) return false;
+        return true;
+    }
+
+    private static int HudCallTarget(ReadOnlySpan<byte> code, int at)
+    {
+        if (at < 0 || at > code.Length - 5 || code[at] != 0xe8) throw new NotSupportedException("Owned HUD helper call is unbound.");
+        var target = (long)at + 5 + BinaryPrimitives.ReadInt32LittleEndian(code[(at + 1)..]);
+        if (target < 0 || target >= code.Length) throw new NotSupportedException("Owned HUD helper target is unbound.");
+        return (int)target;
+    }
+
+    private static int HudShortBranch(ReadOnlySpan<byte> code, int at) => at + 2 + unchecked((sbyte)code[at + 1]);
+    private static bool HudItemFormat(string value, bool multiple)
+    {
+        var specifiers = new List<char>();
+        for (var at = 0; at < value.Length; at++)
+            if (value[at] == '%')
+            {
+                if (++at >= value.Length || value[at] is not ('s' or 'i' or 'd')) return false;
+                specifiers.Add(value[at]);
+            }
+        return multiple ? specifiers.Count == 4 && (specifiers[0] is 'i' or 'd') && specifiers.Skip(1).All(value => value == 's')
+            : specifiers.SequenceEqual(new[] { 's', 's' });
     }
 
     private static bool TryPushInteger(ReadOnlySpan<byte> code, int at, out int value, out int next)

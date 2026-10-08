@@ -9,6 +9,7 @@ internal static class NativeNavigationContracts
     {
         CheckProjectionBounds();
         CheckRefinementIntent();
+        CheckTerminalArrivalIntent();
         CheckSourceArrivalRegion();
         var prefix = NativeCapsuleNavigation.CorridorPrefix(Vector3.Zero,
             [new(0, 0, 6), new(2, 0, 6), new(2, 4, 0)], 8);
@@ -166,6 +167,38 @@ internal static class NativeNavigationContracts
             !limited.DescribeFailure().Contains("omittedRejectionObservations=3", StringComparison.Ordinal))
             throw new InvalidOperationException("Bounded native rejection history silently dropped distinct failure observations.");
         Console.WriteLine("OPENNV_NAVIGATION_INTENT_PASS foldedSource=true separateReferenceRegion=true stackedFloors=true openFrameAdmission=true exactNativeRejection=true");
+    }
+
+    private static void CheckTerminalArrivalIntent()
+    {
+        var goal = new Vector3(0, 0, 2);
+        var terminal = NativeCapsuleNavigation.Intent(Vector3.Zero, [goal], goal, .25f);
+        if (!terminal.ReferenceApproach || terminal.ArrivalRadius != .25f || terminal.Target != goal || terminal.Corridor.Count != 0)
+            throw new InvalidOperationException("A long final source segment discarded its existing matching goal region.");
+        var portal = new Vector3(.5f, 0, 1);
+        var prefix = NativeCapsuleNavigation.Intent(Vector3.Zero, [portal, goal], goal, .25f);
+        var tail = NativeCapsuleNavigation.Intent(portal, [goal], goal, .25f);
+        if (prefix.ReferenceApproach || prefix.ArrivalRadius != 0 || prefix.Target != portal || prefix.Resume != 1 ||
+            !tail.ReferenceApproach || tail.ArrivalRadius != .25f || tail.Target != goal)
+            throw new InvalidOperationException("A terminal region skipped its required source portal or disappeared after arrival there.");
+        var near = new Vector3(.1f, 0, 0);
+        var folded = NativeCapsuleNavigation.Intent(Vector3.Zero, [new(.5f, 0, 0), new(.5f, 0, 2), near], near, .25f);
+        var loop = NativeCapsuleNavigation.Intent(Vector3.Zero, [new(.15f, 0, 0), new(-.15f, 0, 0), goal], goal, .25f);
+        if (folded.ReferenceApproach || folded.ArrivalRadius != 0 || folded.Target != new Vector3(.5f, 0, 2) ||
+            loop.ReferenceApproach || loop.ArrivalRadius != 0 || loop.Corridor.Count != 3)
+            throw new InvalidOperationException("Endpoint or last-portal proximity erased required directed source traversal.");
+        var upper = new Vector3(0, 3, 0);
+        var elevated = NativeCapsuleNavigation.Intent(Vector3.Zero, [upper], upper, .25f);
+        var different = NativeCapsuleNavigation.Intent(Vector3.Zero, [goal], goal + Vector3.Right * .05f, .25f);
+        var exact = NativeCapsuleNavigation.Intent(Vector3.Zero, [goal], goal, 0);
+        if (elevated.ReferenceApproach || elevated.ArrivalRadius != 0 || different.ReferenceApproach || different.ArrivalRadius != 0 ||
+            exact.ReferenceApproach || exact.ArrivalRadius != 0)
+            throw new InvalidOperationException("Terminal arrival changed floor, selected another goal or added an undeclared radius.");
+        var longGoal = new Vector3(0, 0, 10);
+        var slice = NativeCapsuleNavigation.Intent(Vector3.Zero, [longGoal], longGoal, .25f);
+        if (slice.ReferenceApproach || slice.ArrivalRadius != 0 || slice.Target != new Vector3(0, 0, 8) || slice.Resume != 0)
+            throw new InvalidOperationException("A final region bypassed the existing bounded source slice.");
+        Console.WriteLine("OPENNV_TERMINAL_ARRIVAL_INTENT_PASS matchingGoal=true originalRadius=true requiredPortals=true foldedRefused=true floorRetained=true boundedSlice=true");
     }
 
     private static void CheckSourceArrivalRegion()

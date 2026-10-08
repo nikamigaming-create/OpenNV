@@ -343,6 +343,9 @@ public partial class RuntimeCoordinator
             throw new InvalidOperationException(
                 "OpenXR was requested but no initialized runtime is available. " +
                 "Launch with --xr-mode on before --, connect the headset, and verify the active OpenXR runtime.");
+        // Godot stereo viewports cannot run native physics object picking.
+        // XR controls use their explicit ray/input adapter and GUI projection.
+        GetViewport().PhysicsObjectPicking = false;
         GetViewport().UseXR = true;
         _nativeXr = new(_configuration);
         _nativeXr.MenuRequested = ToggleNativeSessionMenu;
@@ -373,9 +376,7 @@ public partial class RuntimeCoordinator
 
     private void QuitOpenXr(int exitCode)
     {
-        GetViewport().UseXR = false;
-        _openXr?.Uninitialize();
-        _openXr = null;
+        StopNativeOpenXr();
         GetTree().Quit(exitCode);
     }
 

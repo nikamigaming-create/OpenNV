@@ -73,6 +73,13 @@ internal sealed partial class RuntimeNifControllerPlayer
         ValidateObjectState(state);
     }
 
+    internal bool IsPlayingState(FalloutObjectAnimationSnapshot state)
+    {
+        ValidateScriptState(state);
+        var sequence = _sequences[state.Sequence];
+        return sequence.CycleType == 0 || ResolveSourceTime(sequence, state.ElapsedSeconds) < sequence.StopTime;
+    }
+
     internal void ValidateObjectState(FalloutObjectAnimationSnapshot state)
     {
         state.Validate();

@@ -25,9 +25,7 @@ internal static partial class CellGraphAudit
         internal string? Checkpoint { get; init; }
         internal string? Snapshot { get; init; }
         internal Vector3? SampleNative { get; init; }
-        internal string? Mod { get; init; }
-        internal string? ModRoot { get; init; }
-        internal string[] Dependencies { get; init; } = [];
+        internal FalloutModStackSelection? SourceSelection { get; init; }
     }
 
     internal static int Run(string[] arguments)
@@ -41,9 +39,7 @@ internal static partial class CellGraphAudit
             throw new InvalidDataException("Cell-graph configuration has a different runtime schema.");
         var units = configuration.RootElement.GetProperty("world").GetProperty("gameUnitsToMeters").GetSingle();
         if (!float.IsFinite(units) || units <= 0) throw new InvalidDataException("Cell-graph units are invalid.");
-        using var source = options.Mod is { } mod
-            ? new FalloutModStackSelection([new(mod, options.ModRoot!, options.Dependencies)]).Resolve(arguments[0]).OpenSource()
-            : RuntimeLiveContentSource.Open(arguments[0], RuntimeLiveContentSource.FalloutNewVegasGame);
+        using var source = DevelopmentLabSource.Open(arguments[0], options.SourceSelection);
         using var records = FalloutPluginStack.Load(source.PluginSources);
         Directory.CreateDirectory(options.Output);
         return RunComponent(source, records, options, units, Convert.ToHexString(SHA256.HashData(payload))) ? 0 : 1;
@@ -52,8 +48,9 @@ internal static partial class CellGraphAudit
     internal static Options ParseOptions(string[] arguments)
     {
         if (arguments.Length < 2) throw new ArgumentException("cell-graph needs an installation and fresh output directory.");
-        string? seed = null, configuration = null, metadata = null, checkpoint = null, snapshot = null, mod = null, modRoot = null;
-        Vector3? sample = null; string[] dependencies = [];
+        string? seed = null, configuration = null, metadata = null, checkpoint = null, snapshot = null;
+        Vector3? sample = null;
+        var sourceOptions = new Dictionary<string, string>(StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 2; index < arguments.Length; index++)
         {
@@ -73,11 +70,8 @@ internal static partial class CellGraphAudit
                         float.Parse(Value(), CultureInfo.InvariantCulture));
                     if (!sample.Value.IsFinite()) throw new ArgumentException("Native sample must be finite.");
                     break;
-                case "--mod":
-                    mod = Value(); modRoot = Value(); dependencies = arguments[(index + 1)..];
-                    if (dependencies.Any(value => value.StartsWith("--", StringComparison.Ordinal)))
-                        throw new ArgumentException("--mod and its dependency roots must be last.");
-                    index = arguments.Length; break;
+                case "--mod" or "--mod-stack" or "--mod-order":
+                    DevelopmentLabSource.ReadOption(arguments, ref index, sourceOptions); break;
                 default: throw new ArgumentException("Unknown cell-graph option: " + option);
             }
         }
@@ -86,7 +80,7 @@ internal static partial class CellGraphAudit
         {
             Metadata = metadata, Checkpoint = checkpoint is null ? null : Path.GetFullPath(checkpoint),
             Snapshot = snapshot is null ? null : Path.GetFullPath(snapshot), SampleNative = sample,
-            Mod = mod, ModRoot = modRoot, Dependencies = dependencies,
+            SourceSelection = DevelopmentLabSource.ReadSelection(sourceOptions),
         };
     }
 

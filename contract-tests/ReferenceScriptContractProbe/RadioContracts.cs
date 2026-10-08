@@ -117,6 +117,7 @@ internal static class RadioContracts
 
     private static void Declaration()
     {
+        RadioHudDeclarationContracts.Run();
         var code = new byte[180]; code[20] = 0x68; BitConverter.GetBytes(1u).CopyTo(code, 21);
         code[60] = 0xb9; BitConverter.GetBytes(2u).CopyTo(code, 61); code[65] = 0xe8;
         code[80] = 0xd9; code[81] = 0x05; BitConverter.GetBytes(3u).CopyTo(code, 82);

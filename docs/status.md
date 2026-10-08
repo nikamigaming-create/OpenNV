@@ -34,14 +34,41 @@ reference-script errors remain visible.
 FO3's shared capsule refinement and source NPC door ownership now let Dad walk
 through the playpen/room route. Original package/script completion advances
 stages 16, 18 and 20, and ordinary player movement reaches stage 30. Its previous
-stage-14 save remains cold-verified. Saving the later state currently refuses
-active background radio speech; the active voice/result continuation is the next
-owner. See [native NPC door access](native-npc-door-access.md). The continuing
-opening, Megaton and full loading/saving acceptance remain open. Another native
-OpenXR process reaches CG01 stage 40 through ordinary movement. Activating the
-source SPECIAL book reaches stage 73 and fails closed on its unbound owned
-transform/light/projection layout. Source creature terrain routes and child
-hand/device presentation remain separate divergence owners.
+stage-14 save remains cold-verified. Save v49 now retains bounded active source
+radio; its fresh-owner native check preserves the fractional PCM suffix without
+selection or result replay. Later ordinary FO3 saves still refuse six active
+legacy birth loops whose disabled actor has no restored native emitter. See
+[native NPC door access](native-npc-door-access.md). FO3's owned SPECIAL book
+transform/light/projection and texture declarations now bind. Fresh ordinary
+pointer input completes its source 40-point allocation. The shared capsule
+planner retains the source arrival region after its mandatory corridor, allowing
+Dad's original bookshelf package and dialogue/escort to advance CG01 through
+stage 100. The original age/equipment/movie handoff reaches CG02 birthday stage
+12. The reached FO3 inventory/radio notices now bind their original optimized
+GMST/Float32 consumers, with synthetic drift refusals and independent owned
+declaration/media checks in FNV, FO3, TTW and the exact combined stack. Ordinary
+birthday replay emits the real Vault 101 discovery notice and permits Amata's
+previously blocked interaction. Owned evidence traces its next failure to
+priority sorting an unrelated The Pitt line before excluding its source speaker.
+General dialogue admission order and birthday completion remain open.
+Typed primary source-bone PCM continuation
+reconstructs its canonical adapter without replaying a key; exact sample/clock
+and clean native retirement checks pass. Disabled legacy and independent ANIO
+continuations remain refused. A living owned TTW creature also passes finite
+source-key completion and cold skeleton reconstruction with its complete saved
+reference/enable/script graph and prior sound history retained. The actual dead
+creature refuses dispatch; neither result establishes looping sound continuation.
+Complete childhood, Megaton, later saving and cold
+continuation remain open.
+Fresh TTW simulator Continue and normal Quit against the explicit pinned engine
+candidate now exit both processes with code zero and a clean full resource
+footer. Rejected source door construction admits its deterministic failures
+before allocating a native Node. Its original three controller refusals and
+all 565 missing SpeedTree references remain visible. The official installed
+engine is unchanged; repeated same-interface XR sessions, broad engine
+acceptance and the actual-worker backlog regression remain open.
+Source creature terrain routes and child hand/device presentation retain their
+own acceptance gates; flat progression does not certify independent XR play.
 
 Current loading/saving fixes support a genuine complete v46 TTW exterior
 checkpoint at Escape stage 150, CELL 0010c1, 115 HP and 8/14 rounds. The actual

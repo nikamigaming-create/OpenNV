@@ -70,9 +70,12 @@ if (args is ["--audit-message-declarations", var messageExecutable])
     return;
 }
 
-if (args is ["--audit-hud-declarations", var hudExecutable])
+if (args.Length > 0 && args[0] == "--audit-hud-declarations")
 {
-    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(FalloutExecutableStringTable.ReadHudMessageDeclarations(hudExecutable)));
+    if (args is [_, var hudExecutable])
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(FalloutExecutableStringTable.ReadHudMessageDeclarations(hudExecutable)));
+    else if (args is [_, var hudRoot, var hudCampaign]) HudDeclarationsProbe.Owned(hudRoot, hudCampaign);
+    else throw new ArgumentException("HUD declaration audit: --audit-hud-declarations <owned-executable> or <owned-root> <fallout-3|fallout-new-vegas>.");
     return;
 }
 

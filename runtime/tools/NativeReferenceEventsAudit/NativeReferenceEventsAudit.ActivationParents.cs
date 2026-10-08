@@ -61,7 +61,7 @@ public partial class NativeReferenceEventsAudit
                     var node = prototype.InstantiatePlaced(Placement(reference));
                     node.SetMeta("opennv_reference_form_key", reference.FormKey.ToString()); root.AddChild(node);
                     var controllers = NodeTraversal.SelfAndDescendants<RuntimeNifControllerPlayer>(node).ToArray();
-                    node.AddChild(new RuntimeNativeDoorMotion(owner.Get(reference.FormKey), controllers, () => { }));
+                    RuntimeNativeDoorMotion.Attach(node, owner.Get(reference.FormKey), controllers, () => { });
                     return node;
                 });
                 root.AddChild(presentation);

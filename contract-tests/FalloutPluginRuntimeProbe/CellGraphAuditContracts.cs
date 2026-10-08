@@ -10,6 +10,8 @@ internal static partial class CellGraphAuditContracts
 {
     internal static void Run()
     {
+        SourceCampaigns();
+        SourceOptions();
         PlacedRootMath();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-cell-graph-" + Guid.NewGuid().ToString("N"));
         var game = Path.Combine(directory, "Game");
@@ -166,7 +168,8 @@ internal static partial class CellGraphAuditContracts
     private static void Reject(Action action, string message)
     {
         try { action(); }
-        catch (Exception error) when (error is IOException or ArgumentException && error.Message.Contains(message, StringComparison.OrdinalIgnoreCase)) { return; }
+        catch (Exception error) when ((error is IOException or InvalidDataException or ArgumentException) &&
+            error.Message.Contains(message, StringComparison.OrdinalIgnoreCase)) { return; }
         throw new InvalidDataException("Cell-graph contract expected rejection: " + message);
     }
 }

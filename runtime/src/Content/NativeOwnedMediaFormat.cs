@@ -86,7 +86,9 @@ internal static class NativeOwnedMediaFormat
             throw new InvalidDataException("WAV requires valid fmt and nonempty data chunks.");
     }
 
-    internal static void ValidateMp3(ReadOnlySpan<byte> payload)
+    internal static void ValidateMp3(ReadOnlySpan<byte> payload) => _ = Mp3Format(payload);
+
+    internal static (int Rate, int Channels) Mp3Format(ReadOnlySpan<byte> payload)
     {
         if (payload.Length < MpegHeaderBytes)
             throw new InvalidDataException("MP3 resource is truncated.");
@@ -111,6 +113,15 @@ internal static class NativeOwnedMediaFormat
             (payload[frameOffset + 2] & 0xf0) is 0 or 0xf0 ||
             (payload[frameOffset + 2] & 0x0c) == 0x0c)
             throw new InvalidDataException("MP3 resource has no valid first MPEG audio frame.");
+        var baseRate = ((payload[frameOffset + 2] >> 2) & 3) switch
+        {
+            0 => 44100,
+            1 => 48000,
+            2 => 32000,
+            _ => throw new InvalidDataException("MP3 source rate is reserved.")
+        };
+        var version = (payload[frameOffset + 1] >> 3) & 3;
+        return (baseRate >> (version == 3 ? 0 : version == 2 ? 1 : 2), (payload[frameOffset + 3] & 0xc0) == 0xc0 ? 1 : 2);
     }
 
     internal static void ValidateOgg(ReadOnlySpan<byte> payload)
@@ -132,5 +143,19 @@ internal static class NativeOwnedMediaFormat
             !payload.Slice(bodyOffset + 1, VorbisIdentificationBytes - 1).SequenceEqual("vorbis"u8))
             throw new InvalidDataException(
                 "Ogg resource does not begin with a complete Vorbis identification packet.");
+    }
+
+    internal static (int Rate, int Channels) OggFormat(ReadOnlySpan<byte> payload)
+    {
+        ValidateOgg(payload);
+        var offset = OggMinimumHeaderBytes + payload[OggSegmentCountOffset];
+        if (payload[OggSegmentCountOffset] == 0 || payload[OggMinimumHeaderBytes] != 30 ||
+            payload.Length - offset < 30 || BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 7)..]) != 0 ||
+            (payload[offset + 29] & 1) == 0)
+            throw new InvalidDataException("Vorbis identification packet has an unsupported version or extent.");
+        var rate = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 12)..]));
+        var channels = payload[offset + 11];
+        if (rate <= 0 || channels == 0) throw new InvalidDataException("Vorbis identification has an empty rate or channel count.");
+        return (rate, channels);
     }
 }

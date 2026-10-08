@@ -205,8 +205,23 @@ Station mode remains independent of reception, the receiver and audio timelines.
 Ended scripted radio has a separate v48 speech-history owner, bound to its
 original station/reference/base/topic and winning hashes. Cold restoration
 retains its cumulative native voice/line generations without INFO selection,
-audio, result callbacks or RNG consumption. Active voices and opaque callbacks
-require their own continuations before save admission.
+audio, result callbacks or RNG consumption. Active v49 radio additionally retains
+the selected winning station/INFO, generation, response index, selected-line
+state, native voice/media identities and finite PCM clock. Restore consumes no
+selection RNG or committed result prefix. Source-owned radio capture rejects
+response SOUN/IDLE and opaque callback owners. v48 migration supplies no invented
+active continuation; successful compiled result-prefix authority, other speech
+and unprovable legacy emitters retain their separate open owners/refusals.
+Exact native samples do not certify retail bus, speaker or
+device-buffer parity.
+
+Primary skeletal sound emitters retain typed source reference, skeleton path/hash,
+bone block/name and PCM clock through the existing animation-sound ledger. Cold
+restoration validates the current parsed primary skeleton and recreates one
+canonical BoneAttachment before a sound key or RNG draw. Applied enable state is
+queried from the current authoritative world, including XESP parents and world
+transfer. Disabled, anonymous legacy and independent ANIO emitter lifetimes keep
+their own refusal boundaries; persistence does not invent a stop or new pose.
 
 [Activation dispatch](activation-lifecycle.md) retains the complete reverse XAPR
 graph and explicit invalid winning endpoints. Validation follows the reached
@@ -502,7 +517,13 @@ integer base writes. Source `ssbmp` dispatch publishes menu1060 and owns a modal
 lease; the source stage prefix and timer retain quest authority. Active book
 continuations refuse saving. Player pools retain source identity and base,
 permanent, temporary and damage lanes across cold saves; skill/vitals consumers
-read that same owner. Complete actor cold restoration remains separate work.
+read that same owner. FO3 optimized Float32 transform/projection/light transports
+and the independent FNV declarations bind the same menu surface. All 25 source
+texture associations retain their loader, field, formatter and PC-platform
+receiver; required media is decoded before ordinary menu input. Source activation
+consumes its original stage prefix before opening the 40-point menu. Failure
+retains that prefix/error, closes its modal lease and does not replay the script.
+Complete actor cold restoration remains separate work.
 
 Explicit [source-string arguments](nvse-source-string-arguments.md) resolve
 deferred typed values before admitting bare literals. Numeric executable defaults

@@ -1,19 +1,31 @@
-using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using Godot;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed class NativeOwnedPcmStream
+internal sealed class NativeOwnedPcmStream : IDisposable
 {
     private sealed class Source(float[] samples, int channels, int rate, int outputRate, FalloutSoundLoop loop,
-        FalloutPcmPlaybackSnapshot? saved)
+        FalloutPcmPlaybackSnapshot? saved, bool suspended)
     {
+        private readonly object _gate = new();
         internal readonly List<FalloutPcmPlayback> Playbacks = [];
         internal FalloutPcmPlayback Allocate()
         {
-            var playback = new FalloutPcmPlayback(samples, channels, rate, outputRate, loop, saved);
-            saved = null; Playbacks.Add(playback); return playback;
+            lock (_gate)
+            {
+                var playback = new FalloutPcmPlayback(samples, channels, rate, outputRate, loop, saved);
+                playback.SetSuspended(suspended);
+                saved = null; Playbacks.Add(playback); return playback;
+            }
+        }
+        internal void SetSuspended(bool value)
+        {
+            lock (_gate)
+            {
+                suspended = value;
+                foreach (var playback in Playbacks) playback.SetSuspended(value);
+            }
         }
     }
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -35,39 +47,57 @@ internal sealed class NativeOwnedPcmStream
     private static Create? _create;
     private static Release? _release;
     private readonly Source _source;
+    internal NativeOwnedPcmData Data { get; }
     internal AudioStream Stream { get; }
 
     internal NativeOwnedPcmStream(AudioStreamWav wav, FalloutSoundLoop loop, FalloutPcmPlaybackSnapshot? saved = null)
+        : this(RequireWav(wav), loop, saved) { }
+
+    private static NativeOwnedPcmData RequireWav(AudioStreamWav wav)
     {
         if (wav.Format != AudioStreamWav.FormatEnum.Format16Bits)
             throw new NotSupportedException("Checkpointed PCM playback currently requires decoded 16-bit WAV samples.");
-        var bytes = wav.Data;
-        var samples = new float[bytes.Length / 2];
-        for (var index = 0; index < samples.Length; index++)
-            samples[index] = BinaryPrimitives.ReadInt16LittleEndian(bytes.AsSpan(index * 2, 2)) / 32768f;
-        var channels = wav.Stereo ? 2 : 1;
-        _source = new(samples, channels, wav.MixRate, checked((int)AudioServer.GetMixRate()), loop, saved);
+        return new(wav);
+    }
+
+    internal NativeOwnedPcmStream(NativeOwnedPcmData data, FalloutSoundLoop loop, FalloutPcmPlaybackSnapshot? saved = null,
+        bool suspended = false)
+    {
+        Data = data;
+        _source = new(data.Samples, data.Channels, data.Rate, checked((int)AudioServer.GetMixRate()), loop, saved, suspended);
         // Validate before publishing a native object or callback handle.
-        _ = new FalloutPcmPlayback(samples, channels, wav.MixRate, checked((int)AudioServer.GetMixRate()), loop, saved);
+        _ = new FalloutPcmPlayback(data.Samples, data.Channels, data.Rate, checked((int)AudioServer.GetMixRate()), loop, saved);
         EnsureLibrary();
         var context = GCHandle.Alloc(_source);
         var id = _create!(GCHandle.ToIntPtr(context), Marshal.GetFunctionPointerForDelegate(Mix),
             Marshal.GetFunctionPointerForDelegate(Query), Marshal.GetFunctionPointerForDelegate(Allocate),
-            Marshal.GetFunctionPointerForDelegate(Free), wav.GetLength(), loop.Mode == FalloutSoundLoopMode.None ? 0 : 1);
+            Marshal.GetFunctionPointerForDelegate(Free), (double)data.Frames / data.Rate, loop.Mode == FalloutSoundLoopMode.None ? 0 : 1);
         if (id == 0) { context.Free(); throw new InvalidOperationException("Native PCM stream construction failed."); }
+        AudioStream? stream = null;
         try
         {
-            Stream = GodotObject.InstanceFromId(id) as AudioStream ?? throw new InvalidOperationException("Native PCM object has no AudioStream binding.");
-            foreach (var key in new[] { "opennv_owned_media_source", "opennv_owned_media_path", "opennv_owned_media_sha256" })
-                Stream.SetMeta(key, wav.GetMeta(key, ""));
+            Stream = stream = GodotObject.InstanceFromId(id) as AudioStream ?? throw new InvalidOperationException("Native PCM object has no AudioStream binding.");
+            Stream.SetMeta("opennv_owned_media_source", data.MediaSource);
+            Stream.SetMeta("opennv_owned_media_path", data.MediaPath);
+            Stream.SetMeta("opennv_owned_media_sha256", data.MediaSha256);
+            Stream.SetMeta("opennv_decoded_pcm_sha256", data.Sha256);
         }
+        catch { stream?.Dispose(); throw; }
         finally { _release!(id); }
     }
+
+    public void Dispose() => Stream.Dispose();
+    internal void SetSuspended(bool suspended) => _source.SetSuspended(suspended);
 
     internal FalloutPcmPlaybackSnapshot Capture()
     {
         if (_source.Playbacks.Count != 1) throw new InvalidDataException("A source voice has no unique PCM playback owner.");
         return _source.Playbacks[0].Capture();
+    }
+    internal void RequireHealthy()
+    {
+        if (_source.Playbacks.Count != 1) throw new InvalidDataException("A source voice has no unique PCM playback owner.");
+        _source.Playbacks[0].RequireHealthy();
     }
     internal void ReleaseEnvelope()
     {

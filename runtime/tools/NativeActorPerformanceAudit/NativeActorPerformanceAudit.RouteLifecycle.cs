@@ -68,7 +68,7 @@ public partial class NativeActorPerformanceAudit
         fixture.AddChild(instance);
         var controllers = instance.FindChildren("*", "", true, false).OfType<RuntimeNifControllerPlayer>().ToArray();
         var doorState = world.Get(door.FormKey);
-        var motion = new RuntimeNativeDoorMotion(doorState, controllers, () => { }); instance.AddChild(motion); motion.SetProcess(false);
+        var motion = RuntimeNativeDoorMotion.Attach(instance, doorState, controllers, () => { }); motion.SetProcess(false);
         foreach (var controller in controllers) controller.SetProcess(false);
         await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);

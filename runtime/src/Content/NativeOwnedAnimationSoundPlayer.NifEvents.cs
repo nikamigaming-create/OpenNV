@@ -75,6 +75,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
                     () => { if (voice is AudioStreamPlayer3D spatialVoice) ApplyListener(spatialVoice, _spatial[spatialVoice]); }, followEmitter);
             else if (voice is AudioStreamPlayer3D) emitter.AddChild(voice);
             else AddChild(voice);
+            if (pcm is not null) voice.AddChild(new NativeOwnedPcmVoicePause(voice, pcm));
         }
         catch { if (voice is AudioStreamPlayer3D spatialVoice) _spatial.Remove(spatialVoice); voice.Free(); throw; }
         var reference = voice is AudioStreamPlayer3D && followEmitter ? NativeOwnedSoundVoice.Reference(_records, emitter) : null;
@@ -135,6 +136,23 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     {
         if (!_voices.TryGetValue(node, out var voice)) return;
         var completed = end is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped;
+        if (completed && voice.Pcm is { } pcm)
+        {
+            try { pcm.RequireHealthy(); }
+            catch (InvalidDataException error)
+            {
+                var textKey = voice.Generation is { } failedGeneration
+                    ? _events!.Events.Single(entry => entry.Generation == failedGeneration).TextKey : "native-pcm-mixer";
+                _events?.Fail(voice.Generation, error.Message, textKey);
+                _unbound.Add(textKey + ":" + error.Message);
+                LastEvent = new { ordinal = ++_eventCount, textKey, disposition = "unbound-source-sound", error = error.Message };
+                ForgetVoice(node);
+                node.QueueFree();
+                DisposeRetiredStreams();
+                ObserveEvent();
+                return;
+            }
+        }
         if (voice.Generation is { } generation)
         {
             if (end == FalloutAnimationSoundEnd.NativeFinished) voice.SaveDrain?.NativeFinished();

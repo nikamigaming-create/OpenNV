@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
+using OpenNV.Runtime.World.Actors;
 
 internal static class RadioConversationContracts
 {
@@ -35,6 +36,7 @@ internal static class RadioConversationContracts
             Reject(() => radio.CaptureFinishedState());
             Require(radio.Info?.Record.FormKey == Key(301) && radio.VoiceIdentity().Actor == Key(10),
                 "Radio lost station predicate identity, default topic or remote voice actor.");
+            CheckActiveCold(records, world, quests, radio.CaptureActiveState());
             Reject(() => radio.Start(Key(900)));
             Require(radio.Info?.Record.FormKey == Key(301) && radio.CompletedLines == 0, "Rejected interruption restarted a source line.");
             phase = 1; radio.CompleteLine();
@@ -51,10 +53,60 @@ internal static class RadioConversationContracts
             Reject(() => radio.Start(Key(900)));
             Require(!radio.Active && world.GetBroadcastState(Key(900)), "Missing continuous owner changed mode.");
             Console.WriteLine("OPENNV_RADIO_CONVERSATION_PASS fullReader=true stationPredicates=true remoteVoice=true defaultTopic=true " +
-                "sourceLinks=true freshConditions=true goodbye=true endedCold=true sourceBound=true noReplay=true activeCaptureRefused=true " +
+                "sourceLinks=true freshConditions=true goodbye=true endedCold=true sourceBound=true noReplay=true activeCursorCold=true finishedOnlyCaptureRefused=true " +
                 "modePreserved=true interruptionAtomic=true continuousRefused=true");
         }
         finally { foreach (var path in Directory.EnumerateFiles(directory)) File.Delete(path); Directory.Delete(directory); }
+    }
+    private static void CheckActiveCold(FalloutPluginStack records, FalloutReferenceWorld world, FalloutQuestState quests,
+        FalloutActiveRadioConversationSnapshot snapshot)
+    {
+        var saved = JsonSerializer.Deserialize<FalloutActiveRadioConversationSnapshot>(JsonSerializer.Serialize(snapshot))!;
+        var restoring = true;
+        var cold = new FalloutRadioConversation(records, world, quests,
+            (_, _) => throw new InvalidDataException("Cold radio replayed a source condition."),
+            _ => restoring ? throw new InvalidDataException("Cold radio reselected the current line.") : 1,
+            new HashSet<FalloutFormKey>(), _ => throw new InvalidDataException("Cold radio consumed source RNG."));
+        cold.RestoreActiveState(saved);
+        Require(cold.Info?.Record.FormKey == Key(301) && cold.CompletedLines == 0 &&
+            JsonSerializer.Serialize(cold.CaptureActiveState()) == JsonSerializer.Serialize(saved),
+            "Cold radio changed its selected line or completion history.");
+        Reject(() => cold.RestoreActiveState(saved));
+        restoring = false; cold.CompleteLine();
+        Require(cold.Info?.Record.FormKey == Key(302) && cold.CompletedLines == 1,
+            "Cold radio failed to evaluate the next source link against changed quest state.");
+        var samples = new FalloutPcmPlaybackSnapshot(120, 32000, 1, 48000,
+            new(FalloutSoundLoopMode.None, 0, 0), 33.25, 0, true, false);
+        var voice = new FalloutActiveRadioVoiceSnapshot(saved, 1, 0,
+            new(Key(10), Key(10), Key(20), "Voice", Key(301), "Radio.esm", 1,
+                "sound/voice/radio.esm/voice/source_0000012d_1.ogg", "sound/voice/radio.esm/voice/source_0000012d_1.lip"),
+            new('a', 64), null, new('b', 64), samples, false, false);
+        var history = new FalloutNativeFinishedSpeechSnapshot([new(Key(900), 1, 0)], 0, 0, 0, 0, 0, null,
+            SettledHistory: new FalloutSpeechCompletionEvents().CaptureHistory(), FinishedRadio: [], ActiveRadio: [voice]);
+        RuntimeNativeSpeech.ValidateFinishedState(records, world, history);
+        world.SetBroadcastState(Key(900), 1);
+        RuntimeNativeSpeech.ValidateFinishedState(records, world, history);
+        world.SetBroadcastState(Key(900), 0);
+        void RejectVoice(FalloutActiveRadioVoiceSnapshot invalid) => Reject(() =>
+            RuntimeNativeSpeech.ValidateFinishedState(records, world, history with { ActiveRadio = [invalid] }));
+        RejectVoice(voice with { Generation = 2 });
+        RejectVoice(voice with { ResponseIndex = 1 });
+        RejectVoice(voice with { Binding = voice.Binding with { Actor = Key(11) } });
+        RejectVoice(voice with { AudioSha256 = "missing" });
+        RejectVoice(voice with { Samples = samples with { Position = double.NaN } });
+        RejectVoice(voice with { Samples = samples with { Position = samples.Frames } });
+        RejectVoice(voice with { Samples = samples with { Playing = false } });
+        RejectVoice(voice with { Samples = samples with { Playing = false, StartPending = true } });
+        RejectVoice(voice with { Samples = samples with { Loops = 1 } });
+        RejectVoice(voice with { Samples = samples with { Releasing = true } });
+        RejectVoice(voice with { Advance = true });
+        RejectVoice(voice with { Conversation = saved with { InfoSha256 = new('f', 64) } });
+        RejectVoice(voice with { Conversation = saved with { Info = Key(201) } });
+        RuntimeNativeSpeech.ValidateFinishedState(records, world, history with { ActiveRadio =
+            [voice with { Samples = samples with { Playing = false, Position = 0, StartPending = true } }] });
+        RuntimeNativeSpeech.ValidateFinishedState(records, world, history with { ActiveRadio =
+            [voice with { Samples = samples with { Playing = false, Position = samples.Frames }, Advance = true }] });
+        Reject(() => RuntimeNativeSpeech.ValidateFinishedState(records, world, history with { ActiveRadio = [voice, voice] }));
     }
     private static void CheckFinishedCold(FalloutPluginStack records, FalloutReferenceWorld world, FalloutQuestState quests,
         FalloutFinishedRadioConversationSnapshot snapshot)

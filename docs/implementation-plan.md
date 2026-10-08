@@ -1,5 +1,111 @@
 # Gameplay, playtest and release plan
 
+## Complete-game direction and execution
+
+The October 7 full-scope direction is complete Fallout: New Vegas, Fallout 3,
+TTW, the selected combined stack, all nine JAM modules, JIP LN, JohnnyGuitar,
+JFP and every required dependency. Keep the original eleven mod targets, all
+installed DLCs, ordinary campaigns, flat/OpenXR, complete saves, clean-system
+launch and matched retail evidence in scope. JFP's exact package identity is
+unresolved; retain that named requirement until its package is identified.
+Do not substitute JIP or another similarly named dependency for it.
+
+All 36 existing broad requirements remain open. No percentage, completion date,
+showcase, record count or source-registration pass certifies the requested scope.
+The source graph supplies the denominator; the checklist preserves earlier
+requirements without limiting newly discovered behavior.
+
+### Parallel ownership
+
+Use all available agent slots for independent owners. The current four-slot
+allocation is primary integration/live play/evidence/publication, FO3 source
+menu/HUD/navigation transports, typed active audio/cold continuation, and
+source/resource lifetime plus dependency auditing. Reassign a finished slot to the next proven
+failure: creature terrain navigation, SpeedTree geometry, material/LOD coverage,
+compiled SCDA, unchanged x86 plugin execution, then remaining campaign owners.
+One owner controls builds, game processes, input, checkpoint writes and checked
+publication. Parallel owners coordinate files, submit bounded proposals and do
+not run competing live sessions or mutate another owner's source/save state.
+
+### Source and acceptance matrix
+
+| Scope | Complete acceptance outcome | First remaining owners |
+| --- | --- | --- |
+| Standalone FNV plus owned DLCs | Fresh launcher New Game, full opening/tutorial, connected world, all authored quests/branches and systems, persistent outcomes and cold continuation | Reached scripts, Sunny/Cheyenne/tutorial, complete combat/advancement, materials/vegetation/LOD and world/campaign coverage |
+| Standalone FO3 plus owned DLCs | Fresh ordinary birth/childhood/G.O.A.T./Escape, exterior/Megaton, complete campaign/DLC/system behavior and cold continuation | Reached birthday/NPC/result-script owners, legacy loop saving, child presentation, later opening and independent source audit |
+| TTW plus its dependency graph | Complete Capital campaign and DLCs, source power/ticket/train route to Mojave, both campaigns/DLCs, return travel and cold outcomes | Exterior creature paths/trees, Megaton/Union Station, train requirements, source scripts and Benny reset/gear consequences |
+| Combined selected stack | Same routes with authored winners, dependency behavior, configured options and interactions intact | Full source selection/settings identity, SCDA, native extensions, MCM and ordinary multi-mod gameplay |
+| JAM | Dynamic Crosshair, Hit Marker, Hit Indicator, Visual Objectives, Hold Breath, Sprint, Bullet Time, Weapon Wheel and Loot Menu, with complete MCM configuration | Remaining source syntax/effects, hit contexts/events, HUD/MCM, input/AP/timing/inventory owners and unchanged dependencies |
+| xNVSE/JIP/JohnnyGuitar/TTW NVSE/kNVSE/UIO and required frameworks | Original downloaded scripts/DLLs run unchanged through their real interfaces and observable effects, with persistent state | Compiled execution, x86 CPU/loader/imports/TLS/ABI, actual object projection, callbacks, hook consumers and serialization |
+| JFP and additional required packages | Identified versioned source/dependency graph, real used behavior and combined-stack acceptance | Resolve package identity, then source-driven interface and gameplay coverage |
+| Flat and OpenXR | Same authoritative gameplay/save outcomes; complete input/menu/device/weapon/body presentation in each mode | Independent simulator final eyes and physical headset input, tracking, scale, comfort and motion acceptance |
+| Release | Clean non-developer Windows New Game/save/quit/Continue using selected owned files and unchanged mods | Native dependencies/decoder resolution, asset-free package, license notices and independent user playtests |
+
+FNV, FO3, TTW and combined results are independent rows. A TTW interpretation
+of FO3 data does not close standalone FO3. A source interpreter or managed
+replacement does not close authoritative SCDA or original-DLL execution.
+The x86 host needs an early actual plugin demonstration with a callback,
+real object access and a used engine hook; memory mapping/registration alone
+cannot satisfy that demonstration. Do this alongside campaign work.
+
+### Exhaustive discovery and error handling
+
+1. Pin the selected owned installation, executable, ordered plugins, dependency
+   packages, settings and winning loose/BSA identities. Use the existing corpus,
+   quest-graph, cell-graph and native telemetry owners. Extend their existing
+   source selection where a game cannot be audited; do not create a second lab.
+2. Enumerate every winning record/program/condition/resource/reference and
+   directed portal, including unnamed cells, disabled alternatives, deleted
+   winners, compiled-only bodies and inactive source arms. Keep source decoding,
+   command effects, native entities and final draws as independent lanes.
+3. Bind each failure to source identity, build, reproduction, earliest incorrect
+   owner and a closure gate. Retain parser/layout errors, uninspected statements,
+   unsupported commands/procedures/materials, missing actors/draws, native errors,
+   corrupt media, save refusals and telemetry loss explicitly. No swallowed error,
+   invented success, reduced selection or replacement actor can make a row pass.
+4. Prioritize crash/data loss/deadlock and ordinary progression/save blockers,
+   then missing runtime content, combat/navigation, dependency behavior,
+   presentation/audio and frame timing. Preserve every lower-priority failure.
+   A command that completes enumeration with recorded failures is a failed lane,
+   not a passing gameplay audit; a CLI/setup failure is a separate failed run.
+5. Expand source-derived scope through every cell/worldspace and authored quest
+   and plugin branch. Static enumeration cannot prove every reachable state,
+   numeric value, loop count or timing interleaving. Add ordinary state/event
+   coverage and negative/interruption/override tests to each implemented owner.
+
+### Fix, play, inspect and publish cycle
+
+For each next failure, reproduce it from a genuine immutable checkpoint or a
+fresh ordinary New Game; trace the winning source contract; implement the
+general C# owner and Godot adapter; add meaningful synthetic and unrelated owned
+instances/overrides; then replay the actual blocked action. Use ordinary input
+for talk/trade/craft/equip/reload/fight/loot/doors and source quest progression.
+No teleport, stage write, edited save or lab fixture counts as campaign progress.
+
+Write a complete ordinary save at each settled segment, quit and cold Continue
+in another process. Check unchanged original checkpoints and exact retained
+quests/scripts, inventory, actor/procedure/physics clocks, audio, mod state,
+source compatibility and player state. Exercise pause, interruption, failure,
+cell replacement, in-process load, death/reload and flat/XR handoff where relevant.
+
+During a specific visual check, review the complete gameplay take and its
+source telemetry, decode audio/video, inspect temporal sequences and both final
+eyes, and classify every visible delta by owner. Retain failed sections and
+original timing/colors. An edited showcase is presentation evidence for its
+actual excerpts; it cannot conceal an unreached route or stand in for a matched
+retail run. Match source/state/camera/event/timing/audio/UI/final pixels before
+claiming parity. Physical-headset acceptance remains an independent user gate.
+Recording stays off during edits/builds/headless checks; temporary frames are
+deleted after inspection/export in cleanup paths.
+
+Before publication, run the selected owned-data audits, required full runtime
+gate and diff check below. Resolve their failures, publish a checked PR, merge,
+and verify clean local main equals origin/main with no outstanding task PR.
+Start the next owner on a fresh codex/ branch. Keep current-work.md limited to
+verified state, current blockers and the executable next outcome. Completion
+requires all matrix rows and every discovered blocking lane to pass; a successful
+fix moves the work forward without closing a broader unverified requirement.
+
 October 7 direction: prioritize functional loading and saving, then the reached
 exterior completeness/LOD/performance failures. Verify standalone New Vegas,
 standalone Fallout 3, TTW and the combined mod stack independently, and verify
