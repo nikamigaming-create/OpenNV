@@ -1,5 +1,13 @@
 # Product status
 
+Shared source palette binding fixes the reproduced black FO3 dialogue text:
+absent packed overrides use original INI RGB components, while explicit packed
+overrides, including black, remain authoritative. Synthetic source/override and
+malformed-owner checks and actual original dialogue-font output pass in FNV,
+FO3, TTW and the combined selection. Source bytes remain unchanged and the
+engine and its console wrapper retire naturally with clean resource footers. Full menu/state
+coverage and matched retail pixels remain unverified.
+
 The requested single 2:04 OpenXR simulator edit is exported and inspected. It
 includes all three cold-loading handoffs, FNV walking/Easy Pete dialogue/two
 coyote kills, standalone FO3 Dad/childhood and TTW night walking/a molerat kill/

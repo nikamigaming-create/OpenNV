@@ -3,6 +3,14 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+UI system-color tokens share a C# palette reader. Explicit installation/profile
+packed HUD and Pip-Boy settings override their channels; absent overrides read
+the complete original INI RGB component declaration. Zero-initialized executable
+packed storage is not an authored override. Arbitrary declared palette identities
+use the same component reader, and missing or malformed channels refuse
+publication. The no-system-color token leaves the canvas untinted. Native menu,
+name-entry and start-menu consumers use this owner without game-specific colors.
+
 [Source convex lists](source-convex-list-collision.md) retain exact ordered
 declarations and publish separate convex leaves under their original body.
 Nested transforms, body mass, source filters and partial-construction retirement

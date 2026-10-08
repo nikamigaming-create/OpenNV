@@ -167,8 +167,8 @@ internal sealed class NativeOwnedMenuTree
         if (!float.IsFinite(backgroundOpacity) || backgroundOpacity is < 0 or > 1)
             throw new InvalidDataException("Owned menu background opacity is outside its unit interval.");
         Bind(_globals, "_background_fill_alpha", backgroundOpacity * 255);
-        var color = _settings.Unsigned("Interface", "uHUDColor");
-        Color = new Color((color >> 24) / 255.0f, ((color >> 16) & 255) / 255.0f, ((color >> 8) & 255) / 255.0f);
+        var color = FalloutUiSystemColors.Read(_settings, "entity_HUDMain");
+        Color = new Color(color.X, color.Y, color.Z);
     }
     internal void Bind(XElement tile, string trait, float value) => _values[(tile, trait)] = value;
     internal void BindText(XElement tile, string trait, string value) => _textValues[(tile, trait)] = value;
@@ -234,25 +234,8 @@ internal sealed class NativeOwnedMenuTree
     {
         var value = tile.Element("systemcolor")?.Value.Trim().ToLowerInvariant();
         if (value is null) return tile.Parent is { } parent ? TileColor(parent) : Color;
-        if (value == "entity_terminal")
-        {
-            float Component(string channel)
-            {
-                var component = _settings.Number("Interface", "iSystemColorTerminal" + channel);
-                if (!float.IsFinite(component) || component is < 0 or > 255)
-                    throw new InvalidDataException("Owned terminal system color is outside its byte interval.");
-                return component / 255;
-            }
-            return new Color(Component("Red"), Component("Green"), Component("Blue"));
-        }
-        if (value == "entity_hudmain") return Color;
-        if (value == "entity_pipboy")
-        {
-            var packed = _settings.Unsigned("Interface", "uPipboyColor");
-            return new Color((packed >> 24) / 255f, ((packed >> 16) & 255) / 255f, ((packed >> 8) & 255) / 255f);
-        }
-        if (value == "entity_nosystemcolor") return new Color(1, 1, 1);
-        throw new NotSupportedException($"Owned menu system color is unbound: {value}.");
+        var color = FalloutUiSystemColors.Read(_settings, value);
+        return new Color(color.X, color.Y, color.Z);
     }
     internal NativeBitmapFontAsset Font(XElement tile)
     {
