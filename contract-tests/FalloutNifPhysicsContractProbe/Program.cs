@@ -5,6 +5,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 RagdollConstraintContracts.Run();
 HingeConstraintContracts.Run();
+ConvexListContracts.Run();
 
 // Offsets come from the Fallout bhkWorldObject, bhkEntity and 550/660 CInfo
 // layouts. Distinct sentinels catch field swaps that a zero-filled body cannot.

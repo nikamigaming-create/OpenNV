@@ -235,6 +235,7 @@ internal sealed partial class FalloutNifFile
             "bhkCapsuleShape" => ReadCapsuleShape(block, ref cursor),
             "bhkConvexVerticesShape" => ReadConvexVerticesShape(block, ref cursor),
             "bhkListShape" => ReadListShape(block, ref cursor),
+            "bhkConvexListShape" => ReadConvexListShape(block, ref cursor),
             "bhkConvexTransformShape" or "bhkTransformShape" => ReadConvexTransformShape(block, ref cursor),
             "BSShaderNoLightingProperty" => ReadNoLightingProperty(block, ref cursor),
             "TileShaderProperty" => ReadTileShaderProperty(block, ref cursor),

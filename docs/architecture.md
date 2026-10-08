@@ -3,6 +3,13 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Source convex lists](source-convex-list-collision.md) retain exact ordered
+declarations and publish separate convex leaves under their original body.
+Nested transforms, body mass, source filters and partial-construction retirement
+remain owned separately. Conflicting compound materials refuse hit dispatch.
+Winning-resource discovery records unsupported headers as failures; source
+enumeration does not stand in for whole-model contacts or ordinary gameplay.
+
 [The native x86 execution domain](native-plugin-execution-domain.md) joins an
 x64 C# owner to an authored Windows x86 companion. Windows owns native DLL
 imports/TLS/entry and the narrow ABI; C# owns request generations, callbacks,

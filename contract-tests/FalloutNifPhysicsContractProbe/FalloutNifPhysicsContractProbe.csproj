@@ -7,6 +7,8 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/tools/NativeNifInstanceAudit/FalloutConvexListFixture.cs" Link="FalloutConvexListFixture.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.ConvexLists.cs" Link="FalloutNifFile.ConvexLists.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifHingeConstraint.cs" Link="FalloutNifHingeConstraint.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifRagdollConstraint.cs" Link="FalloutNifRagdollConstraint.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.Particles.cs" Link="FalloutNifFile.Particles.cs" />
