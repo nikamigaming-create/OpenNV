@@ -3,6 +3,12 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[Source model hinges](source-model-hinges.md) retain independent native bodies
+and resolve their source local frames only after the whole model is built.
+Each instance owns its joint endpoints and physics-server lifetime. Basic and
+limited hinges preserve their declared freedom, limits and friction; unsupported
+joint kinds fail visibly rather than pinning a moving body's collider.
+
 Executable defaults admit either constructor associations or preinitialized
 Win32 setting descriptors. Static descriptors require backed writable storage,
 read-only virtual tables/locators, executable virtual methods and an exact typed

@@ -123,6 +123,11 @@ public partial class NativeNifInstanceAudit : Node
                 GetTree().Quit();
                 return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--hinge", var hingeRoot, var hingeModel])
+            {
+                await ExerciseHingePhysics(hingeRoot, hingeModel);
+                GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--wind", var windRoot, var windModel])
             {
                 await ExerciseWind(windRoot, windModel);
