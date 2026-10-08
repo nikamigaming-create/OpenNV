@@ -29,6 +29,16 @@ internal static class ReferenceAccessContracts
             FalloutReferenceScripts Scripts(FalloutReferenceWorld owner) => new(records, owner, quests,
                 new((_, _) => false, _ => ++effects));
             var scripts = Scripts(world);
+            Require(world.CanNpcOpenDoor(Key(0xb0), Key(0x9a)) && world.CanNpcOpenDoor(Key(0xb1), Key(0x9a)) &&
+                !world.CanNpcOpenDoor(Key(0xb0), Key(14)) && !world.CanNpcOpenDoor(Key(0xb2), Key(0x9a)) &&
+                !world.CanNpcOpenDoor(Key(0xb3), Key(0x9a)) && !world.CanNpcOpenDoor(Key(0xb4), Key(0x9a)) &&
+                world.GetLocked(Key(0xb0)) == 1 && world.GetLockLevel(Key(0xb0)) == 255 &&
+                !world.Get(Key(0xb0)).DoorOpen && !world.Get(Key(0xb0)).Unlocked,
+                "NPC door access lost exact ownership, admitted conditional/foreign owners or changed its lock.");
+            world.SetOwnership(Key(0xb0), Key(7));
+            Require(!world.CanNpcOpenDoor(Key(0xb0), Key(0x9a)) && world.CanNpcOpenDoor(Key(0xb0), Key(14)) &&
+                world.GetLocked(Key(0xb0)) == 1, "Door admission ignored its retained ownership change.");
+            world.SetOwnership(Key(0xb0), Key(8));
             void Run(string source, uint caller = 0x91) => scripts.ExecuteProgram(records.GetEffective(Key(caller)),
                 records.GetEffective(Key(0x50)), FalloutGameModeProgram.Read("begin GameMode\n" + source + "\nend"), 0);
 
@@ -115,6 +125,9 @@ internal static class ReferenceAccessContracts
 
             var snapshots = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
             using var cold = new FalloutReferenceWorld(records); cold.Restore(snapshots); cold.LoadCell(cell);
+            Require(cold.CanNpcOpenDoor(Key(0xb0), Key(0x9a)) && !cold.CanNpcOpenDoor(Key(0xb0), Key(14)) &&
+                cold.GetLocked(Key(0xb0)) == 1 && !cold.Get(Key(0xb0)).DoorOpen,
+                "Cold NPC ownership permission unlocked/opened the door or admitted another caller.");
             Require(cold.GetLocked(Key(0x90)) == 1 && cold.GetLockLevel(Key(0x90)) == 100 &&
                 cold.Ownership(Key(0x94)).Owner == PatchKey(0x121) && cold.Get(Key(0x93)).Taken &&
                 cold.Get(Key(0x91)).ScriptError == fault.Error, "Cold access, ownership, pickup or source fault changed.");
@@ -147,7 +160,7 @@ internal static class ReferenceAccessContracts
             VerifySourceDrift(directory, plugin, patch, snapshots);
             Require(effects == 0, "Reference access emitted a native presentation effect.");
             Console.WriteLine("OPENNV_REFERENCE_ACCESS_PASS ff=true defaults=true byteLevel=true absent=true actualCaller=true " +
-                "typedQueries=true lazy=true perInstance=true typedOwners=true playerBaseDefault=true effectivePickup=true " +
+                "typedQueries=true lazy=true perInstance=true typedOwners=true npcOwnedDoor=true retainedDoorLock=true playerBaseDefault=true effectivePickup=true " +
                 "keyUnlock=true cold=true legacyUnlock=true sourceDrift=true invalidAtomic=true retainedFault=true " +
                 "terminal=true terminalPassword=true terminalPerInstance=true linkedAndLeveledDifficultyAndCellAccess=unbound lockpickAndInheritedCrime=unverified");
         }
@@ -235,7 +248,14 @@ internal static class ReferenceAccessContracts
             Reference("REFR", 0xa0, 5, "SourceTerminal"), Reference("REFR", 0xa1, 6, "PasswordTerminal"),
             Reference("REFR", 0xa2, 5, "OtherTerminal"),
             Reference("REFR", 0xa3, 0x30, "BadTerminalDifficulty"), Reference("REFR", 0xa4, 0x31, "BadTerminalFlags"),
-            Reference("REFR", 0xa5, 0x32, "BadTerminalExtent"), Reference("REFR", 0xa6, 0x33, "BadTerminalPassword")));
+            Reference("REFR", 0xa5, 0x32, "BadTerminalExtent"), Reference("REFR", 0xa6, 0x33, "BadTerminalPassword"),
+            Reference("REFR", 0xb0, 1, "NpcOwnedDoor", Field("XLOC", Lock(255, 0, 0, 12)), Field("XOWN", BitConverter.GetBytes(8u))),
+            Reference("REFR", 0xb1, 1, "ActorOwnedDoor", Field("XLOC", Lock(255, 0, 0, 12)), Field("XOWN", BitConverter.GetBytes(0x9au))),
+            Reference("REFR", 0xb2, 1, "FactionOwnedDoor", Field("XLOC", Lock(255, 0, 0, 12)), Field("XOWN", BitConverter.GetBytes(11u))),
+            Reference("REFR", 0xb3, 1, "ConditionalOwnedDoor", Field("XLOC", Lock(255, 0, 0, 12)),
+                Field("XOWN", BitConverter.GetBytes(8u)), Field("XGLB", BitConverter.GetBytes(0x40u))),
+            Reference("REFR", 0xb4, 1, "RankOwnedDoor", Field("XLOC", Lock(255, 0, 0, 12)),
+                Field("XOWN", BitConverter.GetBytes(8u)), Field("XRNK", BitConverter.GetBytes(2)))));
 
     private static FalloutFormKey Key(uint id) => new("Access.esm", id);
     private static FalloutFormKey PatchKey(uint id) => new("AccessPatch.esp", id);

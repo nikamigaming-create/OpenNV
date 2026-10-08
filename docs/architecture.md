@@ -9,6 +9,11 @@ Each instance owns its joint endpoints and physics-server lifetime. Basic and
 limited hinges preserve their declared freedom, limits and friction; unsupported
 joint kinds fail visibly rather than pinning a moving body's collider.
 
+[Native NPC door access](native-npc-door-access.md) uses one retained C#
+ownership query for route admission and final interaction. Exact NPC/base
+ownership admits the actor without unlocking the door for another caller.
+Actor route refinement shares the complete capsule query with player navigation.
+
 Executable defaults admit either constructor associations or preinitialized
 Win32 setting descriptors. Static descriptors require backed writable storage,
 read-only virtual tables/locators, executable virtual methods and an exact typed

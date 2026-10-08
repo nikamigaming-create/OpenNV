@@ -24,8 +24,8 @@ internal partial class RuntimeNativeReferenceEvents
             activator.Node is null || !_world.CanActivate(actor) || _world.IsDead(actor))
             throw new NotSupportedException("Door activation requires a living resident NPC owner; creature door capabilities remain unbound.");
         RequireRouteDoor(door);
-        if (_world.GetLocked(door.Reference.FormKey) != 0)
-            throw new NotSupportedException("Locked NPC route-door key/ownership semantics remain unbound.");
+        if (!_world.CanNpcOpenDoor(door.Reference.FormKey, actor))
+            throw new NotSupportedException("Locked NPC route door requires its retained key or conditional ownership owner.");
     }
 
     private void RequireRouteDoor(Binding door, FalloutFormKey? activatingParent = null)

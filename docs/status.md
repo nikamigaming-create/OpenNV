@@ -8,9 +8,19 @@ upright on its stand. Matched retail physics and generic loose-object pose savin
 remain open; see [source model hinges](source-model-hinges.md).
 Ordinary FNV creation now reaches stage 200, accepts the source farewell and
 Hardcore choice, crosses the house door into Goodsprings and writes a complete
-v48 checkpoint at 120 HP with 27 inventory entries. Cold continuation of that
-new exterior checkpoint remains pending. Property-free LOD draws and reached
+v48 checkpoint at 120 HP with 27 inventory entries. Another process cold-Continues
+that exterior checkpoint in 35.7 seconds with the original position, health,
+inventory and unchanged bytes. Its requested daytime loading/walk clip is delivered.
+Property-free LOD draws and reached
 reference-script errors remain visible.
+
+FO3's shared capsule refinement and source NPC door ownership now let Dad walk
+through the playpen/room route. Original package/script completion advances
+stages 16, 18 and 20, and ordinary player movement reaches stage 30. Its previous
+stage-14 save remains cold-verified. Saving the later state currently refuses
+active background radio speech; the active voice/result continuation is the next
+owner. See [native NPC door access](native-npc-door-access.md). The continuing
+opening, Megaton and full loading/saving acceptance remain open.
 
 Current loading/saving fixes support a genuine complete v46 TTW exterior
 checkpoint at Escape stage 150, CELL 0010c1, 115 HP and 8/14 rounds. The actual
