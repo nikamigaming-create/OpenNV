@@ -112,6 +112,7 @@ internal static partial class QuestGraphAuditContracts
             StrictBsaCompressedFraming(directory);
             SourceBsaEncodingAdmission(directory);
             StrictHuffmanReaderAdmission(directory);
+            SourceEventEndLabels(directory);
             SourceCallDenominator(directory);
             Console.WriteLine("OPENNV_QUEST_GRAPH_DENOMINATOR_CONTRACT_PASS deletedWinner=true orphanBodies=true duplicateBodies=true emptyCompiled=true inactiveArms=true rawFieldsOnce=true unknownExecution=true failuresRetained=true sourceUnchanged=true");
         }

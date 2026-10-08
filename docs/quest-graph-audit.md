@@ -44,6 +44,17 @@ Compiled instruction coverage remains independently unknown. Authored inactive,
 nested, loop, assignment, malformed and legacy-argument cases retain this boundary
 without invoking functions or reading/writing gameplay state.
 
+Source event blocks accept bare End or one optional case-insensitive name that
+matches the open event. A label does not select another event or reproduce its
+filter/parameters. Orphan, repeated, mismatched, quoted, numeric and extra-token
+closers, open branches/loops and missing closers retain failures. Actual
+Debug/Release full-reader contracts retain the original fields, inactive arms
+and uninspected compiled bodies without invoking any event. Independently read
+original matching-label fields now parse in FNV, TTW and combined with unchanged
+source and complete raw-field report hashes; unrelated failures remain intact.
+Parser version, saved program identity and missing-owner migration permission
+remain unchanged. Complete corpus reads under this newer parser remain pending.
+
 The finite denominator is authored predicates and alternatives. Its independent
 Boolean domain is represented symbolically as 2^N; correlated or unreachable
 valuations are not asserted as playable states. Numeric state, loop iteration,
