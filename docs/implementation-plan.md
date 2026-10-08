@@ -19,8 +19,8 @@ requirements without limiting newly discovered behavior.
 
 Use all available agent slots for independent owners. The current four-slot
 allocation is primary integration/live play/evidence/publication, FO3 source
-menu/HUD/navigation transports, typed active audio/cold continuation, and
-source/resource lifetime plus dependency auditing. Reassign a finished slot to the next proven
+Eat procedure and dependency execution, compiled SCDA/result and save ownership,
+and native OpenXR session/worker lifetime. Reassign a finished slot to the next proven
 failure: creature terrain navigation, SpeedTree geometry, material/LOD coverage,
 compiled SCDA, unchanged x86 plugin execution, then remaining campaign owners.
 One owner controls builds, game processes, input, checkpoint writes and checked

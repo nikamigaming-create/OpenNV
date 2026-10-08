@@ -117,6 +117,15 @@ foreach ($probe in $probes) {
     if ($LASTEXITCODE -ne 0) { throw "$probe failed." }
 }
 
+foreach ($configuration in @('Debug', 'Release')) {
+    & (Join-Path $PSScriptRoot 'Build-NativePluginDomain.ps1') -Configuration $configuration
+    $domainProject = Join-Path $repository 'contract-tests/NativePluginGuestMemoryProbe/NativePluginGuestMemoryProbe.csproj'
+    $domainOutput = Join-Path $runtime "generated/native-plugins/$configuration"
+    & dotnet run --project $domainProject --configuration $configuration -- --test-native-domain `
+        (Join-Path $domainOutput 'opennv_plugin_domain.exe') (Join-Path $domainOutput 'fixtures')
+    if ($LASTEXITCODE -ne 0) { throw "Native plugin execution-domain $configuration contracts failed." }
+}
+
 & npm run check --prefix (Join-Path $repository "desktop")
 if ($LASTEXITCODE -ne 0) { throw "Desktop launcher syntax checks failed." }
 & npm test --prefix (Join-Path $repository "desktop")

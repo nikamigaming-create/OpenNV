@@ -1,0 +1,15 @@
+EXPORTS
+    OpenNvDomainDescribe=OpenNvDomainDescribe
+    OpenNvDomainBind=OpenNvDomainBind
+    OpenNvScalarCdecl=OpenNvScalarCdecl
+    OpenNvScalarStdcall=_OpenNvScalarStdcall@8
+    OpenNvThiscall=OpenNvThiscall
+    OpenNvCallbackCdecl=OpenNvCallbackCdecl
+    OpenNvCallbackStdcall=_OpenNvCallbackStdcall@8
+    OpenNvBadCleanup=OpenNvBadCleanup
+    OpenNvBadPreservation=OpenNvBadPreservation
+    OpenNvBadStdcallCleanup=OpenNvBadCalleeCleanup
+    OpenNvBadThiscallCleanup=OpenNvBadCalleeCleanup
+    OpenNvRaise=OpenNvRaise
+    OpenNvHang=OpenNvHang
+    OpenNvForeignCallback=OpenNvForeignCallback

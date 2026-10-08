@@ -8,6 +8,15 @@ explicit chapters preserve the whole submitted left-eye image. The full MP4
 decodes cleanly. All three immutable checkpoint hashes are unchanged. This
 showcase does not establish complete games, retail parity or headset acceptance.
 
+The native x86 execution domain now passes actual x64 C# to x86 Windows
+Debug/Release checks: real TLS/import/entry, scalar cdecl/stdcall/thiscall,
+nested callbacks, loader/ABI/thread faults, quotas/deadlines and retirement.
+Seven actual child fault envelopes separately check request correlation and
+malformed refusal. The native build restores its parent environment. Read-only
+source-memory audits preserve the selected xNVSE/JIP/JohnnyGuitar DLL hashes;
+no original plugin is loaded. Original interfaces, game objects, used hooks and
+serialization remain absent. See [native execution](native-plugin-execution-domain.md).
+
 OpenXR weapon input now uses semantic fire/reload actions in the existing
 authoritative weapon owner. The native fixture passes with empty desktop
 bindings, including the source fighting refusal and one consumed round. A fresh
