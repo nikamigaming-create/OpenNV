@@ -132,7 +132,8 @@ internal sealed partial class RuntimeNativeActorCombat
             _routeFailures = Math.Min(4, _routeFailures + 1);
             _routeClock = .5 * _routeFailures;
             DisposeRouteSearch();
-            var refinedSpacing = Math.Max(.15f, _radius);
+            // The actor radius already includes its source and instance scale.
+            var refinedSpacing = NativeCapsuleNavigation.RefinementSpacing(_routeSpacing, _radius, 1);
             if (_routeRefinements == 0 && refinedSpacing < _routeSpacing)
             {
                 // A diameter-sized lattice can skip an executable short

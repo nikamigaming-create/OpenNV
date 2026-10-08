@@ -26,6 +26,22 @@ internal sealed partial class FalloutReferenceWorld
         return true;
     }
 
+    internal bool CanNpcOpenDoor(FalloutFormKey reference, FalloutFormKey actor)
+    {
+        var instance = Get(reference);
+        if (records.GetEffective(instance.Base).Signature != "DOOR")
+            throw new InvalidDataException("NPC door access requires a placed door.");
+        var activator = Get(actor);
+        if (records.GetEffective(activator.Base).Signature != "NPC_" || !CanActivate(actor) || IsDead(actor)) return false;
+        if (GetLocked(reference) == 0) return true;
+        var owner = Ownership(reference);
+        // A declared NPC/base or exact actor owner can use its own door.
+        // This permission does not unlock it for another caller. Conditional
+        // faction/global ownership and NPC key use need their separate owners.
+        return owner.Global is null && owner.FactionRank is null &&
+            (owner.Owner == activator.Base || owner.Owner == actor);
+    }
+
     internal void Take(FalloutFormKey reference, FalloutPlayerInventory player, int level, FalloutGlobalState? globals)
     {
         var instance = Get(reference);

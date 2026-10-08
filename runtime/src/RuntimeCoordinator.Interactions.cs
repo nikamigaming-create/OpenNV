@@ -132,8 +132,8 @@ public partial class RuntimeCoordinator
     {
         var world = _nativeReferences!;
         var player = actor == _nativePluginStack!.RuntimeFormKey(0x14);
-        if (!player && (type != "DOOR" || reference.Teleport is not null || world.GetLocked(reference.FormKey) != 0))
-            throw new NotSupportedException($"Default interaction by {actor} requires an unlocked ordinary door.");
+        if (!player && (type != "DOOR" || reference.Teleport is not null || !world.CanNpcOpenDoor(reference.FormKey, actor)))
+            throw new NotSupportedException($"Default interaction by {actor} requires an ordinary door admitting that NPC.");
         if (player && type is "DOOR" or "CONT" or "TERM" && !world.UnlockWithKey(reference.FormKey, _nativeInventory))
         {
             GD.Print($"OPENNV_NATIVE_LOCKED reference={reference.FormKey} level={world.Lock(reference.FormKey)!.Level}");

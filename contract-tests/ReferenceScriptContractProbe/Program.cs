@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--reference-access-contracts"])
+{
+    ReferenceAccessContracts.Run();
+    return;
+}
+
 if (args is ["--game-time-command-contracts"])
 {
     GameTimeCommandContracts.Run();
