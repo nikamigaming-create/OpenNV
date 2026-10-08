@@ -1,5 +1,14 @@
 # Product status
 
+OpenXR weapon input now uses semantic fire/reload actions in the existing
+authoritative weapon owner. The native fixture passes with empty desktop
+bindings, including the source fighting refusal and one consumed round. A fresh
+FNV simulator run cold-loads Goodsprings, equips/reloads through VR controls,
+walks and kills a resident source crow. Submitted left-eye footage shows both
+hands, the wrist inventory, gun and fallen body. Physical-headset acceptance,
+stereo, retail parity and broader game completion remain unverified. See
+[XR weapon actions](xr-weapon-actions.md).
+
 The reported runaway FNV globe motion is repaired through source model hinges:
 joined bodies remain dynamic, bind their declared pivots/axes and exclude mutual
 collision. Synthetic contracts, four independent owned-source stacks and native

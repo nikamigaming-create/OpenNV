@@ -3,6 +3,10 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[XR weapon actions](xr-weapon-actions.md) enter the existing native weapon owner
+as named fire/reload events, preserving source gates and ammunition/animation
+state independently of remapped or absent desktop input events.
+
 [Source model hinges](source-model-hinges.md) retain independent native bodies
 and resolve their source local frames only after the whole model is built.
 Each instance owns its joint endpoints and physics-server lifetime. Basic and
