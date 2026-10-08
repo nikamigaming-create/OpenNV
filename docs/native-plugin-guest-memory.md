@@ -24,7 +24,7 @@ dotnet run --project .\contract-tests\NativePluginGuestMemoryProbe --configurati
 dotnet run --project .\contract-tests\NativePluginGuestMemoryProbe --configuration Release -- --audit-owned-memory $OwnedPluginDll
 ```
 
-## Unavailable execution contract
+## Separate native execution and remaining plugin contracts
 
 Recovered private JIP 57.30 author-source observations require expression utility
 initialization; copied StringVar, ArrayVar, CommandTable, Script and Serialization
@@ -33,9 +33,12 @@ and post-load hook installation and continuation. Its hook writes request memory
 protection changes and instruction-cache flushing. An observer or decoder does
 not supply execution.
 
-There is no verified first-party isolated x86 CPU/Windows execution boundary,
-NVSE ABI/callback marshalling, live engine-object layout/vtable/lifetime bridge,
-or used hook continuation bound to authoritative C# gameplay owners. Those
+The separate [native execution domain](native-plugin-execution-domain.md) now
+passes authored x64 C# to x86 Windows loader, scalar ABI, nested callback,
+deadline/fault and retirement checks in Debug and Release. This detached memory
+owner is not its executable memory. Original NVSE ABI/interface marshalling,
+live engine-object layout/vtable/lifetime and used hook continuation bound to
+authoritative C# gameplay owners remain unimplemented. Those
 contracts block an unchanged-original-plugin callback/object/hook demonstration.
 This owner does not advertise interfaces, invoke plugin code, fabricate actors,
 return callback success, install hooks or change any gameplay/save/startup owner.

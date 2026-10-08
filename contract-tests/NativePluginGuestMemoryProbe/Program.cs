@@ -1,5 +1,11 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args.Length == 3 && args[0] == "--test-native-domain")
+{
+    NativeExecutionContracts.Run(args[1], args[2]);
+    return;
+}
+
 if (args.Length != 0)
 {
     if (args.Length != 2 || args[0] != "--audit-owned-memory")

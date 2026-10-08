@@ -9,5 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\runtime\src\Compatibility\NativePlugins\X86GuestMemory.cs" Link="X86GuestMemory.cs" />
+    <Compile Include="..\..\runtime\src\Compatibility\NativePlugins\NativePluginExecutionDomain.cs" Link="NativePluginExecutionDomain.cs" />
+    <Compile Include="..\..\runtime\src\Compatibility\NativePlugins\NativePluginExecutionDomain.Protocol.cs" Link="NativePluginExecutionDomain.Protocol.cs" />
   </ItemGroup>
 </Project>

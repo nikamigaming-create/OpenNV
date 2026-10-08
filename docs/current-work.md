@@ -143,11 +143,12 @@ Recording is off; selected temporary inspection frames have been deleted.
 
 ## Current divergence owners
 
-The general source-menu/audio/resource block is merged through checked PR #173;
-clean local main equalled origin/main at 87c63aa with no open task PRs before
-the fresh dialogue/furniture-subject feature branch began.
+The general dialogue admission, GetSitting source-subject and complete sound
+save-admission block is merged through checked PR #174. Clean local main
+equalled origin/main at d029c23 with no open task PRs before the fresh native
+execution-domain branch began.
 The general dialogue admission and GetSitting source-subject capabilities are
-integrated on the fresh branch. Debug/Release authored checks and native
+integrated. Debug/Release authored checks and native
 NPC/creature/player physical/cold checks pass. Ordinary FO3 selects Paul's
 original Eat package with the actual different physical subject; food,
 furniture, idle, inventory and procedure completion remain unbound. An
@@ -199,14 +200,31 @@ ordinary play/save acceptance are early architecture work. Preserve compiled-onl
 programs and the complete winning graph; do not replace downloaded DLLs with a
 managed compatibility claim.
 
+The fresh native execution-domain branch passes actual x64 C# to x86 Windows
+Debug/Release authored loader/TLS/import/entry, scalar ABI and nested callbacks.
+Actual ABI/thread/quota/owner faults, complete transaction watchdogs, stale
+capabilities, native unload and child retirement pass. Seven actual child fault
+envelopes verify generation and waiting-request correlation before native codes
+are trusted. The build restores its parent environment. Original selected
+xNVSE/JIP/JohnnyGuitar source-memory audits pass without changed DLL bytes or
+loading them. NVSE runtime interfaces, native game-object/arena projection,
+original Query/Load/PostLoad, used engine hooks and serialization remain absent.
+Compiled SCDA scheduling/result authority is still unpromoted; its early SCTX
+parse, absent-host fallback and legacy cursor ownership need explicit admission.
+The parallel Eat review retains actual FO3 food/default-list/idle declarations
+and TTW's independent Travel override. Save ordering needs a persisted request
+owner; clearing the pending-auto flag or disabled loop history is not a repair.
+
 ## Next owner and outcome
 
 The integrated general source-menu/audio/resource block passes the full required
 runtime gate against installed Godot 4.7.2, including Release/Debug, analyzers,
 contract/launcher and verbose native door/navigation checks. Selected independent
 owned audits and fresh ordinary FO3/TTW replay results are retained above.
-The required full runtime gate passes for dialogue admission, GetSitting subject
-selection and complete audio save admission; checked publication is next. Ordinary FO3
+The required full runtime gate passed for the published dialogue admission,
+GetSitting subject and complete sound admission. Native execution now passes
+the full required gate, including both real native configurations, startup,
+runtime owners and launcher checks. Checked publication is next. Ordinary FO3
 replay from the unchanged toddler checkpoint verifies the original Amata
 conversation through CG02 stage 21 and retains all remaining failures. The
 unchanged subject condition has reached its original Eat-procedure refusal.
@@ -236,6 +254,14 @@ tmp/development-lab/full-scope-audit-20261007; ordinary FO3 replay is
 ordinary-fo3-dialogue-save-admission-20261008. Prior failed Amata/save replay is
 ordinary-fo3-dialogue-sitting-20261008. Fresh TTW natural clean XR quit is
 tmp/development-lab/full-scope-xr-ttw-door-lifetime-20261008.
+Actual integrated native execution/source-memory evidence is under
+tmp/development-lab/native-plugin-domain-next/root-integrated-20261008.
+The independent unrepaired worker test build is under
+tmp/development-lab/openxr-repeat-session-next/worker-engine-test-20261008;
+its first macro-guarded fixture compilation failure is retained. The narrow
+test-only correction compiles and links the exact pinned engine, and the
+unrepaired actual-owner test is running. No worker assertion or repeated-session
+acceptance is claimed yet.
 The requested MP4 is
 local/recordings/showcase-20261007/opennv-three-games-vr-showcase.mp4.
 Its original input mapping/timing remains private. Preserve only immutable

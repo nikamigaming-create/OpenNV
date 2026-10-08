@@ -3,6 +3,15 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+[The native x86 execution domain](native-plugin-execution-domain.md) joins an
+x64 C# owner to an authored Windows x86 companion. Windows owns native DLL
+imports/TLS/entry and the narrow ABI; C# owns request generations, callbacks,
+budgets, faults and retirement. Fault envelopes retain the actual nested
+request's operation/ID/parent before their native code is admitted. Actual
+Debug/Release authored execution passes; original plugin interfaces, objects,
+used hooks and persistence remain unbound. Detached source-memory copies do
+not become executable native pages.
+
 Dialogue admits the source speaker and SayOnce restrictions before asking for
 quest priority. Pure self GetIsID exclusions cannot query an unrelated quest;
 uncertain OR/random/run-on and unowned trait restrictions remain candidates
