@@ -50,7 +50,21 @@ declaration/media checks in FNV, FO3, TTW and the exact combined stack. Ordinary
 birthday replay emits the real Vault 101 discovery notice and permits Amata's
 previously blocked interaction. Owned evidence traces its next failure to
 priority sorting an unrelated The Pitt line before excluding its source speaker.
-General dialogue admission order and birthday completion remain open.
+General dialogue admission now excludes a source-ineligible speaker before
+quest-priority lookup while retaining every eligible missing-owner failure.
+Fresh Debug/Release and physical NPC/creature/player checks validate source
+GetSitting subject ownership, including explicit different actors and cold
+furniture restoration. Ordinary FO3 selects Paul's original Eat package using
+the actual seated Overseer; the Eat procedure remains unbound. Complete sound
+save admission now retains missing/looping source histories as visible save
+blockers without turning their automatic capture failure into a player-package
+failure. Fresh ordinary replay reaches Amata's source-package greeting, uses
+two original dialogue choices, receives the skill-book gift and reaches birthday
+stage 21. The automatic save remains deferred and the manual save fails
+concurrent-auto-save; both original and cloned checkpoint hashes are unchanged.
+Both processes quit naturally with code zero and a clean resource footer, with
+39 distinct source diagnostics retained. Complete birthday and later cold
+checkpoint acceptance remain open.
 Typed primary source-bone PCM continuation
 reconstructs its canonical adapter without replaying a key; exact sample/clock
 and clean native retirement checks pass. Disabled legacy and independent ANIO

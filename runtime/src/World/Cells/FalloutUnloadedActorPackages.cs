@@ -29,7 +29,8 @@ internal sealed record FalloutActorPackageAssignment(FalloutFormKey Package, str
 // invents native movement, arrival, actor presentation or package completion.
 internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutQuestState quests, FalloutGameTime? clock, FalloutGlobalState? globals,
-    Action<FalloutPackageEvent, FalloutFormKey> execute, Func<int> playerLevel)
+    Action<FalloutPackageEvent, FalloutFormKey> execute, Func<int> playerLevel,
+    Func<FalloutFormKey, int>? sitting = null)
 {
     internal const string ContinuationBlocker = "Unloaded actor package assignment awaits its native procedure continuation.";
     private readonly Dictionary<FalloutFormKey, FalloutPackageEvents> _actors = [];
@@ -136,6 +137,8 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
 
     private float Evaluate(FalloutFormKey caller, FalloutCondition condition)
     {
+        if (condition.Function == 159)
+            return FalloutAiPackages.Sitting(records, condition, caller, sitting ?? (reference => world.GetSitting(reference)));
         if (world.EvaluateActorReferenceCondition(caller, condition) is { } referenceQuery) return referenceQuery;
         if (condition.Function is 56 or 58 or 59 or 79 or 546) return quests.Evaluate(condition);
         if (condition.Function == 18) return (clock ?? throw new NotSupportedException("Unloaded AI has no simulation clock.")).Hour;

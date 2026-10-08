@@ -35,7 +35,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         requested = _saveRequested,
         sourceManual = _scripts.ScriptManualSaves.Receipt,
         sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
-        deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceFiniteAudioSaveBlocker,
+        deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
         activeContinuationSaving = "source-radio-pcm;other-continuations-unbound"
     };
 

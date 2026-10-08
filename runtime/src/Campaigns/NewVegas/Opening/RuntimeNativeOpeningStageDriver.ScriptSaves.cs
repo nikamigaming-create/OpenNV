@@ -12,8 +12,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal FalloutScriptManualSaveRequests ManualSourceSaveRequests => _scripts.ScriptManualSaves;
     private string? SourceManualSaveFailure => _scripts.ScriptManualSaves.Receipt is { Disposition: "failed" } receipt
         ? $"Source ForceSave request {receipt.Generation} failed: {receipt.Error}" : null;
-    private string? SourceFiniteAudioSaveBlocker => _scripts.References!.PendingAnimationSoundCaptureCount != 0 &&
-        _scripts.References.PendingAnimationSoundFiniteVoiceWait() is { Count: > 0 } ? "source-finite-audio" : null;
+    private string? SourceAnimationSoundSaveBlocker => _scripts.References!.AnimationSoundSaveBlocker;
 
     private void BindSourceManualSaves()
     {
@@ -37,5 +36,5 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal string? ObserveOriginalSourceManualSaveBlocker() => _saveRequested
         ? throw new NotSupportedException("Concurrent AutoSave and ForceSave require persistent save-request ordering.")
         : SourceManualSaveBlocker?.Invoke() ??
-        (_scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceFiniteAudioSaveBlocker);
+        (_scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker);
 }

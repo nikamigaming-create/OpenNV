@@ -27,13 +27,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
         if (condition.Function == 84)
             return (deadCount ?? throw new NotSupportedException("Dialogue death count has no shared death history."))(condition.FormArgument1);
         if (condition.Function == 159)
-        {
-            var subject = FalloutAiPackages.ConditionSubject(condition, speaker, Listener);
-            if (records.RuntimeFormId(subject) != 0x14 && records.GetEffective(subject).Signature is not ("ACHR" or "ACRE"))
-                throw new InvalidDataException("Dialogue GetSitting subject is not an actor.");
-            var state = (sitting ?? throw new NotSupportedException("Dialogue GetSitting has no physical furniture owner."))(subject);
-            return state is >= 0 and <= 4 ? state : throw new InvalidDataException("Dialogue sitting owner returned an invalid phase.");
-        }
+            return FalloutAiPackages.Sitting(records, condition, speaker, sitting, Listener);
         // The command's reference/quest and declaration index are explicit
         // arguments. They do not become the speaker or listener's locals.
         if (condition.Function == 53)

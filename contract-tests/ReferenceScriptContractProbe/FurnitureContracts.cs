@@ -58,6 +58,7 @@ internal static partial class FurnitureContracts
             ReferenceQueries(records, world, actor, chair, otherActor);
             ColdFurniture(records, cell, actor, chair, otherActor);
             StoppedProcedureContracts();
+            PackageSittingContracts();
             Console.WriteLine("OPENNV_FIND_FURNITURE_CONTRACT_PASS sourceMasters=true radius=true actualPlacement=true enabled=true actorFactionOwnership=true targetKinds=true reservations=true playerRecordAbsent=true unsupportedRefused=true");
         }
         finally { Directory.Delete(directory, recursive: true); }

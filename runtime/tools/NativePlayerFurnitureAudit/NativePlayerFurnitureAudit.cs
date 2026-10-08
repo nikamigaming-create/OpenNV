@@ -114,8 +114,16 @@ public partial class NativePlayerFurnitureAudit : Node3D
                 if (state.GetProperty("error").ValueKind != JsonValueKind.Null) throw new InvalidOperationException(state.ToString());
                 var phase = state.GetProperty("phase").GetString()!;
                 var expectedSitting = phase switch { "none" or "approaching" => 0, "entering" => 2, "occupied" => 3, "exiting" => 4, _ => -1 };
-                if (world.GetSitting(records.RuntimeFormKey(0x14), _ => player.SittingState) != expectedSitting)
+                var playerKey = records.RuntimeFormKey(0x14);
+                if (world.GetSitting(playerKey, _ => player.SittingState) != expectedSitting)
                     throw new InvalidOperationException("Player script-visible sitting phase differs from its actual native furniture clock.");
+                // A neutral CTDA component input reaches the shared declaration
+                // owner with this actual native player phase; no package is run.
+                var sittingCondition = new FalloutCondition(records.GetEffective(reference.FormKey), 0,
+                    expectedSitting, 159, 0, 0, 0, 0);
+                if (FalloutAiPackages.Sitting(records, sittingCondition, playerKey,
+                    subject => world.GetSitting(subject, _ => player.SittingState)) != expectedSitting)
+                    throw new InvalidOperationException("Shared sitting condition differs from the actual native player furniture phase.");
                 phases.Add(phase);
                 if (phase == "occupied" && ++occupiedFrames >= 180 && !occupied)
                 {

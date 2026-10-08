@@ -491,6 +491,9 @@ internal partial class RuntimeNativeNpc
 
     internal float EvaluateAiCondition(FalloutCondition condition)
     {
+        if (condition.Function == 159)
+            return FalloutAiPackages.Sitting(_aiStack ?? throw new NotSupportedException("AI sitting query has no source owner."),
+                condition, Appearance.Reference!.Value, PackageSitting);
         if (condition.Function == 47)
             return OpenNV.Runtime.Gameplay.State.FalloutActorInventoryConditions.ItemCount(
                 condition, Appearance.Reference!.Value, _aiItemCount);
@@ -523,6 +526,14 @@ internal partial class RuntimeNativeNpc
         throw new NotSupportedException($"AI condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} has no subject owner.");
     }
 
+    private int PackageSitting(FalloutFormKey subject)
+    {
+        var records = _aiStack ?? throw new NotSupportedException("AI sitting query has no source owner.");
+        return records.RuntimeFormId(subject) == 0x14
+            ? (Combat?.PackagePlayer ?? throw new NotSupportedException("AI player sitting query has no native furniture owner.")).SittingState
+            : (_aiWorld ?? throw new NotSupportedException("AI sitting query has no shared reference world.")).GetSitting(subject);
+    }
+
     private float EvaluateOwnAiCondition(FalloutCondition condition) => condition.Function switch
     {
         18 => (_aiClock ?? throw new NotSupportedException("AI time query has no simulation clock.")).Hour,
@@ -545,7 +556,6 @@ internal partial class RuntimeNativeNpc
         108 => Combat?.WeaponAnimationType ?? 0,
         110 => CurrentAiPackage,
         143 => CurrentAiProcedure,
-        159 => SittingState,
         160 => _seat?.MarkerId ?? 0,
         162 => _furnitureReference == condition.FormArgument1 ? 1 : 0,
         163 => _seat?.Furniture == condition.FormArgument1 ? 1 : 0,
