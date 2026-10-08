@@ -50,7 +50,14 @@ internal static class NativeNifCollisionBuilder
         if (body.Mass < 0.0f)
             throw new InvalidDataException($"NIF rigid body {body.Block.Index} has negative mass.");
 
-        var pinToWorld = attachment.IsBlend || body.Constraints.Length != 0;
+        var pinToWorld = attachment.IsBlend;
+        if (!pinToWorld)
+            foreach (var constraint in body.Constraints)
+            {
+                var hinge = source.ReadHingeConstraint(constraint);
+                if (hinge.Header.EntityA != body.Block.Index && hinge.Header.EntityB != body.Block.Index)
+                    throw new InvalidDataException("Source body registers another pair's hinge.");
+            }
         PhysicsBody3D result;
         if (body.Mass == 0.0f || pinToWorld || body.MotionSystem is 6 or 7)
             result = new StaticBody3D();

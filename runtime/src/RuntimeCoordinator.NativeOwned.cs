@@ -77,6 +77,10 @@ public partial class RuntimeCoordinator
                 references = _nativeActiveCell.References.Select(reference => reference.FormKey.ToString()).ToArray(),
             },
             referenceEvents = _nativeReferenceEvents?.State,
+            rigidBodies = detailed ? CaptureNativeRigidBodies() : null,
+            modelConstraints = detailed ? _nativeReferencePresentation?.Nodes.SelectMany(reference =>
+                OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<RuntimeNifHingeJoint>(reference.Value)
+                    .Select(joint => new { reference = reference.Key.ToString(), joint = joint.State })).ToArray() : null,
             references = _nativeReferences is null ? null : new
             {
                 _nativeReferences.InstanceCount,

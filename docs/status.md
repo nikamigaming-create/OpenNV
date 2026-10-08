@@ -1,5 +1,17 @@
 # Product status
 
+The reported runaway FNV globe motion is repaired through source model hinges:
+joined bodies remain dynamic, bind their declared pivots/axes and exclude mutual
+collision. Synthetic contracts, four independent owned-source stacks and native
+globe/bucket fall-and-settle checks pass. The rebuilt FNV room shows the globe
+upright on its stand. Matched retail physics and generic loose-object pose saving
+remain open; see [source model hinges](source-model-hinges.md).
+Ordinary FNV creation now reaches stage 200, accepts the source farewell and
+Hardcore choice, crosses the house door into Goodsprings and writes a complete
+v48 checkpoint at 120 HP with 27 inventory entries. Cold continuation of that
+new exterior checkpoint remains pending. Property-free LOD draws and reached
+reference-script errors remain visible.
+
 Current loading/saving fixes support a genuine complete v46 TTW exterior
 checkpoint at Escape stage 150, CELL 0010c1, 115 HP and 8/14 rounds. The actual
 exported executable cold-Continues it and completes a subsequent ordinary menu
@@ -40,14 +52,13 @@ FNV/FO3/TTW/combined source checks pass numeric/string winner selection, origina
 player values and layered INI ownership; malformed relocated synthetic images
 reject. FO3 source input defaults, weather and scalar HUD/subtitle declarations
 now bind. FO3's partial toddler checkpoint has the independent save/Continue
-check above. FNV's ordinary
-opening writes a partial CG01 stage-55 checkpoint. Ordinary menu resave and cold
+check above. FNV's earlier partial CG01 stage-55 checkpoint, ordinary menu resave and cold
 Continue verify v47 and a later v48 checkpoint at 100 HP with all 19 inventory
 entries and unchanged save bytes. Native OpenXR simulator controller input independently writes a manual
 v47 slot and another process cold-Continues it with all 19 inventory entries
 and unchanged save bytes. Inspected final-eye interior and save-menu images
-remain simulator evidence; physical-headset acceptance is pending. The opening
-remains incomplete and its reference-script parse fault is retained.
+remain simulator evidence; physical-headset acceptance is pending. The latest flat
+opening reaches Goodsprings as described above; its reference-script parse fault is retained.
 Save v47 independently retains the engine player's package sound history after
 its package ends and rejects mismatched package/audio random state. Existing
 v46 state remains readable; missing historical data is not invented.

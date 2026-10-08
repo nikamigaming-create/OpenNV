@@ -261,7 +261,7 @@ internal sealed partial class FalloutNifFile
     {
         RequireReference(blockIndex, Blocks.Count, "constraint block", allowNull: false);
         var block = Blocks[blockIndex];
-        if (block.TypeName is not ("bhkRagdollConstraint" or "bhkMalleableConstraint" or "bhkLimitedHingeConstraint"))
+        if (block.TypeName is not ("bhkRagdollConstraint" or "bhkMalleableConstraint" or "bhkLimitedHingeConstraint" or "bhkHingeConstraint"))
             throw new NotSupportedException(
                 $"NIF constraint block {blockIndex} type {block.TypeName} has no identity contract.");
         var cursor = BlockCursor(block);
@@ -271,7 +271,7 @@ internal sealed partial class FalloutNifFile
                 $"NIF constraint block {blockIndex} must join exactly two entities.");
         var entityA = ReadReference(ref cursor, "constraint entity A");
         var entityB = ReadReference(ref cursor, "constraint entity B");
-        if (entityA == -1 || entityB == -1 ||
+        if (entityA == -1 || entityB == -1 || entityA == entityB ||
             Blocks[entityA].TypeName is not ("bhkRigidBody" or "bhkRigidBodyT") ||
             Blocks[entityB].TypeName is not ("bhkRigidBody" or "bhkRigidBodyT"))
             throw new InvalidDataException(
@@ -280,7 +280,7 @@ internal sealed partial class FalloutNifFile
         if (priority is not (1U or 3U))
             throw new NotSupportedException(
                 $"NIF constraint block {blockIndex} priority {priority} is unsupported.");
-        var wrappedType = block.TypeName == "bhkLimitedHingeConstraint" ? 2U : RagdollConstraintType;
+        var wrappedType = block.TypeName switch { "bhkHingeConstraint" => 1U, "bhkLimitedHingeConstraint" => 2U, _ => RagdollConstraintType };
         if (block.TypeName == "bhkMalleableConstraint")
         {
             wrappedType = cursor.ReadUInt32("malleable wrapped constraint type");

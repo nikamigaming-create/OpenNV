@@ -167,6 +167,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     source.ReadGeometry(rootIndex) is { } unbound && unbound.Properties.All(index => index == -1))
                     unboundPropertyFreeLod(unbound);
                 else root.AddChild(state.Build(rootIndex));
+            state.BuildModelConstraints(root);
             state.BuildControllerPlayers(root);
             state.BindEmbeddedSkins();
             return new RuntimeNativeNifScene(root, state.NodeCount, state.SurfaceCount,
@@ -309,6 +310,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     state.BuildHardwareSkinTree(rootIndex, Transform3D.Identity, true, result, skeleton, []);
                 }
             }
+            state.BuildModelConstraints(result);
             state.BuildControllerPlayers(result);
             state.RegisterActorMaterialChannels(materialChannels ?? skeleton.MaterialChannels, result);
             if (state.SurfaceCount == 0)
@@ -1867,9 +1869,29 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 return;
             var built = NativeNifCollisionBuilder.Build(_source, attachment, _unitsToMetres);
             owner.AddChild(built.Body);
+            _collisionBodies.Add(attachment.Body, (PhysicsBody3D)built.Body);
             CollisionBodyCount++;
             CollisionShapeCount += built.Shapes;
             CollisionTriangleCount += built.Triangles;
+        }
+
+        private readonly Dictionary<int, PhysicsBody3D> _collisionBodies = [];
+
+        internal void BuildModelConstraints(Node3D root)
+        {
+            var constraints = _collisionBodies.Where(body => !body.Value.GetMeta("opennv_nif_collision_pinned").AsBool())
+                .SelectMany(body => ((FalloutNifRigidBody)_source.ReadObject(body.Key)).Constraints).Distinct();
+            foreach (var index in constraints)
+            {
+                var source = _source.ReadHingeConstraint(index);
+                if (!_collisionBodies.TryGetValue(source.Header.EntityA, out var first) ||
+                    !_collisionBodies.TryGetValue(source.Header.EntityB, out var second) ||
+                    first.GetMeta("opennv_nif_collision_pinned").AsBool() || second.GetMeta("opennv_nif_collision_pinned").AsBool())
+                    throw new NotSupportedException("Source hinge has no independent pair of model bodies.");
+                var joint = new RuntimeNifHingeJoint();
+                joint.Configure(source, first, second, _unitsToMetres);
+                root.AddChild(joint);
+            }
         }
 
         internal Material BuildMaterial(FalloutNifGeometry geometry, Color? hairColor = null, IReadOnlyList<string>? texturePaths = null)
@@ -2609,7 +2631,7 @@ internal sealed class RuntimeNativeNifPrototype
 {
     private readonly FalloutNifFile _source;
     private readonly float _unitsToMetres;
-    private readonly bool _hasControllers;
+    private readonly bool _requiresFreshOwners;
     internal RuntimeNativeNifScene Scene { get; }
 
     internal RuntimeNativeNifPrototype(ReadOnlyMemory<byte> payload, float unitsToMetres)
@@ -2620,15 +2642,15 @@ internal sealed class RuntimeNativeNifPrototype
         _source = source;
         _unitsToMetres = unitsToMetres;
         Scene = RuntimeNativeNifMeshBuilder.Build(_source, unitsToMetres);
-        _hasControllers = Scene.Root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard);
+        _requiresFreshOwners = Scene.Root.FindChildren("*", "", true, false).Any(node => node is RuntimeNifControllerPlayer or RuntimeNifParticleSystem or NativeNifBillboard or RuntimeNifHingeJoint);
     }
 
     internal Node3D Instantiate()
     {
         // Godot Duplicate copies engine properties, not configured C# delegates
         // and their target objects. Reuse the decoded source, but create fresh
-        // controllers/material owners for each animated reference.
-        if (_hasControllers) return RuntimeNativeNifMeshBuilder.Build(_source, _unitsToMetres).Root;
+        // controllers/material/joint owners for each reference.
+        if (_requiresFreshOwners) return RuntimeNativeNifMeshBuilder.Build(_source, _unitsToMetres).Root;
         // Dynamic-body scripts bind their cloned visual parent on tree entry;
         // no configured delegates or source-instance references are copied.
         return Scene.Root.Duplicate((int)(Node.DuplicateFlags.UseInstantiation | Node.DuplicateFlags.Scripts)) as Node3D ??
