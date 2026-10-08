@@ -12,7 +12,18 @@ internal static partial class CellGraphAuditContracts
     {
         SourceCampaigns();
         SourceOptions();
+        NifTextureSourceIdentity();
+        NifGeometryDataLinks();
+        NifAnimationSoundDeclarations();
+        AddonDependencyDeclarations();
+        ConvexProjectionAttribution();
+        CompleteDenominator();
+        AlternativeQueryMemoization();
         PlacedRootMath();
+        FloorProjectionCandidates();
+        ModeledLightProjection();
+        DisabledNavigationDeclarations();
+        ExternalNavigationTargetDeclarations();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-cell-graph-" + Guid.NewGuid().ToString("N"));
         var game = Path.Combine(directory, "Game");
         var data = Path.Combine(game, "Data");
@@ -124,8 +135,11 @@ internal static partial class CellGraphAuditContracts
             Reject(() => CellGraphAudit.ParseOptions([game, "x", "--seed", Plugin + ":800", "--runtime-config", configuration, "--fake-success"]), "Unknown");
             Require(CellGraphAudit.RunCommand([game, "invalid-command", "--seed", Plugin + ":800"]) == 2,
                 "Command/setup errors were reported as an audited divergence.");
-            Require(Audit([game, Path.Combine(directory, "empty"), "--seed", Plugin + ":802", "--runtime-config", configuration]),
-                "A source-empty interior produced an invented geometry failure or success requirement.");
+            Require(!Audit([game, Path.Combine(directory, "empty"), "--scope", "component", "--seed", Plugin + ":802", "--runtime-config", configuration]),
+                "A source-only empty diagnostic component was awarded complete runtime readiness.");
+            using (var empty = Read(Path.Combine(directory, "empty", "cell-FalloutNV-esm-000802.private.json")))
+                Require(empty.RootElement.GetProperty("failures").GetArrayLength() == 0 && empty.RootElement.GetProperty("references").GetArrayLength() == 0,
+                    "An empty source CELL was assigned invented geometry or reference failures.");
             Console.WriteLine("OPENNV_CELL_GRAPH_AUDIT_CONTRACT_PASS explicitSelection=true interiorClosure=true exteriorBoundary=true disconnected=true empty=true failedCellDenominator=true modeledLightResources=true sourceHashes=true checkpointStackJoin=true snapshotBuildTimePreserved=true placedRootReplaced=true descendantTransforms=true nativePhysicsUnverified=true");
 
             RuntimeLiveContentSource Open() => RuntimeLiveContentSource.Open(game, RuntimeLiveContentSource.FalloutNewVegasGame,

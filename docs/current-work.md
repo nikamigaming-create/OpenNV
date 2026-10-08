@@ -15,20 +15,64 @@ All four owners remain active. Primary integrates, builds, plays and publishes
 serially. The user now prioritizes complete data/scene/selection audits before
 broad repeated gameplay. Parallel owners extend the existing corpus, quest and
 cell graph denominators after freezing their compiled/native/OpenXR proposals.
-Primary publishes the checked shared source color binding that fixes the
-reproduced black FO3 text, then integrates and executes the complete audit lanes.
+Primary integrates and executes the complete audit lanes after the checked
+shared source color binding that fixes the reproduced black FO3 text.
 C# remains authoritative;
 owned files are read-only inputs and private observations never become gameplay
 authority. Recording and trace stay off outside a specific visual check.
 
 ## Verified state
 
-Independent source/quest audits cover FNV, FO3, TTW and the exact combined
-launcher selection. The combined corpus retains 17 failures among 27,889 source
-programs; the quest lane retains 17 failures, 5,332 unbound statements and 90,030
-uninspected commands. All 155,200 program rows are accounted for, including
-27,057 with compiled bytes and seven compiled-only programs. There are zero
-promoted compiled execution owners. Failed audits remain failures.
+Independent corpus/quest audits finish against all four exact launcher selections
+with unchanged audit binaries and natural nonzero exits. Every discovered winning
+payload/layout and loose/BSA resource has an accounting disposition; refused
+members retain no successful byte evidence. Deleted winners remain counted;
+all raw program fields and source bodies have dispositions.
+
+| Selection | Winning records | Deleted winners | Winning resources | Corpus / quest failures |
+| --- | ---: | ---: | ---: | ---: |
+| FNV | 628,463 | 68 | 181,963 | 55 / 58 |
+| FO3 | 930,306 | 62 | 159,163 | 36 / 37 |
+| TTW | 1,556,615 | 0 | 330,173 | 11 / 11 |
+| Combined | 1,556,976 | 0 | 330,362 | 17 / 17 |
+
+The combined quest lane retains 5,332 unbound statements and 90,030 uninspected
+commands. Its 155,200 program rows include 27,057 with compiled bytes and seven
+compiled-only programs. Compiled execution ownership remains unmeasured; static
+inspection makes no owner-count claim. Failed audits remain failures, and every
+selection keeps runtime readiness false. Fresh Release corpus scans read every
+winning payload/layout with zero unread winners and complete byte evidence for
+all winning resources in all four selections. They preserve every remaining
+parser/local-layout failure and finish naturally with failure under unchanged
+binaries. The earlier strict reader's four source-encoding refusals remain in
+their original receipts. The shared record/archive owner validates exact
+stored/fixed/dynamic final extent and output/history/window bounds, with the actual
+inflater independently owning alphabet admission. The rebuilt archive reader now
+also admits source-proven exact declared-empty and checksum-absent header/body
+encodings without game/path exceptions. Actual Debug/Release record, archive,
+Huffman and corpus contracts pass. Four independently selected original members
+pass exact encoding/decoded-count/hash checks with unchanged container hashes.
+Framed bad-Adler and malformed bodies remain refused without cached evidence;
+the record checksum compatibility case remains separate. Complete corpus reads
+establish the new encoding owner; its configured subset sweep and full scene
+dependency reads remain pending. Earlier failures remain bound to their original
+binaries.
+
+The configured JAM/TTW/NMC on/off sweep visits all eight subsets with unchanged
+binaries and a natural failed exit. Six selections retain their source failures;
+TTW and TTW+NMC without JAM refuse the missing JohnnyGuitar and Stewie roots.
+Those refusals keep unknown winning denominators. These byte reads also bind the
+prior archive reader. Unconfigured packages, arbitrary orders/settings, JAM
+toggles and native behavior remain independent coverage dimensions.
+Fresh strict Release quest scans finish against all four exact selections with
+zero unread winners, complete raw-field/body dispositions, zero admitted world
+instances and the same 58/37/11/17 failures. Every process exits naturally with
+failure, retaining unchanged binaries and false runtime readiness.
+Focused corpus/quest/cell and final default contracts pass in Debug and Release;
+the full required runtime gate also passes after dependency integration.
+Direct statement
+names now exclude expression/legacy argument calls, whose null denominators
+remain explicitly unknown. Compiled execution coverage is independent.
 
 Ordinary FNV creation reaches stage 200, accepts the original farewell/Hardcore
 choice and exits to Goodsprings. Its complete v48 checkpoint cold-Continues in
@@ -139,14 +183,49 @@ stereo, physical headset and matched retail acceptance remain open.
 
 ## Next owner and outcome
 
-Integrate and execute exhaustive existing-lab audit corrections on a fresh
-feature branch. Corpus
-coverage must retain deleted winners and complete winning loose/BSA bytes;
-quest coverage must account for orphan/empty/compiled/deleted program bodies;
-cell coverage must include exterior/worldspace and disabled/alternative source
-graphs. Unknown or uninspected owners and failed rows cannot return readiness.
-Valid mod selections and settings remain independent coverage dimensions.
-Fix the retained audit failures before broad repeated gameplay. The reviewed
+Execute complete source CELL/world/reference/alternative graphs and configured
+mod-subset audits. Scene selection includes exterior/disconnected/empty cells
+and deleted/disabled/orphan declarations. Focused Debug/Release source, cache-role,
+output-boundary, compression, exact floor-candidate and source-query-reuse
+contracts pass. The original modeled-light floor omission is reproduced and
+repaired through shared placement; enabled/disabled, transformed and differently
+scaled authored comparisons pass with native readiness still false. Disabled
+source NAVM adjacency now uses the existing shared bounds/reciprocity rules
+without activating those meshes. Exact winning external targets now validate
+triangle bounds for every entry, including disabled/unused declarations and
+overriding masters. Missing/deleted/wrong-type/unsupported targets retain source
+refusals. Authored Debug/Release checks pass; excluded flag-8 adjacency, external
+type semantics and native path contacts remain explicitly uninspected.
+Typed convex-list attribution contracts also pass: ordered source declarations
+name the existing native implementation while retaining uninspected floor
+projection, unverified admission and the original failed status.
+The old NIF audit's invented texture prefix is reproduced as a wrong-source
+failure with valid decoys. Shared native path normalization, raw alias/empty-slot
+rows, malformed sibling continuation and exact loose/BSA winner identities pass
+in Debug and Release. Sky/tile consumer policies remain explicitly uninspected.
+The old geometry audit's wrong-type Data-link false success is independently
+reproduced before repair. Actual typed mesh-data links, source extents,
+triangle/strip/segmented/shared targets, later siblings and null/malformed refusals
+pass in Debug and Release. Native geometry admission remains unverified.
+ADDN nested model and animation sound omissions independently reproduce before
+their repairs. Debug/Release contracts now retain the complete selected ADDN
+catalog, unused model roots, typed resource roles, cached cycles, 68 authored
+cases and a deep graph. Sound contracts retain every original key/segment/time
+bit and all unselected winning variants without claiming audio decode or native
+emitter admission. Final default contracts pass in both configurations.
+Complete owned scene sweeps are running against immutable Release binaries;
+new-reader selection subsets remain unverified. The full required runtime gate
+passes, including native project loading, and the diff check is clean.
+Parallel owners are closing implicit actor KF/IDLE/ANIO declarations and typed
+controller links, and tracing source-selected startup. A read-only implementation
+review retains fixed bootstrap-cell, eager named opening-contract, source-comment
+and named autosave dependencies as open data-driven runtime divergences.
+The general archive encoding owner passes the selected original members and all
+four complete corpus reads. Use streamed compressed private reports on C: to retain complete
+rows without filling D:. Unknown or uninspected owners and failed rows cannot
+return readiness. Other valid selections/settings remain independent coverage
+dimensions. Fix retained source and runtime failures before broad repeated
+gameplay. The reviewed
 compiled-authority, audio lifetime, native arena and XR proposals remain queued
 source-only until integrated and executed. Selected checks, the required gate
 and checked publication remain mandatory; static parsing alone cannot establish
@@ -170,6 +249,10 @@ Latest ordinary FO3 evidence:
 tmp/development-lab/full-scope-audit-20261007/ordinary-fo3-convex-20261008.
 Shared source UI colors:
 tmp/development-lab/source-ui-colors-20261008.
+Complete source denominator integration and four corpus/quest results:
+tmp/development-lab/complete-source-denominators-root-20261008.
+New complete scene/subset outputs:
+C:/Users/nbrys/AppData/Local/OpenNV/private-audits/complete-source-denominators-20261008.
 Fresh clean TTW XR quit:
 tmp/development-lab/full-scope-xr-ttw-door-lifetime-20261008.
 Integrated native host and collision evidence respectively:

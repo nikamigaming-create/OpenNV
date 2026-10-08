@@ -17,25 +17,21 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     private readonly Dictionary<Node, Voice> _voices = [];
     private readonly Dictionary<string, Node3D> _emitters = new(StringComparer.Ordinal);
 
-    private string DispatchNifEvent(string text)
+    private string DispatchNifEvent(FalloutNifTextKeyDeclaration declaration)
     {
+        var text = declaration.Text;
         try
         {
-            const string soundPrefix = "Sound:";
-            const string stopPrefix = "Enum: StopSounds";
-            if (text.StartsWith(soundPrefix, StringComparison.OrdinalIgnoreCase))
+            if (declaration.Kind == FalloutNifTextKeyDeclarationKind.Sound)
             {
-                var payload = text[soundPrefix.Length..].Trim();
-                var separator = payload.IndexOfAny([' ', '\t']);
-                var editorId = separator < 0 ? payload : payload[..separator];
+                var editorId = declaration.EditorId!;
                 var source = FalloutSoundRecordReader.Read(_records, FalloutSoundRecordReader.Find(_records, editorId).FormKey);
-                var selected = ResolveEmitter(separator < 0 ? "" : payload[(separator + 1)..].Trim(), source.IsLooping);
-                return Dispatch(soundPrefix + editorId, selected.Emitter, ownsLoopStop: true, followEmitter: selected.FollowEmitter);
+                var selected = ResolveEmitter(declaration.Emitter!, source.IsLooping);
+                return Dispatch(FalloutNifTextKeyDeclarations.SoundPrefix + editorId, selected.Emitter, ownsLoopStop: true, followEmitter: selected.FollowEmitter);
             }
-            if (text.Equals(stopPrefix, StringComparison.OrdinalIgnoreCase) ||
-                text.StartsWith(stopPrefix + " ", StringComparison.OrdinalIgnoreCase))
+            if (declaration.Kind == FalloutNifTextKeyDeclarationKind.StopSounds)
             {
-                var emitter = ResolveEmitter(text[stopPrefix.Length..].Trim()).Emitter;
+                var emitter = ResolveEmitter(declaration.Emitter!).Emitter;
                 var count = StopVoices(emitter);
                 LastEvent = new { ordinal = ++_eventCount, textKey = text, disposition = "source-stop-sounds", voices = count };
                 ObserveEvent();

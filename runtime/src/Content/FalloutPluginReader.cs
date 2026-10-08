@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.ObjectModel;
 using System.IO.Compression;
@@ -38,12 +39,18 @@ internal sealed class FalloutPluginRecord
 {
     internal const uint CompressedFlag = 0x0004_0000;
     internal const uint DeletedFlag = 0x0000_0020;
-    private const int MinimumZlibPayloadBytes = 6;
+    private const int ZlibHeaderBytes = 2;
+    private const int ZlibTrailerBytes = 4;
+    private const int MinimumDeflateBlockBytes = 2;
+    private const int MinimumZlibPayloadBytes = ZlibHeaderBytes + MinimumDeflateBlockBytes + ZlibTrailerBytes;
     private const int BitsPerByte = 8;
     private const int DeflateCompressionMethod = 8;
     private const int ZlibHeaderCheckDivisor = 31;
     private const int ZlibCompressionMethodMask = 0x0f;
+    private const int ZlibCompressionInfoShift = 4;
+    private const int MaximumDeflateWindowInfo = 7;
     private const int ZlibPresetDictionaryFlag = 0x20;
+    private const int InflateCopyBufferBytes = 64 * 1024;
 
     private readonly FalloutPlugin _plugin;
     private readonly long _dataOffset;
@@ -104,24 +111,35 @@ internal sealed class FalloutPluginRecord
         var expectedSize = BinaryPrimitives.ReadUInt32LittleEndian(stored);
         if (expectedSize > int.MaxValue)
             throw Error($"declares unsupported uncompressed size {expectedSize}");
+        var payload = stored.AsMemory(sizeof(uint));
+        // An empty output is valid only with an actual framed DEFLATE stream.
+        // ZLibStream can return empty for an absent/truncated input without an
+        // exception, so admit the envelope before asking it to inflate.
+        if (!HasSupportedZlibHeader(payload.Span))
+            throw Error("has invalid zlib data: missing or unsupported compressed envelope");
         try
         {
-            return Inflate(stored.AsMemory(sizeof(uint)), expectedSize, zlibFramed: true);
+            _ = FalloutDeflateExtent.ValidateZlibFrame(payload.Span, expectedSize);
+        }
+        catch (InvalidDataException extentError)
+        {
+            throw new FalloutPluginFormatException(
+                $"{_plugin.Name} {Signature} {RawFormId:x8} has invalid DEFLATE extent at 0x{HeaderOffset:x}",
+                extentError);
+        }
+        try
+        {
+            return Inflate(payload, expectedSize, zlibFramed: true);
         }
         catch (FalloutPluginFormatException)
         {
             throw;
         }
-        catch (InvalidDataException zlibError)
+        catch (InvalidDataException)
         {
-            var payload = stored.AsMemory(sizeof(uint));
-            if (!HasSupportedZlibHeader(payload.Span))
-                throw new FalloutPluginFormatException(
-                    $"{_plugin.Name} {Signature} {RawFormId:x8} has invalid zlib data at 0x{HeaderOffset:x}",
-                    zlibError);
             try
             {
-                return Inflate(payload[2..^4], expectedSize, zlibFramed: false);
+                return Inflate(payload[ZlibHeaderBytes..^ZlibTrailerBytes], expectedSize, zlibFramed: false);
             }
             catch (InvalidDataException deflateError)
             {
@@ -134,12 +152,26 @@ internal sealed class FalloutPluginRecord
 
     private byte[] Inflate(ReadOnlyMemory<byte> payload, uint expectedSize, bool zlibFramed)
     {
-        using var input = new MemoryStream(payload.ToArray(), writable: false);
+        using var input = new CompleteCompressedInput(payload.ToArray());
         using Stream inflater = zlibFramed
             ? new ZLibStream(input, CompressionMode.Decompress, leaveOpen: true)
             : new DeflateStream(input, CompressionMode.Decompress, leaveOpen: true);
         using var output = new MemoryStream((int)expectedSize);
-        inflater.CopyTo(output);
+        var copyBuffer = ArrayPool<byte>.Shared.Rent(InflateCopyBufferBytes);
+        try
+        {
+            int count;
+            while ((count = inflater.Read(copyBuffer.AsSpan())) > 0)
+            {
+                if (output.Length + count > expectedSize)
+                    throw Error($"uncompressed size exceeds its declaration {expectedSize}");
+                output.Write(copyBuffer.AsSpan(0, count));
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(copyBuffer);
+        }
         if (input.Position != input.Length)
             throw Error("compressed payload contains trailing data");
         var result = output.ToArray();
@@ -148,14 +180,48 @@ internal sealed class FalloutPluginRecord
         return result;
     }
 
+    // The framework inflater also returns empty at input EOF before a final
+    // DEFLATE block. A complete inflater stops requesting bytes itself; an
+    // unfinished one must retain that refusal instead of manufacturing success.
+    private sealed class CompleteCompressedInput(byte[] payload) : MemoryStream(payload, writable: false)
+    {
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (count > 0)
+                RequireRemainingInput();
+            return base.Read(buffer, offset, count);
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            if (!buffer.IsEmpty)
+                RequireRemainingInput();
+            return base.Read(buffer);
+        }
+
+        public override int ReadByte()
+        {
+            RequireRemainingInput();
+            return base.ReadByte();
+        }
+
+        private void RequireRemainingInput()
+        {
+            if (Position >= Length)
+                throw new InvalidDataException("Compressed input ended before the inflater completed its final block.");
+        }
+    }
+
     private static bool HasSupportedZlibHeader(ReadOnlySpan<byte> payload)
     {
         if (payload.Length < MinimumZlibPayloadBytes)
             return false;
         var compressionMethod = payload[0] & ZlibCompressionMethodMask;
+        var compressionInfo = payload[0] >> ZlibCompressionInfoShift;
         var headerCheck = (payload[0] << BitsPerByte) | payload[1];
         var presetDictionary = (payload[1] & ZlibPresetDictionaryFlag) != 0;
         return compressionMethod == DeflateCompressionMethod &&
+            compressionInfo <= MaximumDeflateWindowInfo &&
             headerCheck % ZlibHeaderCheckDivisor == 0 &&
             !presetDictionary;
     }

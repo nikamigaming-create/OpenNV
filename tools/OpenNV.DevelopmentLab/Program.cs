@@ -7,6 +7,7 @@ if (args.Length >= 3 && args[0] == "classic-interactions") return ClassicInterac
 if (args is ["cell-review", var reviewSource, var reviewSnapshot]) return CellReview.Run(reviewSource, reviewSnapshot);
 if (args.Length >= 5 && args[0] == "weapon-loadout") return WeaponLoadout.Run(args[1], args[2], args[3], args[4..]);
 if (args.Length >= 1 && args[0] == "cell-graph") return CellGraphAudit.RunCommand(args[1..]);
+if (args.Length >= 1 && args[0] == "corpus") return CorpusInventory.RunCommand(args[1..]);
 
 if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[0] is not ("route" or "classic-items" or "classic-campaign-start" or "classic-script" or "classic-item-systems" or "classic-inventory" or "classic-resource" or "classic-frm" or "classic-assets" or "classic-scenery" or "classic-movement" or "classic-player" or "cells" or "exterior" or "actors" or "script" or "record" or "settings" or "dialogue" or "replay" or "lifecycle" or "corpus" or "quest-graph" or "resources" or "resource" or "nif" or "menu"))
 {
@@ -14,7 +15,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "cells <installation-or-source-stack> <CELL editor ID or name fragment> [...]\n" +
         "route <installation-or-source-stack> <request.json: world runtime hex, start/end game units>\n" +
         "cell-review <installation-or-source-stack> <native detailed state.json>\n" +
-        "cell-graph <installation-or-source-stack> <fresh-output-directory> --seed <plugin:hex-object> --runtime-config <path> [--metadata <EDID substring>] [--checkpoint <path>] [--snapshot <path>] [--sample-native <x> <y> <z>] [--mod-stack <launcher-mod-list.json> [--mod-order automatic|manual] | --mod <id> <root> <dependency-root> ... last]\n" +
+        "cell-graph <installation-or-source-stack> <fresh-output-directory> --runtime-config <path> [--scope all|component] [--seed <plugin:hex-object>] [--metadata <EDID substring>] [--checkpoint <path>] [--snapshot <path>] [--sample-native <x> <y> <z>] [--mod-stack <launcher-mod-list.json> [--mod-order automatic|manual] | --mod <id> <root> <dependency-root> ... last]\n" +
         "weapon-loadout <installation-or-source-stack> <checkpoint> <new-private-output> <WEAP runtime hex> [...]\n" +
         "exterior <installation-or-source-stack> <CELL runtime hex ID> [grid diameter]\n" +
         "actors <installation-or-source-stack> <NPC name fragment> [...]\n" +
@@ -36,7 +37,7 @@ if (args.Length < 2 || args.Length < 3 && args[0] != "classic-movement" || args[
         "dialogue <installation-or-source-stack> <quest editor ID>\n" +
         "replay <installation-or-source-stack> <scenario.json>\n" +
         "lifecycle <installation-or-source-stack> <CELL editor ID> [...] (or --all)\n" +
-        "corpus <installation-or-source-stack> <fresh-output-directory>\n" +
+        "corpus <installation-or-source-stack> <fresh-output-directory> [--selection-variants] [source options]\n" +
         "quest-graph <installation-or-source-stack> <fresh-output-directory> [source options]\n" +
         "resources <installation-or-source-stack> <logical-directory>\n" +
         "resource <installation-or-source-stack> <logical-path> [private-output-file]\n" +
@@ -154,11 +155,11 @@ if (args[0] == "classic-assets") return ClassicAssetInventory.Run(args[1..]);
 if (args[0] == "classic-movement") return ClassicMovementProbe.Run(args[1]);
 var sourceCommand = DevelopmentLabSource.ParseCommand(args);
 args = sourceCommand.Arguments;
-if (args[0] is "corpus" or "quest-graph")
+if (args[0] == "quest-graph")
 {
     using var auditContent = DevelopmentLabSource.Open(args[1], sourceCommand.Selection);
     using var auditRecords = FalloutPluginStack.Load(auditContent.PluginSources);
-    return args[0] == "corpus" ? CorpusInventory.Run(auditRecords, auditContent, args[2]) : QuestGraphAudit.Run(auditRecords, auditContent, args[2]);
+    return QuestGraphAudit.Run(auditRecords, auditContent, args[2]);
 }
 DevelopmentLabSource.Configure(args[1], sourceCommand.Selection);
 using var content = RuntimeLiveContentSource.Current!;

@@ -37,10 +37,11 @@ internal static partial class CellGraphAudit
         public object? Native { get; set; }
     }
 
-    private sealed class ResourceRow
+    internal sealed class ResourceRow
     {
         public string Path { get; init; } = "";
-        public string Kind { get; init; } = "";
+        public string Kind { get; set; } = "";
+        public HashSet<string> InspectionRoles { get; } = new(StringComparer.Ordinal);
         public string? Source { get; set; }
         public string? Sha256 { get; set; }
         public int Bytes { get; set; }
@@ -55,13 +56,46 @@ internal static partial class CellGraphAudit
         public int CollisionShapes { get; set; }
         public int CollisionTriangles { get; set; }
         public List<string> Dependencies { get; } = [];
+        public List<ResourceDependency> DependencyEdges { get; } = [];
+        public List<object> DependencyDeclarations { get; } = [];
+        public List<AddonDependencyDeclaration> AddonLinks { get; } = [];
+        public List<GeometryDataLinkRow> GeometryDataLinks { get; } = [];
         public List<object> Failures { get; } = [];
         public object? Native { get; set; }
+
+        internal void AddDependency(string path, string kind)
+        {
+            path = Canonical(path);
+            if (!Dependencies.Contains(path)) Dependencies.Add(path);
+            var edge = new ResourceDependency(path, kind);
+            if (!DependencyEdges.Contains(edge)) DependencyEdges.Add(edge);
+        }
+    }
+
+    internal sealed record ResourceDependency(string Path, string Kind);
+
+    internal sealed class GeometryDataLinkRow
+    {
+        public int Block { get; init; }
+        public string Type { get; init; } = "";
+        public int Offset { get; init; }
+        public int Bytes { get; init; }
+        public string Field { get; } = "Data";
+        public int TargetBlock { get; init; }
+        public string? TargetType { get; init; }
+        public int? TargetOffset { get; init; }
+        public int? TargetBytes { get; init; }
+        public string Reader { get; } = "FalloutNifFile.ReadMeshData";
+        public string ReaderDisposition { get; set; } = "uninspected";
+        public int? Vertices { get; set; }
+        public int? Triangles { get; set; }
+        public string NativeAdmission { get; } = "unverified";
+        public string? Error { get; set; }
     }
 
     internal readonly record struct Triangle(Vector3 A, Vector3 B, Vector3 C, int Shape, string Reference);
     internal sealed record CollisionMath(IReadOnlyList<Triangle> Triangles, int Shapes, int PackedTriangles, IReadOnlyList<object> Failures);
-    private sealed record Model(FalloutNifFile? File, ResourceRow Report, IReadOnlyList<Triangle> Collision);
+    internal sealed record Model(FalloutNifFile? File, ResourceRow Report, IReadOnlyList<Triangle> Collision);
     private sealed record FloorHit(string Reference, int Shape, float Height, float NormalY);
     private sealed class ReadObservation : IDisposable
     {
@@ -80,5 +114,4 @@ internal static partial class CellGraphAudit
         public void Dispose() => _source.ResourceReadObserver = _previous;
     }
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
-
 }

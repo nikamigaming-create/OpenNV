@@ -106,7 +106,11 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         foreach (var (identity, logical) in _archiveResources)
         {
             var file = identity[..identity.IndexOf("::", StringComparison.Ordinal)];
-            yield return (identity, _payloads.GetOrAdd(identity, _ => GetArchive(file).Read(logical)));
+            yield return (identity, _payloads.GetOrAddWithEncoding(identity, _ =>
+            {
+                var read = GetArchive(file).ReadWithEncoding(logical);
+                return new(read.Data, read.Encoding);
+            }).Data);
         }
         foreach (var (file, saved) in _loosePayloads)
         {
@@ -201,7 +205,12 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     }
 
     internal bool TryRead(string logicalPath, string? preferredArchive, out byte[] data, out string source)
+        => TryRead(logicalPath, preferredArchive, out data, out source, out _);
+
+    internal bool TryRead(string logicalPath, string? preferredArchive, out byte[] data, out string source,
+        out FalloutBsaMemberEncoding? archiveEncoding)
     {
+        archiveEncoding = null;
         if (TryResolveLoose(logicalPath, out var loosePath))
         {
             var info = new FileInfo(loosePath);
@@ -223,7 +232,13 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
             var archive = GetArchive(indexedArchive);
             source = $"{indexedArchive}::{canonical}";
             _archiveResources.TryAdd(source, canonical);
-            data = _payloads.GetOrAdd(source, _ => archive.Read(canonical));
+            var payload = _payloads.GetOrAddWithEncoding(source, _ =>
+            {
+                var read = archive.ReadWithEncoding(canonical);
+                return new(read.Data, read.Encoding);
+            });
+            data = payload.Data;
+            archiveEncoding = payload.ArchiveEncoding;
             ResourceReadObserver?.Invoke(logicalPath, source, data);
             return true;
         }
@@ -516,37 +531,42 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         long MtimeMilliseconds,
         string CacheKey);
 
+    internal readonly record struct SourcePayload(byte[] Data, FalloutBsaMemberEncoding? ArchiveEncoding);
+
     internal sealed class SourcePayloadCache(long budgetBytes)
     {
         private readonly object _gate = new();
-        private readonly Dictionary<string, LinkedListNode<(string Key, byte[] Data)>> _entries = new(StringComparer.OrdinalIgnoreCase);
-        private readonly LinkedList<(string Key, byte[] Data)> _lru = [];
+        private readonly Dictionary<string, LinkedListNode<(string Key, SourcePayload Payload)>> _entries = new(StringComparer.OrdinalIgnoreCase);
+        private readonly LinkedList<(string Key, SourcePayload Payload)> _lru = [];
         private long _bytes, _hits, _misses;
         internal object State { get { lock (_gate) return new { bytes = _bytes, budgetBytes, entries = _entries.Count, hits = _hits, misses = _misses }; } }
         internal long Bytes { get { lock (_gate) return _bytes; } }
 
         internal byte[] GetOrAdd(string key, Func<string, byte[]> read)
+            => GetOrAddWithEncoding(key, value => new(read(value), null)).Data;
+
+        internal SourcePayload GetOrAddWithEncoding(string key, Func<string, SourcePayload> read)
         {
             if (budgetBytes < 1) throw new ArgumentOutOfRangeException(nameof(budgetBytes));
             lock (_gate)
             {
                 if (_entries.TryGetValue(key, out var hit))
                 {
-                    _lru.Remove(hit); _lru.AddLast(hit); ++_hits; return hit.Value.Data;
+                    _lru.Remove(hit); _lru.AddLast(hit); ++_hits; return hit.Value.Payload;
                 }
                 ++_misses;
             }
-            var data = read(key); // Independent source reads may run concurrently.
+            var payload = read(key); // Independent source reads may run concurrently.
             lock (_gate)
             {
-                if (_entries.TryGetValue(key, out var published)) return published.Value.Data;
-                if (data.LongLength > budgetBytes) return data;
-                while (_bytes + data.LongLength > budgetBytes && _lru.First is { } oldest)
+                if (_entries.TryGetValue(key, out var published)) return published.Value.Payload;
+                if (payload.Data.LongLength > budgetBytes) return payload;
+                while (_bytes + payload.Data.LongLength > budgetBytes && _lru.First is { } oldest)
                 {
-                    _entries.Remove(oldest.Value.Key); _bytes -= oldest.Value.Data.LongLength; _lru.RemoveFirst();
+                    _entries.Remove(oldest.Value.Key); _bytes -= oldest.Value.Payload.Data.LongLength; _lru.RemoveFirst();
                 }
-                _entries.Add(key, _lru.AddLast((key, data))); _bytes += data.LongLength;
-                return data;
+                _entries.Add(key, _lru.AddLast((key, payload))); _bytes += payload.Data.LongLength;
+                return payload;
             }
         }
 

@@ -32,6 +32,21 @@ if (args is ["--test-cell-graph"])
     CellGraphAuditContracts.Run();
     return;
 }
+if (args is ["--test-corpus"])
+{
+    CorpusInventoryContracts.Run();
+    return;
+}
+if (args is ["--test-quest-graph"])
+{
+    QuestGraphAuditContracts.Run();
+    return;
+}
+if (args.Length > 0 && args[0] == "--test-owned-bsa-encodings")
+{
+    QuestGraphAuditContracts.RunOwnedBsaEncodingAdmission(args[1..]);
+    return;
+}
 if (args is ["--test-light-parents"])
 {
     PlacedLightEnableContracts.Run();
@@ -114,6 +129,7 @@ if (args.Length >= 4 && args[0] == "--audit-mcm-ui")
 }
 ModInstallationContracts.Run();
 ModContentContracts.Run();
+CorpusInventoryContracts.Run();
 if (args is ["--mod-install-contracts"]) return;
 
 HudNotificationsProbe.Run();
@@ -143,6 +159,7 @@ WeatherLightingContracts.Run();
 CellLightingContracts.Run();
 PlacedLightEnableContracts.Run();
 CellGraphAuditContracts.Run();
+QuestGraphAuditContracts.Run();
 WindForceProbe.Run();
 ContentWorkerProbe.Run();
 

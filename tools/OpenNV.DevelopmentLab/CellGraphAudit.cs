@@ -8,12 +8,11 @@ using OpenNV.Runtime.World.Cells;
 internal static partial class CellGraphAudit
 {
     private static void RunCell(RuntimeLiveContentSource source, FalloutPluginStack records, FalloutFormKey key,
-        string reportPath, Options options, float units, string configurationSha256, Stopwatch clock)
+        string reportPath, Options options, float units, string configurationSha256, Stopwatch clock, CellAuditResources auditResources, SourceGraphInventory graph)
     {
         using var observation = new ReadObservation(source);
         var scene = FalloutCellSceneReader.Read(records, key);
-        var faceControls = source.TryRead("facegen/si.ctl", null, out var faceBytes, out _)
-            ? FalloutFaceGeometryControls.Read(faceBytes) : null;
+        var faceControls = auditResources.Faces;
         using var virgin = new FalloutReferenceWorld(records, faceControls: faceControls);
         using var saved = new FalloutReferenceWorld(records, faceControls: faceControls);
         var world = virgin;
@@ -92,64 +91,28 @@ internal static partial class CellGraphAudit
 
         ResourceRow Resource(string path, string kind)
         {
-            path = Canonical(path);
-            if (resources.TryGetValue(path, out var existing)) return existing;
-            var result = new ResourceRow { Path = path, Kind = kind }; resources.Add(path, result);
-            try
-            {
-                if (!source.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException("Owned resource is missing: " + path);
-                result.Source = identity; result.Sha256 = Hash(bytes); result.Bytes = bytes.Length;
-                if (kind == "texture")
-                {
-                    NativeOwnedMediaFormat.ValidateDds(bytes);
-                    _ = FalloutDdsMipChain.ReadPartial(bytes);
-                }
-            }
-            catch (Exception error) { result.Failures.Add(new { lane = "owned-resource", error = error.Message }); }
-            return result;
+            var row = auditResources.Read(path, kind);
+            if (!resources.TryAdd(row.Path, row)) return row;
+            foreach (var dependency in row.DependencyEdges) _ = Resource(dependency.Path, dependency.Kind);
+            return row;
         }
 
         Model ReadModel(string path)
         {
             path = Canonical(path);
-            if (models.TryGetValue(path, out var cached)) return cached;
-            var result = Resource(path, path.EndsWith(".kf", StringComparison.OrdinalIgnoreCase) ? "animation" : "model");
-            FalloutNifFile? nif = null;
-            var collision = new List<Triangle>();
-            try
-            {
-                if (!source.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
-                nif = FalloutNifFile.Read(bytes); result.Stream = nif.UserVersion2; result.Blocks = nif.Blocks.Count;
-                result.Roots = nif.Roots.Count; result.BlockTypes = nif.Blocks.Select(block => block.TypeName).Distinct().Order(StringComparer.Ordinal).ToArray();
-                foreach (var block in nif.Blocks)
-                {
-                    try
-                    {
-                        var obj = nif.ReadObject(block.Index); result.DecodedBlocks++;
-                        if (obj is FalloutNifGeometry) result.Geometry++;
-                        if (obj is FalloutNifCollisionObject) result.CollisionAttachments++;
-                        if (obj is FalloutNifRigidBody) result.CollisionBodies++;
-                        foreach (var texture in Textures(obj))
-                        {
-                            var logical = texture.StartsWith("textures", StringComparison.OrdinalIgnoreCase) ? texture : "textures/" + texture;
-                            logical = Canonical(logical);
-                            if (!result.Dependencies.Contains(logical)) result.Dependencies.Add(logical);
-                            _ = Resource(logical, "texture");
-                        }
-                    }
-                    catch (Exception error) { result.Failures.Add(new { lane = "nif-block", block = block.Index, type = block.TypeName, error = error.Message }); }
-                }
-                if (result.Kind == "model")
-                {
-                    var mathematics = ReadPlacedCollision(nif, units);
-                    collision.AddRange(mathematics.Triangles); result.CollisionShapes = mathematics.Shapes;
-                    result.CollisionTriangles = mathematics.PackedTriangles; result.Failures.AddRange(mathematics.Failures);
-                }
-            }
-            catch (Exception error) { result.Failures.Add(new { lane = "nif-file", error = error.Message }); }
-            result.Native = new { admission = "unverified", sourceReadIsNotNativeAdmission = true };
-            var model = new Model(nif, result, collision); models.Add(path, model);
+            if (models.TryGetValue(path, out var retained)) return retained;
+            var model = auditResources.ReadModel(path);
+            models.Add(path, model); _ = Resource(path, model.Report.Kind);
             return model;
+        }
+
+        void AddPlacedCollision(FalloutPlacedReference reference, ReferenceRow row, Model model)
+        {
+            if (!(row.SavedEnabled ?? row.SourceEnabled ?? false)) return;
+            var pose = world.Placement(reference.FormKey);
+            var transform = ReferenceTransform(pose.Position, pose.RotationRadians, reference.Scale, units);
+            allCollision.AddRange(model.Collision.Select(triangle => triangle with { A = transform * triangle.A,
+                B = transform * triangle.B, C = transform * triangle.C, Reference = row.Identity }));
         }
 
         foreach (var reference in scene.References)
@@ -193,6 +156,7 @@ internal static partial class CellGraphAudit
                     var model = ReadModel(lightModel);
                     foreach (var issue in model.Report.Failures)
                         row.Failures.Add(new { lane = "light-model-resource", model = model.Report.Path, issue });
+                    AddPlacedCollision(reference, row, model);
                 }
                 try { _ = FalloutPlacedLightResolver.Resolve(reference, basis, records); }
                 catch (Exception error) { row.Failures.Add(new { lane = "light-admission", error = error.Message }); }
@@ -217,7 +181,7 @@ internal static partial class CellGraphAudit
                             foreach (var alternateTexture in alternate.Textures.Values) _ = Resource(alternateTexture, "texture");
                     }
                     string? preparationFailure = null;
-                    try { _ = FalloutNpcPreparedGeometry.Read(appearance, source); }
+                    try { auditResources.ValidateAppearance(appearance); }
                     catch (Exception error) { preparationFailure = error.Message; row.Failures.Add(new { lane = "humanoid-prepared-geometry", error = error.Message }); }
                     foreach (var blocker in appearance.Blockers) row.Failures.Add(new { lane = "humanoid-appearance", error = blocker });
                     row.Actor = new { appearance.Npc, appearance.Race, appearance.Female, appearance.Height, appearance.SkeletonPath,
@@ -248,13 +212,7 @@ internal static partial class CellGraphAudit
                 row.Disposition = model.File?.Blocks.Any(block => block.TypeName == "bhkSimpleShapePhantom") == true
                     ? "source-shaped-phantom-contact-unverified" : "source-model";
                 foreach (var issue in model.Report.Failures) row.Failures.Add(new { lane = "model", model = model.Report.Path, issue });
-                if (row.SavedEnabled ?? row.SourceEnabled ?? false)
-                {
-                    var pose = world.Placement(reference.FormKey);
-                    var transform = ReferenceTransform(pose.Position, pose.RotationRadians, reference.Scale, units);
-                    allCollision.AddRange(model.Collision.Select(triangle => triangle with { A = transform * triangle.A,
-                        B = transform * triangle.B, C = transform * triangle.C, Reference = row.Identity }));
-                }
+                AddPlacedCollision(reference, row, model);
             }
             else row.Disposition = basis.Signature switch
             {
@@ -279,7 +237,10 @@ internal static partial class CellGraphAudit
                 try
                 {
                     var door = FalloutDoorDestinationResolver.Resolve(records, reference);
-                    var destinationNav = FalloutNavigationMesh.ReadCell(records, door.DestinationScene.Cell.FormKey);
+                    var destinationNavigation = auditResources.Navigation(records, door.DestinationScene.Cell.FormKey);
+                    if (destinationNavigation.Failures.Length != 0)
+                        throw new InvalidDataException("Destination navigation declarations failed: " + JsonSerializer.Serialize(destinationNavigation.Failures, Json));
+                    IReadOnlyList<FalloutNavigationMesh> destinationNav = destinationNavigation.Meshes;
                     var point = reference.Teleport.Position;
                     var floor = NavigationFloor(destinationNav, point[0], point[1]);
                     var destinationRecord = records.GetEffective(door.Destination.FormKey);
@@ -299,11 +260,9 @@ internal static partial class CellGraphAudit
                 }
                 catch (Exception error) { row.Failures.Add(new { lane = "xtel-graph", error = error.Message }); }
         }
-        var navFailures = new List<object>();
-        var navMeshes = FalloutNavigationMesh.ReadCells(records, new HashSet<FalloutFormKey> { key },
-            (form, error) => navFailures.Add(new { form = form.ToString(), lane = "navm-reader", error = error.Message }));
-        try { _ = CellNavigationGraph.LoadOwned(records, key); }
-        catch (Exception error) { navFailures.Add(new { lane = "runtime-navigation-graph", error = error.Message }); }
+        var navigation = auditResources.Navigation(records, key);
+        IReadOnlyList<FalloutNavigationMesh> navMeshes = navigation.Meshes;
+        var navFailures = navigation.Failures;
         var navRows = navMeshes.Select(mesh => new { form = mesh.Form.ToString(), winner = records.GetEffective(mesh.Form).Plugin.Name,
             sha256 = Hash(records.GetEffective(mesh.Form).ReadData()), mesh.Version, vertices = mesh.Vertices.Length,
             triangles = mesh.Triangles.Length, externalEdges = mesh.Edges.Select(edge => new { edge.Type, mesh = edge.Mesh.ToString(), edge.Triangle,
@@ -311,23 +270,22 @@ internal static partial class CellGraphAudit
             doors = mesh.Doors.Select(door => new { door = door.Door.ToString(), door.Triangle,
                 boundResidentReference = scene.References.Any(reference => reference.FormKey == door.Door) }) }).ToArray();
         var support = new List<object>();
+        var floorIndex = new SourceFloorIndex(allCollision);
         foreach (var mesh in navMeshes)
             for (var index = 0; index < mesh.Triangles.Length; index++)
             {
                 var triangle = mesh.Triangles[index];
                 var center = (mesh.Vertices[triangle.Vertices[0]] + mesh.Vertices[triangle.Vertices[1]] + mesh.Vertices[triangle.Vertices[2]]) / 3;
                 var native = GamebryoCoordinate.ConvertVector(new(center.X, center.Y, center.Z)) * units;
-                var hits = Floors(allCollision, native.X, native.Z);
+                var hits = Floors(floorIndex, native.X, native.Z);
                 var nearest = hits.OrderBy(hit => MathF.Abs(hit.Height - native.Y)).FirstOrDefault();
                 support.Add(new { mesh = mesh.Form.ToString(), triangle = index, triangle.Flags, sourceCentroid = new[] { center.X, center.Y, center.Z },
                     nativeHeight = native.Y, sampledCollisionHeight = nearest?.Height, heightDifference = nearest is null ? (float?)null : native.Y - nearest.Height,
                     nearest?.Reference, nearest?.Shape, nearest?.NormalY, sourceSupportSample = true, nativePhysicsUnverified = true });
             }
         var sample = options.SampleNative;
-        var sampleHeights = sample is { } samplePoint ? Floors(allCollision, samplePoint.X, samplePoint.Z) : [];
-        var deleted = records.Plugins.SelectMany(plugin => plugin.Plugin.Records).Where(record => record.Signature is "REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS")
-            .Select(record => record.FormKey).Distinct().Select(form => records.TryGetWinner(form, out var winner) ? winner : null)
-            .Where(record => record is { IsDeleted: true } && FalloutCellSceneReader.ParentCell(record) == key)
+        var sampleHeights = sample is { } samplePoint ? Floors(floorIndex, samplePoint.X, samplePoint.Z) : [];
+        var deleted = (graph.CellChildren.GetValueOrDefault(key) ?? []).Where(record => record.IsDeleted && PlacedSignatures.Contains(record.Signature))
             .Select(record => new { reference = record!.FormKey.ToString(), record.Signature, winner = record.Plugin.Name, record.Flags, sha256 = Hash(record.ReadData()) }).ToArray();
         var referenceIssues = references.Count(row => row.Failures.Count != 0);
         var report = new
@@ -360,6 +318,12 @@ internal static partial class CellGraphAudit
                 referenceStateOnly = true, wholeSaveColdLoadVerified = false },
             nativeReview, snapshotSha256, failures, references, deletedReferences = deleted,
             resources = resources.Values.OrderBy(resource => resource.Path), allActuallyReadSourceResources = observation.Resources.Values,
+            projectionCandidates = new { floorIndex.TriangleCount, floorIndex.DegenerateProjections, floorIndex.UnboundedProjections,
+                floorIndex.Nodes, floorIndex.Queries, floorIndex.VisitedNodes, floorIndex.CandidateEvaluations,
+                exhaustiveCandidateEvaluations = floorIndex.Queries * floorIndex.TriangleCount,
+                everyOriginalTriangleRetained = floorIndex.TriangleCount == allCollision.Count,
+                projectionOwner = "Existing Height/Floors over original candidates; exhaustive equivalence and full-sweep performance have separate acceptance.",
+                nativeContactTraversalAndParity = "unverified" },
             navMeshes = navRows, navFailures,
             navCentroidSupport = support, requestedSample = sample is { } sampled ? new { nativePoint = new[] { sampled.X, sampled.Y, sampled.Z },
                 sourcePoint = new[] { sampled.X / units, -sampled.Z / units, sampled.Y / units },
@@ -370,7 +334,7 @@ internal static partial class CellGraphAudit
                 localCollision = "NativeNifCollisionBuilder BodyTransform/MatrixTransform; packed vertex Havok scale 7" },
             verdict = "Divergence inventory and source mathematics; no level-completion, gameplay, native contact, or parity claim."
         };
-        File.WriteAllText(reportPath, JsonSerializer.Serialize(report, Json) + System.Environment.NewLine);
+        WriteReport(reportPath, report);
         Console.WriteLine(JsonSerializer.Serialize(new { audit = "cell-graph", report = Path.GetFullPath(reportPath), cell = key.ToString(),
             references = references.Count, referenceIssues, resources = resources.Count, models = models.Count, navMeshes = navMeshes.Count,
             navTriangles = navMeshes.Sum(mesh => mesh.Triangles.Length), nativeFailedIdentities = nativeFailures.Count, savedWorldRestored,

@@ -11,6 +11,7 @@
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutDdsMipChain.cs" Link="FalloutDdsMipChain.cs" />
     <Compile Include="..\..\runtime\src\Content\BethesdaStringTable.cs" Link="BethesdaStringTable.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
     <Compile Include="..\..\runtime\src\Content\NativeOwnedMediaFormat.cs" Link="NativeOwnedMediaFormat.cs" />
   </ItemGroup>
 </Project>

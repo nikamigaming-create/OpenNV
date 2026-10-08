@@ -16,5 +16,6 @@
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifAnimatedNodePath.cs" Link="FalloutNifAnimatedNodePath.cs" />
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifFloatAnimation.cs" Link="FalloutNifFloatAnimation.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
   </ItemGroup>
 </Project>

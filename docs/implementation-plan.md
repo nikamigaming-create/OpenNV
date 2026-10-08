@@ -18,9 +18,13 @@ requirements without limiting newly discovered behavior.
 ### Parallel ownership
 
 Use all available agent slots for independent owners. The current four-slot
-allocation is primary integration/live play/evidence/publication, complete
-corpus/selection accounting, quest/program-body accounting, and complete
-cell/worldspace/reference accounting. The source Eat, compiled SCDA/result/save,
+allocation is primary integration/audit execution/live evidence/publication,
+implicit actor KF/IDLE/ANIO source closure, typed controller-link admission, and
+source-selected startup ownership. Addon-model and animation-sound dependencies
+are integrated with actual Debug/Release contracts. Complete corpus/program-body packets are
+integrated and their four independent owned runs retain failures. The configured
+subset sweep retains its source/dependency refusals; new-reader subsets remain
+next and full scene sweeps are running under immutable binaries. The source Eat, compiled SCDA/result/save,
 native-plugin and OpenXR proposals remain queued for integration and execution.
 Reassign a finished slot to the next proven
 failure: creature terrain navigation, SpeedTree geometry, material/LOD coverage,
