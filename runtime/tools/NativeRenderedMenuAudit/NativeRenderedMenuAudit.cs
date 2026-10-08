@@ -10,6 +10,10 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--ui-system-colors", var colorRoot, .. var colorOptions])
+            {
+                await UiSystemColors(colorRoot, colorOptions); GetTree().Quit(); return;
+            }
             if (args.Length >= 9 && args[1] == "--package-event-speech-cold")
             {
                 await PackageEventSpeechCold(args[0], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9..]);

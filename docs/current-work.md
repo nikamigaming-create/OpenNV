@@ -15,7 +15,8 @@ All four owners remain active. Primary integrates, builds, plays and publishes
 serially. The user now prioritizes complete data/scene/selection audits before
 broad repeated gameplay. Parallel owners extend the existing corpus, quest and
 cell graph denominators after freezing their compiled/native/OpenXR proposals.
-Primary fixes the reproduced black FO3 text through shared source color binding.
+Primary publishes the checked shared source color binding that fixes the
+reproduced black FO3 text, then integrates and executes the complete audit lanes.
 C# remains authoritative;
 owned files are read-only inputs and private observations never become gameplay
 authority. Recording and trace stay off outside a specific visual check.
@@ -96,6 +97,16 @@ layouts prevent complete absence or format-support claims; implement their
 actual layouts rather than deleting reader guards. Other phantom/light,
 material/filter/query/dynamics and source model failures remain open.
 
+Shared UI system colors now select complete source INI RGB components when no
+installation/profile layer supplies a packed override. Executable packed storage
+initialized to zero no longer makes FO3 dialogue black. Explicit overrides,
+including authored black, remain authoritative. Synthetic component/override,
+arbitrary palette and malformed/missing-owner contracts pass. Actual original
+dialogue-tree font output passes independently in FNV, FO3, TTW and the combined
+selection with unchanged source bytes, no retained frames and clean natural
+native/wrapper exits. The required runtime gate passes. Full menu/state coverage and matched retail pixels remain
+unverified; these checks establish the shared color owner only.
+
 The pinned engine candidate repairs actual interaction-profile and unsupported
 marker retirement errors. A fresh TTW XR Continue/menu Quit naturally retires
 both processes with code zero, all 396 prototypes and a clean resource footer.
@@ -128,8 +139,8 @@ stereo, physical headset and matched retail acceptance remain open.
 
 ## Next owner and outcome
 
-Publish the checked convex-list block, then use a fresh feature branch for the
-shared FO3 color repair and exhaustive existing-lab audit corrections. Corpus
+Integrate and execute exhaustive existing-lab audit corrections on a fresh
+feature branch. Corpus
 coverage must retain deleted winners and complete winning loose/BSA bytes;
 quest coverage must account for orphan/empty/compiled/deleted program bodies;
 cell coverage must include exterior/worldspace and disabled/alternative source
@@ -156,7 +167,9 @@ Owned inputs, saves, media and diagnostics remain private. Use cloned checkpoint
   99A3A0D51E88DB36B7D35030AB45FC2FA8E825EC5E5102EF930DE35472D930F0.
 
 Latest ordinary FO3 evidence:
-tmp/development-lab/full-scope-audit-20261007/ordinary-fo3-dialogue-save-admission-20261008.
+tmp/development-lab/full-scope-audit-20261007/ordinary-fo3-convex-20261008.
+Shared source UI colors:
+tmp/development-lab/source-ui-colors-20261008.
 Fresh clean TTW XR quit:
 tmp/development-lab/full-scope-xr-ttw-door-lifetime-20261008.
 Integrated native host and collision evidence respectively:

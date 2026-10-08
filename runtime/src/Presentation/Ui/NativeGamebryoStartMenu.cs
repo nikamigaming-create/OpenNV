@@ -54,15 +54,8 @@ internal sealed partial class NativeGamebryoStartMenu : Control
             throw new InvalidDataException("Font TEX dimensions do not match its original RGBA bytes.");
         using var atlasImage = Image.CreateFromData(width, height, false, Image.Format.Rgba8, tex.AsSpan(8).ToArray());
         _atlas = ImageTexture.CreateFromImage(atlasImage);
-        if (_settings.Contains("Interface", "uHUDColor"))
-        {
-            var packed = _settings.Unsigned("Interface", "uHUDColor");
-            _color = new Color((packed >> 24) / 255.0f, ((packed >> 16) & 255) / 255.0f, ((packed >> 8) & 255) / 255.0f, 1);
-        }
-        else
-            _color = new Color(_settings.Number("Interface", "iSystemColorMainMenuRed") / 255,
-                _settings.Number("Interface", "iSystemColorMainMenuGreen") / 255,
-                _settings.Number("Interface", "iSystemColorMainMenuBlue") / 255);
+        var color = FalloutUiSystemColors.Read(_settings, "entity_MainMenu");
+        _color = new Color(color.X, color.Y, color.Z);
         MouseFilter = MouseFilterEnum.Ignore;
         Name = "StartMenu";
         _background = new NativeGamebryoLoadingBackground(_settings, NativeOwnedMediaLoader.LoadTexture(

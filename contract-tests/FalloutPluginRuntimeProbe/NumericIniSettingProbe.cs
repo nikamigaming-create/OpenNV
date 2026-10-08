@@ -4,7 +4,7 @@ internal static partial class NumericIniSettingProbe
 {
     internal static void Run()
     {
-        Layers(); Decoder(); TypedReads();
+        Layers(); Decoder(); TypedReads(); UiSystemColorContracts.Run();
         Console.WriteLine("OPENNV_NUMERIC_INI_PASS typed=true sourceLayers=true nonnumericShadow=true rendererSeparate=true relocatedAssociations=true malformedRefused=true parity=unverified");
     }
 

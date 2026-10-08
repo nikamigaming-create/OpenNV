@@ -45,8 +45,8 @@ internal partial class NativeOwnedNameMenu : Control
             _ => throw new NotSupportedException($"TextEdit font trait is unbound: {trait}"),
         }));
         _font = NativeBitmapFontAsset.Read(settings, fontId);
-        var packed = settings.Unsigned("Interface", "uHUDColor");
-        _color = new Color((packed >> 24) / 255.0f, ((packed >> 16) & 255) / 255.0f, ((packed >> 8) & 255) / 255.0f);
+        var color = FalloutUiSystemColors.Read(settings, "entity_HUDMain");
+        _color = new Color(color.X, color.Y, color.Z);
         _promptText = FalloutMenuXml.String(_prompt.Element("string")!, records);
         _entry = new LineEdit
         {
