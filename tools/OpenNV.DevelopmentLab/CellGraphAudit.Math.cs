@@ -53,6 +53,13 @@ internal static partial class CellGraphAudit
                     var bodyPose = NativeNifCollisionBuilder.BodyTransform(body, units);
                     WalkShape(source, body.Shape, pose * bodyPose, units, body.Mass, triangles, row, []);
                 }
+                catch (ConvexListProjectionBoundary error)
+                {
+                    row.Failures.Add(new { lane = "collision-floor-projection", block = error.Shape, type = "bhkConvexListShape",
+                        nativeImplementationOwner = "NativeNifCollisionBuilder.BuildConvexList", nativeAdmission = "unverified",
+                        sourceOperation = "ordered-independent-convex-leaf-union", declarations = error.Declarations,
+                        mathProjection = "uninspected", error = error.Message });
+                }
                 catch (Exception error) { row.Failures.Add(new { lane = "source-collision-admission", block = index, error = error.InnerException?.Message ?? error.Message }); }
             }
             if (obj is FalloutNifNode owner)
@@ -73,6 +80,8 @@ internal static partial class CellGraphAudit
                 case FalloutNifListShape list:
                     foreach (var child in list.Children) WalkShape(source, child, pose, units, mass, triangles, row, active);
                     break;
+                case FalloutNifConvexListShape convexList:
+                    throw new ConvexListProjectionBoundary(index, ConvexListDeclarationContext(source, convexList));
                 case FalloutNifConvexTransformShape transform:
                     var matrix = NativeNifCollisionBuilder.MatrixTransform(transform, units);
                     WalkShape(source, transform.Child, pose * matrix, units, mass, triangles, row, active); break;

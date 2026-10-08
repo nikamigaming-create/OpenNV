@@ -11,6 +11,7 @@
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifSkinContract.cs" Link="FalloutNifSkinContract.cs" />
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifHardwareSkin.cs" Link="FalloutNifHardwareSkin.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutNpcFaceAttachment.cs" Link="FalloutNpcFaceAttachment.cs" />
   </ItemGroup>
 </Project>

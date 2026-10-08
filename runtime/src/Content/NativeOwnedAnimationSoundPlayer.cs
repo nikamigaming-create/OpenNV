@@ -161,11 +161,11 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     internal string Dispatch(FalloutNifTextKeyEvent key)
     {
         var dispositions = new List<string>();
-        foreach (var value in key.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()))
+        foreach (var declaration in FalloutNifTextKeyDeclarations.Read(key.Text))
         {
-            var structural = value.Equals("start", StringComparison.OrdinalIgnoreCase) ||
-                value.Equals("end", StringComparison.OrdinalIgnoreCase);
-            dispositions.Add(structural ? "source-sequence-boundary" : DispatchNifEvent(value));
+            if (declaration.DispatchOrdinal is null) continue;
+            var structural = declaration.Kind == FalloutNifTextKeyDeclarationKind.SequenceBoundary;
+            dispositions.Add(structural ? "source-sequence-boundary" : DispatchNifEvent(declaration));
         }
         return string.Join(';', dispositions);
     }

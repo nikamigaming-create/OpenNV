@@ -10,5 +10,6 @@
     <Compile Include="../../runtime/src/Formats/FaceGen/FalloutCtlFile.cs" Link="FalloutCtlFile.cs" />
     <Compile Include="../../runtime/src/Formats/FaceGen/FalloutFaceGenControls.cs" Link="FalloutFaceGenControls.cs" />
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
   </ItemGroup>
 </Project>

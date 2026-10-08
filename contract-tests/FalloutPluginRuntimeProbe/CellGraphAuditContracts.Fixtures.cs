@@ -11,7 +11,7 @@ internal static partial class CellGraphAuditContracts
     private static readonly DateTime OldTime = new(2001, 2, 3, 4, 5, 6, DateTimeKind.Utc);
     private static FalloutFormKey Key(uint id) => new(Plugin, id);
     private static string[] Arguments(string game, string output, string configuration, string checkpoint, string snapshot) =>
-        [game, output, "--seed", Plugin + ":800", "--runtime-config", configuration, "--metadata", "Probe",
+        [game, output, "--scope", "component", "--seed", Plugin + ":800", "--runtime-config", configuration, "--metadata", "Probe",
             "--checkpoint", checkpoint, "--snapshot", snapshot, "--sample-native", "-3", "4", "5"];
 
     private static void WriteSnapshot(string path, string compatibility, FalloutPluginStack? records)

@@ -1,5 +1,43 @@
 # Product status
 
+The expanded corpus/quest audits finish independently for FNV, FO3, TTW and
+the exact combined selection. All winning/deleted payload layouts and discovered
+winning loose/BSA reads retain identities and individual outcomes, and every
+raw script field/source body has an accounting disposition. Corpus failures are
+55/36/11/17 under the rebuilt archive owner and quest failures 58/37/11/17
+respectively; all four remain failed
+with runtime readiness false. Fresh Release record scans retain zero unread
+winning payloads and unchanged failures under envelope/input-completion checks.
+The shared record/BSA owner validates exact final DEFLATE extent, output/history
+and window bounds; the actual inflater independently validates alphabet admission.
+The rebuilt archive owner also admits exact declared-empty and checksum-absent
+header/body encodings generally. Actual Debug/Release block/history/padding,
+malformed/trailing, corpus refusal/cache and strict framed-checksum contracts
+pass. Four selected original members pass exact mode/decoded-byte/hash checks
+with unchanged containers. Fresh complete corpus scans finish with byte evidence
+for every winning resource, unchanged binaries and natural failed exits retaining
+the counts above. The preceding strict encoding refusals retain their original
+receipts. New-reader subset and full scene dependency reads remain pending.
+The configured JAM/TTW/NMC sweep visits all eight on/off subsets under the prior
+archive reader: six retain source failures, and TTW/TTW+NMC without JAM refuse
+missing JohnnyGuitar/Stewie roots with unknown denominators. Strict-reader
+subset reads, complete scene execution and publication remain pending.
+Focused corpus/quest/cell and final default contracts pass in Debug and Release.
+Addon-model and NIF sound declaration omissions independently reproduce before
+repair. The selected full ADDN catalog, unused models, typed roles, cached cycles
+and all original text-key/sound variant declarations now have source audit
+owners. Native instances, composed collision, emitters and audio decoding remain
+independent unverified owners. Implicit actor KF/IDLE/ANIO dependencies and typed
+controller joins remain open. Full scene sweeps are running under immutable
+Release binaries; the full required runtime gate and diff check pass. Direct statement
+name counts exclude expression/legacy-argument calls; those inventories remain
+unknown while source exists or layouts are unread. Compiled execution coverage
+stays independently unknown.
+Fresh strict Release quest scans finish with zero unread winners, complete
+raw-field/body dispositions, zero world admission and the same retained failures
+in all four selections. Binaries remain unchanged and natural failed exits keep
+readiness false. Counts do not certify decoding, effects or whole-game support.
+
 Shared source palette binding fixes the reproduced black FO3 dialogue text:
 absent packed overrides use original INI RGB components, while explicit packed
 overrides, including black, remain authoritative. Synthetic source/override and
@@ -369,7 +407,7 @@ record signature, visits inactive source arms and retains condition/stage edges.
 The selected stack includes 918 quests, 27,827 source programs and 157,055 conditions.
 It accounts for 221,586 statements and both outcomes of 41,357 predicates without
 creating world instances or consuming gameplay. Ten parser failures, one local
-binding failure, 3,990 expression declaration/context failures and 84,968
+binding failure, 3,985 expression declaration/context failures and 84,968
 uninspected legacy statements remain visible. Coverage does not establish reachable
 state permutations or authoritative compiled execution. See [script coverage](quest-graph-audit.md).
 
@@ -951,9 +989,10 @@ placements and advancing idles do not establish dialogue, combat AI or travel.
 
 FO1/FO2 retain owned DAT/MAP/PRO/FRM hex previews, source UI, item/equipment state,
 independent saves and bounded 3D presentation. Campaigns, combat, scripts and
-likeness are incomplete. FO3 retains its bounded Vault 101 route. TTW recognition
-and JAM registration do not supply complete runtime semantics; those routes
-remain unavailable.
+likeness are incomplete. FO3 ordinary input reaches its bounded Vault 101 birthday
+route, with later childhood and complete saving still open. TTW retains its
+ordinary vault-exit and cold exterior checkpoint. Complete campaigns, all nine
+JAM outcomes and unchanged native-plugin behavior remain open.
 
 ## Acceptance
 

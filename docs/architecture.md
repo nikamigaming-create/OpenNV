@@ -152,17 +152,37 @@ actual source root frame with the original finite/Loop attachment distinction.
 Pre-teardown copies retain already admitted stopped nonaudio actor state until
 every original finite generation finishes, without calling retired native owners.
 
-[Whole-stack script coverage](quest-graph-audit.md) discovers all winning
-standalone/embedded programs and condition owners. It inspects every authored
-arm through the shared deferred expression parser without consuming gameplay
-state; compiled authority, statement effects and state feasibility remain
-independent from syntax/declaration coverage.
+[Owned corpus accounting](corpus-audit.md) retains winning/deleted payloads,
+complete layout histograms and winning loose/BSA bytes through the ordinary
+source owner. Original containers and stored extents are independent evidence.
+Configured mod subsets use the launcher's existing selection owners; absent
+packages and other settings/behavior dimensions remain uninspected. Bounded
+neutral digest/read reuse never removes a failed row or limits the denominator.
 
-[Source cell coverage](cell-graph-audit.md) retains every selected winning
-reference, directed interior portal and source resource failure. Enable-root and
-package-template alternatives remain independent of saved-state and native
-snapshot joins. Collision projections share ordinary placement math without
-claiming native contacts or complete reachable state coverage.
+The ordinary archive reader retains successful encoding with its in-process
+payload. Exact declared-empty members and supported checksum-absent header/body
+streams use general structural owners. Complete framed members keep strict
+checksums without a checksum-failure retry. Corpus rows retain that actual
+encoding through payload and digest reuse, separately from stored/container
+identity and uninspected semantic/native use.
+
+[Whole-stack script coverage](quest-graph-audit.md) discovers all winning/deleted
+standalone/embedded programs and condition owners. Original field ordinals and
+hashes must match independently grouped rows, including orphan/empty/repeated
+fields, and every source body retains its own outcome. It inspects every
+authored arm without consuming gameplay state; compiled ownership remains
+unmeasured, and effects/state feasibility stay independent of declaration coverage.
+Direct statement-name inventory excludes expression functions and legacy
+argument calls; those denominators remain null/unknown while source exists or
+layouts are unread. Readable source absence cannot establish compiled coverage.
+
+[Source cell coverage](cell-graph-audit.md) selects every winning effective CELL
+by default, including exterior, disconnected and empty cells. Deleted/disabled,
+orphan/world/group rows, directed portals and authored resource alternatives
+remain source-accounted. Explicit interior-component diagnostics cannot certify
+the complete graph. Enable/template alternatives remain independent of saved
+state and native joins. Collision projections share ordinary placement math;
+native/state/pixel readiness remains unverified even with error-free source rows.
 
 [Escape runtime owners](escape-runtime-owners.md) share directional faction
 overrides/save v38, current actor value/spatial queries, independent package

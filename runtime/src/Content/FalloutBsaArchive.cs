@@ -5,6 +5,16 @@ using System.Text;
 
 namespace OpenNV.Runtime.Content;
 
+internal enum FalloutBsaMemberEncoding
+{
+    Stored,
+    PrefixOnlyEmpty,
+    ZlibFramed,
+    ZlibHeaderDeflate,
+}
+
+internal readonly record struct FalloutBsaMemberRead(byte[] Data, FalloutBsaMemberEncoding Encoding);
+
 internal sealed class FalloutBsaArchive : IDisposable
 {
     private const uint ExpectedMagic = 0x00415342;
@@ -127,7 +137,9 @@ internal sealed class FalloutBsaArchive : IDisposable
         return (member.Offset, checked((int)member.StoredBytes), member.Compressed);
     }
 
-    internal byte[] Read(string logicalPath)
+    internal byte[] Read(string logicalPath) => ReadWithEncoding(logicalPath).Data;
+
+    internal FalloutBsaMemberRead ReadWithEncoding(string logicalPath)
     {
         var canonical = CanonicalPath(logicalPath);
         if (!_members.TryGetValue(canonical, out var member))
@@ -143,17 +155,63 @@ internal sealed class FalloutBsaArchive : IDisposable
         }
         var content = _embeddedNames ? StripEmbeddedName(payload, canonical) : payload;
         if (!member.Compressed)
-            return content;
+            return new(content, FalloutBsaMemberEncoding.Stored);
         if (content.Length < sizeof(uint))
             throw new InvalidDataException($"Compressed BSA member is truncated: {canonical}");
-        var expectedBytes = BitConverter.ToUInt32(content, 0);
-        using var compressed = new MemoryStream(content, sizeof(uint), content.Length - sizeof(uint), writable: false);
-        using var inflater = new ZLibStream(compressed, CompressionMode.Decompress);
+        var expectedBytes = BinaryPrimitives.ReadUInt32LittleEndian(content);
+        var compressedBytes = content.AsSpan(sizeof(uint));
+        if (expectedBytes == 0 && compressedBytes.IsEmpty)
+            return new([], FalloutBsaMemberEncoding.PrefixOnlyEmpty);
+        var encoding = SelectCompressedEncoding(compressedBytes, expectedBytes, canonical);
+        var headerBytes = encoding == FalloutBsaMemberEncoding.ZlibHeaderDeflate ? 2 : 0;
+        using var compressed = new MemoryStream(content, sizeof(uint) + headerBytes,
+            content.Length - sizeof(uint) - headerBytes, writable: false);
+        // Checksum failure of a structurally framed member is a final refusal.
+        // The archive's header/body encoding is selected before any inflater,
+        // and cannot become a retry after framed checksum validation fails.
+        using Stream inflater = encoding == FalloutBsaMemberEncoding.ZlibFramed
+            ? new ZLibStream(compressed, CompressionMode.Decompress)
+            : new DeflateStream(compressed, CompressionMode.Decompress);
         using var output = new MemoryStream(checked((int)expectedBytes));
-        inflater.CopyTo(output);
+        try
+        {
+            inflater.CopyTo(output);
+        }
+        catch (InvalidDataException inflateError)
+        {
+            throw new InvalidDataException($"Compressed BSA member has invalid {encoding} data: {canonical}", inflateError);
+        }
         if (output.Length != expectedBytes)
             throw new InvalidDataException($"Inflated BSA member size differs: {canonical}");
-        return output.ToArray();
+        return new(output.ToArray(), encoding);
+    }
+
+    private static FalloutBsaMemberEncoding SelectCompressedEncoding(ReadOnlySpan<byte> compressed,
+        uint expectedBytes, string canonical)
+    {
+        // A checksum-absent archive body still owns the original supported
+        // zlib header, declared window, exact final block and decoded count.
+        if (compressed.Length < 2 || (compressed[0] & 15) != 8 || (compressed[0] >> 4) > 7 ||
+            (((compressed[0] << 8) | compressed[1]) % 31) != 0 || (compressed[1] & 0x20) != 0)
+            throw new InvalidDataException($"Compressed BSA member has invalid zlib header: {canonical}");
+        try
+        {
+            _ = FalloutDeflateExtent.ValidateZlibFrame(compressed, expectedBytes);
+            return FalloutBsaMemberEncoding.ZlibFramed;
+        }
+        catch (InvalidDataException framedExtentError)
+        {
+            try
+            {
+                _ = FalloutDeflateExtent.Validate(compressed[2..], expectedBytes, 1 << ((compressed[0] >> 4) + 8));
+                return FalloutBsaMemberEncoding.ZlibHeaderDeflate;
+            }
+            catch (InvalidDataException bodyExtentError)
+            {
+                throw new InvalidDataException($"Compressed BSA member has neither an exact framed nor checksum-absent body: {canonical}",
+                    new AggregateException(framedExtentError, bodyExtentError));
+            }
+        }
     }
 
     public void Dispose() => _readHandle.Dispose();
