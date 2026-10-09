@@ -3,7 +3,9 @@ using OpenNV.Runtime.Presentation.Ui;
 using System.Text.Json;
 
 TagSkillMenuContracts.Run();
+MenuPcButtonContracts.Run();
 SpecialBookMenuContracts.Run();
+MenuGeometryProjectionContracts.Run();
 
 var hash = new string('a', 64);
 var layout = new OwnedGamebryoTileLayout(

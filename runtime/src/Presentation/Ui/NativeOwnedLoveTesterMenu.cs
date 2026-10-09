@@ -43,7 +43,17 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         remaining = _contract.RequiredTotal - _state.Values.Sum(),
         turning = _turning,
         accepted = _accepted,
-        targets = Targets.Select(target => new { target.Geometry, center = new[] { target.Center.X, target.Center.Y }, target.InFront }).ToArray()
+        inputAdmitted = !_accepted && !_turning,
+        animation = _animation.Observation,
+        projectionCoordinates = "menu-control-local",
+        projectionCandidates = ProjectionCandidates.Select(candidate => candidate.Observation).ToArray(),
+        targets = Targets.Select(target => new
+        {
+            target.Geometry,
+            center = new[] { target.Center.X, target.Center.Y },
+            bounds = new[] { target.Bounds.Position.X, target.Bounds.Position.Y, target.Bounds.Size.X, target.Bounds.Size.Y },
+            target.InFront
+        }).ToArray()
     };
 
     internal NativeOwnedLoveTesterMenu(FalloutNativeVigorContract contract, FalloutNativeSpecialState initial, FalloutPluginStack records)
@@ -122,21 +132,13 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         foreach (var sourceName in _actions.Keys.Where(name => name.EndsWith(":0", StringComparison.Ordinal)))
             if (!_geometry.ContainsKey(sourceName)) throw new InvalidDataException($"Owned LoveTester target is missing: {sourceName}.");
         SetMeta("opennv_ui_source", MenuPath); SetMeta("opennv_ui_presentation", "owned-nif-controller-manager-and-dds");
-        SetMeta("opennv_ui_unbound", "matched-pixels,render-target-postprocessing,gamepad-repeat-timing");
+        SetMeta("opennv_ui_unbound", "matched-pixels,source-pose-and-framing,alpha-pixel-coverage,unrelated-occluders,shader-draw-order,render-target-postprocessing,gamepad-repeat-timing");
         Resized += Layout; Refresh();
     }
 
     private int ReviewPage => _state.Values.Count + 1;
     private int CurrentAttribute => _page > 0 && _page < ReviewPage ? _page - 1 : -1;
-    internal IReadOnlyList<NativeLoveTesterTarget> Targets => _geometry.Where(item => IsActiveTarget(item.Key, item.Value)).Select(item =>
-    {
-        var mesh = item.Value; var bounds = mesh.Mesh.GetAabb();
-        var points = Enumerable.Range(0, 8).Select(index => _camera.UnprojectPosition(mesh.GlobalTransform * bounds.GetEndpoint(index))).ToArray();
-        var minimum = points.Aggregate((a, b) => new Vector2(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y)));
-        var maximum = points.Aggregate((a, b) => new Vector2(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
-        var center = mesh.GlobalTransform * bounds.GetCenter();
-        return new NativeLoveTesterTarget(item.Key, _camera.UnprojectPosition(center), new(minimum, maximum - minimum), !_camera.IsPositionBehind(center));
-    }).ToArray();
+    internal IReadOnlyList<NativeLoveTesterTarget> Targets => ProjectedTargets();
     public override void _Ready()
     {
         // The owned initial sequence opens the cover onto the first attribute.
@@ -287,34 +289,7 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         mesh.SetMeta("opennv_love_tester_texture", path);
     }
 
-    private string? Pick(Vector2 position)
-    {
-        const float barycentricTolerance = 1e-5f;
-        var origin = _camera.ProjectRayOrigin(position); var direction = _camera.ProjectRayNormal(position);
-        var nearest = float.PositiveInfinity; string? result = null;
-        foreach (var (name, mesh) in _geometry.Where(item => IsActiveTarget(item.Key, item.Value)))
-        {
-            var inverse = mesh.GlobalTransform.AffineInverse(); var o = inverse * origin; var d = inverse.Basis * direction;
-            var arrays = mesh.Mesh.SurfaceGetArrays(0); var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-            var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
-            for (var index = 0; index < indices.Length; index += 3)
-            {
-                var a = vertices[indices[index]]; var b = vertices[indices[index + 1]]; var c = vertices[indices[index + 2]];
-                var first = b - a; var second = c - a; var cross = d.Cross(second); var determinant = first.Dot(cross);
-                if (MathF.Abs(determinant) < 1e-8f) continue;
-                var offset = o - a; var u = offset.Dot(cross) / determinant;
-                // Adjacent source triangles share closed edges. Projection and
-                // inverse-transform rounding must not open a crack between them.
-                if (u < -barycentricTolerance || u > 1 + barycentricTolerance) continue;
-                var q = offset.Cross(first); var v = d.Dot(q) / determinant;
-                if (v < -barycentricTolerance || u + v > 1 + barycentricTolerance) continue;
-                var hit = second.Dot(q) / determinant;
-                if (hit > 0 && hit < nearest) { nearest = hit; result = name; }
-            }
-        }
-        SetMeta("opennv_love_tester_pointer_geometry", result ?? string.Empty);
-        return result;
-    }
+    private string? Pick(Vector2 position) => PickProjected(position);
 
     private bool IsActiveTarget(string name, MeshInstance3D mesh) => _actions.ContainsKey(name) && mesh.IsVisibleInTree() &&
         (!name.StartsWith("Index_", StringComparison.Ordinal) || _page == ReviewPage) &&
