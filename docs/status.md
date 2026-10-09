@@ -1,6 +1,15 @@
 # Product status
 
-The current independent runtime slice implements source NIF sized/unsized extents,
+The native launcher refresh passes the required runtime gate and selected owned
+FNV/TTW launcher-stack checks. Actual FNV New Game enters the source confirmation;
+cancel and source-menu quit preserve the user's save. Native pixels are inspected
+at 1440x900 and the minimum 1060x700 setup window. Original artwork, persistent
+play controls, source-menu entry actions and packaged build identity are present.
+The release helper exports and checks an immutable versioned package before
+updating its stable shortcut; export and pinning remain the immediate work.
+Complete campaign and mod-stack support remains unfinished.
+
+The preceding independent runtime slice implements source NIF sized/unsized extents,
 typed blend/joint/motor declarations, native controller-chain binding, particle
 sphere/plane contacts and source RGBA keys. Construction/retirement preserves
 independent instance ownership. Its required Release/Debug runtime gate, native

@@ -1,148 +1,66 @@
-# Windows playtest candidate
+# Windows development playtest
 
-This is an experimental OpenNV build, not a golden release or a complete
-Fallout implementation. Bring your own legally owned New Vegas installation.
-No game data or saves are included. Read `NOTICE.md` and `THIRD_PARTY.md`.
+This is an experimental OpenNV Release build. The complete New Vegas campaign,
+Fallout 3, TTW, required mods and physical-headset acceptance remain unfinished.
+The native launcher reports the selected route's current status. Its artwork
+is original decorative art, not a gameplay screenshot.
 
-Extract the entire archive, keeping the executable, PCK, and runtime directory
-together. Run **OpenNV Flat.cmd**, select New Vegas, select your installation,
-and choose first person. For VR, start your headset's OpenXR runtime, run
-**OpenNV VR.cmd**, and select OpenXR in the desktop launcher. Both modes use
-the same OpenNV save. The VR launcher does not change your system runtime.
-Godot and .NET are included; development tools are not needed to play.
+Bring your own legally owned installation. No retail files, transformed game
+assets, retail executables or saves are included. Read `NOTICE.md` and
+`THIRD_PARTY.md`. Godot and the .NET runtime are included; playing this package
+requires no development SDK.
 
-Use WASD/mouse and E to move/look/activate in flat mode; Tab opens the Pip-Boy.
-Escape opens the pause menu in flat. In VR, use the left Menu button or click
-the right stick. Use **Save / Load** to create a new save, select an earlier
-save, or return to the main menu. F5 in flat and the left controller's primary
-button in VR create separate manual saves. Earlier slots remain available;
-loading another slot also preserves the previous Continue save.
-Hold Q for the weapon wheel or H for the consumable wheel in flat. Aim with
-the mouse or press 1-8, release to confirm, and use the center or Escape to
-cancel. Scroll or Page Up/Down changes pages. In VR, hold the left primary
-button for the weapon wheel (a short tap still saves), or hold the left trigger
-for consumables. The right stick selects, right A/B changes pages, release
-confirms, and Menu cancels. Gameplay pauses while a wheel is open.
-In VR use the thumbsticks for movement/turning and the controller pointer/trigger
-for menus and interaction. The wrist device shares inventory and gameplay state.
-Close the game before switching modes. Preserve a copy of your OpenNV save
-before an extended test; existing retail saves are not loaded or modified.
-OpenNV saves live under `%APPDATA%/Godot/app_userdata/OpenNV/profiles/`.
-Continue resumes the configured OpenNV save; Load opens the saved-game browser.
-A loading message appears before scene construction. Zero health pauses play
-and offers an earlier save; it cannot silently resume or consume healing items.
-Existing saved choices remain intact when the new encounter-zone state is added.
+## Start a test
 
-The September 27 candidate adds autonomous actor acquisition/assistance, unarmed
-NPC attacks, squat-creature movement, saved-clock package schedules, delayed
-quest death events, partial-stack loot selection and recipe ownership checks.
-It repairs Continue for older saves affected by a quest-script admission
-regression. In the genuine copied Primm save, a hostile fires without player
-provocation, ED-E responds and two patrols advance. This remains a bounded
-playtest; sandbox routines, several creature procedures and reached quest/mod
-commands still need implementation.
+Keep the executable, PCK, native libraries and runtime directory together.
+Run **OpenNV Flat.cmd**, select **New Vegas**, and choose your installation
+folder. Select **Desktop** in the launcher. **Play** opens the original game menu;
+**New Game** enters its original confirmation and bootstrap. **Continue** is
+available only when the selected profile has an OpenNV save, and the game
+validates that save against the selected source stack before loading it.
 
-The combat-response update adds source-conditioned NPC and creature hit
-animations, attack interruption and saved reaction progress. A healthy-limb hit
-does not automatically stagger an actor. Forced reactions, blending, general
-hit scripts and broader combat behavior remain incomplete.
+For VR, start your headset's OpenXR runtime, run **OpenNV VR.cmd**, and select
+**VR**. Flat and OpenXR use the same authoritative gameplay and profile save.
+The launcher does not change the system's OpenXR runtime. Close the game before
+switching modes. Physical-headset behavior still requires a user playtest.
 
-The weapon update adds shared automatic and throw clocks, rotating grenades,
-source fuses/contact response, explosion models and destructible stages. It
-repairs the Flamer's hidden gun, visible purple helper, hand-mounted backpack
-and XR fingers opening on untouched controls. The expanded flat/simulator footage
-shows 9mm, laser rifle, dynamite, knife, hatchet, spear, Fat Man, Flamer and cleaver
-actions. Source laser beam geometry and external dynamite emitter channels are
-connected. The laser, Fat Man and Flamer take uses reachable two-hand support.
-Mixed-material collision now publishes the triangle needed to select its source
-impact, and decal decoding preserves reserved flag bits in owned thrown/melee
-records. Ordinary knife, hatchet and spear throws pass the reached impact paths
-in flat and the simulator. Thrown recovery and tracked hand-velocity launching
-remain unfinished. The Flamer projectile's strip-particle renderer and the VR
-dynamite lighter's offhand attachment also remain unimplemented.
-Native checks separately exercise a source car's explosion/wreckage and saved
-destruction state. The reel does not establish every weapon or natural car
-encounter; mines, beam/flame/tracer completeness, special ammunition, blast
-attenuation and player knockdown remain unfinished.
+Installation folders, mod selections and OpenNV saves remain outside the pinned
+package. OpenNV saves live under
+`%APPDATA%/Godot/app_userdata/OpenNV/profiles/`. Retail saves are not loaded or
+modified. A save from a different source stack can be refused visibly.
 
-The Fat Man impact update removes repeated scene-child scans during a large
-blast. One repeated flat shot's detonation processing falls from 1.73 seconds
-to 0.13 seconds without adding a fuse or changing projectile speed. Explosion
-construction and rendering can still hitch, especially while recording.
-The simulator also completes the corrected shot, spending about 0.20 seconds
-in detonation processing. Several flat diagnostic runs reported a native crash
-after Quit Game. The September 30 source update drains source readers and
-releases detached prototypes and compositor resources before shutdown; selected
-exported flat Quit and main-menu reload checks now exit cleanly. Broader session
-stability remains unfinished.
+## Controls
 
-The September 30 source updates also bind source object PlayGroup animation and
-persistent harvesting, and finish zero/one-argument Kill corpse scripts through
-shared death state. A selected flat harvest saves and cold-Continues without a
-second reward. These repairs are in the refreshed development export; the
-September 27 dated archive predates them.
+In flat mode, use WASD and the mouse to move/look, E to activate, Tab for the
+Pip-Boy, Escape for the pause menu and F5 for a manual save. **Save / Load**
+opens the saved-game browser. Continue resumes the profile's configured save.
+Use Q for the weapon wheel and H for consumables; release to confirm or use
+Escape/the center to cancel. Scroll or Page Up/Down changes pages.
 
-## What to test
+In OpenXR, use the thumbsticks for movement/turning and the controller
+pointer/trigger for menus. The left Menu button or right-stick click opens
+the pause menu. A short left-primary press saves; holding it opens the weapon
+wheel. Hold the left trigger for consumables, select with the right stick and
+release to confirm. The wrist device shares inventory and gameplay state.
 
-- Continue or complete the opening; talk to Doc and check that he turns toward
-  you, speaks, shows choices, and releases dialogue on Goodbye.
-- Buy and sell an item; check caps and inventory, save, then Continue in the
-  other mode and verify the transaction persisted.
-- Open the Pip-Boy, equip a weapon, use a workbench, and check recipe costs and
-  results. Exercise combat and corpse loot with a disposable playtest save.
-- Walk outside, inspect cloud movement, distant structures/terrain and mobs,
-  push a tumbleweed, and watch animals for independent idle timing.
-- Revisit Primm and Bison Steve: zone-assigned NPCs now initialize, and the broken
-  floor ramp admits ordinary movement in both flat and the XR simulator. The
-  shared controller now explicitly allows slopes up to 50 degrees; this is an
-  OpenNV movement policy, not a measured retail limit.
+## Pinned builds
 
-## Known limits
+`release-manifest.json` identifies the exact source commit and every packaged
+file's SHA-256. `build-toolchain.json`, when built through the playtest helper,
+also records the source tree, exporter and SDK. The launcher displays the build
+identity. Each versioned package and ZIP keeps its original path.
 
-The full campaign, arbitrary plugins and all weapon families are incomplete.
-Ordinary dialogue and barter were exercised in flat and Elliott Tate's OpenXR
-Simulator. Simulator evidence does not certify a physical headset. Some NPC
-packages and source scripts remain unsupported. Missing SpeedTree vegetation,
-streaming stalls, distant-material failures, and broader encounter coverage
-remain visible issues. Gecko ragdoll/sever component checks pass with Jolt;
-ordinary combat is not accepted as complete. Source wind flags now drive
-independent exterior gusts in both modes. A distant body still falls below terrain;
-cold dynamic-prop persistence remains unverified. These limits must not be described as
-completed functionality in promotional material.
+For local development, `scripts/Build-OpenNVPlaytest.ps1` creates a checked-source
+Release package and a stable named `.cmd` shortcut. Updating that shortcut points
+it to a newer package without replacing earlier pinned versions. The sibling
+`.json` records the selected version, commit and archive checksum. The helper
+requires a clean committed source tree and a successful exported-launcher start.
 
-The ordinary flat bot reached Primm and entered Nash Residence. Fresh flat and
-simulator runs repaired ED-E with collected parts, recruited him, exited together,
-let him kill an outdoor hostile, and looted that corpse. Follow resumes after
-combat. Fresh checks also cross the curb during a second hostile encounter.
-Mobile actor placement now uses the authored navigation floor; ordinary repair
-in both modes keeps ED-E off the counter. Enhanced Sensors acquisition is saved, but its detection effect and
-the NPC radio remain unbound. Muzzle-light flicker and some impact particles are
-missing. Ordinary post-damage Stimpak use now passes in both modes. Selected
-cleaver swings are recorded; broader melee contacts, VR crafting and an
-uninterrupted paired route still need gameplay proof.
+## Report a failure
 
-Background content preparation adapts to process CPU/memory availability and
-uses at most four workers. The tested safe renderer reaches 60 FPS flat and
-45 FPS in Elliott Tate's simulator at one exterior checkpoint; cell-crossing
-stalls remain. Streamed NPCs now prepare source geometry on bounded workers and
-assemble complete bodies over multiple frames. A selected walk's largest upload
-fell from 183 to 60 ms, but rolling p95 and cell commit did not improve.
-Subsequent resident-index changes reduce two measured cell commits from 49/60
-to 30/39 ms. A completed shot, reload or holster no longer triggers a full
-campaign save. Ordinary firing/reload and explicit saves pass in both modes;
-cold Continue preserves the updated magazine and ammunition across modes.
-Explicit save capture/writing still runs synchronously and can pause play.
-Separate rendering reached about 83 FPS in an intermediate XR
-build but exposed a Godot shutdown error, so the safe mode remains the default.
-Native actor route searches now share a two-millisecond physics-frame budget;
-one node expansion can overrun it. A selected route request fell from earlier
-52–142 ms samples to 2.71 ms after source-projection and search changes.
-These are selected Windows measurements, not headset or cross-platform acceptance.
-The expanded paired weapon capture is substantially slower: about 23.4 distinct
-recorded frames/sec flat and 15.6 in the simulator. Later Debug impact captures
-reach only 12.1 and 10.4 respectively. They retain repeated frames and cannot
-establish smooth combat performance.
-
-The user's flat and physical headset playtests are required before considering
-a golden release. Record the mode, location, action, visible result, and build
-commit from `release-manifest.json` when reporting a failure.
+Record the build commit, mode, selected game/mod stack, location, action and
+visible result. Unsupported scripts, native-plugin behavior, actor routines,
+materials, vegetation/LOD, streaming and save/lifecycle owners remain active
+implementation work. A successful launcher start or component check does not
+establish campaign completion or parity. All complete-game requirements remain
+open. Flat and physical-headset playtests are required before a golden release.

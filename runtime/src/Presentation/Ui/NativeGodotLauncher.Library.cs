@@ -5,6 +5,7 @@ namespace OpenNV.Runtime.Presentation.Ui;
 
 internal sealed partial class NativeGodotLauncher
 {
+    private readonly Dictionary<string, Label> _libraryStates = new(StringComparer.OrdinalIgnoreCase);
     private void RefreshCampaignCards()
     {
         if (_campaignButtons.Count == 0)
@@ -26,7 +27,7 @@ internal sealed partial class NativeGodotLauncher
                 {
                     Name = "Campaign_" + id,
                     Text = LibraryTitle(campaign),
-                    CustomMinimumSize = new Vector2(0, 43),
+                    CustomMinimumSize = new Vector2(0, 42),
                     Alignment = HorizontalAlignment.Left,
                     TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
                     ClipText = true,
@@ -44,37 +45,47 @@ internal sealed partial class NativeGodotLauncher
                     Refresh();
                 };
                 _campaignButtons[id] = button;
+                var row = new HBoxContainer { Name = "LibraryRow_" + id };
+                row.AddThemeConstantOverride("separation", 3);
                 if (FalloutModInstallation.IsMod(id))
                 {
-                    var row = new HBoxContainer();
-                    row.AddThemeConstantOverride("separation", 0);
-                    var toggle = new CheckBox { Name = "EnableMod_" + id, TooltipText = "Enable " + campaign.Title + " alongside your other mods" };
+                    var toggle = new CheckBox { Name = "EnableMod_" + id, TooltipText = "Enable " + campaign.Title + " alongside your other mods", SizeFlagsVertical = SizeFlags.ShrinkCenter };
                     toggle.Toggled += enabled => ToggleMod(id, enabled);
                     _modToggles[id] = toggle;
                     row.AddChild(toggle);
-                    button.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-                    row.AddChild(button);
-                    _campaignList.AddChild(row);
-                    _libraryRows[id] = row;
                 }
-                else
-                {
-                    _campaignList.AddChild(button);
-                    _libraryRows[id] = button;
-                }
+                var entry = Stack("LibraryEntry_" + id, 2);
+                entry.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+                button.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+                button.AddThemeFontSizeOverride("font_size", 15);
+                entry.AddChild(button);
+                var state = Label(string.Empty, 10, Muted);
+                state.Name = "LibraryState_" + id;
+                state.MouseFilter = MouseFilterEnum.Ignore;
+                state.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+                _libraryStates[id] = state;
+                entry.AddChild(state);
+                row.AddChild(entry);
+                _campaignList.AddChild(row);
+                _libraryRows[id] = row;
             }
             _noResults = Label("No matching games or mods.", 14, Muted);
             _noResults.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             _campaignList.AddChild(_noResults);
         }
+        var enabledMods = _profiles.EnabledMods("newvegas");
         foreach (var (id, button) in _campaignButtons)
         {
             var selected = id == _selectedId;
-            button.AddThemeStyleboxOverride("normal", Box(selected ? new Color("34312a") : Colors.Transparent,
-                selected ? new Color("a28350") : Colors.Transparent));
+            button.AddThemeStyleboxOverride("normal", Box(selected ? new Color("293545") : Colors.Transparent,
+                selected ? new Color("a28b65") : Colors.Transparent));
             button.AddThemeColorOverride("font_color", selected ? Gold : Ink);
+            var linked = _profiles.TryGet(id, out var registered) && Directory.Exists(registered.InstallRoot);
+            var mod = FalloutModInstallation.IsMod(id);
+            _libraryStates[id].Text = mod && enabledMods.Contains(id) ? linked ? "ENABLED  ·  FOLDER LINKED" : "ENABLED  ·  CHOOSE FOLDER" :
+                linked ? "FOLDER LINKED" : mod ? "CHOOSE MOD FOLDER" : "CHOOSE GAME FOLDER";
+            _libraryStates[id].TooltipText = registered?.InstallRoot ?? "Select this item to choose its folder.";
         }
-        var enabledMods = _profiles.EnabledMods("newvegas");
         foreach (var (id, toggle) in _modToggles)
         {
             toggle.SetPressedNoSignal(enabledMods.Contains(id));
@@ -125,7 +136,8 @@ internal sealed partial class NativeGodotLauncher
             campaign.Presentations.TryGetValue(mode, out var presentation);
             var button = ActionButton(RouteLabel(mode), 38);
             button.Name = "Presentation_" + mode;
-            button.CustomMinimumSize = new Vector2(90, 38);
+            button.CustomMinimumSize = new Vector2(84, 36);
+            button.AddThemeFontSizeOverride("font_size", 13);
             button.Disabled = presentation is null || !presentation.Launchable || mode == "openxr" && !XrAvailable;
             button.TooltipText = mode == "openxr" && !XrAvailable
                 ? "Start OpenNV VR with your headset runtime active to enable this mode."
@@ -150,13 +162,23 @@ internal sealed partial class NativeGodotLauncher
         var routeReady = campaign.Launchable && presentation?.Launchable == true && profileReady &&
             (_selectedPresentation != "openxr" || XrAvailable);
         var modSelected = FalloutModInstallation.IsMod(campaign.Id);
-        _selectionTitle.Text = campaign.Id == "jam" ? "Just Assorted Mods" : campaign.Title;
-        _selectionCategory.Text = modSelected ? "MOD COLLECTION  /  FALLOUT: NEW VEGAS" : "YOUR WORLD  /  " + RouteLabel(campaign.DefaultPresentation).ToUpperInvariant();
+        _selectionTitle.Text = campaign.Id == "jam" ? "Just Assorted Mods" : LibraryTitle(campaign);
+        _selectionCategory.Text = modSelected ? "MOD COLLECTION  /  FALLOUT: NEW VEGAS" : "YOUR NEXT ADVENTURE";
         _selectionDetail.Text = Description(campaign.Id);
         _selectionStatus.Text = campaign.Launchable
-            ? presentation?.PreviewOnly == true ? "Source preview  ·  Campaign incomplete" : "Experimental playtest  ·  Campaign incomplete"
-            : "Gameplay in development";
-        _folderTitle.Text = modSelected ? "02   Mod folder" : "Game installation";
+            ? presentation?.PreviewOnly == true ? "SOURCE PREVIEW  ·  CAMPAIGN INCOMPLETE" : "EXPERIMENTAL PLAYTEST  ·  GAMEPLAY INCOMPLETE"
+            : "GAMEPLAY IN DEVELOPMENT";
+        _heroContext.Text = !profileReady ? "Connect your files in folder settings below" : modSelected ?
+            (_profiles.EnabledMods("newvegas").Contains(campaign.Id) ? "Enabled in your New Vegas mod stack" : "Folder connected  ·  Check it in the library to enable") :
+            "Installation connected  ·  " + RouteLabel(_selectedPresentation);
+        if (_setupCampaign != campaign.Id)
+        {
+            _setupCampaign = campaign.Id;
+            SetSetupExpanded(!profileReady);
+        }
+        else if (!profileReady) SetSetupExpanded(true);
+        _quickSetup.Visible = !profileReady;
+        _folderTitle.Text = modSelected ? "Mod folder" : "Game folder";
         _baseFolderRow.Visible = modSelected;
         var baseRoot = profile?.BaseInstallRoot ?? ValidProfileRoot("newvegas");
         _baseStatus.Text = baseRoot ?? "Choose the game this mod builds on";
@@ -173,7 +195,7 @@ internal sealed partial class NativeGodotLauncher
         RefreshAdditionalFolders(campaign.Id);
         var count = profile?.DependencyRoots?.Count ?? 0;
         _dependencyCount.Text = count == 0 ? "Add the folders required by this mod" : $"{count} folders  ·  Lower folders take priority";
-        _readinessTitle.Text = !profileReady ? "Setup needed" : modSelected ? "Folder connected" : "Ready for an experimental playtest";
+        _readinessTitle.Text = !profileReady ? "Folder setup needed" : "Installation connected";
         _extensionStatus.Text = !profileReady ? profileMessage : modSelected ? profileMessage : campaign.Status + ".";
         _extensionStatus.TooltipText = profile is null ? string.Empty : "Separate OpenNV save: " + profile.SavePath;
         _launch.Disabled = !routeReady || _launching;
@@ -196,6 +218,7 @@ internal sealed partial class NativeGodotLauncher
 
     private static string LibraryTitle(NativeGodotLauncherCampaign campaign) => campaign.Id switch
     {
+        "newvegas" => "Fallout: New Vegas",
         "jam" => "JAM · Just Assorted Mods",
         "ttw" => "Tale of Two Wastelands",
         "yup" => "YUP · Bug fixes",

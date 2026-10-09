@@ -26,10 +26,10 @@ internal sealed partial class NativeGodotLauncher
         var enabled = _profiles.EnabledMods(campaign.Id);
         if (FindChild("OpenModLoadOrder", true, false) is Button loadOrder)
         {
-            loadOrder.Text = _profiles.AutomaticModOrder("newvegas") ? "Load order · Automatic" : "Load order · Custom";
+            loadOrder.Text = _profiles.AutomaticModOrder("newvegas") ? "Mod order · Automatic" : "Mod order · Custom";
             loadOrder.Visible = campaign.Id == "newvegas";
         }
-        _launchGameTitle.Text = campaign.Title + (enabled.Count == 0 ? "  ·  No mods enabled" : $"  ·  {enabled.Count} mods enabled");
+        _launchGameTitle.Text = LibraryTitle(campaign) + (enabled.Count == 0 ? "" : $"  ·  {enabled.Count} mods enabled");
         var setupReady = TryGetValidatedProfile(campaign.Id, out var profile, out var message);
         if (setupReady && enabled.Count != 0)
         {
@@ -46,12 +46,16 @@ internal sealed partial class NativeGodotLauncher
             (_selectedPresentation != "openxr" || XrAvailable);
         _stackStatus.Text = !setupReady ? message : unsupported.Length != 0
             ? "Enabled together · Gameplay in development: " + string.Join(", ", unsupported.Select(id => FalloutModCatalog.Get(id).Title))
+            : !campaign.Launchable || route?.Launchable != true ? route?.Status ?? campaign.Status
+            : _selectedPresentation == "openxr" && !XrAvailable ? "Start OpenNV VR with your headset runtime active to use this mode."
             : string.Empty;
         _stackStatus.Visible = _stackStatus.Text.Length != 0;
         _launch.Disabled = !launchable || _launching;
-        _launch.Text = _launching ? "Opening…" : !setupReady ? "Finish folder setup" : unsupported.Length != 0 || !campaign.Launchable
-            ? "In development" : route?.PreviewOnly == true ? "Open source preview" : "Play  →";
-        _launch.TooltipText = launchable ? "Play " + campaign.Title + " with the enabled mods · F1" : _stackStatus.Text;
+        _launch.Text = _launching ? "Opening…" : !setupReady ? "Finish setup" : !launchable
+            ? "Unavailable" : route?.PreviewOnly == true ? "Open preview" : "Play  →";
+        _launch.TooltipText = launchable ? "Open " + LibraryTitle(campaign) + " and its original menu · F1" :
+            (_stackStatus.Text.Length == 0 ? route?.Status ?? campaign.Status : _stackStatus.Text);
+        RefreshLaunchActions(campaign, launchable, setupReady);
     }
 
     private void ShowModStack()
@@ -71,7 +75,11 @@ internal sealed partial class NativeGodotLauncher
         _stackWindow.CloseRequested += CloseStackWindow;
         _stackWindow.WindowInput += input =>
         {
-            if (input is InputEventKey { Pressed: true, Keycode: Key.Escape }) CloseStackWindow();
+            if (input is InputEventKey { Pressed: true, Keycode: Key.Escape })
+            {
+                _stackWindow?.SetInputAsHandled();
+                CloseStackWindow();
+            }
         };
         AddChild(_stackWindow);
         var background = new ColorRect { Color = Surface, MouseFilter = MouseFilterEnum.Ignore };

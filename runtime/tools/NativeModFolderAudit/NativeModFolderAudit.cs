@@ -14,6 +14,12 @@ public partial class NativeModFolderAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length > 0 && args[0] == "--launcher-preview")
+            {
+                await RenderLauncherPreview(args);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length < 5) throw new ArgumentException("Expected mod id, game folder, mod folder, private output folder, textures|launcher, then additional folders.");
             var stackSelections = args[4] == "launcher-stack"
                 ? JsonSerializer.Deserialize<FalloutModSelection[]>(File.ReadAllText(args[5])) ?? throw new InvalidDataException("Missing stack fixture.") : null;
