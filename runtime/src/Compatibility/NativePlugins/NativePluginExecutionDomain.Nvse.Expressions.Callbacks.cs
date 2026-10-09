@@ -58,14 +58,16 @@ internal sealed partial class NativePluginExecutionDomain
         {
             case ExpressionExtract:
                 {
-                    var currentOffset = reader.ReadUInt32(); Finish(reader);
+                    var currentOffset = reader.ReadUInt32(); var parser = reader.ReadUInt32(); Finish(reader);
+                    if (parser > 1) throw new InvalidDataException("Native expression extraction has an unknown actual API parser.");
                     if (lifetime.Extracted || currentOffset != caller.Arguments.StartOffset)
                         throw new InvalidDataException("Expression extraction has already consumed this source argument extent.");
                     // Evaluation is deferred until the actual original utility call.
                     // Stateful arguments retain their order and are never rerun by
                     // native GetNthArg/getters or a duplicate extraction attempt.
                     caller.Evaluators[id] = (nativePointer, true);
-                    var values = caller.Arguments.Evaluate() ?? throw new InvalidDataException("Expression argument owner returned no result.");
+                    var evaluatorOwner = parser == 0 ? caller.Arguments.EvaluateNative ?? caller.Arguments.Evaluate : caller.Arguments.Evaluate;
+                    var values = evaluatorOwner() ?? throw new InvalidDataException("Expression argument owner returned no result.");
                     if (values.Values is null || values.Values.Count > byte.MaxValue || values.EndOffset < currentOffset || values.EndOffset > caller.Arguments.MaximumEndOffset)
                         throw new InvalidDataException("Expression argument owner returned an invalid count/source end extent.");
                     var required = caller.Command.Parameters.TakeWhile(parameter => parameter.Optional == 0).Count();
@@ -73,10 +75,12 @@ internal sealed partial class NativePluginExecutionDomain
                         values.Values.Count < required || values.Values.Count > caller.Command.Parameters.Length)
                         throw new InvalidDataException("Original extraction count differs from its required/optional registered parameters.");
                     foreach (var value in values.Values) RetainNvseArgumentArrays(callerId, value);
-                    return SerializeNvseArguments(values, caller);
+                    return SerializeNvseArguments(values, caller, id);
                 }
+            case ExpressionLocalRead:
+                return ReadExpressionLocal(frame, parent, reader, caller, id, nativePointer);
             case ExpressionDestroy:
-                Finish(reader); caller.Evaluators.Remove(id); ++caller.Destroyed; ++_nvseExpressionDestroyed;
+                Finish(reader); caller.TokenValues.Remove(id); caller.Evaluators.Remove(id); ++caller.Destroyed; ++_nvseExpressionDestroyed;
                 return Payload(writer => writer.Write(1U));
             case ExpressionExpectedReturn:
                 {
@@ -90,17 +94,19 @@ internal sealed partial class NativePluginExecutionDomain
         }
     }
 
-    private static byte[] SerializeNvseArguments(NativeNvseEvaluatedArguments values, NativeNvseExpressionCaller caller)
+    private byte[] SerializeNvseArguments(NativeNvseEvaluatedArguments values, NativeNvseExpressionCaller caller, ulong evaluator)
     {
         var nodes = new List<(ulong Id, NativeNvseExpressionValue Value, ulong Left, ulong Right)>();
         ulong Add(NativeNvseExpressionValue value)
         {
             ArgumentNullException.ThrowIfNull(value);
             ulong left = 0, right = 0;
+            if (value.Local is { } local) RequireExpressionLocal(caller, local);
             if (value.Type == NativeNvseTokenType.Pair) { left = Add(value.Left!); right = Add(value.Right!); }
             var id = checked((ulong)nodes.Count + 1); nodes.Add((id, value, left, right)); return id;
         }
         var roots = values.Values.Select(Add).ToArray();
+        caller.TokenValues.Add(evaluator, nodes.Select(node => node.Value).ToArray());
         var payload = Payload(writer =>
         {
             writer.Write(checked((uint)roots.Length)); writer.Write(values.EndOffset); writer.Write(checked((uint)nodes.Count));
@@ -112,6 +118,12 @@ internal sealed partial class NativePluginExecutionDomain
                     case NativeNvseTokenType.Number: case NativeNvseTokenType.Boolean: writer.Write(node.Value.Number); break;
                     case NativeNvseTokenType.Form: case NativeNvseTokenType.Array: writer.Write(checked((uint)node.Value.Number)); break;
                     case NativeNvseTokenType.String: writer.Write(checked((uint)node.Value.Text.Length)); writer.Write(node.Value.Text.AsSpan()); break;
+                    case NativeNvseTokenType.NumericVariable:
+                    case NativeNvseTokenType.ReferenceVariable:
+                    case NativeNvseTokenType.StringVariable:
+                    case NativeNvseTokenType.ArrayVariable:
+                        var local = node.Value.Local ?? throw new InvalidDataException("Native variable token has no actual local.");
+                        writer.Write(local.Context.Id); writer.Write(checked((uint)local.Entry)); writer.Write(local.Index); writer.Write(local.CachedStringIdentity); break;
                     case NativeNvseTokenType.Pair: writer.Write(node.Left); writer.Write(node.Right); break;
                     default: throw new NotSupportedException("Expression token category has no native owner.");
                 }

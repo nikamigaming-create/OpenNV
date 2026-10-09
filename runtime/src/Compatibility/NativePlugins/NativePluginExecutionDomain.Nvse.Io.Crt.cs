@@ -82,7 +82,11 @@ internal sealed partial class NativePluginExecutionDomain
             throw new InvalidDataException("CRT operation lost its true stream/provider/access/call lifetime.");
         if (operation is NativePluginCrtOperation.Read or NativePluginCrtOperation.Write && (result < 0 || (ulong)result > requested))
             throw new InvalidDataException("CRT element result exceeds its actual requested element count.");
-        if (retired == 1) _crtStreams.Remove(routeId);
+        if (retired == 1)
+        {
+            if (!_crtSupportClosing.TryAdd(stream, current)) throw new InvalidDataException("Actual CRT close repeats a pending alias retirement.");
+            _crtStreams.Remove(routeId);
+        }
         owner.RecordCrt(receipt); return Payload(writer => writer.Write(1U));
     }
     private static NativePluginCrtStatus ReadCrtStatus(BinaryReader reader)
@@ -107,16 +111,17 @@ internal sealed partial class NativePluginExecutionDomain
     private void RequirePrivateCrtRetired()
     {
         if (_crtStreams.Count != 0 || _crtRoutes.Count != 0) throw new InvalidDataException("Original module retains genuine CRT stream/path lifetimes.");
-        _privateIo?.RequireCrtRetired();
+        RequirePrivateCrtSupportRetired(); _privateIo?.RequireCrtRetired();
     }
     internal void RequirePrivateCrtSaveOwned()
     {
-        VerifyOwner();
+        VerifyOwner(); RequireNativeEnvironmentSaveOwned(); RequireNativeFileMetadataSaveOwned();
         if (_crtStreams.Count != 0 || _crtRoutes.Count != 0 || NvseCrtReceipts.Count != 0)
             throw new NotSupportedException("Original CRT current/cold stream/caller/error-state construction has no unified source save owner.");
     }
     private void ClearPrivateCrt()
     {
+        ClearPrivateCrtSupportAfterChildExit();
         _crtStreams.Clear(); _crtRoutes.Clear(); _crtProviders.Clear();
     }
 }

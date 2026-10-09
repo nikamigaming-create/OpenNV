@@ -216,10 +216,10 @@ void values_publish_elements(const std::vector<std::pair<NvseArrayElement*, Nvse
 void values_expression_element(void* token_pointer, void* destination) {
     const auto pair = expression_token(token_pointer); const auto& token = *pair.second;
     NvseValueWire value;
-    if (token.type <= 1) { value.type = 1; value.number = token.number; }
-    else if (token.type == 2) { value.type = 3; value.text = token.text; }
-    else if (token.type == 3) { value.type = 2; value.identity = static_cast<std::uint32_t>(token.number); }
-    else if (token.type == 6) { value.type = 4; value.identity = values_array_reference(static_cast<std::uint32_t>(token.number)); }
+    if (token.type <= 1 || token.type == 11) { value.type = 1; value.number = token.type == 11 ? expression_local_number(*pair.first, token) : token.number; }
+    else if (token.type == 2 || token.type == 13) { value.type = 3; value.text = expression_string_value(*pair.first, token); }
+    else if (token.type == 3 || token.type == 12) { value.type = 2; value.identity = token.type == 12 ? expression_local_form_id(*pair.first, token) : static_cast<std::uint32_t>(token.number); }
+    else if (token.type == 6 || token.type == 14) { value.type = 4; value.identity = values_array_reference(token.type == 14 ? expression_local_handle(*pair.first, token) : static_cast<std::uint32_t>(token.number)); }
     else nvse_unowned("Expression.GetElement: token category lacks a native basic Element representation");
     values_publish_elements({{static_cast<NvseArrayElement*>(destination), value}});
 }

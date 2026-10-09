@@ -198,7 +198,7 @@ internal sealed class GodotLauncherProfileStore
                     profile.BaseInstallRoot is { } baseRoot && !Path.IsPathFullyQualified(baseRoot) ||
                     profile.DependencyRoots?.Any(path => !Path.IsPathFullyQualified(path ?? string.Empty)) == true)
                     continue;
-                if (profile.EnabledMods is { } enabled && (property.Name != "newvegas" ||
+                if (profile.EnabledMods is { } enabled && (enabled.Count != 0 && property.Name != "newvegas" ||
                     enabled.Distinct(StringComparer.OrdinalIgnoreCase).Count() != enabled.Count ||
                     enabled.Any(id => !FalloutModInstallation.IsMod(id)))) continue;
                 try { _ = SaveFileName(profile.CampaignId); }

@@ -17,7 +17,7 @@ internal sealed partial class NativePluginPrivateIo
         {
             if (selected is null || string.IsNullOrWhiteSpace(selected.SourceOwner) || selected.Sha256.Length != 64 ||
                 !selected.Sha256.All(Uri.IsHexDigit) || selected.Imports.Count == 0 || selected.Imports.Any(pair => pair.Value.Count == 0 ||
-                    !(NativePluginCrtImports.StreamLibraries.Contains(pair.Key) || NativePluginCrtImports.DirectoryLibraries.Contains(pair.Key)) ||
+                    !NativePluginCrtExtendedImports.Libraries.Contains(pair.Key) ||
                     pair.Value.Any(name => !NativePluginCrtImports.Owned.Contains(name))) ||
                 _crtProviderLeases.Any(row => StringComparer.OrdinalIgnoreCase.Equals(Canonical(row.Selection.Path), Canonical(selected.Path))))
                 throw new InvalidDataException("CRT provider has an absent/duplicate source identity or unowned callable declaration.");

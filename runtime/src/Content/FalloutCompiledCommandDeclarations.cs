@@ -1,7 +1,7 @@
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutCompiledCommandDeclaration(string Name, bool RequiresReference,
-    int Required, IReadOnlyList<byte> Parameters, bool VanillaArguments);
+    int Required, IReadOnlyList<byte> Parameters, bool VanillaArguments, string Alias = "", uint Flags = 0);
 
 // Neutral original vanilla API identities/parameter categories. Declaration
 // coverage is separate from the shared runtime owning the reached effect.
@@ -175,7 +175,13 @@ internal static class FalloutCompiledCommandDeclarations
             FalloutExecutableStringTable.ReadScriptCommandDeclarations(owner.FalloutExecutablePath));
         if (!catalogue.Commands.TryGetValue(opcode, out var declaration))
             throw new NotSupportedException($"Compiled command opcode {opcode:x4} has no selected executable declaration.");
+        return FromSource(declaration);
+    }
+
+    internal static FalloutCompiledCommandDeclaration FromSource(FalloutNativeScriptCommandDeclaration declaration)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
         return new(declaration.Name, declaration.RequiresReference, declaration.Required,
-            declaration.Parameters, declaration.VanillaArguments);
+            declaration.Parameters, declaration.VanillaArguments, declaration.Alias, declaration.Flags);
     }
 }

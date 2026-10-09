@@ -53,6 +53,7 @@ internal partial class NativeOwnedGameplayHud : Control
         _target = target; _shown = shown; _vitals = vitals; _ammunition = ammunition; _notice = notice;
         _scriptUi = scriptUi;
         _controls = controls ?? (() => FalloutPlayerControlState.AllEnabled);
+        CaptureStandaloneHudInput(records);
         var source = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/main/hud_main_menu.xml")).Elements("menu").Single();
         var menu = new XElement(source.Name, source.Attributes(),
             source.Elements().Where(element => element.Attribute("name") is null).Select(element => new XElement(element)));

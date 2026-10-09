@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Godot;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -23,6 +24,27 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller
         try { call.GetAwaiter().GetResult(); }
         catch (Exception failure) { PublishMainFailure(failure); }
         _activeMainCall = null;
+    }
+    internal async Task WaitForPlayerCellPreparation(FalloutPlayerCellPreparation prepared)
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        while (true)
+        {
+            ObserveReturnedMainCall();
+            if (_failure is { } failure) ExceptionDispatchInfo.Capture(failure).Throw();
+            if (!_started || _retired || _stopMainDelivery || !IsInsideTree() || IsQueuedForDeletion())
+                throw new OperationCanceledException("Initial CELL placement lost its actual native Main delivery lifetime.");
+            if (_world.PlayerMoves.SourcePending.Error is { } error) throw new InvalidOperationException(error);
+            if (_activeMainCall is not { IsCompleted: false } &&
+                !ReferenceEquals(_world.PlayerMoves.SourcePending.Next, prepared.Request))
+            {
+                _world.RequireReturnedSourcePlayerCellPlacement(prepared);
+                return;
+            }
+            // Wait for the real process callback. No invented Main invocation,
+            // source delta, pending completion or null store is supplied here.
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
     }
     private void PublishMainFailure(Exception failure)
     {

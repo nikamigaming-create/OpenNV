@@ -1,30 +1,58 @@
 # Product status
 
-The published October 9 gameplay slice includes source Pip-Boy pages/notes/maps,
-separate teammate perks, discovered-destination transfer, attached loop retirement
-and validated source collision construction. Ordinary packaged discovery, travel,
-settled save and cold Continue ran. FNV Test selects fnv-windows-03c3d23a.
-Fresh FO3 vault exit, FNV opening/Goodsprings/ED-E/companions, full Pip-Boy actions
-and the requested exported smoke route still need their actual acceptance.
+Checked PR187 is merged at origin/main 94f26be9, all CI checks passed, and clean
+local main is synchronized. FNV Test still selects fnv-windows-03c3d23a. The
+published gameplay includes source Pip-Boy pages/notes/maps, separate teammate
+perks, discovery/destination transfer, settled save/cold Continue, attached-loop
+retirement and validated source collision construction. These selected observations
+do not establish the fresh campaign/companion smoke route.
 
-The separate protocol 26 source candidate joins compiled scripts/effects, actual
-Main Player transfers, source Sky resets, calling-thread FISTP, Steam/native plugin
-owners, shared CNG buffers, mutexes, source menu/archive lifetimes and CELL/LAND.
-The preceding C#/x86 builds, combined script suite, negative corpus cleanup and
-selected owned LAND audit pass. Authored imported CNG executes real SDK hashing,
-shared nonnull buffers and actual detach/normal exit. OS-selected common placement
-now passes real placeholder reservation/replacement in both living x86 children,
-offset views and the complete digest. Original native compatibility remains open.
-Merged gameplay, protocol 25, FISTP, FO3 Main/Player, mutex and archive registry compile with zero
-warnings/errors. Actual archive, current-thread FISTP and CNG checks pass. The
-mutex caller's real named CreateMutexA returns ERROR_ACCESS_DENIED (5), retained
-as a failure. Retained Local-directory capability/caller-thread NtCreateMutant
-integration compiles but still returns actual NTSTATUS c0000022/error 5. Companion
-event order/topic filters and current/cold Follow contracts pass; ordinary Follow
-and Sandbox dismissal remain unaccepted. The complete combined Test-GodotRuntime
-gate and selected owned LAND construction audit pass with recording off.
-Checked publication and fresh exported acceptance are next; no new root package
-is claimed.
+Current protocol29 source joins expression locals, real internal array buffers
+and source current/cold metadata, standalone FO3 interface/Main/scene/Dialog,
+companion Follow/idle/Sandbox actions, FILE/environment/metadata lifetimes and
+general selected command name/alias resolution. Initial interior CELL preparation
+now retains its immutable source payload for actual Main transfer completion.
+Current C# Debug/Release, native Debug/Release and protocol29 export compile; the
+complete required runtime gate and selected owned-data audit pass. Authored
+source contracts pass where executed; original/native gameplay is not inferred.
+Actual owned FNV and FO3 advancement reads pass against separate executable-bound
+perk-award policies. Original JIP/ShowOff expression declarations both admit on
+read-only matched inspection; original bytes are unchanged.
+
+Fresh FO3 Play/New/Yes passes the repaired canonical MoveToMarker/alias MoveTo
+lookup and reaches initial world preparation. Preparation wrongly requires an
+entered Main destination consumer before the first world exists. The current
+source separates immutable interior preload from execution and requires the actual
+Main transfer/null-store return before startup dismissal. The new ordinary export
+passes preparation and loads its first CELL, then player setup fails at duplicate
+XP perk-condition binding. Partial setup also reaches ability-clock/presentation
+errors; double-vision phase is independently unbound. Sky/TLS/scene boundaries stay
+explicit. No playable opening or Vault exit is accepted. Current FO3 empty mod
+lists, failure captions and
+launcher session-option retention are repaired. Ordinary source Quit exits0.
+
+Current exported FNV New/Yes returns actual JIP Query=True and Load=True, then a
+NVSE message0 raises a structured exception. FNVXR/ShowOff retain separate
+process/window/input and MSVCP/keyboard/standard-FILE imports. Implemented FILE/
+environment entries no longer appear in those residual lists. Stage/fault detail
+now retains the original failure prefix; no module exclusion or success default
+hides it. The actual authored mutex caller still returns c0000022/result0/error5.
+Original Load return does not establish hooks, native mod gameplay or co-save.
+
+Fresh Vault exit, Doc/questionnaire/post-trait chair/Goodsprings, first-person beard,
+ED-E/companions, complete FO3 text, full Pip-Boy/fast travel and cold Continue remain
+ordinary exported acceptance. Full campaigns and selected DLC/mod stacks, complete
+render/audio/UI and physical OpenXR are unfinished. All 36 requirements remain
+open; there is no completion percentage. Current owners and the next executable
+outcome are in current-work.md; full scope is in implementation-plan.md.
+
+The current combined batch's selected owned LAND/advancement audits and full required
+runtime gate pass. Before the next push, complete its diff check and checked PR.
+No new hot/public promotion is claimed.
+One hot package plus one candidate/current work area is the retention target.
+Automatic approval review rejected obsolete directory deletion with "blocked by
+policy"; cleanup and reclaimed space remain unclaimed. Owned inputs and private
+observations are never public package or repository assets.
 
 Exterior window models now accept their authored refraction/material controller
 chains and animate source opacity. The reached source scripts select the daytime

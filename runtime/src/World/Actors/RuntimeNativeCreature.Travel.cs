@@ -20,7 +20,7 @@ internal sealed partial class RuntimeNativeCreature
 
     private void BeginTravel(FalloutPluginRecord package, bool restored)
     {
-        var source = FalloutTravelPackage.Read(package);
+        var source = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
         var retained = restored ? _aiState!.PackageMotion?.Travel : null;
         var progress = retained ?? source.Start(_aiRecords!, _aiWorld!, Appearance.Reference!.Value);
         source.Validate(_aiRecords!, _aiWorld!, Appearance.Reference!.Value, progress);

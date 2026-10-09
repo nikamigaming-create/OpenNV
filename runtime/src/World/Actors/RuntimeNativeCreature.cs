@@ -148,13 +148,17 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        if (_sandboxNativeAction is not null && !_sandboxNativeRetired && _sandbox?.Failure is not null) return;
         if (Combat?.Dead == true || Combat?.OwnsPose == true) return;
         if (Error is not null) return;
         if (_aiState?.ScriptError is not null) return;
         try
         {
             AdvanceConversationFacing((float)delta);
+            AdvanceCollectionReplayClock(delta);
+            Skeleton.ResetMorphPublication();
             if (AdvanceEventIdle(delta)) return;
+            if (AdvanceCollectionIdle(delta)) return;
             if (Combat?.PackageOwnsPose == true) return;
             var from = _clock.ElapsedSeconds;
             var include = _clock.StartPending;
@@ -175,7 +179,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
             Skeleton.ResetMorphPublication();
             _animation.ApplySourceTime(SourceSeconds);
         }
-        catch (Exception error) when (error is InvalidDataException or NotSupportedException or ArgumentException)
+        catch (Exception error)
         {
             Error = error.Message;
             GD.PushError($"OPENNV_NATIVE_CREATURE_ANIMATION_DIVERGENCE reference={Appearance.Reference}: {error.Message}");

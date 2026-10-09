@@ -18,6 +18,7 @@ public partial class RuntimeCoordinator
         BindActualNativeQueuedCallerThread();
         if (_nativeMainPlayerLease is not null) throw new InvalidOperationException("Main Player native children already own a living lease.");
         BindNativeCallingThreadFistp(world);
+        BindStandalonePlayerScene(world);
         var consumers = new NativeMainPlayerConsumers(this, world, world.CampaignMainPlayerCellSource);
         _nativeMainPlayerLease = world.BindCampaignMainPlayerCell(consumers, "actual-native-Player-CELL/" + GetInstanceId());
         _nativeMainPlayerConsumers = consumers;
@@ -36,6 +37,7 @@ public partial class RuntimeCoordinator
         // Refusal retains the still-owned native/source lease for a later safe
         // cleanup attempt. Native caller cancellation/drain happens first.
         _nativeMainPlayerLease?.Dispose(); _nativeMainPlayerLease = null; _nativeMainPlayerConsumers = null;
+        _nativePlayer?.RetireStandalonePlayerScene();
         if (_nativeMainPlayerReplacement is not null && _nativeMainPlayerBoundWorld is { } world)
             world.PlayerMoves.SourcePending.Replaced -= _nativeMainPlayerReplacement;
         _nativeMainPlayerReplacement = null; _nativeMainPlayerBoundWorld = null;
@@ -90,18 +92,35 @@ public partial class RuntimeCoordinator
         }
         public void PendingFlagChild(FalloutMainPlayerCellInvocation invocation)
         { Require(invocation, FalloutMainPlayerCellStep.PendingFlagChild); world.CampaignPlayerPendingConsumers.StoreFinalFlag(invocation); }
-        public bool HeldInterface(FalloutMainPlayerCellInvocation invocation) =>
-            throw Unowned(invocation, FalloutMainPlayerCellStep.HeldInterfaceQuery, "actual-interface-signed-kind-two-producer-unowned");
+        public bool HeldInterface(FalloutMainPlayerCellInvocation invocation) => Source.Main.HasNewVegasChildren
+            ? throw Unowned(invocation, FalloutMainPlayerCellStep.HeldInterfaceQuery, "actual-interface-signed-kind-two-producer-unowned")
+            : world.ReadStandalonePlayerHeldInterface(invocation);
         public void HeldChild(FalloutMainPlayerCellInvocation invocation) =>
             throw Unowned(invocation, FalloutMainPlayerCellStep.HeldChild, "held-Player-child-unowned");
-        public bool SceneMode(FalloutMainPlayerCellInvocation invocation) =>
+        public bool SceneMode(FalloutMainPlayerCellInvocation invocation)
+        {
+            Require(invocation, FalloutMainPlayerCellStep.SceneMode);
+            if (world.HasStandalonePlayerScene) return world.ReadStandalonePlayerSceneMode(invocation);
             throw Unowned(invocation, FalloutMainPlayerCellStep.SceneMode, "independent-original-Main-scene-mode-byte-unowned");
-        public bool ScenePresent(FalloutMainPlayerCellInvocation invocation) =>
+        }
+        public bool ScenePresent(FalloutMainPlayerCellInvocation invocation)
+        {
+            Require(invocation, FalloutMainPlayerCellStep.SceneRead);
+            if (world.HasStandalonePlayerScene) return world.ReadStandalonePlayerFirstPerson(invocation);
             throw Unowned(invocation, FalloutMainPlayerCellStep.SceneRead, "selected-Player-first-person-selector-or-TLS-common-3D-getter-unowned");
-        public void SceneClock(FalloutMainPlayerCellInvocation invocation) =>
+        }
+        public void SceneClock(FalloutMainPlayerCellInvocation invocation)
+        {
+            Require(invocation, FalloutMainPlayerCellStep.SceneClock);
+            if (world.HasStandalonePlayerScene) { world.StoreStandalonePlayerSceneClock(invocation); return; }
             throw Unowned(invocation, FalloutMainPlayerCellStep.SceneClock, "original-Float32-times-wide-scene-clock-and-increment-prefix-unowned");
-        public void SceneChild(FalloutMainPlayerCellInvocation invocation, bool alternate) =>
+        }
+        public void SceneChild(FalloutMainPlayerCellInvocation invocation, bool alternate)
+        {
+            Require(invocation, FalloutMainPlayerCellStep.SceneChild);
+            if (world.HasStandalonePlayerScene) { coordinator.ExecuteStandalonePlayerScene(invocation, world, alternate); return; }
             throw Unowned(invocation, FalloutMainPlayerCellStep.SceneChild, alternate ? "original-alternate-scene-child-unowned" : "actual-Player-virtual-update-child-unowned");
+        }
         public FalloutMainPlayerSourceCell? ParentCell(FalloutMainPlayerCellInvocation invocation)
         { Require(invocation, FalloutMainPlayerCellStep.ParentCellRead); return world.ReadMainPlayerParentCell(invocation); }
         public FalloutMainPlayerSourcePosition Position(FalloutMainPlayerCellInvocation invocation)

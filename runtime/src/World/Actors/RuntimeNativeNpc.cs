@@ -100,7 +100,8 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
     internal void EndResponseAnimation() => _responseIdleActive = false;
 
     private void PlayIdle(FalloutPluginStack stack, FalloutFormKey form, string owner,
-        FalloutActorPackageIdleAnimation? saved = null)
+        FalloutActorPackageIdleAnimation? saved = null,
+        (RuntimeNativeNifAnimation Animation, float Seconds)? restoredBase = null)
     {
         RestoreAuthoredHeadPose();
         var record = stack.GetEffective(form);
@@ -178,8 +179,10 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
                 selected.TextKeys.Select(key => (key.Time, key.Value)).ToArray(),
                 saved?.Clock.SelectedAdditionalLoops ?? timing.SelectAdditionalLoops(_aiRandom.NextBounded));
             if (saved is not null) clock.Restore(saved.Clock);
-            if (saved is not null) RestoreFurnitureResidualPose(saved.ResidualPose!, selected);
-            if (_baseAnimation is null) selected.ApplySourceTime(clock.SourceSeconds);
+            if (saved is not null) RestoreFurnitureResidualPose(saved.ResidualPose!, selected, restoredBase?.Animation);
+            if (restoredBase is { } sourceBase)
+                RuntimeNativeNifAnimation.ApplyLayers((sourceBase.Animation, sourceBase.Seconds), (selected, clock.SourceSeconds));
+            else if (_baseAnimation is null) selected.ApplySourceTime(clock.SourceSeconds);
             else RuntimeNativeNifAnimation.ApplyLayers((_baseAnimation, _baseAnimationSeconds), (selected, clock.SourceSeconds));
             foreach (var old in _animationObjects) old.Free();
             _animationObjects.Clear();
@@ -216,6 +219,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        if (_sandboxNativeAction is not null && !_sandboxNativeRetired && _sandbox?.Failure is not null) return;
         if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true) return;
         RestoreAuthoredHeadPose();
         if (_conversationTarget is null) AdvanceAi(delta: delta);
@@ -271,7 +275,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
             AdvanceFaceAnimation(delta);
             PosePublished?.Invoke();
         }
-        catch (Exception error) when (error is NotSupportedException or InvalidDataException or ArgumentOutOfRangeException or InvalidOperationException)
+        catch (Exception error)
         {
             AnimationError = error.Message;
             GD.PushError($"OPENNV_NATIVE_ANIMATION_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
@@ -292,6 +296,8 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         foreach (var item in _animationObjects) item.Free();
         _animationObjects.Clear();
         if (owner == "package-idle") _packageIdles!.Finish();
+        if (owner == "sandbox-idle-marker") (_sandboxMarkerCollection ??
+            throw new InvalidOperationException("Completed Sandbox IDLE lost its actual IDLM collection.")).Finish();
         // Finished one-shots release their bone and ANIO ownership. The base
         // procedure continues on its existing clock on the next publication.
         if (_baseAnimation is not null) _baseAnimation.ApplySourceTime(_baseAnimationSeconds);

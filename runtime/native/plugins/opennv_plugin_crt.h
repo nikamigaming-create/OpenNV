@@ -14,7 +14,9 @@ namespace opennv_domain {
 enum class CrtOperation : std::uint32_t {
     open = 1, close = 2, read = 3, write = 4, seek = 5, tell = 6, rewind = 7,
     flush = 8, put_character = 9, put_string = 10, formatted_write = 11,
-    eof = 12, error = 13, clear_error = 14, make_directory = 15
+    eof = 12, error = 13, clear_error = 14, make_directory = 15,
+    get_character = 16, push_character = 17, get_position = 18, set_position = 19,
+    set_buffer = 20, buffer_cells = 21, lock = 22, unlock = 23
 };
 struct CrtStatus { int error; unsigned long dos; bool available; int eof, stream_error; };
 struct CrtProvider {

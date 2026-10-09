@@ -15,7 +15,7 @@ internal sealed class FalloutNewGameBootstrap
     private readonly FalloutReferenceWorld _world;
     private readonly FalloutQuestStages _stages;
     private readonly FalloutPluginStack _records;
-    private bool _started, _placementCompleted;
+    private bool _started, _placementCompleted, _placementConsuming, _preparationRetired;
     private readonly Func<bool> _canContinue;
     private FalloutNewGamePlacement? _preparedPlacement;
     internal bool PlacementPreparing => _preparedPlacement is not null;
@@ -30,6 +30,8 @@ internal sealed class FalloutNewGameBootstrap
         controls = Controls,
         stages = _stages.Errors,
         placementPreparing = PlacementPreparing,
+        placementConsuming = _placementConsuming,
+        preparationRetired = _preparationRetired,
         placementCompleted = _placementCompleted,
         placement = _preparedPlacement is { } prepared ? new { prepared.Move, prepared.Placement } : null
     };
@@ -165,9 +167,15 @@ internal sealed class FalloutNewGameBootstrap
 
     internal void Advance(double seconds, IEnumerable<uint>? menus)
     {
+        ObjectDisposedException.ThrowIf(_preparationRetired, this);
         if (!_started) throw new InvalidOperationException("New-game bootstrap has not started.");
         if (_placementCompleted) return;
-        if (_preparedPlacement is { } prepared) { RequirePlacementOwner(prepared); return; }
+        if (_preparedPlacement is { } prepared)
+        {
+            if (!_placementConsuming) RequireCurrentPlacement(prepared);
+            if (_world.PlayerMoves.Error is { } error) throw new NotSupportedException(error);
+            return;
+        }
         _stages.Continue();
         _scripts.Advance(seconds, gameMode: false, menus: menus);
         _scripts.RequireQuestExecution(Quest.FormKey);
@@ -178,40 +186,59 @@ internal sealed class FalloutNewGameBootstrap
 
     internal FalloutNewGamePlacement? PreparePlacement()
     {
+        ObjectDisposedException.ThrowIf(_preparationRetired, this);
         if (!_started) throw new InvalidOperationException("New-game bootstrap has not started.");
         if (_placementCompleted) throw new InvalidOperationException("Initial source placement was already published.");
+        if (_placementConsuming) throw new InvalidOperationException("Initial source placement has transferred to its actual Main consumer.");
         _scripts.RequireQuestExecution(Quest.FormKey);
-        if (_preparedPlacement is { } existing) { RequirePlacementOwner(existing); return existing; }
+        if (_preparedPlacement is { } existing) { RequireCurrentPlacement(existing); return existing; }
         if (!_canContinue() || _stages.HasPendingResults || _scripts.HasPendingStartupExecution || _scripts.HasQueuedMessage)
             return null;
-        var placement = Placement();
-        if (placement is null) return null;
-        var move = _world.PlayerMoves.Next ?? throw new InvalidOperationException("Initial source movement disappeared during admission.");
-        _preparedPlacement = new(move, placement);
+        if (_world.PlayerMoves.Error is { } error) throw new NotSupportedException(error);
+        if (_world.PlayerMoves.Next is not { } move) return null;
+        if (move.Destination == _records.RuntimeFormKey(0x14))
+            throw new NotSupportedException("Startup self movement has no prior player placement.");
+        _preparedPlacement = new(_world.PrepareSourcePlayerCellPlacement(move));
         return _preparedPlacement;
+    }
+
+    internal void RequireCurrentPlacement(FalloutNewGamePlacement prepared)
+    {
+        RequirePlacementOwner(prepared);
+        if (_placementConsuming) throw new InvalidOperationException("Initial preload cannot reenter its actual Main consumer.");
+        _world.RequireCurrentSourcePlayerCellPlacement(prepared.Preparation);
+    }
+
+    internal void TransferPlacementToMain(FalloutNewGamePlacement prepared)
+    {
+        RequireCurrentPlacement(prepared);
+        _placementConsuming = true;
     }
 
     internal void CompletePlacement(FalloutNewGamePlacement prepared)
     {
         RequirePlacementOwner(prepared);
-        _world.PlayerMoves.Complete(prepared.Move);
+        if (!_placementConsuming) throw new InvalidOperationException("Initial source placement has not entered its native Main delivery lifetime.");
+        _world.RequireReturnedSourcePlayerCellPlacement(prepared.Preparation);
+        prepared.Preparation.Dispose();
         _preparedPlacement = null;
+        _placementConsuming = false;
         _placementCompleted = true;
     }
 
     private void RequirePlacementOwner(FalloutNewGamePlacement prepared)
     {
-        if (!ReferenceEquals(_preparedPlacement, prepared) || !ReferenceEquals(_world.PlayerMoves.Next, prepared.Move))
+        ObjectDisposedException.ThrowIf(_preparationRetired, this);
+        if (!ReferenceEquals(_preparedPlacement, prepared))
             throw new InvalidOperationException("Initial source placement lost its exact admitted movement owner.");
         if (_world.PlayerMoves.Error is { } error) throw new NotSupportedException(error);
     }
 
-    internal FalloutReferencePlacement? Placement()
+    internal void RetirePreparation()
     {
-        if (_world.PlayerMoves.Error is { } error) throw new NotSupportedException(error);
-        if (_world.PlayerMoves.Next is not { } move) return null;
-        if (move.Destination == _records.RuntimeFormKey(0x14))
-            throw new NotSupportedException("Startup self movement has no prior player placement.");
-        return _world.ResolvePlayerMove(move, _world.Placement(move.Destination), 1);
+        _preparationRetired = true;
+        _preparedPlacement?.Preparation.Dispose();
+        _preparedPlacement = null;
+        _placementConsuming = false;
     }
 }

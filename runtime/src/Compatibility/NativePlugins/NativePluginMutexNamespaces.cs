@@ -2,7 +2,7 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 // Only the directory capability crosses from the parent. Mutex allocation and
 // initial ownership are genuine NT calls on the original native caller thread.
-internal sealed class NativePluginMutexNamespaces(NativePluginDomainChild process,
+internal sealed partial class NativePluginMutexNamespaces(NativePluginDomainChild process,
     ulong generation, ulong module, uint thread, string restrictingSid)
 {
     private NativePluginMutexWindowsSource? _windows;
@@ -40,6 +40,7 @@ internal sealed class NativePluginMutexNamespaces(NativePluginDomainChild proces
             // Strong ownership precedes any subsequent observation/transfer.
             lease = new(checked(++_next), scope, opened.Name, opened.Handle, opened.Descriptor);
             _directories.Add(scope, lease); Record(call, lease);
+            ObserveFallback(call, opened.Name, opened.Handle);
             var observed = process.ProbeMutexDirectory(opened.Name);
             lease.RestrictedStatus = observed.Status; lease.RestrictedError = observed.Error; Record(call, lease);
             lease.Remote = process.ReceiveMutexDirectory(lease.Parent); Record(call, lease);

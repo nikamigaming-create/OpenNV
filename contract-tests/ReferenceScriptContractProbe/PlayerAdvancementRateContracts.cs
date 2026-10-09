@@ -16,7 +16,7 @@ internal static class PlayerAdvancementRateContracts
     // Authored state identities exercise persistence joins. They are not
     // evidence that an owned executable/dependency has been admitted or run.
     internal static FalloutAdvancementRuntimeReceipt Receipt(FalloutSkillPointRate rate) =>
-        new(new string('1', 64), new string('2', 64), new string('3', 64), new string('4', 64), rate, Getter);
+        new(new string('1', 64), new string('2', 64), new string('3', 64), new string('4', 64), rate, Getter, new("iLevelsPerPerk"));
 
     internal static void Run()
     {

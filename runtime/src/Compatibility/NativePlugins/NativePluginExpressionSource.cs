@@ -7,7 +7,7 @@ internal static class NativePluginExpressionSource
         ["CreateExpressionEvaluator"], ["DestroyExpressionEvaluator"], ["ExtractArgsEval"], ["GetNumArgs"], ["GetNthArg"],
         ["ScriptTokenGetType"], ["ScriptTokenGetFloat"], ["ScriptTokenGetBool"], ["ScriptTokenGetFormID"],
         ["ScriptTokenGetTESForm"], ["ScriptTokenGetString"], ["ScriptTokenGetArray", "ScriptTokenGetArrayID"],
-        ["ScriptTokenGetActorValue"], ["ScriptTokenGetScriptVar"], ["ScriptTokenGetPair"], ["ScriptTokenGetSlice"],
+        ["ScriptTokenGetActorValue"], ["ScriptTokenGetScriptVar", "ScriptTokenGetScriptLocal"], ["ScriptTokenGetPair"], ["ScriptTokenGetSlice"],
         ["ScriptTokenGetAnimGroup", "ScriptTokenGetAnimationGroup"], ["SetExpectedReturnType"],
         ["AssignCommandResultFromElement"], ["ScriptTokenGetElement"], ["ScriptTokenCanConvertTo"], ["ExtractArgsVA", "ExtractArgsV"]
     ];
@@ -58,9 +58,11 @@ internal static class NativePluginExpressionSource
             }
         }
         var array = pdb.FunctionPointer(members[11].Type);
-        var pointer = members[11].Name == "ScriptTokenGetArray" && pdb.PointerTo(array.Return, "NVSEArrayVar");
-        if (!pointer && !(members[11].Name == "ScriptTokenGetArrayID" && pdb.AbiType(array.Return) == "uint32"))
-            throw new NotSupportedException("Original expression field11 return identity is not its reviewed native pointer/UInt32 contract.");
+        var arrayAbi = pdb.AbiType(array.Return);
+        var arrayKind = NativeNvseArrayAccessor.Read(members[11].Name, arrayAbi,
+            arrayAbi == "pointer32" && pdb.PointerTo(array.Return, "NVSEArrayVarInterface::Array") ? "NVSEArrayVarInterface::Array" :
+            arrayAbi == "pointer32" ? "unowned-pointer-pointee" : null);
+        var pointer = arrayKind == NativeNvseArrayAccessorKind.InternalObject;
         var callable = 88U; var reservedStart = 22;
         if (members.Length > 22 && members[22].Name == "ReportError")
         {
@@ -78,7 +80,7 @@ internal static class NativePluginExpressionSource
             if (reserved.Convention != 0 || reserved.Parameters != 0 || pdb.AbiType(reserved.Return) != "void")
                 throw new NotSupportedException("Original reserved utility field is not its source-declared empty cdecl slot.");
         }
-        return new(module.Sha256, "matched-original-CodeView/TPI:ExpressionEvaluatorUtils:" + pdb.Sha256,
+        return new(module.Sha256, "matched-original-CodeView/TPI:ExpressionEvaluatorUtils:" + pdb.Sha256 + ":array-return=" + arrayKind,
             structure.Extent, callable, pointer);
     }
 }

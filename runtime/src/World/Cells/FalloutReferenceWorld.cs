@@ -38,7 +38,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     IReadOnlyList<FalloutPackageResultSnapshot>? PackageResults = null,
     FalloutActorScriptPackageSnapshot? ScriptPackage = null,
     FalloutActorPackageChoice? PendingPackageChoice = null,
-    FalloutScriptLocalStorageSnapshot? LocalStorage = null)
+    FalloutScriptLocalStorageSnapshot? LocalStorage = null, FalloutActorPackageCollectionContinuation? PackageCollection = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -131,6 +131,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             foreach (var start in snapshot.PackageStarts ?? [])
                 (start ?? throw new InvalidDataException("Saved package selection time is absent.")).Validate();
             snapshot.PackageIdle?.Validate();
+            snapshot.PackageCollection?.Validate();
             snapshot.AnimationSoundEvents?.Validate();
             snapshot.HitReactionFaults?.Validate();
             if (snapshot.AnimationSoundEvents is { } sounds && sounds.Reference != snapshot.Reference ||
@@ -231,6 +232,8 @@ internal sealed class FalloutReferenceInstance
         PackageBindingFailure is { } failure && ProcedureCaptureBlocker == failure.Error;
     internal List<FalloutPackageStart> PackageStarts { get; } = [];
     internal FalloutPackageEventIdle? PackageIdle { get; set; }
+    internal FalloutActorPackageCollectionContinuation? PackageCollection { get; set; }
+    internal Func<FalloutActorPackageCollectionContinuation?>? CapturePackageCollection { get; set; }
     internal string? ProcedureCaptureBlocker { get; set; }
     internal FalloutActorHeadTrackingSnapshot? HeadTracking { get; set; }
     internal bool HeadTrackingRequired { get; set; }
@@ -402,7 +405,8 @@ internal sealed class FalloutReferenceInstance
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
             DeferredPackageContinuation: DeferredPackageContinuation, ScriptPackage: ScriptPackage,
-            PendingPackageChoice: PendingPackageChoice, LocalStorage: LocalStorage?.Capture());
+            PendingPackageChoice: PendingPackageChoice, LocalStorage: LocalStorage?.Capture(),
+            PackageCollection: CapturePackageCollection is { } captureCollection ? captureCollection() : PackageCollection?.Copy());
     }
 }
 
@@ -423,7 +427,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     FalloutScriptIniStore? ini = null, FalloutUiComponentStore? ui = null, FalloutInputControls? controls = null,
     FalloutFaceGeometryControls? faceControls = null) : IDisposable
 {
-    internal FalloutScriptValueStore ScriptValues { get; } = scriptValues ?? new();
+    internal FalloutScriptValueStore ScriptValues { get; } = (scriptValues ?? new()).BindArraySource(records);
     internal FalloutAuxiliaryStore Auxiliary { get; } = auxiliary ?? new();
     internal FalloutScriptIniStore? Ini { get; } = ini;
     internal FalloutUiComponentStore? Ui { get; } = ui;
@@ -766,10 +770,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                         RouteWaypoints = travel.RouteWaypoints?.Select(point => (float[])point.Clone()).ToArray()
                     } : null,
                     Guard = motion.Guard is { } guard ? guard with { Location = (float[])guard.Location.Clone() } : null,
-                    Follow = motion.Follow?.Copy()
+                    Follow = motion.Follow?.Copy(),
+                    Sandbox = motion.Sandbox?.Copy()
                 };
             }
             validated.RestorePackageTiming(instance, snapshot);
+            validated.RestorePackageCollection(instance, snapshot);
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
             if (snapshot.AnimationSoundEvents is { } soundEvents) instance.AnimationSoundEvents.Restore(soundEvents, records);
             if (snapshot.HitReactionFaults is { } hitFaults)
@@ -876,12 +882,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             if (snapshot.PackageMotion is { } staleMotion && snapshot.PackageAssignment is { } assignment &&
                 assignment.Package != staleMotion.Package) continue;
+            validated.ValidateSandboxSources(snapshot);
             if (snapshot.PackageMotion?.Travel is { } travel)
                 FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package),
-                    ownsIdleCollection: records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_")
+                    ownsIdleCollection: records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_" || snapshot.PackageCollection is not null)
                     .Validate(records, validated, snapshot.Reference, travel);
             if (snapshot.PackageMotion?.Guard is { } guard)
-                FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
+                FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package),
+                    ownsIdleCollection: snapshot.PackageCollection is not null)
                     .Validate(records, validated, snapshot.Reference, guard);
         }
         validated.RestorePackageResults(snapshots);
@@ -936,6 +944,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             Retire(RetireCampaignIndexedInterfaceSounds);
             Retire(RetireCampaignChallenges);
             Retire(RetirePlayerStatistics);
+            Retire(RetireSandboxSourceProducers);
             Retire(RetireCampaignPlayerRuntime);
             Retire(() => _sounds?.Clear());
             Retire(() => _pipBoyRadio?.Off());

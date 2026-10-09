@@ -25,6 +25,7 @@ internal partial class RuntimeNativeNpc
     {
         Combat?.StopPackageMotion();
         if (_findFurniture is not null) AdvanceFindFurniture(delta);
+        if (_sandboxSource is not null) { AdvanceSandbox(delta); return; }
         if (_furnitureApproaching) { AdvanceFurnitureApproach(delta); return; }
         if (_followPackage is not null) { AdvanceFollow(delta); return; }
         if (_guardPackage is not null) { AdvanceGuard(delta); return; }

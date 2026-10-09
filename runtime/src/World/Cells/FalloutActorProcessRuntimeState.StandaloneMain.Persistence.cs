@@ -6,9 +6,16 @@ internal sealed partial class FalloutActorProcessRuntimeState
 {
     internal static void ValidateStandaloneMain(FalloutStandaloneMainSnapshot saved, FalloutActorProcessRuntimeSnapshot runtime)
     {
-        if (saved is null || saved.Source is null || saved.MainField is null || saved.MainCaller is null || saved.PlayerCell is null)
+        if (saved is null || saved.Source is null || saved.MainField is null || saved.MainCaller is null || saved.PlayerCell is null || saved.Interface is null || saved.Scene is null)
             throw new InvalidDataException("Standalone Main omitted an actual cached field/caller/Player owner.");
         saved.Source.Validate();
+        OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceState.Validate(saved.Interface);
+        OpenNV.Runtime.Gameplay.State.FalloutStandalonePlayerSceneState.Validate(saved.Scene);
+        if (saved.Scene.Source.Main != saved.Source || saved.Scene.Stack != runtime.Stack || saved.Scene.CapturedProcess != runtime.CapturedProcess)
+            throw new InvalidDataException("Standalone Player scene changed its exact Main/stack/captured process.");
+        if (saved.Interface.Source.Main != saved.Source || saved.Interface.Stack != runtime.Stack ||
+            saved.Interface.CapturedProcess != runtime.CapturedProcess)
+            throw new InvalidDataException("Standalone interface changed its actual Main/stack/process owner.");
         if (!FalloutSourceMainFamily.IsFallout3(saved.Source.EngineSha256) ||
             FalloutActorProcessRuntimeDeclaration.ForExecutable(saved.Source.EngineSha256).Contract != runtime.Contract ||
             saved.MainCaller.Source != saved.Source || saved.MainCaller.Stack != runtime.Stack ||
@@ -53,6 +60,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
         }
         var saved = runtime.StandaloneMain ?? throw new InvalidDataException("Current FO3 save omitted its real Main/Player continuation.");
         ValidateStandaloneMain(saved, runtime);
+        OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceState.RequirePlayable(saved.Interface);
+        OpenNV.Runtime.Gameplay.State.FalloutStandalonePlayerSceneState.RequirePlayable(saved.Scene);
         if (saved.MainField.Error is not null || saved.MainCaller.LastCall is { Disposition: FalloutMainScriptCallerDisposition.Failed } ||
             saved.PlayerCell.LastCall is { Disposition: FalloutMainPlayerCellDisposition.Failed } ||
             saved.PlayerCell.Pending.Error is not null || saved.PlayerCell.PendingConsumers.Error is not null ||

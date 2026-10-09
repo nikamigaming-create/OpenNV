@@ -14,7 +14,7 @@ internal sealed partial class NativePluginExecutionDomain
     private readonly Dictionary<ulong, NativeNvseValueCall> _nvseValueCalls = [];
     private readonly List<ulong> _nvseActiveValueCalls = [];
     private readonly Dictionary<ulong, (ulong Caller, uint Array, IReadOnlyList<NativeNvseArrayEntry> Entries)> _nvseValueSnapshots = [];
-    private readonly Dictionary<ulong, (ulong Caller, int Kind, uint Count, string ScriptOwner, List<NativeNvseArrayEntry> Entries)> _nvseValueConstructors = [];
+    private readonly Dictionary<ulong, (ulong Caller, int Kind, uint Count, string ScriptOwner, uint Script, List<NativeNvseArrayEntry> Entries)> _nvseValueConstructors = [];
     private readonly List<NativeNvseValueCallbackReceipt> _nvseValueReceipts = [];
     private ulong _nextNvseValueSnapshot;
     internal IReadOnlyList<NativeNvseValueCallbackReceipt> NvseValueCallbacks => _nvseValueReceipts.AsReadOnly();
@@ -52,10 +52,15 @@ internal sealed partial class NativePluginExecutionDomain
             throw Fatal(new InvalidDataException("Native value caller retirement is not nested in owner order."));
         _nvseActiveValueCalls.RemoveAt(_nvseActiveValueCalls.Count - 1);
         _nvseValueCalls.Remove(caller.Id);
-        var pending = _nvseValueSnapshots.Values.Any(snapshot => snapshot.Caller == caller.Id) || _nvseValueConstructors.Values.Any(lease => lease.Caller == caller.Id);
+        var pending = _nvseValueSnapshots.Values.Any(snapshot => snapshot.Caller == caller.Id) || _nvseValueConstructors.Values.Any(lease => lease.Caller == caller.Id) ||
+            _nvseArrayObjectLeases.Values.Any(lease => lease.Caller == caller.Id);
         try { lifetime.Retire(_nvseValues!); }
         catch (Exception error) { throw Fatal(error); }
-        if (pending) throw Fatal(new InvalidDataException("Native command returned with a live array constructor/enumeration lease."));
+        if (pending) throw Fatal(new InvalidDataException("Native command returned with a live array constructor/enumeration/object lease."));
+        if (_nvseActiveValueCalls.Count == 0)
+        {
+            try { SynchronizeNvseArrayObjects(); } catch (Exception error) { throw Fatal(error); }
+        }
     }
     private void RetainNvseArray(ulong caller, uint id)
     {
@@ -80,7 +85,7 @@ internal sealed partial class NativePluginExecutionDomain
         if (_nvseValues is { } authority)
             foreach (var id in _nvseActiveValueCalls.AsEnumerable().Reverse())
                 if (_nvseValueCalls.Remove(id, out var lifetime)) lifetime.Retire(authority);
-        _nvseActiveValueCalls.Clear(); _nvseValueCalls.Clear(); _nvseValues = null;
+        _nvseActiveValueCalls.Clear(); _nvseValueCalls.Clear(); ClearNvseArrayObjectCapabilities(); _nvseValues = null;
     }
     internal NativeNvseValueStatistics NvseValueStatistics(NativeNvsePlugin plugin)
     {
@@ -191,7 +196,7 @@ internal sealed partial class NativePluginExecutionDomain
                     if (callerId == 0) throw new NotSupportedException("Native array construction requires its actual execution lifetime.");
                     var kind = frame.Operation == ValueCreateArray ? 0 : frame.Operation == ValueCreateMap ? 1 : 2;
                     var lease = checked(++_nextNvseValueSnapshot);
-                    _nvseValueConstructors.Add(lease, (callerId, kind, count, scriptOwner, new List<NativeNvseArrayEntry>((int)count)));
+                    _nvseValueConstructors.Add(lease, (callerId, kind, count, scriptOwner, script, new List<NativeNvseArrayEntry>((int)count)));
                     reply = Payload(writer => writer.Write(lease)); break;
                 }
             case ValueConstructorWrite:
@@ -209,7 +214,7 @@ internal sealed partial class NativePluginExecutionDomain
                     var lease = reader.ReadUInt64(); Finish(reader);
                     if (!_nvseValueConstructors.Remove(lease, out var constructor) || constructor.Caller != callerId || constructor.Entries.Count != constructor.Count)
                         throw new InvalidDataException("Native constructor completion has no full source key/value extent.");
-                    identity = authority.CreateArray(constructor.Kind, constructor.Entries); RetainNvseArray(callerId, identity);
+                    identity = authority.CreateArrayForScript(constructor.Kind, constructor.Entries, constructor.Script); RetainNvseArray(callerId, identity);
                     reply = Payload(writer => writer.Write(identity)); break;
                 }
             case ValueAssignNumber:
@@ -306,6 +311,11 @@ internal sealed partial class NativePluginExecutionDomain
                         throw new InvalidDataException("Native enumeration lease was foreign, absent or already retired.");
                     identity = snapshot.Array; reply = Payload(writer => writer.Write(1U)); break;
                 }
+            case ValueArrayObjectBegin:
+            case ValueArrayObjectRead:
+            case ValueArrayObjectPublish:
+            case ValueArrayObjectRetire:
+                reply = DispatchNvseArrayObject(frame, parent, callerId, reader); break;
             case ValueHeapEvent: reply = AcceptNvseHeapEvent(frame, callerId, reader); break;
             default: throw new InvalidDataException($"Unknown native value callback {frame.Operation}.");
         }

@@ -31,9 +31,9 @@ internal partial class RuntimeNativeNpc
         PlayIdle(_aiStack!, saved.Idle, "package-idle", saved);
     }
 
-    private FalloutActorResidualPose CaptureFurnitureResidualPose()
+    private FalloutActorResidualPose CaptureFurnitureResidualPose(RuntimeNativeNifAnimation? basis = null)
     {
-        var coverage = RuntimeNativeNifAnimation.TransformCoverage(_baseAnimation!, _animation!);
+        var coverage = RuntimeNativeNifAnimation.TransformCoverage(basis ?? _baseAnimation!, _animation!);
         var node = Skeleton.Node;
         var bones = new List<FalloutActorResidualBonePose>();
         for (var index = 0; index < coverage.Length; ++index)
@@ -49,9 +49,10 @@ internal partial class RuntimeNativeNpc
         return new(Appearance.SkeletonPath, Skeleton.Source.Sha256, bones);
     }
 
-    private void RestoreFurnitureResidualPose(FalloutActorResidualPose saved, RuntimeNativeNifAnimation overlay)
+    private void RestoreFurnitureResidualPose(FalloutActorResidualPose saved, RuntimeNativeNifAnimation overlay,
+        RuntimeNativeNifAnimation? basis = null)
     {
-        var coverage = RuntimeNativeNifAnimation.TransformCoverage(_baseAnimation ??
+        var coverage = RuntimeNativeNifAnimation.TransformCoverage(basis ?? _baseAnimation ??
             throw new InvalidDataException("Saved residual pose has no furniture base layer."), overlay);
         var node = Skeleton.Node;
         saved.ValidateBinding(Appearance.SkeletonPath, Skeleton.Source.Sha256,

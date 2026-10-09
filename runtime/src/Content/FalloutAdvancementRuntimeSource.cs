@@ -8,7 +8,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutAdvancementRuntimeReceipt(string EngineSha256, string DependenciesSha256,
     string ConfigurationSha256, string ContractSha256, FalloutSkillPointRate SkillRate,
-    FalloutPermanentIntelligenceGetter IntelligenceGetter)
+    FalloutPermanentIntelligenceGetter IntelligenceGetter, FalloutPerkAwardCadence PerkCadence)
 {
     internal string SourceSha256 => Hash(EngineSha256 + "\0" + DependenciesSha256 + "\0" +
         ConfigurationSha256 + "\0" + ContractSha256);
@@ -16,6 +16,7 @@ internal sealed record FalloutAdvancementRuntimeReceipt(string EngineSha256, str
     {
         ArgumentNullException.ThrowIfNull(SkillRate); SkillRate.Validate();
         ArgumentNullException.ThrowIfNull(IntelligenceGetter); IntelligenceGetter.Validate();
+        ArgumentNullException.ThrowIfNull(PerkCadence); PerkCadence.Validate();
         if (!Digest(EngineSha256) || !Digest(DependenciesSha256) || !Digest(ConfigurationSha256) ||
             !Digest(ContractSha256))
             throw new InvalidDataException("Player advancement runtime receipt is invalid.");
@@ -31,7 +32,7 @@ internal sealed record FalloutAdvancementRuntimeReceipt(string EngineSha256, str
 internal sealed partial class FalloutAdvancementRuntimeSource : IDisposable
 {
     private sealed record EngineContract(FalloutSkillPointRate SkillRate,
-        FalloutPermanentIntelligenceGetter IntelligenceGetter, string NeutralContract);
+        FalloutPermanentIntelligenceGetter IntelligenceGetter, FalloutPerkAwardCadence PerkCadence, string NeutralContract);
     private readonly List<FileStream> _leases = [];
     private IReadOnlyList<string> _unreviewedModuleImages = [];
     private bool _disposed;
@@ -54,6 +55,7 @@ internal sealed partial class FalloutAdvancementRuntimeSource : IDisposable
                 new(FalloutSkillPointOperand.Literal(10), FalloutSkillPointOperand.Literal(1),
                     0, 2, 1, 10, FalloutSkillPointRounding.Floor, new(2, 1, 2, 0, 1)),
                 new(1, 10, FalloutPermanentIntelligenceInteger.Floor),
+                new("iLevelsPerPerk"),
                 "integer-permanent-floor;clamp1..10;base10;scale1/2;floor;odd-intelligence-even-gained-level-plus1"),
             ["c3f97c2255fa041a851c17cf372d69aaadd8694e2dc4230ba556001bbfbd2f3e"] = new(
                 new(FalloutSkillPointOperand.GameSetting("iLevelUpSkillPointsBase"),
@@ -61,6 +63,7 @@ internal sealed partial class FalloutAdvancementRuntimeSource : IDisposable
                     -1, 1, null, 10, FalloutSkillPointRounding.Truncate,
                     Arithmetic: FalloutSkillPointArithmetic.SignedInteger32),
                 new(1, 10, FalloutPermanentIntelligenceInteger.Floor),
+                new(null),
                 "float32-permanent-clamp1..10;integer-floor;subtract1-once;term-min10;int32-multiply-live-interval-plus-live-base"),
         };
 
@@ -82,12 +85,13 @@ internal sealed partial class FalloutAdvancementRuntimeSource : IDisposable
             owner.Receipt = new(engine.Sha256, FalloutAdvancementRuntimeReceipt.Hash(dependencies.Images),
                 FalloutAdvancementRuntimeReceipt.Hash(dependencies.Configuration),
                 FalloutAdvancementRuntimeReceipt.Hash(declaration.NeutralContract + "\0" + dependencies.Contract + "\0" +
-                    JsonSerializer.Serialize(rate) + "\0" + JsonSerializer.Serialize(declaration.IntelligenceGetter)),
-                rate, declaration.IntelligenceGetter);
+                    JsonSerializer.Serialize(rate) + "\0" + JsonSerializer.Serialize(declaration.IntelligenceGetter) + "\0" +
+                    JsonSerializer.Serialize(declaration.PerkCadence)),
+                rate, declaration.IntelligenceGetter, declaration.PerkCadence);
             owner.Receipt.Validate();
             // Admit all consumed live settings before returning a configured
             // source. Default-setting presence does not choose their consumer.
-            _ = FalloutLevelUpRules.Read(records, owner.Receipt.SkillRate);
+            _ = FalloutLevelUpRules.Read(records, owner.Receipt);
             return owner;
         }
         catch { owner.Dispose(); throw; }

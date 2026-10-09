@@ -104,11 +104,11 @@ void* __stdcall expression_create(const NvseParamInfo* parameters, void* data, v
         return pointer;
     });
 }
-bool expression_extract_impl(NvseExpressionEvaluator& evaluator) {
+bool expression_extract_impl(NvseExpressionEvaluator& evaluator, bool vanilla = false) {
     if (evaluator.extracted) throw Fatal(ERROR_INVALID_STATE, "Expression arguments were already consumed.");
     auto& owner = expression_owner(); auto& caller = expression_caller(evaluator.caller);
     Bytes request; request.put(caller.id); request.put(evaluator.id); request.put(address(evaluator.marker.base));
-    request.put(nvse_copy(reinterpret_cast<const std::uint32_t*>(caller.frame[7])));
+    request.put(nvse_copy(reinterpret_cast<const std::uint32_t*>(caller.frame[7]))); request.put(vanilla ? 1U : 0U);
     auto response = expression_host(expression_extract_event, request); Reader reader{response.data};
     const auto count = reader.get<std::uint32_t>(), end = reader.get<std::uint32_t>(), nodes = reader.get<std::uint32_t>();
     if (count > 255 || nodes > 3 * count || end < caller.start || end > caller.end)
@@ -136,6 +136,11 @@ bool expression_extract_impl(NvseExpressionEvaluator& evaluator) {
             token_bytes.data.insert(token_bytes.data.end(), token.text.begin(), token.text.end()); token_bytes.put(std::uint8_t{0}); break;
         }
         case 3: case 6: token.number = reader.get<std::uint32_t>(); break;
+        case 11: case 12: case 13: case 14:
+            token.local_context = reader.get<std::uint64_t>(); token.local_entry = reader.get<std::uint32_t>();
+            token.local_index = reader.get<std::uint32_t>(); token.cached_string = reader.get<std::uint32_t>();
+            if (!token.local_context || !token.local_index) throw Fatal(ERROR_INVALID_DATA, "Expression local has no source cell identity.");
+            break;
         case 21:
             token.left = reader.get<std::uint64_t>(); token.right = reader.get<std::uint64_t>();
             if (!token.left || !token.right || token.left >= token.id || token.right >= token.id)
@@ -192,19 +197,21 @@ void* __fastcall expression_argument(void* pointer, std::uint32_t index) {
 }
 std::uint8_t __fastcall expression_type(void* pointer) { return nvse_adapter([&] { return static_cast<std::uint8_t>(expression_token(pointer).second->type); }); }
 double __fastcall expression_number(void* pointer) {
-    return nvse_adapter([&] { auto* token = expression_token(pointer).second; return token->type <= 1 ? token->number : 0.0; });
+    return nvse_adapter([&] { const auto found = expression_token(pointer); auto& token = *found.second;
+        if (expression_local_type(token.type)) return expression_local_number(*found.first, token);
+        return token.type <= 1 ? token.number : 0.0; });
 }
 bool __fastcall expression_boolean(void* pointer) {
     return nvse_adapter([&] {
-        auto* token = expression_token(pointer).second;
-        // Public basic-token GetBool tests a string's nonnull backing pointer,
-        // including an empty literal. This is independent of C# logical truth.
-        return token->type == 2 || ((token->type <= 1 || token->type == 3 || token->type == 6) && token->number != 0);
+        const auto found = expression_token(pointer); auto& token = *found.second;
+        if (expression_local_type(token.type)) return expression_local_boolean(*found.first, token);
+        return token.type == 2 ? !token.text.empty() : ((token.type <= 1 || token.type == 3 || token.type == 6) && token.number != 0);
     });
 }
 std::uint32_t __fastcall expression_form_id(void* pointer) {
     return nvse_adapter([&] {
-        auto* token = expression_token(pointer).second;
+        const auto found = expression_token(pointer); auto* token = found.second;
+        if (expression_local_type(token->type)) return expression_local_form_id(*found.first, *token);
         if (token->type == 3) return static_cast<std::uint32_t>(token->number);
         if (token->type == 0) { std::uint32_t low = 0; std::memcpy(&low, &token->number, sizeof(low)); return low; }
         return 0U;
@@ -212,6 +219,7 @@ std::uint32_t __fastcall expression_form_id(void* pointer) {
 }
 const char* expression_string_value(NvseExpressionEvaluator& evaluator, const NvseExpressionToken& token) {
     auto& owner = expression_owner();
+    if (expression_local_type(token.type)) return expression_local_string(evaluator, token);
     if (token.type != 2) return static_cast<const char*>(owner.arena.read(evaluator.marker.id, 8, 1));
     const auto* actual = static_cast<const char*>(owner.arena.read(evaluator.tokens_region.id, token.string_offset, static_cast<std::uint32_t>(token.text.size()) + 1));
     if (std::memcmp(actual, token.text.c_str(), token.text.size() + 1)) throw Fatal(ERROR_INVALID_DATA, "Native expression string bytes changed.");
@@ -236,18 +244,30 @@ bool __fastcall expression_convert(void* pointer, std::uint8_t type) {
     return nvse_adapter([&] {
         const auto from = expression_token(pointer).second->type;
         if (from == type) return true;
+        if (expression_local_type(from)) return type == 10 || type == 1 ||
+            from == 11 && type == 0 || from == 12 && type == 3 || from == 13 && type == 2 || from == 14 && type == 6;
         return type == 1 && (from == 0 || from == 2 || from == 3 || from == 6) || from == 1 && type == 0;
     });
 }
-void* __fastcall expression_form(void* pointer) { return nvse_adapter([&]() -> void* { const auto token = expression_token(pointer); return expression_source_form(*token.first, *token.second); }); }
+void* __fastcall expression_form(void* pointer) { return nvse_adapter([&]() -> void* {
+    const auto token = expression_token(pointer);
+    if (token.second->type == 3 || token.second->type == 12) return expression_source_form(*token.first, *token.second);
+    if (expression_local_type(token.second->type)) (void)expression_local_read(*token.first, *token.second);
+    return nullptr; }); }
 std::uint32_t __fastcall expression_array(void* pointer) {
     return nvse_adapter([&] {
-        const auto& token = *expression_token(pointer).second;
-        return token.type == 6 ? values_array_reference(static_cast<std::uint32_t>(token.number)) : 0U;
+        const auto found = expression_token(pointer); const auto& token = *found.second;
+        const auto id = token.type == 14 ? expression_local_handle(*found.first, token) :
+            token.type == 6 ? static_cast<std::uint32_t>(token.number) : 0U;
+        return expression_owner().array_pointer ? array_objects_pointer(id) : values_array_reference(id);
     });
 }
 std::uint32_t __fastcall expression_actor_value(void*) { nvse_unowned("Expression.GetActorValue: source name/type conversion owner absent"); }
-void* __fastcall expression_variable(void*) { nvse_unowned("Expression.GetScriptVar: authoritative native ScriptLocal projection absent"); }
+void* __fastcall expression_variable(void* pointer) {
+    return nvse_adapter([&]() -> void* { const auto found = expression_token(pointer);
+        if (!expression_local_type(found.second->type)) nvse_unowned("Expression.GetScriptLocal: token has no actual local cell");
+        return expression_local_pointer(*found.first, *found.second); });
+}
 const void* __fastcall expression_slice(void*) { nvse_unowned("Expression.GetSlice: exact selected compiler std::string layout owner absent"); }
 std::uint32_t __fastcall expression_animation(void*) { nvse_unowned("Expression.GetAnimationGroup: authoritative animation name/ID conversion absent"); }
 void __fastcall expression_assign(void* evaluator, void* source) { nvse_adapter([&] { values_expression_assign(evaluator, source); }); }
@@ -273,9 +293,15 @@ bool __fastcall expression_extract_v(void* pointer, va_list list) {
         for (std::uint32_t index = 0; index < count; ++index) {
             const auto destination = nvse_copy(reinterpret_cast<void* const*>(list) + index);
             const auto& token = expression_token_id(evaluator, evaluator.roots[index]);
-            if (token.type <= 1) destinations.push_back({destination, sizeof(double), token.number, nullptr});
-            else if (token.type == 2) destinations.push_back({destination, sizeof(const char*), 0, expression_string_value(evaluator, token)});
-            else if (token.type == 6) destinations.push_back({destination, sizeof(const char*), 0, reinterpret_cast<const char*>(values_array_reference(static_cast<std::uint32_t>(token.number)))});
+            if (token.type <= 1 || token.type == 11) destinations.push_back({destination, sizeof(double),
+                token.type == 11 ? expression_local_number(evaluator, token) : token.number, nullptr});
+            else if (token.type == 2 || token.type == 13) destinations.push_back({destination, sizeof(const char*), 0, expression_string_value(evaluator, token)});
+            else if (token.type == 3 || token.type == 12) destinations.push_back({destination, sizeof(void*), 0,
+                static_cast<const char*>(expression_source_form(evaluator, const_cast<NvseExpressionToken&>(token)))});
+            else if (token.type == 6 || token.type == 14) {
+                const auto id = token.type == 14 ? expression_local_handle(evaluator, token) : static_cast<std::uint32_t>(token.number);
+                destinations.push_back({destination, sizeof(void*), 0, reinterpret_cast<const char*>(array_objects_pointer(id))});
+            }
             else nvse_unowned("Expression.ExtractArgsV: destination requires its real object/array/slice/pair owner");
             expression_writable(destinations.back().pointer, destinations.back().size);
         }
@@ -375,6 +401,7 @@ void expression_command(const Frame& frame) {
     CallReceipt receipt{};
     { NvseInvocation invocation(*state->nvse); InvokeNvseCommandGuarded(reinterpret_cast<void*>(function), caller.frame.data(), &receipt); }
     source_local_sync(false);
+    array_objects_refresh_all();
     nvse_check_call(receipt);
     for (const auto& evaluator : expression.evaluators) if (evaluator->caller == caller_id)
         throw Fatal(ERROR_INVALID_DATA, "Original command returned with a live evaluator/token lifetime.");

@@ -48,6 +48,8 @@ internal sealed partial class RuntimeNativeCreature
         travel = TravelState,
         guard = _guardPackage is null ? null : new { source = _guardPackage, progress = _guardProgress },
         eventIdle = _aiState?.PackageIdle,
+        collection = _collection is null ? null : new { source = _collectionSource?.Form.ToString(), state = _collection.Capture(), active = _collectionIdle?.Form.ToString(), clock = _collectionClock?.Capture(), failure = _collectionFailure },
+        sandbox = _sandboxSource is null ? null : new { source = _sandboxSource, atLocation = _sandbox?.AtLocation, selected = _sandbox?.Selected, failure = _sandbox?.Failure },
         packageStarts = _aiState?.PackageStarts,
         packageEvents = _packageEvents is null ? null : new
         {
@@ -70,6 +72,8 @@ internal sealed partial class RuntimeNativeCreature
         _aiClock = clock; _aiGlobals = globals;
         _aiItemCount = itemCount;
         _aiState = world.Get(Appearance.Reference!.Value);
+        (Combat ?? throw new NotSupportedException("Sandbox action binding requires the actual creature body/controller."))
+            .BindSandboxActions(this);
         world.BindActorAlert(Appearance.Reference!.Value, Activity);
         _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiState.PendingPackageChoice is { } choice
             ? choice.Bind(records, _aiState)?.FormKey : _aiPackage?.FormKey;
@@ -82,6 +86,8 @@ internal sealed partial class RuntimeNativeCreature
             ? FalloutActorPackageAssignment.Capture(records, _packageEvents, _boundScriptPackageRevision) : _aiState.PackageAssignment;
         RestoreScriptPackageLifecycle();
         RestoreFollowLifecycleBeforeSelection();
+        RestoreSandboxLifecycleBeforeSelection();
+        BindCollectionCapture();
         BindFollowMotionCapture();
         RestoreEventIdle();
     }
@@ -100,6 +106,8 @@ internal sealed partial class RuntimeNativeCreature
     public override void _ExitTree()
     {
         RetainFollowMotion();
+        RetainCollection();
+        RetireSandboxNativeActionOnExit();
         if (_aiState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
         {
             if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
@@ -174,38 +182,44 @@ internal sealed partial class RuntimeNativeCreature
     {
         var previousFailure = _failedPackage;
         _failedPackage = null;
-        var retained = !_initialPackageSelected ? _aiState!.PackageMotion : null;
+        var retained = !_initialPackageSelected && _aiState!.PackageMotion?.Package == _aiState.PackageAssignment?.Package ? _aiState.PackageMotion : null;
         var restoreTravel = retained?.Travel is not null;
         var restoreGuard = retained?.Guard is not null;
         var restoreFollow = retained?.Follow is not null;
+        var restoreSandbox = retained?.Sandbox is not null;
+        var restoreCollection = !_initialPackageSelected && _aiState!.PackageCollection is { } collection && _aiState.PackageAssignment?.Package == collection.IdleState.Package;
         var choice = _aiState!.PendingPackageChoice;
-        var selected = restoreTravel || restoreGuard || restoreFollow ? _aiRecords!.GetEffective(retained!.Package) :
+        var selected = restoreTravel || restoreGuard || restoreFollow || restoreSandbox || restoreCollection ? _aiRecords!.GetEffective(restoreCollection ? _aiState!.PackageCollection!.IdleState.Package : retained!.Package) :
             choice is not null ? choice.Bind(_aiRecords!, _aiState) : SelectSourcePackage(reevaluateScript: _initialPackageSelected);
         var selectionRevision = ScriptPackageRevision;
         _observedScriptPackageRevision = _bindingScriptPackageRevision = selectionRevision;
-        if (!restoreTravel && !restoreGuard && !restoreFollow) _aiState.PendingPackageChoice = null;
         if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)
         { _failedPackage = previousFailure; return; }
         _aiError = null;
-        if (_aiPackage?.FormKey == selected?.FormKey && _aiState.ScriptPackage?.Pending != true) return;
+        if (_aiPackage?.FormKey == selected?.FormKey && _aiState.ScriptPackage?.Pending != true)
+        {
+            if (ReferenceEquals(_aiState.PendingPackageChoice, choice)) _aiState.PendingPackageChoice = null;
+            return;
+        }
         _failedPackage = selected?.FormKey;
         var source = selected is null ? null : FalloutScriptPackage.Read(selected);
         FalloutFollowPackage? follow = null;
         FalloutDialoguePackage? dialogue = null;
         FalloutTravelPackage? travel = null;
         FalloutGuardPackage? guard = null;
+        FalloutSandboxPackage? sandbox = null;
         if (source is not null)
         {
             if (source.Procedure == 1)
             {
                 follow = FalloutFollowPackage.Read(selected!);
                 follow.RequireActorTarget(_aiRecords!, Appearance.Reference!.Value);
-                if (source.Idles.Count != 0)
-                    throw new NotSupportedException("Creature Follow idle collection requires its native collection clock owner.");
+
                 if (restoreFollow) follow.ValidateContinuation(_aiRecords!, Appearance.Reference!.Value, retained!.Follow!);
             }
-            else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
-            else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!);
+            else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!, ownsIdleCollection: true);
+            else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!, ownsIdleCollection: true);
+            else if (source.Procedure == 12) sandbox = FalloutSandboxPackage.Read(selected!);
             else if (source.Procedure == 15)
             {
                 dialogue = FalloutDialoguePackage.Read(selected!);
@@ -215,12 +229,22 @@ internal sealed partial class RuntimeNativeCreature
             else throw new NotSupportedException($"Creature package {source.Form} procedure {source.Procedure} is unbound.");
         }
         var restoredDialogue = !_initialPackageSelected && _aiState.ScriptPackage?.Pending != true && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
-        if (!restoreTravel && !restoreGuard && !restoreFollow && _packageEvents!.Active is { } active &&
+        if (_sandboxSource is not null && (_sandboxSource.Form != selected?.FormKey || _aiState.ScriptPackage?.Pending == true) && !ClearSandbox())
+        {
+            if (choice is null && selectionRevision == ScriptPackageRevision && _aiState.PendingPackageChoice is null)
+                _aiWorld!.QueueActorPackageChoice(Appearance.Reference!.Value, selected);
+            _evaluateRequested = true;
+            return;
+        }
+        if (!restoreTravel && !restoreGuard && !restoreFollow && !restoreSandbox && !restoreCollection &&
+            ReferenceEquals(_aiState.PendingPackageChoice, choice)) _aiState.PendingPackageChoice = null;
+        if (!restoreTravel && !restoreGuard && !restoreFollow && !restoreSandbox && !restoreCollection && _packageEvents!.Active is { } active &&
             (active.Form != selected?.FormKey || _aiState.ScriptPackage?.Pending == true))
             _packageEvents.Change(null);
-        if (selectionRevision != ScriptPackageRevision || !restoreTravel && !restoreGuard && !restoreFollow &&
+        if (selectionRevision != ScriptPackageRevision || !restoreTravel && !restoreGuard && !restoreFollow && !restoreSandbox && !restoreCollection &&
             _aiState.PendingPackageChoice is not null) { _evaluateRequested = true; return; }
         if (_followPackage is not null && _followPackage.Form != selected?.FormKey) Combat!.RetireFollowRoute();
+        if (_sandboxSource is not null && _sandboxSource.Form != selected?.FormKey) ClearSandbox();
         if (travel is not null) BeginTravel(selected!, restoreTravel);
         else { _travelPackage = null; _travelProgress = null; _travelDestination = null; }
         if (guard is not null)
@@ -234,15 +258,17 @@ internal sealed partial class RuntimeNativeCreature
         }
         else { _guardPackage = null; _guardProgress = null; }
         _initialPackageSelected = true;
-        if (restoreFollow)
+        if (restoreFollow || restoreSandbox || restoreCollection)
         {
-            if (_packageEvents!.Active?.Form != source!.Form || _packageEvents.Done)
+            if (_packageEvents!.Active?.Form != source!.Form || (restoreFollow || restoreSandbox) && _packageEvents.Done)
                 throw new InvalidDataException("Cold Follow lost its bound original lifecycle.");
         }
         else if (restoreTravel || restoreGuard || restoredDialogue) _packageEvents!.Restore(source!, restoreGuard ? false : restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
         _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restoredDialogue;
-        if (travel is null && guard is null && follow is null)
+        if (sandbox is not null) BeginSandbox(selected!, restoreSandbox);
+        BeginCollection(source, restoreFollow || restoreGuard || restoreTravel || restoreSandbox || restoreCollection);
+        if (travel is null && guard is null && follow is null && sandbox is null)
             _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? "Dialogue package continuation has no cold restoration owner." : null;
         if (!restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
@@ -251,7 +277,9 @@ internal sealed partial class RuntimeNativeCreature
             if (restoreFollow) RestoreFollowElection(retained!.Follow!, elapsed);
             else Combat!.BeginFollowObservation();
         }
-        if (restoreTravel) _evaluateRequested = true;
+        if (restoreSandbox) RestoreSandboxElection(retained!.Sandbox!, elapsed);
+        if (restoreCollection && !restoreFollow && !restoreSandbox) RestoreCollectionElection(elapsed);
+        if (restoreTravel && !restoreCollection) _evaluateRequested = true;
         _failedPackage = null;
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");
     }
@@ -295,7 +323,8 @@ internal sealed partial class RuntimeNativeCreature
                 selecting = false;
             }
             if (_aiError is not null) return;
-            if (_travelPackage is not null) AdvanceTravel(delta);
+            if (_sandboxSource is not null) AdvanceSandbox(delta);
+            else if (_travelPackage is not null) AdvanceTravel(delta);
             else if (_guardPackage is { } guard)
                 _guardProgress = Combat.AdvanceGuard(_aiPackage!, guard, _guardProgress!, delta);
             else if (_followPackage is { } follow)

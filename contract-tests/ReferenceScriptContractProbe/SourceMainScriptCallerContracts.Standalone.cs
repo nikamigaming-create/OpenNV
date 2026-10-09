@@ -6,6 +6,8 @@ internal static partial class SourceMainScriptCallerContracts
 {
     private static void RunStandaloneMainContracts()
     {
+        RunStandaloneInterfaceContracts();
+        RunStandalonePlayerSceneContracts();
         StandaloneDeclarations(); StandaloneCurrentAndCold(); StandalonePendingRefusal();
         Console.WriteLine("OPENNV_FO3_SOURCE_MAIN_PLAYER_PASS authoredOnly=true independentMain=true noSteam=true " +
             "interiorSkipsFistp=true coldNoReplay=true mandatoryCurrentOwner=true " +
@@ -115,6 +117,7 @@ internal static partial class SourceMainScriptCallerContracts
         internal readonly Host Host;
         private readonly IDisposable _fadeLease;
         private readonly AuthoredPlayerCell _player;
+        private readonly AuthoredInterfaceObject _interface;
         internal StandaloneFixture(FalloutActorProcessRuntimeSnapshot? saved = null, FalloutInterfaceFadeSnapshot? fade = null)
         {
             const string engine = FalloutSourceMainFamily.Fallout3;
@@ -124,6 +127,7 @@ internal static partial class SourceMainScriptCallerContracts
             FalloutCombatActorIdentity Identity(FalloutFormKey key) => new(key, Key(7), "ENGINE_PLAYER", 0, engine, "NPC_", 0, new('4', 64), true);
             Owner = new(FalloutActorProcessRuntimeDeclaration.ForExecutable(engine), "authored-FO3-Main", Key(0x14), Identity, saved);
             Owner.ConstructStandaloneMain(main, Slot, saved?.StandaloneMain, saved);
+            _interface = PublishAuthoredStandaloneInterface(Owner);
             var rows = new[] { new FalloutInterfaceFadeCatalogRow(0, FalloutInterfaceFadeRoot.Primary, "textures/interface/faders/a.dds"),
                 new FalloutInterfaceFadeCatalogRow(1, FalloutInterfaceFadeRoot.Secondary, "textures/interface/faders/a.dds"),
                 new FalloutInterfaceFadeCatalogRow(2, FalloutInterfaceFadeRoot.Secondary, "textures/interface/faders/b.dds") };
@@ -136,7 +140,7 @@ internal static partial class SourceMainScriptCallerContracts
         }
         internal IDisposable Bind() => new StandaloneLeases(Owner.BindMainPlayerCell(_player, "authored-FO3-player"),
             Owner.BindMainScriptCaller(Host, "authored-FO3-main"));
-        public void Dispose() { _fadeLease.Dispose(); Owner.Dispose(); }
+        public void Dispose() { _fadeLease.Dispose(); Owner.Dispose(); _interface.Retire(); }
     }
     private sealed class StandaloneLeases(IDisposable player, IDisposable main) : IDisposable
     {

@@ -41,6 +41,8 @@ struct NvseExpressionToken {
     std::uint64_t id = 0, left = 0, right = 0;
     std::uint32_t type = 0, offset = 0, string_offset = 0, pair_offset = 0;
     double number = 0;
+    std::uint64_t local_context = 0;
+    std::uint32_t local_entry = 0, local_index = 0, cached_string = 0;
     std::string text;
 };
 struct NvseExpressionCaller {

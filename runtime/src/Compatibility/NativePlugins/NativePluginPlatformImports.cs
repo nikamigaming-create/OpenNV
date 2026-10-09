@@ -16,7 +16,7 @@ internal static class NativePluginPlatformImports
         "GetModuleHandleA", "GetModuleHandleW", "GetModuleFileNameA", "GetModuleFileNameW", "DisableThreadLibraryCalls",
         "GetLastError", "SetLastError", "IsDebuggerPresent", "IsProcessorFeaturePresent", "SetUnhandledExceptionFilter",
         "UnhandledExceptionFilter", "TerminateProcess", "LocalFree", "LocalAlloc", "FormatMessageA", "FormatMessageW",
-        "MultiByteToWideChar", "WideCharToMultiByte", "GetLocaleInfoEx", "GetACP", "GetCPInfo", "GetStringTypeW",
+        "AreFileApisANSI", "MultiByteToWideChar", "WideCharToMultiByte", "GetLocaleInfoEx", "GetACP", "GetCPInfo", "GetStringTypeW",
     };
     private static readonly IReadOnlySet<string> Runtime = new HashSet<string>(StringComparer.Ordinal)
     {

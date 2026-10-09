@@ -3,7 +3,7 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record FalloutLevelUpRules(FalloutSkillPointRate SkillRate, int MaximumLevel,
-    int LevelsPerPerk, int TaggedSkillMultiplier, int SkillPointBase, int IntelligenceMultiplier = 1)
+    int? LevelsPerPerk, int TaggedSkillMultiplier, int SkillPointBase, int IntelligenceMultiplier = 1)
 {
     internal void Validate()
     {
@@ -16,11 +16,12 @@ internal sealed record FalloutLevelUpRules(FalloutSkillPointRate SkillRate, int 
 
     // A reviewed source declaration chooses the consumed operands. Their live
     // GMST values neither select the arithmetic owner nor replace that receipt.
-    internal static FalloutLevelUpRules Read(FalloutPluginStack records, FalloutSkillPointRate rate)
+    internal static FalloutLevelUpRules Read(FalloutPluginStack records, FalloutAdvancementRuntimeReceipt source)
     {
-        rate.Validate();
+        source.Validate();
+        var rate = source.SkillRate;
         int Integer(string name) => unchecked((int)FalloutGameSettingIntegers.Read(records, name));
-        var result = new FalloutLevelUpRules(rate, Integer("iMaxCharacterLevel"), Integer("iLevelsPerPerk"),
+        var result = new FalloutLevelUpRules(rate, Integer("iMaxCharacterLevel"), source.PerkCadence.ReadInterval(records),
             Integer("iSkillPointsTagSkillMult"), rate.Base.Resolve(Integer), rate.IntelligenceMultiplier.Resolve(Integer));
         result.Validate(); return result;
     }

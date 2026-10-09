@@ -46,6 +46,8 @@ internal static class FalloutActorProcessRuntimeSaveContract
             FalloutActorProcessDeclaration.Read(source.FalloutExecutablePath).ExecutableSha256);
         var groups = FalloutCombatGroupDeclaration.ForExecutable(selected.ExecutableSha256);
         var runtime = saved.ActorProcessRuntime!; var common = saved.ActorProcessCommon!;
+        FalloutStandaloneInterfaceSaveContract.ValidateSource(records, runtime);
+        FalloutStandalonePlayerSceneSaveContract.ValidateSource(records, runtime);
         if (runtime.Contract != selected.Contract || runtime.Stack != source.StackId || runtime.Player != records.RuntimeFormKey(0x14))
             throw new InvalidDataException("Runtime/common cold state changed its selected executable/stack/player declaration.");
         var references = saved.References ?? throw new InvalidDataException("Process cold state has no real reference graph.");

@@ -25,6 +25,7 @@ public partial class RuntimeCoordinator
         try
         {
             ConfigureLauncherEntry(request);
+            var sessionOptions = _options;
             _options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["data-root"] = request.DataRoot,
@@ -32,6 +33,10 @@ public partial class RuntimeCoordinator
                 ["presentation"] = request.Presentation,
                 ["save-path"] = request.SavePath,
             };
+            // These belong to the living application session. A source-menu
+            // reload must keep the same profile and diagnostic input recipient.
+            foreach (var name in new[] { "profile-root", "settings-path", "live-harness", "parity-channel", "parity-capture", "perf-report" })
+                if (sessionOptions.TryGetValue(name, out var value)) _options.Add(name, value);
             request.ModSelection?.WriteOptions(_options);
             if (request.EngineCampaign is "fallout-new-vegas" or "fallout-3")
                 _options["opening-menu"] = "true";

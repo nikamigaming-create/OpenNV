@@ -80,7 +80,11 @@ public partial class RuntimeCoordinator
             actor.ExecutePackageEvent = (program, caller) => (_nativeOpeningStageDriver ??
                 throw new InvalidOperationException("Creature package results have no gameplay owner."))
                 .ExecutePackageEvent(program, caller);
-        _nativeReferencePresentation = root.GetChildren().OfType<RuntimeNativeReferencePresentation>().Single();
+        var presentation = root.GetChildren().OfType<RuntimeNativeReferencePresentation>().Single();
+        if (!ReferenceEquals(_nativeReferencePresentation, presentation))
+            _nativeReferencePresentation?.RetireSandboxPublication();
+        _nativeReferencePresentation = presentation;
+        presentation.BindSandboxPublication(_configuration.World.GameUnitsToMeters);
         _nativeReferencePresentation.SynchronizeActorAppearance = actor => SynchronizeNativeNpcAppearance(actor, _nativeActiveCell!);
         if (root.GetChildren().OfType<RuntimeNativeReferenceEvents>().SingleOrDefault() is { } existing)
         {

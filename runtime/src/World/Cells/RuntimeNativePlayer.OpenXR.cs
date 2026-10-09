@@ -123,7 +123,7 @@ internal partial class RuntimeNativePlayer
     }
     public override void _ExitTree()
     {
-        try { RetirePlayerPerception(); }
+        try { RetirePlayerPerceptionAndStandaloneScene(); }
         finally
         {
             try { RetirePlayerPhysicalActivity(); }

@@ -206,7 +206,7 @@ internal partial class RuntimeNativeNpc
         _sitting = 1;
         StartFurnitureAnimation();
         _furnitureEntry = null;
-        _packageEvents!.Complete();
+        if (!_sandboxFurnitureAction) _packageEvents!.Complete();
         GD.Print($"OPENNV_NATIVE_FURNITURE_OCCUPIED reference={Appearance.Reference} package={_aiPackage!.FormKey} " +
             $"target={_furnitureReference} marker={_seat!.MarkerId} sourceIndex={_seat.Index} " +
             $"initialPlacement={_furnitureInitialPlacement} animation={_baseAnimation!.Sequence.Name} parity=unmeasured");
@@ -230,6 +230,7 @@ internal partial class RuntimeNativeNpc
     {
         Basis = _furnitureOccupied.Basis;
         ClearFurniture();
+        if (CompleteSandboxFurnitureExit()) return;
         _packageEvents!.Change(null);
         _aiPackage = null;
         _findFurniture = null;
@@ -298,6 +299,8 @@ internal partial class RuntimeNativeNpc
     public override void _ExitTree()
     {
         RetainFollowMotion();
+        RetainSandboxCollection();
+        RetireSandboxNativeActionOnExit();
         RetainHeadTracking();
         RetainPendingSelection();
         RetainBindingFailure();

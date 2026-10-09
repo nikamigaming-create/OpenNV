@@ -16,6 +16,7 @@ internal partial class RuntimeNativeNpc
         (_nativeMarkerTravel?.Form == package && _nativeMarkerTravelProgress?.Complete == true ||
          _editorTravel?.Form == package && _editorTravelProgress?.Complete == true ||
          _escortPackage?.Form == package && _escortProgress?.Complete == true ||
+         _sandboxSource?.Form == package && _sandbox?.AtLocation == true ||
          _dialoguePackage?.Form == package && _dialogueWaitReached ||
          _aiPackage?.FormKey == package && (_sitting is 1 or 4 || _travelProgress?.ArrivalPending == true) ||
          _aiWorld?.RetainedPackageLocationReached(Appearance.Reference!.Value, package) == true);

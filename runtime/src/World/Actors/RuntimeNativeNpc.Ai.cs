@@ -61,6 +61,7 @@ internal partial class RuntimeNativeNpc
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
         : _followPackage is not null ? throw new NotSupportedException("Follow script-visible procedure code has no selected source declaration.")
         : _guardPackage is not null ? throw new NotSupportedException("Guard script-visible procedure code has no source declaration.")
+        : _sandboxSource is not null ? throw new NotSupportedException("Sandbox script-visible procedure code has no selected source declaration.")
         : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
         {
             "ApproachTarget" => 19,
@@ -121,8 +122,9 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = _sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _followPackage is not null ? (int?)null : CurrentAiProcedure,
+        currentProcedure = _sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _followPackage is not null || _sandboxSource is not null ? (int?)null : CurrentAiProcedure,
         follow = FollowState,
+        sandbox = _sandboxSource is null ? null : new { source = _sandboxSource, atLocation = _sandbox?.AtLocation, selected = _sandbox?.Selected, failure = _sandbox?.Failure },
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,
@@ -206,6 +208,8 @@ internal partial class RuntimeNativeNpc
         if (world is not null)
         {
             _aiReferenceState = world.Get(Appearance.Reference!.Value);
+            (Combat ?? throw new NotSupportedException("Sandbox action binding requires the actual NPC body/controller."))
+                .BindSandboxActions(this);
             world.BindActorAlert(Appearance.Reference!.Value, Activity);
             _baseClock = _aiReferenceState.Animation;
             _aiReferenceState.QueryCurrentPackage = _currentPackageQuery = () => CurrentPackage;
@@ -221,6 +225,8 @@ internal partial class RuntimeNativeNpc
             retained.Bind(stack, _packageEvents);
         RestoreScriptPackageLifecycle();
         RestoreFollowLifecycleBeforeSelection();
+        RestoreSandboxLifecycleBeforeSelection();
+        BindSandboxCollectionCapture();
         RestoreMarkerTravelLifecycleBeforeSelection();
         BindFollowMotionCapture();
         if (_aiReferenceState is { } packageState)
@@ -349,18 +355,20 @@ internal partial class RuntimeNativeNpc
 
     private double PreparePackageIdle(double delta)
     {
+        if (_sandboxNativeAction is not null && !_sandboxNativeRetired) return PrepareSandboxMarkerIdle(delta);
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
             _aiError is not null || _sitting is 2 or 4 || _travelActive || _escortPackage is not null && _escortProgress?.Complete != true ||
             _patrol is not null && _patrolProgress?.Arrived != true ||
             _editorTravel is not null && _editorTravelProgress?.Complete != true ||
-            _followPackage is not null && (!_followTargetObserved || Combat?.PackageMoving != false)) return delta;
+            _followPackage is not null && (!_followTargetObserved || Combat?.PackageMoving != false) ||
+            _sandboxSource is not null && (_sandbox?.AtLocation != true || Combat?.PackageMoving != false)) return delta;
         var remaining = _packageIdles.AdvanceWait(delta);
         try
         {
             if (_packageIdles.Select() is not { } idle) return remaining;
             PlayIdle(_aiStack!, idle, "package-idle");
         }
-        catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
+        catch (Exception error)
         {
             _packageIdleError = error.Message;
             GD.PushError($"OPENNV_NATIVE_PACKAGE_IDLE_DIVERGENCE reference={Appearance.Reference}: {error.Message}");
@@ -409,7 +417,19 @@ internal partial class RuntimeNativeNpc
                     state.PendingPackageChoice = null;
                 return;
             }
-            if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
+            if (_sitting is 2 or 4)
+            {
+                if (_sandboxSource is not null && selection.OverrideRevision == ScriptPackageRevision)
+                    _requestedSelection ??= selection;
+                _pendingPackage = selected;
+                return;
+            }
+            if (_sandboxSource is not null && !ClearSandbox())
+            {
+                if (selection.OverrideRevision == ScriptPackageRevision) _requestedSelection ??= selection;
+                _aiPollRemaining = 0;
+                return; // Keep the actual selected source choice until child return.
+            }
             if (_sitting == 1 && selected is not null && RetainFurniturePackage(selected))
             {
                 if (_aiReferenceState is { } state && ReferenceEquals(state.PendingPackageChoice, queuedChoice))
@@ -437,6 +457,7 @@ internal partial class RuntimeNativeNpc
                 _packageIdles = null;
                 _travelProgress?.Cancel();
                 ClearFollow();
+                ClearSandbox();
                 ClearFurniture();
                 _findFurniture = null;
                 if (_aiReferenceState?.ProcedureCaptureBlocker == FindFurnitureCaptureBlocker)
@@ -459,10 +480,11 @@ internal partial class RuntimeNativeNpc
                 (_aiReferenceState?.PackageAssignment is not { } retained || retained.Package == selected.FormKey);
             _packageIdleSource = selection.Declaration!;
             _packageIdles = new(_packageIdleSource, _idleReplays,
-                idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
+                idle => _idleConditions!.AllPass(idle, EvaluateAiCondition), Combat is { } idleCombat ? idleCombat.PackageRandom : _aiRandom.NextBounded);
             if (_packageIdleSource.Procedure == 0) { BeginFindFurniture(selected); return; }
             if (_packageIdleSource.Procedure == 1) { BeginFollow(selected, restoring); return; }
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, restoring); return; }
+            if (_packageIdleSource.Procedure == 12) { BeginSandbox(selected, restoring); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, restoring); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, restoring); return; }

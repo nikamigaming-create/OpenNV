@@ -411,6 +411,14 @@ public partial class RuntimeCoordinator
         catch (Exception exception)
         {
             CancelNativeLauncherEntry();
+            // Completed records still own failure-screen captions when a later
+            // gameplay producer fails. Preserve both failures if binding fails.
+            if (_nativePluginStack is { } indexed)
+            {
+                try { menu.BindIndexedSource(indexed); }
+                catch (Exception menuError)
+                { exception = new AggregateException("Game startup and source failure-menu binding both failed.", exception, menuError); }
+            }
             var failure = RejectNativePendingLoad(exception);
             DismissLoadingScreen();
             menu.ShowLoadFailure(failure, canRetry: false);
@@ -521,6 +529,7 @@ public partial class RuntimeCoordinator
             throw new InvalidOperationException("New Game has no configured source bootstrap.")).PreparePlacement() ??
             throw new InvalidOperationException("New Game has no admitted original player movement.");
         var startupPlacement = startup?.Placement;
+        if (startup is not null) _nativeBootstrap!.RequireCurrentPlacement(startup);
         var cell = FalloutCellSceneReader.Read(stack, _nativeContinueOpening ?
             _nativeOpeningRestore!.State.ActiveCell : startupPlacement!.Cell);
         FalloutDoorTransition? transition = null;
@@ -634,6 +643,7 @@ public partial class RuntimeCoordinator
         if (grid is not null) grid = grid with { Scene = activeScene };
         _nativeSkyLighting?.EnterCell(activeScene.Cell, _nativeGlobals, position);
         SetLoadingStatus("Loading the world");
+        if (startup is not null) _nativeBootstrap!.RequireCurrentPlacement(startup);
         var root = sourceSide && _nativePrewarmedInitialCellRoot is not null
             ? _nativePrewarmedInitialCellRoot
             : await BuildNativeCellRootResponsive(activeScene, transition, sourceSide,
@@ -647,6 +657,16 @@ public partial class RuntimeCoordinator
             FreeNativeSourceCellRoot(root);
             throw new OperationCanceledException("Initial CELL session retired.");
         }
+        try { if (startup is not null) _nativeBootstrap!.RequireCurrentPlacement(startup); }
+        catch (Exception original)
+        {
+            try { FreeNativeSourceCellRoot(root); }
+            catch (Exception cleanup)
+            {
+                throw new AggregateException("Initial CELL preparation and independent unpublished root retirement failed.", original, cleanup);
+            }
+            throw;
+        }
         if (grid is not null) AddExteriorLandscape(root, grid);
         AddChild(root);
         foreach (var sounds in root.FindChildren("*", "", true, false).OfType<NativeOwnedAnimationSoundPlayer>())
@@ -659,6 +679,7 @@ public partial class RuntimeCoordinator
             AddNativeCellEnvironment(root, activeScene);
         else if (grid is not null)
             AddExteriorEnvironment(root, activeScene.Cell);
+        if (startup is not null) _nativeBootstrap!.TransferPlacementToMain(startup);
         AddNativePlayer(activeScene, startupPlacement);
         SetNativeActiveCell(root, activeScene);
         _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
@@ -669,7 +690,11 @@ public partial class RuntimeCoordinator
             await root.GetChildren().OfType<RuntimeNativeExteriorLod>().Single()
                 .PrepareInitialSelection(GetViewport().GetCamera3D().GlobalPosition);
         }
-        if (startup is not null) _nativeBootstrap!.CompletePlacement(startup);
+        if (startup is not null)
+        {
+            await _nativeOpeningStageDriver!.WaitForSourcePlayerCellPreparation(startup.Preparation);
+            _nativeBootstrap!.CompletePlacement(startup);
+        }
         if (_nativeQuestScripts is not null) _nativeQuestScripts.ActivateWorld(restore is not null);
         GD.Print(
             $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +

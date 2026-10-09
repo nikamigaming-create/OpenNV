@@ -192,7 +192,7 @@ internal sealed partial class FalloutScriptValueStore
             FalloutScriptLocalKind.Form => FalloutScriptValue.Form(value.Number).Number,
             FalloutScriptLocalKind.String => WriteString(previous, value, ownerPlugin),
             FalloutScriptLocalKind.Array => Arrays.SetRoot(ownerLocal ?? throw new InvalidDataException(
-                "Script array local has no instance owner."), value).Number,
+                "Script array local has no instance owner."), value, ownerPlugin).Number,
             _ => throw new InvalidDataException("Script local kind is invalid."),
         };
     }

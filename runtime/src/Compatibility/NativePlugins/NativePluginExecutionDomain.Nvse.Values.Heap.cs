@@ -66,6 +66,8 @@ internal sealed partial class NativePluginExecutionDomain
             if (!_nvseHeapLifetimes.TryGetValue(capability, out var lifetime) || lifetime.Generation != Generation ||
                 lifetime.Address != pointer || lifetime.Length != length || lifetime.RetirementCallback is not null)
                 throw new InvalidDataException("Native heap retirement targets a foreign/absent/interior/already freed allocation.");
+            if (_crtSupport.Values.Any(value => value.BufferOwner == NativePluginCrtBufferOwner.SharedNativeHeap && value.Allocation == capability))
+                throw new InvalidDataException("Native heap retirement still has a genuine FILE buffer borrower.");
             _nvseHeapLifetimes[capability] = lifetime with { RetirementCallback = frame.Id };
         }
         return Payload(writer => writer.Write(1U));

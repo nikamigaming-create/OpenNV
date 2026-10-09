@@ -147,14 +147,14 @@ internal sealed partial class FalloutReferenceWorld
         if (package is null) return false;
         if (state.PackageMotion is { } motion && motion.Package == package)
             return motion.Travel?.Complete == true || motion.EditorTravel?.Complete == true ||
-                motion.Escort?.Complete == true || motion.Guard?.Complete == true || motion.DialogueCompleted;
+                motion.Escort?.Complete == true || motion.Guard?.Complete == true || motion.Sandbox?.AtLocation == true || motion.DialogueCompleted;
         return state.FurnitureContinuation is { Phase: 3 or 4 } furniture && furniture.Assignment.Package == package;
     }
 
     internal bool HasRetainedNativePackageState(FalloutFormKey actor)
     {
         var state = Actor(actor);
-        return state.PackageMotion is not null || state.FurnitureContinuation is not null || state.DialogueContinuation is not null ||
+        return state.PackageMotion is not null || state.PackageCollection is not null || state.FurnitureContinuation is not null || state.DialogueContinuation is not null ||
             state.PackageBindingFailure is not null || state.SelectionFailure is not null || state.PendingPackageSelection is not null ||
             state.Animation.Resource.Length != 0;
     }

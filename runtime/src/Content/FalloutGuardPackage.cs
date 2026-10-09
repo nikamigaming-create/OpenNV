@@ -12,7 +12,7 @@ internal sealed record FalloutGuardPackage(FalloutFormKey Form, uint Flags, int 
     internal bool WarnAndAttack => (Flags & 0x10000000) == 0;
     internal bool ContinueCombat => (Flags & 0x04000000) != 0;
 
-    internal static FalloutGuardPackage Read(FalloutPluginRecord record)
+    internal static FalloutGuardPackage Read(FalloutPluginRecord record, bool ownsIdleCollection = false)
     {
         var source = FalloutScriptPackage.Read(record);
         if (source.Procedure != 14 || source.LocationType is not (0 or 3))
@@ -21,7 +21,7 @@ internal sealed record FalloutGuardPackage(FalloutFormKey Form, uint Flags, int 
         var data = FalloutPackageData.Read(record);
         var flags = data.Flags;
         const uint supported = 0x1000 | 0x2000 | 0x800000 | 0x04000000 | 0x10000000;
-        if ((flags & ~supported) != 0 || data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0) || source.Idles.Count != 0 ||
+        if ((flags & ~supported) != 0 || data.BehaviorFlags != 0 || data.SpecificFlags is not (null or 0) || !ownsIdleCollection && source.Idles.Count != 0 ||
             fields.Any(field => field.Signature is "PLD2" or "PTD2"))
             throw new NotSupportedException("Guard has additional unowned behavior or idle inputs.");
         var targets = fields.Where(field => field.Signature == "PTDT").ToArray();
