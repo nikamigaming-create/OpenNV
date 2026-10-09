@@ -75,9 +75,25 @@ internal static class NativeNifRefractionMaterial
 
     internal static void Apply(Material material, FalloutNifShaderProperty source, float strength, float time)
     {
+        if (!float.IsFinite(strength) || !float.IsFinite(time)) throw new InvalidDataException("Refraction strength or clock is nonfinite.");
+        material.SetMeta("opennv_nif_refraction_strength", strength);
+        // A controller writes its property even when the selected source shader
+        // does not consume refraction. It cannot select a different shader.
+        if ((source.ShaderFlags & Flags) == 0) return;
         if (material is not ShaderMaterial { ResourceName: ResourceIdentity } output)
             throw new NotSupportedException("Refraction channel has no source material owner.");
         output.SetShaderParameter("source_strength", strength);
+        output.SetShaderParameter("source_time", time);
+    }
+
+    internal static void ApplyPeriod(Material material, FalloutNifShaderProperty source, float period, float time)
+    {
+        if (!float.IsFinite(period) || !float.IsFinite(time)) throw new InvalidDataException("Refraction period or clock is nonfinite.");
+        material.SetMeta("opennv_nif_refraction_fire_period", period);
+        if ((source.ShaderFlags & (1u << 16)) == 0) return;
+        if (period < 0 || material is not ShaderMaterial { ResourceName: ResourceIdentity } output)
+            throw new NotSupportedException("Refraction period has no nonnegative source material owner.");
+        output.SetShaderParameter("source_period", period);
         output.SetShaderParameter("source_time", time);
     }
 }

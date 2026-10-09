@@ -16,8 +16,7 @@ internal static class NativeNifLightingMaterial
         FalloutNifMaterialProperty? material, FalloutNifAlphaProperty? alpha, FalloutNifVertexColorState vertexColors,
         Texture2D? height = null)
     {
-        var state = alpha is null ? new FalloutNifAlphaState(FalloutNifBlendMode.Opaque, false, 0, 0, true)
-            : FalloutNifAlphaState.Read(alpha.Flags, alpha.Threshold);
+        var state = FalloutNifAlphaState.ForLighting(source, alpha);
         var modes = new List<string> { "ambient_light_disabled", "specular_disabled",
             textures.CullMode == BaseMaterial3D.CullModeEnum.Disabled ? "cull_disabled" :
                 textures.CullMode == BaseMaterial3D.CullModeEnum.Front ? "cull_front" : "cull_back",

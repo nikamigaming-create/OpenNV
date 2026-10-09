@@ -30,7 +30,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
     private const uint ShaderFlagNoLodLandBlend = 1U << 14;
     private const uint ShaderFlagEnvironmentMapLightFade = 1U << 15;
     private const uint SupportedShaderFlags = ShaderFlagSpecular |
-        ShaderFlagVertexAlpha |
+        ShaderFlagVertexAlpha | ShaderFlagDynamicAlpha |
         ShaderFlagUseFalloff |
         ShaderFlagEnvironmentMapping | ShaderFlagAlphaTexture |
         ShaderFlagEyeEnvironmentMapping |
@@ -1070,7 +1070,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     "NiMaterialColorController" or "NiTextureTransformController" or
                         "NiAlphaController" or "BSMaterialEmittanceMultController" => BuildManagedMaterialChannel(
                         sequence, link, targetBlock),
-                    "BSRefractionStrengthController" => BuildRefractionChannel(sequence, link, targetBlock),
+                    "BSRefractionStrengthController" or "BSRefractionFirePeriodController" => BuildRefractionChannel(sequence, link, targetBlock),
                     "NiGeomMorpherController" => BuildManagedMorphChannel(sequence, link, targetBlock),
                     "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
                         "NiPSysModifierActiveCtlr" => BuildParticleChannel(sequence, link, targetBlock),
@@ -1894,7 +1894,6 @@ internal static partial class RuntimeNativeNifMeshBuilder
             var supportedLightingFlags = SupportedShaderFlags | NativeNifRefractionMaterial.Flags |
                 (geometry.SkinInstance == -1 ? 0U : ShaderFlagSkinned) |
                 (hairColor.HasValue ? FalloutNpcAppearanceHairColor.ShaderFlag : 0U);
-            if (material is not null && HasConstantAlpha(material)) supportedLightingFlags |= ShaderFlagDynamicAlpha;
             // Authored decal/single-pass surfaces already supply their mesh,
             // UVs and NiAlphaProperty. They use the same single lighting pass;
             // these flags do not request a projected Godot decal or new geometry.
@@ -2192,9 +2191,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 if (!seen.Add(reference)) throw new InvalidDataException("Material controller chain contains a cycle.");
                 var time = _source.ReadObject(reference) switch
                 {
-                    FalloutNifMaterialColorController controller when controller.TargetColor == MaterialColorSelfIllumination ||
-                        controller.TargetColor == 2 && controller.Time.StartTime == controller.Time.StopTime &&
-                        (controller.Time.Flags & 0x20) == 0 => controller.Time,
+                    FalloutNifMaterialColorController controller when controller.TargetColor is MaterialColorSelfIllumination or 2 => controller.Time,
                     FalloutNifAlphaController controller => controller.Time,
                     FalloutNifEmittanceController controller => controller.Time,
                     _ => null,
@@ -2208,6 +2205,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
         private void BindDirectMaterialControllers(FalloutNifMaterialProperty property, IReadOnlyList<Material> materials)
         {
             var emissive = new Vector3(property.Emissive.R, property.Emissive.G, property.Emissive.B);
+            var specular = new Vector3(property.Specular.R, property.Specular.G, property.Specular.B);
             var multiple = property.EmissiveMultiple;
             var alpha = property.Alpha;
             var cursor = property.Controller;
@@ -2245,8 +2243,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                             {
                                 var value = sampler.Sample(time);
                                 if (color.TargetColor == MaterialColorSelfIllumination) emissive = new(value.X, value.Y, value.Z);
-                                else if (value.X != property.Specular.R || value.Y != property.Specular.G || value.Z != property.Specular.B)
-                                    throw new NotSupportedException("Source constant specular channel differs from the material property.");
+                                else if (color.TargetColor == 2) specular = new(value.X, value.Y, value.Z);
+                                else throw new NotSupportedException("Source material color target has no shader owner.");
                             };
                             break;
                         }
@@ -2256,27 +2254,42 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 {
                     sample(time);
                     if (!float.IsFinite(multiple) || !float.IsFinite(alpha) ||
-                        !float.IsFinite(emissive.X) || !float.IsFinite(emissive.Y) || !float.IsFinite(emissive.Z))
+                        !float.IsFinite(emissive.X) || !float.IsFinite(emissive.Y) || !float.IsFinite(emissive.Z) ||
+                        !float.IsFinite(specular.X) || !float.IsFinite(specular.Y) || !float.IsFinite(specular.Z))
                         throw new InvalidDataException("Source animated material value is nonfinite.");
                     foreach (var material in materials)
                     {
                         if (material is ShaderMaterial lighting && lighting.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
                         {
-                            lighting.SetShaderParameter("emissive_color", emissive);
-                            lighting.SetShaderParameter("emissive_multiple", multiple);
-                            var factor = lighting.GetShaderParameter("base_factor").AsVector4();
-                            factor.W = alpha;
-                            lighting.SetShaderParameter("base_factor", factor);
+                            // Each controller owns one field. Other fields may
+                            // be driven by a managed sequence on this material.
+                            if (controller is FalloutNifEmittanceController) lighting.SetShaderParameter("emissive_multiple", multiple);
+                            else if (controller is FalloutNifMaterialColorController color)
+                                lighting.SetShaderParameter(color.TargetColor == 2 ? "source_specular" : "emissive_color",
+                                    color.TargetColor == 2 ? specular : emissive);
+                            else
+                            {
+                                var factor = lighting.GetShaderParameter("base_factor").AsVector4();
+                                factor.W = alpha;
+                                lighting.SetShaderParameter("base_factor", factor);
+                            }
                         }
-                        else if (material is ShaderMaterial effect && effect.ResourceName == NativeNifEffectMaterial.ResourceIdentity)
+                        else if (material is ShaderMaterial effect && effect.ResourceName == NativeNifEffectMaterial.ResourceIdentity &&
+                            specular == new Vector3(property.Specular.R, property.Specular.G, property.Specular.B))
                         {
-                            effect.SetMeta("opennv_source_emissive_color", emissive);
-                            effect.SetShaderParameter("source_emissive_multiple", multiple);
-                            effect.SetShaderParameter("source_color_multiplier", new Vector4(
-                                emissive.X * multiple, emissive.Y * multiple, emissive.Z * multiple, alpha));
+                            if (controller is FalloutNifEmittanceController) NativeNifEffectMaterial.ApplyEmissiveMultiple(effect, multiple);
+                            else if (controller is FalloutNifMaterialColorController { TargetColor: MaterialColorSelfIllumination })
+                                NativeNifEffectMaterial.ApplyEmissiveColor(effect, emissive);
+                            else if (controller is FalloutNifAlphaController)
+                            {
+                                var factor = effect.GetShaderParameter("source_color_multiplier").AsVector4();
+                                factor.W = alpha;
+                                effect.SetShaderParameter("source_color_multiplier", factor);
+                            }
                         }
                         else if (material is not StandardMaterial3D || property.EmissiveMultiple != multiple || property.Alpha != alpha ||
-                            property.Emissive.R != emissive.X || property.Emissive.G != emissive.Y || property.Emissive.B != emissive.Z)
+                            property.Emissive.R != emissive.X || property.Emissive.G != emissive.Y || property.Emissive.B != emissive.Z ||
+                            property.Specular.R != specular.X || property.Specular.G != specular.Y || property.Specular.B != specular.Z)
                             throw new NotSupportedException("Animated material has no shader owner.");
                     }
                 }
@@ -2295,18 +2308,6 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     clock.Frequency, clock.StartTime, clock.StopTime, [new RuntimeNifControllerChannel(Apply)])
                 { DirectClock = clock });
             }
-        }
-
-        private bool HasConstantAlpha(FalloutNifMaterialProperty material)
-        {
-            if (material.Controller < 0 || _source.ReadObject(material.Controller) is not FalloutNifAlphaController controller ||
-                controller.Time.Target != material.Block.Index || controller.Time.NextController != -1 ||
-                (controller.Time.Flags & 0x40) == 0 || controller.Interpolator < 0 ||
-                _source.ReadObject(controller.Interpolator) is not FalloutNifFloatInterpolator input || input.Data < 0 ||
-                _source.ReadObject(input.Data) is not FalloutNifFloatData data || data.Keys.Length == 0) return false;
-            // Every authored key equals the material's initial alpha. Its
-            // clock cannot change this value; nonconstant alpha needs a clock.
-            return data.Keys.All(key => key.Value == material.Alpha && (key.Forward ?? 0) == 0 && (key.Backward ?? 0) == 0);
         }
 
         private bool IsManagedTextureController(int reference, int target) =>

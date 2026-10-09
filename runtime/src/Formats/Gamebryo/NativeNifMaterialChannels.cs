@@ -110,8 +110,13 @@ internal sealed class RuntimeNativeNifMaterialChannels
             return time =>
             {
                 var value = sampler.Sample(time);
-                if (value.X != property.Specular.R || value.Y != property.Specular.G || value.Z != property.Specular.B)
-                    throw new NotSupportedException("External KF specular differs from its source constant material value.");
+                if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z))
+                    throw new InvalidDataException("External KF specular color is nonfinite.");
+                foreach (var material in target.Materials)
+                    if (material is ShaderMaterial shader && material.ResourceName == NativeNifLightingMaterial.ResourceIdentity)
+                        shader.SetShaderParameter("source_specular", new Vector3(value.X, value.Y, value.Z));
+                    else if (value.X != property.Specular.R || value.Y != property.Specular.G || value.Z != property.Specular.B)
+                        throw new NotSupportedException("External KF specular has no animated material owner.");
             };
         }
         if (link.ControllerType == "NiMaterialColorController" && link.Variable1 == "SELF_ILLUM" &&

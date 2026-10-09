@@ -41,10 +41,10 @@ frames are removed after inspection. Component checks do not certify games.
 
 ## Published gameplay and hot build
 
-Origin/main 3aaa48f4 includes checked PR185's launcher, Pip-Boy, travel, collision
+Origin/main 41b0ca13 includes checked PR185 and PR186's launcher, Pip-Boy, travel, collision
 and save work. The actual FNV Test command/desktop shortcut select packaged
 Release fnv-gameplay-5a156b84. That pinned process is retired. Root's separate branch is
-codex/full-runtime-owner-integration; source checkpoint 78fd181b retains the
+codex/full-runtime-owner-integration; source checkpoint 33a67180 retains the
 joined batch, and merge 081d94b9 integrates origin/main. No root push/PR/new
 package for that batch is claimed yet.
 
@@ -62,6 +62,12 @@ full scripts/AI, procedural trees, native mods and physical XR remain incomplete
 Retail recording and C# delivery ran with independent saves; matched checkpoint
 and exact native timing remain unestablished. Malformed models retain reference
 failures. Today's smoke test must independently exercise the fresh exported path.
+
+
+Published window animation now binds full source controller chains, including
+refraction strength, managed specular/emissive/opacity and dynamic alpha.
+Ordinary source window scripts and owned day/night fields were checked in PR186;
+final pixels and complete scene parity remain unverified.
 
 ## Joined source candidate
 
