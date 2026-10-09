@@ -22,8 +22,15 @@ internal sealed class FalloutPlayerStatistics
     internal FalloutStatisticOperation? LastOperation => _last?.Capture() ?? _restoredLast;
     internal string? Failure => LastOperation is { } last ? FindFailure(last) : null;
     internal string? SaveBlocker => _executing.Count != 0 ? "miscellaneous-statistic-attempted-prefix" : null;
-    internal object State => new { Source, values = _values.ToArray(), Operations, LastOperation,
-        retired = _retired, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        Source,
+        values = _values.ToArray(),
+        Operations,
+        LastOperation,
+        retired = _retired,
+        saveBlocker = SaveBlocker
+    };
 
     internal FalloutPlayerStatistics(FalloutMiscellaneousStatisticSource source, FalloutPlayerStatisticHost host,
         FalloutPlayerStatisticsSnapshot? restore = null)
@@ -107,8 +114,11 @@ internal sealed class FalloutPlayerStatistics
                 throw new InvalidDataException("Statistic native menu producer returned no observation.");
             menu.Validate(Source.StatsMenuId);
             _menuOwner?.RequireCurrent(menu);
-            current.Value = current.Value with { Menu = menu,
-                Prefix = menu.Present ? FalloutStatisticPrefix.MenuPresent : FalloutStatisticPrefix.MenuAbsent };
+            current.Value = current.Value with
+            {
+                Menu = menu,
+                Prefix = menu.Present ? FalloutStatisticPrefix.MenuPresent : FalloutStatisticPrefix.MenuAbsent
+            };
             if (menu.Present)
             {
                 Prefix(FalloutStatisticPrefix.RefreshEntered);

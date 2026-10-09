@@ -18,6 +18,15 @@ declarations and preserve actual registration, pointer, module and retirement
 lifetimes; foreign/global commands remain unowned. Source menu captions bind
 after indexing and before native startup, independently of gameplay admission,
 so a later failure retains a usable source-backed Quit control.
+Read-only native declarations have one source-owned background task. Campaign
+admission checks the same source, records and script owner after its await;
+native calls remain on the actual product thread. Source disposal drains this
+reader before closing archives. Failed discovery cannot retry in that selection.
+
+The complete C# quest/script graph also has one source-owned background task.
+The return join checks source, records, quests, references, inventory, globals,
+storage, events and transitions. Actual Godot node/native construction stays on
+the product thread; retirement drains this task before closing its source.
 
 Shared script construction reuses the actual campaign Main process before
 bootstrap. Current save/cold state carries the same interpreter, distinct Main
@@ -30,15 +39,54 @@ retain actual private nodes/resources and cache transfers, and distinguish retur
 from real parent publication. Failed allocations and whole-root destruction retire
 independently; source release waits for the actual private resource lifetime.
 
+Scripted constant effects construct every selected source instance and its
+independent compiled event list before entering lifecycle scripts. Recursive
+actor-value queries therefore see the complete current selection without
+manufacturing a completed Start. Source order governs actual lifecycle entry;
+failure and current/cold prefixes retain the same live owners.
+
 Native Data uses the selected public interface revision, actual foreground
 DirectInput device state and the same C# control/inventory owners as gameplay.
+New/Continue attaches and waits for the first actual acquired sample; background
+menu indexing cannot create device bytes or reject a campaign for lost focus.
 Native reader leases survive node exit until exact child closure. The current
 inventory scope wraps bound effect/script consumers inside the committed cumulative
 gameplay-clock lease, using its actual mutation identity. Whole-Main, paused/menu
 calls and genuine native temporary-reference constructors remain separate owners.
 The Main utility queue preserves signed duplicate IDs, source query order and
-failed effect prefixes. Platform interfaces and the independent suppression byte
-require real producers; missing services never become false/default success.
+failed effect prefixes. A dedicated actual platform domain owns selected Steam
+exports, source callback objects and both world bindings. SDK/account state stays
+process-local; cold binds a fresh provider without restoring native pointers.
+Source singleton construction occurs at its actual getter. Suppression and other
+startup bytes have their separate source producers. Source startup consumes the
+real ordered product WinMain vector and retains its allocation/configuration
+identity. Utility command state is mandatory in the shared current/cold schema.
+Main Player awaits one
+replaceable pending transfer slot before Steam and the second sample; CELL DATA
+flags and actual Float32 FISTP rounding determine source grid behavior.
+Unavailable children remain refused.
+
+Restricted child creation retains a fresh hidden desktop and only the explicit
+pipe/station/desktop inheritance list. Failed construction keeps exact creation
+handles and source leases until observed child closure; existing object ACLs
+are unchanged. CNG source preparation does not load its provider. Actual callers
+admit it once and retain real status/handle/buffer/retirement prefixes. First-party
+hashing remains exact source verification, not a native mod startup requirement.
+Actual original CNG calls use a separate Windows-only service whose compiled
+dispatch cannot enter game/mod code. The original child retains local opaque
+capabilities; real service SDK objects/buffers/statuses have independent source
+and retirement owners. Frontend and primitives loader references are separate.
+Shared original CNG buffers retain their actual section handles and exact mapped
+addresses/offsets in the Windows-only service. SDK hash objects pin the actual
+views through DestroyHash; original FreeLibrary has a distinct checked unload
+scope. Address collision remains a failure, never a copied or relocated alias.
+Borrowed engine command leaves use source-decoded semantics and first-party
+callable pages with actual creation-process readback, correlated raw caller
+identities and trap retirement. Effectful or unknown bodies remain refused.
+Diagnostic write routes require an exact source-declared diagnostic input role;
+original files remain read-only while genuine CRT calls use the private copy.
+Terrain resources release when their retained managed binding is the last actual
+reference; foreign borrowers remain visible.
 
 Sequential input retains the actual recipient handle, command lease and first
 receipt timestamp. An explicit expected exit requires a genuine delivered receipt

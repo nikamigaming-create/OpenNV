@@ -13,6 +13,9 @@ internal static partial class SourceMainScriptCallerContracts
     {
         SuccessfulOrderAndCold(); FailedSteamPrefixAndCold(); ShortCircuitAndForbiddenReentry(); ActualMissingHost();
         SourceMainUtilityCases();
+        RunPlayerCellContracts();
+        SourceSkyTransferContracts.Run();
+        RunRawPlayerTransferContracts();
         Console.WriteLine("OPENNV_SOURCE_MAIN_SCRIPT_CALLER_PASS authoredScopeOnly=true realTwoSites=true orderedPlayerSteamContexts=true " +
             "independentContextClock=true sourceOrdinalNotDeliveryFrame=true coldNoReplay=true callbackFailurePrefix=true " +
             "nativeSteamAndWholeMain=UNOWNED nativeGameplay=UNEXECUTED");
@@ -27,7 +30,7 @@ internal static partial class SourceMainScriptCallerContracts
             Require(warm.Owner.Observe().Allows, "A Player child changed the cached byte without an actual next sample.");
             Reject(() => invocation.AdvanceContextTime(1));
         };
-        using (warm.Bind()) warm.Owner.ExecuteMainScriptCaller(71, .02f);
+        using (warm.Bind()) warm.Owner.ExecuteMainScriptCaller(71, .02f).GetAwaiter().GetResult();
         var state = warm.Owner.CaptureMainScriptCaller(); var field = warm.Owner.CaptureMainScriptFrameEvidence();
         Require(state.Calls == 1 && state.LastCall is { Disposition: FalloutMainScriptCallerDisposition.ScopeReturned } &&
             field is { Frame: 1, LastSite: FalloutMainScriptSampleSite.AfterMainChildren, BlocksGameMode: true } &&
@@ -39,7 +42,7 @@ internal static partial class SourceMainScriptCallerContracts
         Require(cold.Host.RealChildMutations == 0 && cold.Owner.CaptureMainScriptCaller().LastCall == state.LastCall &&
             cold.Owner.CaptureMainScriptFrameEvidence() == field && !cold.Owner.Observe().Allows,
             "Cold reconstruction executed a child, cleared its cache or replayed a context-time write.");
-        using (cold.Bind()) cold.Owner.ExecuteMainScriptCaller(1, .03f);
+        using (cold.Bind()) cold.Owner.ExecuteMainScriptCaller(1, .03f).GetAwaiter().GetResult();
         var next = cold.Owner.CaptureMainScriptCaller();
         Require(next.Calls == 2 && next.LastCall is { DeliveryFrame: 1, Ordinal: 2 } && next.ContextTimeWrites == 2 &&
             next.ContextTimeBits == BitConverter.SingleToUInt32Bits(.25f), "Cold delivery numbering rewound source invocation/time ownership.");
@@ -51,7 +54,7 @@ internal static partial class SourceMainScriptCallerContracts
     {
         using var warm = new Fixture();
         warm.Host.DuringSteam = _ => throw new IOException("Authored Steam consumer fails after the real Player prefix.");
-        using (warm.Bind()) Reject(() => warm.Owner.ExecuteMainScriptCaller(300, .02f));
+        using (warm.Bind()) Reject(() => warm.Owner.ExecuteMainScriptCaller(300, .02f).GetAwaiter().GetResult());
         var state = warm.Owner.CaptureMainScriptCaller(); var field = warm.Owner.CaptureMainScriptFrameEvidence();
         Require(state.LastCall is { Disposition: FalloutMainScriptCallerDisposition.Failed, FailureType: "System.IO.IOException" } &&
             state.LastCall.Children.Last() is { Step: FalloutMainScriptCallerStep.SteamCallbacks, Returned: null, Error: not null } &&
@@ -61,7 +64,7 @@ internal static partial class SourceMainScriptCallerContracts
         Reject(() => warm.Owner.Observe()); Reject(() => warm.Owner.CaptureScriptFrame());
         var runtime = warm.Owner.Capture();
         using var cold = new Fixture(runtime, field, state);
-        using (cold.Bind()) Reject(() => cold.Owner.ExecuteMainScriptCaller(1, .02f));
+        using (cold.Bind()) Reject(() => cold.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult());
         Require(cold.Host.Log.Count == 0 && cold.Owner.CaptureMainScriptCaller().LastCall == state.LastCall &&
             cold.Owner.MainScriptCallerSaveBlocker is not null, "Cold replayed or silently accepted a failed actual source child.");
         var failedCall = state.LastCall ?? throw new InvalidOperationException("Steam consumer lost its entered failed call.");
@@ -74,7 +77,7 @@ internal static partial class SourceMainScriptCallerContracts
         using (var suppressed = new Fixture())
         {
             suppressed.Host.Tab = suppressed.Host.Alt = true;
-            using (suppressed.Bind()) suppressed.Owner.ExecuteMainScriptCaller(0, .02f);
+            using (suppressed.Bind()) suppressed.Owner.ExecuteMainScriptCaller(0, .02f).GetAwaiter().GetResult();
             Require(suppressed.Owner.CaptureMainScriptCaller().LastCall is { Disposition: FalloutMainScriptCallerDisposition.InputSuppressed } &&
                 suppressed.Host.Log.SequenceEqual(["Tab", "Alt"]) && suppressed.Owner.CaptureScriptFrame().Frame == 0,
                 "OS high-bit early return ran a source child or invented either cached write.");
@@ -82,7 +85,7 @@ internal static partial class SourceMainScriptCallerContracts
         using (var menu = new Fixture())
         {
             menu.Host.Menu = true;
-            using (menu.Bind()) menu.Owner.ExecuteMainScriptCaller(2, .02f);
+            using (menu.Bind()) menu.Owner.ExecuteMainScriptCaller(2, .02f).GetAwaiter().GetResult();
             var call = menu.Owner.CaptureMainScriptCaller();
             Require(!menu.Host.Log.Contains("Gui") && !menu.Host.Log.Contains("Hold") && call.ContextTimeWrites == 0 &&
                 call.LastCall is { Disposition: FalloutMainScriptCallerDisposition.ScopeReturned },
@@ -91,13 +94,13 @@ internal static partial class SourceMainScriptCallerContracts
         using (var retiring = new Fixture())
         {
             retiring.Host.DuringPlayer = _ => Reject(retiring.TryRetireFade);
-            using (retiring.Bind()) Reject(() => retiring.Owner.ExecuteMainScriptCaller(4, .02f));
+            using (retiring.Bind()) Reject(() => retiring.Owner.ExecuteMainScriptCaller(4, .02f).GetAwaiter().GetResult());
             Require(retiring.Owner.CaptureMainScriptCaller().LastCall is { Disposition: FalloutMainScriptCallerDisposition.Failed } &&
                 !retiring.Host.Log.Contains("Steam"), "An entered child swallowed fade retirement and returned an invented Main prefix.");
         }
         using var reentered = new Fixture();
-        reentered.Host.DuringPlayer = _ => { Reject(() => reentered.Owner.Capture()); Reject(() => reentered.Owner.ExecuteMainScriptCaller(100, .02f)); };
-        using (reentered.Bind()) Reject(() => reentered.Owner.ExecuteMainScriptCaller(99, .02f));
+        reentered.Host.DuringPlayer = _ => { Reject(() => reentered.Owner.Capture()); Reject(() => reentered.Owner.ExecuteMainScriptCaller(100, .02f).GetAwaiter().GetResult()); };
+        using (reentered.Bind()) Reject(() => reentered.Owner.ExecuteMainScriptCaller(99, .02f).GetAwaiter().GetResult());
         Require(reentered.Owner.CaptureMainScriptCaller().LastCall is { Disposition: FalloutMainScriptCallerDisposition.Failed } &&
             reentered.Host.RealChildMutations == 1 && !reentered.Host.Log.Contains("Steam"),
             "A source child swallowed forbidden capture/reentry and returned an invented Main scope.");
@@ -107,11 +110,11 @@ internal static partial class SourceMainScriptCallerContracts
         using var fixture = new Fixture();
         var source = FalloutMainScriptCallerSource.Read(fixture.Source);
         using (fixture.Owner.BindMainScriptCaller(new FalloutCampaignMainScriptConsumers(source, _ => false), "authored-native-key-provider-only"))
-            Reject(() => fixture.Owner.ExecuteMainScriptCaller(1, .02f));
+            Reject(() => fixture.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult());
         var state = fixture.Owner.CaptureMainScriptCaller();
         var failed = state.LastCall ?? throw new InvalidOperationException("Product host lost its refused actual call.");
         Require(failed.Children.Last() is { Step: FalloutMainScriptCallerStep.Prologue, Returned: null } &&
-            failed.Error!.Contains("SteamAPI_IsSteamRunning-SteamUser-SteamUserStats-provider-unbound", StringComparison.Ordinal) &&
+            failed.Error!.Contains("source-Main-platform-utility-current-native-invocation-scope-unbound", StringComparison.Ordinal) &&
             fixture.Owner.CaptureMainScriptFrameEvidence().Frame == 0,
             "Product host fabricated missing original consumers or jumped directly to a cached sample.");
     }
@@ -150,6 +153,7 @@ internal static partial class SourceMainScriptCallerContracts
         internal bool Tab, Alt, Menu;
         internal int RealChildMutations;
         internal Action<FalloutMainScriptInvocation>? DuringPlayer, DuringSteam, DuringPrologue;
+        internal Func<FalloutMainScriptInvocation, Task>? AwaitPlayer;
         public bool AsyncKeyHighBit(FalloutMainScriptInvocation invocation, int key)
         { invocation.Require(key == 9 ? FalloutMainScriptCallerStep.TabKey : FalloutMainScriptCallerStep.AltKey); Log.Add(key == 9 ? "Tab" : "Alt"); return key == 9 ? Tab : Alt; }
         public void Prologue(FalloutMainScriptInvocation invocation) { invocation.Require(FalloutMainScriptCallerStep.Prologue); Log.Add("Prologue"); DuringPrologue?.Invoke(invocation); }
@@ -160,8 +164,8 @@ internal static partial class SourceMainScriptCallerContracts
         public bool ForeignActiveMenu(FalloutMainScriptInvocation invocation) { Log.Add("Foreign"); return false; }
         public int InterfaceContextKind(FalloutMainScriptInvocation invocation) { Log.Add("Kind"); return 2; }
         public void KindThreePrelude(FalloutMainScriptInvocation invocation) => throw new InvalidOperationException("Excluded authored kind-three branch was invoked.");
-        public void Player(FalloutMainScriptInvocation invocation)
-        { invocation.Require(FalloutMainScriptCallerStep.Player); Log.Add("Player"); RealChildMutations++; DuringPlayer?.Invoke(invocation); }
+        public Task Player(FalloutMainScriptInvocation invocation)
+        { invocation.Require(FalloutMainScriptCallerStep.Player); Log.Add("Player"); RealChildMutations++; DuringPlayer?.Invoke(invocation); return AwaitPlayer?.Invoke(invocation) ?? Task.CompletedTask; }
         public void SteamCallbacks(FalloutMainScriptInvocation invocation)
         { invocation.Require(FalloutMainScriptCallerStep.SteamCallbacks); Log.Add("Steam"); RealChildMutations++; DuringSteam?.Invoke(invocation); }
         public bool MainHold(FalloutMainScriptInvocation invocation) { Log.Add("Hold"); return false; }

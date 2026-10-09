@@ -22,9 +22,9 @@ internal static partial class PlayerAbilityScriptContracts
             foreach (var duplicate in new[] { false, true }) CheckStartCold(directory, duplicate);
             CheckCompiledExtentMismatch(directory);
             CheckPrefixFailure(directory);
-            CheckUnsupportedEvent(directory);
+            CheckUpdateRequiresClockMutation(directory);
             CheckCompiledAbilityAuthority(directory);
-            Console.WriteLine("OPENNV_PLAYER_ABILITY_SCRIPT_START_PASS sourceReader=true unequalHeaderCounts=true compiledExtentRefused=true effectLocals=true genuinePlayer=true independentEffects=true prefixFailure=true cold=true nonStartRefused=true compiledExecution=authoritative_SCDA parity=unverified");
+            Console.WriteLine("OPENNV_PLAYER_ABILITY_SCRIPT_START_PASS sourceReader=true unequalHeaderCounts=true compiledExtentRefused=true effectLocals=true genuinePlayer=true independentEffects=true prefixFailure=true cold=true uncommittedFrameRefused=true compiledExecution=authoritative_SCDA parity=unverified");
         }
         finally
         {
@@ -126,16 +126,20 @@ internal static partial class PlayerAbilityScriptContracts
         Reject(restored.Synchronize);
     }
 
-    private static void CheckUnsupportedEvent(string directory)
+    private static void CheckUpdateRequiresClockMutation(string directory)
     {
         File.WriteAllBytes(Path.Combine(directory, Plugin), Fixture(false, update: true));
         using var records = FalloutPluginStack.Load(directory, [Plugin]);
         using var world = new FalloutReferenceWorld(records);
         var actor = new FalloutPlayerActorValues(records); var skills = Skills(records, actor);
         var effects = Bind(records, world, actor, skills);
-        Reject(effects.Synchronize);
-        Require(skills.CaptureValues().Pools.Count == 0 && world.InstanceCount == 0,
-            "Unowned Update was skipped after a successful-looking Start.");
+        effects.Synchronize();
+        effects.Synchronize();
+        Reject(effects.AdvanceFromCurrentSourceFrame);
+        var state = effects.Capture().Effects.Single();
+        Require(skills.CaptureValues().Pools[32].Permanent == 3 && world.InstanceCount == 0 &&
+            state.Started && state.Error is null && state.Compiled!.Events.Count(row => row.Attempted) == 1 && state.Timeline!.ElapsedBits == 0,
+            "Ordinary getters or an uncommitted frame produced Update or lost the genuine Start prefix.");
     }
 
     private static FalloutPlayerSkills Skills(FalloutPluginStack records, FalloutPlayerActorValues actor) => new(records,
@@ -145,6 +149,7 @@ internal static partial class PlayerAbilityScriptContracts
         FalloutPlayerActorValues actor, FalloutPlayerSkills skills, FalloutPlayerAbilityScriptsSnapshot? restore = null, FalloutQuestState? quests = null)
     {
         var effects = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, restore);
+        BindAbilityClock(records, effects, restore?.Clock);
         var executor = new FalloutReferenceScripts(records, world, quests ?? new FalloutQuestState(records),
             new((_, _) => throw new NotSupportedException("Unexpected fixture furniture query."),
                 _ => throw new NotSupportedException("Unexpected fixture presentation command."),

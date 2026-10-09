@@ -196,10 +196,15 @@ internal sealed partial class FalloutCellProcesses
         a.Count == b.Count && a.Zip(b).All(pair => SameNativeCell(pair.First, pair.Second));
     private static FalloutCellSharedGraphChange CopySharedGraph(FalloutCellSharedGraphChange change) => change with
     {
-        BeforeEpochs = CopyEpochs(change.BeforeEpochs), AfterEpochs = CopyEpochs(change.AfterEpochs),
-        BeforeChildren = CopyChildren(change.BeforeChildren), TargetChildren = change.TargetChildren.Select(CopyPlacedChild).ToArray(),
-        TargetCellSources = change.TargetCellSources.ToArray(), BeforeCellConsumers = CopyNativeCells(change.BeforeCellConsumers),
-        PublishedChildren = CopyChildren(change.PublishedChildren), PublishedCellConsumers = CopyNativeCells(change.PublishedCellConsumers),
-        DestroyedReferences = change.DestroyedReferences.ToArray(), DestroyedCellConsumers = change.DestroyedCellConsumers.ToArray(),
+        BeforeEpochs = CopyEpochs(change.BeforeEpochs),
+        AfterEpochs = CopyEpochs(change.AfterEpochs),
+        BeforeChildren = CopyChildren(change.BeforeChildren),
+        TargetChildren = change.TargetChildren.Select(CopyPlacedChild).ToArray(),
+        TargetCellSources = change.TargetCellSources.ToArray(),
+        BeforeCellConsumers = CopyNativeCells(change.BeforeCellConsumers),
+        PublishedChildren = CopyChildren(change.PublishedChildren),
+        PublishedCellConsumers = CopyNativeCells(change.PublishedCellConsumers),
+        DestroyedReferences = change.DestroyedReferences.ToArray(),
+        DestroyedCellConsumers = change.DestroyedCellConsumers.ToArray(),
     };
 }

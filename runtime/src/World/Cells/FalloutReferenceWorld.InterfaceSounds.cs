@@ -18,7 +18,7 @@ internal sealed partial class FalloutReferenceWorld
         FalloutIndexedInterfaceSoundSnapshot? restore)
     {
         if (_campaignIndexedInterfaceSounds is not null) throw new InvalidOperationException("Campaign indexed sound authority cannot be replaced.");
-        _campaignIndexedInterfaceSounds = new(new FalloutIndexedInterfaceSoundSource(records, source), restore);
+        _campaignIndexedInterfaceSounds = new(new FalloutIndexedInterfaceSoundSource(records, source, restore?.Selection), restore);
         if (Challenges.Source is not null) Challenges.BindInterfaceSounds(_campaignIndexedInterfaceSounds);
     }
     private void RetireCampaignIndexedInterfaceSounds() => _campaignIndexedInterfaceSounds?.Retire();

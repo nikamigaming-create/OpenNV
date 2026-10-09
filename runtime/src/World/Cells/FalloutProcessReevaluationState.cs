@@ -46,9 +46,18 @@ internal sealed partial class FalloutProcessReevaluationState : IDisposable
             FalloutProcessReevaluationPhase.AlreadyPending or FalloutProcessReevaluationPhase.ProcessAbsent)) is { } incomplete ?
             "original-process-reevaluation:" + incomplete.Source.Reference + ":" + (incomplete.Failure ?? incomplete.Phase.ToString()) : null;
     internal string? RuntimeBoundary => _pending.Count == 0 ? null : "actual-original-pending-process-factory-list-consumer-unbound";
-    internal object State => new { source = _source.Contract, process = _process, _sequence,
-        actors = _actors.Values.ToArray(), pending = _pending.ToArray(), invocations = _invocations.ToArray(),
-        cold = _cold, saveBlocker = SaveBlocker, runtimeBoundary = RuntimeBoundary };
+    internal object State => new
+    {
+        source = _source.Contract,
+        process = _process,
+        _sequence,
+        actors = _actors.Values.ToArray(),
+        pending = _pending.ToArray(),
+        invocations = _invocations.ToArray(),
+        cold = _cold,
+        saveBlocker = SaveBlocker,
+        runtimeBoundary = RuntimeBoundary
+    };
 
     internal void Construct(FalloutFormKey actor, long epoch)
     {

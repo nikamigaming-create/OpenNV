@@ -15,8 +15,16 @@ internal sealed partial class FalloutPlayerAbilityScripts
             script.Plugin.Name, Hash(script), generation, false, false, null, [], null, null, null);
         if (saved is not null)
         {
-            var savedIdentity = saved with { Active = false, Started = false, Error = null, Locals = initial.Locals,
-                Compiled = null, Timeline = null, Consumption = null };
+            var savedIdentity = saved with
+            {
+                Active = false,
+                Started = false,
+                Error = null,
+                Locals = initial.Locals,
+                Compiled = null,
+                Timeline = null,
+                Consumption = null
+            };
             if (savedIdentity != initial || saved.Compiled is null || saved.Timeline is null)
                 throw new InvalidDataException("Saved effect differs from its complete winning source/timeline/cell owner.");
             RequireConsumptionSource(saved.Consumption);

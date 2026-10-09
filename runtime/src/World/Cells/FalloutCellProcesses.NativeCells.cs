@@ -13,8 +13,12 @@ internal sealed partial class FalloutCellProcesses
         var retained = owner.CellConsumers[index].NativeObjects.Concat(nativeObjects).Distinct().ToArray();
         RequireExclusiveNativeCellObjects(owner, index, retained);
         var entries = owner.CellConsumers.ToArray();
-        entries[index] = entries[index] with { Phase = FalloutCellProcessChildPhase.Failed, NativeObjects = retained,
-            Owner = "actual-source-LAND-native-factory-failed:" + (string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message) };
+        entries[index] = entries[index] with
+        {
+            Phase = FalloutCellProcessChildPhase.Failed,
+            NativeObjects = retained,
+            Owner = "actual-source-LAND-native-factory-failed:" + (string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message)
+        };
         _attachments[attachment] = owner with { CellConsumers = entries };
         FailSharedGraph(attachment, error);
     }

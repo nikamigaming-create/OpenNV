@@ -1,5 +1,6 @@
 // Included inside the companion's existing anonymous namespace, after its
 // transport/call/arena helpers. No original executable or plugin code is here.
+#include "opennv_plugin_loader.inc"
 constexpr DWORD nvse_missing_owner_exception = 0xe04e5653U;
 
 NvseRuntime& nvse_owner() {
@@ -67,14 +68,14 @@ void nvse_text(Bytes& out, const char* pointer, bool optional) {
     out.put(address(pointer)); out.put(static_cast<std::uint32_t>(text.size()));
     out.data.insert(out.data.end(), text.begin(), text.end());
 }
-void nvse_executable(void* pointer, bool optional = false) {
+void nvse_executable(void* pointer, bool optional = false, const std::string& context = "callback") {
     if (!pointer && optional) return;
     MEMORY_BASIC_INFORMATION memory{};
     if (!pointer || !VirtualQuery(pointer, &memory, sizeof(memory)) || memory.State != MEM_COMMIT ||
         memory.Type != MEM_IMAGE || memory.AllocationBase != state->module || (memory.Protect & PAGE_GUARD) ||
         ((memory.Protect & 0xffU) != PAGE_EXECUTE && (memory.Protect & 0xffU) != PAGE_EXECUTE_READ &&
             (memory.Protect & 0xffU) != PAGE_EXECUTE_READWRITE && (memory.Protect & 0xffU) != PAGE_EXECUTE_WRITECOPY))
-        throw Fatal(ERROR_INVALID_ADDRESS, "NVSE callback is not executable code in its retained original module.");
+        throw Fatal(ERROR_INVALID_ADDRESS, "NVSE " + context + " is not executable code in its retained original module.");
 }
 std::uint32_t nvse_host(NvseHostCall call, const Bytes& payload) {
     auto& owner = nvse_owner();
@@ -120,8 +121,9 @@ bool nvse_register(NvseCommandInfo* pointer, std::uint8_t return_type, std::uint
     nvse_load_only();
     const auto raw = nvse_copy(pointer);
     const auto source_name = nvse_string(raw.name, false), source_alias = nvse_string(raw.alias, true), source_help = nvse_string(raw.help, true);
-    nvse_executable(raw.execute, true); nvse_executable(raw.evaluate, true);
-    if (address(raw.parse) != nvse_expression_parser) nvse_executable(raw.parse, true);
+    engine_command_handler(raw.execute, address(pointer), "command '" + source_name + "' execute");
+    nvse_executable(raw.evaluate, true, "command '" + source_name + "' evaluate");
+    if (address(raw.parse) != nvse_expression_parser) nvse_executable(raw.parse, true, "command '" + source_name + "' parse");
     Bytes bytes; bytes.put(address(pointer)); bytes.put(raw.opcode);
     bytes.put(static_cast<std::uint32_t>(return_type)); bytes.put(required_version);
     bytes.put(raw.needs_parent); bytes.put(raw.parameter_count); bytes.put(raw.flags);
@@ -186,6 +188,7 @@ const char* __cdecl nvse_runtime_directory() { return nvse_adapter([] { return n
 void __cdecl nvse_expression_utils(void* destination) { nvse_adapter([&] { expression_initialize(destination); }); }
 
 void nvse_check_call(const CallReceipt& receipt) {
+    engine_commands_validate_all();
     command_table_validate_all();
     if (callback_fault.load()) throw Fatal(callback_fault.load(), state->callback_reason[0] ? state->callback_reason : "NVSE callback ownership failed.");
     if (receipt.exception_code) throw Fatal(receipt.exception_code, "Original NVSE module raised a structured exception.");
@@ -340,9 +343,15 @@ void load_nvse(const Frame& frame) {
     if (!VirtualProtect(owner->tables, owner->tables_extent, PAGE_READONLY, &previous))
         throw Fatal(GetLastError(), "NVSE interface protection failed.");
     callback_fault.store(0); state->callback_reason[0] = '\0'; state->callback_reason_truncated = false;
+    import_providers_begin_original(frame, path);
+    LoaderInvocation loader;
     const auto loaded = LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!loaded) { reply(frame, GetLastError(), "Original NVSE DLL imports/entry admission failed."); return; }
+    const auto loader_error = loaded ? ERROR_SUCCESS : GetLastError();
+    loader.finish();
+    import_providers_end_original(frame, loaded != nullptr);
+    if (!loaded) { reply(frame, loader_error, loader.refusal("Original NVSE DLL imports/entry admission failed.")); return; }
     state->module = loaded;
+    import_providers_validate_original(loaded);
     io_bind_imports(loaded);
     // Loader entry has actually run. No authored diagnostic exports, TLS
     // counters, editor flag or successful Query receipt is substituted here.
@@ -354,7 +363,7 @@ void load_nvse(const Frame& frame) {
         state->module = nullptr; reply(frame, ERROR_PROC_NOT_FOUND, "Original NVSE Query/Load exports are absent."); return;
     }
     nvse_executable(query); nvse_executable(load_function);
-    state->module_id = ++state->next_module;
+    if (!state->import_providers) state->module_id = ++state->next_module;
     if (state->module_id >= nvse_invalid_handle) throw Fatal(ERROR_ARITHMETIC_OVERFLOW, "NVSE plugin handle identity exhausted.");
     owner->handle = source_handle; owner->query = address(query); owner->load = address(load_function);
     state->nvse = std::move(owner);
@@ -442,7 +451,7 @@ void unload_nvse(const Frame& frame) {
     state->nvse->interface_calls = 0; state->transaction_callbacks = 0;
     if (state->value_heap) state->value_heap->loader_retiring = true;
     if (state->io) state->io->loader_retiring = true;
-    if (!FreeLibrary(image)) throw Fatal(GetLastError(), "Original NVSE module FreeLibrary failed.");
+    if (!cng_original_free_library(frame, image)) throw Fatal(GetLastError(), "Original NVSE module FreeLibrary failed.");
     values_heap_flush_detach(frame);
     io_flush_detach(frame);
     if (callback_fault.load()) throw Fatal(callback_fault.load(), "Original NVSE detach attempted an unowned callback.");
@@ -456,6 +465,7 @@ void unload_nvse(const Frame& frame) {
     if (!VirtualQuery(tables, &memory, sizeof(memory)) || memory.State != MEM_FREE)
         throw Fatal(ERROR_INVALID_DATA, "NVSE interface mapping remains after retirement.");
     state->data.reset();
+    engine_commands_retire(frame);
     command_table_retire(); expression_retire(); values_heap_retire(); values_retire(); source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
     Bytes data; nvse_counters(data); data.put(0U); data.put(0U);
     state->nvse.reset(); state->module = nullptr; state->module_id = 0;

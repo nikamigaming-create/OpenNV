@@ -25,12 +25,20 @@ internal sealed partial class FalloutActorProcessRuntimeState
             "source-Main-script-caller:" + call.Children.LastOrDefault()?.Step + ":" + call.Error : null;
     internal object? MainScriptCallerState => _scriptCallerSource is null ? null : new
     {
-        source = _scriptCallerSource, sourceProcess = _process, calls = _scriptCallerCalls, last = _scriptCallerLast,
+        source = _scriptCallerSource,
+        sourceProcess = _process,
+        calls = _scriptCallerCalls,
+        last = _scriptCallerLast,
         cachedInterfaceFields = _mainInterfaceCachedFields,
-        contextTimeBits = _contextTimeBits, contextTimeWrites = _contextTimeWrites, lastContextTimeWrite = _contextTimeLast,
-        deliveryBound = _scriptCallerLease != Guid.Empty, deliveryOwner = _scriptCallerDeliveryOwner,
-        lastDeliveredFrame = _scriptCallerLastDeliveredFrame, cold = _scriptCallerCold,
-        blocker = MainScriptCallerSaveBlocker, wholeMain = "unowned-original-tail-after-this-sampling-segment"
+        contextTimeBits = _contextTimeBits,
+        contextTimeWrites = _contextTimeWrites,
+        lastContextTimeWrite = _contextTimeLast,
+        deliveryBound = _scriptCallerLease != Guid.Empty,
+        deliveryOwner = _scriptCallerDeliveryOwner,
+        lastDeliveredFrame = _scriptCallerLastDeliveredFrame,
+        cold = _scriptCallerCold,
+        blocker = MainScriptCallerSaveBlocker,
+        wholeMain = "unowned-original-tail-after-this-sampling-segment"
     };
     internal void ConstructMainScriptCaller(FalloutMainScriptCallerSource source, FalloutMainScriptCallerSnapshot? saved)
     {
@@ -82,7 +90,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _scriptCallerSource ?? throw new NotSupportedException("source-Main-script-caller-constructor-unbound");
     }
-    internal void ExecuteMainScriptCaller(ulong deliveryFrame, float deliveredSeconds)
+    internal async Task ExecuteMainScriptCaller(ulong deliveryFrame, float deliveredSeconds)
     {
         RequireNotBusy(); RequireMainWriterOutsideWindow(); var source = MainScriptCallerSource();
         if (_scriptCallerInvocation is not null) { FaultMainScriptReentry(); throw new InvalidOperationException("Actual Main child cannot reenter its frame caller."); }
@@ -117,7 +125,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
             var foreign = Read(FalloutMainScriptCallerStep.ForeignMenu, () => consumers.ForeignActiveMenu(invocation));
             var kind = ReadInteger(FalloutMainScriptCallerStep.ContextKind, () => consumers.InterfaceContextKind(invocation));
             if (kind == 3 && !foreign) Enter(FalloutMainScriptCallerStep.KindThreePrelude, () => consumers.KindThreePrelude(invocation));
-            Enter(FalloutMainScriptCallerStep.Player, () => consumers.Player(invocation));
+            await EnterAsync(FalloutMainScriptCallerStep.Player, () => consumers.Player(invocation));
             Enter(FalloutMainScriptCallerStep.SteamCallbacks, () => consumers.SteamCallbacks(invocation));
             var advance = !menu && !Read(FalloutMainScriptCallerStep.MainHold, () => consumers.MainHold(invocation));
             Enter(FalloutMainScriptCallerStep.TimedContexts, () => consumers.TimedContexts(invocation, advance));
@@ -135,16 +143,40 @@ internal sealed partial class FalloutActorProcessRuntimeState
             var children = _scriptCallerLast!.Children.ToArray();
             if (children.Length != 0 && children[^1].Returned is null)
                 children[^1] = children[^1] with { FailureType = type, Error = Message(failure) };
-            _scriptCallerLast = _scriptCallerLast with { Changed = Next(), Disposition = FalloutMainScriptCallerDisposition.Failed,
-                Children = children, FailureType = type, Error = Message(failure) };
+            _scriptCallerLast = _scriptCallerLast with
+            {
+                Changed = Next(),
+                Disposition = FalloutMainScriptCallerDisposition.Failed,
+                Children = children,
+                FailureType = type,
+                Error = Message(failure)
+            };
             throw;
         }
         finally { _scriptCallerInvocation = null; }
 
         void Finish(FalloutMainScriptCallerDisposition disposition) => _scriptCallerLast = _scriptCallerLast! with
         { Disposition = disposition, Changed = Next() };
+        async Task EnterAsync(FalloutMainScriptCallerStep step, Func<Task> action)
+        {
+            RequireOwnerThread();
+            var child = new FalloutMainScriptChild(step, Next(), null, null, null, null, null);
+            _scriptCallerLast = _scriptCallerLast! with { Changed = child.Entered, Children = [.. _scriptCallerLast.Children, child] };
+            var fault = _scriptCallerReentry;
+            await action();
+            RequireOwnerThread();
+            if (fault != _scriptCallerReentry) throw new InvalidOperationException("Main asynchronous child swallowed a forbidden source caller reentry.");
+            var children = _scriptCallerLast.Children.ToArray(); children[^1] = children[^1] with { Returned = Next() };
+            _scriptCallerLast = _scriptCallerLast with { Children = children, Changed = _sequence };
+        }
+        void RequireOwnerThread()
+        {
+            if (_scriptCallerManagedThread != Environment.CurrentManagedThreadId)
+                throw new InvalidOperationException("Main continuation left its actual native/platform owner thread.");
+        }
         void Enter(FalloutMainScriptCallerStep step, Action action)
         {
+            RequireOwnerThread();
             var child = new FalloutMainScriptChild(step, Next(), null, null, null, null, null);
             _scriptCallerLast = _scriptCallerLast! with { Changed = child.Entered, Children = [.. _scriptCallerLast.Children, child] };
             var fault = _scriptCallerReentry; action();

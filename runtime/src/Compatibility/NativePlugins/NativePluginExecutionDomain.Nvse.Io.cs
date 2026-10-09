@@ -13,7 +13,7 @@ internal sealed partial class NativePluginExecutionDomain
             WriteText(writer, owner.ModuleRoot); WriteText(writer, owner.CurrentDirectory); WriteText(writer, owner.RestrictingSid);
             writer.Write(checked((uint)owner.Selection.DeclaredNonIoImports.Count));
             foreach (var import in owner.Selection.DeclaredNonIoImports.Order(StringComparer.Ordinal)) WriteText(writer, import);
-            WriteCrtProviders(writer, owner);
+            WriteCrtProviders(writer, owner); WriteCryptoProvider(writer, owner);
         }));
         if (reader.ReadUInt32() != 1) throw new InvalidDataException("Private native I/O has no restricted-token/diagnostic initialization receipt.");
         Finish(reader);
@@ -22,8 +22,25 @@ internal sealed partial class NativePluginExecutionDomain
     {
         var owner = _privateIo ?? throw new NotSupportedException("Original native I/O has no selected module-owned private storage.");
         using var reader = Reader(frame.Payload); var thread = reader.ReadUInt32(); var module = reader.ReadUInt64();
-        if (thread != NativeThread || _nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation)
+        var enteredLoader = IsEnteredOriginalLoaderIo(frame.Operation, module, parent);
+        if (thread != NativeThread || !enteredLoader && (_nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation))
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
+        if (frame.Operation == MutexCallback)
+        {
+            if (enteredLoader) throw new NotSupportedException("Original pre-entry mutex construction has no intercepted loader/TLS caller owner.");
+            return DispatchPrivateMutex(parent, thread, owner, reader);
+        }
+        if (frame.Operation == MappingCallback) return DispatchPrivateMapping(parent, owner, reader);
+        if (frame.Operation == CryptoCallback)
+        {
+            if (enteredLoader)
+            {
+                var category = reader.ReadUInt32();
+                if (category != 4) throw new NotSupportedException("Original loader entry only owns the actual separate CNG service callback lane.");
+                return DispatchCngSystemService(parent, owner, reader);
+            }
+            return DispatchPrivateCrypto(parent, owner, reader);
+        }
         if (frame.Operation == ProfileResultCallback) return DispatchPrivateProfile(frame, parent, owner, reader);
         if (frame.Operation is >= FindBeginCallback and <= FindBackendCallback) return DispatchPrivateFind(frame, parent, owner, reader);
         if (frame.Operation is >= CrtProvider and <= CrtPathResult) return DispatchPrivateCrt(frame, parent, owner, reader);
@@ -68,6 +85,7 @@ internal sealed partial class NativePluginExecutionDomain
     private void RequirePrivateIoRetired()
     {
         if (_ioFiles.Count != 0) throw new InvalidDataException("Original module retirement retains native file handles.");
+        RequirePrivateMutexesRetired(); RequirePrivateMappingsRetired(); RequirePrivateCryptoRetired();
         RequirePrivateCrtRetired(); _privateIo?.RequireFindRetired();
         _privateIo?.RequireRetired();
     }
@@ -75,6 +93,7 @@ internal sealed partial class NativePluginExecutionDomain
     {
         if (!ChildExited) throw new InvalidOperationException("Native I/O source/provider cleanup requires verified child closure.");
         RetainPrivateProfileReceipts(); RetainPrivateFindReceipts();
-        ClearPrivateCrt(); _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
+        ClearPrivateMutexesAfterChildExit(); ClearNativeImportProvidersAfterChildExit();
+        ClearPrivateMappings(); ClearPrivateCrypto(); ClearPrivateCrt(); _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
     }
 }

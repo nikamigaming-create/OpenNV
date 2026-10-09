@@ -5,10 +5,10 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutActiveImageModifier(FalloutImageSpaceModifier Source, double ElapsedSeconds);
 internal sealed record FalloutImageSpaceFrame(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade,
     IReadOnlyList<FalloutActiveImageModifier> Active, IReadOnlyList<string> UnboundChannels, float BlurRadius = 0,
-    Vector2 DoubleVisionOffset = default);
+    Vector2 DoubleVisionOffset = default, IReadOnlyList<FalloutSourceSkyImageContribution>? SourceSky = null);
 
 /// <summary>Gameplay-clock IMAD lifetime and source IMGS/IMAD composition, independent of captured state.</summary>
-internal sealed class FalloutImageSpaceState
+internal sealed partial class FalloutImageSpaceState
 {
     // IMAD channel order differs from IMGS storage: Skin Dimmer is channel 2;
     // cinematic order is saturation, contrast, average luminance, brightness.
@@ -66,6 +66,12 @@ internal sealed class FalloutImageSpaceState
         var blurRadius = 0f;
         var doubleVision = 0f;
         var unbound = new HashSet<string>(StringComparer.Ordinal);
+        var sourceSky = ReadSourceSkyContributions();
+        foreach (var contribution in sourceSky)
+            if (contribution.Failure is { } failure) unbound.Add(failure);
+        // Admitted anonymous/default and null programs are mathematically
+        // neutral. They retain real manager identity without fake FormIDs.
+        // Nonneutral source instance consumption remains explicitly unbound.
         foreach (var active in activeModifiers)
         {
             var modifier = active.Source;
@@ -111,6 +117,6 @@ internal sealed class FalloutImageSpaceState
         var angle = phase?.Angle(gameHour.GetValueOrDefault()) ?? 0;
         var doubleVisionOffset = new Vector2((float)(Math.Cos(angle) * doubleVision), (float)(Math.Sin(angle) * doubleVision));
         return new(traits[4], new Vector4(traits[25], traits[26], traits[27], traits[28]), finalTint, finalFade,
-            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset);
+            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset, sourceSky);
     }
 }

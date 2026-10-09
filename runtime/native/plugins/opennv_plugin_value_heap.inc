@@ -28,17 +28,17 @@ void* values_heap_allocate(std::uint32_t length, std::uint32_t abi = 0, std::uin
     if (abi) values_heap_contract(NvseHeapOperation::allocate, static_cast<Abi>(abi), receiver);
     if (!length) throw Fatal(ERROR_NOT_SUPPORTED, "Zero-size original heap allocation has no admitted lifetime extent.");
     if (owner.created == std::numeric_limits<std::uint32_t>::max()) throw Fatal(ERROR_NOT_ENOUGH_QUOTA, "Native heap capability sequence exhausted.");
-    const auto region = owner.arena.allocate(length, GuestAccess::read_write, nullptr, 0);
+    const auto region = owner.shared_heap.allocate(length);
     const auto pointer = address(region.base);
     try { owner.allocations.emplace(pointer, NvseHeapAllocation{region, values_caller_id()}); }
-    catch (...) { owner.arena.release(region.id); throw; }
+    catch (...) { owner.shared_heap.release(region.id); throw; }
     ++owner.created; values_heap_note(region, 1, abi, receiver); return region.base;
 }
 bool values_heap_contains(const void* pointer) {
     if (!state->value_heap) return false;
     auto& owner = values_heap_owner(); const auto found = owner.allocations.find(address(pointer));
     if (found == owner.allocations.end()) return false;
-    owner.arena.inspect(found->second.region.id); return true;
+    owner.shared_heap.inspect(found->second.region.id); return true;
 }
 void values_heap_release(void* pointer, std::uint32_t abi = 0, std::uint32_t receiver = 0) {
     auto& owner = values_heap_owner();
@@ -46,7 +46,8 @@ void values_heap_release(void* pointer, std::uint32_t abi = 0, std::uint32_t rec
     if (!pointer) return;
     const auto found = owner.allocations.find(address(pointer));
     if (found == owner.allocations.end()) throw Fatal(ERROR_INVALID_HANDLE, "Native heap free targets a foreign, interior or retired allocation.");
-    const auto region = found->second.region; owner.arena.release(region.id); owner.allocations.erase(found);
+    const auto region = found->second.region; cng_shared_require_releasable(1U, region.id);
+    owner.shared_heap.release(region.id); cng_shared_forget(1U, region.id); owner.allocations.erase(found);
     ++owner.destroyed; values_heap_note(region, 2, abi, receiver);
 }
 void* __cdecl values_heap_allocate_cdecl(std::uint32_t length) { return nvse_adapter([&] { return values_heap_allocate(length, 1); }); }
@@ -146,9 +147,9 @@ void values_heap_flush_detach(const Frame& frame) {
 void values_heap_retire() {
     if (!state->value_heap) return;
     auto& owner = *state->value_heap;
-    if (owner.loader_retiring || !owner.pending.empty() || !owner.allocations.empty() || owner.created != owner.destroyed || owner.arena.live())
+    if (owner.loader_retiring || !owner.pending.empty() || !owner.allocations.empty() || owner.created != owner.destroyed || owner.shared_heap.live())
         throw Fatal(ERROR_BUSY, "Unreleased original native Element/heap allocations prevent clean generation retirement.");
-    owner.arena.retire();
+    owner.shared_heap.retire();
     for (auto& page : owner.pages) {
         const auto previous = page.base;
         if (!VirtualFree(page.base, 0, MEM_RELEASE)) throw Fatal(GetLastError(), "Native heap thunk mapping could not retire.");

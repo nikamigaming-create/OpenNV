@@ -13,7 +13,6 @@ internal static class NativePluginIoImports
         "FindFirstFileExA", "FindFirstFileExW",
         "CopyFileA", "CopyFileW", "CopyFileExA", "CopyFileExW", "CopyFile2", "MoveFileA", "MoveFileW", "MoveFileExA", "MoveFileExW",
         "MoveFileWithProgressA", "MoveFileWithProgressW", "ReplaceFileA", "ReplaceFileW", "SetFileAttributesA", "SetFileAttributesW",
-        "CreateFileMappingA", "CreateFileMappingW", "OpenFileMappingA", "OpenFileMappingW", "MapViewOfFile", "MapViewOfFileEx",
         "WriteFileEx", "ReadFileEx",
         "NtCreateFile", "NtOpenFile", "NtWriteFile", "NtDeleteFile", "NtSetInformationFile" };
     internal static readonly IReadOnlySet<string> Owned = new HashSet<string>(StringComparer.Ordinal) {
@@ -24,9 +23,11 @@ internal static class NativePluginIoImports
         "LoadLibraryA", "LoadLibraryW", "LoadLibraryExA", "LoadLibraryExW", "GetCurrentDirectoryW", "GetCurrentDirectoryA",
         "SetCurrentDirectoryW", "SetCurrentDirectoryA", "GetFileType", "SetEndOfFile",
         "FindFirstFileW", "FindFirstFileA", "FindNextFileW", "FindNextFileA", "FindClose",
+        "CreateFileMappingA", "CreateFileMappingW", "OpenFileMappingA", "OpenFileMappingW",
+        "MapViewOfFile", "MapViewOfFileEx", "UnmapViewOfFile", "FlushViewOfFile",
         "GetPrivateProfileSectionW", "GetPrivateProfileSectionA", "GetPrivateProfileSectionNamesW", "GetPrivateProfileSectionNamesA",
         "GetPrivateProfileStructW", "GetPrivateProfileStructA", "WritePrivateProfileSectionW", "WritePrivateProfileSectionA",
-        "WritePrivateProfileStructW", "WritePrivateProfileStructA" };
+        "WritePrivateProfileStructW", "WritePrivateProfileStructA" }.Union(NativePluginMutexSource.Apis).ToHashSet(StringComparer.Ordinal);
     internal static void Admit(FileStream original, NativePluginPrivateIo io)
     {
         var position = original.Position;
@@ -65,9 +66,11 @@ internal static class NativePluginIoImports
                 if ((pointer & 0x80000000) != 0) throw new NotSupportedException("Original ordinal import I/O/call ownership is unbound.");
                 var name = Text(pe, checked(pointer + 2));
                 var crtFile = NativePluginCrtImports.IsFileImport(library, name);
+                var crypto = NativePluginCryptoImports.IsOwned(library, name);
+                if (crypto) _ = io.CryptoProvider;
                 if (crtFile) NativePluginCrtImports.Require(io, library, name);
                 else if (Unowned.Contains(name)) throw new NotSupportedException("Original file import has no callable private I/O owner: " + library + "!" + name);
-                if (!crtFile && !(platform && Owned.Contains(name)) && !io.Selection.DeclaredNonIoImports.Contains(library + "!" + name))
+                if (!crtFile && !crypto && !(platform && Owned.Contains(name)) && !io.Selection.DeclaredNonIoImports.Contains(library + "!" + name))
                     throw new NotSupportedException("Original import lacks native I/O or an exact declared non-I/O owner: " + library + "!" + name);
                 _ = pe.GetSectionData(checked((int)(slots + checked((uint)at * 4)))).GetReader(0, 4).ReadUInt32();
             }

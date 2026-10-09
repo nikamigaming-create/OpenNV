@@ -164,7 +164,7 @@ internal static class ExteriorSharedCellGraphContracts
     private static void Require(bool value, string error) { if (!value) throw new InvalidDataException(error); }
     private static void Reject(Action action)
     {
-        try { action(); } catch (Exception error) when (error is IOException or InvalidOperationException or NotSupportedException or KeyNotFoundException) { return; }
+        try { action(); } catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or NotSupportedException or KeyNotFoundException) { return; }
         throw new InvalidDataException("Foreign/unfinished/missing CELL/native graph was admitted.");
     }
 }

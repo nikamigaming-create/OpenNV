@@ -8,6 +8,7 @@ public partial class RuntimeCoordinator
 {
     private void AdvanceNativePlayerMoves()
     {
+        if (_nativeReferences?.CampaignMainPlayerCellConstructed == true) return; // The actual Main child owns source delivery.
         if (_nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession || _nativeBootstrap?.PlacementPreparing == true ||
             _nativeReferences is not { } references || references.PlayerMoves.Next is not { } move ||
             _nativePlayer is not { } player || _nativeOpeningStageDriver is not { } driver || _nativeActiveCell is not { } active)
@@ -48,9 +49,9 @@ public partial class RuntimeCoordinator
         var current = _nativeCurrentCellRoot ?? throw new InvalidOperationException("Player MoveTo has no resident CELL root.");
         var active = _nativeActiveCell ?? throw new InvalidOperationException("Player MoveTo has no active CELL.");
         var sky = _nativeSkyLighting ?? throw new InvalidOperationException("Player MoveTo has no sky owner.");
-        var previousSky = sky.Capture();
+        var previousSky = sky.CaptureLightingProjection();
         var scene = FalloutCellSceneReader.Read(_nativePluginStack!, placement.Cell);
-        var grid = scene.Cell.Worldspace is { } world ? ResolveExterior(world, placement.Position) : null;
+        var grid = scene.Cell.Worldspace is { } world ? ResolveExteriorFromSourceCell(world, placement.Cell) : null;
         scene = _nativeReferences!.ComposeResidency(grid?.Scene ?? scene, grid?.Cells);
         if (grid is not null) grid = grid with { Scene = scene };
         Node3D? root = null;
@@ -75,7 +76,7 @@ public partial class RuntimeCoordinator
         catch
         {
             FreeNativeSourceCellRoot(root);
-            sky.Restore(previousSky);
+            sky.RestoreLightingProjection(previousSky);
             DiscoverNativeCellReferences(active);
             ObserveNativeResidentReferences(active);
             throw;

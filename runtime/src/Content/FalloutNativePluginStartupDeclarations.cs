@@ -53,6 +53,7 @@ internal static class FalloutNativePluginStartupDeclarations
                     if (import.Name is not { } name) { unowned.Add(import.Library + "!#" + import.Ordinal); continue; }
                     var platform = import.Library is "kernel32.dll" or "kernelbase.dll" || import.Library.StartsWith("api-ms-win-core-", StringComparison.Ordinal);
                     if (platform && NativePluginIoImports.Owned.Contains(name)) continue;
+                    if (NativePluginCryptoImports.IsOwned(import.Library, name)) continue;
                     if (NativePluginCrtImports.IsFileImport(import.Library, name))
                     { if (!NativePluginCrtImports.Owned.Contains(name)) unowned.Add(import.Library + "!" + name); continue; }
                     if (NativePluginPlatformImports.Owner(import.Library, name) is not null) nonIo.Add(import.Library + "!" + name);
@@ -75,9 +76,13 @@ internal static class FalloutNativePluginStartupDeclarations
                 var writes = Writes(source, image, runtimeDirectory, owner);
                 var reads = Configurations(source, runtimeDirectory);
                 modules.Add(new(logical, physical, image.Sha256, writes, reads, inputs, owner,
-                    nonIo, expression, null) { QueryHandle = handle, PreEntryFailure = unowned.Count == 0 ? null :
+                    nonIo, expression, null)
+                {
+                    QueryHandle = handle,
+                    PreEntryFailure = unowned.Count == 0 ? null :
                         "Original imported operations have no actual callable source owner: " + string.Join(", ", unowned),
-                        ExpressionDeclarationFailure = expressionFailure });
+                    ExpressionDeclarationFailure = expressionFailure
+                });
                 inventory.Add(new(logical, physical, image.Sha256, FalloutNativeModuleDisposition.SelectedPlugin,
                     handle, null, image.Imports, unowned.AsReadOnly(), expressionFailure));
             }
@@ -96,7 +101,8 @@ internal static class FalloutNativePluginStartupDeclarations
             nvseHash, source.StackId, edition.NoGore, edition.Owner);
         return new(source, runtimeHash, host.PhysicalPath, nvseHash, edition.NoGore, edition.Owner,
             "xNVSE6.4.9/top-level-case-insensitive-sort/query-all-then-load:" + host.SourceOwner,
-            modules.AsReadOnly()) { Inventory = inventory.AsReadOnly() };
+            modules.AsReadOnly())
+        { Inventory = inventory.AsReadOnly() };
     }
 
     private static FalloutNativePluginHostDependency Host(RuntimeLiveContentSource source)

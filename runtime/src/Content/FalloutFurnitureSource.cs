@@ -36,13 +36,13 @@ internal static class FalloutFurnitureSource
     }
 
     internal static IReadOnlyList<FalloutFurnitureSeat> ReadSeats(FalloutPluginStack stack, FalloutPluginRecord furniture,
-        FalloutNifFile nif, bool allowSleeping = false)
+        FalloutNifFile nif, bool allowSleeping = false, bool sourcePending = false)
     {
         if (furniture.Signature != "FURN") throw new InvalidDataException("Furniture source is not FURN.");
         var data = furniture.ReadSubrecords().Single(field => field.Signature == "MNAM").Data;
         if (data.Length != 4) throw new InvalidDataException("Furniture marker flags have an invalid extent.");
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(data.Span);
-        var kind = ReadKind(furniture);
+        var kind = sourcePending ? FalloutPendingFurnitureSource.Kind(flags) : ReadKind(furniture);
         if (kind == FalloutPlayerFurnitureKind.Sleeping && !allowSleeping)
             throw new NotSupportedException("Furniture requires its source sleep procedure owner.");
         var tables = nif.Blocks.Where(block => block.TypeName == "BSFurnitureMarker")

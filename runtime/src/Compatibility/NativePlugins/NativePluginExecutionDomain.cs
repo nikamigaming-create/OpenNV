@@ -35,9 +35,11 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     internal int ProcessId { get; }
     internal uint NativeThread { get; private set; }
     internal bool NaturallyRetired => _retired;
+    internal bool ResourcesRetired => _disposed && ChildExited && _process.ResourcesRetired && _privateIo is null && ImportProviderSourcesRetired;
     internal bool ChildExited { get => Volatile.Read(ref _childExited); private set => Volatile.Write(ref _childExited, value); }
     internal int? ChildExitCode { get; private set; }
     internal NativePluginTokenObjectReceipt? ObjectSecurity => _process.ObjectSecurity;
+    internal NativePluginDesktopReceipt? Desktop => _process.Desktop;
     private bool _childExitDiagnosticPublished;
     internal NativePluginDomainFault? Fault { get { lock (_faultGate) return CurrentFault(); } }
     internal Func<NativePluginCallback, uint>? Callback
@@ -74,7 +76,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             WorkingDirectory = Path.GetDirectoryName(executable)!,
         };
         start.ArgumentList.Add("--generation"); start.ArgumentList.Add(Generation.ToString(CultureInfo.InvariantCulture));
-        _process = NativePluginDomainChild.Start(start, privateIo);
+        _process = NativePluginDomainChild.Start(start, privateIo, Generation);
         ProcessId = _process.Id; _diagnosticDrain = DrainDiagnostics();
         try
         {
@@ -187,7 +189,12 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     public void Dispose()
     {
         VerifyThread();
-        if (_disposed && ChildExited) return;
+        if (_disposed && ChildExited && _process.ResourcesRetired)
+        {
+            if (!CngSystemOwnersRetired) ReleaseCngSystemServiceAfterChildExit();
+            if (!ImportProviderSourcesRetired) ClearNativeImportProvidersAfterChildExit();
+            return;
+        }
         if (_callDepth != 0) throw new InvalidOperationException("A native call/callback prevents retirement of its process generation.");
         Exception? failure = null;
         try
@@ -196,6 +203,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             {
                 if (_module is not null) Unload(_module);
                 if (_nvsePlugin is not null) UnloadNvse(_nvsePlugin);
+                RequireSteamRetired();
+                RetireNativeImportProviders();
                 RequirePrivateIoRetired();
                 ReleaseGuestResources();
                 using var reader = Exchange(NativePluginDomainOperation.Retire, []);
@@ -222,6 +231,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                 _moduleSource = null; _module = null; _functions.Clear();
                 try { ClearGuestCapabilities(); } catch (Exception error) { cleanup.Add(error); }
                 try { ClearNvseCapabilities(); } catch (Exception error) { cleanup.Add(error); }
+                try { ClearSteamAfterChildExit(); } catch (Exception error) { cleanup.Add(error); }
                 try { ClearPrivateIo(); } catch (Exception error) { cleanup.Add(error); }
                 try { _process.Dispose(); } catch (Exception error) { cleanup.Add(error); }
                 _disposed = true;
@@ -268,14 +278,18 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                 {
                     if (frame.Id != request || frame.Parent != _callbackOwner || frame.Operation != (uint)operation)
                         throw new InvalidDataException("Native fault does not belong to its waiting call frame.");
-                    using var fault = Reader(frame.Payload); var code = fault.ReadUInt32(); var reason = ReadText(fault); Finish(fault);
+                    using var fault = Reader(frame.Payload); var code = fault.ReadUInt32(); var reason = ReadText(fault);
+                    if (operation == NativePluginDomainOperation.SteamProvider) RetainSteamFault(fault);
+                    Finish(fault);
                     if (code == 0 || reason.Length == 0)
                         throw new InvalidDataException("Native fault lacks a failure code or reason.");
                     MarkFault(new InvalidDataException(reason), code); throw FaultException();
                 }
                 if (frame.Kind is NativePluginDomainMessage.Callback or NativePluginDomainMessage.StateQuery or NativePluginDomainMessage.NvseCallback or NativePluginDomainMessage.IoCallback)
                 {
-                    if (operation is not (NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
+                    var steamSourceCallback = operation == NativePluginDomainOperation.SteamProvider &&
+                        frame.Kind == NativePluginDomainMessage.NvseCallback && (frame.Operation == SteamCallbackEvent || frame.Operation == SteamSourceHashEvent);
+                    if (!steamSourceCallback && !IsOriginalLoaderCallback(operation, frame) && operation is not (NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
                         NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.UnloadNvse))
                         throw new InvalidDataException("A native callback arrived outside its executable call owner.");
                     DispatchCallback(frame, request); continue;
@@ -304,6 +318,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         NativePluginDomainOperation.GuestRead or NativePluginDomainOperation.GuestWrite or
                         NativePluginDomainOperation.GuestRelease or NativePluginDomainOperation.GuestBindState or
                         NativePluginDomainOperation.GuestStatistics or NativePluginDomainOperation.GuestSeal => NativeModuleCount,
+                        NativePluginDomainOperation.SteamProvider => NativeModuleCount,
+                        NativePluginDomainOperation.ImportProviders => _importProvidersRetiring ? 0U : NativeModuleCount,
                         _ => 0U,
                     };
                     if (liveModules != expectedModules) throw new InvalidDataException("Native module lifetime drifted across its request.");
@@ -332,6 +348,10 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         {
             if (++_ioCallbackCount > 1048576) throw new InvalidDataException("Native private I/O callback budget exceeded.");
         }
+        else if (frame.Kind == NativePluginDomainMessage.NvseCallback && (frame.Operation == SteamCallbackEvent || frame.Operation == SteamSourceHashEvent))
+        {
+            // SDK member callbacks and our actual original-file hashing each own a separate bounded budget.
+        }
         else if (frame.Kind == NativePluginDomainMessage.NvseCallback)
         {
             if (++_nvseCallbackCount > _nvseCallbackBudget) throw new InvalidDataException("NVSE interface callback budget exceeded.");
@@ -343,6 +363,10 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         {
             uint value = 0; byte[]? typedReply = null;
             if (frame.Kind == NativePluginDomainMessage.IoCallback) typedReply = DispatchPrivateIo(frame, waitingCall);
+            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == SteamSourceHashEvent)
+                typedReply = DispatchSteamSourceHash(frame, waitingCall);
+            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == SteamCallbackEvent)
+                value = DispatchSteamSourceCallback(frame, waitingCall);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == 0x500)
                 typedReply = DispatchNvseData(frame, waitingCall);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == CommandTableEvent)

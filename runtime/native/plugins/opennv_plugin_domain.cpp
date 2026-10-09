@@ -2,14 +2,17 @@
 #define NOMINMAX
 #include <windows.h>
 #include "opennv_plugin_domain.h"
+#include "opennv_plugin_steam.h"
 #include "opennv_plugin_guest_arena.h"
 #include "opennv_plugin_nvse.h"
 #include "opennv_plugin_command_table.h"
+#include "opennv_plugin_engine_commands.h"
 #include "opennv_plugin_data.h"
 #include "opennv_plugin_expression.h"
 #include "opennv_plugin_values.h"
 #include "opennv_plugin_value_heap.h"
 #include "opennv_plugin_io.h"
+#include "opennv_plugin_import_providers.h"
 #include "opennv_plugin_source_locals.h"
 #include "opennv_plugin_source_objects.h"
 #include "opennv_plugin_source_files.h"
@@ -92,6 +95,8 @@ static std::uint32_t InvokeGuarded(void* function, Abi abi, void* receiver,
 
 #include "opennv_plugin_nvse_call.h"
 #include "opennv_plugin_expression_call.h"
+#include "opennv_plugin_steam_call.h"
+#include "opennv_plugin_steam_callbacks_call.h"
 
 namespace {
 struct Fatal final : std::runtime_error {
@@ -213,6 +218,9 @@ struct State {
     std::unique_ptr<NvseValueRuntime> values;
     std::unique_ptr<NvseValueHeap> value_heap;
     std::unique_ptr<PluginIoRuntime> io;
+    std::unique_ptr<CngSystemService> cng_service;
+    std::unique_ptr<ImportProvidersRuntime> import_providers;
+    std::unique_ptr<SteamRuntime> steam;
     std::unique_ptr<SourceLocalRuntime> source_locals;
     std::unique_ptr<SourceObjectRuntime> source_objects;
     std::unique_ptr<SourceFileRuntime> source_files;
@@ -246,11 +254,15 @@ std::uint32_t retain_callback_fault(std::uint32_t code, const char* reason) noex
 }
 void source_local_sync(bool);
 bool source_local_callback_needs_sync(Kind, std::uint32_t);
+bool cng_detach_active();
+bool mutex_detach_callback_allowed();
 Bytes perform_callback_bytes(Kind kind, std::uint32_t event, const Bytes& payload) noexcept {
     if (!state || GetCurrentThreadId() != state->thread || state->calls.empty()) {
         callback_fault.store(ERROR_INVALID_THREAD_ID); return {};
     }
     try {
+        if (cng_detach_active() && (kind != Kind::io_callback || event != 21U && !(event == 22U && mutex_detach_callback_allowed())))
+            throw Fatal(ERROR_NOT_SUPPORTED, "Actual original unload only admits existing CNG cleanup and mutex before/after-loader receipts.");
         const auto synchronize_locals = source_local_callback_needs_sync(kind, event);
         if (synchronize_locals) source_local_sync(false);
         if (kind == Kind::io_callback) {
@@ -258,6 +270,17 @@ Bytes perform_callback_bytes(Kind kind, std::uint32_t event, const Bytes& payloa
             auto& owner = *state->io; const auto transaction = state->calls.front();
             if (owner.transaction != transaction) { owner.transaction = transaction; owner.transaction_callbacks = 0; }
             if (++owner.transaction_callbacks > 1048576) throw Fatal(ERROR_NOT_ENOUGH_QUOTA, "Native private I/O callback budget exceeded.");
+        }
+        else if (kind == Kind::nvse_callback && event == 0x601) {
+            if (!state->steam || state->steam->source_hashes.empty() || state->steam->source_hashes.size() > 65 ||
+                state->steam->source_request != state->calls.back() ||
+                state->steam->source_hashes.back()->request != state->calls.back() ||
+                state->steam->source_hashes.back()->phase != SteamSourceHashPhase::callback_entered)
+                throw Fatal(ERROR_INVALID_STATE, "Original-file hash callback has no genuine entered platform source/file prefix.");
+        }
+        else if (kind == Kind::nvse_callback && event == 0x600) {
+            if (!state->steam || state->steam->callback_prefix.empty() || state->steam->callback_prefix.size() > 65536)
+                throw Fatal(ERROR_INVALID_STATE, "Steam callback has no bounded entered source member prefix.");
         }
         else if (kind == Kind::nvse_callback) {
             if (!state->nvse || ++state->nvse->interface_calls > state->nvse->interface_budget)
@@ -282,6 +305,7 @@ Bytes perform_callback_bytes(Kind kind, std::uint32_t event, const Bytes& payloa
                 if (synchronize_locals) source_local_sync(false);
                 return result;
             }
+            if (cng_detach_active()) throw Fatal(ERROR_BUSY, "Original CNG unload callback cannot enter another original command or allocation.");
             const auto operation = static_cast<Operation>(incoming.header.operation);
             if (operation != Operation::call && operation != Operation::guest_read &&
                 operation != Operation::guest_write && operation != Operation::guest_stats &&
@@ -368,6 +392,11 @@ HostCallbacks host_callbacks{sizeof(HostCallbacks), 1, nullptr, cdecl_callback, 
 
 void* command_table_interface_address();
 void command_table_validate_all();
+void engine_command_handler(void*, std::uint32_t, const std::string&);
+void engine_command_executable(void*);
+bool engine_command_zero_parameter_caller(std::uint32_t, std::uint32_t, std::uint32_t);
+void engine_commands_validate_all();
+void engine_commands_retire(const Frame&);
 void command_table_retire();
 void expression_initialize(void*);
 void expression_retire();
@@ -383,9 +412,25 @@ bool values_heap_contains(const void*);
 void* values_heap_allocate(std::uint32_t, std::uint32_t, std::uint32_t);
 void values_heap_release(void*, std::uint32_t, std::uint32_t);
 void io_bind_imports(HMODULE);
+void* mutex_entry(const std::string&);
+bool mutex_close_handle(HANDLE, BOOL&);
+void mutex_flush_detach();
+void mutex_retire();
+void mutex_before_free(const Frame&, HMODULE);
+BOOL mutex_original_free_library(HMODULE);
+void mutex_after_free(const Frame&, HMODULE, BOOL, DWORD);
 void io_flush_detach(const Frame&);
 void io_retire();
 void crt_prepare(PluginIoRuntime&, Reader&);
+void crypto_prepare(PluginIoRuntime&, Reader&);
+void* crypto_import_entry(const std::string&, const std::string&, void*);
+void* crypto_dynamic_entry(HMODULE, const std::string&);
+void crypto_flush_detach();
+void crypto_retire();
+void* mapping_entry(const std::string&);
+bool mapping_close_handle(HANDLE, BOOL&);
+void mapping_flush_detach();
+void mapping_retire();
 void* crt_import_entry(const std::string&, const std::string&, void*);
 bool crt_io_import_name(const std::string&, const std::string&);
 void* crt_dynamic_entry(HMODULE, const std::string&);
@@ -404,6 +449,31 @@ void* source_script_interface_address();
 void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
 void data_sync_if_bound();
 void* data_interface_address(std::uint32_t);
+void import_providers_begin_original(const Frame&, const std::wstring&);
+void import_providers_end_original(const Frame&, bool);
+void import_providers_validate_original(HMODULE);
+BOOL cng_original_free_library(const Frame&, HMODULE);
+void cng_shared_require_releasable(std::uint32_t, std::uint64_t);
+void cng_shared_forget(std::uint32_t, std::uint64_t);
+void cng_shared_retain_mapping_view(PluginMappingView&, HANDLE);
+void cng_shared_close_mapping_view(PluginMappingView&);
+void cng_shared_flush_detach();
+void cng_shared_hash_destroyed(std::uint64_t);
+void cng_shared_handle_destination(const void*, std::uint32_t);
+void cng_detach_require_request(CngServiceStep, const Bytes&);
+Bytes cng_detach_host(const Bytes&);
+struct CngCallerBuffer;
+struct CngCallerResult;
+bool cng_shared_needed(std::uint64_t, const std::array<CngCallerBuffer, 4>&, ULONG*, PUCHAR, ULONG);
+CngCallerResult cng_shared_invoke(std::uint32_t, std::uint64_t, ULONG, DWORD, ULONG, bool, ULONG*, const std::array<CngCallerBuffer, 4>&, void*, PUCHAR);
+PUCHAR cng_shared_service_pointer(CngSystemService&, const CngSharedPointer&);
+void cng_shared_service_before(CngSystemService&, CngInvocation&);
+void cng_shared_service_after(CngSystemService&, const CngInvocation&);
+void cng_shared_service_release_invocation(CngSystemService&, const CngInvocation&);
+void cng_shared_service_hash_abandoned(CngSystemService&, std::uint64_t);
+void cng_shared_service_abandon(CngSystemService&);
+void cng_shared_service_require_retired(CngSystemService&);
+void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_nvse.inc"
 #include "opennv_plugin_data.inc"
 #include "opennv_plugin_command_table.inc"
@@ -412,18 +482,28 @@ void* data_interface_address(std::uint32_t);
 #include "opennv_plugin_values.inc"
 #include "opennv_plugin_value_heap.inc"
 #include "opennv_plugin_io.inc"
+#include "opennv_plugin_mutexes.inc"
 #include "opennv_plugin_profiles.inc"
 #include "opennv_plugin_find.inc"
 #include "opennv_plugin_crt.inc"
 #include "opennv_plugin_crt_open.inc"
 #include "opennv_plugin_crt_members.inc"
+#include "opennv_plugin_crypto.inc"
+#include "opennv_plugin_cng_client.inc"
+#include "opennv_plugin_import_providers.inc"
+#include "opennv_plugin_mappings.inc"
+#include "opennv_plugin_cng_shared_client.inc"
 #include "opennv_plugin_source_objects.inc"
 #include "opennv_plugin_source_refresh.inc"
 #include "opennv_plugin_source_local_attach.inc"
 #include "opennv_plugin_callable_pages.inc"
+#include "opennv_plugin_engine_commands.inc"
 #include "opennv_plugin_source_publication.inc"
 #include "opennv_plugin_source_files.inc"
 #include "opennv_plugin_binary_files.inc"
+#include "opennv_plugin_steam.inc"
+#include "opennv_plugin_cng_service.inc"
+#include "opennv_plugin_cng_shared_service.inc"
 
 void unload(const Frame& frame) {
     if (!state->module || state->nvse || !state->calls.empty()) { reply(frame, ERROR_BUSY, "Authored module is absent or still owns an active call."); return; }
@@ -447,8 +527,11 @@ void load(const Frame& frame) {
     Reader reader{frame.payload}; const auto path = path_from_utf8(reader.text()); reader.finish();
     if (state->module) { reply(frame, ERROR_BUSY, "One module is already admitted."); return; }
     state->lifetime = {}; state->callback_reason[0] = '\0'; state->callback_reason_truncated = false; callback_fault.store(0);
+    LoaderInvocation loader;
     const auto loaded = LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!loaded) { reply(frame, GetLastError(), "Windows DLL/import/entry admission failed."); return; }
+    const auto loader_error = loaded ? ERROR_SUCCESS : GetLastError();
+    loader.finish();
+    if (!loaded) { reply(frame, loader_error, loader.refusal("Windows DLL/import/entry admission failed.")); return; }
     state->module = loaded;
     const auto describe = function_pointer<DescribeAuthoredModule>(GetProcAddress(loaded, "OpenNvDomainDescribe"));
     const auto bind = function_pointer<BindAuthoredModule>(GetProcAddress(loaded, "OpenNvDomainBind"));
@@ -519,6 +602,12 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
         frame.header.id <= state->last_request || state->retired)
         throw Fatal(ERROR_INVALID_DATA, "Request generation, sequence or stack owner drift.");
     state->last_request = frame.header.id;
+#ifdef OPENNV_SYSTEM_CNG_SERVICE
+    if (frame.header.operation != static_cast<std::uint32_t>(Operation::hello) &&
+        frame.header.operation != static_cast<std::uint32_t>(Operation::cng_system_service) &&
+        frame.header.operation != static_cast<std::uint32_t>(Operation::retire))
+        throw Fatal(ERROR_NOT_SUPPORTED, "First-party CNG service admits no module, original DLL, object, file or call operation.");
+#endif
     try { switch (static_cast<Operation>(frame.header.operation)) {
     case Operation::hello: {
         Reader reader{frame.payload}; reader.finish(); Bytes data;
@@ -539,6 +628,9 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     case Operation::nvse_values_statistics: values_statistics(frame); break;
     case Operation::nvse_value_heap: values_heap_configure(frame); break;
     case Operation::private_io_prepare: io_prepare(frame); break;
+    case Operation::steam_provider: steam_provider(frame); break;
+    case Operation::cng_system_service: cng_system_service(frame); break;
+    case Operation::import_providers: import_providers_operation(frame); break;
     case Operation::nvse_local_create: source_local_create(frame); break;
     case Operation::nvse_local_fill: source_local_fill(frame); break;
     case Operation::nvse_local_seal: source_local_seal(frame); break;
@@ -606,6 +698,9 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     case Operation::retire: {
         Reader reader{frame.payload}; reader.finish();
         if (state->module || !state->calls.empty()) { reply(frame, ERROR_BUSY, "An active module or call prevents retirement."); break; }
+        steam_require_retired();
+        cng_system_service_require_retired();
+        import_providers_require_retired();
         io_retire(); state->io.reset();
         source_callables_close();
         state->arena.retire(); state->retired = true; Bytes data; arena_stats(data);
@@ -651,6 +746,7 @@ int wmain(int argc, wchar_t** argv) {
     catch (const Fatal& failure) {
         try { Bytes bytes; bytes.put(failure.code); bytes.text(failure.what());
             const auto& request = owned.fault_request;
+            if (request.operation == static_cast<std::uint32_t>(Operation::steam_provider)) steam_fault_bytes(bytes, owned.steam.get());
             send(Kind::fault, request.operation, owned.generation, request.id, request.parent, bytes); } catch (...) { }
         std::fprintf(stderr, "OPENNV_NATIVE_DOMAIN_FAULT code=%lu owner=%s\n", static_cast<unsigned long>(failure.code), failure.what());
     }

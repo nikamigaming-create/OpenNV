@@ -51,14 +51,14 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         _events.Active = true;
     }
 
-    internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
-        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, FalloutReferenceWorld? references = null,
-        FalloutScriptEvents? events = null, FalloutScriptStorage? storage = null)
+    internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutPlayerInventory inventory, FalloutQuestScripts scripts)
     {
+        if (!ReferenceEquals(scripts.Records, records) || !ReferenceEquals(scripts.PlayerInventory, inventory))
+            throw new InvalidOperationException("Quest presentation requires its genuine prepared record and inventory owners.");
         Name = "NativeQuestScripts";
         _records = records;
         _inventory = inventory;
-        Scripts = new(records, quests, claimed, inventory, globals, references: references, events: events, storage: storage);
+        Scripts = scripts;
         _events = new(Scripts.Events, () => Scripts.Host?.InvokeFunction);
         _uiClock = new(() => Scripts.Ui);
         ProcessMode = ProcessModeEnum.Always;

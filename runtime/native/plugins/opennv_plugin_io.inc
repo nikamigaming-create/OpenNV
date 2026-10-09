@@ -1,3 +1,7 @@
+void* cng_client_import_entry(const std::string&, const std::string&, void*);
+void* cng_client_dynamic_entry(HMODULE, const std::string&);
+void cng_client_flush_detach();
+void cng_client_require_retired();
 constexpr std::uint32_t io_route = 1, io_complete = 2, io_handle_event = 3, io_current_directory = 4;
 constexpr std::uint32_t io_open_api = 1, io_close_api = 2, io_read_api = 3, io_write_api = 4,
     io_directory_api = 5, io_delete_api = 6, io_attributes_api = 7, io_profile_api = 8, io_profile_write_api = 9,
@@ -116,8 +120,13 @@ HANDLE WINAPI io_create_a(LPCSTR path, DWORD access, DWORD share, LPSECURITY_ATT
     return nvse_adapter([&] { return io_open(io_ansi(path), access, share, security, disposition, flags, template_file); });
 }
 BOOL WINAPI io_close(HANDLE handle) {
+    const auto incoming = GetLastError();
     return nvse_adapter([&]() -> BOOL {
+        SetLastError(incoming); BOOL mutex_result = FALSE;
+        if (mutex_close_handle(handle, mutex_result)) return mutex_result;
         auto& owner = io_owner();
+        BOOL mapping_result = FALSE;
+        if (mapping_close_handle(handle, mapping_result)) return mapping_result;
         if (handle == owner.stdin_file || handle == owner.stdout_file || handle == owner.stderr_file) {
             const auto result = CloseHandle(handle); const auto last = GetLastError();
             if (result) { if (handle == owner.stdout_file) owner.stdout_file = INVALID_HANDLE_VALUE;
@@ -262,6 +271,7 @@ FARPROC WINAPI io_proc(HMODULE module, LPCSTR pointer) {
         if (filename == "kernel32.dll" || filename == "kernelbase.dll" || filename.rfind("api-ms-win-core-", 0) == 0)
             if (auto* replacement = io_entry(name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = crt_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
+        if (auto* replacement = cng_client_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (crt_io_import_name(filename, name)) throw Fatal(ERROR_NOT_SUPPORTED, "Dynamic CRT file API has no actual selected provider/callable owner.");
         if (module != state->module && !io_owner().non_io_imports.count(filename + "!" + name))
             throw Fatal(ERROR_NOT_SUPPORTED, "Dynamic API lookup has no selected native I/O/non-I/O owner.");
@@ -278,6 +288,7 @@ UINT WINAPI io_profile_int_a(LPCSTR section, LPCSTR key, INT fallback, LPCSTR pa
         io_profile_result(route, 14, 0, result, last, false); SetLastError(last); return result; });
 }
 void* io_entry(const std::string& name) {
+    if (auto* entry = mutex_entry(name)) return entry;
     struct Entry { const char* name; void* function; };
     const Entry entries[] = {
         {"CreateFileW", reinterpret_cast<void*>(io_create_w)}, {"CreateFileA", reinterpret_cast<void*>(io_create_a)},
@@ -297,6 +308,7 @@ void* io_entry(const std::string& name) {
         {"GetProcAddress", reinterpret_cast<void*>(io_proc)}, {"LoadLibraryA", reinterpret_cast<void*>(io_load_a)}, {"LoadLibraryW", reinterpret_cast<void*>(io_load_w)},
         {"LoadLibraryExA", reinterpret_cast<void*>(io_load_ex_a)}, {"LoadLibraryExW", reinterpret_cast<void*>(io_load_ex_w)} };
     for (const auto& entry : entries) if (name == entry.name) return entry.function;
+    if (auto* entry = mapping_entry(name)) return entry;
     if (auto* entry = io_profile_extended_entry(name)) return entry;
     return io_find_entry(name);
 }
@@ -305,7 +317,7 @@ void io_prepare(const Frame& frame) {
     if (state->io || state->module || !state->calls.empty() || count > 4096) { reply(frame, ERROR_INVALID_STATE, "Private I/O must prepare once before native loader admission."); return; }
     auto owner = std::make_unique<PluginIoRuntime>(); owner->root = root; owner->logical_directory = directory;
     for (std::uint32_t at = 0; at < count; ++at) if (!owner->non_io_imports.insert(reader.text()).second) throw Fatal(ERROR_INVALID_DATA, "Private I/O import declarations repeat.");
-    crt_prepare(*owner, reader); reader.finish();
+    crt_prepare(*owner, reader); crypto_prepare(*owner, reader); reader.finish();
     HANDLE token = nullptr; PSID expected = nullptr; DWORD size = 0; bool found = false;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token) || !ConvertStringSidToSidW(sid_text.c_str(), &expected)) throw Fatal(GetLastError(), "Native write restriction has no actual token/SID.");
     GetTokenInformation(token, TokenRestrictedSids, nullptr, 0, &size); std::vector<std::uint8_t> bytes(size);
@@ -357,7 +369,7 @@ void io_bind_imports(HMODULE image) {
             const auto name = nvse_string(reinterpret_cast<const char*>(base + original.u1.AddressOfData + sizeof(WORD)), false);
             auto** slot = reinterpret_cast<void**>(const_cast<std::uint8_t*>(base) + item.FirstThunk + static_cast<std::size_t>(relative));
             const auto prior = nvse_copy(slot); const auto crt_file = crt_io_import_name(library, name);
-            auto* replacement = platform ? io_entry(name) : crt_file ? crt_import_entry(library, name, prior) : nullptr;
+            auto* replacement = platform ? io_entry(name) : crt_file ? crt_import_entry(library, name, prior) : cng_client_import_entry(library, name, prior);
             if (!replacement) {
                 if (crt_file || !owner.non_io_imports.count(library + "!" + name)) throw Fatal(ERROR_NOT_SUPPORTED, "Imported function has neither actual native I/O nor selected non-I/O ownership.");
                 continue;
@@ -388,12 +400,12 @@ void io_flush_detach(const Frame& frame) {
     if (!state->io) return; auto& owner = *state->io; owner.loader_retiring = false;
     state->calls.push_back(frame.header.id);
     for (const auto& event : owner.pending) io_event(PluginIoFile{event.capability, reinterpret_cast<HANDLE>(event.handle), false}, event.api, event.count, event.error);
-    owner.pending.clear(); crt_flush_detach(); find_flush_detach(); state->calls.pop_back();
+    owner.pending.clear(); mutex_flush_detach(); crt_flush_detach(); find_flush_detach(); mapping_flush_detach(); cng_client_flush_detach(); crypto_flush_detach(); state->calls.pop_back();
 }
 void io_retire() {
     if (!state->io) return; auto& owner = *state->io;
     if (!owner.files.empty() || !owner.pending.empty()) throw Fatal(ERROR_BUSY, "Selected native file capabilities remain after module retirement.");
-    crt_retire(); find_retire(); owner.imports.clear();
+    mutex_retire(); mapping_retire(); cng_client_require_retired(); crypto_retire(); crt_retire(); find_retire(); owner.imports.clear();
     if (owner.stdin_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdin_file)) throw Fatal(GetLastError(), "Native standard input boundary did not retire."); owner.stdin_file = INVALID_HANDLE_VALUE; }
     if (owner.stdout_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdout_file)) throw Fatal(GetLastError(), "Native stdout diagnostic file did not retire."); owner.stdout_file = INVALID_HANDLE_VALUE; }
     if (owner.stderr_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stderr_file)) throw Fatal(GetLastError(), "Native stderr diagnostic file did not retire."); owner.stderr_file = INVALID_HANDLE_VALUE; }

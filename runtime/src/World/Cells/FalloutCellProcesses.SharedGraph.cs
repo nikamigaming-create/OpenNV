@@ -56,8 +56,13 @@ internal sealed partial class FalloutCellProcesses
                 CopyEpochs(owner.CellEpochs), CopyEpochs(epochs), CopyChildren(owner.Children),
                 target.Select(CopyPlacedChild).ToArray(), targetSources, CopyNativeCells(owner.CellConsumers), [], [], [], [],
                 FalloutCellSharedGraphPhase.Preparing, entered, entered, null));
-            _attachments[attachment] = owner with { CellEpochs = unionEpochs, Children = children,
-                CellConsumers = consumers, RootPublished = false };
+            _attachments[attachment] = owner with
+            {
+                CellEpochs = unionEpochs,
+                Children = children,
+                CellConsumers = consumers,
+                RootPublished = false
+            };
             foreach (var (cell, epoch) in epochs.Where(pair => !owner.CellEpochs.ContainsKey(pair.Key)))
             {
                 _cells[cell] = Require(cell) with { Epoch = epoch };
@@ -113,8 +118,11 @@ internal sealed partial class FalloutCellProcesses
             var children = owner.Children.ToArray();
             children[index] = children[index] with { Phase = FalloutCellProcessChildPhase.Retired, NativeObjects = [], Owner = originalOwner };
             _attachments[attachment] = owner with { Children = children };
-            StoreGraph(change with { DestroyedReferences = change.DestroyedReferences.Append(reference)
-                .Distinct(FalloutFormKeyComparer.Instance).ToArray() });
+            StoreGraph(change with
+            {
+                DestroyedReferences = change.DestroyedReferences.Append(reference)
+                .Distinct(FalloutFormKeyComparer.Instance).ToArray()
+            });
         });
     }
 
@@ -162,8 +170,12 @@ internal sealed partial class FalloutCellProcesses
                 Write(cell, FalloutCellProcessOperation.CompleteAttach, FalloutCellProcessPhase.Attached, attachment,
                     "actual-incoming-shared-CELL-consumers-published");
             _attachments[attachment] = candidate;
-            StoreGraph(change with { Phase = cancelling ? FalloutCellSharedGraphPhase.Cancelled : FalloutCellSharedGraphPhase.Complete,
-                PublishedChildren = CopyChildren(targetChildren), PublishedCellConsumers = CopyNativeCells(targetConsumers) });
+            StoreGraph(change with
+            {
+                Phase = cancelling ? FalloutCellSharedGraphPhase.Cancelled : FalloutCellSharedGraphPhase.Complete,
+                PublishedChildren = CopyChildren(targetChildren),
+                PublishedCellConsumers = CopyNativeCells(targetConsumers)
+            });
         });
     }
 

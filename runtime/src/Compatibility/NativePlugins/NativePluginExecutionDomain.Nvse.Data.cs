@@ -12,11 +12,16 @@ internal sealed partial class NativePluginExecutionDomain
     private readonly List<NativeNvseInventoryPublication> _nvseInventoryPending = [];
     private readonly List<NativeNvseDataCallback> _nvseDataCallbacks = [];
     internal IReadOnlyList<NativeNvseDataCallback> NvseDataCallbacks => _nvseDataCallbacks.AsReadOnly();
-    internal object NvseDataState => new { InterfaceVersion = _nvseDataVersion, InputAddress = _nvseInputAddress,
-        Input = _nvseInputSnapshot, Inventory = _nvseInventoryReferences.Select(value => new
+    internal object NvseDataState => new
+    {
+        InterfaceVersion = _nvseDataVersion,
+        InputAddress = _nvseInputAddress,
+        Input = _nvseInputSnapshot,
+        Inventory = _nvseInventoryReferences.Select(value => new
         { value.Value.FormId, value.Value.Reference, value.Value.InventoryReference, value.Value.Entry, value.Value.ExtraData }).ToArray(),
         PendingInventory = _nvseInventoryPending.Count,
-        Lambdas = _nvseLambdaCaptures.Values.Select(value => new { value.Script.Address, value.Context.Id, value.Saves }).ToArray() };
+        Lambdas = _nvseLambdaCaptures.Values.Select(value => new { value.Script.Address, value.Context.Id, value.Saves }).ToArray()
+    };
 
     internal void AttachNvseData(NativeNvsePlugin plugin, NativeNvseRuntimeDataAuthority authority)
     {

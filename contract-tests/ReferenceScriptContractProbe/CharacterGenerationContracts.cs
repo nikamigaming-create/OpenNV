@@ -97,7 +97,12 @@ internal static class CharacterGenerationContracts
             cold.Session.Restore(legacy);
             Require(!cold.Session.PlayerYoung && !cold.Session.PlayerToddler && cold.Session.PlayerScale == 1,
                 "Cold legacy restoration retained earlier player policy.");
-            foreach (var invalid in new[] { "-1", "2", "0.5" }) Reject(() => Run("SetInCharGen " + invalid + "\nset sample to 99"));
+            foreach (var signed in new[] { "-1", "2" })
+            {
+                Run("SetInCharGen " + signed);
+                Require(scripts.Session.InCharGen, "A nonzero signed chargen flag did not publish the source Boolean.");
+            }
+            foreach (var invalid in new[] { "0.5", "2147483648", "-2147483649" }) Reject(() => Run("SetInCharGen " + invalid + "\nset sample to 99"));
             Require(scripts.Session.InCharGen && quests.Variable(Key(0x601), 1) == 0, "Invalid flag mutated state or executed its suffix.");
 
             var initial = vitals.State;
@@ -127,10 +132,11 @@ internal static class CharacterGenerationContracts
                 (_, _, _, _) => throw new InvalidDataException("Unexpected startup command."),
                 _ => throw new InvalidDataException("Unexpected startup effect."), () => true);
             scripts.Session.Restore(legacy);
-            bootstrap.Start();
-            Require(scripts.Session.InCharGen && scripts.Session.PlayerYoung && scripts.Session.PlayerToddler && scripts.Session.PlayerScale == .4f,
-                "Pre-world source result lost shared player policy.");
-            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true bootstrap=true youth=true youthSignedFlag=true youthRevision=true toddler=true toddlerSignedFlag=true sourceScale=true scalePrecisionClamp=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewardContracts=separate parity=unverified");
+            try { bootstrap.Start(); throw new InvalidDataException("Startup admitted diagnostic SCTX without its original compiled result."); }
+            catch (NotSupportedException error) when (error.Message.Contains("original compiled program", StringComparison.Ordinal)) { }
+            Require(!scripts.Session.InCharGen && !scripts.Session.PlayerYoung && !scripts.Session.PlayerToddler && scripts.Session.PlayerScale == 1,
+                "Rejected source-only startup changed the actual player policy.");
+            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true missingCompiledBootstrapRefused=true youth=true youthSignedFlag=true youthRevision=true toddler=true toddlerSignedFlag=true chargenSignedFlag=true sourceScale=true scalePrecisionClamp=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewardContracts=separate parity=unverified");
         }
         finally { File.Delete(path); Directory.Delete(directory); }
     }

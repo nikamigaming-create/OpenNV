@@ -184,7 +184,11 @@ internal sealed class NativePluginPdbTypes
         if ((id & 0xf00) == 0x400) return "pointer32";
         return id switch
         {
-            0x03 => "void", 0x30 => "bool8", 0x20 => "uint8", 0x22 or 0x75 => "uint32", 0x41 => "float64",
+            0x03 => "void",
+            0x30 => "bool8",
+            0x20 => "uint8",
+            0x22 or 0x75 => "uint32",
+            0x41 => "float64",
             _ => throw new NotSupportedException("Original callable scalar ABI is not the declared public utility domain: " + id.ToString("x"))
         };
     }

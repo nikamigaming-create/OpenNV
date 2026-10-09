@@ -14,8 +14,14 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
     private IDisposable? _callerLease, _fadeLease;
     private bool _started, _retired;
     private Exception? _failure, _retirementFailure;
-    internal object State => new { source = _world.CampaignMainScriptCallerState, started = _started,
-        retired = _retired, failure = _failure?.ToString(), retirementFailure = _retirementFailure?.ToString() };
+    internal object State => new
+    {
+        source = _world.CampaignMainScriptCallerState,
+        started = _started,
+        retired = _retired,
+        failure = _failure?.ToString(),
+        retirementFailure = _retirementFailure?.ToString()
+    };
     private RuntimeNativeSourceMainScriptCaller(FalloutReferenceWorld world, Action<Exception> failed)
     {
         _world = world; _failed = failed; Name = "SourceMainScriptCaller";
@@ -63,18 +69,16 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
         try
         {
             if (!double.IsFinite(delta) || delta < 0 || !float.IsFinite((float)delta)) throw new InvalidDataException("Main native adapter delta is not finite Float32.");
-            _world.ExecuteCampaignMainScriptCaller(Engine.GetProcessFrames(), (float)delta);
+            DeliverMain(Engine.GetProcessFrames(), (float)delta);
         }
         catch (Exception failure)
         {
-            _failure ??= failure; ProcessMode = ProcessModeEnum.Disabled;
-            try { _failed(failure); }
-            catch (Exception publication) { _failure = new AggregateException("Main source failure and error publication both failed.", _failure, publication); }
-            GD.PushError("OPENNV_SOURCE_MAIN_CALLER_REFUSED " + _failure);
+            PublishMainFailure(failure);
         }
     }
     internal void Retire()
     {
+        RequireMainCallDrained();
         _retired = true; ProcessMode = ProcessModeEnum.Disabled;
         var failures = new List<Exception>();
         if (_retirementFailure is { } prior) failures.Add(prior);

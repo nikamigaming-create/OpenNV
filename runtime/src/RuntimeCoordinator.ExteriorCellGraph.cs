@@ -129,7 +129,8 @@ public partial class RuntimeCoordinator
     }
     private object? NativeSharedGridState => _nativeSharedGridRoot is { } root && _nativeCellProcessAttachments.TryGetValue(root, out var owner) ? new
     {
-        root, invocation = _nativeSharedGridChange,
+        root,
+        invocation = _nativeSharedGridChange,
         placementInput = _nativeSharedGridPlacementRevision,
         change = _nativeReferences?.CellProcesses.ReadSharedGraph(owner.Identity),
         pendingSourceRelease = _nativeSharedGridReleasedCells,

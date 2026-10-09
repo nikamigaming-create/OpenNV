@@ -192,6 +192,7 @@ internal sealed partial class FalloutReferenceWorld
     }
     private void RetireActualProcessRuntime()
     {
+        if (_rawPlayerPlacementLease is not null) throw new NotSupportedException("Actual Player transfer still owns its native placement consumer.");
         if (_processBodies.Count != 0) throw new NotSupportedException("Actual common process source still owns native body consumers.");
         // The manager retires first. Failed common/runtime retirement retains
         // its real providers and cannot be reported as a complete world close.

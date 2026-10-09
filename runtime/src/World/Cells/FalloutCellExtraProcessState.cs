@@ -34,8 +34,16 @@ internal sealed partial class FalloutCellExtraProcessState : IDisposable
     internal string? SaveBlocker => _busy ? "actual-CELL-extra-process-consumer-in-flight" :
         _invocations.FirstOrDefault(item => item.Phase != FalloutCellExtraProcessPhase.Complete) is { } pending ?
             "actual-CELL-extra-process:" + pending.Cell + ":" + (pending.Failure ?? pending.Phase.ToString()) : null;
-    internal object State => new { source = _source.Contract, process = _process, _sequence,
-        cells = _cells.Values.ToArray(), invocations = _invocations.ToArray(), cold = _cold, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        source = _source.Contract,
+        process = _process,
+        _sequence,
+        cells = _cells.Values.ToArray(),
+        invocations = _invocations.ToArray(),
+        cold = _cold,
+        saveBlocker = SaveBlocker
+    };
 
     internal void Construct(FalloutFormKey cell)
     {
@@ -110,9 +118,15 @@ internal sealed partial class FalloutCellExtraProcessState : IDisposable
     {
         var index = _invocations.FindIndex(item => item.Identity == identity);
         var state = _invocations[index];
-        _invocations[index] = state with { Phase = phase, Generation = generation ?? state.Generation,
-            CurrentReferences = references ?? state.CurrentReferences, NextReference = next ?? state.NextReference,
-            InFlight = inFlight, Changed = Next() };
+        _invocations[index] = state with
+        {
+            Phase = phase,
+            Generation = generation ?? state.Generation,
+            CurrentReferences = references ?? state.CurrentReferences,
+            NextReference = next ?? state.NextReference,
+            InFlight = inFlight,
+            Changed = Next()
+        };
     }
     private void Operation(Guid identity, Action action)
     {

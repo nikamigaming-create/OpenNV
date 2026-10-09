@@ -31,12 +31,15 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     private readonly FalloutNativePluginDataBindings? _dataBindings;
     private readonly List<Module> _modules = [];
     private readonly List<NativePluginExecutionDomain> _retiringDomains = [];
+    private readonly List<NativePluginPrivateIo> _retiringIos = [];
     private readonly List<FalloutNativePluginCampaignModule> _failures = [];
     private readonly Dictionary<ushort, (Module Module, NativeNvseCommand Command)> _commands = [];
     private bool _disposed;
     private int _active;
     internal bool ChildDomainsExited => _modules.All(module => module.Domain.ChildExited) &&
-        _retiringDomains.All(domain => domain.ChildExited);
+        _retiringDomains.All(domain => domain.ChildExited) && _retiringIos.All(io => io.FailedChildrenExited);
+    internal bool ResourcesRetired => _disposed && _graphSource is null && _retiringIos.Count == 0 &&
+        _modules.All(module => module.Domain.ResourcesRetired) && _retiringDomains.All(domain => domain.ResourcesRetired);
     internal string? ModuleFailure => string.Join("; ", Modules.Where(module => module.Query != true || module.Load != true ||
         module.Failure is not null || module.Unowned.Count != 0).Select(module => module.LogicalPath + ": Query=" + module.Query +
             ", Load=" + module.Load + "; " + (module.Failure ?? string.Join(", ", module.Unowned)))) is { Length: > 0 } failure ? failure : null;
@@ -147,6 +150,8 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             io = FalloutNativePluginPrivateIo.Create(_source, physical, admission.Sha256, privateStateRoot,
                 admission.WriteScopes, admission.ReadDeclarations, admission.InputRoots, admission.ImportOwner, admission.NonIoImports);
             domain = new(companion, privateIo: io); io = null;
+            domain.BindCngSystemServiceBuild(companion);
+            domain.BindNativeImportProviderBuild(companion);
             plugin = domain.LoadNvseImage(host, physical, admission.Sha256, sourcePluginHandle: admission.QueryHandle); host = null;
             domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues));
             domain.AttachNvseScriptInterface(plugin);
@@ -164,7 +169,8 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             try { domain?.Dispose(); } catch (Exception retirement) { failure += "\nNative retirement: " + retirement; }
             if (domain is not null && !domain.ChildExited) _retiringDomains.Add(domain);
             try { host?.Dispose(); } catch (Exception retirement) { failure += "\nSource retirement: " + retirement; }
-            try { io?.Dispose(); } catch (Exception retirement) { failure += "\nI/O retirement: " + retirement; }
+            try { io?.Dispose(); }
+            catch (Exception retirement) { if (io is not null) _retiringIos.Add(io); failure += "\nI/O retirement: " + retirement; }
             _failures.Add(new(admission.LogicalPath, physical, admission.Sha256, domain?.Generation, domain?.ProcessId,
                 plugin?.QueryReceipt?.Returned, plugin?.LoadReceipt?.Returned, failure,
                 plugin?.Registry.UnownedRequests.Select(row => row.Operation).ToArray() ?? [], domain?.NaturallyRetired ?? false));
@@ -251,7 +257,11 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         var source = CaptureSourceContinuation();
         if (source is not null) RequireSourceContinuationCurrent(source);
         foreach (var module in _modules)
-        { module.Domain.RequireNvseSourceFilesSaveOwned(); module.Domain.RequireNvseBinarySaveOwned(); module.Domain.RequirePrivateCrtSaveOwned(); module.Domain.RequirePrivateProfileDirectorySaveOwned(); }
+        {
+            module.Domain.RequireNvseSourceFilesSaveOwned(); module.Domain.RequireNvseBinarySaveOwned();
+            module.Domain.RequirePrivateCrtSaveOwned(); module.Domain.RequirePrivateProfileDirectorySaveOwned();
+            module.Domain.RequirePrivateCryptoMappingSaveOwned(); module.Domain.RequirePrivateMutexSaveOwned();
+        }
         if (_modules.Any(module => module.Plugin.Registry.SerializationHistory.Count != 0))
             throw new NotSupportedException("Original plugin co-save callback state has no current unified campaign writer/reader owner.");
         RequireOriginalModuleColdContinuation();
@@ -265,7 +275,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     }
     public void Dispose()
     {
-        if (_disposed && _graphSource is null && _modules.All(module => module.Domain.ChildExited) && _retiringDomains.All(domain => domain.ChildExited)) return;
+        if (_disposed && _graphSource is null && ChildDomainsExited && _retiringIos.Count == 0) return;
         if (Environment.CurrentManagedThreadId != _thread) throw new InvalidOperationException("Native campaign retirement changed owner thread.");
         if (_active != 0) throw new InvalidOperationException("Native campaign cannot retire during an actual original call.");
         _disposed = true; var errors = new List<Exception>();
@@ -287,6 +297,11 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         }
         foreach (var domain in _retiringDomains)
             try { domain.Dispose(); } catch (Exception error) { errors.Add(error); }
+        foreach (var io in _retiringIos.ToArray())
+        {
+            try { io.Dispose(); _retiringIos.Remove(io); }
+            catch (Exception error) { errors.Add(error); }
+        }
         if (errors.Count == 0 && _graphSource is { } graph)
         {
             try

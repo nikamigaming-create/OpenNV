@@ -81,8 +81,13 @@ internal sealed partial class FalloutCompiledActiveEffectExecution
                 }
                 row.State = row.State with
                 {
-                    Attempted = true, Cycle = checked(row.State.Cycle + 1), SecondsBits = BitConverter.SingleToUInt32Bits(seconds),
-                    Cursor = Copy(row.Cursor.State), Receipt = null, LastReachedOffset = null, Failure = null
+                    Attempted = true,
+                    Cycle = checked(row.State.Cycle + 1),
+                    SecondsBits = BitConverter.SingleToUInt32Bits(seconds),
+                    Cursor = Copy(row.Cursor.State),
+                    Receipt = null,
+                    LastReachedOffset = null,
+                    Failure = null
                 };
                 _entered = new(this, ordinal, row.Cursor, seconds, producer);
                 try
@@ -93,16 +98,25 @@ internal sealed partial class FalloutCompiledActiveEffectExecution
                     receipt.Require();
                     if (receipt.Retired.Disposition != "completed" || !row.Cursor.State.Completed)
                         throw new NotSupportedException("Script-effect event did not retire its complete original SCDA suffix.");
-                    row.State = row.State with { Cursor = Copy(row.Cursor.State), Receipt = receipt.Retired,
-                        LastReachedOffset = receipt.LastReachedOffset };
+                    row.State = row.State with
+                    {
+                        Cursor = Copy(row.Cursor.State),
+                        Receipt = receipt.Retired,
+                        LastReachedOffset = receipt.LastReachedOffset
+                    };
                 }
                 catch (FalloutCompiledActiveEffectFailure failure)
                 {
                     failure.Receipt.Require();
                     if (!ReferenceEquals(failure.Receipt.Invocation, _entered))
                         throw new InvalidDataException("Failed effect receipt belongs to another invocation.", failure);
-                    row.State = row.State with { Cursor = Copy(row.Cursor.State), Receipt = failure.Receipt.Retired,
-                        LastReachedOffset = failure.Receipt.LastReachedOffset, Failure = failure.Message };
+                    row.State = row.State with
+                    {
+                        Cursor = Copy(row.Cursor.State),
+                        Receipt = failure.Receipt.Retired,
+                        LastReachedOffset = failure.Receipt.LastReachedOffset,
+                        Failure = failure.Message
+                    };
                     throw;
                 }
                 catch (Exception failure)

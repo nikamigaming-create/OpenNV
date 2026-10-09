@@ -29,8 +29,11 @@ public partial class RuntimeCoordinator
             var first = construction?.OriginalFailure ?? original;
             construction?.MarkCallerFailure(first);
             var failures = new List<Exception> { original };
-            try { owner.NativeTerrainFailed(cell, first, construction?.StillOwnedNodes ??
-                (land is not null && GodotObject.IsInstanceValid(land) ? [land.GetInstanceId()] : [])); }
+            try
+            {
+                owner.NativeTerrainFailed(cell, first, construction?.StillOwnedNodes ??
+                (land is not null && GodotObject.IsInstanceValid(land) ? [land.GetInstanceId()] : []));
+            }
             catch (Exception error) { failures.Add(error); }
             // A returned factory value with no parent is still this invocation's
             // actual allocation. Root-owned values retire through the CELL owner.

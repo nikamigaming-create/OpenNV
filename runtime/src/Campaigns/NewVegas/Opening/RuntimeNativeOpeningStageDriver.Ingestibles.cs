@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class RuntimeNativeOpeningStageDriver
 {
-    private readonly FalloutSoundRandomState _ingestibleSoundRandom = new(0x41d);
+    private long _ingestibleSoundOccurrence;
     internal FalloutIngestiblesSnapshot IngestibleState => _ingestibles.Capture();
 
     internal void UseAid(FalloutFormKey form)
@@ -18,7 +18,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             // Resolve audio before committing the inventory/vitals transaction.
             if (use.Sound is { } soundForm)
                 sound = NativeOwnedSoundPlayback.CreateMenu(FalloutSoundRecordReader.Read(_pluginStack, soundForm), _pluginStack,
-                    RuntimeLiveContentSource.Current!, _ingestibleSoundRandom);
+                    NativeOwnedSoundPlayback.MenuCall(this, checked(++_ingestibleSoundOccurrence), soundForm));
             var result = use.Commit();
             if (sound is not null && result.Consumed)
             {

@@ -28,6 +28,8 @@ internal static partial class FalloutNativeCampaignSave
             state.Scripts.Challenges is null || state.IndexedInterfaceSounds is null)
             throw new InvalidDataException("Campaign state is missing an authoritative runtime owner.");
         if (state.IndexedInterfaceSounds.Schema != FalloutIndexedInterfaceSounds.Schema ||
+            state.IndexedInterfaceSounds.Selection is null ||
+            state.IndexedInterfaceSounds.Selection.Schema != FalloutMenuSoundSelection.Schema ||
             state.IndexedInterfaceSounds.Voices is null ||
             state.IndexedInterfaceSounds.LastOrdinal != state.IndexedInterfaceSounds.Voices.Count ||
             state.IndexedInterfaceSounds.Voices.Any(voice => voice is null || voice.Pending))

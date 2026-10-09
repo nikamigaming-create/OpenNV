@@ -93,6 +93,7 @@ internal static partial class PlayerAbilityScriptContracts
             BitConverter.UInt64BitsToDouble(entry.Locals[2].Payload) == 1 && skills.CaptureValues().Pools[32].Permanent == 3 &&
             world.InstanceCount == 0, "Compiled effect views lost a duplicate tail, routed implicit locals to an actor, or invented a reference payload.");
         var cold = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, saved);
+        BindAbilityClock(records, cold, saved.Clock);
         cold.BindExecutor(_ => throw new InvalidOperationException("Cold completed Start cannot execute."));
         cold.Synchronize();
         Require(JsonSerializer.Serialize(saved) == JsonSerializer.Serialize(cold.Capture()), "Cold raw mixed cells or completed effect cursor changed.");
@@ -114,7 +115,7 @@ internal static partial class PlayerAbilityScriptContracts
             Require(effects.Capture().Effects.Count == 0 && skills.CaptureValues().Pools.Count == 0,
                 "An unrelated source script type was widened into active-effect execution.");
         }
-        foreach (var eventType in new ushort[] { 18, 19, 0, 21 })
+        foreach (var eventType in new ushort[] { 0, 21 })
         {
             File.WriteAllBytes(Path.Combine(directory, Plugin), RewriteAbilityScript(Fixture(false), fields =>
                 ReplaceAbilityCode(fields, Join(AbilityInstruction(0x1d), AbilityBlock(eventType, AbilityActorValue(32, 99, 1))), 2, 1)));
@@ -123,6 +124,19 @@ internal static partial class PlayerAbilityScriptContracts
             var actor = new FalloutPlayerActorValues(records); var skills = Skills(records, actor);
             var effects = Bind(records, world, actor, skills); Reject(effects.Synchronize);
             Require(skills.CaptureValues().Pools.Count == 0, "An unowned effect event/clock consumed its source body.");
+        }
+        foreach (var eventType in new ushort[] { 18, 19 })
+        {
+            File.WriteAllBytes(Path.Combine(directory, Plugin), RewriteAbilityScript(Fixture(false), fields =>
+                ReplaceAbilityCode(fields, Join(AbilityInstruction(0x1d), AbilityBlock(eventType, AbilityActorValue(32, 99, 1))), 2, 1)));
+            using var records = FalloutPluginStack.Load(directory, [Plugin]);
+            using var world = new FalloutReferenceWorld(records);
+            var actor = new FalloutPlayerActorValues(records); var skills = Skills(records, actor);
+            var effects = Bind(records, world, actor, skills); effects.Synchronize();
+            Reject(effects.AdvanceFromCurrentSourceFrame);
+            Require(skills.CaptureValues().Pools.Count == 0 && effects.Capture().Effects.Single().Compiled!.Events is
+                [{ Attempted: false, Cycle: 0, Receipt: null }],
+                "Update/Finish entered without its source clock or lifecycle transition.");
         }
     }
 

@@ -115,8 +115,15 @@ internal sealed class FalloutQueuedReferencePriority : IDisposable
         return new(Schema, _source.Contract, _stack, _process, _sequence, _cache, _cold);
     }
     internal string? SaveBlocker => _callback ? "actual-source-priority-inputs-entered" : null;
-    internal object State => new { contract = _source.Contract, process = _process, sequence = _sequence,
-        cache = _cache, cold = _cold, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        contract = _source.Contract,
+        process = _process,
+        sequence = _sequence,
+        cache = _cache,
+        cold = _cold,
+        saveBlocker = SaveBlocker
+    };
     internal static void Validate(FalloutQueuedPrioritySnapshot saved)
     {
         if (saved is null || saved.Schema != Schema || saved.Contract is not { Length: 64 } || !saved.Contract.All(Uri.IsHexDigit) ||

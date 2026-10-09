@@ -10,10 +10,10 @@ internal static class RestHostContracts
     internal static void Run()
     {
         FullReaderLocation(); TypedPreferenceSelection(); ActualQueueAndWriter(); EarlierWriterFailure();
-        MenuOperationOrderAndFault(); SourceWorldTime(); SoundAttemptAndCold();
+        MenuOperationOrderAndFault(); SourceWorldTime(); SoundSourceAdmission();
         Console.WriteLine("OPENNV_REST_HOST_CONTRACT_PASS authored=true fullReaderLocation=true preferenceCollections=true " +
             "sharedQueue=true realWriterDigest=true earlierFailureVisible=true cancelBeforeHours=true afterHoursPrefix=true " +
-            "elapsedFloat32=true coldNoReplay=true syntheticSoundCallbacks=true native=unexecuted originalEffects=unexecuted");
+            "elapsedFloat32=true coldNoReplay=true missingSoundSourceRefused=true native=unexecuted originalEffects=unexecuted");
     }
 
     private sealed class RestFixture
@@ -203,7 +203,7 @@ internal static class RestHostContracts
             () => new(FalloutAdvancementActivityState.Satisfied, "authored-frame"), elapsed.Capture() with { ValueBits = 1 }));
     }
 
-    private static void SoundAttemptAndCold()
+    private static void SoundSourceAdmission()
     {
         var folder = Directory.CreateTempSubdirectory("opennv-rest-cues-"); var path = Path.Combine(folder.FullName, "AuthoredRest.esm");
         var bytes = Join(Header(), Sound(0x850, "UIMenuOK"), Sound(0x851, "UIMenuCancel")); File.WriteAllBytes(path, bytes);
@@ -211,19 +211,29 @@ internal static class RestHostContracts
         {
             using var records = FalloutPluginStack.Load(folder.FullName, ["AuthoredRest.esm"]);
             var rest = new RestFixture(); rest.Open(FalloutRestKind.Wait);
-            var owner = new FalloutRestInterfaceSounds(records, rest.Owner); var lease = owner.BindNative();
-            var cue = owner.RequestCue(lease, rest.Owner.Request!, FalloutRestInterfaceCueKind.Start);
-            owner.NativeAllocated(lease, cue.Sequence, 900); owner.NativeStarted(lease, cue.Sequence, 900);
-            owner.Failed(lease, cue.Sequence, new IOException("authored-native-prefix")); Reject(() => owner.Capture());
-            owner.NativeStopped(lease, cue.Sequence, 900); var snapshot = RoundTrip(owner.Capture());
-            Require(snapshot.Voices.Single() is { State: FalloutRestInterfaceVoiceState.Failed, NativeVoiceRetired: true } &&
-                snapshot.Failure is not null, "A stopped failed cue invented successful completion or lost its error.");
-            var cold = new FalloutRestInterfaceSounds(records, rest.Cold().Owner, snapshot);
-            var coldLease = cold.BindNative(); Reject(() => cold.RequestCue(coldLease, rest.Owner.Request!, FalloutRestInterfaceCueKind.Start));
-            Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(snapshot), "Cold cue changed its retained failed source/playback prefix.");
-            Reject(() => new FalloutRestInterfaceSounds(records, rest.Owner, snapshot with
-                { Voices = [snapshot.Voices.Single() with { State = FalloutRestInterfaceVoiceState.NativeStarted, Failure = null, NativeVoiceRetired = false }] }));
+            // Familiar SOUN names are not an executable cue catalogue. This
+            // authored record fixture has neither an owned engine nor an
+            // actual indexed caller/native voice; it must not manufacture them.
+            foreach (var id in new uint[] { 0x850, 0x851 })
+                _ = FalloutSoundRecordReader.Read(records, new("AuthoredRest.esm", id));
+            MissingSource(() => new FalloutRestInterfaceSounds(records, rest.Owner));
+            MissingSource(() => new FalloutRestInterfaceSounds(records, rest.Cold().Owner));
+            var retained = new FalloutInterfaceSoundCatalogue(rest.Owner.Source.EngineSha256, 3,
+                [new(-1, FalloutInterfaceSoundDisposition.SourceSilent, null, 0),
+                 new(0, FalloutInterfaceSoundDisposition.SourceSilent, null, 0),
+                 new(1, FalloutInterfaceSoundDisposition.NamedSound, "UIMenuOK", 0x121),
+                 new(2, FalloutInterfaceSoundDisposition.NamedSound, "UIMenuCancel", 0x121)],
+                FalloutInterfaceSoundDisposition.SourceSilent);
+            retained.Validate();
+            MissingSource(() => FalloutRestInterfaceSoundSource.Read(records, rest.Owner.Source, retained));
             Require(File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes), "Rest cue parsing changed its source bytes.");
+
+            static void MissingSource(Action action)
+            {
+                try { action(); }
+                catch (NotSupportedException error) when (error.Message == "Rest cues have no actual selected executable source.") { return; }
+                throw new InvalidDataException("Authored SOUN records admitted rest audio without an actual engine/indexed caller.");
+            }
         }
         finally { Directory.Delete(folder.FullName, true); }
     }

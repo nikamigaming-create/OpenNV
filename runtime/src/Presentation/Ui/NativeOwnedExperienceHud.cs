@@ -207,12 +207,14 @@ internal sealed partial class NativeOwnedExperienceHud : Control
         }
         catch (Exception error) { Fail(error); }
     }
+    private long _menuSoundOccurrence;
     private void Play(FalloutExperienceSoundReceipt request)
     {
         var record = FalloutSoundRecordReader.Find(_records, request.EditorId);
         var descriptor = FalloutSoundRecordReader.Read(_records, record.FormKey);
         if (descriptor.IsLooping) throw new NotSupportedException("XP notification source sound is looping without its explicit retirement owner.");
-        var player = NativeOwnedSoundPlayback.CreateMenu(descriptor, _records, _records.OwnedSource!, _owner.SoundRandom);
+        var player = NativeOwnedSoundPlayback.CreateMenu(descriptor, _records,
+            NativeOwnedSoundPlayback.MenuCall(this, checked(++_menuSoundOccurrence), descriptor.FormKey));
         try
         {
             player.ProcessMode = ProcessModeEnum.Always; _voices.Add(player, request);

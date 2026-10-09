@@ -1,8 +1,10 @@
+using OpenNV.Runtime.Gameplay.State;
+
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutIndexedInterfaceCue(FalloutInterfaceSoundEntry Entry,
     FalloutFormKey? Sound, string? Winner, string? RecordSha256, FalloutSoundRecord? Descriptor,
-    FalloutSoundFlags? OriginalFlags = null);
+    FalloutSoundFlags? OriginalFlags = null, long? SelectionOrdinal = null);
 
 internal sealed class FalloutIndexedInterfaceSoundSource
 {
@@ -10,10 +12,12 @@ internal sealed class FalloutIndexedInterfaceSoundSource
     private readonly FalloutAdvancementRuntimeSource _runtime;
     internal FalloutInterfaceSoundCatalogue Catalogue { get; }
     internal FalloutMenuCuePlaybackSource Playback { get; }
+    internal FalloutMenuSoundSelection Selection { get; }
     internal string Identity { get; }
     internal FalloutPluginStack Records => _records;
 
-    internal FalloutIndexedInterfaceSoundSource(FalloutPluginStack records, FalloutAdvancementRuntimeSource runtime)
+    internal FalloutIndexedInterfaceSoundSource(FalloutPluginStack records, FalloutAdvancementRuntimeSource runtime,
+        FalloutMenuSoundSelectionSnapshot? restoreSelection = null)
     {
         ArgumentNullException.ThrowIfNull(records); ArgumentNullException.ThrowIfNull(runtime);
         var source = records.OwnedSource ?? throw new NotSupportedException("Indexed interface sounds have no selected owned source.");
@@ -23,13 +27,15 @@ internal sealed class FalloutIndexedInterfaceSoundSource
         Catalogue = FalloutExecutableStringTable.ReadInterfaceSounds(source.FalloutExecutablePath, runtime.Receipt.EngineSha256);
         Playback = new(runtime.Receipt.EngineSha256, runtime.Receipt.SourceSha256, FalloutMenuCuePlaybackSource.CurrentContractSha256);
         Playback.Validate();
-        Identity = FalloutAdvancementRuntimeReceipt.Hash(Catalogue.Identity + "\0" + Playback.Identity + "\0" + runtime.Receipt.SourceSha256);
+        Selection = source.OpenMenuSoundSelection(records, runtime, restoreSelection);
+        Identity = FalloutAdvancementRuntimeReceipt.Hash(Catalogue.Identity + "\0" + Playback.Identity + "\0" + Selection.Source.Identity + "\0" + runtime.Receipt.SourceSha256);
     }
 
-    internal FalloutIndexedInterfaceCue Resolve(int callerIndex)
+    internal FalloutIndexedInterfaceCue Resolve(FalloutInterfaceSoundCall call, long voiceOrdinal)
     {
         _runtime.Receipt.Validate();
-        var entry = Catalogue.Resolve(callerIndex);
+        call.Validate(); if (voiceOrdinal <= 0) throw new InvalidDataException("Indexed selection has no real entered voice ordinal.");
+        var entry = Catalogue.Resolve(call.Index);
         if (entry.Disposition == FalloutInterfaceSoundDisposition.SourceSilent) return new(entry, null, null, null, null);
         // This is a manager request flag domain, distinct from SOUN/SNDD bits.
         // All admitted original indexed branches declare this 2D/menu request.
@@ -47,16 +53,18 @@ internal sealed class FalloutIndexedInterfaceSoundSource
         if ((descriptor.Flags & FalloutSoundFlags.Lfe360) != 0 &&
             Catalogue.EngineSha256 == "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57")
             descriptor = descriptor with { Flags = descriptor.Flags & ~FalloutSoundFlags.Lfe360 };
-        descriptor = Playback.ExactFile(_records, descriptor);
-        return new(entry, record.FormKey, record.Plugin.Name, FalloutRestLocation.SourceIdentity(record), descriptor, originalFlags);
+        var prepared = Selection.Prepare(descriptor, new(call.Owner, call.Occurrence, call.BranchOrdinal,
+            record.FormKey, voiceOrdinal, call.Index));
+        descriptor = Playback.PreparedFile(_records, prepared, Selection);
+        return new(entry, record.FormKey, record.Plugin.Name, FalloutRestLocation.SourceIdentity(record), descriptor, originalFlags, prepared.SelectionOrdinal);
     }
 
     internal void RequirePreparedDeclaration(FalloutInterfaceSoundEntry entry, FalloutFormKey? sound,
-        string? winner, string? recordSha256, string? logicalPath, FalloutSoundFlags? flags)
+        string? winner, string? recordSha256, string? logicalPath, FalloutSoundFlags? flags, long? selectionOrdinal, long voiceOrdinal)
     {
         if (entry.Disposition == FalloutInterfaceSoundDisposition.SourceSilent)
         {
-            if (sound is not null || winner is not null || recordSha256 is not null || logicalPath is not null || flags is not null)
+            if (sound is not null || winner is not null || recordSha256 is not null || logicalPath is not null || flags is not null || selectionOrdinal is not null)
                 throw new InvalidDataException("Source-silent indexed branch fabricated a sound declaration.");
             return;
         }
@@ -65,8 +73,9 @@ internal sealed class FalloutIndexedInterfaceSoundSource
         if (record.FormKey != sound || record.Plugin.Name != winner || FalloutRestLocation.SourceIdentity(record) != recordSha256 ||
             descriptor.Flags != flags || logicalPath is null || FalloutBsaArchive.CanonicalPath(logicalPath) != logicalPath ||
             !logicalPath.StartsWith("sound\\", StringComparison.Ordinal) ||
-            !Path.GetExtension(logicalPath).Equals(".wav", StringComparison.OrdinalIgnoreCase))
+            Path.GetExtension(logicalPath).ToLowerInvariant() is not (".wav" or ".ogg") || selectionOrdinal is not { } selected)
             throw new InvalidDataException("Indexed sound receipt changed its original winning declaration/prepared file.");
+        Selection.RequirePrepared(selected, record.FormKey, logicalPath, record.Plugin.Name, recordSha256!, voiceOrdinal);
         // A real SetSoundPath later in this session must not rebind a prepared
         // or finished voice. Current mutable paths are checked by Resolve on
         // the next source call; this receipt keeps the actual earlier path.

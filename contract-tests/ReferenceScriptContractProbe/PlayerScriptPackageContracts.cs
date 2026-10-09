@@ -47,11 +47,13 @@ internal static class PlayerScriptPackageContracts
             Reject(() => exact.ContainsReferenceLocation(Key(0x400), projected, Key(0x400), projected, 0));
             var saved = new FalloutPlayerScriptPackageSnapshot(package.Form,
                 Convert.ToHexString(SHA256.HashData(records.GetEffective(package.Form).ReadData())), Key(0x300),
-                new string('A', 64), 1, true, false, .375, 0);
+                new string('A', 64), 1, true, false, .375, 0, EventKind: "POBA",
+                Playback: new(.375, 0, 0, 0, false, false),
+                IdleSha256: Convert.ToHexString(SHA256.HashData(records.GetEffective(Key(0x300)).ReadData())), EventResults: []);
             var session = new FalloutScriptSession(); session.PublishPlayerPackage(saved);
             var cold = new FalloutScriptSession();
             cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(session.Capture()))!);
-            Require(cold.PlayerPackage == saved, "Cold player package lost assignment, phase, cursor, hash or elapsed time.");
+            Require(Same(cold.PlayerPackage, saved), "Cold player package lost assignment, phase, cursor, hash or elapsed time.");
             var repeated = saved with
             {
                 Elapsed = 23.5,
@@ -61,7 +63,7 @@ internal static class PlayerScriptPackageContracts
             };
             cold.PublishPlayerPackage(repeated);
             cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(cold.Capture()))!);
-            Require(cold.PlayerPackage == repeated && cold.PlayerPackage.PendingPackage is null,
+            Require(Same(cold.PlayerPackage, repeated) && cold.PlayerPackage!.PendingPackage is null,
                 "Cold settled change pose lost its IDLE identity, repetitions, phase or sound random state.");
             foreach (var invalidRepeat in new[]
             {
@@ -72,18 +74,18 @@ internal static class PlayerScriptPackageContracts
             })
             {
                 Reject(() => cold.PublishPlayerPackage(invalidRepeat));
-                Require(cold.PlayerPackage == repeated, "Rejected repeat state partially changed the live player package.");
+                Require(Same(cold.PlayerPackage, repeated), "Rejected repeat state partially changed the live player package.");
             }
             var changing = saved with { EventKind = "POCA", PendingPackage = Key(0x101), PendingPackageSha256 = new string('B', 64) };
             cold.PublishPlayerPackage(changing);
             cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(cold.Capture()))!);
-            Require(cold.PlayerPackage == changing && cold.PlayerPackage.Phase == "POCA", "Cold change phase lost its pending source assignment.");
+            Require(Same(cold.PlayerPackage, changing) && cold.PlayerPackage!.Phase == "POCA", "Cold change phase lost its pending source assignment.");
             foreach (var invalidChange in new[] { changing with { PendingPackage = null }, changing with { PendingPackageSha256 = null },
                 changing with { PendingPackageSha256 = "bad" }, changing with { EventKind = "POBA" }, changing with { PackageEvent = false },
                 changing with { EventKind = "POEA" }, changing with { Idle = null, AnimationSha256 = null, PackageEvent = false } })
             {
                 Reject(() => cold.PublishPlayerPackage(invalidChange));
-                Require(cold.PlayerPackage == changing, "Rejected change phase partially replaced saved assignment.");
+                Require(Same(cold.PlayerPackage, changing), "Rejected change phase partially replaced saved assignment.");
             }
             cold.PublishPlayerPackage(saved);
             foreach (var invalid in new[] { saved with { Cursor = -1 }, saved with { Elapsed = double.NaN },
@@ -91,9 +93,9 @@ internal static class PlayerScriptPackageContracts
                 saved with { Wait = -1 }, saved with { Complete = true } })
             {
                 Reject(() => cold.PublishPlayerPackage(invalid));
-                Require(cold.PlayerPackage == saved, "Rejected package state partially published.");
+                Require(Same(cold.PlayerPackage, saved), "Rejected package state partially published.");
                 Reject(() => cold.Restore(cold.Capture() with { PlayerPackage = invalid }));
-                Require(cold.PlayerPackage == saved, "Rejected cold package state replaced live assignment.");
+                Require(Same(cold.PlayerPackage, saved), "Rejected cold package state replaced live assignment.");
             }
             var legacy = JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>("{\"Hardcore\":false,\"AutoDisplayObjectives\":true,\"Achievements\":[]}")!;
             Require(legacy.PlayerPackage is null, "Legacy session acquired a script package.");
@@ -138,6 +140,8 @@ internal static class PlayerScriptPackageContracts
     }
     private static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
     private static byte[] Join(params byte[][] values) => values.SelectMany(value => value).ToArray();
+    private static bool Same(FalloutPlayerScriptPackageSnapshot? actual, FalloutPlayerScriptPackageSnapshot expected) =>
+        JsonSerializer.Serialize(actual) == JsonSerializer.Serialize(expected);
     private static void Require(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
     private static void Reject(Action action)
     {

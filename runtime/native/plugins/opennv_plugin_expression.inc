@@ -335,7 +335,8 @@ void expression_command(const Frame& frame) {
     for (const auto* active : expression.callers) if (active->id == caller_id) throw Fatal(ERROR_INVALID_HANDLE, "Expression caller identity is already active.");
     const NvseRegisteredCommand* command = nullptr;
     for (const auto& candidate : state->nvse->commands) if (candidate.original == source && candidate.opcode == opcode) { command = &candidate; break; }
-    if (!command || !command->execute || command->parse != nvse_expression_parser && !(command->parse == 0 && script_object && state->source_objects && state->source_objects->script_interface) || command->needs_parent != 0 || (command->return_type != 0 && command->return_type != 2 && command->return_type != 3 && command->return_type != 5) ||
+    if (!command || !command->execute || command->parse != nvse_expression_parser && !(command->parse == 0 && script_object && state->source_objects && state->source_objects->script_interface) &&
+        !engine_command_zero_parameter_caller(command->execute, command->parameter_count, command->return_type) || command->needs_parent != 0 || (command->return_type != 0 && command->return_type != 2 && command->return_type != 3 && command->return_type != 5) ||
         (target_type != 0 && target_type != 2 && target_type != 3) ||
         (command->return_type == 0 && target_type == 3) ||
         ((command->return_type == 2 || command->return_type == 3) && command->return_type != target_type) || (target_type && !state->values)) {
@@ -354,7 +355,7 @@ void expression_command(const Frame& frame) {
             nvse_string(actual.name, true) != declared.name)
             throw Fatal(ERROR_INVALID_DATA, "Native retained command parameter copy changed after registration.");
     }
-    nvse_executable(reinterpret_cast<void*>(command->execute));
+    engine_command_executable(reinterpret_cast<void*>(command->execute));
     auto* source_script = script_object ? &source_object(script_object) : nullptr;
     if (source_script && (!local_context || source_local_context(local_context).script_id != script_object || source_script->kind != 1))
         throw Fatal(ERROR_INVALID_DATA, "Actual command Script/event-list context differs.");

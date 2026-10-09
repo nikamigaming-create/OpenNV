@@ -29,6 +29,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         SourceIndexedInterfaceSoundSaveBlocker is { } interfaceSound ? interfaceSound :
         ActorUpdateSaveBlocker is { } actorUpdate ? actorUpdate :
         CellProcessSaveBlocker is { } cellProcess ? cellProcess :
+        _skyLighting?.SourceTransferSaveBlocker is { } sourceSky ? sourceSky :
         ActualProcessRuntimeSaveBlocker is { } processRuntime ? processRuntime :
         ActualProcessCommonSaveBlocker is { } processCommon ? processCommon :
         SourceProcessQueueSaveBlocker is { } processQueue ? processQueue :
@@ -66,6 +67,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         actualProcessRuntime = ActualProcessRuntimeState,
         actualProcessCommon = ActualProcessCommonState,
         processQueues = SourceProcessQueueState,
+        sourceSky = _skyLighting?.SourceTransferState,
         actorUpdates = ActorUpdateState,
         cellProcesses = CellProcessState,
         levelUp = PlayerLevelUpMenuState,

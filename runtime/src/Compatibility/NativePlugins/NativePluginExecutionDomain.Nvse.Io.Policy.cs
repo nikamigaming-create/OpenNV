@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 internal enum NativePluginIoRole : uint { Configuration = 1, State = 2, CoSave = 3, Diagnostic = 4 }
 internal enum NativePluginIoAction : uint { Read = 1, Write = 2, Directory = 3, Delete = 4, Attributes = 5, ProfileRead = 6, ProfileWrite = 7 }
 internal sealed record NativePluginIoWriteScope(string VirtualPath, bool Directory, NativePluginIoRole Role, string DeclarationOwner);
-internal sealed record NativePluginIoReadWinner(string PhysicalPath, string Sha256, string SourceOwner, bool Configuration);
+internal sealed record NativePluginIoReadWinner(string PhysicalPath, string Sha256, string SourceOwner, bool Configuration, bool Diagnostic = false);
 internal sealed record NativePluginIoSelection(string StackSha256, string ModuleSha256, string ModulePath,
     string RuntimeDirectory, string PrivateStateRoot, IReadOnlyList<string> OriginalRoots,
     IReadOnlyList<NativePluginIoWriteScope> WriteScopes, Func<string, NativePluginIoReadWinner?> ResolveWinningRead,
@@ -64,7 +64,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
                     pair => (IReadOnlySet<string>)new HashSet<string>(pair.Value, StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase)
                 }).ToArray()
         };
-        if (Selection.DeclaredNonIoImports.Any(declaration => NativePluginIoImports.Unowned.Contains(declaration[(declaration.LastIndexOf('!') + 1)..]) || NativePluginCrtImports.IsFileDeclaration(declaration)))
+        if (Selection.DeclaredNonIoImports.Any(declaration => (NativePluginIoImports.Unowned.Contains(declaration[(declaration.LastIndexOf('!') + 1)..]) || NativePluginIoImports.Owned.Contains(declaration[(declaration.LastIndexOf('!') + 1)..])) || NativePluginCrtImports.IsFileDeclaration(declaration) || NativePluginCryptoImports.IsCryptoDeclaration(declaration)))
             throw new NotSupportedException("A file API cannot be admitted as a non-I/O import.");
         CurrentDirectory = Canonical(selection.RuntimeDirectory);
         if (!Selection.OriginalRoots.Any(root => Within(root, Canonical(selection.ModulePath))) ||
@@ -110,7 +110,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
         _moduleLease = new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         try
         {
-            InitializeCrtProviders();
+            InitializeCrtProviders(); InitializeCryptoProvider();
             if (File.Exists(_deletionFile))
             {
                 NoReparse(_deletionFile);
@@ -125,6 +125,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
         catch (Exception error)
         {
             var failures = new List<Exception> { error };
+            try { DisposeCryptoSource(); } catch (Exception cleanup) { failures.Add(cleanup); }
             try { DisposeCrtProviderLeases(); } catch (Exception cleanup) { failures.Add(cleanup); }
             try { _moduleLease.Dispose(); } catch (Exception cleanup) { failures.Add(cleanup); }
             if (failures.Count != 1) throw new AggregateException("Native I/O construction and retained source cleanup failed.", failures);
@@ -207,7 +208,8 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
             {
                 if (Selection.ResolveWinningRead(path) is { } winner)
                 {
-                    if (role != NativePluginIoRole.Configuration || !winner.Configuration)
+                    if (!(role == NativePluginIoRole.Configuration && winner.Configuration && !winner.Diagnostic ||
+                        role == NativePluginIoRole.Diagnostic && winner.Diagnostic && !winner.Configuration))
                         throw new NotSupportedException("Original source content cannot become a private writable asset copy.");
                     var original = LeaseWinner(path, winner); hash = winner.Sha256;
                     if (action == NativePluginIoAction.ProfileWrite) RequireUnmappedProfile(original);
@@ -307,6 +309,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
     }
     internal void RequireRetired()
     {
+        if (HasFailedChildConstruction) throw new InvalidOperationException("Native I/O retains an unfinished child construction.");
         if (_routes.Count != 0 || _fileRoutes.Count != 0) throw new InvalidDataException("Native private I/O retains unfinished route/file results.");
         foreach (var (path, lease) in _reads)
         {
@@ -318,7 +321,9 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
     public void Dispose()
     {
         if (_disposed) { if (_ioDisposeFailure is not null) throw _ioDisposeFailure; return; }
+        RetireFailedChildConstructions();
         var failures = new List<Exception>();
+        try { DisposeCryptoSource(); } catch (Exception error) { failures.Add(error); }
         try { DisposeCrtProviderLeases(); } catch (Exception error) { failures.Add(error); }
         foreach (var lease in _reads.Values) try { lease.Dispose(); } catch (Exception error) { failures.Add(error); }
         _reads.Clear(); _winners.Clear();

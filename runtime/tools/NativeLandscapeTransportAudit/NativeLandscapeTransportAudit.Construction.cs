@@ -21,7 +21,8 @@ public partial class NativeLandscapeTransportAudit
         {
             var options = new Dictionary<string, string>
             {
-                ["mod-stack"] = File.ReadAllText(args[4]), ["mod-order"] = args.Length == 7 ? args[6] : "automatic"
+                ["mod-stack"] = File.ReadAllText(args[4]),
+                ["mod-order"] = args.Length == 7 ? args[6] : "automatic"
             };
             var stack = FalloutModStackSelection.ReadOptions(options)!.Resolve(args[1]);
             RuntimeLiveContentSource.Configure(args[1], campaign, stack.ContentRoots.Skip(1).ToArray(), stack.ActivePlugins, stack.Settings);
@@ -42,6 +43,7 @@ public partial class NativeLandscapeTransportAudit
         var foreign = new Node3D { Name = "AuthoredForeignTerrainBorrower" }; AddChild(foreign);
         var successful = new List<RuntimeNativeLandscapeTransport>();
         string? completed = null;
+        Exception? auditFailure = null;
         try
         {
             var phases = new[] { RuntimeNativeLandscapeConstructionPhase.Mesh, RuntimeNativeLandscapeConstructionPhase.Material,
@@ -129,6 +131,11 @@ public partial class NativeLandscapeTransportAudit
                 "originalFailures=true foreignParentRefused=true resourceBorrowerRefused=true exactRetry=true malformedBeforeAllocation=true " +
                 "sharedTextureBorrowPreserved=true newNativeLifetime=true pixels=unverified gpuFence=unverified parity=unmeasured";
         }
+        catch (Exception original)
+        {
+            auditFailure = original;
+            throw;
+        }
         finally
         {
             var errors = new List<Exception>();
@@ -145,14 +152,15 @@ public partial class NativeLandscapeTransportAudit
                 catch (Exception error) { errors.Add(error); }
             foreach (var texture in cache.Values.Distinct())
                 try { texture.Dispose(); } catch (Exception error) { errors.Add(error); }
-            if (errors.Count != 0) throw new AggregateException("Native LAND construction audit retains actual allocation retirement errors.", errors);
+            if (errors.Count != 0) throw new AggregateException("Native LAND construction audit retains its original failure and actual allocation retirement errors.",
+                auditFailure is { } original ? new[] { original }.Concat(errors) : errors);
         }
         GD.Print(completed ?? throw new InvalidDataException("LAND construction audit did not complete its actual selected assertions."));
     }
     private static void Require(bool value, string error) { if (!value) throw new InvalidDataException(error); }
     private static void Reject(Action action)
     {
-        try { action(); } catch (Exception error) when (error is IOException or InvalidOperationException or NotSupportedException or AggregateException) { return; }
+        try { action(); } catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or NotSupportedException or AggregateException) { return; }
         throw new InvalidOperationException("An unfinished/foreign actual LAND allocation was admitted.");
     }
 }

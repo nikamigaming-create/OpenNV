@@ -11,7 +11,8 @@ internal sealed record FalloutMainUtilitySource(FalloutMainScriptCallerSource Ma
         "source-FIFO-inline-first-and-appended-next;duplicate-signed-ids-preserved;" +
         "payload-retired-before-range-platform-and-iterator;id-greater-than-100-diagnostic;" +
         "platform-name-prefix-ASCII65-signed-decimal-minimum-width-two-zero-padding;" +
-        "each-nonnull-statistics-test-followed-by-fresh-interface-query;" +
+        "four-byte-destination-reserves-NUL-explicit-byte3-termination;overflow-enters-unowned-invalid-parameter-handler;" +
+        "nonnull-statistics-test-then-format-before-fresh-interface-query;" +
         "SetAchievement-and-StoreStats-return-booleans-ignored-by-source-but-retained-as-observations;" +
         "StoreStats-before-entire-queue-clear;empty-queue-no-platform-query;" +
         "login-constructor-false-null-callback;IsSteamRunning-then-nonnull-user-then-fresh-user-BLoggedOn;" +
@@ -32,6 +33,13 @@ internal sealed record FalloutMainUtilitySource(FalloutMainScriptCallerSource Ma
         var number = id.ToString(CultureInfo.InvariantCulture);
         // The original printf width includes a minus sign. D2 would add a
         // third character to -1 and silently change the actual API argument.
-        return ((char)65).ToString() + (number.Length < 2 ? number.PadLeft(2, '0') : number);
+        var identifier = ((char)65).ToString() + (number.Length < 2 ? number.PadLeft(2, '0') : number);
+        // The selected source formatter reserves its fourth byte for NUL.
+        // Overflow clears the destination and invokes a separate original
+        // invalid-parameter handler. Its outcome is not truncation, a wider
+        // identifier or an admitted empty achievement API argument.
+        if (identifier.Length >= 4)
+            throw new NotSupportedException("source-four-byte-achievement-invalid-parameter-handler-unbound");
+        return identifier;
     }
 }

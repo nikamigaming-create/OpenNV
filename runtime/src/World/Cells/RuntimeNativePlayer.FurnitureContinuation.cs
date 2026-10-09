@@ -43,14 +43,14 @@ internal partial class RuntimeNativePlayer
             _furniturePath?.Select(point => new[] { point.X, point.Y, point.Z }).ToArray(), _furnitureWaypoint,
             _furniturePhysicalClock?.Seconds ?? 0, _furnitureLookYaw, _furniturePhysicalClock,
             _furnitureClips.ToDictionary(pair => pair.Key, pair => pair.Value.Identity), PhysicalPose(_furniturePlacement),
-            _furnitureSourcePlacement!, _furnitureCameraSource, _furnitureCameraSkeletonHash, _bedPublicationAttempted);
+            _furnitureSourcePlacement!, _furnitureCameraSource, _furnitureCameraSkeletonHash, _bedPublicationAttempted, _furniturePendingTransfer);
         result.Validate(); return result;
     }
 
     private void RestorePlayerFurniture(FalloutPlayerFurnitureSnapshot saved)
     {
         saved.Validate(); var records = _physicalRecords!; var world = _physicalWorld!;
-        if (saved.Kind == FalloutPlayerFurnitureKind.Sleeping)
+        if (saved.Kind == FalloutPlayerFurnitureKind.Sleeping && saved.PendingTransfer != true)
             throw new NotSupportedException("Cold player bed requires its admitted original player activation and sleep/wait consumer.");
         var original = records.GetEffective(saved.Reference); var instance = world.Get(saved.Reference);
         var furniture = records.GetEffective(instance.Base); var placement = world.Placement(saved.Reference);
@@ -68,7 +68,8 @@ internal partial class RuntimeNativePlayer
         var content = RuntimeLiveContentSource.Current ?? throw new NotSupportedException("Cold physical source is absent.");
         FalloutNifFile Read(string resource) => content.TryRead(resource, null, out var bytes, out _)
             ? FalloutNifFile.Read(bytes) : throw new FileNotFoundException("Cold physical source resource is absent.", resource);
-        var nif = Read(model); var seat = FalloutFurnitureSource.ReadPlayer(records, furniture, nif);
+        var nif = Read(model); var seat = saved.PendingTransfer == true ?
+            FalloutPendingFurnitureSource.Marker(records, furniture, nif, saved.Seat.Index) : FalloutFurnitureSource.ReadPlayer(records, furniture, nif);
         if (model != saved.Model || !nif.Sha256.Equals(saved.ModelSha256, StringComparison.OrdinalIgnoreCase) ||
             seat.Furniture != saved.Seat.Furniture || seat.Index != saved.Seat.Index || seat.MarkerId != saved.Seat.MarkerId ||
             seat.Kind != saved.Kind || seat.Marker != saved.Seat.Marker || seat.HeadingDelta != saved.Seat.HeadingDelta ||
@@ -113,7 +114,7 @@ internal partial class RuntimeNativePlayer
         _occupied = occupied; _approach = approach; GlobalTransform = PhysicalPose(saved.Pose);
         _furniturePhase = (int)saved.Phase; _furniturePhysicalClock = saved.Animation;
         _furnitureCameraSource = saved.Camera; _furnitureCameraSkeletonHash = saved.CameraSkeletonSha256;
-        _bedPublicationAttempted = saved.BedPublicationAttempted; _furnitureLookYaw = saved.LookYaw;
+        _bedPublicationAttempted = saved.BedPublicationAttempted; _furniturePendingTransfer = saved.PendingTransfer!.Value; _furnitureLookYaw = saved.LookYaw;
         _furniturePath = saved.Path?.Select(point => new Vector3(point[0], point[1], point[2])).ToArray(); _furnitureWaypoint = saved.Waypoint;
         if (!_furnitureNavigation.TryGetValue(saved.Cell, out _furnitureGraph))
             _furnitureNavigation.Add(saved.Cell, _furnitureGraph = CellNavigationGraph.LoadOwned(records, saved.Cell));

@@ -39,88 +39,91 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         var construction = new RuntimeNativeLandscapeConstruction(source, observeConstruction);
         try
         {
-        construction.Advance(RuntimeNativeLandscapeConstructionPhase.Entered);
-        var sharedTextureCache = decodedTextures is not null;
-        decodedTextures ??= new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
-        Texture2D Texture(string path)
-        {
-            if (!decodedTextures.TryGetValue(path, out var texture))
+            construction.Advance(RuntimeNativeLandscapeConstructionPhase.Entered);
+            var sharedTextureCache = decodedTextures is not null;
+            decodedTextures ??= new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+            Texture2D Texture(string path)
             {
-                texture = construction.Own(NativeOwnedMediaLoader.LoadTexture(path));
-                decodedTextures.Add(path, texture);
-                if (sharedTextureCache)
-                    construction.TransferResourceToCache(texture, "actual-CELL-shared-decoded-LAND-texture:" + path,
-                        () => decodedTextures.TryGetValue(path, out var actual) && ReferenceEquals(actual, texture));
+                if (!decodedTextures.TryGetValue(path, out var texture))
+                {
+                    texture = construction.Own(NativeOwnedMediaLoader.LoadTexture(path));
+                    decodedTextures.Add(path, texture);
+                    if (sharedTextureCache)
+                        construction.TransferResourceToCache(texture, "actual-CELL-shared-decoded-LAND-texture:" + path,
+                            () => decodedTextures.TryGetValue(path, out var actual) && ReferenceEquals(actual, texture));
+                }
+                if (!GodotObject.IsInstanceValid(texture))
+                    throw new InvalidDataException("LAND texture cache retains a disposed native source texture.");
+                return texture;
             }
-            if (!GodotObject.IsInstanceValid(texture))
-                throw new InvalidDataException("LAND texture cache retains a disposed native source texture.");
-            return texture;
-        }
-        var textures = source.Textures.ToDictionary(
-            pair => pair.Key,
-            pair => new RuntimeLandscapeTextureResources(
-                Texture(pair.Value.DiffusePath),
-                pair.Value.NormalPath is null
-                    ? null
-                    : Texture(pair.Value.NormalPath)));
-        construction.Advance(RuntimeNativeLandscapeConstructionPhase.Textures);
-        var mesh = construction.Own(new ArrayMesh());
-        construction.Advance(RuntimeNativeLandscapeConstructionPhase.Mesh);
-        var settings = FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current ??
-            throw new InvalidOperationException("Landscape has no owned installation settings."));
-        var tiling = settings.Number("Landscape", "fLandTextureTilingMult");
-        var quadrantTiling = FalloutLandscapeMaterialInputs.QuadrantTiling(tiling);
-        var faceMaterials = new List<int>();
-        for (byte quadrant = 0; quadrant < QuadrantSide * QuadrantSide; ++quadrant)
-        {
-            using var arrays = BuildQuadrant(source, quadrant, gameUnitsToMeters);
-            mesh.AddSurfaceFromArrays(
-                Mesh.PrimitiveType.Triangles,
-                arrays);
-            mesh.SurfaceSetMaterial(quadrant, Material(source, quadrant, textures, quadrantTiling, construction));
-            construction.Advance(RuntimeNativeLandscapeConstructionPhase.Material);
-            var layers = source.AlphaLayers.Where(layer => layer.Quadrant == quadrant).OrderBy(layer => layer.LayerIndex).ToArray();
-            var basis = source.BaseLayers.Single(layer => layer.Quadrant == quadrant);
-            var materials = new[] { basis }.Concat(layers).Select(layer => (int?)source.Textures[layer.Texture].Physics?.Material ?? -1).ToArray();
-            using var indexValue = arrays[(int)Mesh.ArrayType.Index];
-            faceMaterials.AddRange(FalloutLandscapeMaterialInputs.CollisionMaterials(FalloutLandscapeMaterialInputs.Weights(layers),
-                materials, indexValue.AsInt32Array()));
-        }
-        mesh.RegenNormalMaps();
-        var geometry = construction.Own(new MeshInstance3D());
-        geometry.Name = $"LAND_Geometry_{source.Landscape}"; geometry.Mesh = mesh;
-        construction.Advance(RuntimeNativeLandscapeConstructionPhase.Geometry);
-        geometry.SetMeta("opennv_land_render_status", "source-layers-and-vertex-alpha; retail-pixels-unverified");
-        geometry.SetMeta("opennv_land_surfaces", mesh.GetSurfaceCount());
-        geometry.SetMeta("opennv_land_alpha_layers", source.AlphaLayers.Count);
-        geometry.SetMeta("opennv_land_quadrant_tiling", quadrantTiling);
-        geometry.SetMeta("opennv_land_weight_owner", "normalized-at-source-vertices;weighted-diffuse-and-decoded-normals");
-        var root = construction.Own(new RuntimeNativeLandscapeTransport
-        {
-            Source = source, Geometry = geometry, Textures = textures, Construction = construction,
-        });
-        root.Name = $"NativeLAND_{source.Landscape}";
-        root.SetMeta("opennv_land", source.Landscape.ToString());
-        root.SetMeta("opennv_land_cell", source.ActiveCell.ToString());
-        root.SetMeta("opennv_land_world", source.Worldspace.ToString());
-        root.SetMeta("opennv_land_height_owner", source.HeightDefault is { } defaults
-            ? $"WRLD-DNAM:{defaults.OwnerWorldspace}" : $"LAND-VHGT:{source.Landscape}");
-        root.SetMeta("opennv_land_texture_count", textures.Count);
-        root.SetMeta("opennv_source", "live-retail-files");
-        root.AddChild(geometry);
-        construction.Advance(RuntimeNativeLandscapeConstructionPhase.Root);
-        var collision = construction.Own(new StaticBody3D()); collision.Name = "LandscapeCollision";
-        root.AddChild(collision);
-        var collisionShape = construction.Own(new CollisionShape3D()); collision.AddChild(collisionShape);
-        var shape = mesh.CreateTrimeshShape() ?? throw new InvalidDataException("Native LAND mesh returned no collision shape.");
-        collisionShape.Shape = construction.Own(shape);
-        if (shape.Data.Length != faceMaterials.Count * 3)
-            throw new InvalidDataException("Actual LAND collision constructor changed the source face/material extent.");
-        collisionShape.SetMeta("opennv_havok_face_materials", faceMaterials.ToArray());
-        geometry.SetMeta("opennv_land_impact_unbound_triangles", faceMaterials.Count(material => material < 0));
-        construction.Advance(RuntimeNativeLandscapeConstructionPhase.Collision);
-        NativeExteriorDetailBlend.Bind(root, terrain: true);
-        construction.FactoryReturned(root); return root;
+            var textures = source.Textures.ToDictionary(
+                pair => pair.Key,
+                pair => new RuntimeLandscapeTextureResources(
+                    Texture(pair.Value.DiffusePath),
+                    pair.Value.NormalPath is null
+                        ? null
+                        : Texture(pair.Value.NormalPath)));
+            construction.Advance(RuntimeNativeLandscapeConstructionPhase.Textures);
+            var mesh = construction.Own(new ArrayMesh());
+            construction.Advance(RuntimeNativeLandscapeConstructionPhase.Mesh);
+            var settings = FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current ??
+                throw new InvalidOperationException("Landscape has no owned installation settings."));
+            var tiling = settings.Number("Landscape", "fLandTextureTilingMult");
+            var quadrantTiling = FalloutLandscapeMaterialInputs.QuadrantTiling(tiling);
+            var faceMaterials = new List<int>();
+            for (byte quadrant = 0; quadrant < QuadrantSide * QuadrantSide; ++quadrant)
+            {
+                using var arrays = BuildQuadrant(source, quadrant, gameUnitsToMeters);
+                mesh.AddSurfaceFromArrays(
+                    Mesh.PrimitiveType.Triangles,
+                    arrays);
+                mesh.SurfaceSetMaterial(quadrant, Material(source, quadrant, textures, quadrantTiling, construction));
+                construction.Advance(RuntimeNativeLandscapeConstructionPhase.Material);
+                var layers = source.AlphaLayers.Where(layer => layer.Quadrant == quadrant).OrderBy(layer => layer.LayerIndex).ToArray();
+                var basis = source.BaseLayers.Single(layer => layer.Quadrant == quadrant);
+                var materials = new[] { basis }.Concat(layers).Select(layer => (int?)source.Textures[layer.Texture].Physics?.Material ?? -1).ToArray();
+                using var indexValue = arrays[(int)Mesh.ArrayType.Index];
+                faceMaterials.AddRange(FalloutLandscapeMaterialInputs.CollisionMaterials(FalloutLandscapeMaterialInputs.Weights(layers),
+                    materials, indexValue.AsInt32Array()));
+            }
+            mesh.RegenNormalMaps();
+            var geometry = construction.Own(new MeshInstance3D());
+            geometry.Name = $"LAND_Geometry_{source.Landscape}"; geometry.Mesh = mesh;
+            construction.Advance(RuntimeNativeLandscapeConstructionPhase.Geometry);
+            geometry.SetMeta("opennv_land_render_status", "source-layers-and-vertex-alpha; retail-pixels-unverified");
+            geometry.SetMeta("opennv_land_surfaces", mesh.GetSurfaceCount());
+            geometry.SetMeta("opennv_land_alpha_layers", source.AlphaLayers.Count);
+            geometry.SetMeta("opennv_land_quadrant_tiling", quadrantTiling);
+            geometry.SetMeta("opennv_land_weight_owner", "normalized-at-source-vertices;weighted-diffuse-and-decoded-normals");
+            var root = construction.Own(new RuntimeNativeLandscapeTransport
+            {
+                Source = source,
+                Geometry = geometry,
+                Textures = textures,
+                Construction = construction,
+            });
+            root.Name = $"NativeLAND_{source.Landscape}";
+            root.SetMeta("opennv_land", source.Landscape.ToString());
+            root.SetMeta("opennv_land_cell", source.ActiveCell.ToString());
+            root.SetMeta("opennv_land_world", source.Worldspace.ToString());
+            root.SetMeta("opennv_land_height_owner", source.HeightDefault is { } defaults
+                ? $"WRLD-DNAM:{defaults.OwnerWorldspace}" : $"LAND-VHGT:{source.Landscape}");
+            root.SetMeta("opennv_land_texture_count", textures.Count);
+            root.SetMeta("opennv_source", "live-retail-files");
+            root.AddChild(geometry);
+            construction.Advance(RuntimeNativeLandscapeConstructionPhase.Root);
+            var collision = construction.Own(new StaticBody3D()); collision.Name = "LandscapeCollision";
+            root.AddChild(collision);
+            var collisionShape = construction.Own(new CollisionShape3D()); collision.AddChild(collisionShape);
+            var shape = mesh.CreateTrimeshShape() ?? throw new InvalidDataException("Native LAND mesh returned no collision shape.");
+            collisionShape.Shape = construction.Own(shape);
+            if (shape.Data.Length != faceMaterials.Count * 3)
+                throw new InvalidDataException("Actual LAND collision constructor changed the source face/material extent.");
+            collisionShape.SetMeta("opennv_havok_face_materials", faceMaterials.ToArray());
+            geometry.SetMeta("opennv_land_impact_unbound_triangles", faceMaterials.Count(material => material < 0));
+            construction.Advance(RuntimeNativeLandscapeConstructionPhase.Collision);
+            NativeExteriorDetailBlend.Bind(root, terrain: true);
+            construction.FactoryReturned(root); return root;
         }
         catch (Exception original)
         {
@@ -138,64 +141,64 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         using var parameters = new RuntimeNativeLandscapeParameterBindings();
         try
         {
-        var shader = new StringBuilder("""
+            var shader = new StringBuilder("""
             shader_type spatial;
             render_mode cull_back, ambient_light_disabled, specular_disabled;
             uniform sampler2D base_texture : filter_linear_mipmap_anisotropic, repeat_enable;
             uniform float tiling;
             varying float source_fog_factor;
             """);
-        shader.AppendLine(NativeNifMaterialEnvironment.ShaderSource);
-        shader.AppendLine(RetailVertexFog.ShaderSource);
-        shader.AppendLine(NativeExteriorDetailBlend.NearDeclarations);
-        var vertex = new StringBuilder("void vertex() {\nsource_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), PROJECTION_MATRIX, owned_environment_fog_range(), owned_environment_fog_units());\n");
-        vertex.AppendLine(NativeExteriorDetailBlend.NearVertex);
-        for (var pack = 0; pack * 4 < weights.Length; pack++)
-        {
-            shader.AppendLine($"uniform sampler2D weights_{pack} : filter_nearest, repeat_disable;\nvarying vec4 layer_weights_{pack};");
-            vertex.AppendLine($"layer_weights_{pack} = textureLod(weights_{pack}, (UV * 16.0 + 0.5) / 17.0, 0.0);");
-            parameters.Add($"weights_{pack}", construction.Own(WeightTexture(weights, pack)));
-        }
-        static string Weight(int layer) => $"layer_weights_{layer / 4}.{"xyzw"[layer % 4]}";
-        var fragment = new StringBuilder($"void fragment() {{\nvec2 tiled_uv = UV * tiling;\nvec3 albedo = texture(base_texture, tiled_uv).rgb * {Weight(0)};\nvec3 normal_sample = vec3(0.0,0.0,1.0) * {Weight(0)};\n");
-        fragment.AppendLine(NativeExteriorDetailBlend.NearFragment);
-        var basis = source.BaseLayers.Single(layer => layer.Quadrant == quadrant);
-        parameters.Add("base_texture", textures[basis.Texture].Diffuse);
-        parameters.Add("tiling", tiling);
-        if (textures[basis.Texture].Normal is { } baseNormal)
-        {
-            shader.AppendLine("uniform sampler2D base_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;");
-            parameters.Add("base_normal", baseNormal);
-            fragment.AppendLine($"normal_sample = (texture(base_normal, tiled_uv).rgb * 2.0 - 1.0) * {Weight(0)};");
-        }
-        for (var index = 0; index < layers.Length; index++)
-        {
-            var layer = layers[index];
-            shader.AppendLine($"uniform sampler2D color_{index} : filter_linear_mipmap_anisotropic, repeat_enable;");
-            fragment.AppendLine($"albedo += texture(color_{index}, tiled_uv).rgb * {Weight(index + 1)};");
-            parameters.Add($"color_{index}", textures[layer.Texture].Diffuse);
-            if (textures[layer.Texture].Normal is { } normal)
+            shader.AppendLine(NativeNifMaterialEnvironment.ShaderSource);
+            shader.AppendLine(RetailVertexFog.ShaderSource);
+            shader.AppendLine(NativeExteriorDetailBlend.NearDeclarations);
+            var vertex = new StringBuilder("void vertex() {\nsource_fog_factor = owned_vertex_fog(MODELVIEW_MATRIX * vec4(VERTEX, 1.0), PROJECTION_MATRIX, owned_environment_fog_range(), owned_environment_fog_units());\n");
+            vertex.AppendLine(NativeExteriorDetailBlend.NearVertex);
+            for (var pack = 0; pack * 4 < weights.Length; pack++)
             {
-                shader.AppendLine($"uniform sampler2D normal_{index} : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;");
-                parameters.Add($"normal_{index}", normal);
-                fragment.AppendLine($"normal_sample += (texture(normal_{index}, tiled_uv).rgb * 2.0 - 1.0) * {Weight(index + 1)};");
+                shader.AppendLine($"uniform sampler2D weights_{pack} : filter_nearest, repeat_disable;\nvarying vec4 layer_weights_{pack};");
+                vertex.AppendLine($"layer_weights_{pack} = textureLod(weights_{pack}, (UV * 16.0 + 0.5) / 17.0, 0.0);");
+                parameters.Add($"weights_{pack}", construction.Own(WeightTexture(weights, pack)));
             }
-            else fragment.AppendLine($"normal_sample += vec3(0.0,0.0,1.0) * {Weight(index + 1)};");
-        }
-        shader.Append(vertex).AppendLine("}").Append(fragment)
-            .AppendLine("ALBEDO = albedo * COLOR.rgb; EMISSION = ALBEDO * owned_environment_ambient(); NORMAL_MAP = normalize(normal_sample) * 0.5 + 0.5; FOG = vec4(owned_environment_fog_color(), source_fog_factor); }");
-        RetailLighting.AppendDiffuseLightFunction(shader);
-        var code = shader.ToString();
-        if (!Shaders.TryGetValue(code, out var compiled))
-        {
-            compiled = construction.Own(new Shader()); compiled.Code = code; Shaders.Add(code, compiled);
-            construction.TransferResourceToCache(compiled, "actual-first-party-LAND-shader-cache",
-                () => Shaders.TryGetValue(code, out var actual) && ReferenceEquals(actual, compiled));
-        }
-        if (!GodotObject.IsInstanceValid(compiled)) throw new InvalidDataException("LAND shader cache retained a disposed native shader.");
-        material.Shader = compiled;
-        foreach (var (name, value) in parameters.Values) material.SetShaderParameter(name, value);
-        return material;
+            static string Weight(int layer) => $"layer_weights_{layer / 4}.{"xyzw"[layer % 4]}";
+            var fragment = new StringBuilder($"void fragment() {{\nvec2 tiled_uv = UV * tiling;\nvec3 albedo = texture(base_texture, tiled_uv).rgb * {Weight(0)};\nvec3 normal_sample = vec3(0.0,0.0,1.0) * {Weight(0)};\n");
+            fragment.AppendLine(NativeExteriorDetailBlend.NearFragment);
+            var basis = source.BaseLayers.Single(layer => layer.Quadrant == quadrant);
+            parameters.Add("base_texture", textures[basis.Texture].Diffuse);
+            parameters.Add("tiling", tiling);
+            if (textures[basis.Texture].Normal is { } baseNormal)
+            {
+                shader.AppendLine("uniform sampler2D base_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;");
+                parameters.Add("base_normal", baseNormal);
+                fragment.AppendLine($"normal_sample = (texture(base_normal, tiled_uv).rgb * 2.0 - 1.0) * {Weight(0)};");
+            }
+            for (var index = 0; index < layers.Length; index++)
+            {
+                var layer = layers[index];
+                shader.AppendLine($"uniform sampler2D color_{index} : filter_linear_mipmap_anisotropic, repeat_enable;");
+                fragment.AppendLine($"albedo += texture(color_{index}, tiled_uv).rgb * {Weight(index + 1)};");
+                parameters.Add($"color_{index}", textures[layer.Texture].Diffuse);
+                if (textures[layer.Texture].Normal is { } normal)
+                {
+                    shader.AppendLine($"uniform sampler2D normal_{index} : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;");
+                    parameters.Add($"normal_{index}", normal);
+                    fragment.AppendLine($"normal_sample += (texture(normal_{index}, tiled_uv).rgb * 2.0 - 1.0) * {Weight(index + 1)};");
+                }
+                else fragment.AppendLine($"normal_sample += vec3(0.0,0.0,1.0) * {Weight(index + 1)};");
+            }
+            shader.Append(vertex).AppendLine("}").Append(fragment)
+                .AppendLine("ALBEDO = albedo * COLOR.rgb; EMISSION = ALBEDO * owned_environment_ambient(); NORMAL_MAP = normalize(normal_sample) * 0.5 + 0.5; FOG = vec4(owned_environment_fog_color(), source_fog_factor); }");
+            RetailLighting.AppendDiffuseLightFunction(shader);
+            var code = shader.ToString();
+            if (!Shaders.TryGetValue(code, out var compiled))
+            {
+                compiled = construction.Own(new Shader()); compiled.Code = code; Shaders.Add(code, compiled);
+                construction.TransferResourceToCache(compiled, "actual-first-party-LAND-shader-cache",
+                    () => Shaders.TryGetValue(code, out var actual) && ReferenceEquals(actual, compiled));
+            }
+            if (!GodotObject.IsInstanceValid(compiled)) throw new InvalidDataException("LAND shader cache retained a disposed native shader.");
+            material.Shader = compiled;
+            foreach (var (name, value) in parameters.Values) material.SetShaderParameter(name, value);
+            return material;
         }
         catch (Exception original) { parameters.OriginalFailure = original; construction.MarkCallerFailure(original); throw; }
     }

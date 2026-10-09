@@ -5,10 +5,10 @@ internal static partial class SourceMainScriptCallerContracts
 {
     private static void SourceMainUtilityCases()
     {
-        UtilitySignedQueueAndCold(); UtilityMutableQueue(); UtilityFailedPrefix(); UtilityCallbackCommitAndFailure();
+        UtilitySignedQueueAndCold(); UtilityFormattingFailedPrefix(); UtilityMutableQueue(); UtilityFailedPrefix(); UtilityCallbackCommitAndFailure();
         Console.WriteLine("OPENNV_SOURCE_MAIN_UTILITIES_PASS authoredPlatformOnly=true realUtilityOrder=true " +
             "duplicateSignedFIFO=true falseApiObservations=true nestedQueue=true cacheBeforeCallbackFault=true " +
-            "coldNoReplay=true nativeSteam=UNOWNED gameplay=UNEXECUTED");
+            "fourByteFormatting=true formatterBeforeFreshQuery=true coldNoReplay=true nativeSteam=UNEXECUTED gameplay=UNEXECUTED");
     }
     private static void UtilitySignedQueueAndCold()
     {
@@ -19,12 +19,12 @@ internal static partial class SourceMainScriptCallerContracts
         using (warm.Owner.BindMainUtilityPlatform(platform))
         using (warm.Owner.BindMainUtilityCommandHost(commands))
         {
-            foreach (var id in new[] { 1, 1, -1, 100, 101 }) warm.Owner.AddSourceAchievement(id);
-            using (warm.Bind()) warm.Owner.ExecuteMainScriptCaller(1, .02f);
+            foreach (var id in new[] { 1, 1, -1, 99, 101 }) warm.Owner.AddSourceAchievement(id);
+            using (warm.Bind()) warm.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult();
         }
         var utility = warm.Owner.CaptureMainUtilities();
         var frame = utility.LastFrame ?? throw new InvalidOperationException("Actual utility frame is absent.");
-        Require(platform.Achievements.SequenceEqual(["A01", "A01", "A-1", "A100"]) &&
+        Require(platform.Achievements.SequenceEqual(["A01", "A01", "A-1", "A99"]) &&
             commands.Range.SequenceEqual([101]) && utility.Pending.Count == 0 && utility.ClearedThrough == 5 &&
             utility.LastCleared.All(request => request.PayloadRetired is not null) && platform.StatisticsQueries == 10 &&
             platform.UserQueries == 0 && frame.Returned && frame.Effects.Last().Step == FalloutMainUtilityStep.ThirdNoOp &&
@@ -43,6 +43,37 @@ internal static partial class SourceMainScriptCallerContracts
         Require(restored.LastFrame == frame && restored.LastCleared.SequenceEqual(utility.LastCleared) &&
             restored.Pending.Count == 0 && cold.Host.Log.Count == 0 && platform.Achievements.Count == 4,
             "Cold utility reconstruction replayed platform calls, rewrote payloads or fabricated a source callback.");
+    }
+    private static void UtilityFormattingFailedPrefix()
+    {
+        foreach (var wide in new[] { 100, -10, int.MinValue })
+        {
+            using var fixture = new Fixture();
+            var platform = new UtilityPlatform(fixture.Owner.MainUtilitySource);
+            var commands = new UtilityCommands(fixture.Owner.MainUtilitySource);
+            fixture.Host.DuringPrologue = fixture.Owner.ExecuteMainUtilities;
+            using (fixture.Owner.BindMainUtilityPlatform(platform))
+            using (fixture.Owner.BindMainUtilityCommandHost(commands))
+            using (fixture.Bind())
+            {
+                fixture.Owner.AddSourceAchievement(1); fixture.Owner.AddSourceAchievement(wide);
+                fixture.Owner.AddSourceAchievement(2);
+                Reject(() => fixture.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult());
+            }
+            var state = fixture.Owner.CaptureMainUtilities();
+            Require(platform.StatisticsQueries == 3 && platform.Achievements.SequenceEqual(["A01"]) &&
+                commands.Range.Count == 0 && state.ClearedThrough == 0 && !state.LoginConstructed &&
+                state.Pending is [{ Id: 1, PayloadRetired: not null }, { PayloadRetired: not null }, { Id: 2, PayloadRetired: null }] &&
+                state.Pending[1].Id == wide && state.LastFrame is { Returned: false, FailureType: "System.NotSupportedException" } &&
+                state.LastFrame.Effects.Last() is { Step: FalloutMainUtilityStep.FormatAchievement, Returned: null, Argument: null },
+                "Four-byte formatter overflow queried the second interface, widened/truncated an award, replayed a retired payload or cleared its genuine prefix.");
+            var field = fixture.Owner.CaptureMainScriptFrameEvidence(); var main = fixture.Owner.CaptureMainScriptCaller();
+            using var cold = new Fixture(fixture.Owner.Capture(), field, main);
+            cold.Owner.RestoreMainUtilities(state);
+            using (cold.Bind()) Reject(() => cold.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult());
+            Require(cold.Owner.CaptureMainUtilities().LastFrame == state.LastFrame && cold.Host.Log.Count == 0,
+                "Cold reconstructed a guessed formatter handler or replayed the original failure prefix.");
+        }
     }
     private static void UtilityMutableQueue()
     {
@@ -65,12 +96,12 @@ internal static partial class SourceMainScriptCallerContracts
                     fixture.Owner.RegisterSourceLoginCallback("authored-source-unregister", null);
                 }
             });
-            fixture.Owner.ExecuteMainScriptCaller(7, .02f);
+            fixture.Owner.ExecuteMainScriptCaller(7, .02f).GetAwaiter().GetResult();
             var first = fixture.Owner.CaptureMainUtilities();
             Require(platform.Achievements.SequenceEqual(["A01", "A02"]) && first.Pending is [{ Id: 3, PayloadRetired: null }] &&
                 first.Callback is { Registered: false, Registration: 2 } && first.LoggedOn && first.Registrations == 2,
                 "Nested source writers lost mutable traversal, revived an old callback pointer or prematurely cleared a later login request.");
-            fixture.Owner.ExecuteMainScriptCaller(8, .02f);
+            fixture.Owner.ExecuteMainScriptCaller(8, .02f).GetAwaiter().GetResult();
             Require(platform.Achievements.SequenceEqual(["A01", "A02", "A03"]) && fixture.Owner.CaptureMainUtilities().Pending.Count == 0,
                 "The next genuine Main invocation replayed an earlier source request or lost the pending login callback request.");
         }
@@ -87,7 +118,7 @@ internal static partial class SourceMainScriptCallerContracts
         using (fixture.Bind())
         {
             fixture.Owner.AddSourceAchievement(4);
-            Reject(() => fixture.Owner.ExecuteMainScriptCaller(1, .02f));
+            Reject(() => fixture.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult());
         }
         var state = fixture.Owner.CaptureMainUtilities();
         Require(state.Pending is [{ Id: 4, PayloadRetired: not null }] && state.ClearedThrough == 0 &&
@@ -98,7 +129,7 @@ internal static partial class SourceMainScriptCallerContracts
         var main = fixture.Owner.CaptureMainScriptCaller(); var field = fixture.Owner.CaptureMainScriptFrameEvidence();
         using var cold = new Fixture(fixture.Owner.Capture(), field, main);
         cold.Owner.RestoreMainUtilities(state);
-        using (cold.Bind()) Reject(() => cold.Owner.ExecuteMainScriptCaller(1, .02f));
+        using (cold.Bind()) Reject(() => cold.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult());
         Require(cold.Owner.CaptureMainUtilities().LastFrame == state.LastFrame && cold.Host.Log.Count == 0 &&
             cold.Owner.MainUtilitySaveBlocker is not null, "Cold replayed the entered failed platform frame.");
     }
@@ -114,7 +145,7 @@ internal static partial class SourceMainScriptCallerContracts
             if (value) throw new IOException("Authored login callback fails after the committed cache write.");
         });
         using (fixture.Owner.BindMainUtilityPlatform(platform))
-        using (fixture.Bind()) Reject(() => fixture.Owner.ExecuteMainScriptCaller(10, .02f));
+        using (fixture.Bind()) Reject(() => fixture.Owner.ExecuteMainScriptCaller(10, .02f).GetAwaiter().GetResult());
         var state = fixture.Owner.CaptureMainUtilities();
         Require(calls == 2 && state.LoggedOn && state.LoginChanged > 0 && state.Callback is { Registered: true } &&
             state.LastFrame is { Returned: false, FailureType: "System.IO.IOException" } &&

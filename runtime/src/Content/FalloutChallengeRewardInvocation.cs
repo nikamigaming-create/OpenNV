@@ -170,16 +170,23 @@ internal sealed class FalloutChallengeRewardInvocation : IFalloutCompiledEventLo
         receipt.Require(Program, Target);
         if (receipt.Invocation != 0) requests.RequireCurrentCompiledReceipt(receipt);
         else if (receipt.Disposition != "admission-refusal") throw new InvalidDataException("Challenge reward has no genuine shared invocation.");
-        _events[_activeOrdinal] = _events[_activeOrdinal] with { Receipt = receipt,
-            FailureType = receipt.Error is null ? null : "OpenNV.Runtime.Content.FalloutCompiledInvocationFailure", Error = receipt.Error };
+        _events[_activeOrdinal] = _events[_activeOrdinal] with
+        {
+            Receipt = receipt,
+            FailureType = receipt.Error is null ? null : "OpenNV.Runtime.Content.FalloutCompiledInvocationFailure",
+            Error = receipt.Error
+        };
     }
     internal void ExitEvent(Exception? failure = null)
     {
         if (_activeCursor is null) return;
         var row = _events[_activeOrdinal];
-        _events[_activeOrdinal] = row with { Cursor = _activeCursor.State with { Branches = _activeCursor.State.Branches.ToArray() },
+        _events[_activeOrdinal] = row with
+        {
+            Cursor = _activeCursor.State with { Branches = _activeCursor.State.Branches.ToArray() },
             FailureType = failure is null ? row.FailureType : failure.GetType().FullName ?? failure.GetType().Name,
-            Error = failure?.Message ?? row.Error };
+            Error = failure?.Message ?? row.Error
+        };
         _activeCursor = null; _activeOrdinal = -1; ActiveCompiledInvocation = false;
     }
     internal void Completed()

@@ -7,9 +7,13 @@ internal sealed partial class FalloutReferenceWorld
     private FalloutQueuedReferencePriority? _sourceQueuePriority;
     private Func<(FalloutActorProcessFact<int> X, FalloutActorProcessFact<int> Y)>? _sourceQueueGrid;
     private object? _sourceQueueGridLease;
-    internal object? SourceMainFrameState => new { main = ActualProcessRuntimeState,
-        priority = _sourceQueuePriority?.State, tasks = _queuedReferences?.TaskPriorities.State,
-        actualGridProducerBound = _sourceQueueGridLease is not null };
+    internal object? SourceMainFrameState => new
+    {
+        main = ActualProcessRuntimeState,
+        priority = _sourceQueuePriority?.State,
+        tasks = _queuedReferences?.TaskPriorities.State,
+        actualGridProducerBound = _sourceQueueGridLease is not null
+    };
     internal IDisposable BindSourceQueuedPriorityGrid(Func<(FalloutActorProcessFact<int> X, FalloutActorProcessFact<int> Y)> read)
     {
         ObjectDisposedException.ThrowIf(_disposed, this); ArgumentNullException.ThrowIfNull(read);

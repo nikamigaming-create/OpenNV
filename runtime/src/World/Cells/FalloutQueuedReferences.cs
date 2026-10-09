@@ -65,9 +65,20 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
     }
     internal object State
     {
-        get { lock (_gate) return new { source = _source.Contract, process = _process, _sequence,
-            map = _map.Select(item => new FalloutQueuedReferenceMapEntry(item.Key, item.Value)).ToArray(),
-            objects = _objects.Values.ToArray(), tasks = TaskPriorities.State, cold = _cold, saveBlocker = SaveBlocker }; }
+        get
+        {
+            lock (_gate) return new
+            {
+                source = _source.Contract,
+                process = _process,
+                _sequence,
+                map = _map.Select(item => new FalloutQueuedReferenceMapEntry(item.Key, item.Value)).ToArray(),
+                objects = _objects.Values.ToArray(),
+                tasks = TaskPriorities.State,
+                cold = _cold,
+                saveBlocker = SaveBlocker
+            };
+        }
     }
 
     internal FalloutQueuedReferenceRequest Request(FalloutFormKey reference, int priority,
@@ -141,8 +152,12 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
                 _ => throw new InvalidDataException("Queued-reference consumer entered outside its actual source work order.")
             };
             var consumer = Guid.NewGuid(); var sequence = Next();
-            _objects[identity] = item with { Phase = phase, Changed = sequence,
-                Consumers = item.Consumers.Append(new(consumer, kind, owner, _process, sequence, sequence, false, null)).ToArray() };
+            _objects[identity] = item with
+            {
+                Phase = phase,
+                Changed = sequence,
+                Consumers = item.Consumers.Append(new(consumer, kind, owner, _process, sequence, sequence, false, null)).ToArray()
+            };
             return consumer;
         }
     }
@@ -182,8 +197,13 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
                 FalloutQueuedReferenceConsumerKind.Cancellation => FalloutQueuedReferencePhase.ConsumersRetired,
                 _ => throw new InvalidDataException("Queued-reference consumer kind is unknown.")
             };
-            _objects[identity] = item with { Phase = phase, Failure = item.Failure ?? error, Changed = sequence,
-                Consumers = item.Consumers.Select(value => value.Identity == consumer ? returned : value).ToArray() };
+            _objects[identity] = item with
+            {
+                Phase = phase,
+                Failure = item.Failure ?? error,
+                Changed = sequence,
+                Consumers = item.Consumers.Select(value => value.Identity == consumer ? returned : value).ToArray()
+            };
         }
     }
 

@@ -175,8 +175,14 @@ internal sealed class FalloutScriptedActiveEffect
             var freshLocals = new FalloutScriptEffectLocals(_script);
             var fresh = new FalloutCompiledActiveEffectExecution(_records, _target, Source.Script, next, _script, freshLocals);
             Locals = freshLocals; Compiled = fresh;
-            _state = _state with { EventListGeneration = next, Started = false, FinishApplied = false,
-                FinishCause = null, PreviousClosedList = prior };
+            _state = _state with
+            {
+                EventListGeneration = next,
+                Started = false,
+                FinishApplied = false,
+                FinishCause = null,
+                PreviousClosedList = prior
+            };
         }
         _state = _state with { ConditionsInitialized = true, Applied = pass };
     }

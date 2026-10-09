@@ -30,6 +30,7 @@ void command_table_declaration_text(Bytes& bytes, const char* source, const std:
 }
 void command_table_check(const NativeCommandPublication& publication) {
     const auto observed = nvse_copy(&publication.descriptor);
+    if (observed.execute) engine_command_executable(observed.execute);
     if (std::memcmp(&observed, &publication.original, sizeof(observed)) != 0 ||
         nvse_string(observed.name, false) != publication.expected_name ||
         nvse_string(observed.alias, true) != publication.expected_alias || nvse_string(observed.help, true) != publication.expected_help)

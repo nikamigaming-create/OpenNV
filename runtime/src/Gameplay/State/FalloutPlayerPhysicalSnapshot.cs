@@ -28,7 +28,7 @@ internal sealed record FalloutPlayerFurnitureSnapshot(FalloutFormKey Reference, 
     IReadOnlyDictionary<int, FalloutFurnitureClipSnapshot> Clips,
     float[] Placement, FalloutReferencePlacement ReferencePlacement,
     FalloutFurnitureClipSnapshot? Camera = null, string? CameraSkeletonSha256 = null,
-    bool BedPublicationAttempted = false)
+    bool BedPublicationAttempted = false, bool? PendingTransfer = null)
 {
     internal void Validate()
     {
@@ -42,6 +42,7 @@ internal sealed record FalloutPlayerFurnitureSnapshot(FalloutFormKey Reference, 
             Seat.PlacementOffset is not { Length: 3 } || Seat.PlacementOffset.Any(value => !float.IsFinite(value)) ||
             !float.IsFinite(Seat.HeadingDelta) || !Enum.IsDefined(Kind) || Phase is FalloutPlayerFurniturePhase.None ||
             !Enum.IsDefined(Phase) || !double.IsFinite(PhaseSeconds) || PhaseSeconds < 0 || !float.IsFinite(LookYaw) ||
+            PendingTransfer is null || PendingTransfer == true && BedPublicationAttempted ||
             Clips is null || !Clips.Keys.Order().SequenceEqual(new[] { 1, 2, 4 }) ||
             Waypoint < 0 || Waypoint > (Path?.Count ?? 0) ||
             Path?.Any(point => point is not { Length: 3 } || point.Any(value => !float.IsFinite(value))) == true ||

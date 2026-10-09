@@ -11,9 +11,17 @@ internal sealed record FalloutCellNativeSource(FalloutCellProcessIdentity Cell, 
     internal static string TransportDigest(FalloutLandscapeTransport source) =>
         Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new
         {
-            source.ActiveCell, x = source.ActiveCoordinates.X, y = source.ActiveCoordinates.Y,
-            source.Worldspace, source.Landscape, source.Flags, source.Heights, source.Normals, source.Colors,
-            source.BaseLayers, source.AlphaLayers,
+            source.ActiveCell,
+            x = source.ActiveCoordinates.X,
+            y = source.ActiveCoordinates.Y,
+            source.Worldspace,
+            source.Landscape,
+            source.Flags,
+            source.Heights,
+            source.Normals,
+            source.Colors,
+            source.BaseLayers,
+            source.AlphaLayers,
             textures = source.Textures.Select(pair => new { identity = pair.Key, source = pair.Value }).ToArray(),
             source.HeightDefault
         }))).ToLowerInvariant();

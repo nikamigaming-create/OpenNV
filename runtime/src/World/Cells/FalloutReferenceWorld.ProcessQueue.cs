@@ -30,10 +30,13 @@ internal sealed partial class FalloutReferenceWorld
         throw new NotSupportedException("Original counted CELL extra process owner is absent.");
     internal object? SourceProcessQueueState => _queuedReferences is null && _actorLoaderFields is null &&
         _processReevaluation is null && _cellExtraProcess is null ? null : new
-    {
-        loader = _queuedReferences?.State, reevaluation = _processReevaluation?.State,
-        cells = _cellExtraProcess?.State, mainFrame = SourceMainFrameState, unownedCurrentLists = _unownedCellReferenceLists.ToArray()
-    };
+        {
+            loader = _queuedReferences?.State,
+            reevaluation = _processReevaluation?.State,
+            cells = _cellExtraProcess?.State,
+            mainFrame = SourceMainFrameState,
+            unownedCurrentLists = _unownedCellReferenceLists.ToArray()
+        };
     internal string? SourceProcessQueueSaveBlocker => !SourceProcessQueuesConfigured ? "actual-source-process-queue-owner-absent" :
         QueuedReferences.SaveBlocker ?? ActorLoaderFields.SaveBlocker ?? ProcessReevaluation.SaveBlocker ?? CellExtraProcess.SaveBlocker ??
         _sourceQueuePriority?.SaveBlocker ?? _unownedCellReferenceLists.Values.FirstOrDefault();

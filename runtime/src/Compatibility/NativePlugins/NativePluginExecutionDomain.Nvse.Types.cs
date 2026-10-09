@@ -7,6 +7,7 @@ internal enum NativeNvseHostCall : uint
     QueryInterface = 1, SetOpcode = 2, RegisterCommand = 3, RegisterListener = 4,
     SerializationCallback = 5, Unsupported = 6, DispatchMessage = 7,
     DeliveredMessage = 8, DeliveredSerialization = 9, BeginSerialization = 10,
+    EngineCommandDeclare = 11, EngineCommandPublish = 12, EngineCommandExecute = 13, EngineCommandRetire = 14,
 }
 internal enum NativeNvsePhase { Mapped, Querying, QueriedTrue, QueriedFalse, Loading, LoadedTrue, LoadedFalse, Retired, Faulted }
 internal enum NativeNvseSerializationEvent : uint { Save, Load, NewGame, PreLoad }
@@ -26,9 +27,11 @@ internal sealed record NativeNvseCommand(
     byte RawReturnType, NativeNvseCommandReturn ReturnType, uint RequiredPluginVersion,
     ushort NeedsParent, uint Flags, uint ParameterAddress,
     NativeNvseText Name, NativeNvseText Alias, NativeNvseText Help,
-    ImmutableArray<NativeNvseParameter> Parameters, uint Execute, uint Parse, uint Evaluate)
+    ImmutableArray<NativeNvseParameter> Parameters, uint Execute, uint Parse, uint Evaluate, NativeNvseEngineCommandBinding? EngineExecute = null)
 {
-    internal string ExecutionAdmission => NeedsParent == 0 && Parse == 0x08000000 && ReturnType == NativeNvseCommandReturn.Default
+    internal string ExecutionAdmission => EngineExecute is { Live: true } && NeedsParent == 0 && Parameters.IsEmpty && ReturnType == NativeNvseCommandReturn.Default
+        ? "source-Boolean-leaf-first-party-callable; actual-caller-execution-receipt-required"
+        : NeedsParent == 0 && Parse == 0x08000000 && ReturnType == NativeNvseCommandReturn.Default
         ? "explicit-objectless-expression-caller-required; original-execution-unverified" : "native-object-or-special-caller-owner-absent";
     internal string ParseAdmission => Parse switch
     {

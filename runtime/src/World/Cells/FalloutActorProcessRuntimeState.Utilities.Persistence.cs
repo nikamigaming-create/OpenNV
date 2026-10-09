@@ -8,7 +8,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
     {
         if (_utilityActive is not null)
         { FaultMainUtility(); throw new NotSupportedException("Actual platform utility cannot capture or retire its entered consumer."); }
-        if (retiring && (_utilityPlatformLease != Guid.Empty || _utilityCommandLease != Guid.Empty))
+        if (retiring && (_utilityPlatformLease != Guid.Empty || _utilityCommandLease != Guid.Empty || _steamServiceLease != Guid.Empty))
             throw new NotSupportedException("Actual utility provider leases must retire before the source Main process.");
     }
     internal FalloutMainUtilitySnapshot CaptureMainUtilities()
@@ -135,7 +135,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 if (!known.TryGetValue(effect.Request!.Value, out var request))
                     throw new InvalidDataException("Utility frame referenced a payload outside its actual pending/cleared FIFO.");
                 if (effect.Step == FalloutMainUtilityStep.RetirePayload && effect.Returned is not null && request.PayloadRetired != effect.Entered + 1 ||
-                    effect.Step == FalloutMainUtilityStep.SetAchievement && effect.Argument != FalloutMainUtilitySource.AchievementIdentifier(request.Id) ||
+                    (effect.Step == FalloutMainUtilityStep.SetAchievement || effect.Step == FalloutMainUtilityStep.FormatAchievement && effect.Returned is not null) &&
+                    effect.Argument != FalloutMainUtilitySource.AchievementIdentifier(request.Id) ||
                     effect.Step == FalloutMainUtilityStep.RangeDiagnostic && request.Id <= 100)
                     throw new InvalidDataException("Utility platform argument or payload retirement drifted from its original queued request.");
             }
@@ -187,9 +188,9 @@ internal sealed partial class FalloutActorProcessRuntimeState
                     FalloutMainUtilityStep.LoggedOn or FalloutMainUtilityStep.StoreLogin or FalloutMainUtilityStep.ChangedCallback or
                     FalloutMainUtilityStep.SuppressionByte or FalloutMainUtilityStep.RegisterCallback or FalloutMainUtilityStep.InitialCallback;
                 var requestStep = effect.Step is FalloutMainUtilityStep.RetirePayload or FalloutMainUtilityStep.RangeDiagnostic or
-                    FalloutMainUtilityStep.StatisticsTest or FalloutMainUtilityStep.StatisticsQuery or FalloutMainUtilityStep.SetAchievement;
+                    FalloutMainUtilityStep.StatisticsTest or FalloutMainUtilityStep.FormatAchievement or FalloutMainUtilityStep.StatisticsQuery or FalloutMainUtilityStep.SetAchievement;
                 var argumentStep = effect.Step is FalloutMainUtilityStep.SetAchievement or FalloutMainUtilityStep.QueueAchievement or
-                    FalloutMainUtilityStep.RegisterCallback;
+                    FalloutMainUtilityStep.RegisterCallback || effect.Step == FalloutMainUtilityStep.FormatAchievement && effect.Returned is not null;
                 if (effect.Returned is not null && booleanStep != (effect.Boolean is not null) ||
                     effect.Returned is null && effect.Boolean is not null || requestStep != (effect.Request is not null) ||
                     argumentStep != (effect.Argument is not null))
@@ -210,7 +211,11 @@ internal sealed partial class FalloutActorProcessRuntimeState
             {
                 var present = Take(FalloutMainUtilityStep.StatisticsTest)?.Boolean == true;
                 if (present && !stopped)
-                { Take(FalloutMainUtilityStep.StatisticsQuery); if (!stopped) Take(FalloutMainUtilityStep.SetAchievement); }
+                {
+                    Take(FalloutMainUtilityStep.FormatAchievement);
+                    if (!stopped) Take(FalloutMainUtilityStep.StatisticsQuery);
+                    if (!stopped) Take(FalloutMainUtilityStep.SetAchievement);
+                }
             }
             foreach (var effect in effects.Where(effect => effect.Request == request && effect.Step == FalloutMainUtilityStep.SetAchievement))
                 if (effect.Argument is null) throw new InvalidDataException("Actual achievement API argument was lost.");

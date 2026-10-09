@@ -17,7 +17,7 @@ internal static class RewardXpContracts
         GlobalFunction();
         Console.WriteLine("OPENNV_REWARD_XP_CONTRACT_PASS playerOwner=true sourceCap=true cappedTotal=true " +
             "signedDecrease=true float32=true noHeal=true object=true questSharedAndFallback=true " +
-            "globalFunction=true consumedPrefix=true cold=true activeXpPerkRefused=true " +
+            "globalFunction=true consumedPrefix=true cold=true activeXpPerk=true acquiredOrderRefused=true " +
             "levelUpGapVisible=true xpPresentation=unverified");
     }
 
@@ -39,8 +39,13 @@ internal static class RewardXpContracts
         Require(fixture.Experience.Reward(100000003) == 100000000, "RewardXP lost the engine Float32 conversion.");
         var retained = fixture.Vitals.State;
         fixture.Perks.Add(new(9, 3, 1.1f, []));
+        Require(fixture.Experience.Reward(1) == 2 &&
+            fixture.Vitals.State == retained with { ExperiencePoints = retained.ExperiencePoints + 2 },
+            "The owned Float32 XP modifier and source ceiling did not reach shared vitals.");
+        var afterModifier = fixture.Vitals.State;
+        fixture.Perks.Add(new(9, 2, 3, []));
         Reject(() => fixture.Experience.Reward(1));
-        Require(fixture.Vitals.State == retained, "Missing XP modifier dispatch published an unmodified award.");
+        Require(fixture.Vitals.State == afterModifier, "Missing acquired-entry ordering partially published another award.");
         fixture.Perks.Clear();
         fixture.Vitals.Publish(before);
         Reject(() => fixture.Experience.Reward(-1));

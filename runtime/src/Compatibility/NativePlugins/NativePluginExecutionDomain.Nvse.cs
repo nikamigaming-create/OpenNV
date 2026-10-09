@@ -30,8 +30,10 @@ internal sealed partial class NativePluginExecutionDomain
                 throw new InvalidDataException("Native I/O and NVSE disagree about the exact owned runtime directory.");
             NativePluginIoImports.Admit(source, io);
             NativeNvseHostSource.RequirePluginExports(source);
+            PrepareOriginalImportProviders(path, expectedSha256);
             host.Claim(Generation); _nvseHostSource = host; _nvseCallbackBudget = maximumInterfaceCallbacks;
             started = true; _nvseImageAttempted = true;
+            EnterOriginalLoaderAttempt();
             using var reader = Exchange(NativePluginDomainOperation.LoadNvse, Payload(writer =>
             {
                 WriteText(writer, path); WriteText(writer, host.RuntimeDirectory);
@@ -42,6 +44,7 @@ internal sealed partial class NativePluginExecutionDomain
             if (module == 0 || module >= uint.MaxValue || handle != sourcePluginHandle || image == 0 || nativeInterface == 0 || query == 0 || load == 0)
                 throw new InvalidDataException("Original NVSE image has no actual module/interface/Query/Load capability.");
             var plugin = new NativeNvsePlugin(Generation, module, handle, image, nativeInterface, query, load, path, expectedSha256.ToUpperInvariant());
+            CompleteOriginalLoaderAttempt(module);
             VerifyOwner(); _nvsePlugin = plugin; _nvseModuleSource = source; return plugin;
         }
         catch (NativePluginDomainRefusal)
@@ -54,6 +57,7 @@ internal sealed partial class NativePluginExecutionDomain
             if (!started) throw;
             throw Fatal(error);
         }
+        finally { LeaveOriginalLoaderAttempt(); }
     }
     internal NativeNvseInitializationReceipt QueryNvse(NativeNvsePlugin plugin)
     {
@@ -136,22 +140,28 @@ internal sealed partial class NativePluginExecutionDomain
     internal NativeNvseRetirementReceipt UnloadNvse(NativeNvsePlugin plugin)
     {
         VerifyNvse(plugin); RequireNvseEmptyCall(); RequireNvseSourceFilesIdle(); RequireNvseBinaryIdle(); ++_callDepth;
+        _cngOriginalUnloading = true;
         try
         {
             using var reader = Exchange(NativePluginDomainOperation.UnloadNvse, Payload(writer => writer.Write(plugin.Module)));
             var counts = ReadNvseCounts(reader); var image = reader.ReadUInt32(); var interfaces = reader.ReadUInt32(); Finish(reader);
             CheckNvseCounts(plugin, counts);
             if (image != 0 || interfaces != 0) throw new InvalidDataException("Original NVSE image/interface mapping remains after retirement.");
+            RequireEngineCommandRetirement();
             RequirePrivateIoRetired();
+            RetireNativeImportProviders();
             RequireNvseHeapRetired();
             var receipt = new NativeNvseRetirementReceipt(counts, false, false); plugin.Retirement = receipt;
             plugin.Registry.Retire(); plugin.Phase = NativeNvsePhase.Retired;
-            _nvseModuleSource!.Dispose(); _nvseModuleSource = null; _nvseHostSource!.Retire(Generation); _nvseHostSource = null;
-            ClearNvseData(); ClearNvseCommandTable(); ClearNvseLocalCapabilities(); ClearNvseExpressionCapabilities(); ClearNvseValueCapabilities(); ClearNvseSourceObjects(); _nvsePlugin = null; VerifyOwner(); return receipt;
+            // FreeLibrary has retired the original native publications. The
+            // source files, graphs and host leases still belong to this living
+            // process generation and close in ClearNvseCapabilities only after
+            // its actual child exit. Preserve them through failed retirement.
+            _nvsePlugin = null; VerifyOwner(); return receipt;
         }
         catch (NativePluginDomainRefusal) { throw; }
         catch (Exception error) { plugin.Phase = NativeNvsePhase.Faulted; throw Fatal(error); }
-        finally { --_callDepth; }
+        finally { _cngOriginalUnloading = false; --_callDepth; }
     }
     private uint DispatchNvseHost(Frame frame, ulong parent)
     {
@@ -177,7 +187,7 @@ internal sealed partial class NativePluginExecutionDomain
                     var parameters = ImmutableArray.CreateBuilder<NativeNvseParameter>(count);
                     for (var index = 0; index < count; ++index) parameters.Add(new(ReadNvseText(reader), reader.ReadUInt32(), reader.ReadUInt32()));
                     value = registry.Register(frame.Id, source, rawOpcode, (byte)returnType, required, needsParent, flags,
-                        parametersAddress, name, alias, help, parameters.MoveToImmutable(), execute, parse, evaluate); break;
+                        parametersAddress, name, alias, help, parameters.MoveToImmutable(), execute, parse, evaluate, EngineCommandBinding(execute)); break;
                 }
             case NativeNvseHostCall.RegisterListener:
                 { var registeredHandle = reader.ReadUInt32(); var sender = ReadNvseText(reader); value = registry.RegisterListener(frame.Id, registeredHandle, sender, reader.ReadUInt32()); break; }
@@ -197,6 +207,11 @@ internal sealed partial class NativePluginExecutionDomain
                 value = registry.CompleteSerialization(frame.Id, parent, (NativeNvseSerializationEvent)reader.ReadUInt32(), reader.ReadUInt32()); break;
             case NativeNvseHostCall.BeginSerialization:
                 value = registry.BeginSerialization(parent, (NativeNvseSerializationEvent)reader.ReadUInt32(), reader.ReadUInt32()); break;
+            case NativeNvseHostCall.EngineCommandDeclare:
+            case NativeNvseHostCall.EngineCommandPublish:
+            case NativeNvseHostCall.EngineCommandExecute:
+            case NativeNvseHostCall.EngineCommandRetire:
+                value = DispatchNvseEngineCommand((NativeNvseHostCall)frame.Operation, frame, parent, reader); break;
             default: throw new InvalidDataException("Unknown NVSE interface callback operation.");
         }
         Finish(reader); return value;
@@ -204,6 +219,7 @@ internal sealed partial class NativePluginExecutionDomain
     private void ClearNvseCapabilities()
     {
         if (!ChildExited) throw new InvalidOperationException("Native source/capability owners require verified exact child closure.");
+        ClearEngineCommandsAfterChildExit();
         ClearNvseBinaryAfterChildClosure();
         ClearNvseData();
         ClearNvseCommandTable();

@@ -58,10 +58,12 @@ public partial class RuntimeCoordinator
         maximumUploadMilliseconds = _nativeGridMaximumUploadMilliseconds,
         maximumUploadSource = _nativeGridMaximumUploadSource,
         preparingNpcs = _nativeGridNpcPreparations.Count,
-        retainedNpcPublications = _nativeGridNpcPublications.Count, queuedActorCallers = NativeQueuedActorCallerState,
+        retainedNpcPublications = _nativeGridNpcPublications.Count,
+        queuedActorCallers = NativeQueuedActorCallerState,
         lastCommitMilliseconds = _nativeGridCommitMilliseconds,
         lastCommitPhasesMilliseconds = _nativeGridCommitPhases,
-        error = _nativeGridError, sourceCellGraph = NativeSharedGridState
+        error = _nativeGridError,
+        sourceCellGraph = NativeSharedGridState
     };
 
     private void AdvanceNativeExteriorStreaming(double delta)
@@ -210,12 +212,16 @@ public partial class RuntimeCoordinator
         var failures = new List<Exception>();
         void Retire(Action action) { try { action(); } catch (Exception error) { failures.Add(error); } }
         Retire(RetireNativePluginCampaign);
+        if (_nativePluginCampaign is null && _nativeDirectInput is null && _nativeQuestScripts is { } scripts &&
+            GodotObject.IsInstanceValid(scripts) && scripts.GetParent() is null)
+            Retire(() => { scripts.Free(); _nativeQuestScripts = null; });
         Retire(RetireNativeExperienceHud);
         Retire(() => CancelNativeManualSave("Native session retired before the pending manual save could commit.", allQueued: true));
         Retire(DetachNativeCloseRequest);
         Retire(CancelNativeLauncherEntry);
         Retire(CancelNativeGridRead);
         Retire(RequireNativeSourceCellRetirementBeforeWorldRelease);
+        Retire(() => _nativeSkyLighting?.RetireSourceTransfer());
         if (!_retiringNativeSession)
         {
             if (failures.Count != 0) throw new AggregateException("Native session retirement retained failures.", failures);
@@ -343,7 +349,7 @@ public partial class RuntimeCoordinator
         var retained = grid.Cells.Select(cell => cell.FormKey).ToHashSet();
         ++_nativeGridGeneration;
         var sky = new FalloutSkyLightingState(_nativePluginStack!, _nativeSkyLighting!.DaytimeExtension);
-        sky.Restore(_nativeSkyLighting.Capture());
+        sky.RestoreLightingProjection(_nativeSkyLighting.CaptureLightingProjection());
         var position = _nativePlayer!.GlobalPosition / _configuration.World.GameUnitsToMeters;
         sky.EnterCell(grid.Scene.Cell, _nativeGlobals, [position.X, -position.Z, position.Y]);
         if (previous == grid.Scene.Cell.FormKey) _nativeReferences!.ReplaceResidentCell(grid.Scene);
@@ -353,7 +359,7 @@ public partial class RuntimeCoordinator
             _nativeReferences.UnloadCell(previous);
         }
         _nativeActiveCell = grid.Scene;
-        _nativeSkyLighting.Restore(sky.Capture());
+        _nativeSkyLighting.CommitLightingProjection(sky.CaptureLightingProjection());
         Mark("world-and-weather");
         DiscoverNativeCellReferences(grid.Scene);
         Mark("source-discovery");

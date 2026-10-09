@@ -120,8 +120,12 @@ internal sealed class FalloutQueuedTaskPriorities : IDisposable
             // Native/reference preparation can construct further task graphs
             // and a TLS context. Its entered state is never guessed from the
             // first-party read Task. Keep that real source boundary visible.
-            _tasks[identity] = task with { State = null,
-                Boundary = task.Boundary ?? "actual-source-task-dispatch-state-and-child-producers-unowned:" + owner, Changed = Next() };
+            _tasks[identity] = task with
+            {
+                State = null,
+                Boundary = task.Boundary ?? "actual-source-task-dispatch-state-and-child-producers-unowned:" + owner,
+                Changed = Next()
+            };
         }
     }
     internal void Retire(Guid identity)
@@ -139,9 +143,12 @@ internal sealed class FalloutQueuedTaskPriorities : IDisposable
     }
     internal string? SaveBlocker
     {
-        get { lock (_gate) return _busy ? "actual-source-task-priority-consumer-entered" :
+        get
+        {
+            lock (_gate) return _busy ? "actual-source-task-priority-consumer-entered" :
             _tasks.Values.FirstOrDefault(value => !value.Retired) is { } task ?
-                task.Failure ?? task.Boundary ?? "actual-source-task-object-still-owned:" + task.Identity : null; }
+                task.Failure ?? task.Boundary ?? "actual-source-task-object-still-owned:" + task.Identity : null;
+        }
     }
     internal string? RuntimeBoundary
     {
@@ -149,8 +156,19 @@ internal sealed class FalloutQueuedTaskPriorities : IDisposable
     }
     internal object State
     {
-        get { lock (_gate) return new { contract = _source.Contract, process = _process, sequence = _sequence,
-            tasks = _tasks.Values.ToArray(), cold = _cold, runtimeBoundary = RuntimeBoundary, saveBlocker = SaveBlocker }; }
+        get
+        {
+            lock (_gate) return new
+            {
+                contract = _source.Contract,
+                process = _process,
+                sequence = _sequence,
+                tasks = _tasks.Values.ToArray(),
+                cold = _cold,
+                runtimeBoundary = RuntimeBoundary,
+                saveBlocker = SaveBlocker
+            };
+        }
     }
     internal FalloutQueuedTaskPrioritySnapshot Capture()
     {

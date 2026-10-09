@@ -58,6 +58,7 @@ internal static partial class ChallengeContracts
             var ini = new FalloutNumericIniSettings([new("bShowChallengeUpdates:GamePlay", FalloutIniCollection.Main,
                 notices ? 1u : 0u)], [], "authored-original-INI-declaration");
             World.ConfigureCampaignChallenges(Queue, FalloutChallengeEventSource.Read(source, ini));
+            World.ConfigureCampaignScriptEngineContexts(FalloutImmediateScriptSource.Read(Challenges.Source!));
             Statistics = new(source, new(null, menu =>
             {
                 ++MenuCalls; DuringMenu?.Invoke(checked((ushort)menu));
@@ -65,7 +66,7 @@ internal static partial class ChallengeContracts
             }, null), statistics);
             Challenges.BindStatistics(Statistics);
             if (challenges is not null) Challenges.Restore(challenges);
-            if (bindGameMode) World.BindChallengeGameModeSource(new AuthoredGameMode(allows));
+            if (bindGameMode) World.BindChallengeGameModeSource(new AuthoredGameMode(FalloutImmediateScriptSource.Read(Challenges.Source!), allows));
             Scripts = new(records, World, new(records), new((_, _) => false,
                 _ => throw new InvalidDataException("Authored challenge reached an unrelated host effect."),
                 Challenges: Challenges, Statistics: Statistics));
@@ -73,11 +74,15 @@ internal static partial class ChallengeContracts
         }
         public void Dispose() { Challenges.Retire(); Statistics.Retire(); World.Dispose(); }
     }
-    private sealed class AuthoredGameMode(bool allows) : IFalloutChallengeGameModeSource
+    private sealed class AuthoredGameMode(FalloutImmediateScriptSource source, bool allows) : IFalloutChallengeGameModeSource
     {
         private long _ordinal;
         private FalloutChallengeGameModeObservation? _last;
-        public FalloutChallengeGameModeObservation Observe() => _last = new(Engine, new('b', 64), ++_ordinal, allows);
+        public FalloutChallengeGameModeObservation Observe()
+        {
+            source.Validate();
+            return _last = new(source.EngineSha256, source.Identity, ++_ordinal, allows);
+        }
         public void RequireCurrent(FalloutChallengeGameModeObservation observation)
         {
             if (!ReferenceEquals(observation, _last)) throw new InvalidDataException("Authored predicate lost its actual current observation.");
@@ -229,7 +234,7 @@ internal static partial class ChallengeContracts
             fixture.Statistics.Mod(1, 1, "authored-winning-registration");
             var saved = fixture.Challenges.Capture();
             Require(saved.Entries.Select(row => row.Form).SequenceEqual(new[] { Key(0x100), new FalloutFormKey("Override.esp", 0x300) }) &&
-                saved.LastDispatch!.Attempts.Select(row => row.Form).SequenceEqual(saved.Entries.Select(row => row.Form)) &&
+                saved.LastDispatch!.Attempts.Select(row => row.Form).SequenceEqual(saved.Entries.Select(row => row.Form).Reverse()) &&
                 fixture.Challenges.State(Key(0x100)).SourceSha256 == FalloutChallengeDefinition.Read(records.GetEffective(Key(0x100))).Sha256,
                 "Overrides reordered a first registration, resurrected a deleted winner, or selected a loser definition.");
             var hash = SHA256.HashData(File.ReadAllBytes(overridePath));

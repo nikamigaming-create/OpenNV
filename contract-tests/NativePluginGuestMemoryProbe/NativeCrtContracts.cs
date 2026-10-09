@@ -19,6 +19,8 @@ internal static class NativeCrtContracts
         var sourceRoot = Directory.CreateDirectory(Path.Combine(temporary, "authored-source")).FullName;
         var input = Path.Combine(sourceRoot, "source.cfg"); File.WriteAllText(input, "ABCDE", new UTF8Encoding(false));
         originals.Add(input, Hash(input));
+        var diagnosticInput = Path.Combine(sourceRoot, "source.log");
+        File.WriteAllText(diagnosticInput, "prior diagnostic bytes", new UTF8Encoding(false)); originals.Add(diagnosticInput, Hash(diagnosticInput));
         var runtimeDirectory = Path.GetDirectoryName(runtime)!;
         var virtualInput = Path.Combine(runtimeDirectory, "OpenNVCrtAuthored.cfg");
         var virtualOutput = Path.Combine(runtimeDirectory, "OpenNVCrtAuthored.out");
@@ -30,7 +32,9 @@ internal static class NativeCrtContracts
                 new(virtualOutput, false, NativePluginIoRole.Diagnostic, "authored-native-output"),
                 new(virtualDirectory, true, NativePluginIoRole.State, "authored-native-directory")],
             path => StringComparer.OrdinalIgnoreCase.Equals(path, virtualInput)
-                ? new(input, originals[input], "authored-five-byte-winning-input", true) : null,
+                ? new(input, originals[input], "authored-five-byte-winning-input", true) :
+                StringComparer.OrdinalIgnoreCase.Equals(path, virtualOutput)
+                    ? new(diagnosticInput, originals[diagnosticInput], "authored-selected-diagnostic-input", false, true) : null,
             "authored-public-ABI-CRT-imports",
             new HashSet<string>(StringComparer.Ordinal)
             {

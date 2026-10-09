@@ -85,19 +85,43 @@ internal sealed class NativeNvseHostSource : IDisposable
     internal static FileStream Lease(string path, string sha256, bool dll)
     {
         RequireHash(sha256);
+        var source = LeaseHashed(path, dll, out var actual);
+        try
+        {
+            if (!string.Equals(actual, sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Original native source identity drifted before admission.");
+            return source;
+        }
+        catch (Exception failure)
+        {
+            try { source.Dispose(); }
+            catch (Exception cleanup) { throw new AggregateException("Original source digest admission and input retirement failed.", failure, cleanup); }
+            throw;
+        }
+    }
+    // Explicit first admission of a genuinely discovered source image. This
+    // does not turn an absent expected digest into an accepted legacy call.
+    internal static FileStream LeaseHashed(string path, bool dll, out string sha256, long? maximumBytes = null)
+    {
         var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         try
         {
+            if (maximumBytes is { } bound && (bound < 1 || source.Length < 1 || source.Length > bound))
+                throw new InvalidDataException("Original native image exceeds its declared bounded source extent.");
             using (var pe = new PEReader(source, PEStreamOptions.LeaveOpen))
                 if (pe.PEHeaders.CoffHeader.Machine != Machine.I386 || pe.PEHeaders.PEHeader?.Magic != PEMagic.PE32 ||
                     pe.PEHeaders.CorHeader is not null || pe.PEHeaders.CoffHeader.Characteristics.HasFlag(Characteristics.Dll) != dll)
                     throw new InvalidDataException("NVSE source admission requires the declared unmanaged Windows PE32/I386 image kind.");
             source.Position = 0;
-            if (!string.Equals(Convert.ToHexString(SHA256.HashData(source)), sha256, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Original native source identity drifted before admission.");
+            sha256 = Convert.ToHexString(SHA256.HashData(source)).ToLowerInvariant();
             source.Position = 0; return source;
         }
-        catch { source.Dispose(); throw; }
+        catch (Exception failure)
+        {
+            try { source.Dispose(); }
+            catch (Exception cleanup) { throw new AggregateException("Original source image admission and input retirement failed.", failure, cleanup); }
+            throw;
+        }
     }
     internal static void RequirePluginExports(FileStream source)
     {

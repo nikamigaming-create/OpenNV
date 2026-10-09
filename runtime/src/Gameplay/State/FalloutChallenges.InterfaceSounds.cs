@@ -32,8 +32,11 @@ internal sealed partial class FalloutChallenges
         {
             var voice = sounds.Play(call);
             sounds.RequireCall(voice.Ordinal, call, returned: true);
-            attempt.Value = attempt.Value with { InterfaceCueOrdinal = voice.Ordinal,
-                Prefix = FalloutChallengePrefix.InterfaceCueReturned };
+            attempt.Value = attempt.Value with
+            {
+                InterfaceCueOrdinal = voice.Ordinal,
+                Prefix = FalloutChallengePrefix.InterfaceCueReturned
+            };
         }
         finally
         {

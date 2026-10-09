@@ -38,6 +38,7 @@ internal partial class RuntimeNativePlayer
         var reference = _physicalRecords!.RuntimeFormKey(0x14);
         _playerPerceptionOwner = "actual-engine-player-source-body/" + reference + "/" + body.Skeleton.Source.Sha256;
         BindActualPlayerSourceProcessBody();
+        BindActualPlayerTransferAndController();
         _playerPerceptionLease = _playerPerceptionWorld.BindNativePerception(reference, _playerPerceptionOwner, ObservePlayerPerception);
     }
     private FalloutPerceptionNativeObservation ObservePlayerPerception(long lease)
@@ -58,6 +59,7 @@ internal partial class RuntimeNativePlayer
     {
         var failures = new List<Exception>();
         try { _playerPerceptionLease?.Dispose(); _playerPerceptionLease = null; } catch (Exception error) { failures.Add(error); }
+        try { RetireActualPlayerTransferAndController(); } catch (Exception error) { failures.Add(error); }
         try { RetireActualPlayerSourceProcessBody(); } catch (Exception error) { failures.Add(error); }
         if (failures.Count != 0) throw new AggregateException("Player perception/process-body retirement retains actual failures.", failures);
         _playerPerceptionOwner = null;

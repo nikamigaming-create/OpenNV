@@ -46,8 +46,13 @@ internal sealed class FalloutDirectInputState
             var before = _keys[key];
             var inserted = !before.ScriptDisabled && (before.Hold || before.Tap);
             var game = raw && !before.UserDisabled || inserted;
-            var after = before with { Raw = raw, Game = game, Inserted = inserted,
-                Tap = before.ScriptDisabled && before.Tap };
+            var after = before with
+            {
+                Raw = raw,
+                Game = game,
+                Inserted = inserted,
+                Tap = before.ScriptDisabled && before.Tap
+            };
             _keys[key] = after;
             if (before.Game != after.Game) edges.Add((key, after.Game));
         }
@@ -81,8 +86,11 @@ internal sealed class FalloutDirectInputState
         RequireOwner(); if (key >= KeyCount) return;
         if (mask == 0) mask = 3;
         var value = _keys[key];
-        _keys[key] = value with { UserDisabled = (mask & 1) != 0 ? disabled : value.UserDisabled,
-            ScriptDisabled = (mask & 2) != 0 ? disabled : value.ScriptDisabled }; ++Revision;
+        _keys[key] = value with
+        {
+            UserDisabled = (mask & 1) != 0 ? disabled : value.UserDisabled,
+            ScriptDisabled = (mask & 2) != 0 ? disabled : value.ScriptDisabled
+        }; ++Revision;
     }
     internal void SetHold(uint key, bool held)
     { RequireOwner(); if (key < KeyCount) { _keys[key] = _keys[key] with { Hold = held }; ++Revision; } }
@@ -106,8 +114,13 @@ internal sealed class FalloutDirectInputState
                 throw new InvalidOperationException("Native and campaign DirectInput controls have competing writers.");
         }
         foreach (var change in changes)
-            _keys[change.Key] = _keys[change.Key] with { Hold = change.After.Hold, Tap = change.After.Tap,
-                UserDisabled = change.After.UserDisabled, ScriptDisabled = change.After.ScriptDisabled };
+            _keys[change.Key] = _keys[change.Key] with
+            {
+                Hold = change.After.Hold,
+                Tap = change.After.Tap,
+                UserDisabled = change.After.UserDisabled,
+                ScriptDisabled = change.After.ScriptDisabled
+            };
         if (changes.Count != 0) ++Revision;
     }
     internal static bool ControlsEqual(FalloutDirectInputKey first, FalloutDirectInputKey second)

@@ -4,6 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-source-sky-transfer"])
+{
+    SourceSkyTransferContracts.Run();
+    return;
+}
+
+if (args is ["--test-source-main-player-cell"])
+{
+    SourceMainScriptCallerContracts.RunPlayerCellContracts();
+    return;
+}
+
 if (args is ["--test-player-statistics"])
 {
     PlayerStatisticContracts.Run();
@@ -57,6 +69,17 @@ if (args is ["--rest-host-contracts"])
 if (args is ["--test-source-rest-cues"])
 {
     SourceRestCueContracts.Run();
+    return;
+}
+
+if (args is ["--source-archive-file-manager-contracts"])
+{
+    SourceArchiveFileManagerContracts.Run();
+    return;
+}
+if (args is ["--source-menu-sound-contracts"])
+{
+    SourceMenuSoundSelectionContracts.Run();
     return;
 }
 
@@ -1124,6 +1147,8 @@ RestHostContracts.Run();
 RestMenuControlContracts.Run();
 RestWorldConsumerContracts.Run();
 SourceRestCueContracts.Run();
+SourceMenuSoundSelectionContracts.Run();
+SourceArchiveFileManagerContracts.Run();
 IndexedInterfaceSoundContracts.Run();
 PlayerAdvancementContracts.Run();
 PlayerPhysicalActivityContracts.Run();

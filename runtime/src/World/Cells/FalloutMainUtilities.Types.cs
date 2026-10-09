@@ -9,7 +9,7 @@ internal enum FalloutMainUtilityStep
     StoreStatisticsQuery, StoreStatistics, ClearQueue, ConstructLogin,
     PlatformRunning, UserTest, UserQuery, LoggedOn, StoreLogin,
     ChangedCallback, ConstructThird, ThirdNoOp, SuppressionByte, QueueAchievement,
-    RegisterCallback, InitialCallback
+    RegisterCallback, InitialCallback, FormatAchievement
 }
 internal sealed record FalloutMainUtilityEffect(FalloutMainUtilityStep Step, long Entered,
     long? Returned = null, long? Request = null, bool? Boolean = null, string? Argument = null,

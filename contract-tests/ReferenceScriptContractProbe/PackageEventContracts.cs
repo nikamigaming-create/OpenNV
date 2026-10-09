@@ -125,10 +125,10 @@ internal static class PackageEventContracts
             var duplicate = topicSource.EventPrograms["POBA"] with
             { Fields = topicSource.EventPrograms["POBA"].Fields.Append(new("TNAM", BitConverter.GetBytes(0u))).ToArray() };
             Reject(() => scripts.ExecutePackageEvent(duplicate, Key(0x90)));
-            Require(world.Get(Key(0x90)).Read(1) == 10 && topicStages.Count == 3,
-                "Duplicate topic metadata admitted speech or skipped its preceding script.");
+            Require(world.Get(Key(0x90)).Read(1) == 9 && topicStages.Count == 3,
+                "A forged package scope mutated its result or admitted speech.");
             Reject(() => scripts.ExecutePackageEvent(duplicate with { Kind = "Unknown" }, Key(0x90)));
-            Require(world.Get(Key(0x90)).Read(1) == 10, "An untyped event mutated its source result.");
+            Require(world.Get(Key(0x90)).Read(1) == 9, "An untyped event mutated its source result.");
             Console.WriteLine("OPENNV_PACKAGE_EVENT_RESULTS_PASS actorScope=true ownCompiledScope=true conditional=true stage=true prefixLatch=true coldValues=true invalidAtomic=true topics=source-bound eventOrder=true winner=true actorColdLifecycle=unverified nativeVoice=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }

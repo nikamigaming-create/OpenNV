@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed class FalloutInstallationSettings
+internal sealed partial class FalloutInstallationSettings
 {
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RuntimeLiveContentSource, FalloutInstallationSettings> Instances = new();
     private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);

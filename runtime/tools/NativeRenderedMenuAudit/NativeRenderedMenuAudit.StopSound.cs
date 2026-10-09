@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
@@ -24,6 +25,8 @@ public partial class NativeRenderedMenuAudit
             var source = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(source.PluginSources);
             using var world = new FalloutReferenceWorld(records);
+            using var runtime = FalloutAdvancementRuntimeSource.Open(records);
+            _ = source.OpenMenuSoundSelection(records, runtime);
             var quest = FalloutDialogueTopic.Find(records, "QUST", questId);
             var hash = SHA256.HashData(quest.ReadData());
             var fields = quest.ReadSubrecords().ToArray();
@@ -82,7 +85,7 @@ public partial class NativeRenderedMenuAudit
             var animationCompletions = 0;
             if (!animation.DispatchSound(sound.FormKey, completed: () => ++animationCompletions).StartsWith("source-sound-", StringComparison.Ordinal))
                 throw new InvalidDataException("Owned animation loop did not start.");
-            var menu = NativeOwnedSoundPlayback.CreateMenu(sound, records, source, new(43)); scene.AddChild(menu); menu.Play();
+            var menu = NativeOwnedSoundPlayback.CreateMenu(sound, records, NativeOwnedSoundPlayback.MenuCall(this, 1, sound.FormKey)); scene.AddChild(menu); menu.Play();
             world.Sounds.Play(quest.FormKey, sound.FormKey); var request = world.Sounds.LastRequest!;
             var script = presenter.GetChildren().OfType<AudioStreamPlayer>().Single();
             var native = animation.GetChildren().OfType<AudioStreamPlayer>().Single();

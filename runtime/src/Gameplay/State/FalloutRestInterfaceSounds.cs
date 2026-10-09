@@ -125,8 +125,12 @@ internal sealed class FalloutRestInterfaceSounds
         RequireNative(lease); var index = Index(sequence); var row = _voices[index];
         if (row.State != FalloutRestInterfaceVoiceState.NativeStarted || row.NativePlayer != player)
             throw new InvalidOperationException("Rest sound has no matching once-only actual Finished callback.");
-        _voices[index] = row with { State = FalloutRestInterfaceVoiceState.NativeFinished,
-            NativeVoiceRetired = true, NativeFinishObserved = true };
+        _voices[index] = row with
+        {
+            State = FalloutRestInterfaceVoiceState.NativeFinished,
+            NativeVoiceRetired = true,
+            NativeFinishObserved = true
+        };
     }
 
     internal void Failed(Guid lease, long? sequence, Exception error)

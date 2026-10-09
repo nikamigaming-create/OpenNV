@@ -41,6 +41,7 @@ internal static class NativeExecutionContracts
             NativeExecutionProtocolContracts.Run(companion);
             NativeFaultEnvelopeContracts.Run(companion);
             NativeGuestArenaContracts.Run(companion, fixtureDirectory);
+            NativeCngSystemServiceContracts.Run(companion);
         }
         finally
         {

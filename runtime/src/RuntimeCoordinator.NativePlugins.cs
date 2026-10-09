@@ -10,7 +10,7 @@ public partial class RuntimeCoordinator
     private string? _nativePluginRetirementFailure;
     private RuntimeNativeDirectInput? _nativeDirectInput;
     private FalloutInventoryReferenceStore? _nativeInventoryReferences;
-    private void BindNativePluginCampaign()
+    private async Task BindNativePluginCampaign()
     {
         if (_nativePluginCampaign is not null || _nativeDirectInput is not null || _nativeInventoryReferences is not null)
             throw new InvalidOperationException("Actual campaign still owns native module/data generations.");
@@ -26,7 +26,13 @@ public partial class RuntimeCoordinator
         var companion = _options.GetValueOrDefault("native-plugin-companion",
             ProjectSettings.GlobalizePath("res://generated/native-plugins/" + configuration + "/opennv_plugin_domain.exe"));
         var privateRoot = Path.Combine(OS.GetUserDataDir(), "native-plugin-state");
-        var declarations = source.EnsureNativePluginDeclarations();
+        GD.Print("OPENNV_NATIVE_SOURCE_ADMISSION phase=read-entered");
+        var declarationRead = System.Diagnostics.Stopwatch.StartNew();
+        var declarations = await source.EnsureNativePluginDeclarationsAsync();
+        if (_nativeSessionTransitioning || _retiringNativeSession || !ReferenceEquals(RuntimeLiveContentSource.Current, source) ||
+            !ReferenceEquals(_nativePluginStack, records) || !ReferenceEquals(_nativeQuestScripts?.Scripts, scripts))
+            throw new OperationCanceledException("Native source discovery returned after its actual campaign retired.");
+        GD.Print($"OPENNV_NATIVE_SOURCE_ADMISSION phase=read-returned elapsedMs={declarationRead.ElapsedMilliseconds}");
         GD.Print("OPENNV_NATIVE_SOURCE_DECLARATIONS " + System.Text.Json.JsonSerializer.Serialize(new
         { source.StackId, declarations.Inventory, Initialization = "pending-original-calls" }));
         var world = scripts.References ?? throw new InvalidOperationException("Native campaign has no shared live reference owner.");
@@ -34,11 +40,15 @@ public partial class RuntimeCoordinator
         try
         {
             var controls = scripts.Controls ?? throw new InvalidOperationException("Actual source controls are unbound.");
+            GD.Print("OPENNV_NATIVE_INPUT_ADMISSION phase=device-construction-entered");
             var input = RuntimeNativeDirectInput.Create(source.StackId, controls);
             _nativeDirectInput = input;
+            GD.Print("OPENNV_NATIVE_INPUT_ADMISSION phase=device-constructed");
             AddChild(input);
             if (!input.IsInsideTree() || input.GetParent() != this)
                 throw new InvalidOperationException("Actual DirectInput owner was not attached to its product lifetime.");
+            await input.WaitForFirstSample(() => _nativeSessionTransitioning || _retiringNativeSession);
+            GD.Print($"OPENNV_NATIVE_INPUT_ADMISSION phase=sample-published sample={input.State.Sample}");
             var inventory = new FalloutInventoryReferenceStore(records, world,
                 () => _nativeOpeningStageDriver?.PlayerLevel ?? throw new NotSupportedException("Actual player level has not been constructed."),
                 () => _nativeGlobals ?? throw new NotSupportedException("Actual globals are unbound."));
@@ -64,12 +74,13 @@ public partial class RuntimeCoordinator
     }
     private void RetireNativePluginCampaign()
     {
+        RetireNativeSteamCampaign();
         var owner = _nativePluginCampaign;
         var failures = new List<Exception>();
         if (owner is not null)
         {
             try { owner.Dispose(); } catch (Exception error) { failures.Add(error); }
-            if (owner.ChildDomainsExited)
+            if (owner.ResourcesRetired)
             {
                 _nativePluginCampaign = null;
                 if (_nativeQuestScripts?.Scripts.References is { } world && ReferenceEquals(world.NativePlugins, owner))
@@ -95,5 +106,9 @@ public partial class RuntimeCoordinator
             _nativePluginRetirementFailure = error.ToString(); throw error;
         }
     }
-    private void RequireNativePluginSaveBoundary() => _nativePluginCampaign?.RequireIdleForSave();
+    private void RequireNativePluginSaveBoundary()
+    {
+        _nativeSteamCampaign?.RequireIdleForSave();
+        _nativePluginCampaign?.RequireIdleForSave();
+    }
 }

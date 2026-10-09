@@ -232,6 +232,7 @@ internal static partial class FalloutNativeCampaignSave
         ValidateCurrentRestSource(stack, state);
         ValidateCurrentPlayerAbilitySource(stack, state);
         ValidateCurrentPlayerStatisticSource(stack, state);
+        ValidateCurrentSourceSky(stack, state);
         if (state.PlayerPackageAudio is { } playerAudio)
             FalloutAnimationSoundEvents.ValidateSource(playerAudio.Events, stack, stack.RuntimeFormKey(0x14));
         var activeCell = stack.GetEffective(state.ActiveCell);

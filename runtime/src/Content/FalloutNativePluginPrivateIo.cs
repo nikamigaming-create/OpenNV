@@ -28,6 +28,18 @@ internal static partial class FalloutNativePluginPrivateIo
                 read.SourceOwner, read.Configuration);
             if (!declared.TryAdd(path, winner)) throw new InvalidDataException("Native read declarations repeat a virtual winner identity.");
         }
+        foreach (var scope in writeScopes.Where(scope => !scope.Directory && scope.Role == NativePluginIoRole.Diagnostic))
+        {
+            var path = NativePluginPrivateIo.Canonical(Path.GetFullPath(scope.VirtualPath, runtimeDirectory));
+            if (!NativePluginPrivateIo.Within(runtimeDirectory, path) || string.IsNullOrWhiteSpace(scope.DeclarationOwner))
+                throw new InvalidDataException("Native diagnostic input lost its selected original path declaration.");
+            NativePluginPrivateIo.NoReparse(path);
+            if (!File.Exists(path)) continue;
+            using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var winner = new NativePluginIoReadWinner(path, Convert.ToHexString(SHA256.HashData(input)),
+                "selected-original-diagnostic:" + scope.DeclarationOwner + ":" + source.StackId, false, true);
+            if (!declared.TryAdd(path, winner)) throw new InvalidDataException("Diagnostic input conflicts with another selected read role.");
+        }
         var roots = source.ContentRoots.Concat(new[] { runtimeDirectory, module }).Concat(additionalInputRoots)
             .Select(NativePluginPrivateIo.Canonical).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         return new NativePluginPrivateIo(new(source.StackId, moduleSha256, module, runtimeDirectory, privateStateRoot,

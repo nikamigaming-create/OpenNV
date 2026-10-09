@@ -159,18 +159,37 @@ internal sealed class RuntimeNativeLandscapeConstruction
     private void RetireResources()
     {
         var errors = new List<Exception>();
-        foreach (var allocation in _allocations.Where(value => !value.Node).Reverse())
+        // The retained managed binding itself owns one native reference. Keep
+        // it alive while a mesh, material or foreign native consumer borrows
+        // the resource; releasing that binding early can cause Godot to create
+        // another binding during the consumer's later unreference callback.
+        // A successful release can make another owned dependency releasable.
+        bool progressed;
+        do
         {
-            if (!Alive(allocation.Identity) || allocation.DisposeEntered) continue;
-            allocation.DisposeEntered = true;
-            try { allocation.Value.Dispose(); }
-            catch (Exception error) { errors.Add(error); }
-        }
-        // Native consumers can retain a ref-counted resource after its managed
-        // release. Retry only the real handle observation, never force-delete it
-        // or submit a second release through an already disposed wrapper.
-        if (_allocations.Any(value => Alive(value.Identity)))
-            errors.Add(new InvalidOperationException("LAND retirement retains a native allocation or an unretired external resource borrower."));
+            progressed = false;
+            foreach (var allocation in _allocations.Where(value => !value.Node))
+            {
+                if (!Alive(allocation.Identity) || allocation.DisposeEntered) continue;
+                try
+                {
+                    if (allocation.Value is not Resource resource || !GodotObject.IsInstanceValid(resource))
+                        throw new InvalidOperationException("A living LAND resource lost its retained managed binding before release.");
+                    var references = resource.GetReferenceCount();
+                    if (references < 1) throw new InvalidDataException("Living LAND resource has no native reference owner.");
+                    if (references != 1) continue;
+                    allocation.DisposeEntered = true; progressed = true;
+                    resource.Dispose();
+                }
+                catch (Exception error) { errors.Add(error); }
+            }
+        } while (progressed);
+        // Failed or externally borrowed resources retain their real ownership.
+        // Retry never repeats a release through an already disposed wrapper.
+        var retained = _allocations.Where(value => Alive(value.Identity)).ToArray();
+        if (retained.Length != 0)
+            errors.Add(new InvalidOperationException("LAND retirement retains native allocations or external resource borrowers: " +
+                string.Join(", ", retained.Select(value => $"{value.Value.GetType().Name} id={value.Identity} node={value.Node} managedReleaseEntered={value.DisposeEntered}")) + "."));
         if (errors.Count != 0) RetainRetirementFailure(errors);
         Phase = RuntimeNativeLandscapeConstructionPhase.Retired;
     }

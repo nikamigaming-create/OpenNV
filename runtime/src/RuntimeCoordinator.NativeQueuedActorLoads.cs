@@ -167,9 +167,13 @@ public partial class RuntimeCoordinator
         _nativeQueuedActorCallers.TryGetValue(root.GetInstanceId(), out var callers) ? callers.GetValueOrDefault(reference) : null;
     private object NativeQueuedActorCallerState => _nativeQueuedActorCallers.Values.SelectMany(value => value.Values).Select(caller => new
     {
-        root = caller.RootIdentity, reference = caller.Reference.ToString(), caller.Owner,
-        task = caller.Load?.Identity, readReturned = caller.Load?.ReadTask.IsCompleted,
+        root = caller.RootIdentity,
+        reference = caller.Reference.ToString(),
+        caller.Owner,
+        task = caller.Load?.Identity,
+        readReturned = caller.Load?.ReadTask.IsCompleted,
         actor = caller.Load?.TransferredActor is { } actor && GodotObject.IsInstanceValid(actor) ? actor.GetInstanceId() : (ulong?)null,
-        caller.CancelRequested, failure = caller.Failure is { } error ? MessageNativeQueuedCaller(error) : null
+        caller.CancelRequested,
+        failure = caller.Failure is { } error ? MessageNativeQueuedCaller(error) : null
     }).ToArray();
 }

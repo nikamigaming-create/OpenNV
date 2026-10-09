@@ -55,9 +55,13 @@ internal sealed partial class FalloutPlayerAbilityScripts
         var timeline = entry.Lifetime.Capture();
         return entry.State with
         {
-            Generation = entry.Lifetime.EventListGeneration, Active = entry.Lifetime.Applied,
-            Started = entry.Lifetime.Started, Error = entry.Lifetime.Failure,
-            Locals = entry.Lifetime.Locals.Capture(), Compiled = entry.Lifetime.Compiled.Capture(), Timeline = timeline
+            Generation = entry.Lifetime.EventListGeneration,
+            Active = entry.Lifetime.Applied,
+            Started = entry.Lifetime.Started,
+            Error = entry.Lifetime.Failure,
+            Locals = entry.Lifetime.Locals.Capture(),
+            Compiled = entry.Lifetime.Compiled.Capture(),
+            Timeline = timeline
         };
     }
 
@@ -93,6 +97,20 @@ internal sealed partial class FalloutPlayerAbilityScripts
         {
             var candidates = selection.SelectMany(form => _declarations.Scripts(form)).ToArray();
             var selected = candidates.Select(effect => (effect.Spell, effect.EffectOrdinal)).ToHashSet();
+            // Start and Finish can query another effect in the same source
+            // selection. Bind every declared instance and its independent
+            // event list before entering any lifecycle script. Construction
+            // does not apply conditions or mark a Start as completed.
+            foreach (var definition in candidates)
+            {
+                var key = (definition.Spell, definition.EffectOrdinal);
+                if (!_entries.TryGetValue(key, out var entry) || entry.Lifetime.Retired)
+                {
+                    var next = checked(_generation + 1);
+                    entry = BuildCompiled(definition, next, null);
+                    _entries[key] = entry; _generation = next;
+                }
+            }
             foreach (var entry in _entries.Values.OrderBy(entry => entry.Lifetime.InstanceGeneration))
                 if (!selected.Contains((entry.Definition.Spell, entry.Definition.EffectOrdinal)))
                 {
@@ -107,13 +125,7 @@ internal sealed partial class FalloutPlayerAbilityScripts
                 }
             foreach (var definition in candidates)
             {
-                var key = (definition.Spell, definition.EffectOrdinal);
-                if (!_entries.TryGetValue(key, out var entry) || entry.Lifetime.Retired)
-                {
-                    var next = checked(_generation + 1);
-                    entry = BuildCompiled(definition, next, null);
-                    _entries[key] = entry; _generation = next;
-                }
+                var entry = _entries[(definition.Spell, definition.EffectOrdinal)];
                 try { entry.Lifetime.InitializeConstant(_condition); }
                 finally { entry.State = CaptureEntry(entry); }
             }
@@ -206,8 +218,12 @@ internal sealed partial class FalloutPlayerAbilityScripts
         try
         {
             use.Consume(); // The genuine inventory Remove, exactly once.
-            consumption = consumption with { InventoryCommitted = true,
-                CountAfter = use.Inventory.Item(use.Item.Form)?.Count ?? 0, InventoryRevisionAfter = use.Inventory.Revision };
+            consumption = consumption with
+            {
+                InventoryCommitted = true,
+                CountAfter = use.Inventory.Item(use.Item.Form)?.Count ?? 0,
+                InventoryRevisionAfter = use.Inventory.Revision
+            };
             _lastConsumption = consumption;
             publishExistingPools();
             consumption = consumption with { PoolsCommitted = true }; _lastConsumption = consumption;
@@ -229,10 +245,14 @@ internal sealed partial class FalloutPlayerAbilityScripts
         catch (Exception failure)
         {
             _sourceFailure = "Scripted Aid application retained its consumed/published prefix: " + failure.Message;
-            consumption = consumption with { Failure = _sourceFailure,
-                CountAfter = use.Inventory.Item(use.Item.Form)?.Count ?? 0, InventoryRevisionAfter = use.Inventory.Revision,
+            consumption = consumption with
+            {
+                Failure = _sourceFailure,
+                CountAfter = use.Inventory.Item(use.Item.Form)?.Count ?? 0,
+                InventoryRevisionAfter = use.Inventory.Revision,
                 InventoryCommitted = consumption.InventoryCommitted ||
-                    (use.Inventory.Item(use.Item.Form)?.Count ?? 0) == use.CountBefore - 1 && use.Inventory.Revision > use.RevisionBefore };
+                    (use.Inventory.Item(use.Item.Form)?.Count ?? 0) == use.CountBefore - 1 && use.Inventory.Revision > use.RevisionBefore
+            };
             _lastConsumption = consumption;
             foreach (var instance in consumption.Instances)
                 _transients[instance].State = _transients[instance].State with { Consumption = consumption };

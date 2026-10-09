@@ -125,8 +125,11 @@ internal sealed partial class FalloutChallenges
         Notice(definition, definition.Threshold, completed: true, attempt);
         var current = _state[form];
         var recurring = definition.Recurring && (current.RuntimeFlags & 8u) == 0;
-        _state[form] = recurring ? current with { Progress = unchecked(current.Progress - definition.Threshold),
-            RuntimeFlags = current.RuntimeFlags | 4u } : current with { RuntimeFlags = current.RuntimeFlags | 2u };
+        _state[form] = recurring ? current with
+        {
+            Progress = unchecked(current.Progress - definition.Threshold),
+            RuntimeFlags = current.RuntimeFlags | 4u
+        } : current with { RuntimeFlags = current.RuntimeFlags | 2u };
         attempt.Value = attempt.Value with { Prefix = FalloutChallengePrefix.FlagsCommitted };
         return !recurring;
     }

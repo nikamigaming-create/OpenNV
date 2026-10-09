@@ -176,13 +176,20 @@ internal static partial class ExperienceNotificationContracts
             var actor = new byte[24]; actor[8] = 1;
             File.WriteAllBytes(Path.Combine(_directory.FullName, "Notifications.esm"), Join(
                 Record("TES4", 0, Field("HEDR", new byte[12])),
-                Record("NPC_", 7, Field("ACBS", actor), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5])),
+                Record("NPC_", 7, Field("ACBS", actor), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5]), Field("RNAM", BitConverter.GetBytes(8u))),
+                Record("RACE", 8),
                 Setting(100, "fAVDHealthEnduranceMult", BitConverter.GetBytes(20f)), Setting(101, "fAVDHealthLevelMult", BitConverter.GetBytes(5f)),
                 Setting(102, "fAVDActionPointsBase", BitConverter.GetBytes(65f)), Setting(103, "fAVDActionPointsMult", BitConverter.GetBytes(3f)),
                 Setting(104, "iXPBase", BitConverter.GetBytes(200)), Setting(105, "iXPBumpBase", BitConverter.GetBytes(150)),
-                Setting(106, "iMaxCharacterLevel", BitConverter.GetBytes(3))));
+                Setting(106, "iMaxCharacterLevel", BitConverter.GetBytes(3)),
+                Setting(107, "fAVDHealthEnduranceOffset", BitConverter.GetBytes(5f))));
             Records = FalloutPluginStack.Load(_directory.FullName, ["Notifications.esm"]);
-            Vitals = new(Records, new("Notifications.esm", 7), new(5, 5, 5, 5, 5, 5, 5));
+            var values = new FalloutPlayerActorValues(Records);
+            var skills = new FalloutPlayerSkills(Records, () => values.BaseSpecial, _ => false, () => [],
+                null, new FalloutPlayerInventory(), new("Notifications.esm", 7), () => new("Notifications.esm", 8),
+                () => false, actorValues: values);
+            values.BindConstantModifiers(skills.Modifiers);
+            Vitals = FalloutPlayerVitals.FromActorValues(Records, values);
             Experience = new(Records, Vitals, () => []); Experience.BindPerkConditions(_ => 1);
         }
         internal FalloutExperienceNotifications Owner(FalloutExperienceNotificationSnapshot? restore = null) =>

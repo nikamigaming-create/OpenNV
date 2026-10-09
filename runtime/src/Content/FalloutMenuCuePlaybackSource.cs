@@ -1,3 +1,5 @@
+using OpenNV.Runtime.Gameplay.State;
+
 namespace OpenNV.Runtime.Content;
 
 // The original named-sound resolver treats a trailing directory separator as
@@ -46,6 +48,27 @@ internal sealed record FalloutMenuCuePlaybackSource(string EngineSha256,
         if ((flags & ~admitted) != 0 || sound.RandomChancePercent != 0 || sound.StopTime != 0 || sound.StartTime != 0 ||
             sound.LoopStartSample != 0 || sound.LoopEndSample != 0 || sound.FixedPitchScale <= 0)
             throw Unsupported(sound, "random, looping, timed, envelope or nonpositive-pitch playback");
+        return sound with { Flags = flags | FalloutSoundFlags.MenuSound };
+    }
+
+    internal FalloutSoundRecord PreparedFile(FalloutPluginStack records, FalloutPreparedMenuSound prepared,
+        FalloutMenuSoundSelection selection, bool sourceLoop = false)
+    {
+        Validate(); ArgumentNullException.ThrowIfNull(prepared); ArgumentNullException.ThrowIfNull(selection);
+        var sound = prepared.Descriptor;
+        if (!ReferenceEquals(records, selection.Records) || selection.Source.EngineSha256 != EngineSha256 ||
+            selection.Source.RuntimeSha256 != RuntimeSha256)
+            throw new InvalidDataException("Menu playback differs from its actual selected source/random owner.");
+        var receipt = selection.Attempt(prepared.SelectionOrdinal);
+        selection.RequirePrepared(receipt.Ordinal, sound.FormKey, sound.LogicalPath, receipt.Winner, receipt.RecordSha256);
+        if (Path.GetExtension(sound.LogicalPath).ToLowerInvariant() is not (".wav" or ".ogg"))
+            throw Unsupported(sound, "the selected codec consumer outside wave/Ogg");
+        var flags = sound.Flags & ~(FalloutSoundFlags.EnvironmentIgnored | FalloutSoundFlags.MuteWhenSubmerged);
+        const FalloutSoundFlags admitted = FalloutSoundFlags.MenuSound | FalloutSoundFlags.TwoDimensional | FalloutSoundFlags.DialogueSound;
+        var supported = admitted | (sourceLoop ? FalloutSoundFlags.Loop : 0);
+        if ((flags & ~supported) != 0 || sound.RandomChancePercent != 0 || sound.StopTime != 0 || sound.StartTime != 0 ||
+            !sourceLoop && (sound.LoopStartSample != 0 || sound.LoopEndSample != 0) || sound.FixedPitchScale <= 0)
+            throw Unsupported(sound, "random-frequency, scheduled, looping, envelope or nonpositive-pitch playback");
         return sound with { Flags = flags | FalloutSoundFlags.MenuSound };
     }
 

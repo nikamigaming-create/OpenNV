@@ -11,7 +11,8 @@ namespace opennv_domain {
 enum class NvseHostCall : std::uint32_t {
     query_interface = 1, set_opcode = 2, register_command = 3,
     register_listener = 4, serialization_callback = 5, unsupported = 6,
-    dispatch_message = 7, delivered_message = 8, delivered_serialization = 9, begin_serialization = 10
+    dispatch_message = 7, delivered_message = 8, delivered_serialization = 9, begin_serialization = 10,
+    engine_command_declare = 11, engine_command_publish = 12, engine_command_execute = 13, engine_command_retire = 14
 };
 enum class NvsePhase : std::uint32_t { mapped, querying, queried_true, queried_false, loading, loaded_true, loaded_false };
 enum class NvseSerializationEvent : std::uint32_t { save, load, new_game, pre_load };

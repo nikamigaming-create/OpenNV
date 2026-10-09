@@ -23,9 +23,16 @@ internal sealed class FalloutScriptEngineContexts : IDisposable
     private FalloutScriptEngineCall? _restoredLast;
     private bool _disposed;
     internal string? SaveBlocker => _active.Count == 0 ? null : "actual-source-script-interpreter-call-in-flight";
-    internal object State => new { source = _source, calls = _calls, contexts = _contexts,
-        cachedContext = _cached, active = _active.Select(call => call.Capture()).ToArray(),
-        last = _last?.Capture() ?? _restoredLast, retired = _disposed };
+    internal object State => new
+    {
+        source = _source,
+        calls = _calls,
+        contexts = _contexts,
+        cachedContext = _cached,
+        active = _active.Select(call => call.Capture()).ToArray(),
+        last = _last?.Capture() ?? _restoredLast,
+        retired = _disposed
+    };
     internal FalloutScriptEngineContexts(FalloutImmediateScriptSource source, FalloutScriptEngineContextsSnapshot? restore = null)
     {
         source.Validate(); _source = source;

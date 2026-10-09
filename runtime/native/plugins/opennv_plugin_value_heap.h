@@ -1,6 +1,7 @@
 #pragma once
 #include "opennv_plugin_domain.h"
 #include "opennv_plugin_values.h"
+#include "opennv_plugin_shared_heap.h"
 
 namespace opennv_domain {
 enum class NvseHeapOperation : std::uint32_t { allocate = 1, release = 2 };
@@ -9,7 +10,7 @@ struct NvseHeapEvent { std::uint64_t capability, caller; std::uint32_t pointer, 
 struct NvseHeapAllocation { GuestRegion region; std::uint64_t caller; };
 struct NvseHeapThunkPage { void* base; std::uint32_t length; };
 struct NvseValueHeap {
-    GuestArena arena;
+    SharedHeap shared_heap;
     std::vector<NvseHeapThunkDeclaration> declarations;
     std::vector<NvseHeapThunkPage> pages;
     std::map<std::uint32_t, NvseHeapAllocation> allocations;

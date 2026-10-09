@@ -50,6 +50,7 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         _layers = new RuntimeNativeSkyLayers { Name = "OwnedSkyLayers" };
         _layers.Build(_records, _sky, _units);
         AddChild(_layers);
+        if (_sky.SourceTransfer is { } sourceSky) _layers.BindSourceReset(sourceSky);
         _environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,

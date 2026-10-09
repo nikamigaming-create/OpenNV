@@ -1,14 +1,38 @@
 # Product status
 
-The current local integration now includes source native startup declarations,
-retained command-table callbacks, shared script construction/current cold state,
-Main utilities, exterior same-root CELL/reference/LAND transactions and actual
-pre-return terrain allocation cleanup. Source-versioned native Data at protocol16
-joins complete DirectInput, shared controls/inventory and retained lambda values.
-Runtime, reference and native guest probe Debug builds pass without warnings or
-errors; the x86 Debug companion builds. Actual startup, Main children,
-ordinary streaming and campaign cold acceptance remain open. No new candidate
-is published or pinned. The immutable FNV test package remains unchanged.
+The current local protocol23 integration joins native declarations, command-table
+callbacks, shared script current/cold state, actual Main Player pending transfers,
+dedicated Steam platform/callback owners, private CNG/mappings, complete DirectInput
+and same-root CELL/reference/LAND. Runtime and x86 Debug compile cleanly. The owned
+LAND construction/resource-borrower cleanup audit passes. Windows USER32 now loads/
+releases in the restricted selected-module context with normal child exit;
+JIP completes its original Query in the visible candidate; its actual Load is
+blocked by callback executable ownership. CNG loads only for an actual original
+caller. First-party Steam hashing uses retained C# files and real kernel identity
+correlation; its actual Steam Load call remains unexecuted. Product
+platform construction/telemetry/save/retirement is joined but has no accepted
+ordinary constructor/pump. The independent Windows-only service hashes complete
+streamed authored bytes through the real SDK and retires normally. Full Main
+children, streaming, campaign cold, matched
+retail and physical-XR acceptance remain open. The combined gate has not passed
+this wave. No new PR, candidate package or pin is published; the test pin is intact.
+
+Source Sky construction/reset, current/cold anonymous image-instance ownership
+and actual cloud-child order are integrated; authored reset/failure/cold contracts
+pass. Exterior Clouds/Moon/frame consumers remain unowned. Borrowed source engine
+Boolean leaves now have a shared actual callable/retirement owner; authored reader
+cases pass, but original native publication/invocation remains unexecuted. The
+joined effect owner materializes the full independent selection before recursive
+Start/Finish queries. Source menu sound RNG/hash/history owners pass authored
+contracts; actual file-manager startup modes, archive order and invalidation
+visibility remain required before accepting directory playback.
+
+Shared native CNG section views and unload ownership compile. The real imported
+authored SDK caller reaches an exact-address collision before shared calls; the
+failure is retained. The latest ordinary protocol23 New/Yes cursors settle, then
+wait for genuine foreground DirectInput ownership. That candidate was retired
+without an acquired sample or original Load receipt, with the original save
+unchanged and recording off. Full gameplay/mod/audio/pixel acceptance remains open.
 
 The indexed interface sound catalogue reader now shares decoded executable
 sections with instruction reads. Actual FNV and FO3 catalogue reads pass with
@@ -19,11 +43,19 @@ while the nested Data interface revision is separate. Admission retains the
 actual source version. These source reads do not establish original plugin
 Query/Load or gameplay compatibility.
 
-Ordinary candidate New/Yes still refuses JIP's pre-Query entry and unowned
-FNVXR/ShowOff imports. Same-source menu recovery and ordinary Quit now work.
+Ordinary visible candidate New/Yes completes JIP Query after the general repair
+selects an exact declared diagnostic read role and separate private writable
+baseline. Load reaches a callback ownership refusal. The candidate publishes
+actual DirectInput sample1. The C# script scheduler now prepares the full source
+graph on its owned background task: ordinary New and Yes both settle during its
+roughly35-second preparation. Source discovery returns in208 milliseconds.
+Actual Godot/native construction stays on the product thread, and source/campaign
+retirement drains the readers before source release.
+FNVXR/ShowOff imports remain unowned. Same-source recovery and ordinary Quit work.
 The recorder's fresh product check passes: a genuine delivered Quit receipt and
 exit code0 retain the last observed cursor explicitly as unsettled. Actual native
-device sampling is reached; original Query/Load remains absent. The original
+device sampling is reached after the accepted game-start action; background
+indexing never fabricates input. Completed original Load remains absent. The original
 user save and immutable test package remain unchanged; recording is off.
 
 The fresh origin-based integration now combines the protected compiled/runtime

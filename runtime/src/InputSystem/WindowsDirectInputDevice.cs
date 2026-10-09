@@ -30,7 +30,7 @@ internal sealed class WindowsDirectInputDevice : IDisposable
     internal (byte[] Keyboard, byte[] MouseButtons, int X, int Y, int Wheel) Read()
     {
         RequireOwner();
-        if (GetForegroundWindow() != Window) throw new InvalidOperationException("Product window is not the foreground DirectInput owner.");
+        if (GetForegroundWindow() != Window) throw new DirectInputUnavailableException("Product window is not the foreground DirectInput owner.");
         Read(_keyboard, _keyboardBytes); Read(_mouse, _mouseBytes);
         return (_keyboardBytes.ToArray(), _mouseBytes.AsSpan(12, 8).ToArray(),
             System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(_mouseBytes),
@@ -58,8 +58,15 @@ internal sealed class WindowsDirectInputDevice : IDisposable
             }
             var extent = Marshal.SizeOf<ObjectFormat>(); var array = Allocate(checked(objects.Count * extent));
             for (var index = 0; index < objects.Count; ++index) Marshal.StructureToPtr(objects[index], array + index * extent, false);
-            var format = new DataFormat { Size = checked((uint)Marshal.SizeOf<DataFormat>()), ObjectSize = checked((uint)extent),
-                Flags = 2, DataSize = mouse ? 20U : 256U, ObjectCount = checked((uint)objects.Count), Objects = array };
+            var format = new DataFormat
+            {
+                Size = checked((uint)Marshal.SizeOf<DataFormat>()),
+                ObjectSize = checked((uint)extent),
+                Flags = 2,
+                DataSize = mouse ? 20U : 256U,
+                ObjectCount = checked((uint)objects.Count),
+                Objects = array
+            };
             Check(Function<SetFormat>(device, 11)(device, ref format), "SetDataFormat");
             Check(Function<Cooperative>(device, 13)(device, Window, 6), "SetCooperativeLevel foreground/nonexclusive");
             return device;
@@ -103,7 +110,9 @@ internal sealed class WindowsDirectInputDevice : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate uint Release(nint self);
     [DllImport("dinput8.dll", ExactSpelling = true)] private static extern int DirectInput8Create(nint module, uint version, ref Guid iid, out nint result, nint outer);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] private static extern nint GetModuleHandleW(string? name);
-    [DllImport("user32.dll", ExactSpelling = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(nint window);
+    [DllImport("user32.dll", ExactSpelling = true)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(nint window);
     [DllImport("user32.dll", ExactSpelling = true)] private static extern uint GetWindowThreadProcessId(nint window, out uint process);
     [DllImport("user32.dll", ExactSpelling = true)] private static extern nint GetForegroundWindow();
 }
+
+internal sealed class DirectInputUnavailableException(string message) : InvalidOperationException(message);

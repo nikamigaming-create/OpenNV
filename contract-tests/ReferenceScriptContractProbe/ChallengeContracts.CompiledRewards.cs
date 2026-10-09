@@ -88,28 +88,17 @@ internal static partial class ChallengeContracts
 
     private static void UnknownRewardFamilies(string directory)
     {
-        // Empty SCDA is its own authored disposition; missing SCDA never
-        // falls back to a diagnostic source body, even with a zero extent.
+        // A standalone script requires its canonical SCN instruction. Empty
+        // or missing SCDA never falls back to a diagnostic source body.
         foreach (var empty in new[] { true, false })
         {
             Write(directory, Challenge(0x100, 11, 1, 0, 1, script: 0x500), Script(0x500, empty ? [] : null,
                 diagnostics: [Field("SCTX", Text("begin GameMode\nset count to 17\nend"))]));
             using var records = Load(directory); using var fixture = new Fixture(records);
-            if (empty)
-            {
-                fixture.Statistics.Mod(1, 1, "authored-empty-byte-program");
-                var reward = fixture.Challenges.Capture().LastDispatch!.Attempts.Single().Reward!;
-                Require(reward is { Disposition: "authored-empty", Events.Count: 0 } && fixture.Statistics.Read(27) == 1 &&
-                    BitConverter.UInt64BitsToDouble(reward.Locals.Single().Payload) == 0,
-                    "Authored empty SCDA executed text or invented a compiled invocation receipt.");
-            }
-            else
-            {
-                Reject(() => fixture.Statistics.Mod(1, 1, "authored-missing-byte-program"));
-                Require(fixture.Statistics.Read(27) == 0 && fixture.Challenges.Capture().LastDispatch!.Attempts.Single() is
-                    { Prefix: FalloutChallengePrefix.RewardEntered, Reward: null, Error: not null },
-                    "Missing SCDA was admitted as empty or diagnostic execution.");
-            }
+            Reject(() => fixture.Statistics.Mod(1, 1, empty ? "authored-empty-byte-program" : "authored-missing-byte-program"));
+            Require(fixture.Statistics.Read(27) == 0 && fixture.Challenges.Capture().LastDispatch!.Attempts.Single() is
+                { Prefix: FalloutChallengePrefix.RewardEntered, Reward: null, Error: not null },
+                "A standalone reward without canonical SCDA was admitted as empty or diagnostic execution.");
         }
         foreach (var kind in new ushort[] { 1, 0x0100, 2 })
         {
@@ -145,16 +134,17 @@ internal static partial class ChallengeContracts
             Require(scalarFiltered.Challenges.Capture().LastDispatch!.Attempts.Single().Reward!.Events.Single() is
                 { Filtered: true, Receipt: null }, "The source independent predicate was ignored or conflated with menu mode.");
         }
-        // A nested nonrecurring completion commits its flags before the
-        // original linked-node retirement boundary. That boundary stays open.
+        // The nested rebuild retires the parent's current interior cursor.
+        // Both completions commit before its next read exposes that retirement.
         Write(directory, Challenge(0x100, 11, 1, 0, 1), Challenge(0x101, 11, 1, 0, 27));
         using var nestedRecords = Load(directory); using var nested = new Fixture(nestedRecords);
         Reject(() => nested.Statistics.Mod(1, 1, "authored-nested-bucket-retirement"));
         var saved = nested.Challenges.Capture();
-        Require(saved.LastDispatch!.Children.Single() is { RebuildEntered: true, Complete: false, Error: not null } &&
-            nested.Challenges.State(Key(0x101)).Completed && !nested.Challenges.State(Key(0x100)).Completed &&
+        Require(saved.LastDispatch!.Children.Single() is { RebuildEntered: true, Complete: true, Error: null } &&
+            !saved.LastDispatch.Complete && saved.LastDispatch.Error is not null &&
+            nested.Challenges.State(Key(0x101)).Completed && nested.Challenges.State(Key(0x100)).Completed &&
             nested.Statistics.Read(27) == 1 && saved.LastDispatch!.Attempts.Single().CompletionStatisticOrdinal == 2,
-            "Unowned linked-node retirement was guessed, or genuine completed child flags/counter prefixes were rolled back.");
+            "Retired interior traversal was accepted, or genuine completed flags/counter prefixes were rolled back.");
         using var coldNested = new Fixture(nestedRecords, statistics: Copy(nested.Statistics.Capture()), challenges: Copy(saved));
         Reject(() => coldNested.Statistics.Mod(1, 1, "authored-no-nested-prefix-replay"));
         Require(coldNested.MenuCalls == 0 && coldNested.Statistics.Read(27) == 1, "Cold linked-bucket refusal replayed or discarded actual child effects.");

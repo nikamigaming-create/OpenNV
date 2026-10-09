@@ -53,7 +53,7 @@ internal interface IFalloutMainScriptCallerConsumers
     bool ForeignActiveMenu(FalloutMainScriptInvocation invocation);
     int InterfaceContextKind(FalloutMainScriptInvocation invocation);
     void KindThreePrelude(FalloutMainScriptInvocation invocation);
-    void Player(FalloutMainScriptInvocation invocation);
+    Task Player(FalloutMainScriptInvocation invocation);
     void SteamCallbacks(FalloutMainScriptInvocation invocation);
     bool MainHold(FalloutMainScriptInvocation invocation);
     void TimedContexts(FalloutMainScriptInvocation invocation, bool advanceTimer);

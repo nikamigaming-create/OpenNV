@@ -31,7 +31,7 @@ internal static class PlayerPhysicalActivityContracts
         return new(new("Authored.esm", 31), new('8', 64), new("Authored.esm", 32), new('9', 64),
             "meshes/authored-bed.nif", new('a', 64), seat, seat.Kind, phase, Pose, Pose, Pose, null, 0, 0, 0,
             phase == FalloutPlayerFurniturePhase.Approaching ? null : new(clips[phase == FalloutPlayerFurniturePhase.Occupied ? 1 : (int)phase], 0, true),
-            clips, Pose, new(new("Authored.esm", 32), [2, 3, 4], [0, 0, 0]));
+            clips, Pose, new(new("Authored.esm", 32), [2, 3, 4], [0, 0, 0]), PendingTransfer: false);
     }
     private static FalloutPlayerPhysicalSnapshot Capture(FalloutPlayerPhysicalActivity owner,
         FalloutPlayerFurnitureSnapshot? furniture = null, FalloutPlayerKnockdownSnapshot? knockdown = null) =>
@@ -131,6 +131,7 @@ internal static class PlayerPhysicalActivityContracts
         var bed = Bed(FalloutPlayerFurniturePhase.Occupied);
         var active = empty with { Furniture = bed, NativePose = Bones };
         active.Validate();
+        Reject(() => (active with { Furniture = bed with { PendingTransfer = null } }).Validate());
         Reject(() => (active with { NativePose = null }).Validate());
         Reject(() => (active with { Furniture = bed with { Animation = bed.Animation! with { AttemptedKeyOrdinal = 3, AttemptedKeyCycle = 0 } } }).Validate());
         Reject(() => (Bones with { Bones = [] }).Validate());

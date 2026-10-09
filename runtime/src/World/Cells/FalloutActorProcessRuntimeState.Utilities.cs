@@ -22,14 +22,29 @@ internal sealed partial class FalloutActorProcessRuntimeState
         _utilityFrame?.Error is { } frame ? "source-Main-platform-utility:" + frame :
         _utilityCommand?.Error is { } command ? "source-Main-platform-command:" + command :
         _utilityCallbackAttempt?.Error is { } callback ? "source-Main-platform-callback:" + callback : null;
-    internal object MainUtilityState => new { source = MainUtilitySource, constructed = _utilityConstructed,
-        achievementsConstructed = _utilityAchievementsConstructed, loginConstructed = _utilityLoginConstructed,
-        thirdConstructed = _utilityThirdConstructed, loggedOn = _utilityLoggedOn, loginChanged = _utilityLoginChanged,
-        requests = _utilityRequests, clearedThrough = _utilityClearedThrough, pending = _utilityPending,
-        lastCleared = _utilityLastCleared, calls = _utilityCalls, lastFrame = _utilityFrame, lastCommand = _utilityCommand,
-        callback = _utilityCallbackReceipt, registrations = _utilityRegistrations, lastCallbackAttempt = _utilityCallbackAttempt,
+    internal object MainUtilityState => new
+    {
+        source = MainUtilitySource,
+        constructed = _utilityConstructed,
+        achievementsConstructed = _utilityAchievementsConstructed,
+        loginConstructed = _utilityLoginConstructed,
+        thirdConstructed = _utilityThirdConstructed,
+        loggedOn = _utilityLoggedOn,
+        loginChanged = _utilityLoginChanged,
+        requests = _utilityRequests,
+        clearedThrough = _utilityClearedThrough,
+        pending = _utilityPending,
+        lastCleared = _utilityLastCleared,
+        calls = _utilityCalls,
+        lastFrame = _utilityFrame,
+        lastCommand = _utilityCommand,
+        callback = _utilityCallbackReceipt,
+        registrations = _utilityRegistrations,
+        lastCallbackAttempt = _utilityCallbackAttempt,
         platformBound = _utilityPlatformLease != Guid.Empty,
-        commandHostBound = _utilityCommandLease != Guid.Empty, blocker = MainUtilitySaveBlocker };
+        commandHostBound = _utilityCommandLease != Guid.Empty,
+        blocker = MainUtilitySaveBlocker
+    };
 
     internal IDisposable BindMainUtilityPlatform(IFalloutMainUtilityPlatform platform)
     {
@@ -93,14 +108,18 @@ internal sealed partial class FalloutActorProcessRuntimeState
                             boolean: () => statistics is not null);
                         if (statistics is not null)
                         {
+                            string? identifier = null;
+                            Effect(FalloutMainUtilityStep.FormatAchievement,
+                                () => identifier = FalloutMainUtilitySource.AchievementIdentifier(request.Id), request.Request,
+                                returnedArgument: () => identifier);
                             Effect(FalloutMainUtilityStep.StatisticsQuery, () => statistics = UtilityPlatform().SteamUserStats(), request.Request,
                                 boolean: () => statistics is not null);
-                            var identifier = FalloutMainUtilitySource.AchievementIdentifier(request.Id); var result = false;
+                            var result = false;
                             Effect(FalloutMainUtilityStep.SetAchievement, () =>
                             {
                                 var actual = statistics ?? throw new InvalidDataException("Original second SteamUserStats pointer disappeared before its source dereference.");
                                 if (string.IsNullOrWhiteSpace(actual.Owner)) throw new InvalidDataException("Steam statistics interface has no genuine provider identity.");
-                                result = actual.SetAchievement(identifier);
+                                result = actual.SetAchievement(identifier ?? throw new InvalidDataException("Original achievement formatter omitted its returned argument."));
                             }, request.Request, boolean: () => result, argument: identifier);
                         }
                     }
@@ -216,7 +235,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         Effect(step, () => { }); constructed = true;
     }
     private void Effect(FalloutMainUtilityStep step, Action action, long? request = null,
-        Func<bool>? boolean = null, string? argument = null)
+        Func<bool>? boolean = null, string? argument = null, Func<string?>? returnedArgument = null)
     {
         var current = _utilityActive ?? throw new InvalidOperationException("Utility effect has no entered source call.");
         var effect = new FalloutMainUtilityEffect(step, Next(), Request: request, Argument: argument);
@@ -224,7 +243,9 @@ internal sealed partial class FalloutActorProcessRuntimeState
         var faults = _utilityFaults; var mainFaults = _scriptCallerReentry; action();
         if (faults != _utilityFaults || mainFaults != _scriptCallerReentry)
             throw new InvalidOperationException("Utility child swallowed a forbidden source capture/retirement/reentry.");
-        var effects = _utilityActive.Effects.ToArray(); effects[^1] = effects[^1] with { Returned = Next(), Boolean = boolean?.Invoke() };
+        var actualBoolean = boolean?.Invoke(); var actualArgument = returnedArgument?.Invoke() ?? argument;
+        var effects = _utilityActive.Effects.ToArray(); effects[^1] = effects[^1] with
+        { Returned = Next(), Boolean = actualBoolean, Argument = actualArgument };
         _utilityActive = _utilityActive with { Effects = effects, Changed = _sequence };
     }
     private void FinishUtility() => _utilityActive = _utilityActive! with { Returned = true, Changed = Next() };

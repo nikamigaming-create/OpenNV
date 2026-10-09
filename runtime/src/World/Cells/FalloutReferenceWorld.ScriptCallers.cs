@@ -6,13 +6,14 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed partial class FalloutReferenceWorld
 {
     private Exception? _campaignSharedScriptConstructionFailure;
-    internal bool CampaignSharedScriptRuntimeConfigured => _scriptEngineContexts is not null && _processRuntime?.MainScriptCallerConstructed == true;
+    internal bool CampaignSharedScriptRuntimeConfigured => _scriptEngineContexts is not null && _processRuntime?.MainScriptCallerConstructed == true &&
+        _processRuntime.MainPlayerCellConstructed && _processRuntime.MainUtilityCommandsConstructed;
     internal object? CampaignMainScriptCallerState => _processRuntime?.MainScriptCallerState;
     internal string? CampaignSharedScriptSaveBlocker => CampaignChallengesConfigured && Challenges.Source is not null ?
         _campaignSharedScriptConstructionFailure is not null ? "source-shared-script-construction-failed:" + _campaignSharedScriptConstructionFailure.Message :
         !CampaignSharedScriptRuntimeConfigured ? "source-shared-script-context-Main-caller-construction-unbound" :
-        _scriptEngineContexts!.SaveBlocker ?? ProcessRuntime.MainScriptCallerSaveBlocker ?? ProcessRuntime.MainUtilitySaveBlocker ??
-            ProcessRuntime.SourceScriptFrameSaveBlocker : null;
+        _scriptEngineContexts!.SaveBlocker ?? ProcessRuntime.MainScriptCallerSaveBlocker ?? ProcessRuntime.MainPlayerCellSaveBlocker ?? ProcessRuntime.MainUtilitySaveBlocker ??
+            ProcessRuntime.MainUtilityCommandSaveBlocker ?? ProcessRuntime.PlatformStartupSaveBlocker ?? ProcessRuntime.SourceScriptFrameSaveBlocker : null;
     internal void ConfigureCampaignSharedScripts(FalloutAdvancementRuntimeSource runtime, FalloutSharedScriptRuntimeSnapshot? restore)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -31,6 +32,11 @@ internal sealed partial class FalloutReferenceWorld
             ConfigureCampaignScriptContexts(runtime, restore?.Contexts, restore?.MainField, restore?.MainCaller);
             ProcessRuntime.ConstructMainScriptCaller(FalloutMainScriptCallerSource.Read(FalloutImmediateScriptSource.Read(runtime.Receipt)), restore?.MainCaller);
             if (restore is not null) ProcessRuntime.RestoreMainUtilities(restore.Utilities);
+            var utility = FalloutMainUtilitySource.Read(CampaignMainScriptSource);
+            ConstructCampaignUtilityCommands(FalloutExecutableStringTable.ReadMainUtilityCommandSource(runtime.OwnedSource.FalloutExecutablePath, utility),
+                FalloutConsoleActivitySource.Read(runtime.Receipt), restore?.UtilityCommands);
+            if (restore is not null) RequireMainPlayerColdSources(restore.PlayerCell);
+            ProcessRuntime.ConstructMainPlayerCell(CampaignMainPlayerCellSource, PlayerMoves.SourcePending, restore?.PlayerCell);
         }
         catch (Exception failure) { _campaignSharedScriptConstructionFailure = failure; throw; }
     }
@@ -38,7 +44,7 @@ internal sealed partial class FalloutReferenceWorld
         FalloutImmediateScriptSource.Read(CampaignPlayerRuntimeSource.Receipt));
     internal IDisposable BindCampaignMainScriptCaller(IFalloutMainScriptCallerConsumers consumers, string deliveryOwner) =>
         ProcessRuntime.BindMainScriptCaller(consumers, deliveryOwner);
-    internal void ExecuteCampaignMainScriptCaller(ulong actualDeliveredFrame, float deliveredSeconds) =>
+    internal Task ExecuteCampaignMainScriptCaller(ulong actualDeliveredFrame, float deliveredSeconds) =>
         ProcessRuntime.ExecuteMainScriptCaller(actualDeliveredFrame, deliveredSeconds);
     internal FalloutSharedScriptRuntimeSnapshot? CaptureCampaignSharedScripts()
     {
@@ -47,7 +53,7 @@ internal sealed partial class FalloutReferenceWorld
         if (!CampaignSharedScriptRuntimeConfigured) throw new NotSupportedException("source-shared-script-context-Main-caller-construction-unbound");
         var caller = ProcessRuntime.CaptureMainScriptCaller(); var field = ProcessRuntime.CaptureMainScriptFrameEvidence();
         var result = new FalloutSharedScriptRuntimeSnapshot(FalloutSharedScriptRuntimeSnapshot.CurrentSchema,
-            _scriptEngineContexts!.Capture(), field, caller, ProcessRuntime.CaptureMainUtilities());
+            _scriptEngineContexts!.Capture(), field, caller, ProcessRuntime.CaptureMainUtilities(), ProcessRuntime.CaptureMainPlayerCell(), CaptureCampaignUtilityCommands());
         result.Validate(ProcessRuntime.Capture()); return result;
     }
 }

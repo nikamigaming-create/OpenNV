@@ -50,8 +50,13 @@ internal sealed partial class FalloutActorProcessCommonState
         var current = Require(actor); var observation = ObserveInitializationBody(actor);
         // The original initializer returns before all skeleton/BPTD/LOD
         // lookup work if its actual source 3D getter returns null.
-        _current[actor] = current with { Body = observation.Body, Source3D = observation.Source3D,
-            Phase = FalloutProcessCommonPhase.Initialized, Changed = Next() };
+        _current[actor] = current with
+        {
+            Body = observation.Body,
+            Source3D = observation.Source3D,
+            Phase = FalloutProcessCommonPhase.Initialized,
+            Changed = Next()
+        };
     }
 
     private void ObserveExistingCurrentSourceBody(FalloutFormKey actor, FalloutProcessCommonEntry current)
@@ -59,8 +64,13 @@ internal sealed partial class FalloutActorProcessCommonState
         var observation = ObserveInitializationBody(actor);
         if (current.Body is { } before && observation.Body is { } after && !BodyEquivalent(before, after))
             throw new NotSupportedException("Source High body replacement has no admitted body-part/LOD rebinding transaction.");
-        _current[actor] = current with { Body = observation.Body, Source3D = observation.Source3D,
-            Phase = FalloutProcessCommonPhase.Initialized, Changed = Next() };
+        _current[actor] = current with
+        {
+            Body = observation.Body,
+            Source3D = observation.Source3D,
+            Phase = FalloutProcessCommonPhase.Initialized,
+            Changed = Next()
+        };
     }
 
     private static void ValidateSourceBodyEntry(FalloutProcessCommonEntry entry)

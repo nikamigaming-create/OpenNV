@@ -8,12 +8,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\..\runtime\src\Compatibility\NativePlugins\X86GuestMemory.cs" Link="X86GuestMemory.cs" />
-    <Compile Include="..\..\runtime\src\Compatibility\NativePlugins\NativePluginExecutionDomain.cs" Link="NativePluginExecutionDomain.cs" />
-    <Compile Include="..\..\runtime\src\Compatibility\NativePlugins\NativePluginExecutionDomain.Protocol.cs" Link="NativePluginExecutionDomain.Protocol.cs" />
-    <Compile Include="..\..\runtime\src\Compatibility\NativePlugins\NativePluginExecutionDomain.Arena.cs" Link="NativePluginExecutionDomain.Arena.cs" />
-    <Compile Include="..\..\runtime\src\Compatibility\NativePlugins\NativePluginExecutionDomain.Nvse*.cs" Link="%(Filename)%(Extension)" />
-    <Compile Include="..\..\runtime\src\Content\NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
-    <Compile Include="..\..\runtime\src\Gameplay\State\GameplayVitals.cs" Link="GameplayVitals.cs" />
+    <ProjectReference Include="../../runtime/OpenNV.csproj" />
   </ItemGroup>
 </Project>

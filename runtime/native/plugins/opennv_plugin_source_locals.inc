@@ -91,6 +91,7 @@ void source_local_sync(bool entry) {
     source_local_validate(context);
 }
 bool source_local_callback_needs_sync(Kind kind, std::uint32_t event) {
+    if (kind == Kind::nvse_callback && (event == 0x600 || event == 0x601)) return false;
     return (kind != Kind::nvse_callback || event < local_begin_event || event > local_end_event) &&
         state && state->source_locals && !state->source_locals->synchronizing && !state->source_locals->calls.empty();
 }

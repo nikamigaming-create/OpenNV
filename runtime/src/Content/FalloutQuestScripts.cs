@@ -248,6 +248,8 @@ internal sealed partial class FalloutQuestScripts
 
     private readonly FalloutPluginStack _records;
     private readonly FalloutQuestState _quests;
+    internal FalloutPluginStack Records => _records;
+    internal FalloutPlayerInventory PlayerInventory => _inventory;
     private readonly List<Instance> _instances = [];
     private readonly List<FalloutQuestScriptCompiledSelection> _compiledSelections = [];
     internal IReadOnlyList<FalloutQuestScriptCompiledSelection> CompiledSelections => _compiledSelections.AsReadOnly();

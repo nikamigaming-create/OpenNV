@@ -1,5 +1,23 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args.Length == 5 && args[0] == "--test-native-mutex")
+{
+    NativeMutexContracts.Run(args[1], args[2], args[3], args[4]);
+    return;
+}
+
+if (args is ["--test-native-engine-command-leaves"])
+{
+    NativeEngineCommandLeafContracts.Run();
+    return;
+}
+
+if (args.Length == 5 && args[0] == "--test-native-cng-shared")
+{
+    NativeCngSharedContracts.Run(args[1], args[2], args[3], args[4]);
+    return;
+}
+
 if (args.Length == 5 && args[0] == "--test-native-crt")
 {
     NativeCrtContracts.Run(args[1], args[2], args[3], args[4]);
@@ -26,6 +44,7 @@ if (args.Length != 0)
     return;
 }
 
+NativeEngineCommandLeafContracts.Run();
 OwnershipAndEndian();
 AdjacentExtents();
 AtomicRefusal();

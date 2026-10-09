@@ -26,12 +26,16 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal void RetireSourceMainScriptCaller()
     {
         if (_sourceMainScriptCallerRetired) return;
-        _sourceMainScriptCallerRetired = true;
-        var native = _sourceMainScriptCaller; _sourceMainScriptCaller = null;
-        if (native is null) return;
+        var native = _sourceMainScriptCaller;
+        if (native is null) { _sourceMainScriptCallerRetired = true; return; }
         var failures = new List<Exception>();
         try { native.Retire(); } catch (Exception failure) { failures.Add(failure); }
-        try { if (GodotObject.IsInstanceValid(native)) native.Free(); } catch (Exception failure) { failures.Add(failure); }
+        try
+        {
+            if (native.CanDestroyAfterRetirement && GodotObject.IsInstanceValid(native)) native.Free();
+            if (!GodotObject.IsInstanceValid(native)) { _sourceMainScriptCaller = null; _sourceMainScriptCallerRetired = true; }
+        }
+        catch (Exception failure) { failures.Add(failure); }
         if (failures.Count != 0) throw new AggregateException("Source Main native retirement retained its actual failure.", failures);
     }
 }

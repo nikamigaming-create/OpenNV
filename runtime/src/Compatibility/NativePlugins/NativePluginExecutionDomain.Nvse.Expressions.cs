@@ -49,7 +49,7 @@ internal sealed partial class NativePluginExecutionDomain
         VerifyNvse(plugin); RequireNvseLoaded(plugin); VerifyGuest(scriptData); ArgumentNullException.ThrowIfNull(arguments);
         if (_nvseExpressionAbi is null || !plugin.Registry.Commands.Any(row => ReferenceEquals(row, command)) ||
             command.Generation != Generation || command.Module != plugin.Module || command.Execute == 0 || command.NeedsParent != 0 ||
-            command.Parse != 0x08000000 && !(command.Parse == 0 && sourceScript is not null && _nvseScriptInterface) || command.ReturnType is not (NativeNvseCommandReturn.Default or NativeNvseCommandReturn.String or NativeNvseCommandReturn.Array or NativeNvseCommandReturn.Ambiguous) ||
+            command.Parse != 0x08000000 && !(command.Parse == 0 && sourceScript is not null && _nvseScriptInterface) && !HasEngineCommandCaller(command) || command.ReturnType is not (NativeNvseCommandReturn.Default or NativeNvseCommandReturn.String or NativeNvseCommandReturn.Array or NativeNvseCommandReturn.Ambiguous) ||
             (command.ReturnType is NativeNvseCommandReturn.String or NativeNvseCommandReturn.Array) && (resultTarget is null || resultTarget.Kind != command.ReturnType) ||
             command.ReturnType == NativeNvseCommandReturn.Default && resultTarget?.Kind == NativeNvseCommandReturn.Array ||
             resultTarget is not null && (_nvseValues is null || string.IsNullOrWhiteSpace(resultTarget.SourceOwner) || resultTarget.Kind is not (NativeNvseCommandReturn.String or NativeNvseCommandReturn.Array)) ||
@@ -64,6 +64,7 @@ internal sealed partial class NativePluginExecutionDomain
         {
             BeginNvseLocalCall(caller); localBegun = true;
             BeginNvseValueCall(caller); valueBegun = true;
+            var engineEvents = _nvseEngineCommandEvents.Count; var engineParent = checked(_nextRequest + 1);
             using var reader = Exchange(NativePluginDomainOperation.NvseCommand, Payload(writer =>
             {
                 writer.Write(plugin.Module); writer.Write(command.SourceAddress); writer.Write(command.AssignedOpcode);
@@ -74,6 +75,7 @@ internal sealed partial class NativePluginExecutionDomain
             var raw = reader.ReadUInt32(); var stack = reader.ReadInt32(); var registers = reader.ReadUInt32(); var exception = reader.ReadUInt32();
             var number = reader.ReadDouble(); var end = reader.ReadUInt32(); var created = reader.ReadUInt32(); var destroyed = reader.ReadUInt32(); var tokens = reader.ReadUInt32(); Finish(reader);
             CheckNvseBoundary(stack, registers, exception);
+            RequireEngineCommandInvocation(caller, engineEvents, engineParent, raw, number, end);
             if ((raw & 255) > 1 || !double.IsFinite(number) || end < arguments.StartOffset || end > arguments.MaximumEndOffset ||
                 created != caller.Created || destroyed != caller.Destroyed || tokens != caller.Tokens || created != destroyed || caller.Evaluators.Count != 0 || caller.NativeParameters is null)
                 throw new InvalidDataException("Original expression caller has no complete result/offset/token retirement receipt.");

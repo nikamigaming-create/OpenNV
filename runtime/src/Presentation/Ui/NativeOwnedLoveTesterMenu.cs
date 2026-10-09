@@ -28,7 +28,7 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
     private readonly Dictionary<string, string> _input = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (FalloutSoundRecord Source, long Revision)> _sounds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Texture2D> _textures = new(StringComparer.OrdinalIgnoreCase);
-    private readonly FalloutSoundRandomState _soundRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
+    private long _menuSoundOccurrence;
     private FalloutNativeSpecialState _state;
     private int _page, _index;
     private bool _turning, _accepted;
@@ -302,7 +302,8 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
             entry = (FalloutSoundRecordReader.Read(_records, record.FormKey), _records.SoundPaths.Revision(record.FormKey));
             _sounds[editorId] = entry;
         }
-        var player = NativeOwnedSoundPlayback.CreateMenu(entry.Source, _records, RuntimeLiveContentSource.Current!, _soundRandom);
+        var player = NativeOwnedSoundPlayback.CreateMenu(entry.Source, _records,
+            NativeOwnedSoundPlayback.MenuCall(this, checked(++_menuSoundOccurrence), entry.Source.FormKey));
         (surviveMenu ? GetTree().Root : (Node)this).AddChild(player);
         player.Finished += player.QueueFree;
         player.Play();

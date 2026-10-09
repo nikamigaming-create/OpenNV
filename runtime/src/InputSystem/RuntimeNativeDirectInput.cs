@@ -20,7 +20,6 @@ internal sealed partial class RuntimeNativeDirectInput : Node
         try
         {
             var state = new FalloutDirectInputState(source, checked((ulong)window), controls);
-            var sample = device.Read(); state.Publish(sample.Keyboard, sample.MouseButtons, sample.X, sample.Y, sample.Wheel);
             return new(state, device);
         }
         catch { device.Dispose(); throw; }
@@ -30,11 +29,29 @@ internal sealed partial class RuntimeNativeDirectInput : Node
     {
         (byte[] Keyboard, byte[] MouseButtons, int X, int Y, int Wheel) sample;
         try { sample = _device.Read(); }
-        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or DirectInputUnavailableException)
         { State.DeviceUnavailable(error.Message); return; }
         // A reached script/event failure is not a failed device acquisition.
         // Keep the committed sample and let the real callback error propagate.
         State.Publish(sample.Keyboard, sample.MouseButtons, sample.X, sample.Y, sample.Wheel);
+    }
+    internal async Task WaitForFirstSample(Func<bool> cancelled)
+    {
+        if (_retired || !IsInsideTree()) throw new InvalidOperationException("Initial device admission requires its attached product owner.");
+        string? lastFailure = null;
+        while (State.Sample == 0)
+        {
+            if (cancelled() || _retired || !IsInsideTree())
+                throw new OperationCanceledException("Product input admission ended before an actual device sample.");
+            _Process(0);
+            if (State.Failure is { } failure && failure != lastFailure)
+            {
+                lastFailure = failure;
+                GD.Print("OPENNV_NATIVE_INPUT_ADMISSION phase=waiting-for-device detail=" + failure);
+            }
+            if (State.Sample == 0) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        State.RequireCurrent();
     }
     internal void Poll()
     {

@@ -70,10 +70,13 @@ internal partial class RuntimeNativePlayer
     }
 
     internal void ActivateFurniture(FalloutPluginStack records, FalloutQuestState quests,
-        FalloutPlacedReference reference, Transform3D placement, FalloutFormKey cell, FalloutReferenceWorld? world = null)
+        FalloutPlacedReference reference, Transform3D placement, FalloutFormKey cell, FalloutReferenceWorld? world = null,
+        int? sourceMarker = null, bool pendingTransfer = false)
     {
         if (_furniturePhase != 0 || _furnitureError is not null)
             throw new InvalidOperationException("Player already owns a furniture interaction or failure.");
+        if (pendingTransfer != (sourceMarker is not null))
+            throw new InvalidDataException("Source pending marker selection must enter its actual pending-furniture origin.");
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned furniture source is absent.");
         var furniture = records.GetEffective(reference.Base);
         var path = "meshes/" + FalloutDialogueTopic.Text(furniture.ReadSubrecords().Single(field => field.Signature == "MODL").Data.Span).Replace('\\', '/');
@@ -81,7 +84,7 @@ internal partial class RuntimeNativePlayer
         if (PhysicalPlayer.HasPhysicalMotion || world is null || records != _physicalRecords || quests != _physicalQuests || world != _physicalWorld ||
             !world.IsEnabled(reference.FormKey) || world.Get(reference.FormKey).Base != reference.Base || world.Placement(reference.FormKey).Cell != cell)
             throw new InvalidDataException("Furniture activation differs from the actual player's enabled authoritative source world.");
-        if (FalloutFurnitureSource.ReadKind(furniture) == FalloutPlayerFurnitureKind.Sleeping)
+        if (!pendingTransfer && FalloutFurnitureSource.ReadKind(furniture) == FalloutPlayerFurnitureKind.Sleeping)
         {
             // The original player bed branch opens its real sleep menu. It
             // does not dispatch the separate actor chair/lying animation path
@@ -93,7 +96,8 @@ internal partial class RuntimeNativePlayer
         if (_thirdPersonMode && _xr is null)
             throw new NotSupportedException("Player furniture requires its actual third-person camera transition owner.");
         var nif = Read(path);
-        var seat = FalloutFurnitureSource.ReadPlayer(records, furniture, nif);
+        var seat = sourceMarker is { } marker ? FalloutPendingFurnitureSource.Marker(records, furniture, nif, marker) :
+            FalloutFurnitureSource.ReadPlayer(records, furniture, nif);
         var body = _thirdPerson?.Actor ?? throw new NotSupportedException("Player furniture requires its actual current source body.");
         if (!body.IsInsideTree()) throw new NotSupportedException("Player furniture source body is detached.");
         _furniturePlacement = placement;
@@ -177,7 +181,7 @@ internal partial class RuntimeNativePlayer
                 _furnitureWorld = world;
                 _furnitureReservationActor = records.RuntimeFormKey(0x14);
                 // Resource/clock preparation precedes publication of the interaction.
-                _furnitureSeat = seat; _furnitureReference = reference.FormKey; _furniturePhase = 1;
+                _furnitureSeat = seat; _furnitureReference = reference.FormKey; _furniturePendingTransfer = pendingTransfer; _furniturePhase = 1;
                 _furnitureLookYaw = 0;
                 PhysicalPlayer.CommitFurniture(seat.Kind, FalloutPlayerFurniturePhase.Approaching);
                 CancelWeaponAction(); Velocity = Vector3.Zero; Activity.SetMovement(false, false);
@@ -223,7 +227,7 @@ internal partial class RuntimeNativePlayer
         Velocity = Vector3.Zero;
         DispatchFurnitureKeys(0);
         PublishFurnitureCamera();
-        if (phase == 3 && _furnitureSeat.Kind == FalloutPlayerFurnitureKind.Sleeping && !_bedPublicationAttempted)
+        if (phase == 3 && !_furniturePendingTransfer && _furnitureSeat.Kind == FalloutPlayerFurnitureKind.Sleeping && !_bedPublicationAttempted)
         {
             _bedPublicationAttempted = true;
             (SourceBedOccupied ?? throw new NotSupportedException("Player bed has no actual source sleep-menu/time consumer."))(_furnitureReference!.Value);
@@ -315,7 +319,7 @@ internal partial class RuntimeNativePlayer
         ReleaseFurnitureReservation();
         PhysicalPlayer.CommitFurniture(_furnitureSeat!.Kind, FalloutPlayerFurniturePhase.None);
         RetirePlayerPhysicalView();
-        _furnitureBody = null; _furnitureClip = null; _furniturePhysicalClock = null; _bedPublicationAttempted = false;
+        _furnitureBody = null; _furnitureClip = null; _furniturePhysicalClock = null; _bedPublicationAttempted = false; _furniturePendingTransfer = false;
         _furnitureCameraSource = null; _furnitureCameraSkeletonHash = null;
         _furnitureClips.Clear(); _furnitureSeat = null; _furnitureReference = null; _furniturePhase = 0;
         ReleaseSourceCamera();

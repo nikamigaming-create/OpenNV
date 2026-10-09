@@ -113,8 +113,8 @@ internal static class RadioConversationContracts
         Reject(() => FalloutNativeCampaignSave.ValidateResultAuthorityVersion(minimal with
         { Schema = "opennv-native-fnv-campaign-save/v49", FinishedSpeech = history with
             { ActiveRadio = [voice with { BeginResults = null, EndResults = null }] } }));
-        FalloutNativeCampaignSave.ValidateResultAuthorityVersion(minimal with
-        { Schema = "opennv-native-fnv-campaign-save/v49", FinishedSpeech = history with { ActiveRadio = [] } });
+        Reject(() => FalloutNativeCampaignSave.ValidateResultAuthorityVersion(minimal with
+        { Schema = "opennv-native-fnv-campaign-save/v49", FinishedSpeech = history with { ActiveRadio = [] } }));
         RejectVoice(voice with { Generation = 2 });
         RejectVoice(voice with { ResponseIndex = 1 });
         RejectVoice(voice with { Binding = voice.Binding with { Actor = Key(11) } });

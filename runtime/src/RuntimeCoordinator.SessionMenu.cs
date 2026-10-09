@@ -221,7 +221,9 @@ public partial class RuntimeCoordinator
     private async Task DrainNativeSourceReaders()
     {
         GetTree().Paused = true;
+        RequestNativeMainPlayerRetirement();
         var pending = StopActualQueuedSourceReads().ToList();
+        if (_nativeOpeningStageDriver is { } actualDriver) pending.Add(actualDriver.StopAndDrainSourceMainScriptCaller());
         pending.AddRange(RequestNativeQueuedActorCallerRetirement());
         pending.AddRange(_nativeGridNpcPreparations.Select(item => item.ReadTask));
         if (_nativeMenuRead is { } menuRead) pending.Add(menuRead);

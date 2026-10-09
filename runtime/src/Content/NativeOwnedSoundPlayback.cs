@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Content;
 
@@ -10,42 +11,43 @@ internal static partial class NativeOwnedSoundPlayback
         FalloutSoundFlags.TwoDimensional |
         FalloutSoundFlags.DialogueSound;
 
-    internal static AudioStreamPlayer CreateMenu(FalloutSoundRecord descriptor, FalloutPluginStack records,
-        RuntimeLiveContentSource source, FalloutSoundRandomState random)
+    internal static FalloutMenuSoundSelectionCall MenuCall(Node owner, long occurrence, FalloutFormKey sound)
     {
-        var before = random.State;
-        var selected = descriptor.LogicalPath;
-        if (!descriptor.HasExactFile)
-        {
-            var prefix = FalloutBsaArchive.CanonicalPath(descriptor.LogicalPath).TrimEnd('\\') + "\\";
-            var variants = source.ResourcePathsUnder(descriptor.LogicalPath)
-                .Where(path => !path[prefix.Length..].Contains('\\') &&
-                    Path.GetExtension(path).Equals(".wav", StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            if (variants.Length == 0) throw new InvalidDataException($"Menu SOUN {descriptor.FormKey} has no owned WAV variants in {descriptor.LogicalPath}.");
-            selected = variants[random.NextBounded((uint)variants.Length)];
-        }
-        // The menu event is an explicit 2D playback request. Its SOUN still
-        // supplies the winning asset, gain, pitch and loop declaration.
-        // Environmental/submersion gates belong to positioned sounds. A menu
-        // request has no world position or underwater listener relationship.
-        var menuFlags = descriptor.Flags & ~(FalloutSoundFlags.EnvironmentIgnored | FalloutSoundFlags.MuteWhenSubmerged);
-        var player = CreateTwoDimensional(descriptor with { LogicalPath = selected, Flags = menuFlags | FalloutSoundFlags.MenuSound }, records);
+        ArgumentNullException.ThrowIfNull(owner);
+        if (!owner.IsInsideTree()) throw new InvalidOperationException("Menu cue has no actual attached presentation caller.");
+        var call = new FalloutMenuSoundSelectionCall("native-menu-caller:" + RuntimeSaveProcessIdentity.Current.Boot + ":" +
+            owner.GetInstanceId().ToString(System.Globalization.CultureInfo.InvariantCulture), occurrence, 0, sound);
+        call.Validate(); return call;
+    }
+
+    internal static AudioStreamPlayer CreateMenu(FalloutSoundRecord descriptor, FalloutPluginStack records,
+        FalloutMenuSoundSelectionCall call)
+    {
+        var source = records.OwnedSource ?? throw new NotSupportedException("Menu cue has no actual selected source.");
+        if (!ReferenceEquals(source, RuntimeLiveContentSource.Current))
+            throw new InvalidDataException("Menu decode differs from its actual currently selected source graph.");
+        var selection = source.RequireMenuSoundSelection(records);
+        var prepared = selection.Prepare(descriptor, call);
+        var policy = new FalloutMenuCuePlaybackSource(selection.Source.EngineSha256, selection.Source.RuntimeSha256,
+            FalloutMenuCuePlaybackSource.CurrentContractSha256);
+        var selected = policy.PreparedFile(records, prepared, selection, sourceLoop: true);
+        var player = CreateTwoDimensional(selected, records);
         try
         {
             player.SetMeta("opennv_menu_sound_source", descriptor.FormKey.ToString());
             player.SetMeta("opennv_menu_sound_source_flags", (int)descriptor.Flags);
-            player.SetMeta("opennv_menu_sound_variant", selected);
-            player.SetMeta("opennv_menu_sound_random_before", before.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            player.SetMeta("opennv_menu_sound_random_after", random.State.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            player.SetMeta("opennv_menu_sound_variant", selected.LogicalPath);
+            player.SetMeta("opennv_menu_sound_selection_ordinal", prepared.SelectionOrdinal);
+            player.SetMeta("opennv_menu_sound_selection_source", selection.Source.Identity);
             return player;
         }
         catch (Exception original)
         {
-            try { player.Free(); }
-            catch (Exception cleanup)
-            { throw new AggregateException("Menu voice retained original metadata and native retirement failures.", original, cleanup); }
-            throw;
+            List<Exception> failures = [original];
+            try { ((NativeOwnedTwoDimensionalSoundPlayer)player).ReleaseDecodedStream(); } catch (Exception cleanup) { failures.Add(cleanup); }
+            try { player.Free(); } catch (Exception cleanup) { failures.Add(cleanup); }
+            if (failures.Count == 1) throw;
+            throw new AggregateException("Menu voice retained original metadata and native/resource retirement failures.", failures);
         }
     }
 

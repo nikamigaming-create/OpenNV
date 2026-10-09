@@ -140,6 +140,7 @@ public partial class RuntimeCoordinator
     }
     private void RetireNativeSourceCellAttachments()
     {
+        RetireNativeMainPlayerCell();
         var failures = new List<Exception>();
         try { _ = RequestNativeQueuedActorCallerRetirement(); }
         catch (Exception error) { failures.Add(error); }

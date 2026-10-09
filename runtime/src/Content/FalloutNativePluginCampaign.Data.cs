@@ -23,12 +23,30 @@ internal sealed partial class FalloutNativePluginCampaign
     internal object DataExecutionState => new
     {
         Source = _source.StackId,
-        Input = _dataBindings is { } bindings ? new { bindings.Input.Source, bindings.Input.Window,
-            bindings.Input.Sample, bindings.Input.Revision, bindings.Input.Failure, bindings.Input.NativeReaders } : null,
+        Input = _dataBindings is { } bindings ? new
+        {
+            bindings.Input.Source,
+            bindings.Input.Window,
+            bindings.Input.Sample,
+            bindings.Input.Revision,
+            bindings.Input.Failure,
+            bindings.Input.NativeReaders
+        } : null,
         InventoryFrameActive = _dataBindings?.Inventory.HasFrame,
         InventoryEntries = _dataBindings?.Inventory.Entries.Count,
-        Modules = _modules.Select(module => new { module.Domain.Generation, module.Plugin.Module,
-            State = module.Domain.NvseDataState, Callbacks = module.Domain.NvseDataCallbacks }).ToArray()
+        Modules = _modules.Select(module => new
+        {
+            module.Domain.Generation,
+            module.Plugin.Module,
+            State = module.Domain.NvseDataState,
+            Callbacks = module.Domain.NvseDataCallbacks,
+            Crypto = module.Domain.NvseCryptoReceipts,
+            Mappings = module.Domain.NvseMappingReceipts,
+            EngineCommands = module.Domain.NvseEngineCommandEvents,
+            SharedCryptoViews = module.Domain.CngSharedReceipts,
+            SharedCryptoCalls = module.Domain.CngSharedCalls,
+            CryptoDetach = module.Domain.CngDetachReceipts
+        }).ToArray()
     };
     private sealed class CampaignData(FalloutNativePluginCampaign campaign, NativePluginExecutionDomain domain,
         NativeNvsePlugin plugin, FalloutNativePluginDataBindings bindings) : NativeNvseRuntimeDataAuthority

@@ -22,9 +22,12 @@ internal sealed partial class FalloutCellProcesses
     private void SharedRootRetired(FalloutCellProcessAttachment owner)
     {
         if (ActiveSharedGraph(owner.Identity) is not { Phase: FalloutCellSharedGraphPhase.RetiringRoot } change) return;
-        StoreGraph(change with { Phase = FalloutCellSharedGraphPhase.RootRetired,
+        StoreGraph(change with
+        {
+            Phase = FalloutCellSharedGraphPhase.RootRetired,
             DestroyedReferences = owner.Children.Select(child => child.Source.Reference).ToArray(),
-            DestroyedCellConsumers = owner.CellConsumers.Select(cell => cell.Source.Cell.Cell).ToArray() });
+            DestroyedCellConsumers = owner.CellConsumers.Select(cell => cell.Source.Cell.Cell).ToArray()
+        });
     }
     private static bool TransitionCellOwned(FalloutCellProcessesSnapshot saved, FalloutCellProcessTransition transition,
         FalloutCellProcessAttachment current)

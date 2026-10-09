@@ -21,7 +21,7 @@ internal sealed record FalloutInterfaceSoundVoice(long Ordinal, FalloutInterface
     ulong? NativePlayer = null, ulong? NativeStream = null, string? MediaSha256 = null,
     bool VoiceRetired = false, bool PlayerDestroyed = false, bool StreamReferenceReleased = false,
     bool StreamDestroyed = false, string? FailureType = null, string? Error = null,
-    bool PlayReturned = false, bool FinishObserved = false)
+    bool PlayReturned = false, bool FinishObserved = false, long? SelectionOrdinal = null)
 {
     internal bool Pending => Phase is FalloutInterfaceVoicePhase.Entered or FalloutInterfaceVoicePhase.Resolved or
         FalloutInterfaceVoicePhase.Allocated or FalloutInterfaceVoicePhase.Started ||
@@ -29,14 +29,14 @@ internal sealed record FalloutInterfaceSoundVoice(long Ordinal, FalloutInterface
 }
 
 internal sealed record FalloutIndexedInterfaceSoundSnapshot(string Schema, string SourceSha256,
-    long LastOrdinal, IReadOnlyList<FalloutInterfaceSoundVoice> Voices, string? Failure);
+    long LastOrdinal, IReadOnlyList<FalloutInterfaceSoundVoice> Voices, string? Failure, FalloutMenuSoundSelectionSnapshot Selection);
 
 // The source call, original named lookup, native Play, Finished, voice stop,
 // player deletion and fresh decoded-resource retirement are independent facts.
 // Only the actual attached native host may publish those facts through its lease.
 internal sealed class FalloutIndexedInterfaceSounds
 {
-    internal const string Schema = "opennv-indexed-interface-sounds/v1";
+    internal const string Schema = "opennv-indexed-interface-sounds/v2";
     private readonly List<FalloutInterfaceSoundVoice> _voices = [];
     private Guid? _native;
     private Func<FalloutInterfaceSoundCall, long>? _play;
@@ -47,9 +47,17 @@ internal sealed class FalloutIndexedInterfaceSounds
     internal string? SaveBlocker => _voices.Any(row => row.Pending) ? "indexed-interface-finite-native-audio" : null;
     internal long LastOrdinal => _voices.Count;
     internal event Action<FalloutInterfaceSoundVoice>? Changed;
-    internal object State => new { source = Source.Identity, catalogue = Source.Catalogue,
-        voices = _voices.ToArray(), failure = _failure, nativePublished = _native is not null,
-        saveBlocker = SaveBlocker, dialogueAndMessageTileProducer = "unowned" };
+    internal object State => new
+    {
+        source = Source.Identity,
+        catalogue = Source.Catalogue,
+        selection = Source.Selection.State,
+        voices = _voices.ToArray(),
+        failure = _failure,
+        nativePublished = _native is not null,
+        saveBlocker = SaveBlocker,
+        dialogueAndMessageTileProducer = "unowned"
+    };
 
     internal FalloutIndexedInterfaceSounds(FalloutIndexedInterfaceSoundSource source,
         FalloutIndexedInterfaceSoundSnapshot? restore = null)
@@ -57,8 +65,9 @@ internal sealed class FalloutIndexedInterfaceSounds
         ArgumentNullException.ThrowIfNull(source); Source = source;
         if (restore is null) return;
         if (restore.Schema != Schema || restore.SourceSha256 != source.Identity || restore.Voices is null ||
-            restore.LastOrdinal != restore.Voices.Count || restore.Failure is not null && string.IsNullOrWhiteSpace(restore.Failure))
+            restore.Selection is null || restore.LastOrdinal != restore.Voices.Count || restore.Failure is not null && string.IsNullOrWhiteSpace(restore.Failure))
             throw new InvalidDataException("Cold indexed interface audio lacks its complete selected source/caller ledger.");
+        source.Selection.RequireSameSnapshot(restore.Selection);
         var mediaHashes = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var row in restore.Voices)
         {
@@ -84,6 +93,7 @@ internal sealed class FalloutIndexedInterfaceSounds
         }
         if (_voices.Any(row => row.Error is not null) && restore.Failure is null)
             throw new InvalidDataException("Cold indexed interface audio removed its retained failure.");
+        RequireSelectionCalls(restore.Selection);
         _failure = restore.Failure;
         // A settled native prefix is evidence. No old sound or callback is replayed.
     }
@@ -120,11 +130,18 @@ internal sealed class FalloutIndexedInterfaceSounds
     {
         RequireNative(lease); var row = Voice(ordinal);
         if (row.Phase != FalloutInterfaceVoicePhase.Entered) throw new InvalidOperationException("Indexed cue has no first source resolution prefix.");
-        var cue = Source.Resolve(row.Call.Index);
+        var cue = Source.Resolve(row.Call, row.Ordinal);
         if (cue.Entry != row.Entry) throw new InvalidDataException("Indexed cue changed its original branch.");
-        Set(row with { Phase = cue.Descriptor is null ? FalloutInterfaceVoicePhase.SourceSilent : FalloutInterfaceVoicePhase.Resolved,
-            Sound = cue.Sound, Winner = cue.Winner, RecordSha256 = cue.RecordSha256,
-            LogicalPath = cue.Descriptor?.LogicalPath, OriginalFlags = cue.OriginalFlags });
+        Set(row with
+        {
+            Phase = cue.Descriptor is null ? FalloutInterfaceVoicePhase.SourceSilent : FalloutInterfaceVoicePhase.Resolved,
+            Sound = cue.Sound,
+            Winner = cue.Winner,
+            RecordSha256 = cue.RecordSha256,
+            LogicalPath = cue.Descriptor?.LogicalPath,
+            OriginalFlags = cue.OriginalFlags,
+            SelectionOrdinal = cue.SelectionOrdinal
+        });
         return cue;
     }
 
@@ -162,8 +179,11 @@ internal sealed class FalloutIndexedInterfaceSounds
     internal void Stopped(Guid lease, long ordinal, ulong player)
     {
         RequireNative(lease); var row = Matching(ordinal, player);
-        Set(row with { Phase = row.Phase is FalloutInterfaceVoicePhase.Finished or FalloutInterfaceVoicePhase.Failed ? row.Phase : FalloutInterfaceVoicePhase.Stopped,
-            VoiceRetired = true });
+        Set(row with
+        {
+            Phase = row.Phase is FalloutInterfaceVoicePhase.Finished or FalloutInterfaceVoicePhase.Failed ? row.Phase : FalloutInterfaceVoicePhase.Stopped,
+            VoiceRetired = true
+        });
     }
 
     internal void ReleasedStream(Guid lease, long ordinal, ulong player, ulong stream)
@@ -185,8 +205,12 @@ internal sealed class FalloutIndexedInterfaceSounds
     {
         RequireNative(lease); ArgumentNullException.ThrowIfNull(error); var row = Voice(ordinal);
         var detail = error.GetType().Name + ": " + error.Message; _failure ??= detail;
-        Set(row with { Phase = FalloutInterfaceVoicePhase.Failed, FailureType = row.FailureType ?? error.GetType().Name,
-            Error = row.Error ?? error.Message });
+        Set(row with
+        {
+            Phase = FalloutInterfaceVoicePhase.Failed,
+            FailureType = row.FailureType ?? error.GetType().Name,
+            Error = row.Error ?? error.Message
+        });
     }
 
     internal FalloutInterfaceSoundVoice Voice(long ordinal) => ordinal > 0 && ordinal <= _voices.Count ?
@@ -203,7 +227,8 @@ internal sealed class FalloutIndexedInterfaceSounds
     {
         ObjectDisposedException.ThrowIf(_retired, this);
         if (SaveBlocker is { } blocker) throw new NotSupportedException("Indexed sound capture requires " + blocker + "; no cold sample cursor is fabricated.");
-        return new(Schema, Source.Identity, _voices.Count, _voices.ToArray(), _failure);
+        var selection = Source.Selection.Capture(); RequireSelectionCalls(selection);
+        return new(Schema, Source.Identity, _voices.Count, _voices.ToArray(), _failure, selection);
     }
     internal void RequireRestContinuation(FalloutRestInterfaceSoundSnapshot saved)
     {
@@ -254,16 +279,37 @@ internal sealed class FalloutIndexedInterfaceSounds
     {
         if (Source.Catalogue.Resolve(row.Call.Index) != row.Entry)
             throw new InvalidDataException("Indexed sound continuation changed its original source branch.");
-        Source.RequirePreparedDeclaration(row.Entry, row.Sound, row.Winner, row.RecordSha256, row.LogicalPath, row.OriginalFlags);
+        Source.RequirePreparedDeclaration(row.Entry, row.Sound, row.Winner, row.RecordSha256, row.LogicalPath, row.OriginalFlags, row.SelectionOrdinal, row.Ordinal);
     }
+    private void RequireSelectionCalls(FalloutMenuSoundSelectionSnapshot selection)
+    {
+        foreach (var attempt in selection.Attempts.Where(row => row.Call.IndexedVoice is not null))
+        {
+            var voice = Voice(attempt.Call.IndexedVoice!.Value);
+            if (attempt.Call.Owner != voice.Call.Owner || attempt.Call.Occurrence != voice.Call.Occurrence ||
+                attempt.Call.BranchOrdinal != voice.Call.BranchOrdinal || attempt.Call.IndexedIndex != voice.Call.Index ||
+                voice.Entry.Disposition == FalloutInterfaceSoundDisposition.SourceSilent ||
+                voice.SelectionOrdinal is { } selected && selected != attempt.Ordinal ||
+                voice.SelectionOrdinal is null && voice.Phase != FalloutInterfaceVoicePhase.Failed)
+                throw new InvalidDataException("Indexed audio changed or dropped its actual committed selection prefix.");
+        }
+        foreach (var voice in _voices.Where(row => row.SelectionOrdinal is not null))
+        {
+            var attempt = Source.Selection.Attempt(voice.SelectionOrdinal!.Value);
+            if (attempt.Call.IndexedVoice != voice.Ordinal || attempt.Call.IndexedIndex != voice.Call.Index)
+                throw new InvalidDataException("Indexed voice borrowed another real source selection receipt.");
+        }
+    }
+
     private static void RequireIdentityShape(FalloutInterfaceSoundVoice row)
     {
         if (row.Entry.Disposition == FalloutInterfaceSoundDisposition.SourceSilent &&
-            (row.Sound is not null || row.NativePlayer is not null || row.NativeStream is not null || row.MediaSha256 is not null ||
+            (row.Sound is not null || row.SelectionOrdinal is not null || row.NativePlayer is not null || row.NativeStream is not null || row.MediaSha256 is not null ||
                 row.Phase is not (FalloutInterfaceVoicePhase.SourceSilent or FalloutInterfaceVoicePhase.Failed)) ||
             (row.NativePlayer is null) != (row.NativeStream is null) || row.NativePlayer == 0 || row.NativeStream == 0 ||
             row.NativePlayer is not null && row.NativePlayer == row.NativeStream ||
             row.NativePlayer is null && (row.VoiceRetired || row.PlayerDestroyed || row.StreamReferenceReleased || row.StreamDestroyed) ||
+            row.Sound is not null && row.SelectionOrdinal is not > 0 || row.Sound is null && row.SelectionOrdinal is not null ||
             row.NativePlayer is not null && (row.Sound is null || row.Winner is null || row.LogicalPath is null ||
                 row.OriginalFlags is null || !FalloutAdvancementRuntimeReceipt.Digest(row.RecordSha256?.ToLowerInvariant()) ||
                 row.MediaSha256 is not null && !FalloutAdvancementRuntimeReceipt.Digest(row.MediaSha256) ||

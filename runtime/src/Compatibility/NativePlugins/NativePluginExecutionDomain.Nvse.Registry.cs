@@ -54,7 +54,7 @@ internal sealed class NativeNvseRegistry(NativeNvsePlugin plugin)
     }
     internal uint Register(ulong callback, uint source, uint rawOpcode, byte returnType, uint requiredVersion,
         ushort needsParent, uint flags, uint parametersAddress, NativeNvseText name, NativeNvseText alias,
-        NativeNvseText help, ImmutableArray<NativeNvseParameter> parameters, uint execute, uint parse, uint evaluate)
+        NativeNvseText help, ImmutableArray<NativeNvseParameter> parameters, uint execute, uint parse, uint evaluate, NativeNvseEngineCommandBinding? engineExecute = null)
     {
         RequireLoad(); ++_commandAttempts;
         if (_nextOpcode is null || _nextOpcode == 0 || _nextOpcode == uint.MaxValue || _opcodes.ContainsKey(_nextOpcode.Value))
@@ -62,10 +62,14 @@ internal sealed class NativeNvseRegistry(NativeNvsePlugin plugin)
         // Public xNVSE normalizes unknown return enums to Default. Preserve the
         // original byte independently, rather than erase the declaration.
         var effectiveReturn = returnType < 6 ? (NativeNvseCommandReturn)returnType : NativeNvseCommandReturn.Default;
+        if (engineExecute is not null && (!engineExecute.Live || engineExecute.Generation != plugin.Generation ||
+            engineExecute.Module != plugin.Module || engineExecute.Source.SourceAddress != execute || !engineExecute.SourceDescriptors.Contains(source)))
+            throw new InvalidDataException("Borrowed command registration changed its source/publication/generation owner.");
         var command = new NativeNvseCommand(plugin.Generation, plugin.Module, plugin.Handle, ++_nextRegistration,
             source, rawOpcode, _nextOpcode.Value, _baseOpcode, returnType, effectiveReturn, requiredVersion,
-            needsParent, flags, parametersAddress, name, alias, help, parameters, execute, parse, evaluate);
+            needsParent, flags, parametersAddress, name, alias, help, parameters, execute, parse, evaluate, engineExecute);
         _commands.Add(command); _opcodes.Add(command.AssignedOpcode, command); ++_nextOpcode;
+        engineExecute?.Registrations.Add(command);
         return command.AssignedOpcode;
     }
     internal uint RegisterListener(ulong callback, uint handle, NativeNvseText sender, uint function)
