@@ -189,7 +189,7 @@ internal sealed partial class NativePluginExecutionDomain
 
     private void ClearNvseSourceObjects()
     {
-        ClearNvseSourceGraphs();
+        ClearNvseSourceFiles(); ClearNvseSourceGraphs();
         var errors = new List<Exception>();
         foreach (var value in _nvseSourceObjects.Values)
         {

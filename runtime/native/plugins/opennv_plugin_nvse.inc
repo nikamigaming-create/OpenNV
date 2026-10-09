@@ -438,7 +438,7 @@ void unload_nvse(const Frame& frame) {
     state->nvse->tables = nullptr;
     if (!VirtualQuery(tables, &memory, sizeof(memory)) || memory.State != MEM_FREE)
         throw Fatal(ERROR_INVALID_DATA, "NVSE interface mapping remains after retirement.");
-    expression_retire(); values_heap_retire(); values_retire(); source_locals_retire_all(); source_objects_retire_all(); io_retire();
+    expression_retire(); values_heap_retire(); values_retire(); source_locals_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
     Bytes data; nvse_counters(data); data.put(0U); data.put(0U);
     state->nvse.reset(); state->module = nullptr; state->module_id = 0;
     reply(frame, ERROR_SUCCESS, "", data);

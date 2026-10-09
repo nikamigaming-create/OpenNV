@@ -273,7 +273,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         NativePluginDomainOperation.NvseLocalCreate or NativePluginDomainOperation.NvseLocalFill or NativePluginDomainOperation.NvseLocalSeal or
                         NativePluginDomainOperation.NvseLocalRetire or NativePluginDomainOperation.NvseLocalStatistics or
                         NativePluginDomainOperation.NvseObjectBind or NativePluginDomainOperation.NvseObjectRetire or NativePluginDomainOperation.NvseScriptInterface or
-                        NativePluginDomainOperation.NvseObjectRefresh or NativePluginDomainOperation.NvseLocalAttachScript => 1U,
+                        NativePluginDomainOperation.NvseObjectRefresh or NativePluginDomainOperation.NvseLocalAttachScript or
+                        NativePluginDomainOperation.NvseFileMethods => 1U,
                         NativePluginDomainOperation.GuestCapabilities or NativePluginDomainOperation.GuestAllocate or
                         NativePluginDomainOperation.GuestRead or NativePluginDomainOperation.GuestWrite or
                         NativePluginDomainOperation.GuestRelease or NativePluginDomainOperation.GuestBindState or
@@ -319,6 +320,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             if (frame.Kind == NativePluginDomainMessage.IoCallback) typedReply = DispatchPrivateIo(frame, waitingCall);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= LocalBegin && frame.Operation <= LocalEnd)
                 typedReply = DispatchNvseLocals(frame);
+            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= SourceFileBegin && frame.Operation <= SourceFileEnd)
+                typedReply = DispatchNvseSourceFile(frame);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation is 0x401 or 0x403)
                 typedReply = DispatchNvseSourceObject(frame);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= ValueGetString)

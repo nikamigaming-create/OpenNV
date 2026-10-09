@@ -10,6 +10,18 @@ if (args is ["--native-source-construction-contracts"])
     return;
 }
 
+if (args is ["--native-source-file-contracts"])
+{
+    NativeSourceFileContracts.Run();
+    return;
+}
+
+if (args is ["--native-loaded-file-contracts"])
+{
+    NativeLoadedFileContracts.Run();
+    return;
+}
+
 if (args is ["--combat-group-contracts"])
 {
     CombatGroupContracts.Run();
@@ -987,6 +999,8 @@ finally
 CompiledScriptContracts.Run();
 ActorScriptPackageContracts.Run();
 NativeSourceConstructionContracts.Run();
+NativeSourceFileContracts.Run();
+NativeLoadedFileContracts.Run();
 CombatGroupContracts.Run();
 PlayerAdvancementContracts.Run();
 PlayerPhysicalActivityContracts.Run();

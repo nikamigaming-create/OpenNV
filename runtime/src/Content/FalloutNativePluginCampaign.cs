@@ -89,7 +89,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     public IReadOnlyList<FalloutNativePluginCampaignModule> Modules => _failures.Concat(_modules.Select(module =>
         new FalloutNativePluginCampaignModule(module.Admission.LogicalPath, module.Admission.PhysicalPath, module.Admission.Sha256,
             module.Domain.Generation, module.Domain.ProcessId, module.Plugin.QueryReceipt?.Returned, module.Plugin.LoadReceipt?.Returned,
-            module.Domain.Fault?.Reason ?? module.ObjectFailure, module.Plugin.Registry.UnownedRequests.Select(row => row.Operation).ToArray(), module.Retired))).ToArray();
+            module.Domain.Fault?.Reason ?? module.ObjectFailure ?? module.Domain.NvseSourceFileDiagnostics, module.Plugin.Registry.UnownedRequests.Select(row => row.Operation).ToArray(), module.Retired))).ToArray();
 
     private void Admit(FalloutNativePluginModuleAdmission admission, string companion, string privateStateRoot)
     {
@@ -111,6 +111,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues));
             domain.AttachNvseScriptInterface(plugin);
             if (admission.Heap is { } heap) domain.ConfigureNvseValueHeap(plugin, heap);
+            if (admission.SourceFiles is { } files) domain.ConfigureNvseSourceFileMethods(plugin, files);
             var query = domain.QueryNvse(plugin);
             if (query.Returned)
             {
@@ -195,6 +196,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         RequireCurrent();
         if (ModuleFailure is { } failure) throw new NotSupportedException("Selected native module state is incomplete: " + failure);
         if (_active != 0) throw new InvalidOperationException("An original native caller still owns campaign state.");
+        foreach (var module in _modules) module.Domain.RequireNvseSourceFilesSaveOwned();
         if (_modules.Any(module => module.Plugin.Registry.SerializationHistory.Count != 0))
             throw new NotSupportedException("Original plugin co-save callback state has no current unified campaign writer/reader owner.");
     }
@@ -207,7 +209,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     }
     public void Dispose()
     {
-        if (_disposed && _modules.All(module => module.Domain.ChildExited) && _retiringDomains.All(domain => domain.ChildExited)) return;
+        if (_disposed && _graphSource is null && _modules.All(module => module.Domain.ChildExited) && _retiringDomains.All(domain => domain.ChildExited)) return;
         if (Environment.CurrentManagedThreadId != _thread) throw new InvalidOperationException("Native campaign retirement changed owner thread.");
         if (_active != 0) throw new InvalidOperationException("Native campaign cannot retire during an actual original call.");
         _disposed = true; var errors = new List<Exception>();
@@ -229,6 +231,17 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         }
         foreach (var domain in _retiringDomains)
             try { domain.Dispose(); } catch (Exception error) { errors.Add(error); }
+        if (errors.Count == 0 && _graphSource is { } graph)
+        {
+            try
+            {
+                if (_modules.Any(module => !module.Domain.ChildExited || !module.Domain.NaturallyRetired) ||
+                    _retiringDomains.Any(domain => !domain.ChildExited || !domain.NaturallyRetired))
+                    throw new InvalidOperationException("Contributor source retirement requires verified native child closure.");
+                graph.RetireLoadedContributors(); _graphSource = null;
+            }
+            catch (Exception error) { errors.Add(error); }
+        }
         _commands.Clear(); if (errors.Count != 0) throw new AggregateException("Native campaign retirement retained failures.", errors);
     }
     private static string HashLoose(string path)

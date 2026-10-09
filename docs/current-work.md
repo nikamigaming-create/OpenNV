@@ -36,17 +36,25 @@ separate immutable Release `fnv-dev-6c79290edde5`, pinned at
 exit/movement, complete ability save/cold state, selected owned ability and the
 mandatory runtime gate pass. The exported executable also enters/exits the couch,
 moves and quits with exit code 0; the user's original save is unchanged. PR 182
-is pushed and its CI merge is pending. Preserve this delivered package while
+is merged on origin/main at `4a739468d70a58c5b1db8ab59779a6d0a9c22d09`
+with every CI check passing. Preserve this delivered package while
 integrating the larger current/compiled candidate; it is not campaign completion.
-Next primary joins are SourceFiles18 -> LoadedFiles13 and the retained rest,
-detection/process and source constructor-registration proposals. Source-only
-packets and successful compilation remain distinct from executed gameplay.
+SourceFiles18 and LoadedFiles13 now share the actual selected contributor parser,
+binary buffer, metadata and retained source lifetime. Protocol 9 C# and x86 Debug
+compilation pass, and the joined source contract project compiles. The separate
+parser-only cache is removed. Native child closure precedes source collection
+retirement, and cleanup failures remain retained on repeated calls. Complete
+BSFile/CRT, original DLL behavior and current native source-topology persistence
+remain unowned; their existing admission refusals remain enabled. Binary14,
+rest, detection/process and source constructor-registration proposals are next.
+Source-only packets and successful compilation remain distinct from executed gameplay.
 
 ## Integrated candidate
 
 The current feature branch is `codex/compiled-authority-world-dependencies`, based
-on `9c1a694fbce0a5d3f5374a4febf30c83af8c3862`. The substantial uncommitted candidate
-contains compiled SCDA execution/scheduling and current cursors, result-driven
+on `9c1a694fbce0a5d3f5374a4febf30c83af8c3862`. The local source checkpoint
+`59c18d324d30c3472afa1f5bdaf00b7e844cd4ae` preserves the earlier candidate.
+It contains compiled SCDA execution/scheduling and current cursors, result-driven
 startup/control bindings, actual PACK/TERM/quest result scopes and source save
 requester leases. Actor KF/IDLE/ANIO, PACK/IDLM/INFO/controller dependencies,
 LAND/primitive declarations, unsized NIF headers, typed blend/constraint declarations

@@ -1,5 +1,18 @@
 # Product status
 
+The separate FNV development Release `fnv-dev-6c79290edde5` repairs the reported
+first-person beard and post-trait couch fault. PR 182 is merged with all CI checks
+passing; ordinary source gameplay, save/cold state and the exported couch
+entry/exit/movement/quit pass with the original user save unchanged. The stable
+FNV Test shortcut is advanced and all older packages remain intact.
+
+The larger candidate now joins selected contributor parser, real binary buffer,
+OS metadata and shared loaded-file lifetime at managed/native protocol 9. C#,
+x86 Debug and the joined source contract project compile. Complete BSFile/CRT,
+original DLL execution and native source-state cold gameplay remain unverified
+or unowned; source save admission remains refused. This is not complete-game
+acceptance.
+
 The current greenfield integration candidate adds compiled startup/query/effect
 owners, player package result execution, typed NIF physics and particle families,
 source trait selection and complete current-state capture. Actor script-package

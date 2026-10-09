@@ -10,6 +10,7 @@
 #include "opennv_plugin_io.h"
 #include "opennv_plugin_source_locals.h"
 #include "opennv_plugin_source_objects.h"
+#include "opennv_plugin_source_files.h"
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -208,6 +209,7 @@ struct State {
     std::unique_ptr<PluginIoRuntime> io;
     std::unique_ptr<SourceLocalRuntime> source_locals;
     std::unique_ptr<SourceObjectRuntime> source_objects;
+    std::unique_ptr<SourceFileRuntime> source_files;
     bool nvse_image_attempted = false;
 };
 State* state = nullptr;
@@ -376,6 +378,7 @@ void io_retire();
 void source_locals_retire_all();
 SourceObject& source_object(std::uint64_t);
 void source_objects_retire_all();
+void source_files_retire();
 void* source_script_interface_address();
 void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
 #include "opennv_plugin_nvse.inc"
@@ -387,6 +390,7 @@ void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
 #include "opennv_plugin_source_objects.inc"
 #include "opennv_plugin_source_refresh.inc"
 #include "opennv_plugin_source_local_attach.inc"
+#include "opennv_plugin_source_files.inc"
 
 void unload(const Frame& frame) {
     if (!state->module || state->nvse || !state->calls.empty()) { reply(frame, ERROR_BUSY, "Authored module is absent or still owns an active call."); return; }
@@ -513,6 +517,7 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     case Operation::nvse_object_retire: source_object_retire(frame); break;
     case Operation::nvse_object_refresh: source_object_refresh(frame); break;
     case Operation::nvse_local_attach_script: source_local_attach_script(frame); break;
+    case Operation::nvse_file_methods: source_files_configure(frame); break;
     case Operation::resolve: resolve(frame); break;
     case Operation::call: call(frame); break;
     case Operation::unload: unload(frame); break;

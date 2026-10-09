@@ -10,7 +10,7 @@ internal sealed partial class FalloutNativePluginGraphSource
     // Source-backed class fields and child allocations are produced here.
     // The full-byte composer independently refuses any uncovered runtime
     // field; source metadata cannot stand in for a parser handle or child class.
-    private sealed class ModAuthority : NativeNvseGraphDataAuthority
+    private sealed partial class ModAuthority : NativeNvseGraphDataAuthority
     {
         private readonly FalloutNativePluginGraphSource _source;
         private readonly FalloutPluginContext _mod;
@@ -82,7 +82,8 @@ internal sealed partial class FalloutNativePluginGraphSource
                 new(0x410, bytes.AsMemory(checked((int)_author), 8), "original-source-author"),
                 new(0x418, bytes.AsMemory(checked((int)_description), 8), "original-source-description"),
             };
-            // Status/alias/map/BSFile, buffer/current-record/group cursors,
+            fields.AddRange(LoadedFileFields());
+            // Status/alias/map/BSFile, buffer/current-group cursors,
             // find-data, loaded flags and the remaining lifecycle fields need
             // their real original-compatible reader owner. Deliberately leave
             // them uncovered: constructor zero is not loaded reader state.
@@ -95,8 +96,7 @@ internal sealed partial class FalloutNativePluginGraphSource
             if (!_source._records.Plugins.Contains(_mod) || !_mod.Plugin.NativeSourceAvailable)
                 throw new InvalidOperationException("Actual native contributor reader has retired.");
         }
-        internal override IDisposable RetainSource() => SourceLease.Open(_mod.Plugin.Path,
-            _source._records.OwnedSource!.FalloutExecutablePath, _source._construction.Value.RuntimeSha256, RequireCurrent);
+        internal override IDisposable RetainSource() => RetainModLoadedSource();
     }
 
     private sealed class QuestAuthority : NativeNvseGraphDataAuthority

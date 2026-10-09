@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutNativePluginModuleAdmission(string LogicalPath, string PhysicalPath, string Sha256,
     IReadOnlyList<NativePluginIoWriteScope> WriteScopes, IReadOnlyList<FalloutNativePluginIoReadDeclaration> ReadDeclarations,
     IReadOnlyList<string> InputRoots, string ImportOwner, IReadOnlySet<string> NonIoImports,
-    NativeNvseExpressionAbi ExpressionAbi, NativeNvseHeapDeclaration? Heap);
+    NativeNvseExpressionAbi ExpressionAbi, NativeNvseHeapDeclaration? Heap, NativeNvseFileDeclaration? SourceFiles = null);
 internal sealed record FalloutNativePluginCampaignSelection(RuntimeLiveContentSource Source,
     string RuntimeSha256, string NvsePath, string NvseSha256, bool? NoGore, string EditionOwner,
     string LoadOrderOwner, IReadOnlyList<FalloutNativePluginModuleAdmission> Modules);

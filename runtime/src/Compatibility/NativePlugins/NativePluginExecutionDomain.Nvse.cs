@@ -130,7 +130,7 @@ internal sealed partial class NativePluginExecutionDomain
     }
     internal NativeNvseRetirementReceipt UnloadNvse(NativeNvsePlugin plugin)
     {
-        VerifyNvse(plugin); RequireNvseEmptyCall(); ++_callDepth;
+        VerifyNvse(plugin); RequireNvseEmptyCall(); RequireNvseSourceFilesIdle(); ++_callDepth;
         try
         {
             using var reader = Exchange(NativePluginDomainOperation.UnloadNvse, Payload(writer => writer.Write(plugin.Module)));
