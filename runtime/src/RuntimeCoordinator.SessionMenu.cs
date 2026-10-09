@@ -197,6 +197,7 @@ public partial class RuntimeCoordinator
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
             _nativeScriptStorage?.Controls?.Flush();
             RetireNativeExperienceHud();
+            RetireNativeSourceCellAttachments();
             GetTree().Paused = false;
             var error = GetTree().ReloadCurrentScene();
             if (error != Error.Ok) throw new InvalidOperationException($"Session reload failed: {error}.");
@@ -247,6 +248,7 @@ public partial class RuntimeCoordinator
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
             RetireNativeExperienceHud();
+            RetireNativeSourceCellAttachments();
             StopNativeOpenXr();
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
             GetTree().Quit();

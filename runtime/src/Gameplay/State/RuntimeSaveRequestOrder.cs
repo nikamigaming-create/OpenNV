@@ -3,14 +3,15 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal enum RuntimeSaveRequestOrigin { ScriptAutoSave, ScriptForceSave, PlayerInput, SessionMenu, NativeInteraction, NativeDoorTransport, NativePipBoyClose }
+internal enum RuntimeSaveRequestOrigin { ScriptAutoSave, ScriptForceSave, PlayerInput, SessionMenu, NativeInteraction, NativeDoorTransport, NativePipBoyClose, NativeRestStart }
 internal enum RuntimeSaveRequestDestination { Continue, NewSlot }
 internal enum RuntimeSaveRequestDisposition { Pending, Writing, Completed, Failed, Cancelled }
 internal enum RuntimeSaveInvocationDisposition { Entered, Suspended, Completed, Stopped, Abandoned }
 
 internal sealed record RuntimeSaveNativeSite(Guid Session, ulong Generation, FalloutFormKey Player,
     FalloutFormKey Cell, FalloutFormKey? Reference = null, string? ReferenceSha256 = null,
-    FalloutFormKey? PreviousCell = null, FalloutFormKey? ArrivalDoor = null, string? ArrivalDoorSha256 = null);
+    FalloutFormKey? PreviousCell = null, FalloutFormKey? ArrivalDoor = null, string? ArrivalDoorSha256 = null,
+    FalloutRestAutoSaveSite? Rest = null);
 
 internal sealed record RuntimeSaveInvocationRetirement(Guid Session, ulong Invocation,
     RuntimeSaveInvocationDisposition Disposition, string? Error = null,
@@ -87,7 +88,7 @@ internal sealed partial class RuntimeSaveRequestOrder
             invocation is not null && (invocation.Session != Epoch || invocation.Invocation != script!.Invocation || invocation.Disposition != RuntimeSaveInvocationDisposition.Entered))
             throw new InvalidDataException("Save request lacks its exact source invocation or native input identity.");
         var id = Guid.NewGuid();
-        var destination = origin is RuntimeSaveRequestOrigin.ScriptAutoSave or RuntimeSaveRequestOrigin.NativeInteraction or RuntimeSaveRequestOrigin.NativeDoorTransport or RuntimeSaveRequestOrigin.NativePipBoyClose
+        var destination = origin is RuntimeSaveRequestOrigin.ScriptAutoSave or RuntimeSaveRequestOrigin.NativeInteraction or RuntimeSaveRequestOrigin.NativeDoorTransport or RuntimeSaveRequestOrigin.NativePipBoyClose or RuntimeSaveRequestOrigin.NativeRestStart
             ? RuntimeSaveRequestDestination.Continue : RuntimeSaveRequestDestination.NewSlot;
         var path = Path.GetFullPath(destination == RuntimeSaveRequestDestination.Continue ? _continuePath! : _slotPath!(id));
         if (destination == RuntimeSaveRequestDestination.NewSlot && File.Exists(path))

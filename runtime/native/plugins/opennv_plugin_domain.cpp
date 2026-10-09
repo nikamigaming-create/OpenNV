@@ -11,6 +11,8 @@
 #include "opennv_plugin_source_locals.h"
 #include "opennv_plugin_source_objects.h"
 #include "opennv_plugin_source_files.h"
+#include "opennv_plugin_callable_pages.h"
+#include "opennv_plugin_binary_files.h"
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -210,6 +212,7 @@ struct State {
     std::unique_ptr<SourceLocalRuntime> source_locals;
     std::unique_ptr<SourceObjectRuntime> source_objects;
     std::unique_ptr<SourceFileRuntime> source_files;
+    std::unique_ptr<BinaryFileRuntime> binary_files;
     bool nvse_image_attempted = false;
 };
 State* state = nullptr;
@@ -379,6 +382,7 @@ void source_locals_retire_all();
 SourceObject& source_object(std::uint64_t);
 void source_objects_retire_all();
 void source_files_retire();
+void binary_files_retire_all();
 void* source_script_interface_address();
 void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
 #include "opennv_plugin_nvse.inc"
@@ -390,7 +394,9 @@ void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
 #include "opennv_plugin_source_objects.inc"
 #include "opennv_plugin_source_refresh.inc"
 #include "opennv_plugin_source_local_attach.inc"
+#include "opennv_plugin_callable_pages.inc"
 #include "opennv_plugin_source_files.inc"
+#include "opennv_plugin_binary_files.inc"
 
 void unload(const Frame& frame) {
     if (!state->module || state->nvse || !state->calls.empty()) { reply(frame, ERROR_BUSY, "Authored module is absent or still owns an active call."); return; }
@@ -518,6 +524,9 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     case Operation::nvse_object_refresh: source_object_refresh(frame); break;
     case Operation::nvse_local_attach_script: source_local_attach_script(frame); break;
     case Operation::nvse_file_methods: source_files_configure(frame); break;
+    case Operation::nvse_binary_methods: binary_methods_configure(frame); break;
+    case Operation::nvse_binary_bind: binary_file_bind(frame); break;
+    case Operation::nvse_binary_retire: binary_file_retire(frame); break;
     case Operation::resolve: resolve(frame); break;
     case Operation::call: call(frame); break;
     case Operation::unload: unload(frame); break;
@@ -571,6 +580,7 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
         Reader reader{frame.payload}; reader.finish();
         if (state->module || !state->calls.empty()) { reply(frame, ERROR_BUSY, "An active module or call prevents retirement."); break; }
         io_retire(); state->io.reset();
+        source_callables_close();
         state->arena.retire(); state->retired = true; Bytes data; arena_stats(data);
         reply(frame, ERROR_SUCCESS, "", data); break;
     }

@@ -96,6 +96,7 @@ class GuestArena final {
             throw GuestArenaFailure(ERROR_INVALID_PARAMETER, "Guest access crosses its owned extent or transfer budget.");
     }
 public:
+#include "opennv_plugin_guest_replace_range.inc"
     GuestArena() {
         SYSTEM_INFO info{}; GetSystemInfo(&info); page_size_ = info.dwPageSize;
         allocation_granularity_ = info.dwAllocationGranularity;

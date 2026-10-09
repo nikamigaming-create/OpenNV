@@ -94,6 +94,7 @@ internal sealed partial class NativePluginExecutionDomain
 
     internal void ReleaseGuest(NativePluginGuestAllocation allocation)
     {
+        RequireNvseBinaryGuestRelease(allocation.Handle);
         VerifyGuest(allocation); RequireGuestLifetimeChange();
         try
         {

@@ -69,9 +69,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         get => _executionError;
         private set { _executionError = value; _stageResultDriverFailure = null; }
     }
-    internal string? ExecutionFault => ExecutionError ?? _player?.PlayerPhysicalFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
+    internal string? ExecutionFault => ExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
     internal string? BlockingExecutionError => _stageResultDriverFailure?.Error == ExecutionError ? null : ExecutionError;
-    internal string? BlockingExecutionFault => BlockingExecutionError ?? _player?.PlayerPhysicalFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
+    internal string? BlockingExecutionFault => BlockingExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
@@ -118,6 +118,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (_tagSkillEntry is not null) yield return 1048;
         if (_traitEntry is not null) yield return 1084;
         if (PlayerLevelUpMenuId is { } levelUp) yield return levelUp;
+        if (PlayerRestMenuId is { } rest) yield return rest;
         if (_recipeMenu is not null) yield return 1077;
         if (_barterMenu is not null) yield return 1053;
         if (_terminalMenus.Values.Any(menu => menu.Active)) yield return FalloutTerminal.MenuId;
@@ -205,7 +206,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }, ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: ChangePlayerActorValue,
             Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
             Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: RewardPlayerExperience, GameTime: gameTime,
-            IsPcSleeping: _player.IsPcSleeping, Sleeping: ActorSleeping, KnockedState: ActorKnockedState);
+            IsPcSleeping: _player.IsPcSleeping, Sleeping: ActorSleeping, KnockedState: ActorKnockedState,
+            OpenSleepWaitMenu: OpenCurrentPlayerRest);
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
@@ -227,6 +229,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new InvalidDataException("Current interface frame continuation is absent."));
         ConfigureSourceCombatGroups(restore is null ? null : restore.State.CombatGroups ??
             throw new InvalidDataException("Current combat group continuation is absent."));
+        ConfigureSourceActorCellProducers(restore is null ? null : restore.State.ActorUpdates ??
+            throw new InvalidDataException("Current actor update continuation is absent."),
+            restore is null ? null : restore.State.CellProcesses ??
+            throw new InvalidDataException("Current CELL process continuation is absent."));
         ConfigureSourceActorPerception(restore is null ? null : restore.State.ActorPerception ??
             throw new InvalidDataException("Current actor perception continuation is absent."));
         ConfigureSourceActorProcesses(restore is null ? null : restore.State.ActorProcesses ??
@@ -295,6 +301,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _scripts.References!.UnloadedPackages?.Advance(delta);
             AdvanceSourceActorPerception(delta);
             AdvanceSourceCombatGroups(delta);
+            AdvanceSourceRestInCurrentPlayerFrame(Engine.GetProcessFrames());
             AdvanceNativePlayerInCurrentFrame();
             if (!CanProcess()) return; // Native advancement can acquire a modal gameplay pause in this same frame.
         }

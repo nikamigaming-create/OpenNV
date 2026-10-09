@@ -4,6 +4,26 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--sleep-wait-contracts"])
+{
+    SleepWaitContracts.Run();
+    RestHostContracts.Run();
+    RestWorldConsumerContracts.Run();
+    return;
+}
+
+if (args is ["--rest-host-contracts"])
+{
+    RestHostContracts.Run();
+    return;
+}
+
+if (args is ["--test-rest-interface-consumers"])
+{
+    RestWorldConsumerContracts.Run();
+    return;
+}
+
 if (args is ["--native-source-construction-contracts"])
 {
     NativeSourceConstructionContracts.Run();
@@ -19,6 +39,12 @@ if (args is ["--native-source-file-contracts"])
 if (args is ["--native-loaded-file-contracts"])
 {
     NativeLoadedFileContracts.Run();
+    return;
+}
+
+if (args is ["--actor-update-cell-process-contracts"])
+{
+    ActorUpdateCellProcessContracts.Run();
     return;
 }
 
@@ -1023,6 +1049,10 @@ CombatGroupContracts.Run();
 ActorPerceptionContracts.Run();
 ActorProcessContracts.Run();
 ActorConstructorSourceContracts.Run();
+ActorUpdateCellProcessContracts.Run();
+SleepWaitContracts.Run();
+RestHostContracts.Run();
+RestWorldConsumerContracts.Run();
 PlayerAdvancementContracts.Run();
 PlayerPhysicalActivityContracts.Run();
 LevelUpPerkSourceContracts.Run();

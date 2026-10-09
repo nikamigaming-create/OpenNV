@@ -201,6 +201,7 @@ public partial class RuntimeCoordinator
         Retire(() => CancelNativeManualSave("Native session retired before the pending manual save could commit.", allQueued: true));
         Retire(() => GetWindow().CloseRequested -= OnNativeCloseRequested);
         Retire(CancelNativeGridRead);
+        Retire(RequireNativeSourceCellRetirementBeforeWorldRelease);
         if (!_retiringNativeSession)
         {
             if (failures.Count != 0) throw new AggregateException("Native session retirement retained failures.", failures);
@@ -217,7 +218,7 @@ public partial class RuntimeCoordinator
         }
         GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototypes-freed count={retired}");
         _nativeNifPrototypes.Clear();
-        Retire(() => _nativePrewarmedInitialCellRoot?.Free()); _nativePrewarmedInitialCellRoot = null;
+        Retire(() => FreeNativeSourceCellRoot(_nativePrewarmedInitialCellRoot)); _nativePrewarmedInitialCellRoot = null;
         if (_nativePluginCampaign is null)
         {
             Retire(() => _nativeReferences?.Dispose());

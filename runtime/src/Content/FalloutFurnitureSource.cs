@@ -10,6 +10,18 @@ internal sealed record FalloutFurnitureSeat(FalloutFormKey Furniture, int Index,
 
 internal static class FalloutFurnitureSource
 {
+    internal static FalloutPlayerFurnitureKind ReadKind(FalloutPluginRecord furniture)
+    {
+        if (furniture.Signature != "FURN") throw new InvalidDataException("Furniture source is not FURN.");
+        var data = furniture.ReadSubrecords().Single(field => field.Signature == "MNAM").Data;
+        if (data.Length != 4) throw new InvalidDataException("Furniture marker flags have an invalid extent.");
+        return (BinaryPrimitives.ReadUInt32LittleEndian(data.Span) & 0xc0000000u) switch
+        {
+            0x40000000u => FalloutPlayerFurnitureKind.Sitting,
+            0x80000000u => FalloutPlayerFurnitureKind.Sleeping,
+            _ => throw new NotSupportedException("Furniture requires another source procedure kind."),
+        };
+    }
     internal static FalloutFurnitureSeat Read(FalloutPluginStack stack, FalloutPluginRecord furniture,
         FalloutNifFile nif)
     {
@@ -30,12 +42,9 @@ internal static class FalloutFurnitureSource
         var data = furniture.ReadSubrecords().Single(field => field.Signature == "MNAM").Data;
         if (data.Length != 4) throw new InvalidDataException("Furniture marker flags have an invalid extent.");
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(data.Span);
-        var kind = (flags & 0xc0000000u) switch
-        {
-            0x40000000u => FalloutPlayerFurnitureKind.Sitting,
-            0x80000000u when allowSleeping => FalloutPlayerFurnitureKind.Sleeping,
-            _ => throw new NotSupportedException("Furniture requires its source sleep/non-sitting procedure owner."),
-        };
+        var kind = ReadKind(furniture);
+        if (kind == FalloutPlayerFurnitureKind.Sleeping && !allowSleeping)
+            throw new NotSupportedException("Furniture requires its source sleep procedure owner.");
         var tables = nif.Blocks.Where(block => block.TypeName == "BSFurnitureMarker")
             .Select(block => (FalloutNifFurnitureMarker)nif.ReadObject(block.Index)).ToArray();
         if (tables.Length != 1) throw new NotSupportedException("Furniture marker table is absent or ambiguous.");

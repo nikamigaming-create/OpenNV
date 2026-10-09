@@ -130,7 +130,7 @@ internal sealed partial class NativePluginExecutionDomain
     }
     internal NativeNvseRetirementReceipt UnloadNvse(NativeNvsePlugin plugin)
     {
-        VerifyNvse(plugin); RequireNvseEmptyCall(); RequireNvseSourceFilesIdle(); ++_callDepth;
+        VerifyNvse(plugin); RequireNvseEmptyCall(); RequireNvseSourceFilesIdle(); RequireNvseBinaryIdle(); ++_callDepth;
         try
         {
             using var reader = Exchange(NativePluginDomainOperation.UnloadNvse, Payload(writer => writer.Write(plugin.Module)));
@@ -198,6 +198,8 @@ internal sealed partial class NativePluginExecutionDomain
     }
     private void ClearNvseCapabilities()
     {
+        if (!ChildExited) throw new InvalidOperationException("Native source/capability owners require verified exact child closure.");
+        ClearNvseBinaryAfterChildClosure();
         ClearNvseLocalCapabilities(); ClearNvseValueCapabilities(); _nvseHeapDeclaration = null;
         ClearNvseExpressionCapabilities(); ClearNvseSourceObjects();
         if (_nvsePlugin is not null)

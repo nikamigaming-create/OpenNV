@@ -58,7 +58,8 @@ public partial class RuntimeCoordinator
         {
             sky.EnterCell(scene.Cell, _nativeGlobals, placement.Position);
             SetLoadingStatus("Loading the world");
-            root = await BuildNativeCellRootResponsive(scene, null, sourceSide: false);
+            root = await BuildNativeCellRootResponsive(scene, null, sourceSide: false,
+                sourceCells: grid is null ? null : grid.Cells.Select(definition => definition.FormKey).Append(grid.PersistentCell).Distinct(FalloutFormKeyComparer.Instance).ToArray());
             root.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) AddExteriorLandscape(root, grid);
             AddChild(root);
@@ -73,7 +74,7 @@ public partial class RuntimeCoordinator
         }
         catch
         {
-            root?.Free();
+            FreeNativeSourceCellRoot(root);
             sky.Restore(previousSky);
             DiscoverNativeCellReferences(active);
             ObserveNativeResidentReferences(active);
@@ -109,6 +110,6 @@ public partial class RuntimeCoordinator
         }
         root.ProcessMode = ProcessModeEnum.Inherit;
         current.ProcessMode = ProcessModeEnum.Disabled;
-        current.QueueFree();
+        QueueNativeSourceCellRetirement(current);
     }
 }

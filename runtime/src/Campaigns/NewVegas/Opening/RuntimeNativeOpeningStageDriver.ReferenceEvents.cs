@@ -121,7 +121,8 @@ internal partial class RuntimeNativeOpeningStageDriver
                 CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills, IsInCell: IsInCell, IsHardcore: () => _scripts.Session.Hardcore,
                 RewardXp: RewardPlayerExperience, GameTime: _gameTime,
                 Placement: ReferenceScriptPlacement, IsPcSleeping: _player.IsPcSleeping,
-                Sleeping: ActorSleeping, KnockedState: ActorKnockedState));
+                Sleeping: ActorSleeping, KnockedState: ActorKnockedState,
+                SleepWait: PlayerRest, OpenSleepWaitMenu: OpenCurrentPlayerRest));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true);

@@ -4,11 +4,15 @@ internal partial class RuntimeNativeOpeningStageDriver
 {
     public override void _ExitTree()
     {
+        try { RetireCurrentCampaignRest(); }
+        catch (Exception error) { RetainDriverFailure(error); }
         try { DisposeSourcePlayerAdvancement(); }
         catch (Exception error) { RetainDriverFailure(error); }
         try { RetireInterfaceActivationFrames(); }
         catch (Exception error) { RetainDriverFailure(error); }
         try { RetireExperienceNotifications(); }
+        catch (Exception error) { RetainDriverFailure(error); }
+        try { RetireCurrentNativeCellCapture(); }
         catch (Exception error) { RetainDriverFailure(error); }
         try { RetireSourceActorPerceptionInputs(); }
         catch (Exception error) { RetainDriverFailure(error); }

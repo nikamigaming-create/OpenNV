@@ -80,6 +80,7 @@ public partial class RuntimeCoordinator
             _nativeReferenceEvents = existing;
             existing.ActivateHitCallbacks();
             existing.SetProcess(true);
+            PublishNativeSourceCellAttachment(root, existing);
             return;
         }
         var events = new RuntimeNativeReferenceEvents
@@ -117,6 +118,7 @@ public partial class RuntimeCoordinator
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;
+        PublishNativeSourceCellAttachment(root, events);
         foreach (var reference in events.BoundTriggers)
             _parityObservations.Observe("world/active-cell", $"{cell.Cell.FormKey}/{reference.FormKey}",
                 NativeReferenceState(reference, cell.BaseObjects[reference.Base], "source-primitive-contact-owner"));

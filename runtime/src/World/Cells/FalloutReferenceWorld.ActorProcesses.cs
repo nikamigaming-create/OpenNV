@@ -74,19 +74,19 @@ internal sealed partial class FalloutReferenceWorld
     }
     private FalloutActorProcessScheduleObservation ReadProcessObservation(FalloutFormKey actor, long epoch)
     {
-        if (_actorProcessInputs is not null) return _actorProcessInputs.Observe(actor, epoch);
+        if (_actorProcessInputs is not null) return JoinCurrentActorUpdate(_actorProcessInputs.Observe(actor, epoch));
         var actual = ReadPerceptionObservation(actor);
-        return new(actor, epoch, actual.HasSource3D, new(null, "original-current-actor-update-enabled-byte-producer-absent"),
+        return JoinCurrentActorUpdate(new(actor, epoch, actual.HasSource3D, new(null, "original-current-actor-update-enabled-byte-producer-absent"),
             new(null, "original-current-actor-life-state-producer-absent"), new(null, "original-high-process-eligibility-producer-absent"),
-            new(null, "original-actor-base-eligibility-producer-absent"), actual.SourcePosition.ToArray(), "actual-source-native-or-unloaded-actor-placement");
+            new(null, "original-actor-base-eligibility-producer-absent"), actual.SourcePosition.ToArray(), "actual-source-native-or-unloaded-actor-placement"));
     }
     private FalloutActorProcessElection ReadProcessElection(FalloutFormKey actor, long epoch) =>
-        _actorProcessInputs?.Election(actor, epoch) ?? new(actor, epoch,
+        JoinCurrentCellProcess(_actorProcessInputs?.Election(actor, epoch) ?? new(actor, epoch,
             new(null, "original-current-player-transition-counter-producer-absent"),
             new(null, "original-main-forced-processing-bit-producer-absent"),
             new(null, "original-processing-tree-membership-producer-absent"),
             new(null, "original-current-cell-load-phase-producer-absent"),
-            new(null, "original-cell-extra-data-nine-producer-absent"), "original-current-tier-factory-inputs");
+            new(null, "original-cell-extra-data-nine-producer-absent"), "original-current-tier-factory-inputs"));
     private FalloutActorProcessConstruction ReadProcessConstruction(FalloutFormKey actor) =>
         ReadActualSourceActorConstruction(actor);
     private FalloutActorProcessProducerGuards ReadProcessGuards(FalloutFormKey actor, long epoch) =>

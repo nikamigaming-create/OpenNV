@@ -84,6 +84,12 @@ internal sealed class FalloutPlayerPhysicalActivity
         if (!Sleeping) throw new InvalidOperationException("No source player sleep clock is active.");
         Execute("end-source-sleep-clock", () => { end(); Sleeping = false; });
     }
+    internal void CommitSleepFlag(bool sleeping)
+    {
+        if (!Published || Failure is not null)
+            throw new InvalidOperationException("Source sleep flag has no healthy published physical owner.");
+        Sleeping = sleeping;
+    }
     internal int SleepingState
     {
         get

@@ -20,6 +20,11 @@ internal sealed partial class FalloutNativePluginLoadedFiles
         {
             ObjectDisposedException.ThrowIf(_disposed, this); _owner.RequireReader(_reader);
         }
+        internal FalloutNativePluginBinaryFile BinaryFile()
+        {
+            RequireCurrent(); return _reader.File.Binary;
+        }
+
         internal IReadOnlyList<NativeNvseDataField> NativeFields()
         {
             RequireCurrent(); return _reader.File.NativeFields();

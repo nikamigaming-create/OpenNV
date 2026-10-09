@@ -7,7 +7,7 @@ entry/exit/movement/quit pass with the original user save unchanged. The stable
 FNV Test shortcut is advanced and all older packages remain intact.
 
 The larger candidate now joins selected contributor parser, real binary buffer,
-OS metadata and shared loaded-file lifetime at managed/native protocol 9. C#,
+OS metadata, shared loaded-file lifetime and callable binary members at managed/native protocol 10. C#,
 x86 Debug and the joined source contract project compile. Complete BSFile/CRT,
 original DLL execution and native source-state cold gameplay remain unverified
 or unowned; source save admission remains refused. This is not complete-game
@@ -18,9 +18,18 @@ selected constructor-registration inputs are integrated into the large candidate
 Reference construction, native player/actor publication, source update, capture,
 cold validation and retirement share those owners. The runtime and script-contract
 project compile in Debug with zero warnings/errors. Their source contracts and
-ordinary gameplay have not run. Current AI/CELL, complete process election/transfer,
-light/pair and original frame consumers remain required; body presence cannot
+ordinary gameplay have not run. Actual AI state and native CELL lifecycle are now
+integrated with mandatory current capture and cold validation. Complete process
+election/transfer, light/pair and original frame consumers remain required; body presence cannot
 establish a High process or completed detection frame.
+
+Source sleep/wait, rest admission, furniture publication, save-queue ownership,
+cumulative world time, interface fades and rest sound lifetimes are integrated.
+Current capture and cold validation retain the same owners. The combined runtime,
+script-contract project and protocol-10 x86 Debug companion compile with zero
+warnings/errors. Real rest cue RNG, hourly world/effect, console and interface-clock
+producers remain required; no absent producer is replaced by a fixed value or empty
+callback. Contract/native execution and ordinary sleep/wait gameplay remain pending.
 
 The current greenfield integration candidate adds compiled startup/query/effect
 owners, player package result execution, typed NIF physics and particle families,
@@ -45,7 +54,7 @@ body, authoritative damage/vitals, shared source queries, mandatory current save
 and advancement observations before source execution. Furniture-body factories are
 removed and player appearance resolves its canonical engine base. The combined
 runtime and script-probe Debug builds pass with zero warnings/errors. Actual
-sleep/wait/time/effect continuation remains under parallel implementation. Actual
+sleep/wait/time/effect producer completion remains under parallel implementation. Actual
 CombatManager lists, source acquisition/assistance/provocation/damage joins, personal
 XP count and the separately cached public player combat flag are integrated and
 compile. Construction precedes startup scripts; driver attachment retains the same

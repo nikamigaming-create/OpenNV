@@ -20,6 +20,25 @@ internal partial class RuntimeNativePlayer
     private NativeOwnedAnimationSoundPlayer? _physicalSounds;
     private Action? _physicalInput;
     private Func<FalloutFormKey, Transform3D>? _physicalFurniturePlacement;
+    private Func<bool>? _sourceSleepContinuation;
+    internal void BindSourceSleepContinuation(FalloutSleepWaitSource source, Func<bool> ownsContinuation)
+    {
+        ArgumentNullException.ThrowIfNull(ownsContinuation);
+        source.Validate();
+        if (_sourceSleepContinuation is not null) throw new InvalidOperationException("Player sleep continuation is already bound.");
+        if (source.RuntimeSha256 != PhysicalPlayer.Source.RuntimeSha256 || PhysicalPlayer.Published)
+            throw new InvalidOperationException("Sleep continuation must bind the same selected runtime before native physical publication.");
+        _sourceSleepContinuation = ownsContinuation;
+    }
+    internal bool CommittedPlayerSleeping => PhysicalPlayer.Sleeping;
+    internal void WriteSourceSleepFlag(bool sleeping, Action writeHours)
+    {
+        ArgumentNullException.ThrowIfNull(writeHours);
+        PhysicalPlayer.Execute("write-source-sleep-hours-and-flag", () =>
+        {
+            writeHours(); PhysicalPlayer.CommitSleepFlag(sleeping);
+        });
+    }
     internal event Action<FalloutFormKey>? SourceBedOccupied;
 
     internal void ConfigurePlayerPhysicalActivity(FalloutPluginStack records, FalloutQuestState quests,
@@ -45,7 +64,8 @@ internal partial class RuntimeNativePlayer
             _furnitureRandom.Restore(restore.RandomState);
             _physicalSoundEvents.Restore(restore.Sounds, records);
         }
-        if (_thirdPerson is not null) PublishPhysicalPlayerBody();
+        // The shared rest owner binds the cold independent sleep flag before
+        // PublishRequiredPlayerPhysicalBody performs its native publication.
     }
     internal FalloutAdvancementActivityObservation ObservePhysicalActivity(FalloutAdvancementActivityFact fact) =>
         _playerPhysical?.Observe(fact) ?? new(FalloutAdvancementActivityState.Unowned, "physical-player:source-owner-absent");
@@ -64,7 +84,7 @@ internal partial class RuntimeNativePlayer
             if (_playerPhysical is not { Published: true }) return "player-physical-publication";
             // The independent original sleep flag needs the actual time/effect
             // consumer's continuation. A bed pose cannot substitute for it.
-            if (_playerPhysical.Sleeping) return "player-sleep-clock-continuation";
+            if (_playerPhysical.Sleeping && _sourceSleepContinuation?.Invoke() != true) return "player-sleep-clock-continuation";
             if (_restorePlayerPhysical is not null) return "player-physical-cold-publication";
             if (_physicalSounds is null || !_physicalSounds.CanCaptureSilent || _physicalSoundEvents?.CanCapture != true)
                 return "player-physical-animation-sound-continuation";
@@ -119,7 +139,7 @@ internal partial class RuntimeNativePlayer
         try
         {
             var saved = _restorePlayerPhysical;
-            if (saved?.Sleeping == true)
+            if (saved?.Sleeping == true && _sourceSleepContinuation?.Invoke() != true)
                 throw new NotSupportedException("Cold active player sleep requires its actual hour/time/effect continuation owner.");
             if (saved?.NativePose is { } pose) RestorePhysicalBones(pose);
             if (saved?.Furniture is { } furniture) RestorePlayerFurniture(furniture);

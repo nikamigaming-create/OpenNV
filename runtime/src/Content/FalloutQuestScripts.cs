@@ -223,7 +223,8 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Func<FalloutPluginRecord, FalloutCompiledScriptProgram, int, FalloutCompiledExecutionCursor, double, Func<bool>, FalloutCompiledSliceReceipt>? ExecuteCompiledProgram = null,
     Func<bool, bool>? CanContinueCompiled = null,
     Func<bool>? IsPcSleeping = null, Func<FalloutFormKey, int>? Sleeping = null,
-    Func<FalloutFormKey, int>? KnockedState = null);
+    Func<FalloutFormKey, int>? KnockedState = null, FalloutSleepWait? SleepWait = null,
+    Action<FalloutRestRequest>? OpenSleepWaitMenu = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -772,6 +773,10 @@ internal sealed partial class FalloutQuestScripts
                     .GetSitting(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
                         host?.Sitting))
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "isactorsaioff")
+                return new([], _ => FalloutActorAiCommands.Query(References ??
+                    throw new NotSupportedException("IsActorsAIOff has no actual reference owner."),
+                    caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))) { ReadOnly = true };
             if (parts.Length <= 2 && operation is "getsleeping" or "getknockedstate")
                 return new([], _ => operation == "getsleeping"
                     ? (References ?? throw new NotSupportedException("GetSleeping has no actual reference owner."))
@@ -890,6 +895,8 @@ internal sealed partial class FalloutQuestScripts
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(_records, operation) is { } iniSettingFunction)
                 return iniSettingFunction;
+            if (parts.Length == 1 && FalloutSleepWaitCommands.Function(operation, host?.SleepWait, host?.OpenSleepWaitMenu) is { } restFunction)
+                return restFunction;
             if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host?.GameTime, () => Session.Hardcore) is { } timeFunction)
                 return timeFunction;
             if (parts.Length == 1 && FalloutModQueryCommands.Function(_records, operation) is { } modQueryFunction)
@@ -985,6 +992,13 @@ internal sealed partial class FalloutQuestScripts
                 if (parts.Length != 1 || arguments.Count != 0)
                     throw new InvalidDataException("ForceSave is a global zero-argument command.");
                 ScriptManualSaves.Request((program ?? instance.Program).LastStatement);
+                return;
+            }
+            if (operation is "setactorsai" or "toggleactorsai")
+            {
+                if (parts.Length != 2) throw new InvalidDataException("Quest actor AI command requires its explicit actual reference receiver.");
+                _ = FalloutActorAiCommands.Apply(References ?? throw new NotSupportedException("Actor AI command has no current world."),
+                    instance.Quest.FormKey, instance.Bindings.Reference(parts[0]), operation, arguments.Select(NumberArgument).ToArray());
                 return;
             }
             if (operation == "setalert")

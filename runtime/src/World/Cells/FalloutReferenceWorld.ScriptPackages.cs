@@ -95,8 +95,9 @@ internal sealed partial class FalloutReferenceWorld
         return true;
     }
 
-    private static void RetireDeletedActorScriptPackage(FalloutReferenceInstance actor)
+    private void RetireDeletedActorScriptPackage(FalloutReferenceInstance actor)
     {
+        RetireActualActorUpdate(actor, "actual-source-reference-deletion");
         actor.PendingPackageChoice = null;
         if (actor.ScriptPackage is not { Package: not null } slot) return;
         var next = slot with { Revision = checked(slot.Revision + 1), Package = null, Sha256 = null, Pending = false };

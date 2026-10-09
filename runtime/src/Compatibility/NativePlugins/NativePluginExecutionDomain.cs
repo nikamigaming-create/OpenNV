@@ -211,10 +211,31 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         finally
         {
             if (!_retired) StopOwnedChild();
-            DrainAfterExit(); _moduleSource?.Dispose(); _moduleSource = null; _module = null; _functions.Clear(); ClearGuestCapabilities(); ClearNvseCapabilities();
-            if (ChildExited) { ClearPrivateIo(); _process.Dispose(); }
-            else { MarkFault(new TimeoutException("The owned native child has not exited after bounded retirement."), null); failure ??= new TimeoutException("Owned child remains alive."); }
-            _disposed = true;
+            DrainAfterExit();
+            if (ChildExited)
+            {
+                var cleanup = new List<Exception>();
+                try { _moduleSource?.Dispose(); } catch (Exception error) { cleanup.Add(error); }
+                _moduleSource = null; _module = null; _functions.Clear();
+                try { ClearGuestCapabilities(); } catch (Exception error) { cleanup.Add(error); }
+                try { ClearNvseCapabilities(); } catch (Exception error) { cleanup.Add(error); }
+                try { ClearPrivateIo(); } catch (Exception error) { cleanup.Add(error); }
+                try { _process.Dispose(); } catch (Exception error) { cleanup.Add(error); }
+                _disposed = true;
+                if (cleanup.Count != 0)
+                {
+                    if (failure is not null) cleanup.Insert(0, failure);
+                    failure = new AggregateException("Native source/capability retirement failed after verified child closure.", cleanup);
+                    MarkFault(failure, null);
+                }
+            }
+            else
+            {
+                // Keep actual source leases, callable capabilities, process
+                // handle and first failure for another exact-child cleanup.
+                MarkFault(new TimeoutException("The owned native child has not exited after bounded retirement."), null);
+                failure ??= new TimeoutException("Owned child remains alive.");
+            }
         }
         if (failure is not null) throw FaultException(failure);
     }
@@ -274,7 +295,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         NativePluginDomainOperation.NvseLocalRetire or NativePluginDomainOperation.NvseLocalStatistics or
                         NativePluginDomainOperation.NvseObjectBind or NativePluginDomainOperation.NvseObjectRetire or NativePluginDomainOperation.NvseScriptInterface or
                         NativePluginDomainOperation.NvseObjectRefresh or NativePluginDomainOperation.NvseLocalAttachScript or
-                        NativePluginDomainOperation.NvseFileMethods => 1U,
+                        NativePluginDomainOperation.NvseFileMethods or NativePluginDomainOperation.NvseBinaryMethods or
+                        NativePluginDomainOperation.NvseBinaryBind or NativePluginDomainOperation.NvseBinaryRetire => 1U,
                         NativePluginDomainOperation.GuestCapabilities or NativePluginDomainOperation.GuestAllocate or
                         NativePluginDomainOperation.GuestRead or NativePluginDomainOperation.GuestWrite or
                         NativePluginDomainOperation.GuestRelease or NativePluginDomainOperation.GuestBindState or
@@ -320,6 +342,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             if (frame.Kind == NativePluginDomainMessage.IoCallback) typedReply = DispatchPrivateIo(frame, waitingCall);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= LocalBegin && frame.Operation <= LocalEnd)
                 typedReply = DispatchNvseLocals(frame);
+            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= BinaryBegin && frame.Operation <= BinaryEnd)
+                typedReply = DispatchNvseBinary(frame);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= SourceFileBegin && frame.Operation <= SourceFileEnd)
                 typedReply = DispatchNvseSourceFile(frame);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation is 0x401 or 0x403)

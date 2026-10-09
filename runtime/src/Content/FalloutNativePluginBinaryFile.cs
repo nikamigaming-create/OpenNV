@@ -109,34 +109,12 @@ internal sealed partial class FalloutNativePluginBinaryFile : IDisposable
 
     internal void Seek(uint argument, uint sourceOrigin)
     {
-        RequireIdle();
-        if (!_good) return;
-        uint target;
-        if (sourceOrigin == _construction.SeekSet) target = argument;
-        else if (sourceOrigin == _construction.SeekCurrent) target = unchecked(_logicalOffset + argument);
-        else if (sourceOrigin == _construction.SeekEnd) target = unchecked(Size() - argument);
-        else throw new NotSupportedException("Binary seek origin has no selected source declaration.");
-        if (target == _logicalOffset) return;
-        if (target > int.MaxValue)
-            throw new NotSupportedException("Original signed backend seek needs its actual CRT failure/large-file owner.");
-        // A relative move inside the real retained read buffer changes no
-        // backend file position and preserves its source bytes.
-        var signedDelta = unchecked((int)(target - _logicalOffset));
-        var bufferedTarget = (long)_consumed + signedDelta;
-        // The selected read mode converts absolute/end origins into this same
-        // relative logical delta before the inherited buffered seek.
-        if (bufferedTarget >= 0 && bufferedTarget < _valid)
-        {
-            _consumed = checked((uint)bufferedTarget); _binaryOffset = unchecked(_binaryOffset + (uint)signedDelta);
-        }
-        else
-        {
-            _valid = _consumed = 0; _backendOffset = _binaryOffset = target;
-        }
-        _logicalOffset = target; _revision = checked(_revision + 1);
+        SeekMember(argument, sourceOrigin);
     }
 
-    internal FalloutNativeBinaryTransfer Read(uint requested)
+    internal FalloutNativeBinaryTransfer Read(uint requested) => ReadCore(requested, true);
+
+    private FalloutNativeBinaryTransfer ReadCore(uint requested, bool updateLogical)
     {
         RequireIdle();
         var pieces = new List<BinaryPiece>(); var count = 0U;
@@ -176,7 +154,7 @@ internal sealed partial class FalloutNativePluginBinaryFile : IDisposable
                         count = checked(count + _consumed);
                     }
                 }
-                _logicalOffset = unchecked(_logicalOffset + count); _revision = checked(_revision + 1);
+                if (updateLogical) _logicalOffset = unchecked(_logicalOffset + count); _revision = checked(_revision + 1);
             }
             var transfer = new FalloutNativeBinaryTransfer(this, checked(++_nextTransfer), requested, count, pieces);
             _pending = transfer; return transfer;

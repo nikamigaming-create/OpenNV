@@ -42,7 +42,15 @@ reservation/placement, fractional phase clocks, attempted keys, RNG and sound
 history. Cold publication selects no branch and dispatches no saved key. Physical
 faults retain their committed prefix and block dependent source execution. The
 selected body must publish before source queries or advancement can observe normal
-state. Sleep/wait time/effects, interrupted motion and death remain distinct owners.
+state. Interrupted motion and death remain distinct owners.
+
+Sleep/wait retains the source player counter and UI countdown independently. Source
+furniture publication, rest admission, the persistent save queue, cumulative world
+time, fades and completed audio voices share current capture and cold validation.
+Actual campaign callbacks own restriction observations, source counting, each
+world/effect hour and completion. Missing callbacks or the selected cue RNG remain
+explicitly unowned; an ordinary world tick or convenient random stream cannot
+stand in for their source behavior. Cold validation never replays these prefixes.
 
 XP notifications retain actual award order and source-selected tile declarations,
 raw wall-clock fades and a distinct pausable level-text timer. Genuine native draws,
@@ -76,6 +84,11 @@ owners and their constructor receipts. Cold construction replays no producer or
 factory prefix, and real native publication uses a new process lease. Missing
 election, common transfer, pair/light, controller and frame facts refuse their
 reached operations. Process retirement precedes its perception/source providers.
+Actor AI updates use their own source byte. CELL metadata loading, genuine native
+root/child publication, detach and destruction own distinct process phases; the
+current player CELL is separate from actor cohort membership. Mandatory cold state
+retains phase and source history without replaying saved factories or treating old
+native identities as new publication.
 
 SPECIAL menu requests use their compiled integer argument. The selected executable
 owns the reached menu type, XML/model arguments, integer bounds and presentation

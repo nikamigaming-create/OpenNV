@@ -91,7 +91,7 @@ internal sealed partial class NativePluginExecutionDomain
                 if (number != expected) throw new InvalidDataException("Native result bytes drifted from their actual C# assignment publication.");
             }
             VerifyOwner();
-            RequireNvseSourceFileCallerComplete(caller.Id);
+            RequireNvseSourceFileCallerComplete(caller.Id); RequireNvseBinaryCallerComplete(caller.Id);
             return new(caller.Id, command.AssignedOpcode, (raw & 255) == 1, raw, number, end, created, destroyed, tokens, stack, registers, exception)
             { TypedResult = caller.PublishedValue, PublishedIdentity = caller.PublishedIdentity };
         }

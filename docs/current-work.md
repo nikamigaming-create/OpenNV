@@ -22,9 +22,9 @@ C# owns formats/gameplay/persistence and Godot adapts presentation/input/OpenXR.
 | Owner | Active implementation |
 | --- | --- |
 | Primary | Frozen packet integration, actual driver/coordinator/capture/lifecycle joins, retained source-data failures and combined compilation/publication |
-| active_radio_save | Source menu shortcut packet frozen; general source-screen projection and clipping owners |
-| fo3_special_book | Source Actor AI update byte and genuine CELL load/attach/detach/release producers |
-| scope_plugin_audit | Original selected UCRT provider/FILE streams and binary-member child-closure ownership |
+| active_radio_save | Menu projection packet frozen; actual rest RNG, restrictions and hourly world/effect producers |
+| fo3_special_book | Selected Player/Main tier inputs, genuine process-tree membership and common process transfer |
+| scope_plugin_audit | UCRT stream packet frozen; selected profile imports and winning directory enumeration |
 
 The three parallel owners submit immutable first-party source proposals. Primary
 alone controls tracked integration, builds, native/game processes, input, saves
@@ -40,8 +40,9 @@ is merged on origin/main at `4a739468d70a58c5b1db8ab59779a6d0a9c22d09`
 with every CI check passing. Preserve this delivered package while
 integrating the larger current/compiled candidate; it is not campaign completion.
 SourceFiles18 and LoadedFiles13 now share the actual selected contributor parser,
-binary buffer, metadata and retained source lifetime. Protocol 9 C# and x86 Debug
-compilation pass, and the joined source contract project compiles. The separate
+binary buffer, metadata and retained source lifetime. The integrated binary-member
+owner now uses managed/native protocol 10. C#, x86 Debug and the joined source
+contract project compile with zero warnings/errors. The separate
 parser-only cache is removed. Native child closure precedes source collection
 retirement, and cleanup failures remain retained on repeated calls. Complete
 BSFile/CRT, original DLL behavior and current native source-topology persistence
@@ -49,9 +50,16 @@ remain unowned; their existing admission refusals remain enabled. Actor detectio
 four-tier process scheduling and source constructor registration are now joined
 to real reference construction, native body leases, frame execution, complete
 current capture and cold validation. Their combined runtime and contract project
-Debug builds pass with zero warnings/errors. No source contracts or gameplay have
-been executed for this batch. AI/CELL producers, Binary14 and rest are next;
-missing process election, transfer, pair/light and frame producers remain visible.
+Debug builds pass with zero warnings/errors. Actual Actor AI update state and CELL
+load/attach/detach/release now join genuine native reference construction and
+retirement, current capture and cold validation. Sleep/wait joins source furniture,
+physical state, the real save queue, cumulative world time, source fades and sound
+lifetimes. Its required cue RNG, hourly world/effect, console and interface-clock
+producers remain unowned, and reached operations refuse without them. These joins
+compile; their source contracts, native callbacks and ordinary gameplay have not
+run. Missing process election, common transfer, pair/light and original frame
+producers remain visible. The frozen UCRT stream and source-menu projection packets
+are next for serial integration and execution.
 Source-only packets and successful compilation remain distinct from executed gameplay.
 
 ## Integrated candidate
@@ -90,8 +98,10 @@ complete bones, attempted keys, RNG and sound history. Awake/upright observation
 require actual healthy native body publication before source execution. Independent
 IsPCSleeping, actor sleep and knocked queries bind the same owners; retained physical
 faults stop dependent script execution. Obsolete furniture-body factories are removed.
-The actual sleep/wait consumer, active sleep continuation, interruption/death and
-camera/headset acceptance remain open. Player appearance now resolves the canonical
+The source sleep/wait owner, rest-host admission, save/time/fade/sound continuation
+and mandatory cold state are integrated and compile. Required real rest RNG and
+hourly world/effect producers, active ordinary sleep/wait execution,
+interruption/death and camera/headset acceptance remain open. Player appearance now resolves the canonical
 engine base instead of an editor-name search.
 Required absent physical/frame/native-effect facts never default to Ready.
 Native attachment, mutation, submission and post-completion retirement faults retain

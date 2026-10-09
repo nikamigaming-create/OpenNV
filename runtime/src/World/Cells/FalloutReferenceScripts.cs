@@ -39,7 +39,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Action<double>? RewardXp = null, FalloutGameTime? GameTime = null,
     Func<FalloutFormKey, bool, FalloutReferencePlacement>? Placement = null,
     Func<bool>? IsPcSleeping = null, Func<FalloutFormKey, int>? Sleeping = null,
-    Func<FalloutFormKey, int>? KnockedState = null);
+    Func<FalloutFormKey, int>? KnockedState = null, FalloutSleepWait? SleepWait = null,
+    Action<FalloutRestRequest>? OpenSleepWaitMenu = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -492,6 +493,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(records, operation) is { } iniSettingFunction)
                 return iniSettingFunction;
+            if (parts.Length == 1 && FalloutSleepWaitCommands.Function(operation, host.SleepWait, host.OpenSleepWaitMenu) is { } restFunction)
+                return restFunction;
             if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host.GameTime, host.IsHardcore) is { } timeFunction)
                 return timeFunction;
             if (parts.Length == 1 && FalloutModQueryCommands.Function(records, operation) is { } modQueryFunction)
@@ -712,6 +715,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length <= 2 && operation == "getdetected")
                 return new([FalloutScriptArgumentKind.Value], arguments => world.GetDetected(Target(),
                     arguments[0].Value.FormKey(records), world.PreparePerceptionPairPerks)) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "isactorsaioff")
+                return new([], _ => FalloutActorAiCommands.Query(world, Target())) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getsleeping")
                 return new([], _ => world.GetSleeping(Target(), host.Sleeping)) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getknockedstate")
@@ -905,6 +910,12 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 if (arguments.Count != 2) throw new InvalidDataException("SetPlayerTagSkill requires a skill and slot.");
                 (host.TagSkills ?? throw new NotSupportedException("SetPlayerTagSkill has no shared player tag owner."))
                     .Set(arguments[0], Number(arguments[1]));
+                return;
+            }
+            if (operation is "setactorsai" or "toggleactorsai")
+            {
+                if (parts.Length > 2) throw new InvalidDataException("Actor AI command has an invalid receiver path.");
+                _ = FalloutActorAiCommands.Apply(world, source, target, operation, arguments.Select(Number).ToArray());
                 return;
             }
             if (operation == "setalert")

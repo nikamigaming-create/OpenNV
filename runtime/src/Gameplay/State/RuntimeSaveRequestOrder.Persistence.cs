@@ -150,6 +150,19 @@ internal sealed partial class RuntimeSaveRequestOrder
             origin == RuntimeSaveRequestOrigin.NativeInteraction && site.Reference is null ||
             origin != RuntimeSaveRequestOrigin.NativeDoorTransport && (site.ArrivalDoor is not null || site.PreviousCell is not null))
             throw new InvalidDataException("Native save origin substituted its interaction or transport identity.");
+        if ((origin == RuntimeSaveRequestOrigin.NativeRestStart) != (site.Rest is not null))
+            throw new InvalidDataException("Native save origin has no matching actual rest-policy request identity.");
+        if (site.Rest is { } rest)
+        {
+            rest.Request.Validate();
+            if (rest.RequestOrdinal <= 0 || rest.Request.Origin == FalloutRestOrigin.ScriptHours ||
+                !Hash(rest.RestSourceSha256) || !Hash(rest.PolicySha256) || rest.Location.Cell != site.Cell ||
+                rest.Request.Bed != site.Reference || rest.Request.BedSha256 != site.ReferenceSha256)
+                throw new InvalidDataException("Native rest save replaced its actual menu/source/bed/CELL request.");
+            rest.Location.RequireCurrent(records, site.Cell);
+            if (rest.Request.BedSource is { } bed)
+                bed.RequireCurrent(FalloutSleepWaitBed.ReadCurrent(records, bed.Reference));
+        }
     }
 
     internal static void RequirePublishedCapture(RuntimeSaveRequestOrderSnapshot snapshot)

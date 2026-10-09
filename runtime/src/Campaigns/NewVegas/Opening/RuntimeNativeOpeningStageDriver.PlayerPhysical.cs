@@ -15,7 +15,6 @@ internal partial class RuntimeNativeOpeningStageDriver
         _player.ConfigurePlayerPhysicalActivity(_pluginStack, _quests, _scripts.References!, source.Receipt,
             () => Vitals, name => ReadPlayerActorValue(name, FalloutActorValueRead.Current),
             PlayerProgressCondition, restore, furniturePlacement);
-        _player.PublishRequiredPlayerPhysicalBody();
     }
 
     private int ActorSleeping(FalloutFormKey actor) => _pluginStack.RuntimeFormId(actor) == 0x14

@@ -78,15 +78,22 @@ internal partial class RuntimeNativePlayer
         var furniture = records.GetEffective(reference.Base);
         var path = "meshes/" + FalloutDialogueTopic.Text(furniture.ReadSubrecords().Single(field => field.Signature == "MODL").Data.Span).Replace('\\', '/');
         PhysicalPlayer.RequireHealthy();
-        if (_thirdPersonMode && _xr is null)
-            throw new NotSupportedException("Player furniture requires its actual third-person camera transition owner.");
         if (PhysicalPlayer.HasPhysicalMotion || world is null || records != _physicalRecords || quests != _physicalQuests || world != _physicalWorld ||
             !world.IsEnabled(reference.FormKey) || world.Get(reference.FormKey).Base != reference.Base || world.Placement(reference.FormKey).Cell != cell)
             throw new InvalidDataException("Furniture activation differs from the actual player's enabled authoritative source world.");
+        if (FalloutFurnitureSource.ReadKind(furniture) == FalloutPlayerFurnitureKind.Sleeping)
+        {
+            // The original player bed branch opens its real sleep menu. It
+            // does not dispatch the separate actor chair/lying animation path
+            // or consume its IDLE selection RNG/text-key history.
+            (OpenSourceSleepMenu ?? throw new NotSupportedException("Source bed activation has no actual sleep/wait menu factory."))
+                (FalloutSleepWaitBed.Read(records, reference, Read(path)).Request);
+            return;
+        }
+        if (_thirdPersonMode && _xr is null)
+            throw new NotSupportedException("Player furniture requires its actual third-person camera transition owner.");
         var nif = Read(path);
         var seat = FalloutFurnitureSource.ReadPlayer(records, furniture, nif);
-        if (seat.Kind == FalloutPlayerFurnitureKind.Sleeping)
-            throw new NotSupportedException("Player bed activation requires its selected source sleep/wait menu and time/effect consumer; actor bed-query phases do not admit a player animation protocol.");
         var body = _thirdPerson?.Actor ?? throw new NotSupportedException("Player furniture requires its actual current source body.");
         if (!body.IsInsideTree()) throw new NotSupportedException("Player furniture source body is detached.");
         _furniturePlacement = placement;

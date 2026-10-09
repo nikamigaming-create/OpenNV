@@ -293,6 +293,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled(); return;
         }
         if (PresentationInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
+        if (SourceRestInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (!_modalInput && _furniturePhase == 0 && GetMeta("opennv_source_pipboy_enabled", false).AsBool() && inputEvent.IsActionPressed(input.PipBoy.Action))
         {
             OpenPipBoy?.Invoke(); GetViewport().SetInputAsHandled(); return;

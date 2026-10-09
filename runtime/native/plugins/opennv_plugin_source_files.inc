@@ -71,15 +71,8 @@ void* source_file_entry(SourceFileMethod method) {
 }
 
 void source_files_release_pages(SourceFileRuntime& owner) {
-    DWORD error = ERROR_SUCCESS;
-    for (auto& page : owner.pages) if (page.base) {
-        const auto previous = page.base;
-        if (!VirtualFree(page.base, 0, MEM_RELEASE)) { if (!error) error = GetLastError(); continue; }
-        page.base = nullptr; MEMORY_BASIC_INFORMATION observed{};
-        if ((!VirtualQuery(previous, &observed, sizeof(observed)) || observed.State != MEM_FREE) && !error) error = ERROR_INVALID_DATA;
-    }
-    if (error) throw Fatal(error, "Source method mapping did not completely retire; its exact owner remains retained.");
-    owner.pages.clear();
+    if (!owner.callable_lease) return;
+    source_callables_release(owner.callable_lease); owner.callable_lease = 0;
 }
 void source_files_configure(const Frame& frame) {
     Reader reader{frame.payload}; const auto module = reader.get<std::uint64_t>(); const auto count = reader.get<std::uint32_t>();
@@ -103,47 +96,17 @@ void source_files_configure(const Frame& frame) {
     // Retain the owner before allocating, including a failed rollback. An
     // allocation error cannot discard the identity of an unreleased page.
     state->source_files = std::move(owner); auto& actual = *state->source_files;
-    try {
-        SYSTEM_INFO system{}; GetSystemInfo(&system); const auto granularity = system.dwAllocationGranularity;
-        if (!granularity || (granularity & (granularity - 1))) throw Fatal(ERROR_INVALID_DATA, "Source callable mapping granularity is unowned.");
-        for (const auto& thunk : actual.thunks) {
-            const auto base = thunk.address & ~(granularity - 1);
-            if (thunk.address - base > granularity - 7) throw Fatal(ERROR_INVALID_ADDRESS, "Source file entry crosses its owned mapping.");
-            if (std::any_of(actual.pages.begin(), actual.pages.end(), [&](const auto& page) { return address(page.base) == base; })) continue;
-            MEMORY_BASIC_INFORMATION observed{};
-            if (!VirtualQuery(reinterpret_cast<void*>(base), &observed, sizeof(observed)) || observed.State != MEM_FREE ||
-                reinterpret_cast<std::uintptr_t>(observed.BaseAddress) > base || static_cast<std::uint64_t>(base) + granularity >
-                reinterpret_cast<std::uintptr_t>(observed.BaseAddress) + observed.RegionSize)
-                throw Fatal(ERROR_INVALID_ADDRESS, "Source method collides with another native mapping; existing mappings are never replaced.");
-            actual.pages.push_back({nullptr, granularity});
-            auto* memory = VirtualAlloc(reinterpret_cast<void*>(base), granularity, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-            actual.pages.back().base = memory;
-            if (!memory) throw Fatal(GetLastError(), "Exact source method mapping failed.");
-            if (address(memory) != base) throw Fatal(ERROR_INVALID_ADDRESS, "Source method allocation returned a different mapping identity.");
-            // A reached undeclared offset is an explicit native fault, not
-            // executable zero bytes or a guessed original function.
-            std::memset(memory, 0xcc, granularity);
-        }
-        for (const auto& thunk : actual.thunks) {
-            std::array<std::uint8_t, 7> jump{0xb8, 0, 0, 0, 0, 0xff, 0xe0};
-            const auto target = address(source_file_entry(thunk.method));
-            std::memcpy(jump.data() + 1, &target, 4); std::memcpy(reinterpret_cast<void*>(thunk.address), jump.data(), jump.size());
-        }
-        for (const auto& page : actual.pages) {
-            DWORD previous = 0;
-            if (!VirtualProtect(page.base, page.length, PAGE_EXECUTE_READ, &previous) || !FlushInstructionCache(GetCurrentProcess(), page.base, page.length))
-                throw Fatal(GetLastError(), "First-party source method mapping could not publish executable protection.");
-        }
+    std::vector<CallableEntry> entries; entries.reserve(actual.thunks.size());
+    SYSTEM_INFO system{}; GetSystemInfo(&system); const auto granularity = system.dwAllocationGranularity;
+    if (!granularity || (granularity & (granularity - 1))) throw Fatal(ERROR_INVALID_DATA, "Source callable granularity is unowned.");
+    std::set<std::uint32_t> units;
+    for (const auto& thunk : actual.thunks) {
+        entries.push_back({thunk.address, source_file_entry(thunk.method)}); units.insert(thunk.address & ~(granularity - 1));
     }
-    catch (const std::exception& original) {
-        // Keep a failed cleanup owner for terminal domain retirement.
-        try { source_files_release_pages(actual); }
-        catch (const Fatal& cleanup) {
-            throw Fatal(cleanup.code, std::string(original.what()) + "\nSource method rollback: " + cleanup.what());
-        }
-        state->source_files.reset(); throw;
-    }
-    Bytes receipt; receipt.put(count); receipt.put(static_cast<std::uint32_t>(actual.pages.size())); reply(frame, ERROR_SUCCESS, "", receipt);
+    // Shared owner retains partial failed reservations and faults the whole
+    // generation; a source-family rollback cannot unmap another live family.
+    actual.callable_lease = source_callables_acquire(entries);
+    Bytes receipt; receipt.put(count); receipt.put(static_cast<std::uint32_t>(units.size())); reply(frame, ERROR_SUCCESS, "", receipt);
 }
 void source_files_retire() {
     if (!state->source_files) return;

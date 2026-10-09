@@ -151,6 +151,8 @@ public partial class RuntimeCoordinator
                 combatGroups = _nativeOpeningStageDriver.CombatGroupState,
                 actorPerception = _nativeOpeningStageDriver.ActorPerceptionState,
                 actorProcesses = _nativeOpeningStageDriver.ActorProcessState,
+                actorUpdates = _nativeOpeningStageDriver.ActorUpdateState,
+                cellProcesses = _nativeOpeningStageDriver.CellProcessState,
                 advancementRuntime = _nativeOpeningStageDriver.PlayerAdvancementRuntimeState,
                 playerPhysical = _nativePlayer?.PlayerPhysicalState,
                 nativePlugins = _nativeOpeningStageDriver.NativePluginExecutionState,
@@ -315,6 +317,7 @@ public partial class RuntimeCoordinator
         _nativeReferences = new(_nativePluginStack, auxiliary: _nativeScriptStorage.Auxiliary,
             ini: _nativeScriptStorage.Ini, ui: _nativeUi, controls: _nativeScriptStorage.Controls);
         _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId);
+        _nativeReferences.ConfigureActualActorCellProducers(content.StackId);
         _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId);
         _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId);
         _nativeStartingQuest = FalloutNewGameBootstrap.StartingQuest(_nativePluginStack, FalloutInstallationSettings.Read(content));
@@ -497,7 +500,7 @@ public partial class RuntimeCoordinator
         {
             // Prewarmed presentation captured the new-game reference owner.
             // Restore builds presentation against the restored world instead.
-            _nativePrewarmedInitialCellRoot?.Free();
+            FreeNativeSourceCellRoot(_nativePrewarmedInitialCellRoot);
             _nativePrewarmedInitialCellRoot = null;
             RetireNativePluginCampaign();
             _nativeReferences?.Dispose();
@@ -512,6 +515,9 @@ public partial class RuntimeCoordinator
             var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Cold combat groups have no selected source.");
             _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId,
                 restore.State.CombatGroups ?? throw new InvalidDataException("Current campaign has no combat group continuation."));
+            _nativeReferences.ConfigureActualActorCellProducers(content.StackId,
+                restore.State.ActorUpdates ?? throw new InvalidDataException("Current actor update continuation is absent."),
+                restore.State.CellProcesses ?? throw new InvalidDataException("Current CELL process continuation is absent."));
             _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId,
                 restore.State.ActorPerception ?? throw new InvalidDataException("Current campaign has no actor perception continuation."));
             _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId,
@@ -582,14 +588,15 @@ public partial class RuntimeCoordinator
         SetLoadingStatus("Loading the world");
         var root = sourceSide && _nativePrewarmedInitialCellRoot is not null
             ? _nativePrewarmedInitialCellRoot
-            : await BuildNativeCellRootResponsive(activeScene, transition, sourceSide);
+            : await BuildNativeCellRootResponsive(activeScene, transition, sourceSide,
+                grid is null ? null : grid.Cells.Select(definition => definition.FormKey).Append(grid.PersistentCell).Distinct(FalloutFormKeyComparer.Instance).ToArray());
         _nativePrewarmedInitialCellRoot = null;
         SetLoadingStatus("Preparing characters and controls");
         if (DisplayServer.GetName() != "headless")
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         if (_nativeSessionTransitioning || _retiringNativeSession)
         {
-            root.Free();
+            FreeNativeSourceCellRoot(root);
             throw new OperationCanceledException("Initial CELL session retired.");
         }
         if (grid is not null) AddExteriorLandscape(root, grid);
@@ -650,31 +657,31 @@ public partial class RuntimeCoordinator
     private Node3D BuildNativeCellRoot(
         FalloutCellScene cell,
         FalloutDoorTransition? transition,
-        bool sourceSide)
+        bool sourceSide, IReadOnlyList<FalloutFormKey>? sourceCells = null)
     {
         var root = new Node3D { Name = $"NativeCell_{cell.Cell.FormKey}" };
         try
         {
-            PopulateNativeCellRoot(root, cell, transition, sourceSide);
+            PopulateNativeCellRoot(root, cell, transition, sourceSide, sourceCells);
             return root;
         }
-        catch
+        catch (Exception error)
         {
-            root.Free();
+            RetireFailedNativeSourceCellRoot(root, error);
             throw;
         }
     }
 
     private void PopulateNativeCellRoot(Node3D root, FalloutCellScene cell,
-        FalloutDoorTransition? transition, bool sourceSide)
+        FalloutDoorTransition? transition, bool sourceSide, IReadOnlyList<FalloutFormKey>? sourceCells)
     {
-        BeginNativeCellRoot(cell);
+        BeginNativeCellRoot(root, cell, sourceCells);
         foreach (var reference in cell.References) PlaceNativeCellReference(root, cell, reference);
         CompleteNativeCellRoot(root, cell);
     }
 
     private async Task<Node3D> BuildNativeCellRootResponsive(FalloutCellScene cell,
-        FalloutDoorTransition? transition, bool sourceSide)
+        FalloutDoorTransition? transition, bool sourceSide, IReadOnlyList<FalloutFormKey>? sourceCells = null)
     {
         _ = transition;
         _ = sourceSide;
@@ -687,7 +694,7 @@ public partial class RuntimeCoordinator
         FalloutFormKey? maximumReference = null;
         try
         {
-            BeginNativeCellRoot(cell);
+            BeginNativeCellRoot(root, cell, sourceCells);
             foreach (var reference in cell.References)
             {
                 if (_nativeSessionTransitioning || _retiringNativeSession)
@@ -717,20 +724,21 @@ public partial class RuntimeCoordinator
                 $"maxReferenceMs={maximumReferenceMilliseconds:F1} maxReference={maximumReference}");
             return root;
         }
-        catch
+        catch (Exception error)
         {
-            root.Free();
+            RetireFailedNativeSourceCellRoot(root, error);
             throw;
         }
     }
 
-    private void BeginNativeCellRoot(FalloutCellScene cell)
+    private void BeginNativeCellRoot(Node3D root, FalloutCellScene cell, IReadOnlyList<FalloutFormKey>? sourceCells)
     {
         _ = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was cleared during CELL streaming.");
         _nativeReferences!.EnterEncounterCell(cell.Cell.FormKey,
             _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1);
         DiscoverNativeCellReferences(cell);
+        EnterNativeSourceCellAttachment(root, cell, sourceCells);
         _nativeActorDivergences.Clear();
         _nativeReferenceDivergences.Clear();
     }
@@ -738,13 +746,18 @@ public partial class RuntimeCoordinator
     private void PlaceNativeCellReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference)
     {
         var previousChildren = root.GetChildCount();
-        try { PlaceNativeReference(root, cell, reference); }
+        try
+        {
+            PlaceNativeReference(root, cell, reference);
+            CompleteNativeSourceCellReference(root, cell, reference, previousChildren);
+        }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
         {
             // Reject the whole failed reference. Other source references
             // retain independent ownership; the rejected identity remains
             // missing in the parity denominator, never a substitute draw.
             while (root.GetChildCount() > previousChildren) root.GetChild(previousChildren).Free();
+            FailNativeSourceCellReference(root, reference, error, previousChildren);
             _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
             GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey} base={reference.Base}: {error.Message}");
         }
@@ -962,6 +975,18 @@ public partial class RuntimeCoordinator
         instance.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
         instance.SetMeta("opennv_source_model", baseObject.ModelPath);
         instance.SetMeta("opennv_source_form", baseObject.FormKey.ToString());
+        if (baseObject.Signature == "FURN" && FalloutFurnitureSource.ReadKind(_nativePluginStack!.GetEffective(baseObject.FormKey)) ==
+            FalloutPlayerFurnitureKind.Sleeping)
+        {
+            try { RuntimeNativeRestFurniturePublication.Attach(_nativePluginStack!, reference, prototype.Source, instance); }
+            catch (Exception original)
+            {
+                try { instance.Free(); }
+                catch (Exception retirement)
+                { throw new AggregateException("Source bed factory and native retirement both failed.", original, retirement); }
+                throw;
+            }
+        }
         root.AddChild(instance);
         RuntimeNativeDestructible.Attach(instance, _nativeReferences!.Get(reference.FormKey), _nativePluginStack!, source,
             _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionMask | _configuration.Player.CollisionLayer, NativeCombatContext);
@@ -1080,7 +1105,8 @@ public partial class RuntimeCoordinator
             if (grid is not null) grid = grid with { Scene = targetScene };
             sky.EnterCell(targetScene.Cell, _nativeGlobals, entry.Position);
             SetLoadingStatus("Loading the world");
-            targetRoot = await BuildNativeCellRootResponsive(targetScene, null, sourceSide: false);
+            targetRoot = await BuildNativeCellRootResponsive(targetScene, null, sourceSide: false,
+                sourceCells: grid is null ? null : grid.Cells.Select(definition => definition.FormKey).Append(grid.PersistentCell).Distinct(FalloutFormKeyComparer.Instance).ToArray());
             targetRoot.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) AddExteriorLandscape(targetRoot, grid);
             AddChild(targetRoot);
@@ -1112,7 +1138,7 @@ public partial class RuntimeCoordinator
         }
         catch
         {
-            targetRoot?.Free();
+            FreeNativeSourceCellRoot(targetRoot);
             sky.Restore(previousSky);
             RollbackFollowerDoorTransfer(followers);
             current.ProcessMode = ProcessModeEnum.Inherit;
@@ -1134,6 +1160,7 @@ public partial class RuntimeCoordinator
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(cell);
+        RequireNativeSourceCellSelection(root, cell);
         if (_nativeReferences is { } references)
         {
             if (_nativeActiveCell?.Cell.FormKey != cell.Cell.FormKey) _nativeReferenceEvents?.SetProcess(false);
@@ -1267,14 +1294,19 @@ public partial class RuntimeCoordinator
             restore is null ? _nativeBootstrapCharacter : null);
         AddChild(_nativeOpeningStageDriver);
         _nativeOpeningStageDriver.AttachExperiencePauseClock();
+        AttachCurrentNativePlayerCell();
         _nativeOpeningStageDriver.ConfigureCurrentPlayerAdvancement();
         _nativeOpeningStageDriver.ConfigureCurrentPlayerPhysicalActivity(restore is null ? null :
             restore.State.PlayerPhysical ?? throw new InvalidDataException("Current campaign has no player physical continuation."),
             reference => (_nativeReferenceEvents ?? throw new NotSupportedException("Player furniture has no resident presentation owner."))
                 .PlayerFurniturePlacement(reference));
+        _nativeOpeningStageDriver.ConfigureCurrentCampaignRest(_nativeGameTimeAdapter ??
+            throw new NotSupportedException("Rest has no actual native world clock."), () => CreateNativeSaveSite(), restore?.State);
+        _nativePlayer.PublishRequiredPlayerPhysicalBody();
         // This owner is part of the load transaction. Native bridge dispatch
         // logs _Ready exceptions without propagating them to that transaction.
         _nativeOpeningStageDriver.InitializeOwnedState();
+        _nativeOpeningStageDriver.PublishPendingSourceRestMenu();
         _nativeOpeningStageDriver.AttachInterfaceActivationFrames();
         _nativeOpeningStageDriver.AttachSourceCombatGroups();
         AttachNativeExperienceHud(_nativeOpeningStageDriver);

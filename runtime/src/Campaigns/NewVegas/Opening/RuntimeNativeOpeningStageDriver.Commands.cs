@@ -22,6 +22,9 @@ internal partial class RuntimeNativeOpeningStageDriver
         ExperienceNotificationSaveBlocker is { } experience ? experience :
         InterfaceActivationFrameSaveBlocker is { } activation ? activation :
         _player.PlayerPhysicalSaveBlocker is { } physical ? physical :
+        CampaignRestSaveBlocker is { } rest ? rest :
+        ActorUpdateSaveBlocker is { } actorUpdate ? actorUpdate :
+        CellProcessSaveBlocker is { } cellProcess ? cellProcess :
         ActorProcessSaveBlocker is { } process ? process :
         ActorPerceptionSaveBlocker is { } perception ? perception :
         CombatGroupSaveBlocker is { } combat ? combat :
@@ -44,9 +47,12 @@ internal partial class RuntimeNativeOpeningStageDriver
         experienceNotifications = ExperienceNotificationState,
         interfaceActivationFrames = InterfaceActivationFrameState,
         playerPhysical = _player.PlayerPhysicalState,
+        playerRest = CampaignRestState,
         combatGroups = CombatGroupState,
         actorPerception = ActorPerceptionState,
         actorProcesses = ActorProcessState,
+        actorUpdates = ActorUpdateState,
+        cellProcesses = CellProcessState,
         levelUp = PlayerLevelUpMenuState,
         deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
         activeContinuationSaving = "source-radio-pcm;other-continuations-unbound"
@@ -162,6 +168,7 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
+        ObserveCurrentNativeCellProcessesForCapture();
         _scripts.References?.NativePlugins?.RequireIdleForSave();
         _scripts.ScriptManualSaves.RequireCapture();
         _scripts.References!.PlayerMoves.RequireSettled();
@@ -180,7 +187,10 @@ internal partial class RuntimeNativeOpeningStageDriver
             Vitals, _player.CaptureWeaponHandling(), _ingestibles.Capture(), _scripts.References.CaptureActorOverrides(),
             _scripts.References.CaptureEncounterZones(), _player.CaptureExplosionExposure(), _scripts.References.CaptureFactionRelations(),
             CapturePlayerProgress(), _scripts.ScriptManualSaves.CaptureOrder(), CaptureExperienceNotifications(), CaptureInterfaceActivationFrames(),
-            _player.CapturePlayerPhysicalActivity(), CaptureSourceCombatGroups(), CaptureSourceActorPerception(), CaptureSourceActorProcesses());
+            _player.CapturePlayerPhysicalActivity(), CaptureSourceCombatGroups(), CaptureSourceActorPerception(), CaptureSourceActorProcesses(),
+            CaptureCurrentPlayerRest(), CaptureCurrentRestAutoSave(), CaptureCurrentRestWorldTime(),
+            CaptureCurrentRestInterfaceSounds(), CaptureSourceInterfaceFade(), CaptureCurrentHardcoreNeeds(),
+            CaptureSourceActorUpdates(), CaptureSourceCellProcesses());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)
