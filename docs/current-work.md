@@ -42,13 +42,14 @@ restarting Steam repaired it. Ordinary retail menu input was recorded and replay
 through C#. Independent saves are not a matched gameplay checkpoint, and adapter
 acknowledgements do not establish exact native consumption timing.
 
-Ordinary source and packaged Release Continue loaded the outdoor save. Skills, note text and the
-resident Local Map were rendered and inspected. Recorded retail F1/F2/F3 inputs
-replayed through C# and left the actual menu on Data. The owned Pip-Boy and
-companion checks and byte-transport check pass. Successful ordinary fast-travel
-arrival remains to be exercised; it is not established by the menu checks. The
-packaged map click exposed a map canvas intercepting the Travel button. Map
-canvases now sit behind the authored menu art and interactive controls.
+Ordinary source and packaged Release Continue loaded the outdoor save. Skills,
+note text and the resident Local Map were rendered and inspected. Recorded retail
+F1/F2/F3 inputs replayed through C# and left the actual menu on Data. The owned
+Pip-Boy and companion checks and byte-transport check pass. The packaged World
+Map control accepts the actual click and displays the source undiscovered-location
+message. Map canvases sit behind the authored art and interactive controls.
+Ordinary walking and jumping reach the next prepared exterior region. Quicksave
+finishes after the outstanding finite ambient voices complete.
 
 The same outdoor run found a malformed/unsupported model aborting the whole
 exterior prefetch. Invalid model data now reaches the ordinary per-reference
@@ -59,7 +60,13 @@ A packaged cold load exposed a native crash in Mesh.CreateTrimeshShape while
 constructing packed NIF collision. The builder now supplies validated source
 triangles directly to the concave physics shape, preserving vertex transforms,
 winding, backface collision and face-material order without a temporary render
-mesh.
+mesh. A fresh packaged Continue loads all 49 resident cells and remains alive.
+
+Walking into Goodsprings discovery range exposed the shared XP owner's refusal
+of Skilled's XP entry. The existing integration branch's numeric perk dispatcher
+now serves RewardXP and discovery here, with live player conditions and upward
+rounding. Multiple simultaneous XP entries and full level-up remain separately
+unbound. Successful discovered-marker arrival still needs the updated live run.
 
 Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
 statistics and all inventory actions remain incomplete. Outdoor play still

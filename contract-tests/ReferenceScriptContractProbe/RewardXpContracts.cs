@@ -17,7 +17,7 @@ internal static class RewardXpContracts
         GlobalFunction();
         Console.WriteLine("OPENNV_REWARD_XP_CONTRACT_PASS playerOwner=true sourceCap=true cappedTotal=true " +
             "signedDecrease=true float32=true noHeal=true object=true questSharedAndFallback=true " +
-            "globalFunction=true consumedPrefix=true cold=true activeXpPerkRefused=true " +
+            "globalFunction=true consumedPrefix=true cold=true activeXpPerkApplied=true " +
             "levelUpGapVisible=true xpPresentation=unverified");
     }
 
@@ -39,8 +39,10 @@ internal static class RewardXpContracts
         Require(fixture.Experience.Reward(100000003) == 100000000, "RewardXP lost the engine Float32 conversion.");
         var retained = fixture.Vitals.State;
         fixture.Perks.Add(new(9, 3, 1.1f, []));
-        Reject(() => fixture.Experience.Reward(1));
-        Require(fixture.Vitals.State == retained, "Missing XP modifier dispatch published an unmodified award.");
+        Require(fixture.Experience.Reward(10) == 11 && fixture.Vitals.State.ExperiencePoints == retained.ExperiencePoints + 11,
+            "XP perk multiplier did not apply before upward rounding.");
+        fixture.Perks[0] = new(9, 3, .9f, []);
+        Require(fixture.Experience.Reward(10) == 9, "XP-reducing perk did not modify a discovery award.");
         fixture.Perks.Clear();
         fixture.Vitals.Publish(before);
         Reject(() => fixture.Experience.Reward(-1));
