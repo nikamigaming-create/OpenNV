@@ -410,6 +410,7 @@ void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
 #include "opennv_plugin_source_refresh.inc"
 #include "opennv_plugin_source_local_attach.inc"
 #include "opennv_plugin_callable_pages.inc"
+#include "opennv_plugin_source_publication.inc"
 #include "opennv_plugin_source_files.inc"
 #include "opennv_plugin_binary_files.inc"
 

@@ -57,7 +57,11 @@ internal static class FalloutCompiledParameterNames
             ? AnimationGroups[(int)number] : throw new InvalidDataException("Compiled animation group ID is invalid."),
         18 => number switch { 0 => "Male", 1 => "Female", _ => throw new InvalidDataException("Compiled sex ID is invalid.") },
         5 => ActorValue(number),
-        22 or 28 or 32 or 41 or 44 or 45 or 46 or 51 or 52 or 55 =>
+        // Type41 retains the original UInt16 statistic ordinal. The living
+        // source catalogue owns its name/extent; no localized-name mapping.
+        41 => double.IsFinite(number) && number == Math.Truncate(number) && number >= 0 && number <= ushort.MaxValue
+            ? null : throw new InvalidDataException("Compiled statistic enum is not UInt16."),
+        22 or 28 or 32 or 44 or 45 or 46 or 51 or 52 or 55 =>
             throw new NotSupportedException("Compiled enum/variable parameter has no shared named owner."),
         _ => null
     };

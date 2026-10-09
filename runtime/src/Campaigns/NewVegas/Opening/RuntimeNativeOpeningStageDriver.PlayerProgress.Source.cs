@@ -15,20 +15,17 @@ internal partial class RuntimeNativeOpeningStageDriver
         Func<int, int> admitSkillBudget, Action<FalloutFormKey, int> acquirePerkRank)
     {
         if (_advancementRuntimeSource is not null) throw new InvalidOperationException("Selected advancement source is already configured.");
-        var source = FalloutAdvancementRuntimeSource.Open(_pluginStack);
-        try
-        {
-            var activity = source.Activity(observeActivity);
-            ConfigureNativePlayerAdvancement(source.Player(_playerActorValues.Source), activity.Read,
-                admitSkillBudget, acquirePerkRank);
-            _advancementRuntimeSource = source;
-        }
-        catch { source.Dispose(); throw; }
+        var source = (_scripts.References ?? throw new NotSupportedException("Player advancement has no campaign world.")).CampaignPlayerRuntimeSource;
+        var activity = source.Activity(observeActivity);
+        ConfigureNativePlayerAdvancement(source.Player(_playerActorValues.Source), activity.Read,
+            admitSkillBudget, acquirePerkRank);
+        _advancementRuntimeSource = source;
     }
 
     // Join actual driver/world retirement, including rejected construction.
     private void DisposeSourcePlayerAdvancement()
     {
-        _advancementRuntimeSource?.Dispose(); _advancementRuntimeSource = null;
+        // The campaign world owns the same retained source used by bootstrap.
+        _advancementRuntimeSource = null;
     }
 }

@@ -69,72 +69,68 @@ internal sealed partial class NativePluginExecutionDomain
             if (!Enum.IsDefined(method) || !_nvseFileDeclaration.Thunks.Any(thunk => thunk.Method == method) ||
                 method is NativeNvseFileMethod.NextChunk or NativeNvseFileMethod.AdvanceChunk && capacity != 0 ||
                 method == NativeNvseFileMethod.Read32 && capacity != 4 ||
-                _nvseFileTransfers.Values.Any(transfer => transfer.Caller == callerId || ReferenceEquals(transfer.Object, value)))
+                _nvseFileTransfers.Values.Any(transfer => transfer.Caller == callerId || ReferenceEquals(transfer.Object, value)) ||
+                _nvseSourcePublications.Values.Any(publication => publication.Caller == callerId || ReferenceEquals(publication.Object, value)))
                 throw new InvalidDataException("Source file operation or output lifetime differs from the actual admitted native call.");
             if (!_nvseSourceGraphs.TryGetValue(value.Id, out var graph) || !graph.NativeImages.TryGetValue(value.Id, out var before))
                 throw new NotSupportedException("Native contributor parser needs the actual cyclic campaign image owner.");
             if (!ReadNvseGraphBytes(value.Image).AsSpan().SequenceEqual(before) ||
                 !ReadNvseGraphBytes(value.Metadata).AsSpan().SequenceEqual(graph.NativeMetadata[value.Id]))
                 throw new InvalidDataException("Contributor image/metadata changed outside its actual source publication owner.");
-            var read = file.CallSourceFile(method, capacity);
-            file.RequireSourceFileCurrent();
-            if (method is NativeNvseFileMethod.NextChunk or NativeNvseFileMethod.AdvanceChunk && !read.Bytes.IsEmpty ||
-                method == NativeNvseFileMethod.Read32 && read.Bytes.Length > 4)
-                throw new InvalidDataException("Actual source parser returned an invalid native output extent.");
-            var (after, _, dependencies, fingerprint) = ComposeNvseGraphObject(value);
-            if (after.Length != before.Length || !dependencies.Distinct().OrderBy(row => row.Id).SequenceEqual(value.Dependencies.OrderBy(row => row.Id)))
-                throw new NotSupportedException("A source file method changed its contributor topology or complete image extent.");
-            // Retain the exact before/after image for the native read-only
-            // replacement. Only parser-owned fields may change in this call.
-            for (var at = 0; at < after.Length; ++at)
-                if (after[at] != before[at] && !(at is >= 0x240 and < 0x260 or >= 0x264 and < 0x270))
-                    throw new NotSupportedException("Native source parsing changed an unowned contributor field.");
-            ulong transferId = 0;
-            var receipt = _nvseFileCalls.Count;
-            if (!read.Bytes.IsEmpty)
+            _nvseSourceFileCurrentCapture = null;
+            return GuardSourceFilePublication(file, () =>
             {
-                transferId = checked(++_nextNvseFileTransfer);
-                _nvseFileTransfers.Add(transferId, new(callerId, value, read.Bytes, receipt));
-            }
-            _nvseFileCalls.Add(new(frame.Id, callerId, value.Id, method, capacity, read.Result,
-                checked((uint)read.Bytes.Length), read.Diagnostic, transferId == 0 ? null : transferId, transferId == 0));
-            graph.NativeImages[value.Id] = after; value.PublishedSha256 = fingerprint;
-            return Payload(writer =>
-            {
-                writer.Write(read.Result); writer.Write(transferId); writer.Write(checked((uint)read.Bytes.Length));
-                writer.Write(checked((uint)before.Length)); writer.Write(before); writer.Write(after);
+                var read = file.CallSourceFile(method, capacity);
+                file.RequireSourceFileCurrent();
+                if (method is NativeNvseFileMethod.NextChunk or NativeNvseFileMethod.AdvanceChunk && !read.Bytes.IsEmpty ||
+                    method == NativeNvseFileMethod.Read32 && read.Bytes.Length > 4)
+                    throw new InvalidDataException("Actual source parser returned an invalid native output extent.");
+                var (after, _, dependencies, fingerprint) = ComposeNvseGraphObject(value);
+                if (after.Length != before.Length || !dependencies.Distinct().OrderBy(row => row.Id).SequenceEqual(value.Dependencies.OrderBy(row => row.Id)))
+                    throw new NotSupportedException("A source file method changed its contributor topology or complete image extent.");
+                // Retain the exact before/after image for the native read-only
+                // replacement. Only parser-owned fields may change in this call.
+                for (var at = 0; at < after.Length; ++at)
+                    if (after[at] != before[at] && !(at is >= 0x240 and < 0x260 or >= 0x264 and < 0x270))
+                        throw new NotSupportedException("Native source parsing changed an unowned contributor field.");
+                ulong transferId = 0;
+                var receipt = _nvseFileCalls.Count;
+                if (!read.Bytes.IsEmpty)
+                {
+                    transferId = checked(++_nextNvseFileTransfer);
+                    _nvseFileTransfers.Add(transferId, new(callerId, value, read.Bytes, receipt));
+                }
+                _nvseFileCalls.Add(new(frame.Id, callerId, value.Id, method, capacity, read.Result,
+                    checked((uint)read.Bytes.Length), read.Diagnostic, transferId == 0 ? null : transferId, transferId == 0));
+                RetainSourceFilePublication(frame, callerId, value, file, after, receipt);
+                graph.NativeImages[value.Id] = after; value.PublishedSha256 = fingerprint;
+                return Payload(writer =>
+                {
+                    writer.Write(read.Result); writer.Write(transferId); writer.Write(checked((uint)read.Bytes.Length)); writer.Write(frame.Id);
+                    writer.Write(checked((uint)before.Length)); writer.Write(before); writer.Write(after);
+                });
             });
         }
+        if (frame.Operation == SourceFilePublished)
+            return DispatchSourceFilePublication(frame, reader, callerId, value, file);
         var transfer = reader.ReadUInt64();
         if (!_nvseFileTransfers.TryGetValue(transfer, out var pending) || pending.Caller != callerId || !ReferenceEquals(pending.Object, value))
             throw new InvalidDataException("Source bytes belong to another caller, contributor or completed output lifetime.");
-        if (frame.Operation == SourceFileSlice)
-        {
-            var at = reader.ReadUInt32(); var count = reader.ReadUInt32(); Finish(reader);
-            if (at != pending.Position || count == 0 || count > MaximumPayload - 64 || count > pending.Bytes.Length - at)
-                throw new InvalidDataException("Native source output skipped, repeated or exceeded its actual complete byte extent.");
-            pending.Position = checked(at + count);
-            return Payload(writer => { writer.Write(count); writer.Write(pending.Bytes.Span.Slice(checked((int)at), checked((int)count))); });
-        }
-        if (frame.Operation != SourceFileEnd) throw new InvalidDataException("Unknown source file callback.");
-        Finish(reader);
-        if (pending.Position != pending.Bytes.Length)
-            throw new InvalidDataException("Native source output ended before every actual byte was consumed.");
-        _nvseFileTransfers.Remove(transfer);
-        _nvseFileCalls[pending.Receipt] = _nvseFileCalls[pending.Receipt] with { OutputCompleted = true };
-        return Payload(writer => writer.Write(1U));
+        return DispatchSourceFileOutput(frame, reader, transfer, pending, file);
     }
 
     internal void RequireNvseSourceFilesIdle()
     {
         VerifyOwner();
-        if (_nvseFileTransfers.Count != 0 || _nvseFileCalls.Any(call => !call.OutputCompleted))
+        if (_nvseFileTransfers.Count != 0 || _nvseSourcePublications.Count != 0 ||
+            _nvseFileCalls.Any(call => !call.PublicationCompleted || !call.OutputCompleted))
             throw new InvalidOperationException("Native source file output retains an incomplete actual caller lifetime.");
     }
     private void RequireNvseSourceFileCallerComplete(ulong caller)
     {
         if (_nvseFileTransfers.Values.Any(transfer => transfer.Caller == caller) ||
-            _nvseFileCalls.Any(call => call.Caller == caller && !call.OutputCompleted))
+            _nvseSourcePublications.Values.Any(publication => publication.Caller == caller) ||
+            _nvseFileCalls.Any(call => call.Caller == caller && (!call.PublicationCompleted || !call.OutputCompleted)))
             throw new InvalidDataException("Original caller returned before its complete source-byte output retired.");
     }
     internal string? NvseSourceFileDiagnostics => _nvseFileCalls.Where(call => call.Diagnostic is not null)
@@ -143,13 +139,19 @@ internal sealed partial class NativePluginExecutionDomain
     internal void RequireNvseSourceFilesSaveOwned()
     {
         RequireNvseSourceFilesIdle();
-        if (_nvseFileCalls.Count != 0)
-            throw new NotSupportedException("Reached original contributor parser state needs its complete current cold-capture/restore join.");
+        if (_nvseFileCalls.Count == 0) return;
+        var plugin = _nvsePlugin ?? throw new InvalidOperationException("Source continuation lost its actual initialized module.");
+        var capture = _nvseSourceFileCurrentCapture ??
+            throw new NotSupportedException("Reached source parsing needs its actual current native/source continuation capture.");
+        RequireNvseSourceFileCurrent(plugin, capture);
     }
     private void ClearNvseSourceFiles()
     {
         // Failed-output receipts stay visible during terminal capability
         // cleanup. Releasing byte leases is never an output completion.
-        _nvseFileTransfers.Clear(); _nvseFileDeclaration = null;
+        if (!ChildExited) throw new InvalidOperationException("Native source capabilities must remain leased until actual child closure.");
+        var retained = RetainIncompleteSourceFilePrefixes(new InvalidOperationException("Native source publication/output retired unfinished."));
+        _nvseFileTransfers.Clear(); _nvseSourcePublications.Clear(); _nvseFileDeclaration = null; _nvseSourceFileCurrentCapture = null;
+        if (retained is AggregateException) throw retained;
     }
 }

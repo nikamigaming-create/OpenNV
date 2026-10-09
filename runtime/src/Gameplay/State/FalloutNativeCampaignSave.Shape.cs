@@ -24,7 +24,7 @@ internal static partial class FalloutNativeCampaignSave
             state.SleepWait is null || state.RestAutoSave is null || state.RestWorldTime is null ||
             state.RestInterfaceSounds is null || state.InterfaceFades is null ||
             state.ActorUpdates is null || state.CellProcesses is null || state.ActorProcessRuntime is null || state.ActorProcessCommon is null ||
-            state.PlayerSkillValues is null || state.PlayerAbilityScripts is null)
+            state.PlayerSkillValues is null || state.PlayerAbilityScripts is null || state.PlayerStatistics is null)
             throw new InvalidDataException("Campaign state is missing an authoritative runtime owner.");
         ValidateResultAuthorityVersion(state);
         state.PlayerPackageAudio.Events.Validate();
@@ -48,6 +48,7 @@ internal static partial class FalloutNativeCampaignSave
         FalloutPlayerActorValues.Validate(state.PlayerActorValues);
         ValidatePlayerProgress(state.PlayerProgress, state.Vitals, state.PlayerActorValues);
         ValidateCurrentPlayerAbilityState(state);
+        state.PlayerStatistics.Validate();
         ValidateExperienceNotifications(state.ExperienceNotifications, state.Vitals);
         ValidateAdvancementFrameContinuation(state);
         state.PlayerPhysical.Validate();

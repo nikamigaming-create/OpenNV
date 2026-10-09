@@ -17,11 +17,11 @@ internal interface INativeNvseSourceFileAuthority
 
 internal sealed record NativeNvseFileCallReceipt(ulong Callback, ulong Caller, ulong Object,
     NativeNvseFileMethod Method, uint Capacity, uint Result, uint OutputBytes,
-    string? Diagnostic, ulong? Transfer, bool OutputCompleted);
+    string? Diagnostic, ulong? Transfer, bool OutputCompleted, uint ProducedOutput = 0, uint DeliveredOutput = 0, bool PublicationCompleted = false);
 
 internal sealed partial class NativePluginExecutionDomain
 {
-    private const uint SourceFileBegin = 0x420, SourceFileSlice = 0x421, SourceFileEnd = 0x422;
+    private const uint SourceFileBegin = 0x420, SourceFileSlice = 0x421, SourceFileEnd = 0x422, SourceFileOutputAck = 0x423;
     private sealed class NativeSourceFileTransfer(ulong caller, NativeNvseSourceObject value,
         ReadOnlyMemory<byte> bytes, int receipt)
     {
@@ -29,7 +29,8 @@ internal sealed partial class NativePluginExecutionDomain
         internal readonly NativeNvseSourceObject Object = value;
         internal readonly ReadOnlyMemory<byte> Bytes = bytes;
         internal readonly int Receipt = receipt;
-        internal uint Position;
+        internal uint Position, Delivered;
+        internal byte[]? LastSlice;
     }
     private readonly Dictionary<ulong, NativeSourceFileTransfer> _nvseFileTransfers = [];
     private readonly List<NativeNvseFileCallReceipt> _nvseFileCalls = [];

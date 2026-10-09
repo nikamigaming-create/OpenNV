@@ -4,6 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-player-statistics"])
+{
+    PlayerStatisticContracts.Run();
+    return;
+}
+
+if (args is ["--owned-statistic-catalogue", var statisticExecutable])
+{
+    PlayerStatisticContracts.RunOwnedCatalogue(statisticExecutable);
+    return;
+}
+
 if (args is ["--player-ability-supplement-contracts"])
 {
     PlayerAbilitySupplementContracts.Run();
@@ -1176,6 +1188,7 @@ else if (args is [var recoveryRoot, "--script-recovery", var recoverySave, var r
 StageAndInventoryContracts.Run();
 PlayerAbilityScriptContracts.Run();
 PlayerAbilitySupplementContracts.Run();
+PlayerStatisticContracts.Run();
 QuestStagePersistenceContracts.Run();
 QuestObjectContracts.Run();
 InventoryCommandContracts.Run();

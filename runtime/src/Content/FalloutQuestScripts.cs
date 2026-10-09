@@ -224,7 +224,7 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Func<bool, bool>? CanContinueCompiled = null,
     Func<bool>? IsPcSleeping = null, Func<FalloutFormKey, int>? Sleeping = null,
     Func<FalloutFormKey, int>? KnockedState = null, FalloutSleepWait? SleepWait = null,
-    Action<FalloutRestRequest>? OpenSleepWaitMenu = null);
+    Action<FalloutRestRequest>? OpenSleepWaitMenu = null, FalloutPlayerStatistics? Statistics = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -895,6 +895,8 @@ internal sealed partial class FalloutQuestScripts
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(_records, operation) is { } iniSettingFunction)
                 return iniSettingFunction;
+            if (parts.Length == 1 && FalloutPlayerStatisticCommands.Function(operation, host?.Statistics) is { } statisticFunction)
+                return statisticFunction;
             if (parts.Length == 1 && FalloutSleepWaitCommands.Function(operation, host?.SleepWait, host?.OpenSleepWaitMenu) is { } restFunction)
                 return restFunction;
             if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host?.GameTime, () => Session.Hardcore) is { } timeFunction)
@@ -1010,6 +1012,7 @@ internal sealed partial class FalloutQuestScripts
                 return;
             }
             var caller = instance.Script.FormKey.OwnerPlugin;
+            if (parts.Length == 1 && FalloutPlayerStatisticCommands.Apply(operation, arguments, host?.Statistics)) return;
             if (operation == "rewardxp")
             {
                 if (parts.Length > 2 || arguments.Count != 1)

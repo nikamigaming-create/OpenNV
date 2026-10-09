@@ -18,6 +18,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private NativeOwnedBarterMenu? _barterMenu;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveContinuationBlocker =>
+        PlayerStatisticSaveBlocker is { } statistic ? statistic :
         PlayerProgressSaveBlocker is { } progress ? progress :
         ExperienceNotificationSaveBlocker is { } experience ? experience :
         InterfaceActivationFrameSaveBlocker is { } activation ? activation :
@@ -46,6 +47,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         sourceManual = _scripts.ScriptManualSaves.Receipt,
         sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
         playerProgress = PlayerProgressState,
+        playerStatistics = PlayerStatisticState,
         experienceNotifications = ExperienceNotificationState,
         interfaceActivationFrames = InterfaceActivationFrameState,
         playerPhysical = _player.PlayerPhysicalState,
@@ -197,7 +199,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             CaptureCurrentPlayerRest(), CaptureCurrentRestAutoSave(), CaptureCurrentRestWorldTime(),
             CaptureCurrentRestInterfaceSounds(), CaptureSourceInterfaceFade(), CaptureCurrentHardcoreNeeds(),
             CaptureSourceActorUpdates(), CaptureSourceCellProcesses(), CaptureCurrentProcessRuntime(), CaptureCurrentProcessCommon(),
-            _playerSkills.CaptureValues(), _playerAbilities.Capture());
+            _playerSkills.CaptureValues(), _playerAbilities.Capture(), CaptureCurrentPlayerStatistics());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

@@ -81,6 +81,8 @@ public partial class RuntimeCoordinator
                 _nativeReferences.InstanceCount,
                 _nativeReferences.ResidentCellCount,
                 _nativeReferences.ScriptDefinitionCount,
+                playerStatistics = _nativeReferences.PlayerStatisticState,
+                retirementFailure = _nativeReferences.WorldRetirementFailure,
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
                 pendingProcedureCaptureOwners = _nativeReferences.PendingProcedureCaptures,
@@ -146,6 +148,7 @@ public partial class RuntimeCoordinator
                 stageResults = _nativeOpeningStageDriver.StageResultState,
                 saveRequest = _nativeOpeningStageDriver.SaveRequestState,
                 playerProgress = _nativeOpeningStageDriver.PlayerProgressState,
+                playerStatistics = _nativeOpeningStageDriver.PlayerStatisticState,
                 experienceNotifications = _nativeOpeningStageDriver.ExperienceNotificationState,
                 interfaceActivationFrames = _nativeOpeningStageDriver.InterfaceActivationFrameState,
                 combatGroups = _nativeOpeningStageDriver.CombatGroupState,
@@ -318,6 +321,7 @@ public partial class RuntimeCoordinator
         _nativeReferences?.Dispose();
         _nativeReferences = new(_nativePluginStack, auxiliary: _nativeScriptStorage.Auxiliary,
             ini: _nativeScriptStorage.Ini, ui: _nativeUi, controls: _nativeScriptStorage.Controls);
+        _nativeReferences.ConfigureCampaignPlayerRuntime();
         _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId);
         _nativeReferences.ConfigureActualActorCellProducers(content.StackId);
         _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId);
@@ -519,6 +523,8 @@ public partial class RuntimeCoordinator
             _nativeReferences?.Dispose();
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
                 ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
+            _nativeReferences.ConfigureCampaignPlayerRuntime(restore.State.PlayerStatistics ??
+                throw new InvalidDataException("Current campaign has no player statistics continuation."));
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             _nativeReferences.Restore(restore.State.References ??
                 throw new InvalidDataException("Current campaign has no retained reference state."));

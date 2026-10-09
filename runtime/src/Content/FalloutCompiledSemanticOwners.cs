@@ -17,7 +17,7 @@ internal static class FalloutCompiledSemanticOwners
         "IsXBox", "GetIgnoreFriendlyHits", "GetLinkedRef", "IsInList", "GetObjectiveCompleted",
         "GetObjectiveDisplayed", "HasPerk", "GetPlayerTeammate", "GetBroadcastState", "GetMapMarkerVisible",
         "GetPermanentActorValue", "IsPS3", "IsWin32", "GetQuestCompleted", "GetInCharGen",
-        "IsHardcore", "GetLocationSpecificLoadScreensOnly", "IsActorsAIOff", "GetPCSleepHours",
+        "IsHardcore", "GetLocationSpecificLoadScreensOnly", "IsActorsAIOff", "GetPCSleepHours", "GetPCMiscStat",
     };
     private static readonly HashSet<string> Effects = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -39,7 +39,7 @@ internal static class FalloutCompiledSemanticOwners
         "RestoreActorValue", "IgnoreCrime", "SetIgnoreFriendlyHits", "ForceActiveQuest", "SetHardcore",
         "AutoDisplayObjectives", "AddAchievement", "SetTalkingActivatorActor", "SwapTexture", "SwapTextureOnRef",
         "ShowMap", "UnlockChallenge", "IncrementScriptedChallenge", "KillQuestUpdates", "StartConversation",
-        "ShowLoveTesterMenuParams", "StopCombatAlarmOnActor", "SetActorsAI", "ToggleActorsAI", "SetPCSleepHours", "ShowSleepWaitMenu",
+        "ShowLoveTesterMenuParams", "StopCombatAlarmOnActor", "SetActorsAI", "ToggleActorsAI", "SetPCSleepHours", "ShowSleepWaitMenu", "ModPCMiscStat",
     };
 
     internal static bool IsQuery(string name) => Queries.Contains(name);

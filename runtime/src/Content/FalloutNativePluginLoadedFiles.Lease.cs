@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed partial class FalloutNativePluginLoadedFiles
 {
-    internal sealed class Lease : INativeNvseSourceFileAuthority, IDisposable
+    internal sealed partial class Lease : INativeNvseSourceFileAuthority, IDisposable
     {
         private readonly FalloutNativePluginLoadedFiles _owner;
         private readonly Reader _reader;

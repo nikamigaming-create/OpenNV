@@ -900,21 +900,50 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         foreach (var (seat, actor) in validated._furnitureSeats) _furnitureSeats.Add(seat, actor);
     }
 
+    private bool _retiring;
+    private AggregateException? _retirementFailure;
+    internal string? WorldRetirementFailure => _retirementFailure?.Message;
+
     public void Dispose()
     {
-        RetireActorProcessGraph();
-        RetireCellProcesses();
-        RetireActorUpdates();
-        RetireCombatGroups();
+        if (_disposed)
+        {
+            if (_retirementFailure is not null) throw _retirementFailure;
+            return;
+        }
+        if (_retiring) throw new InvalidOperationException("Campaign world retirement cannot reenter.");
+        _retiring = true;
+        var failures = new List<Exception>();
+        void Retire(Action action)
+        {
+            try { action(); }
+            catch (Exception failure) { failures.Add(failure); }
+        }
+        try
+        {
+            Retire(RetireActorProcessGraph);
+            Retire(RetireCellProcesses);
+            Retire(RetireActorUpdates);
+            Retire(RetireCombatGroups);
+            Retire(RetirePlayerStatistics);
+            Retire(RetireCampaignPlayerRuntime);
+            Retire(() => _sounds?.Clear());
+            Retire(() => _pipBoyRadio?.Off());
+            Retire(() => _screenBlood?.Clear());
+            Retire(() => _packageEvents?.Clear());
+            Retire(() => _hitEvents?.Clear());
+            Retire(() => Menus.Publish(true));
+            _disposed = true;
+            if (failures.Count != 0)
+            {
+                _retirementFailure = new AggregateException("Campaign world retirement retained failed owners.", failures);
+                throw _retirementFailure;
+            }
+        }
+        finally { _retiring = false; }
         UnloadedPackages = null;
         _beforeActorHit = null;
-        _sounds?.Clear();
-        _pipBoyRadio?.Off();
-        _screenBlood?.Clear();
         PlayerMoves.Clear();
-        _packageEvents?.Clear();
-        _hitEvents?.Clear();
-        Menus.Publish(true);
         _residentCells.Clear();
         _residentReferences.Clear();
         _furnitureSeats.Clear();
@@ -926,6 +955,5 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         _bodyParts.Clear();
         _encounterZones.Clear();
         _cellEncounterZones.Clear();
-        _disposed = true;
     }
 }

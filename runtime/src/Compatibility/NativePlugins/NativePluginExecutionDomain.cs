@@ -347,7 +347,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                 typedReply = DispatchNvseLocals(frame);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= BinaryBegin && frame.Operation <= BinaryEnd)
                 typedReply = DispatchNvseBinary(frame);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= SourceFileBegin && frame.Operation <= SourceFileEnd)
+            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= SourceFileBegin && frame.Operation <= SourceFilePublished)
                 typedReply = DispatchNvseSourceFile(frame);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation is 0x401 or 0x403)
                 typedReply = DispatchNvseSourceObject(frame);
@@ -394,6 +394,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     }
     private NativePluginDomainFaultException Fatal(Exception error)
     {
+        error = RetainIncompleteSourceFilePrefixes(error);
         MarkFault(error, null); StopOwnedChild(); return FaultException(error);
     }
     private NativePluginDomainFaultException FaultException(Exception? inner = null) => new(Fault ??

@@ -113,8 +113,20 @@ Cold formula validation follows actual ability binding. Historical save promotio
 and initial-effect admission receipts are removed. Earlier schema-success fixtures
 are replaced by current refusal and source-clock contracts; complete current
 campaign cold acceptance still requires ordinary gameplay. Active ability scripts
-still need their real ScriptType2 compiled event owner; a parallel owner is
-implementing it. The frozen protocol13 source-delivery packet awaits integration.
+still need their compiled magic-effect event owner; the original SCHR kind is
+0x0100, distinct from runtime API type2. A parallel owner is implementing it.
+The 22-file protocol13 source-delivery packet is integrated; native x86 and managed
+Debug compilation pass. Real native readback and original DLL cold acceptance
+remain unexecuted.
+Source miscellaneous statistics, signed counter mutations, original catalogues
+and compiled commands are integrated. The world retains one actual selected
+player-runtime source before bootstrap and shares it with advancement and the
+living driver; cold restores require its complete counter continuation. Every
+host uses that same statistic owner, and rest commits at the original post-hours
+boundary. Current captures/source checks and independent retirement join the
+same owners. Runtime Debug compiles with zero warnings/errors. Actual CHAL11
+and native Stats-menu consumers remain unowned; reached failures retain their
+real counter prefix. A parallel owner is implementing challenge completion.
 It contains compiled SCDA execution/scheduling and current cursors, result-driven
 startup/control bindings, actual PACK/TERM/quest result scopes and source save
 requester leases. Actor KF/IDLE/ANIO, PACK/IDLM/INFO/controller dependencies,

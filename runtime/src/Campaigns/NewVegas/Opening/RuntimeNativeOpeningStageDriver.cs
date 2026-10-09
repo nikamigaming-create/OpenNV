@@ -71,7 +71,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     }
     internal string? ExecutionFault => ExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
     internal string? BlockingExecutionError => _stageResultDriverFailure?.Error == ExecutionError ? null : ExecutionError;
-    internal string? BlockingExecutionFault => BlockingExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
+    internal string? BlockingExecutionFault => BlockingExecutionError ?? PlayerStatisticFailure ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
@@ -213,6 +213,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
             () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)), _playerActorValues,
             perk => _scripts.References!.PerkRank(pluginStack.RuntimeFormKey(0x14), perk));
+        BindCurrentPlayerStatistics(_scripts.References!.CampaignPlayerRuntimeSource.Receipt);
         BindPlayerAbilityState(restore, gameTime);
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
         _playerAbilities.Synchronize();

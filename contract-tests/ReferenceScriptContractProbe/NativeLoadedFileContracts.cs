@@ -29,6 +29,7 @@ internal static partial class NativeLoadedFileContracts
             using var records = FalloutPluginStack.Load(root, ["Current.esm", "Later.esp"]);
             var context = records.Plugins.Single(item => item.Plugin.Name == "Current.esm");
             CheckSharedContributors(root, records, context, construction);
+            CheckSourceContinuations(records, context, construction);
 
             using (var reader = new FalloutNativePluginBinaryFile(records, context, construction, 8))
             {

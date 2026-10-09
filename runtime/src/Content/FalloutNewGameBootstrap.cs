@@ -72,7 +72,8 @@ internal sealed class FalloutNewGameBootstrap
                 scripts.MessageResults.Take, Globals: globals, Command: command, Events: scripts.Events,
                 LocationSpecificLoadScreensOnly: () => scripts.Session.LocationSpecificLoadScreensOnly,
                 InCharGen: () => scripts.Session.InCharGen, IsHardcore: () => scripts.Session.Hardcore, GameTime: gameTime,
-                Inventory: inventory, PlayerLevel: playerLevel));
+                Inventory: inventory, PlayerLevel: playerLevel,
+                Statistics: world.PlayerStatisticsConfigured ? world.PlayerStatistics : null));
         _stages = new(records, quests, (owner, fields, _) =>
         {
             if (!FalloutCompiledScriptProgram.HasProgram(fields))
@@ -87,7 +88,8 @@ internal sealed class FalloutNewGameBootstrap
         Host = new((quest, stage) => () => _stages.Enter(quest, stage),
             _ => throw new NotSupportedException("Startup player actor-value query has no player state owner."),
             executor.ExecuteProgram, executor.InvokeFunction, GameTime: gameTime,
-            ExecuteCompiledProgram: executor.ExecuteProgram, CanContinueCompiled: _ => canContinue() && !_stages.HasPendingResults);
+            ExecuteCompiledProgram: executor.ExecuteProgram, CanContinueCompiled: _ => canContinue() && !_stages.HasPendingResults,
+            Statistics: world.PlayerStatisticsConfigured ? world.PlayerStatistics : null);
         world.ExecutePerkQuestStage = effect => _stages.Enter(effect.Quest,
             effect.Stage <= short.MaxValue ? (short)effect.Stage :
                 throw new NotSupportedException("Startup perk quest stage requires the original unsigned stage owner."));

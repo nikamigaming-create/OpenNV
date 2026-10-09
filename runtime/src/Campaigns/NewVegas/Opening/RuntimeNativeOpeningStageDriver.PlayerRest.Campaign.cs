@@ -52,7 +52,11 @@ internal partial class RuntimeNativeOpeningStageDriver
             ApplyCampaignRestEffects, CompleteCampaignSleep, CloseCampaignRest,
             () => _player.CommittedPlayerSleeping)
         {
-            AfterMenuPlayerHours = request => RequireCampaignRestConsumers("post-hours-statistic-and-world-start").AfterPlayerHours(request),
+            AfterMenuPlayerHours = request =>
+            {
+                CommitCurrentRestStartStatistic(request);
+                RequireCampaignRestConsumers("post-hours-world-start").AfterPlayerHours(request);
+            },
             BeforeCancelPlayerHours = request =>
             {
                 RequireRestCuePublication().PlayCancel(request);

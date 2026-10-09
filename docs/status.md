@@ -5,7 +5,7 @@ candidate with merged NIF, launcher, couch/head visibility, ability and source-m
 work. Runtime Debug compilation passes. Current saves require actual skill/effect
 owners with exact advancement agreement; cold formulas evaluate after ability
 binding. Historical save promotion and empty-effect admission are removed.
-Compiled ScriptType2 ability execution is being implemented; the text-executed
+Compiled magic-effect execution with original raw kind0x0100 is being implemented; the text-executed
 ability path is not binary gameplay acceptance. Whole current campaign cold
 acceptance and the joined publication gate remain pending.
 

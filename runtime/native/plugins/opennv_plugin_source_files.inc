@@ -19,10 +19,11 @@ std::uint32_t source_file_call(void* receiver, SourceFileMethod method, void* de
     Bytes request; source_file_request_prefix(request, caller, object); request.put(static_cast<std::uint32_t>(method)); request.put(capacity);
     auto response = expression_host(source_file_begin_event, request); Reader reader{response.data};
     const auto result = reader.get<std::uint32_t>(); const auto transfer = reader.get<std::uint64_t>();
-    const auto length = reader.get<std::uint32_t>(), extent = reader.get<std::uint32_t>();
+    const auto length = reader.get<std::uint32_t>(); const auto publication = reader.get<std::uint64_t>();
+    const auto extent = reader.get<std::uint32_t>();
     const auto* before = static_cast<const std::uint8_t*>(reader.bytes(extent));
     const auto* after = static_cast<const std::uint8_t*>(reader.bytes(extent)); reader.finish();
-    if (extent != object.extent || (!transfer != !length) ||
+    if (!publication || extent != object.extent || (!transfer != !length) ||
         ((method == SourceFileMethod::next_chunk || method == SourceFileMethod::advance_chunk) && length) ||
         (method == SourceFileMethod::read32 && length > 4) ||
         (method == SourceFileMethod::read_chunk && capacity && length > capacity))
@@ -31,6 +32,7 @@ std::uint32_t source_file_call(void* receiver, SourceFileMethod method, void* de
         if (before[at] != after[at] && (at < 0x240 || (at >= 0x260 && at < 0x264) || at >= 0x270))
             throw Fatal(ERROR_INVALID_DATA, "Source parser changed a contributor field outside its cursor owner.");
     state->arena.replace_read_only(object.image_id, before, after, extent);
+    source_publication_ack(caller, object, publication);
     ++methods.calls;
     if (!length) return result;
     expression_writable(destination, length);
@@ -42,6 +44,7 @@ std::uint32_t source_file_call(void* receiver, SourceFileMethod method, void* de
         if (slice_reader.get<std::uint32_t>() != count) throw Fatal(ERROR_INVALID_DATA, "Native source slice changed its admitted output extent.");
         const auto* bytes = slice_reader.bytes(count); slice_reader.finish();
         expression_write(static_cast<std::uint8_t*>(destination) + position, bytes, count);
+        source_output_ack(caller, object, transfer, position, static_cast<std::uint8_t*>(destination) + position, count);
         position += count;
     }
     Bytes end; source_file_request_prefix(end, caller, object); end.put(transfer);

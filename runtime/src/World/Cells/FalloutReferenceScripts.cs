@@ -40,7 +40,7 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, bool, FalloutReferencePlacement>? Placement = null,
     Func<bool>? IsPcSleeping = null, Func<FalloutFormKey, int>? Sleeping = null,
     Func<FalloutFormKey, int>? KnockedState = null, FalloutSleepWait? SleepWait = null,
-    Action<FalloutRestRequest>? OpenSleepWaitMenu = null);
+    Action<FalloutRestRequest>? OpenSleepWaitMenu = null, FalloutPlayerStatistics? Statistics = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -497,6 +497,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(records, operation) is { } iniSettingFunction)
                 return iniSettingFunction;
+            if (parts.Length == 1 && FalloutPlayerStatisticCommands.Function(operation, host.Statistics) is { } statisticFunction)
+                return statisticFunction;
             if (parts.Length == 1 && FalloutSleepWaitCommands.Function(operation, host.SleepWait, host.OpenSleepWaitMenu) is { } restFunction)
                 return restFunction;
             if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host.GameTime, host.IsHardcore) is { } timeFunction)
@@ -903,6 +905,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             }
             if (bindCompiledOwners is null)
                 arguments = FalloutGameModeProgram.ResolveCommandArguments(arguments, values, Function, UserFunction);
+            if (parts.Length == 1 && FalloutPlayerStatisticCommands.Apply(operation, arguments, host.Statistics)) return;
             if (operation == "rewardxp")
             {
                 if (arguments.Count != 1) throw new InvalidDataException("RewardXP requires one signed integer.");

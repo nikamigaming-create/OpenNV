@@ -122,7 +122,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 RewardXp: RewardPlayerExperience, GameTime: _gameTime,
                 Placement: ReferenceScriptPlacement, IsPcSleeping: _player.IsPcSleeping,
                 Sleeping: ActorSleeping, KnockedState: ActorKnockedState,
-                SleepWait: PlayerRest, OpenSleepWaitMenu: OpenCurrentPlayerRest));
+                SleepWait: PlayerRest, OpenSleepWaitMenu: OpenCurrentPlayerRest, Statistics: PlayerStatistics));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
             EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true);

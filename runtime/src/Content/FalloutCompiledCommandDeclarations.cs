@@ -12,6 +12,8 @@ internal static class FalloutCompiledCommandDeclarations
     private static readonly IReadOnlyDictionary<ushort, FalloutCompiledCommandDeclaration> Commands =
         new Dictionary<ushort, FalloutCompiledCommandDeclaration>
         {
+            [0x1137] = new("ModPCMiscStat", false, 2, [41, 1], true),
+            [0x1138] = new("GetPCMiscStat", false, 1, [41], true),
             [0x1001] = new("GetDistance", true, 1, [4], true),
             [0x1002] = new("AddItem", true, 2, [50, 1, 1], true),
             [0x1005] = new("GetLocked", true, 0, [], true),
