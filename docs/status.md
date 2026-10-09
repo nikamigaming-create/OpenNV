@@ -12,7 +12,7 @@ checks and the actual owned Skilled ability audit pass. The required Release/Deb
 publication gate, native Godot checks and diff check pass. The immutable export
 also observes the real furniture approach/entry, exits with Activate, moves
 2.76 metres and quits with exit code 0. The refreshed Release is pinned and the
-checked merge remains next. An independent
+checked fix is merged through PR 182 with every CI check passing. An independent
 reached malformed source-text script still refuses; its compiled execution owner
 and matched retail acceptance remain open.
 

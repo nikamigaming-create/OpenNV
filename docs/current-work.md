@@ -25,13 +25,21 @@ byte-identical. The required Release/Debug publication gate, native Godot checks
 selected owned ability audit and diff check pass. The immutable export also
 observes the exact furniture reservation while approaching, completes actual
 entry, exits with Activate, moves 2.76 metres and quits with exit code 0. The
-stable FNV Test entry is advanced; the checked merge is next. This establishes
+stable FNV Test entry is advanced and PR 182 is merged with every CI check
+passing. Main is synchronized to `4a739468d70a58c5b1db8ab59779a6d0a9c22d09`.
+Source-declared PC menu input now joins the existing native mouse actions on
+`codex/source-menu-input-projection`. Debug compilation and the authored alternate
+key/action/failure checks pass. Original Back remains an explicit missing-target
+transition refusal. Native dispatch, Release/publication checks and general
+source-screen projection remain next while the larger compiled/native candidate
+continues.
+This establishes
 the selected opening repair, not complete campaign or matched retail acceptance.
 A reached malformed source-text branch still refuses
 and requires the compiled-script execution owner.
 
 All four owners remain active. The larger gameplay/current-save and native-plugin
-candidate is preserved separately while this reported gameplay fix is published.
+candidate is preserved separately and the reported gameplay fix is published.
 The FNV development playtest remains available independently
 through its pinned shortcut.
 Parallel owners implement source actor-AI and CELL lifecycle producers, declared

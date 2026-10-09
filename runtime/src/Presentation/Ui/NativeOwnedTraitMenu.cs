@@ -12,7 +12,8 @@ internal sealed partial class NativeOwnedTraitMenu : Control
     private readonly FalloutPluginStack _records;
     private readonly XElement _list, _scrollbar, _description, _descriptionScrollbar, _icon, _counter;
     private readonly List<Row> _rows = [];
-    private readonly List<(XElement Tile, NativeBitmapMenuButton Button)> _actions = [];
+    private readonly List<(XElement Tile, NativeBitmapMenuButton Button, Action Action)> _actions = [];
+    private readonly FalloutMenuPcButtonBindings<Key> _shortcuts;
     private readonly List<(XElement Tile, NativeOwnedTileTarget Button, XElement Bar)> _scrollTargets = [];
     private readonly Action<IReadOnlyList<FalloutNativeTraitIdentity>> _accepted;
     private readonly Action<Exception> _failed;
@@ -28,8 +29,15 @@ internal sealed partial class NativeOwnedTraitMenu : Control
         maximum = _selection.Maximum,
         focused = _focused?.Choice.Trait.EditorId,
         scroll = _scroll,
+        shortcuts = _shortcuts.Declarations.Select(declaration => new
+        {
+            key = declaration.Key,
+            target = declaration.TargetName,
+            targetPresent = declaration.Target is not null,
+            bound = _actions.Any(action => action.Tile == declaration.Target)
+        }),
         error = Error,
-        unbound = "native-list-sort-ties,perk-eligibility-and-multirank,scrollbar-drag,focus-and-click-sounds,exact-layout-timing,retail-and-XR-pixels"
+        unbound = "source-back-and-other-menu-transitions,native-list-sort-ties,perk-eligibility-and-multirank,scrollbar-drag,focus-and-click-sounds,exact-layout-timing,retail-and-XR-pixels"
     };
 
     internal NativeOwnedTraitMenu(FalloutPluginStack records, FalloutNativeTraitFarewellContract contract,
@@ -56,13 +64,13 @@ internal sealed partial class NativeOwnedTraitMenu : Control
             var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.Color)
             { Name = "Trait_" + choice.Trait.RuntimeFormId, Text = choice.Trait.DisplayName, DrawText = false, FocusMode = FocusModeEnum.All };
             var row = new Row(tile, button, choice); _rows.Add(row); AddChild(button);
-            button.Pressed += () => Try(() => { _selection.Toggle(choice.Trait); Focus(row); Refresh(); });
+            button.Pressed += () => Try(() => { if (_submitted) return; _selection.Toggle(choice.Trait); Focus(row); Refresh(); });
             button.MouseEntered += () => Try(() => { Focus(row); QueueRedraw(); });
             button.FocusEntered += () => Try(() => { Focus(row); EnsureVisible(row); Refresh(); });
         }
         foreach (var (tile, action) in new[]
         {
-            (Named("LUM_ResetButton"), (Action)(() => { _selection.Reset(); Refresh(); })),
+            (Named("LUM_ResetButton"), (Action)(() => { if (_submitted) return; _selection.Reset(); Refresh(); })),
             (Named("LUM_ContinueButton"), (Action)(() => { if (_submitted) return; _submitted = true; _accepted(_selection.Submit()); })),
         })
         {
@@ -73,8 +81,14 @@ internal sealed partial class NativeOwnedTraitMenu : Control
             button.MouseExited += () => { _tiles.Bind(tile, "mouseover", 0); QueueRedraw(); };
             button.FocusEntered += () => { _tiles.Bind(tile, "mouseover", 1); QueueRedraw(); };
             button.FocusExited += () => { _tiles.Bind(tile, "mouseover", 0); QueueRedraw(); };
-            _actions.Add((tile, button)); AddChild(button);
+            _actions.Add((tile, button, action)); AddChild(button);
         }
+        _shortcuts = NativeMenuPcButtons.Bind(menu, declaration =>
+        {
+            var action = _actions.SingleOrDefault(value => value.Tile == declaration.Target);
+            return action.Tile is not null ? action.Action : () => throw new NotSupportedException(
+                $"Trait menu source shortcut {declaration.Key} target {declaration.TargetName} has no menu-transition owner.");
+        });
         menu.Elements("template").Remove();
         _tiles.Bind(_scrollbar, "_current_value", 0);
         _tiles.Bind(_scrollbar, "_SetInCode", 1);
@@ -103,7 +117,7 @@ internal sealed partial class NativeOwnedTraitMenu : Control
             }
         }
         SetMeta("opennv_ui_source", "menus/trait_menu.xml;winning-PERK;owned-font-and-atlas");
-        SetMeta("opennv_ui_unbound", "native-list-sort-ties,perk-eligibility-and-multirank,scrollbar-drag,focus-and-click-sounds,exact-layout-timing,matched-retail-and-XR-pixels");
+        SetMeta("opennv_ui_unbound", "source-back-and-other-menu-transitions,native-list-sort-ties,perk-eligibility-and-multirank,scrollbar-drag,focus-and-click-sounds,exact-layout-timing,matched-retail-and-XR-pixels");
     }
 
     public override void _Ready()
@@ -166,7 +180,7 @@ internal sealed partial class NativeOwnedTraitMenu : Control
             row.Button.Visible = rect.HasArea(); row.Button.Position = rect.Position; row.Button.Size = rect.Size;
         }
         if (_focused is not null) Focus(_focused);
-        foreach (var (tile, button) in _actions)
+        foreach (var (tile, button, _) in _actions)
         {
             button.Text = _tiles.String(tile); button.Position = _tiles.Position(tile);
             button.Size = new(_tiles.Number(tile, "width"), _tiles.Number(tile, "height"));
@@ -205,8 +219,7 @@ internal sealed partial class NativeOwnedTraitMenu : Control
                 GetViewport().SetInputAsHandled();
             }
             if (input is not InputEventKey { Pressed: true, Echo: false } key) return;
-            if (key.Keycode == Key.R) { _selection.Reset(); Refresh(); GetViewport().SetInputAsHandled(); }
-            if (key.Keycode == Key.A) { _submitted = true; _accepted(_selection.Submit()); GetViewport().SetInputAsHandled(); }
+            if (_shortcuts.TryDispatch(key.Keycode, key.Pressed, key.Echo)) { GetViewport().SetInputAsHandled(); return; }
             if (key.Keycode is Key.Up or Key.Down && _rows.Count != 0)
             {
                 var index = _focused is null ? 0 : _rows.IndexOf(_focused);
@@ -223,7 +236,7 @@ internal sealed partial class NativeOwnedTraitMenu : Control
         {
             Error = error.Message;
             foreach (var row in _rows) row.Button.Disabled = true;
-            foreach (var (_, button) in _actions) button.Disabled = true;
+            foreach (var (_, button, _) in _actions) button.Disabled = true;
             foreach (var (_, button, _) in _scrollTargets) button.Disabled = true;
             _failed(error);
         }

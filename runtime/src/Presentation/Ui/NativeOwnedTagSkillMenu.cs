@@ -16,7 +16,7 @@ internal sealed partial class NativeOwnedTagSkillMenu : Control
     private readonly List<Row> _rows = [];
     private readonly List<(XElement Tile, NativeBitmapMenuButton Button, Action Action)> _actions = [];
     private readonly List<(XElement Tile, NativeOwnedTileTarget Button)> _scrollTargets = [];
-    private readonly Dictionary<Key, Action> _shortcuts = [];
+    private readonly FalloutMenuPcButtonBindings<Key> _shortcuts;
     private readonly Action<IReadOnlyList<FalloutNativeSkillIdentity>> _accepted;
     private readonly Action<Exception> _failed;
     private Row? _focused;
@@ -80,13 +80,12 @@ internal sealed partial class NativeOwnedTagSkillMenu : Control
             button.FocusExited += () => { _tiles.Bind(tile, "mouseover", 0); QueueRedraw(); };
             _actions.Add((tile, button, action)); AddChild(button);
         }
-        foreach (var shortcut in menu.Elements().Where(value => value.Name.LocalName.StartsWith("_PCButton_", StringComparison.Ordinal)))
+        _shortcuts = NativeMenuPcButtons.Bind(menu, declaration =>
         {
-            var action = _actions.SingleOrDefault(value => (string?)value.Tile.Attribute("name") == shortcut.Value.Trim());
+            var action = _actions.SingleOrDefault(value => value.Tile == declaration.Target);
             if (action.Tile is null) throw new NotSupportedException("Tag menu shortcut targets an unbound source action.");
-            if (!Enum.TryParse<Key>(shortcut.Name.LocalName[10..], out var key) || !_shortcuts.TryAdd(key, action.Action))
-                throw new NotSupportedException("Tag menu shortcut key is unbound or ambiguous.");
-        }
+            return action.Action;
+        });
         menu.Elements("template").Remove();
         _tiles.Bind(_scrollbar, "_current_value", 0); _tiles.Bind(_scrollbar, "_SetInCode", 1);
         foreach (var marker in menu.Descendants().Where(tile => (string?)tile.Attribute("name") == "scrollbar_vert_marker"))
@@ -207,7 +206,7 @@ internal sealed partial class NativeOwnedTagSkillMenu : Control
             if (input is InputEventMouseButton { Pressed: true } mouse && mouse.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
             { Scroll(mouse.ButtonIndex == MouseButton.WheelUp ? -1 : 1); GetViewport().SetInputAsHandled(); }
             if (input is not InputEventKey { Pressed: true, Echo: false } key) return;
-            if (_shortcuts.TryGetValue(key.Keycode, out var action)) { action(); GetViewport().SetInputAsHandled(); }
+            if (_shortcuts.TryDispatch(key.Keycode, key.Pressed, key.Echo)) { GetViewport().SetInputAsHandled(); return; }
             if (key.Keycode is Key.Up or Key.Down && _rows.Count != 0)
             {
                 var index = _focused is null ? 0 : _rows.IndexOf(_focused);
