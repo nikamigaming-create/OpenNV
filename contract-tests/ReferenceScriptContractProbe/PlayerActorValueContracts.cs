@@ -146,14 +146,27 @@ internal static class PlayerActorValueContracts
         Reject(() => cold.AddModifier(5, FalloutActorValuePool.Temporary, float.PositiveInfinity));
         Reject(() => cold.WriteBaseInteger(4, 5)); Reject(() => cold.Change("Guns", "setav", 5));
         Require(JsonSerializer.Serialize(cold.Capture()) == before, "Invalid mutation changed a supported player pool.");
-        var legacy = new FalloutPlayerActorValues(records, legacy: new(4, 5, 6, 7, 8, 9, 10));
+        var legacy = new FalloutPlayerActorValues(records);
+        foreach (var value in Enumerable.Range(5, 7)) legacy.WriteBaseInteger(value, value - 1);
         legacy.BindConstantModifiers((_, _) => []);
         Require(legacy.BaseSpecial == new FalloutNativeSpecialState(4, 5, 6, 7, 8, 9, 10) &&
             legacy.Capture().Values.Values.All(value => value.Permanent == 0 && value.Temporary == 0 && value.Damage == 0),
-            "Legacy seven-integer migration created current values or modifier history.");
+            "Explicit BASE assignments created modifier history.");
         cold.WriteBaseInteger(5, -5);
         Require(cold.ReadBase(5) == -5 && cold.ReadPermanent(5) == 1 && cold.ReadCurrent(5) == -3.25f && cold.ReadBoundedCurrent(5) == 1,
             "A menu allocation clamp was imposed on the source BASE setter or raw script current getter.");
+        var intelligence = new FalloutPermanentIntelligenceGetter(1, 10, FalloutPermanentIntelligenceInteger.Floor);
+        cold.WriteBaseInteger(9, 10); cold.AddModifier(9, FalloutActorValuePool.Permanent, 2.75f);
+        Require(cold.ReadRawPermanent(9) == 12.75f && cold.ReadPermanent(9) == 10 &&
+            intelligence.Read(cold.ReadRawPermanent(9)) == 10,
+            "Raw permanent storage was clipped, or the independent source getter omitted its bounds.");
+        var intelligenceSnapshot = JsonSerializer.Deserialize<FalloutPlayerActorValuesSnapshot>(JsonSerializer.Serialize(cold.Capture()))!;
+        var intelligenceCold = new FalloutPlayerActorValues(records, intelligenceSnapshot);
+        _ = Skills(records, intelligenceCold, inventory, globals);
+        Require(intelligenceCold.ReadRawPermanent(9) == cold.ReadRawPermanent(9) &&
+            intelligenceCold.ReadPermanent(9) == cold.ReadPermanent(9) &&
+            intelligence.Read(intelligenceCold.ReadRawPermanent(9)) == 10,
+            "Cold permanent storage lost its unbounded pool or source getter declaration.");
         foreach (var boundary in new[] { int.MinValue, int.MaxValue })
         {
             cold.WriteBaseInteger(5, boundary);

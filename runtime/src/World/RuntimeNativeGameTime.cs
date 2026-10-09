@@ -8,6 +8,13 @@ internal sealed partial class RuntimeNativeGameTime : Node
 {
     private readonly FalloutGameTime _clock;
     private string? _error;
+    private Func<bool>? _restOwnsClock;
+    internal void BindSourceRestClock(Func<bool> ownsClock)
+    {
+        ArgumentNullException.ThrowIfNull(ownsClock);
+        if (_restOwnsClock is not null) throw new InvalidOperationException("Game time already has a rest clock owner.");
+        _restOwnsClock = ownsClock;
+    }
     internal object State => new
     {
         hour = _clock.Hour,
@@ -29,7 +36,12 @@ internal sealed partial class RuntimeNativeGameTime : Node
     public override void _Process(double delta)
     {
         if (_error is not null || GetTree().Paused) return;
-        try { _clock.AdvanceSimulation((float)delta); }
+        try
+        {
+            if (_restOwnsClock?.Invoke() == true) return;
+            AdvanceCurrentCumulativeWorldTime((float)delta);
+            _clock.AdvanceSimulation((float)delta);
+        }
         catch (Exception error)
         {
             _error = error.Message;

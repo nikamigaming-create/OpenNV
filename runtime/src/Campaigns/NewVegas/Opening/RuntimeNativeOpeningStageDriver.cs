@@ -11,17 +11,13 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver : Node
 {
     private RuntimeNativePlayer _player = null!;
-    private FalloutOpeningStageMachine? _machine;
-    private FalloutOpeningStageTransitionGraph _transitions = null!;
     private string _sourceQuestEditorId = string.Empty;
     private FalloutPlayerControlState _sourceControls = FalloutPlayerControlState.AllEnabled;
     private bool _configured;
     private FalloutNativeRaceSexContract _raceSexContract = null!;
-    private FalloutNativeVigorContract? _vigorContract;
-    private FalloutNativeVigorContract? _specialMenuContract;
-    private FalloutNativeTagSkillContract? _tagSkillContract;
+    private FalloutLoveTesterSource? _specialMenuSource;
+    private FalloutNativeSpecialAllocation? _specialMenuContract;
     private IReadOnlyList<FalloutNativeSkillIdentity> _skillCatalog = [];
-    private FalloutNativeTraitFarewellContract? _traitFarewellContract;
     private FalloutPluginStack _pluginStack = null!;
     private string _savePath = string.Empty;
     private string _saveCompatibilityId = string.Empty;
@@ -49,7 +45,6 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutTagSkillMenuRequest? _tagMenuRequest;
     private FalloutNativeTagSkillChoices? _activeTagSkillContract;
     private RuntimeNativeTraitEntry? _traitEntry;
-    private bool _stage200Saved;
     private FalloutOpeningControlGraph _controls = null!;
     private bool _moviePlaying;
     private RuntimeNativeSpeech? _speech;
@@ -66,7 +61,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutGlobalState? _globals;
     private FalloutGameTime? _gameTime;
     private FalloutSkyLightingState? _skyLighting;
-    private bool _restoringEnteredStage;
+    private (FalloutFormKey Quest, short Stage)? _initialStageResultRequest;
     private Func<RuntimeNativeImageSpace> _imageSpacePresenter = null!;
     private string? _executionError;
     internal string? ExecutionError
@@ -74,20 +69,21 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         get => _executionError;
         private set { _executionError = value; _stageResultDriverFailure = null; }
     }
-    internal string? ExecutionFault => ExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
+    internal string? ExecutionFault => ExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
     internal string? BlockingExecutionError => _stageResultDriverFailure?.Error == ExecutionError ? null : ExecutionError;
-    internal string? BlockingExecutionFault => BlockingExecutionError ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
+    internal string? BlockingExecutionFault => BlockingExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
-    internal string QuestEditorId => _machine?.QuestEditorId ?? _sourceQuestEditorId;
-    internal short Stage => _machine?.Stage ?? _quests.Stage(FalloutDialogueTopic.Find(_pluginStack, "QUST", _sourceQuestEditorId).FormKey);
-    internal float? TimerSeconds => _machine?.TimerSeconds;
-    internal IReadOnlyCollection<string> PendingBlockers => _machine?.PendingBlockers ?? [];
-    private FalloutPlayerControlState PlayerControls => _machine?.ControlState ?? _sourceControls;
+    internal string QuestEditorId => _sourceQuestEditorId;
+    internal short Stage => _quests.Stage(FalloutDialogueTopic.Find(_pluginStack, "QUST", _sourceQuestEditorId).FormKey);
+    // Timer identities and values belong to original quest variables and the
+    // shared script clock. This owner cannot infer a generic fTimer from SCTX.
+    internal float? TimerSeconds => null;
+    internal IReadOnlyCollection<string> PendingBlockers => ActiveSourcePresentationOwners();
+    private FalloutPlayerControlState PlayerControls => _sourceControls;
     internal FalloutFormKey ActiveCell => _activeCell;
     internal void EnterWorldCell(FalloutFormKey cell) => _activeCell = cell;
-    internal void RequestWorldSave() => _saveRequested = true;
     internal bool HasCampaignSave => File.Exists(_savePath);
     internal string PlayerName => _playerName;
     internal int PlayerLevel => SourcePlayerLevel;
@@ -117,10 +113,12 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         if (_nameEntry is not null) yield return 1051;
         if (_raceSexEntry is not null) yield return 1036;
-        if (_vigorEntry is not null) yield return 1074;
+        if (_vigorEntry is not null) yield return (_specialMenuSource ?? throw new InvalidOperationException("SPECIAL menu source is absent.")).MenuId;
         if (_specialBookEntry is not null) yield return FalloutSpecialBookPresentation.MenuId;
         if (_tagSkillEntry is not null) yield return 1048;
         if (_traitEntry is not null) yield return 1084;
+        if (PlayerLevelUpMenuId is { } levelUp) yield return levelUp;
+        if (PlayerRestMenuId is { } rest) yield return rest;
         if (_recipeMenu is not null) yield return 1077;
         if (_barterMenu is not null) yield return 1053;
         if (_terminalMenus.Values.Any(menu => menu.Active)) yield return FalloutTerminal.MenuId;
@@ -131,9 +129,6 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         FalloutOpeningControlGraph controls,
         RuntimeNativePlayer player,
         FalloutNativeRaceSexContract raceSexContract,
-        FalloutNativeVigorContract? vigorContract,
-        FalloutNativeTagSkillContract? tagSkillContract,
-        FalloutNativeTraitFarewellContract? traitFarewellContract,
         FalloutPluginStack pluginStack,
         string savePath,
         string saveCompatibilityId,
@@ -151,21 +146,19 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         Func<RuntimeNativeImageSpace> imageSpacePresenter,
         string initialQuestEditorId,
         short initialStage, FalloutPlayerControlState? initialControls = null,
-        IReadOnlyList<FalloutQuestStageResultSnapshot>? bootstrapStageResults = null)
+        IReadOnlyList<FalloutQuestStageResultSnapshot>? bootstrapStageResults = null,
+        FalloutNativeRaceSexSelection? initialCharacter = null)
     {
         if (_configured)
             throw new InvalidOperationException("Native opening stage driver was already configured.");
+        if (!controls.ResultDriven || transitions.Transitions.Count != 0)
+            throw new NotSupportedException("Native opening requires original result-driven stage declarations; predicted controls/transitions are refused.");
         _configured = true;
         _player = player ?? throw new ArgumentNullException(nameof(player));
         _raceSexContract = raceSexContract ?? throw new ArgumentNullException(nameof(raceSexContract));
-        _vigorContract = vigorContract;
-        _tagSkillContract = tagSkillContract;
-        _traitFarewellContract = traitFarewellContract;
-        _skillCatalog = tagSkillContract?.Skills ?? FalloutNativeTagSkillResolver.ResolveSkills(pluginStack);
+        _skillCatalog = FalloutNativeTagSkillResolver.ResolveSkills(pluginStack);
         _pluginStack = pluginStack ?? throw new ArgumentNullException(nameof(pluginStack));
         _controls = controls;
-        _transitions = new(transitions.Transitions.Where(transition => transition.Kind != "stage-script" || transition.Blockers.Count != 0)
-            .Select(transition => transition.Kind == "stage-script" ? transition with { Kind = "script-wait" } : transition).ToArray());
         _sourceQuestEditorId = restore?.State.QuestEditorId ?? initialQuestEditorId;
         _sourceControls = restore is null ? initialControls ?? FalloutPlayerControlState.AllEnabled : FalloutNativeCampaignSave.RestorePlayerControls(restore.State);
         _savePath = Path.GetFullPath(savePath ?? throw new ArgumentNullException(nameof(savePath)));
@@ -174,20 +167,21 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
                 "Native save compatibility identity is required.", nameof(saveCompatibilityId))
             : saveCompatibilityId;
         _activeCell = restore?.State.ActiveCell ?? initialCell;
-        _stage200Saved = restore?.State.CharacterCreationComplete == true;
         _playerName = restore?.State.PlayerName ?? FalloutGameSettingStrings.Read(pluginStack, "sDefaultPlayerName");
-        _character = restore?.State.Character ?? raceSexContract.Initial;
+        _character = restore?.State.Character ?? initialCharacter ?? raceSexContract.Initial;
         FalloutNativeRaceSexResolver.Validate(raceSexContract, _character);
-        _playerActorValues = new(pluginStack, restore?.State.PlayerActorValues,
-            restore?.State.PlayerActorValues is null ? restore?.State.Special : null);
-        _tagSkills = new(pluginStack, _skillCatalog, tagSkillContract?.RequiredCount, restore?.State.TagSkillSlots, restore?.State.TagSkills);
+        _playerActorValues = new(pluginStack, restore?.State.PlayerActorValues);
+        _tagSkills = new(pluginStack, _skillCatalog, snapshot: restore?.State.TagSkillSlots);
         _traits = restore?.State.Traits ?? [];
-        FalloutNativeCampaignSave.ValidateTraits(traitFarewellContract, _traits);
+        FalloutTraitMenuCatalogue.Validate(pluginStack, _traits);
         _lipConfiguration = lipConfiguration;
         _imageSpaceState = imageSpaceState;
         _quests = quests;
         _scripts = scripts;
+        _scripts.References!.PlayerTraitSelection = () => _traits.Select(trait => _pluginStack.RuntimeFormKey(trait.RuntimeFormId)).ToArray();
         BindSourceManualSaves();
+        if (restore is not null) _scripts.ScriptManualSaves.RestoreOrder(restore.SaveRequestLoad ??
+            throw new InvalidDataException("Current save has no actual file/source queue handoff."));
         _scripts.References!.BindActorAlert(_pluginStack.RuntimeFormKey(0x14), _player.Activity);
         _restoreFinishedSpeech = restore?.State.FinishedSpeech;
         _restoreFinishedSpeechStage = restore?.State.FinishedSpeechStage;
@@ -200,48 +194,52 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _scripts.References!.BindPlayerAppearance(() => PlayerCreationState);
         _scriptHost = new((quest, stage) =>
         {
-            var source = _controls.Quests.Values.SelectMany(values => values.Values)
-                .SingleOrDefault(value => value.Quest == quest && value.Stage == stage);
-            return () =>
-            {
-                GD.Print($"OPENNV_NATIVE_SET_STAGE quest={quest} stage={stage} owner=shared-script-host");
-                if (source is null)
-                {
-                    // Background quests may also enter stages. Keep the configured
-                    // startup identity; the shared quest state owns every stage.
-                    (_stageResults ?? throw new InvalidOperationException("Quest stage result owner is absent.")).Enter(quest, stage);
-                }
-                else
-                {
-                    if (_machine is null)
-                    {
-                        _restoringEnteredStage = false;
-                        _machine = new(_transitions, _controls, source.QuestEditorId, stage, _sourceControls);
-                    }
-                    else _machine.EnterScriptStage(source.QuestEditorId, stage);
-                    Synchronize();
-                }
-            };
+            return () => RequestSourceStage(quest, stage);
         }, name =>
         {
             if (name.Equals("Health", StringComparison.OrdinalIgnoreCase)) return Vitals.ExactHitPoints;
             if (name.Equals("RadiationRads", StringComparison.OrdinalIgnoreCase)) return Vitals.RadiationRads;
             if (name.Equals("ActionPoints", StringComparison.OrdinalIgnoreCase)) return Vitals.ActionPoints;
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
-            return IsSpecial(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)) : _playerSkills.Value(name);
-        }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
-            ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: ChangePlayerActorValue,
+            return IsSpecial(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)) :
+                _playerSkills.IsSkill(name) ? _playerSkills.ReadSkill(name, FalloutActorValueRead.Current) : _playerSkills.Value(name);
+        }, ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: ChangePlayerActorValue,
             Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
-            Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: value => _experience.Reward(value), GameTime: gameTime);
+            Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: RewardPlayerExperience, GameTime: gameTime,
+            IsPcSleeping: _player.IsPcSleeping, Sleeping: ActorSleeping, KnockedState: ActorKnockedState,
+            OpenSleepWaitMenu: OpenCurrentPlayerRest);
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
-            () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)), _playerActorValues);
+            () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)), _playerActorValues,
+            perk => _scripts.References!.PerkRank(pluginStack.RuntimeFormKey(0x14), perk));
         BindPlayerAbilityState(restore, gameTime);
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
         _playerAbilities.Synchronize();
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
+        _playerSkills.BindAbilityConditions(PlayerProgressCondition);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
+        InitializePlayerProgress(restore is null ? null : restore.State.PlayerProgress ??
+            throw new InvalidDataException("Current player progress is absent."));
+        ConfigureExperienceNotifications(restore is null ? null : restore.State.ExperienceNotifications ??
+            throw new InvalidDataException("Current experience notifications are absent."),
+            BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
+        ConfigureInterfaceActivationFrames(restore is null ? null : restore.State.InterfaceActivationFrames ??
+            throw new InvalidDataException("Current interface frame continuation is absent."));
+        ConfigureSourceCombatGroups(restore is null ? null : restore.State.CombatGroups ??
+            throw new InvalidDataException("Current combat group continuation is absent."));
+        ConfigureSourceActorCellProducers(restore is null ? null : restore.State.ActorUpdates ??
+            throw new InvalidDataException("Current actor update continuation is absent."),
+            restore is null ? null : restore.State.CellProcesses ??
+            throw new InvalidDataException("Current CELL process continuation is absent."));
+        ConfigureSourceActorPerception(restore is null ? null : restore.State.ActorPerception ??
+            throw new InvalidDataException("Current actor perception continuation is absent."));
+        ConfigureCurrentProcessRuntime(restore is null ? null : restore.State.ActorProcessRuntime ??
+            throw new InvalidDataException("Current process runtime continuation is absent."),
+            restore is null ? null : restore.State.ActorProcessCommon ??
+            throw new InvalidDataException("Current common process continuation is absent."));
+        ConfigureSourceActorProcesses(restore is null ? null : restore.State.ActorProcesses ??
+            throw new InvalidDataException("Current actor process continuation is absent."));
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
@@ -254,71 +252,74 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }, _imageSpaceState, restore?.State.ExplosionExposure);
         _gameTime = gameTime;
         _skyLighting = skyLighting;
-        _restoringEnteredStage = restore is not null;
         _imageSpacePresenter = imageSpacePresenter;
-        if (controls.Quests.TryGetValue(_sourceQuestEditorId, out var initialStages) && initialStages.ContainsKey(restore?.State.Stage ?? initialStage))
-            _machine = new(_transitions, controls, _sourceQuestEditorId, restore?.State.Stage ?? initialStage, _sourceControls);
+        // Attachment observes existing authoritative state. A bootstrap or
+        // cold result history never becomes another SetStage invocation, even
+        // when the original QUST admits deliberate repeated stage requests.
+        if (restore is null && bootstrapStageResults is null)
+            _initialStageResultRequest = (FalloutDialogueTopic.Find(_pluginStack, "QUST", initialQuestEditorId).FormKey, initialStage);
         Name = "NativeOpeningStageDriver";
         Synchronize();
     }
 
     internal void CompleteBlocker(string blocker)
     {
-        if (_machine is null || !_machine.PendingBlockers.Contains(blocker, StringComparer.OrdinalIgnoreCase)) return;
-        var beforeQuest = _machine.QuestEditorId;
-        var beforeStage = _machine.Stage;
-        var changed = _machine.CompleteBlocker(blocker);
-        GD.Print(
-            $"OPENNV_NATIVE_OPENING_BLOCKER_COMPLETE quest={beforeQuest} stage={beforeStage} " +
-            $"blocker={blocker} remaining={string.Join(',', _machine.PendingBlockers)}");
-        if (changed)
-            Synchronize();
+        // The actual completed menu/movie/speech owner already retired its
+        // state. It cannot lend a predicted destination or rerun stage effects.
+        if (string.IsNullOrWhiteSpace(blocker)) throw new ArgumentException("Source presentation owner is absent.", nameof(blocker));
+        if (_configured) Synchronize();
     }
 
     private void OpenVigorMenu(int total)
     {
+        RequireLevelUpMenuFree("SPECIAL menu");
         if (_vigorEntry is not null || _specialBookEntry is not null || BlockingExecutionError is not null)
             throw new InvalidOperationException("SPECIAL menu cannot open while its owner is busy or failed.");
-        var contract = _vigorContract ?? throw new NotSupportedException("SPECIAL tester menu has no source device contract.");
-        _specialMenuContract = contract with { RequiredTotal = total };
+        var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("SPECIAL menu owned source is absent.");
+        _specialMenuSource = FalloutExecutableStringTable.ReadLoveTesterSource(content.FalloutExecutablePath);
+        _specialMenuContract = _specialMenuSource.Allocate(total);
+        _specialMenuContract.Validate(Special, allowUnspent: true);
         _vigorEntry = new RuntimeNativeVigorEntry();
         AddChild(_vigorEntry);
         _vigorEntry.Accepted += AcceptSpecial;
-        _vigorEntry.Configure(_specialMenuContract, Special, _pluginStack, _imageSpacePresenter());
+        _vigorEntry.Configure(_specialMenuSource, _specialMenuContract, Special, _pluginStack, _imageSpacePresenter());
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_VIGOR_OPEN stage={Stage} total={total} " +
-            $"reference={contract.TesterReference.FormKey} " +
-            "source=live-player-vigor-scripts presentation=owned-love-tester-menu parity=unverified");
+            $"menu={_specialMenuSource.MenuId} source=compiled-menu-request presentation=owned-love-tester-menu parity=unverified");
     }
 
     public override void _Process(double delta)
     {
-        if (BlockingExecutionError is not null) return;
+        if (BlockingExecutionFault is not null) return;
         try
         {
             _playerAbilities.Synchronize();
             DrainSourceManualSaves();
-            if (BlockingExecutionError is not null) return;
+            if (!CanProcess()) return; // Save preparation may have acquired this producer during the current callback.
+            if (BlockingExecutionFault is not null) return;
             RefreshRadioStations();
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
-            if (_saveRequested && SaveContinuationBlocker is null && SourceAnimationSoundSaveBlocker is null &&
-                !_scripts.References!.PlayerMoves.Pending)
-                SaveCurrentState();
             _playerPackage?.Advance(delta);
+            _scripts.References!.UnloadedPackages?.Advance(delta);
+            AdvanceSourceActorPerception(delta);
+            AdvanceSourceCombatGroups(delta);
+            AdvanceSourceRestInCurrentPlayerFrame(Engine.GetProcessFrames());
+            AdvanceNativePlayerInCurrentFrame();
+            if (!CanProcess()) return; // Native advancement can acquire a modal gameplay pause in this same frame.
         }
-        catch (Exception error) when (error is NotSupportedException or InvalidDataException or FileNotFoundException or InvalidOperationException or KeyNotFoundException or OverflowException)
+        catch (Exception error)
         {
             RetainDriverFailure(error);
             GD.PushError($"OPENNV_NATIVE_PLAYER_PACKAGE_DIVERGENCE: {error.Message}");
             return;
         }
-        if (_machine is not null && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null && _specialBookEntry is null &&
-            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null)
+        if (_controls is not null && _controls.Quests.ContainsKey(QuestEditorId) && !_moviePlaying && _nameEntry is null && _raceSexEntry is null && _vigorEntry is null && _specialBookEntry is null &&
+            _tagSkillEntry is null && _traitEntry is null && _recipeMenu is null && _barterMenu is null && _levelUpEntry is null)
         {
             try { _scripts.AdvanceClaimed(_controls.Stage(QuestEditorId, Stage).Quest, delta, _scriptHost); }
-            catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
+            catch (Exception error)
             {
                 RetainDriverFailure(error);
                 GD.PushError($"OPENNV_NATIVE_QUEST_SCRIPT_DIVERGENCE quest={QuestEditorId} stage={Stage}: {error.Message}");
@@ -330,7 +331,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal void InitializeOwnedState()
     {
         _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell,
-            _restorePlayerPackageAudio);
+            _restorePlayerPackageAudio, (program, committed) =>
+                (_resultScripts ?? throw new InvalidOperationException("Player package result VM is absent."))
+                    .ExecutePlayerPackageEvent(program, committed));
         _scripts.References!.UnloadedPackages = new(_pluginStack, _scripts.References, _quests, _gameTime,
             _globals, ExecutePackageEvent, () => SourcePlayerLevel, ActorSitting);
         _speech = new RuntimeNativeSpeech();
@@ -338,15 +341,6 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new NotSupportedException("Source subtitle presentation is absent."))(subtitle);
         _speech.SayToCompleted += receipt => (SayToCompleted ??
             throw new NotSupportedException("Source SayToDone event dispatch is absent."))(receipt);
-        _speech.InfoCompleted += _ =>
-        {
-            if (_machine is not null && !_speech.Active && _speechStage == $"{_machine.QuestEditorId}:{_machine.Stage}" &&
-                _machine.PendingBlockers.Contains("sayto", StringComparer.OrdinalIgnoreCase))
-            {
-                _machine.CompleteDialogueSpeech();
-                Synchronize();
-            }
-        };
         _speech.Configure(_pluginStack, _lipConfiguration, quest => _quests.Stage(quest), condition =>
         {
             if (condition.Function == 53) return (float)_scripts.References!.ReadVariable(_quests, condition.FormArgument1, condition.Argument2);
@@ -366,6 +360,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _scripts.References!.GetDeadCount);
         AddChild(_speech);
         ConfigureConversation();
+        AttachSourceActorPerception();
         ConfigureDetectionAndFinishedSpeech();
         ApplyEnteredActorCommands();
     }
@@ -375,36 +370,22 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         ApplyEnteredActorCommands();
         if (BlockingExecutionError is not null) return;
         _player.ApplySourceControls(PlayerControls);
-        if (_machine is null) return;
-        SynchronizeNameEntry();
-        SynchronizeRaceSexEntry();
-        SynchronizeTagSkillEntry();
-        SynchronizeTraitEntry();
         GD.Print(
-            $"OPENNV_NATIVE_OPENING_STAGE quest={_machine.QuestEditorId} stage={_machine.Stage} " +
-            $"movement={_machine.ControlState.Movement} looking={_machine.ControlState.Looking} " +
-            $"pipBoy={_machine.ControlState.PipBoy} fighting={_machine.ControlState.Fighting} " +
-            $"timer={(_machine.TimerSeconds?.ToString("R") ?? "none")} " +
-            $"blockers={string.Join(',', _machine.PendingBlockers)} " +
-            "source=live-qust-scpt-dial-info");
-        if (_machine.QuestEditorId == FalloutNativeCampaignSave.OpeningQuestEditorId &&
-            _machine.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
-            !_stage200Saved)
-        {
-            _saveRequested = true;
-        }
+            $"OPENNV_NATIVE_OPENING_STAGE quest={QuestEditorId} stage={Stage} " +
+            $"movement={PlayerControls.Movement} looking={PlayerControls.Looking} " +
+            $"pipBoy={PlayerControls.PipBoy} fighting={PlayerControls.Fighting} " +
+            $"timer=original-script-variable-owner pending={string.Join(',', PendingBlockers)} " +
+            "source=actual-shared-quest-result-state");
     }
 
     private void ApplyEnteredActorCommands()
     {
-        if (!IsInsideTree() || BlockingExecutionError is not null || _machine is null) return;
+        if (!IsInsideTree() || BlockingExecutionError is not null || _initialStageResultRequest is null) return;
         try
         {
-            while (_machine.TryTakeEnteredStage(out var stage))
-            {
-                if (_restoringEnteredStage) { _restoringEnteredStage = false; continue; }
-                (_stageResults ?? throw new InvalidOperationException("Quest stage owner is absent.")).Enter(stage!.Quest, stage.Stage);
-            }
+            var stage = _initialStageResultRequest.Value;
+            _initialStageResultRequest = null;
+            (_stageResults ?? throw new InvalidOperationException("Quest stage owner is absent.")).Enter(stage.Quest, stage.Stage);
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or FileNotFoundException or InvalidOperationException or KeyNotFoundException or OverflowException)
         {
@@ -433,6 +414,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         if (Vitals.HitPoints == 0)
             throw new InvalidOperationException("Cannot replace a playable save after player death.");
+        if (_scripts.ScriptManualSaves.Order.Writing is null)
+            throw new InvalidOperationException("Persistent campaign writes require their actual ordered head lease.");
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var state = CaptureCurrentState(activeCell);
         var captured = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -461,6 +444,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         if (_nameEntry is not null)
             return;
+        RequireLevelUpMenuFree("Player name menu");
         _nameEntry = new RuntimeNativePlayerNameEntry();
         AddChild(_nameEntry);
         _nameEntry.Accepted += AcceptPlayerName;
@@ -523,6 +507,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             return;
         }
         _raceMenuCommand = sourceCommand ?? pendingCommand ?? "showracemenu";
+        RequireLevelUpMenuFree("Player appearance menu");
         var modelPath = RaceMenuModel(_raceMenuCommand);
         var entry = new RuntimeNativeRaceSexEntry();
         AddChild(entry);
@@ -576,23 +561,22 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         CompleteBlocker(_raceMenuCommand);
         // The existing modal handoff delivers the source MenuMode event here.
         // Exact scheduling while the menu is open remains a separate owner.
-        if (_machine is not null) _scripts.ExecuteClaimedMenu(_controls.Stage(QuestEditorId, Stage).Quest, 1036, _scriptHost);
+        if (_controls.Quests.ContainsKey(QuestEditorId)) _scripts.ExecuteClaimedMenu(_controls.Stage(QuestEditorId, Stage).Quest, 1036, _scriptHost);
     }
 
     private void AcceptSpecial(FalloutNativeSpecialState state)
     {
         try { AcceptSpecialCore(state); }
-        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException)
+        catch (Exception error)
         {
-            ExecutionError = error.Message;
+            RetainDriverFailure(error);
             GD.PushError($"OPENNV_NATIVE_VIGOR_DIVERGENCE {error.Message}");
         }
     }
 
     private void AcceptSpecialCore(FalloutNativeSpecialState state)
     {
-        FalloutNativeVigorResolver.Validate(_specialMenuContract ?? _vigorContract ??
-            throw new NotSupportedException("SPECIAL tester acceptance has no source contract."), state);
+        (_specialMenuContract ?? throw new NotSupportedException("SPECIAL tester acceptance has no source contract.")).Validate(state);
         for (var index = 0; index < state.Values.Count; index++) _playerActorValues.WriteBaseInteger(index + 5, state.Values[index]);
         _ = Vitals;
         if (_vigorEntry is not null)
@@ -607,7 +591,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         GD.Print(
             $"OPENNV_NATIVE_SPECIAL_ACCEPTED total={Special.Values.Sum()} " +
             $"values={string.Join(',', Special.Values)} stage={Stage} " +
-            "source=configured-player-input-live-vigor-contract");
+            "source=player-input-selected-source-menu");
         Synchronize();
     }
 
@@ -629,13 +613,14 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         if (_tagSkillEntry is not null)
             return;
+        RequireLevelUpMenuFree("Tag skill menu");
+        var request = _tagMenuRequest ??
+            throw new NotSupportedException("Tag menu has no source SetTagSkills request.");
+        _activeTagSkillContract = new(_skillCatalog, request.TotalCount);
         _tagSkillEntry = new RuntimeNativeTagSkillEntry();
         AddChild(_tagSkillEntry);
         _tagSkillEntry.Accepted += AcceptTagSkills;
         _tagSkillEntry.Failed += error => ExecutionError = error.Message;
-        var request = _tagMenuRequest ?? new(_tagSkillContract?.RequiredCount ??
-            throw new NotSupportedException("Tag menu has no source SetTagSkills request."), true);
-        _activeTagSkillContract = new(_skillCatalog, request.TotalCount);
         _tagSkillEntry.Configure(_pluginStack, _activeTagSkillContract, _tagSkills.Selection,
             skill => _playerSkills.Value(FalloutNativeTagSkillResolver.ActorValueName(_pluginStack, skill)), request.ShowInitialTaggedSkills);
         var releaseModalInput = _player.AcquireModalInput();
@@ -686,12 +671,21 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         }
         if (_traitEntry is not null)
             return;
-        var contract = _traitFarewellContract ?? throw new NotSupportedException("Trait menu has no source creation contract.");
+        RequireLevelUpMenuFree("Trait menu");
+        var contract = FalloutTraitMenuCatalogue.Read(_pluginStack);
         _traitEntry = new RuntimeNativeTraitEntry();
         AddChild(_traitEntry);
         _traitEntry.Accepted += AcceptTraits;
         _traitEntry.Failed += error => ExecutionError = error.Message;
-        _traitEntry.Configure(_pluginStack, contract, _traits);
+        try { _traitEntry.Configure(_pluginStack, contract, Traits, PlayerLevel, EvaluateMessageCondition); }
+        catch
+        {
+            _traitEntry.Accepted -= AcceptTraits;
+            _traitEntry.ReleasePause();
+            _traitEntry.QueueFree();
+            _traitEntry = null;
+            throw;
+        }
         _player.SetModalInput(true);
         GD.Print(
             $"OPENNV_NATIVE_TRAITS_OPEN stage={Stage} " +
@@ -702,9 +696,24 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private void AcceptTraits(IReadOnlyList<FalloutNativeTraitIdentity> selection)
     {
-        FalloutNativeCampaignSave.ValidateTraits(_traitFarewellContract, selection);
-        _traits = selection.OrderBy(value => value.RuntimeFormId).ToArray();
-        _playerAbilities.Synchronize();
+        try
+        {
+            FalloutTraitMenuCatalogue.Validate(_pluginStack, selection);
+            var player = _pluginStack.RuntimeFormKey(0x14);
+            var selectedForms = selection.Select(value => _pluginStack.RuntimeFormKey(value.RuntimeFormId)).ToArray();
+            var selected = selectedForms.ToHashSet();
+            foreach (var previous in Traits.Select(value => _pluginStack.RuntimeFormKey(value.RuntimeFormId)).Where(form => !selected.Contains(form)))
+                _scripts.References!.SetPerkRank(player, previous, 0);
+            foreach (var trait in selectedForms) _scripts.References!.SetPerkRank(player, trait, 1);
+            _traits = selection.OrderBy(value => value.RuntimeFormId).ToArray();
+            _playerAbilities.Synchronize();
+        }
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
+        {
+            RetainDriverFailure(error);
+            GD.PushError($"OPENNV_NATIVE_TRAIT_EFFECT_DIVERGENCE: {error.Message}");
+            throw;
+        }
         if (_traitEntry is not null)
         {
             _traitEntry.Accepted -= AcceptTraits;

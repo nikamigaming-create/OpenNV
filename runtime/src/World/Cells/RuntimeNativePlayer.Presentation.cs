@@ -115,13 +115,14 @@ internal partial class RuntimeNativePlayer
 
     public override void _Process(double delta)
     {
+        if (_playerPhysical?.Failure is not null) return;
         if (!GetTree().Paused) AdvancePendingProjectileImpacts((float)delta);
         if (_presentationRecords is null) return;
         var active = !_modalInput && _sourceCamera is null && _furniturePhase == 0 && _movementEnabled;
         if (_firstPersonPixels is not null) _firstPersonPixels.Visible = _presentationError is null && active && !_thirdPersonMode && (_firstPerson?.Weapon is null || _weaponHandling!.Drawn || _weaponAction is not null);
         if (_thirdPerson is not null)
         {
-            _thirdPerson.Visible = _presentationError is null && (_xr is not null || _sourceCamera is null && _furniturePhase == 0);
+            _thirdPerson.Visible = _presentationError is null && (_playerPhysical?.HasPhysicalMotion == true || _xr is not null || _sourceCamera is null && _furniturePhase == 0);
             _thirdPerson.SetViewPolicy(_xr is not null || _thirdPersonMode, true);
         }
         if (_xr is not null && _firstPerson is not null) _firstPerson.Visible = _presentationError is null;
@@ -151,6 +152,17 @@ internal partial class RuntimeNativePlayer
             var policy = _playerPolicy();
             ApplySourceScale(policy.PlayerScale);
             _firstPerson?.SetToddler(policy.PlayerToddler);
+        }
+        if (_playerPhysical?.HasPhysicalMotion == true)
+        {
+            // The genuine KF/rig owns the current world body. The normal
+            // locomotion and tracked-arm publishers cannot overwrite that pose.
+            try { PhysicalPlayer.Execute("publish-player-physical-frame", PublishPlayerPhysicalView); }
+            catch (Exception error) when (FalloutPlayerPhysicalActivity.Ordinary(error))
+            { GD.PushError("OPENNV_PLAYER_PHYSICAL_FRAME_FAILED " + error.Message); return; }
+            if (_firstPersonPixels is not null) _firstPersonPixels.Visible = false;
+            if (_firstPerson is not null && _xr is not null) _firstPerson.Visible = false;
+            return;
         }
         if (!active && _xr is null && !(_firstPerson is { Toddler: true } && !_modalInput && _sourceCamera is null && _furniturePhase == 0))
         {
@@ -199,6 +211,7 @@ internal partial class RuntimeNativePlayer
 
     private void RebuildPresentation(uint[] equipped)
     {
+        RequirePhysicalPresentationReplacement();
         var records = _presentationRecords!; var content = RuntimeLiveContentSource.Current!;
         var appearance = _appearance!();
         var weapon = equipped.Select(records.RuntimeFormKey).Where(key => records.GetEffective(key).Signature == "WEAP")
@@ -282,6 +295,7 @@ internal partial class RuntimeNativePlayer
                 _thirdPerson.ShowTrackedBody(_firstPerson);
                 BindXrContacts();
             }
+            PublishPhysicalPlayerBody();
             PresentationChanged?.Invoke();
             Activity.SetWeaponDrawn(weapon is not null && _weaponHandling.Drawn);
         }

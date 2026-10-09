@@ -26,14 +26,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         {
             var position = _player.GlobalPosition / _player.UnitsToMeters;
             return world.DetectionPlacement(reference, new(_activeCell, [position.X, -position.Z, position.Y], [0, 0, 0]), _player.UnitsToMeters);
-        }, actor =>
-        {
-            // The source player class owns a HighProcess. Other actor process
-            // tiers remain unknown until a separate shared process owner binds
-            // them; presentation residency cannot prove those source classes.
-            if (actor == _pluginStack.RuntimeFormKey(0x14) && _player.IsInsideTree()) return FalloutDetectionProcessLevel.High;
-            return null;
-        });
+        }, world.ReadSourceActorProcessLevel);
         _speech!.CanResumeSourceCompletion = receipt => _resultScripts!.CanResumeSpeechCompletion(receipt);
         _speech.ResumeSourceCompletion = receipt =>
         {

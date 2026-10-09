@@ -34,7 +34,11 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutHitReactionFaultsSnapshot? HitReactionFaults = null,
     FalloutActivationRelaySnapshot? ActivationRelay = null,
     FalloutActorCorpseEquipment? CorpseEquipment = null,
-    FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null)
+    FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null,
+    IReadOnlyList<FalloutPackageResultSnapshot>? PackageResults = null,
+    FalloutActorScriptPackageSnapshot? ScriptPackage = null,
+    FalloutActorPackageChoice? PendingPackageChoice = null,
+    FalloutScriptLocalStorageSnapshot? LocalStorage = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -48,9 +52,16 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 snapshot.Variables.Values.Any(value => !double.IsFinite(value)) ||
                 snapshot.Deleted && snapshot.DeletePending || snapshot.DeathCount is < 0 ||
                 !float.IsFinite(snapshot.Opacity) || snapshot.Opacity is < 0 or > 1 ||
-                (snapshot.Script is null ? snapshot.ScriptSha256 is not null || snapshot.Variables.Count != 0 :
-                    !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
+                (snapshot.Script is null ? snapshot.ScriptSha256 is not null || snapshot.Variables.Count != 0 || snapshot.LocalStorage is not null :
+                    !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit) ||
+                    snapshot.LocalStorage is null))
                 throw new InvalidDataException("Saved reference state is invalid or duplicated.");
+            if (snapshot.LocalStorage is { } locals)
+            {
+                locals.Validate();
+                if (locals.Script != snapshot.Script || !string.Equals(locals.ScriptSha256, snapshot.ScriptSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Saved reference local storage differs from its script identity.");
+            }
             foreach (var (name, value) in snapshot.ActorValues ?? new Dictionary<string, FalloutActorValue>())
                 if ((name is not ("health" or "aggression") && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
@@ -82,6 +93,11 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved attack randomness differs between reference and active engagement.");
             snapshot.PackageMotion?.Validate();
             snapshot.PackageAssignment?.Validate();
+            snapshot.ScriptPackage?.ValidateContinuation(snapshot);
+            snapshot.PendingPackageChoice?.Validate();
+            if ((snapshot.PendingPackageChoice is { } choice && choice.Actor != snapshot.Reference) ||
+                (snapshot.PackageAssignment is { ScriptPackageRevision: > 0 } && snapshot.ScriptPackage is null))
+                throw new InvalidDataException("Actor package selection or procedure lost its exact reference epoch.");
             snapshot.DeferredPackageContinuation?.ValidateShape(snapshot);
             snapshot.PackageBindingFailure?.Validate();
             snapshot.SelectionFailure?.Validate();
@@ -138,12 +154,14 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
 
 internal sealed class FalloutReferenceInstance
 {
+    private static readonly IReadOnlyDictionary<uint, double> EmptyVariables = new Dictionary<uint, double>();
     internal FalloutFormKey Reference { get; }
     internal FalloutFormKey Cell { get; }
     internal FalloutFormKey Base { get; }
     internal FalloutReferenceScriptDefinition? Script { get; private set; }
     internal FalloutActorTemplateSelection? Templates { get; set; }
-    internal Dictionary<uint, double> Variables { get; }
+    internal FalloutScriptLocalStorage? LocalStorage { get; private set; }
+    internal IReadOnlyDictionary<uint, double> Variables => LocalStorage is null ? EmptyVariables : LocalStorage;
     internal string? ScriptError { get; set; }
     internal FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame { get; set; }
     internal FalloutReferenceScriptStoppedFrame? CompletedScriptContinuation { get; set; }
@@ -171,6 +189,8 @@ internal sealed class FalloutReferenceInstance
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
     internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
+    internal FalloutActorScriptPackageSnapshot? ScriptPackage { get; set; }
+    internal FalloutActorPackageChoice? PendingPackageChoice { get; set; }
     internal FalloutActorDeferredPackageContinuation? DeferredPackageContinuation { get; set; }
     internal Func<FalloutActorPackageAssignment?>? CapturePackageAssignment { get; set; }
     internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
@@ -249,7 +269,22 @@ internal sealed class FalloutReferenceInstance
     internal int DeathCount { get; set; }
     internal FalloutActorRagdollState? Ragdoll { get; set; }
     internal Func<FalloutActorRagdollState>? CaptureRagdoll { get; set; }
-    internal FalloutActorEngagement? Engagement { get; set; }
+    private FalloutActorEngagement? _engagement;
+    internal Action<FalloutActorEngagement?, FalloutActorEngagement?>? CombatGroupTargetChanged { get; set; }
+    internal FalloutActorEngagement? Engagement
+    {
+        get => _engagement;
+        set
+        {
+            var previous = _engagement;
+            _engagement = value;
+            var oldTarget = previous?.Target;
+            var newTarget = value?.Target;
+            if (oldTarget.HasValue != newTarget.HasValue || oldTarget.HasValue &&
+                !FalloutFormKeyComparer.Instance.Equals(oldTarget.GetValueOrDefault(), newTarget.GetValueOrDefault()))
+                CombatGroupTargetChanged?.Invoke(previous, value);
+        }
+    }
     internal Action? StopCombat { get; set; }
     internal Func<FalloutActorEngagement?>? CaptureEngagement { get; set; }
     internal FalloutActorCorpseEquipment? CorpseEquipment { get; set; }
@@ -285,7 +320,7 @@ internal sealed class FalloutReferenceInstance
         Enabled = (reference.Flags & 0x800) == 0;
         NoFade = (reference.Flags & 0x08000000) != 0;
         EnableParent = FalloutReferenceEnableParent.Read(reference);
-        Variables = script?.Locals.Values.ToDictionary(index => index, _ => 0d) ?? [];
+        if (script is not null) LocalStorage = new(script.Record, FalloutScriptLocalStorage.ReadInitialPayloads(script.Record));
     }
 
     internal double Read(uint index) => Variables.TryGetValue(index, out var value) ? value :
@@ -299,16 +334,18 @@ internal sealed class FalloutReferenceInstance
     {
         _ = Read(index);
         if (!double.IsFinite(value)) throw new InvalidDataException("Reference variable is non-finite.");
-        Variables[index] = value;
+        if (Script is { } compiled && FalloutCompiledScriptProgram.HasProgram(compiled.Record.ReadSubrecords().ToArray()))
+            FalloutScriptLocals.RequireCompiledValue(compiled.Record, index, value);
+        (LocalStorage ?? throw new InvalidDataException("Reference has no local storage owner.")).Write(index, value);
     }
 
     internal void BindTemplateScript(FalloutReferenceScriptDefinition? script)
     {
         if (Script?.Record.FormKey == script?.Record.FormKey) return;
-        if (Variables.Values.Any(value => value != 0) || ScriptError is not null)
+        if (LocalStorage?.HasMutations == true || ScriptError is not null)
             throw new InvalidDataException("Cannot replace an actor script after its execution has started.");
-        Script = script; Variables.Clear();
-        foreach (var index in script?.Locals.Values ?? []) Variables.Add(index, 0);
+        Script = script;
+        LocalStorage = script is null ? null : new(script.Record, FalloutScriptLocalStorage.ReadInitialPayloads(script.Record));
     }
 
     internal FalloutReferenceSnapshot Capture() => CaptureCore(null, null, false);
@@ -363,7 +400,8 @@ internal sealed class FalloutReferenceInstance
                 ? capturePending() : PendingPackageSelection?.Copy() : null,
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
-            DeferredPackageContinuation: DeferredPackageContinuation);
+            DeferredPackageContinuation: DeferredPackageContinuation, ScriptPackage: ScriptPackage,
+            PendingPackageChoice: PendingPackageChoice, LocalStorage: LocalStorage?.Capture());
     }
 }
 
@@ -455,7 +493,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             throw new InvalidOperationException($"Cell {scene.Cell.FormKey} is already resident.");
         var instances = scene.References.Select(reference => Get(reference.FormKey)).ToArray();
         foreach (var instance in instances.Where(instance => instance.DeletePending && !_residentReferences.ContainsKey(instance.Reference)))
-        { instance.Deleted = true; instance.DeletePending = false; }
+        { instance.Deleted = true; instance.DeletePending = false; RetireDeletedActorScriptPackage(instance); }
         // Exterior residency includes persistent references whose source parent
         // is the world cell. Source ancestry remains unchanged in every instance.
         if (instances.Where((instance, index) => instance.Cell != scene.References[index].Cell).Any() ||
@@ -476,7 +514,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             var remaining = _residentReferences[instance.Reference] - 1;
             if (remaining > 0) { _residentReferences[instance.Reference] = remaining; continue; }
             _residentReferences.Remove(instance.Reference);
-            if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; }
+            if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; RetireDeletedActorScriptPackage(instance); }
         }
     }
 
@@ -496,6 +534,9 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             _definitions.Add(script.FormKey, definition = new(script));
         instance = new(record, definition, () => IsEnabled(key));
         _instances.Add(key, instance);
+        BindCombatGroupInstance(instance);
+        ConstructActualActorUpdate(instance);
+        BindActorPerceptionInstance(instance);
         return instance;
     }
 
@@ -545,6 +586,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         {
             reference = instance.Reference.ToString(),
             assignment = instance.PackageAssignment?.Package.ToString(),
+            scriptPackage = instance.ScriptPackage,
+            pendingPackageChoice = instance.PendingPackageChoice,
             motion = instance.PackageMotion?.Package.ToString(),
             blocker = instance.ProcedureCaptureBlocker,
             bindingCapture = instance.PackageBindingCaptureDiagnostic,
@@ -565,11 +608,15 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         if (_instances.Values.Any(instance => instance.DeferredPackageContinuation is not null && IsResident(instance.Reference)))
             throw new NotSupportedException("Resident deferred package requires its actual native handoff before saving.");
         foreach (var actor in _packageEvents?.PendingActors ?? []) _ = Get(actor);
-        return _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
+        var result = _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
             .Select(instance => instance.Capture() with
             {
-                PackageEvents = _packageEvents?.Capture(instance.Reference) is { Count: > 0 } events ? events : null
+                PackageEvents = _packageEvents?.Capture(instance.Reference) is { Count: > 0 } events ? events : null,
+                PackageResults = CapturePackageResults(instance.Reference)
             }).ToArray();
+        ValidateActorScriptPackageCapture(result);
+        ValidateRecordedPackageResults(records, result);
+        return result;
     }
 
     internal void Restore(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
@@ -577,6 +624,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_instances.Count != 0 || PendingPackageEventCount != 0) throw new InvalidOperationException("Reference restoration requires a fresh world.");
         FalloutReferenceSnapshot.Validate(snapshots);
+        ValidateRecordedPackageResults(records, snapshots);
         using var validated = new FalloutReferenceWorld(records);
         foreach (var snapshot in snapshots)
         {
@@ -593,21 +641,19 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 snapshot.ScriptSha256 != instance.Script?.Sha256 || snapshot.Variables is null ||
                 !snapshot.Variables.Keys.Order().SequenceEqual(instance.Variables.Keys.Order()))
                 throw new InvalidDataException($"Saved reference {snapshot.Reference} differs from its winning source declaration.");
-            foreach (var (index, value) in snapshot.Variables) instance.Write(index, value);
-            // Older builds incorrectly retained failed engine default actions
-            // as source-program faults even on objects with no script.
-            // Parsing executes no source statements. Retry it after a cold
-            // load so a parser correction can recover an existing save.
-            // Reached execution failures retain their applied prefix/error.
-            // PACK result scripts belong to their package, so even an actor
-            // without an attached script can retain their reached failure.
-            var packageFault = snapshot.ScriptError is { } error &&
-                (error.StartsWith("Package POBA ", StringComparison.Ordinal) ||
-                 error.StartsWith("Package POCA ", StringComparison.Ordinal) ||
-                 error.StartsWith("Package POEA ", StringComparison.Ordinal));
-            instance.ScriptError = instance.Script is null && !packageFault ||
-                snapshot.ScriptError?.StartsWith("Parse:", StringComparison.OrdinalIgnoreCase) == true
-                ? null : snapshot.ScriptError;
+            if (instance.Script is { } compiled && FalloutCompiledScriptProgram.HasProgram(compiled.Record.ReadSubrecords().ToArray()))
+            {
+                if (snapshot.ScriptStoppedFrame is not null || snapshot.CompletedScriptContinuation is not null)
+                    throw new NotSupportedException("Legacy source statement continuation has no compiled offset/ordinal authority; its prefix cannot be replayed.");
+                foreach (var (index, value) in snapshot.Variables) FalloutScriptLocals.RequireCompiledValue(compiled.Record, index, value);
+            }
+            if (instance.LocalStorage is { } locals)
+                locals.Restore(snapshot.LocalStorage ?? throw new InvalidDataException("Saved reference has no complete ordered local storage."), snapshot.Variables);
+            else if (snapshot.LocalStorage is not null)
+                throw new InvalidDataException("Saved ordered locals have no attached reference script.");
+            // The saved reached failure is part of this owner's continuation.
+            // Cold publication must retain it without retrying or clearing it.
+            instance.ScriptError = snapshot.ScriptError;
             if (snapshot.ScriptStoppedFrame is not null || snapshot.CompletedScriptContinuation is not null)
             {
                 if (instance.Script is null) throw new InvalidDataException("Saved stopped frame has no source script.");
@@ -638,6 +684,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             instance.DeletePending = snapshot.DeletePending;
             instance.Deleted = snapshot.Deleted;
+            validated.RestoreActorScriptPackage(instance, snapshot);
             instance.Taken = snapshot.Taken;
             instance.DoorOpen = snapshot.DoorOpen;
             instance.DoorMotion = snapshot.DoorMotion;
@@ -833,6 +880,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
                     .Validate(records, validated, snapshot.Reference, guard);
         }
+        validated.RestorePackageResults(snapshots);
         validated.PackageEvents.Restore(snapshots);
         _packageEvents = validated._packageEvents;
         validated._packageEvents = null;
@@ -843,13 +891,21 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.BindReferenceEnableQuery(() => IsEnabled(key));
             _instances.Add(key, instance);
             BindInventoryRemoval(instance);
+            BindCombatGroupInstance(instance);
+            ConstructActualActorUpdate(instance);
+            BindActorPerceptionInstance(instance);
         }
+        foreach (var (key, results) in validated._packageResults) _packageResults.Add(key, results);
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
         foreach (var (seat, actor) in validated._furnitureSeats) _furnitureSeats.Add(seat, actor);
     }
 
     public void Dispose()
     {
+        RetireActorProcessGraph();
+        RetireCellProcesses();
+        RetireActorUpdates();
+        RetireCombatGroups();
         UnloadedPackages = null;
         _beforeActorHit = null;
         _sounds?.Clear();
@@ -863,6 +919,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         _residentReferences.Clear();
         _furnitureSeats.Clear();
         _instances.Clear();
+        _scriptPackageSources.Clear();
+        _packageResults.Clear();
         _definitions.Clear();
         _healthSources.Clear();
         _bodyParts.Clear();

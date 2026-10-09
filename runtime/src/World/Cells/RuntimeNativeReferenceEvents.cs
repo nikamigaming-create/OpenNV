@@ -79,7 +79,13 @@ internal partial class RuntimeNativeReferenceEvents : Node
         _records = records;
         _world = world;
         _quests = quests;
-        _host = host with { Sitting = host.Sitting ?? GetSitting };
+        _host = host with
+        {
+            Sitting = host.Sitting ?? GetSitting,
+            Sleeping = host.Sleeping ?? GetSleeping,
+            KnockedState = host.KnockedState ?? GetKnockedState,
+            IsPcSleeping = host.IsPcSleeping ?? (() => (Player ?? throw new NotSupportedException("IsPCSleeping has no actual native player owner.")).IsPcSleeping()),
+        };
         _scripts = new(records, world, quests, _host);
         _transform = transform; _unitsToMeters = unitsToMeters; _collisionMask = collisionMask;
         SetResidency(cell, root);
@@ -305,6 +311,26 @@ internal partial class RuntimeNativeReferenceEvents : Node
         ? (Player ?? throw new NotSupportedException("Player GetSitting has no resident native owner.")).SittingState
         : _world.GetSitting(actor);
 
+    private int GetSleeping(FalloutFormKey actor) => _records.RuntimeFormId(actor) == 0x14
+        ? (Player ?? throw new NotSupportedException("GetSleeping has no actual native player owner.")).GetPlayerSleeping()
+        : throw new NotSupportedException($"GetSleeping actor {actor} has no source sleep procedure continuation owner.");
+    private int GetKnockedState(FalloutFormKey actor)
+    {
+        if (_records.RuntimeFormId(actor) == 0x14)
+            return (Player ?? throw new NotSupportedException("GetKnockedState has no actual native player owner.")).GetPlayerKnockedState();
+        var node = _bindings.GetValueOrDefault(actor)?.Node ?? throw new NotSupportedException("Knocked-state subject has no actual native actor.");
+        return (RuntimeNativeActorCombat.Find(node) ?? throw new NotSupportedException("Knocked-state actor has no physical combat owner.")).GetKnockedState();
+    }
+    internal Transform3D PlayerFurniturePlacement(FalloutFormKey reference)
+    {
+        var binding = _bindings.GetValueOrDefault(reference) ?? throw new NotSupportedException("Cold player furniture has no actual resident native instance.");
+        var node = binding.Node ?? throw new NotSupportedException("Cold player furniture source instance has no native node.");
+        if (binding.Instance.Reference != reference || _records.GetEffective(binding.Instance.Base).Signature != "FURN" ||
+            !_world.IsEnabled(reference) || !node.IsInsideTree())
+            throw new InvalidDataException("Cold player furniture node differs from its authoritative enabled source reference.");
+        return node.GlobalTransform;
+    }
+
     private FalloutFormKey? Contact(Node body)
     {
         for (Node? node = body; node is not null; node = node.GetParent())
@@ -451,6 +477,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
                 {
                     if (effect.Conditions.Count != 0) throw new NotSupportedException("Script ability conditions require their lifecycle owner.");
                     var script = _records.GetEffective(effect.Script);
+                    FalloutCompiledScriptProgram.RequireDiagnosticOnly(script, script.ReadSubrecords().ToArray(), "ScriptEffectStart");
                     if (FalloutScriptLocals.Read(script).Count != 0) throw new NotSupportedException("Ability script local persistence is unbound.");
                     var text = FalloutDialogueTopic.ScriptText(script.ReadSubrecords().Single(row => row.Signature == "SCTX").Data.Span);
                     foreach (var block in FalloutGameModeProgram.ReadEvents(text).Where(block => block.Event.Equals("ScriptEffectStart", StringComparison.OrdinalIgnoreCase)))

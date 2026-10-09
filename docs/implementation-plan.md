@@ -2,6 +2,15 @@
 
 ## Complete-game direction and execution
 
+The October 8 direction treats the engine as greenfield. Replace incomplete
+owners and remove obsolete adapters freely; preserving earlier OpenNV schemas
+or implementation behavior is not an acceptance requirement. Implement general
+source-driven capabilities in substantial parallel batches. Keep the candidate
+compilable during integration and defer broad validation to combined candidates
+at roughly four-hour intervals. Do not repeat full gates after each small patch.
+Testing follows the implementation batch and retained source failures drive
+the next engine owners. Owned game inputs remain read-only and private.
+
 The October 7 full-scope direction is complete Fallout: New Vegas, Fallout 3,
 TTW, the selected combined stack, all nine JAM modules, JIP LN, JohnnyGuitar,
 JFP and every required dependency. Keep the original eleven mod targets, all
@@ -38,7 +47,7 @@ not run competing live sessions or mutate another owner's source/save state.
 | Scope | Complete acceptance outcome | First remaining owners |
 | --- | --- | --- |
 | Standalone FNV plus owned DLCs | Fresh launcher New Game, full opening/tutorial, connected world, all authored quests/branches and systems, persistent outcomes and cold continuation | Reached scripts, Sunny/Cheyenne/tutorial, complete combat/advancement, materials/vegetation/LOD and world/campaign coverage |
-| Standalone FO3 plus owned DLCs | Fresh ordinary birth/childhood/G.O.A.T./Escape, exterior/Megaton, complete campaign/DLC/system behavior and cold continuation | Reached birthday/NPC/result-script owners, legacy loop saving, child presentation, later opening and independent source audit |
+| Standalone FO3 plus owned DLCs | Fresh ordinary birth/childhood/G.O.A.T./Escape, exterior/Megaton, complete campaign/DLC/system behavior and cold continuation | Reached birthday/NPC/result-script owners, source audio-loop continuation, child presentation, later opening and independent source audit |
 | TTW plus its dependency graph | Complete Capital campaign and DLCs, source power/ticket/train route to Mojave, both campaigns/DLCs, return travel and cold outcomes | Exterior creature paths/trees, Megaton/Union Station, train requirements, source scripts and Benny reset/gear consequences |
 | Combined selected stack | Same routes with authored winners, dependency behavior, configured options and interactions intact | Full source selection/settings identity, SCDA, native extensions, MCM and ordinary multi-mod gameplay |
 | JAM | Dynamic Crosshair, Hit Marker, Hit Indicator, Visual Objectives, Hold Breath, Sprint, Bullet Time, Weapon Wheel and Loot Menu, with complete MCM configuration | Remaining source syntax/effects, hit contexts/events, HUD/MCM, input/AP/timing/inventory owners and unchanged dependencies |

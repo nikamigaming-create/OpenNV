@@ -66,7 +66,7 @@ public partial class NativeRenderedMenuAudit
             speech.PrepareSubtitle = _ => { };
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
                 _ => throw new NotSupportedException("Selected NPC fixture reached an unbound source effect.")));
-            speech.ExecuteResults = scripts.ExecuteResult;
+            speech.ExecuteOwnedResults = scripts.ExecuteResultOwned;
             speech.SayToCompleted += _ => throw new InvalidDataException("Package NPC speech invented scripted SayToDone.");
             fixture.AddChild(speech);
             var terminalPrefix = 0; var settled = 0; var linkedNotifications = 0;

@@ -2,23 +2,26 @@ using System.Globalization;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed record FalloutTraitMenuChoice(FalloutNativeTraitIdentity Trait, string Description, string? Icon);
+internal sealed record FalloutTraitMenuChoice(FalloutNativeTraitIdentity Trait, string Description, string? Icon, bool Enabled);
 
 // A menu draft does not grant/revoke perks before the shared acceptance owner.
 internal sealed class FalloutTraitMenuSelection
 {
-    private readonly FalloutNativeTraitFarewellContract _contract;
+    private readonly FalloutTraitMenuContract _contract;
+    private readonly FalloutPluginStack _records;
+    private readonly int _playerLevel;
+    private readonly Func<FalloutCondition, float> _evaluate;
     private readonly List<FalloutNativeTraitIdentity> _selected;
     internal IReadOnlyList<FalloutTraitMenuChoice> Choices { get; }
     internal IReadOnlyList<FalloutNativeTraitIdentity> Selected => _selected.ToArray();
     internal int Maximum => _contract.MaximumTraits;
     internal int Remaining => Maximum - _selected.Count;
 
-    internal FalloutTraitMenuSelection(FalloutPluginStack records, FalloutNativeTraitFarewellContract contract,
-        IReadOnlyList<FalloutNativeTraitIdentity> current)
+    internal FalloutTraitMenuSelection(FalloutPluginStack records, FalloutTraitMenuContract contract,
+        IReadOnlyList<FalloutNativeTraitIdentity> current, int playerLevel, Func<FalloutCondition, float> evaluate)
     {
-        FalloutNativeTraitFarewellResolver.ValidateTraits(contract, current);
-        _contract = contract; _selected = [.. current];
+        FalloutTraitMenuCatalogue.Validate(records, contract, current);
+        _records = records; _contract = contract; _selected = [.. current]; _playerLevel = playerLevel; _evaluate = evaluate;
         Choices = contract.Traits.Select(trait =>
         {
             var record = records.GetEffective(records.RuntimeFormKey(trait.RuntimeFormId));
@@ -32,7 +35,8 @@ internal sealed class FalloutTraitMenuSelection
             }
             if (Text("EDID") != trait.EditorId || Text("FULL") != trait.DisplayName)
                 throw new InvalidDataException("Trait menu identity differs from its winning PERK.");
-            return new FalloutTraitMenuChoice(trait, Text("DESC") ?? "", Text("ICON"));
+            return new FalloutTraitMenuChoice(trait, Text("DESC") ?? "", Text("ICON"),
+                FalloutTraitMenuCatalogue.Eligible(records, trait, playerLevel, evaluate));
         }).OrderBy(choice => choice.Trait.DisplayName, StringComparer.Ordinal).ToArray();
     }
 
@@ -40,6 +44,7 @@ internal sealed class FalloutTraitMenuSelection
     {
         if (!Choices.Any(choice => choice.Trait == trait)) throw new InvalidDataException("Trait menu choice is outside its source contract.");
         if (_selected.Remove(trait)) return true;
+        if (!FalloutTraitMenuCatalogue.Eligible(_records, trait, _playerLevel, _evaluate)) return false;
         if (_selected.Count >= Maximum) return false;
         _selected.Add(trait); return true;
     }
@@ -47,7 +52,9 @@ internal sealed class FalloutTraitMenuSelection
     internal IReadOnlyList<FalloutNativeTraitIdentity> Submit()
     {
         var selected = _selected.OrderBy(trait => trait.RuntimeFormId).ToArray();
-        FalloutNativeTraitFarewellResolver.ValidateTraits(_contract, selected);
+        FalloutTraitMenuCatalogue.Validate(_records, _contract, selected);
+        if (selected.Any(trait => !FalloutTraitMenuCatalogue.Eligible(_records, trait, _playerLevel, _evaluate)))
+            throw new InvalidDataException("Selected trait is no longer eligible in the authoritative player state.");
         return selected;
     }
     internal static int ReadMaximum(FalloutPluginStack records)

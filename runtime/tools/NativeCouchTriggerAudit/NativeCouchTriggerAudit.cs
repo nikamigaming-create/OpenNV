@@ -46,8 +46,10 @@ public partial class NativeCouchTriggerAudit : Node3D
                 appearanceState: FalloutNativeCharacterCreation.ActorState(records, creation.Player, creation.Initial));
             var player = new RuntimeNativePlayer(); root.AddChild(player); player.Configure(configuration, Placement(furniture));
             player.SetPhysicsProcess(false); player.SetProcessUnhandledInput(false);
-            player.CreateFurnitureBody = () => RuntimeNativeNpc.Create(playerAppearance with { Reference = records.RuntimeFormKey(0x14) },
-                content, units, (_, _, _, _) => new StandardMaterial3D());
+            using var physicalSource = FalloutAdvancementRuntimeSource.Open(records);
+            NativeSourcePlayerPhysicalSetup.Configure(player, records, quests, world, playerAppearance,
+                physicalSource.Receipt, key => key == furniture.FormKey && world.IsEnabled(key) && couch.IsInsideTree()
+                    ? couch.GlobalTransform : throw new NotSupportedException("Furniture diagnostic has no attached enabled source instance."));
             var effects = new List<FalloutReferenceScriptEffect>();
             var events = new RuntimeNativeReferenceEvents { Player = player };
             events.Configure(records, world, quests, cell, root, new(events.IsCurrentFurniture, effect =>

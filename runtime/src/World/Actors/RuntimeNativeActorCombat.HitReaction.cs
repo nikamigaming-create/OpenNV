@@ -113,7 +113,7 @@ internal sealed partial class RuntimeNativeActorCombat
         49 => 0, // No sleeping procedure is currently owned by a resident actor.
         72 => _state.Base == condition.FormArgument1 ? 1 : 0,
         77 => _state.HitReactionRandom.NextBounded(100),
-        107 => _state.KnockedDown ? 2 : 0,
+        107 => _state.KnockedDown ? 1 : 0,
         159 => _actor is RuntimeNativeNpc npc ? npc.SittingState : 0,
         286 => Activity.Sneaking ? 1 : 0,
         391 => hitLocation,

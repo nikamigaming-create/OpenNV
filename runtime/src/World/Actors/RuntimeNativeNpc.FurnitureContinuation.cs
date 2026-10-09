@@ -31,7 +31,7 @@ internal partial class RuntimeNativeNpc
         if (!CanCaptureFurnitureContinuation())
             throw new NotSupportedException("Furniture still has an unowned approach, idle or source selection continuation.");
         var lifecycle = _packageEvents!;
-        var state = new FalloutActorFurnitureContinuation(FalloutActorPackageAssignment.Capture(_aiStack!, lifecycle)!,
+        var state = new FalloutActorFurnitureContinuation(FalloutActorPackageAssignment.Capture(_aiStack!, lifecycle, _boundScriptPackageRevision)!,
             lifecycle.Revision, lifecycle.LastEvent, lifecycle.LastPackage,
             lifecycle.LastPackage is { } previous ? FalloutActorFurnitureContinuation.RecordHash(_aiStack!.GetEffective(previous)) : null,
             SittingState, Math.Clamp(_furnitureSearchRemaining, 0, .5), WriteFurniturePose(Transform),

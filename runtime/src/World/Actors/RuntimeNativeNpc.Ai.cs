@@ -83,6 +83,7 @@ internal partial class RuntimeNativeNpc
         package = _aiPackage?.FormKey.ToString(),
         selectedPackage = CurrentPackage?.ToString(),
         evaluationPending = _requestedSelection is not null,
+        scriptPackage = _aiReferenceState?.ScriptPackage,
         pendingSelectionCaptureReady = CanCapturePendingSelection(),
         furniture = _furnitureReference?.ToString(),
         marker = _seat?.MarkerId,
@@ -216,9 +217,10 @@ internal partial class RuntimeNativeNpc
             deferred.BindNative(stack, _aiReferenceState, _packageEvents);
         else if (_aiReferenceState?.PackageAssignment is { } retained && _aiReferenceState.PackageMotion?.Package != retained.Package)
             retained.Bind(stack, _packageEvents);
+        RestoreScriptPackageLifecycle();
         RestoreMarkerTravelLifecycleBeforeSelection();
         if (_aiReferenceState is { } packageState)
-            packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents);
+            packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents, _boundScriptPackageRevision);
         BindFailureCapture();
         BindSelectionFailureCapture();
         BindPendingSelectionCapture();
@@ -281,6 +283,7 @@ internal partial class RuntimeNativeNpc
 
     private void DispatchPackageEvent(FalloutScriptPackage package, string kind)
     {
+        var startedRevision = BeginScriptPackageEvent(package, kind);
         // The source process marks the actual actor before executing its PACK
         // result. Its attached script consumes these marks in declaration order
         // on the normal source frame, including events produced before 3D binds.
@@ -295,7 +298,11 @@ internal partial class RuntimeNativeNpc
                 _ => throw new InvalidDataException("Package lifecycle event kind is unknown."),
             });
         }
-        try { DispatchPackageActions(package, kind); }
+        try
+        {
+            DispatchPackageActions(package, kind);
+            CompleteScriptPackageEvent(package, kind, startedRevision);
+        }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
         {
             // An unsupported embedded result cannot release the attached actor
@@ -363,17 +370,25 @@ internal partial class RuntimeNativeNpc
         _aiPollRemaining -= delta;
         var scheduleTime = _aiClock?.ScheduleTime();
         if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
-        if (_requestedSelection is null && _aiQuestRevision == _questState.Revision && _aiActivityRevision == Activity.Revision &&
+        if (_requestedSelection is null && _aiReferenceState?.PendingPackageChoice is null &&
+            _aiReferenceState?.ScriptPackage?.Pending != true &&
+            ScriptPackageRevision == _observedScriptPackageRevision &&
+            _aiQuestRevision == _questState.Revision && _aiActivityRevision == Activity.Revision &&
             _aiScheduleTime == scheduleTime && _aiPollRemaining > 0) return;
         _aiQuestRevision = _questState.Revision;
         _aiActivityRevision = Activity.Revision;
         _aiScheduleTime = scheduleTime;
         _aiPollRemaining = 10;
         FalloutPluginRecord? selected = null;
-        var forced = _requestedSelection is not null;
+        var forced = _requestedSelection is not null || _aiReferenceState?.PendingPackageChoice is not null ||
+            _aiReferenceState?.ScriptPackage?.Pending == true ||
+            ScriptPackageRevision != _observedScriptPackageRevision;
         try
         {
-            var selection = _requestedSelection ?? SelectSourcePackage();
+            var queuedChoice = _aiReferenceState?.PendingPackageChoice;
+            var selection = _requestedSelection is { } requested && requested.OverrideRevision == ScriptPackageRevision
+                ? requested : SelectSourcePackage();
+            _observedScriptPackageRevision = _bindingScriptPackageRevision = selection.OverrideRevision;
             _requestedSelection = null;
             if (_aiReferenceState is { } requestedState) requestedState.PendingPackageSelection = null;
             selected = selection.Record;
@@ -383,18 +398,23 @@ internal partial class RuntimeNativeNpc
             // A failed procedure cannot freeze a later eligible package. Event
             // errors retain their separate exactly-once failure latch.
             _aiError = null; _failedPackage = null;
-            if (_aiPackage?.FormKey == selected?.FormKey) return;
-            if (!forced && _nativeMarkerTravel is { } markerTravel && _nativeMarkerTravelProgress is { Complete: false } &&
-                markerTravel.MustReach && selected?.FormKey != markerTravel.Form)
+            if (_aiPackage?.FormKey == selected?.FormKey && !ScriptPackageAssignmentPending)
             {
-                _selectedSourcePackage = markerTravel.Form;
+                if (_aiReferenceState is { } state && ReferenceEquals(state.PendingPackageChoice, queuedChoice))
+                    state.PendingPackageChoice = null;
                 return;
             }
-            if (!forced && _editorTravel is { MustComplete: true } && _editorTravelProgress?.Complete != true)
-                throw new NotSupportedException("Incomplete editor travel needs its must-complete package reevaluation owner.");
             if (_sitting is 2 or 4) { _pendingPackage = selected; return; }
-            if (_sitting == 1 && selected is not null && RetainFurniturePackage(selected)) return;
-            if (_aiPackage is not null)
+            if (_sitting == 1 && selected is not null && RetainFurniturePackage(selected))
+            {
+                if (_aiReferenceState is { } state && ReferenceEquals(state.PendingPackageChoice, queuedChoice))
+                    state.PendingPackageChoice = null;
+                return;
+            }
+            if (ReferenceEquals(_aiReferenceState?.PendingPackageChoice, queuedChoice) && _aiReferenceState is not null)
+                _aiReferenceState.PendingPackageChoice = null;
+            if (_aiPackage is not null || _packageEvents?.Active is { } active &&
+                (active.Form != selected?.FormKey || ScriptPackageAssignmentPending))
             {
                 if (_seat is not null && !_furnitureApproaching)
                 {
@@ -426,18 +446,22 @@ internal partial class RuntimeNativeNpc
                 if (_aiReferenceState?.ProcedureCaptureBlocker == MarkerTravelCaptureBlocker)
                     _aiReferenceState.ProcedureCaptureBlocker = null;
             }
+            if (selection.OverrideRevision != ScriptPackageRevision || _requestedSelection is not null ||
+                _aiReferenceState?.PendingPackageChoice is not null) { _aiPollRemaining = 0; return; }
             if (selected is null) return;
+            var restoring = initializing && !ScriptPackageAssignmentPending &&
+                (_aiReferenceState?.PackageAssignment is not { } retained || retained.Package == selected.FormKey);
             _packageIdleSource = selection.Declaration!;
             _packageIdles = new(_packageIdleSource, _idleReplays,
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
             if (_packageIdleSource.Procedure == 0) { BeginFindFurniture(selected); return; }
-            if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, initializing); return; }
+            if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, restoring); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
-            if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }
-            if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }
+            if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, restoring); return; }
+            if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, restoring); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 0, LocationReference: { } marker } &&
                 _aiStack.GetEffective(_aiWorld!.Get(marker).Base).Signature != "FURN")
-            { BeginMarkerTravel(selected, initializing); return; }
+            { BeginMarkerTravel(selected, restoring); return; }
             if (_packageIdleSource.Procedure == 15)
             {
                 FalloutPlacedReference? wait = null;
@@ -449,7 +473,7 @@ internal partial class RuntimeNativeNpc
                         wait = _aiCell!.References.SingleOrDefault(value => value.FormKey == _packageIdleSource.LocationReference) ??
                             throw new NotSupportedException($"PACK {selected.FormKey} dialogue wait location is outside the active cell.");
                 }
-                BeginDialoguePackage(selected, wait, initializing);
+                BeginDialoguePackage(selected, wait, restoring);
                 return;
             }
             var fields = selected.ReadSubrecords().ToArray();
@@ -472,7 +496,7 @@ internal partial class RuntimeNativeNpc
             }
             if (_packageIdleSource.LocationRadius != 0)
                 throw new NotSupportedException($"PACK {selected.FormKey} requires its furniture location-radius owner.");
-            BeginFurniturePackage(selected, reference, furniture, initializing);
+            BeginFurniturePackage(selected, reference, furniture, restoring);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
         {

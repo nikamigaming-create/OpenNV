@@ -50,8 +50,9 @@ internal static class PlayerTagSkillContracts
             tags.AcceptMenu(identities.Take(3).ToArray());
             Require(tags.Capture().Slots[3] is null && !tags.IsTagged("Science") && skills.Value("Science") == baseScience,
                 "Menu acceptance kept a fourth slot or stale skill bonus.");
-            var legacy = new FalloutPlayerTagSkills(records, contract, legacy: identities.Take(3).ToArray());
-            Require(JsonSerializer.Serialize(legacy.Capture()) == JsonSerializer.Serialize(tags.Capture()), "Legacy tags did not retain stored selection order.");
+            var accepted = new FalloutPlayerTagSkills(records, contract);
+            accepted.AcceptMenu(identities.Take(3).ToArray());
+            Require(JsonSerializer.Serialize(accepted.Capture()) == JsonSerializer.Serialize(tags.Capture()), "Menu tags did not retain submitted selection order.");
             foreach (var shared in new[] { false, true })
             {
                 using var world = new FalloutReferenceWorld(records);

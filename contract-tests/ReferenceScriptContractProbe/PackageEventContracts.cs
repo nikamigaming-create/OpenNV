@@ -142,8 +142,8 @@ internal static class PackageEventContracts
     }
     private static byte[] Event(string kind, string source, uint? reference = null, uint topic = 0, uint idle = 0)
     {
-        var header = new byte[20]; UInt(header, 4, reference is null ? 0u : 1u); UInt(header, 8, 1);
-        return Join(Field(kind, []), Field("SCHR", header), Field("SCDA", [0]), Field("SCTX", Text(source)),
+        var header = new byte[20]; UInt(header, 4, reference is null ? 0u : 1u); UInt(header, 8, 0);
+        return Join(Field(kind, []), Field("SCHR", header), Field("SCTX", Text(source)),
             reference is { } form ? Field("SCRO", BitConverter.GetBytes(form)) : [], Field("TNAM", BitConverter.GetBytes(topic)),
             idle == 0 ? [] : Field("INAM", BitConverter.GetBytes(idle)));
     }

@@ -20,7 +20,6 @@ internal static class PlayerAbilityScriptContracts
         {
             CheckHeaderLayout();
             foreach (var duplicate in new[] { false, true }) CheckStartCold(directory, duplicate);
-            CheckOriginalAdmissionStart(directory);
             CheckCompiledExtentMismatch(directory);
             CheckPrefixFailure(directory);
             CheckUnsupportedEvent(directory);
@@ -124,31 +123,6 @@ internal static class PlayerAbilityScriptContracts
         Reject(restored.Synchronize);
     }
 
-    private static void CheckOriginalAdmissionStart(string directory)
-    {
-        File.WriteAllBytes(Path.Combine(directory, Plugin), Fixture(false));
-        using var records = FalloutPluginStack.Load(directory, [Plugin]);
-        using var world = new FalloutReferenceWorld(records);
-        var actor = new FalloutPlayerActorValues(records);
-        var original = new FalloutNativeCampaignState(FalloutNativeCampaignSave.BeforeAbilityScriptsSchema,
-            "authored-source", Key(0x800), "AuthoredQuest", 0, "Authored Player", null!, actor.BaseSpecial,
-            [], [], [], [], [], [], [], PlayerActorValues: actor.Capture());
-        var receipt = FalloutPlayerAbilitySaveAdmission.FromOriginalHeader(original)!;
-        var current = receipt.CompleteOriginalRead(original with { Schema = FalloutNativeCampaignSave.ExpectedSchema }, records);
-        var skills = Skills(records, actor);
-        skills.RestoreValues(current.PlayerSkillValues!);
-        Reject(() => new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition,
-            current.PlayerAbilityScripts));
-        var effects = Bind(records, world, actor, skills, current.PlayerAbilityScripts, receipt);
-        effects.Synchronize();
-        Require(effects.Capture().Effects is [{ Started: true, Generation: 1 }] &&
-            skills.ReadSkill("Barter", FalloutActorValueRead.Permanent) == 18,
-            "The exact source-proven original admission failed to run its first real ability instance.");
-        effects.Synchronize();
-        Require(skills.ReadSkill("Barter", FalloutActorValueRead.Permanent) == 18,
-            "Original admission reapplied its completed effect prefix.");
-    }
-
     private static void CheckUnsupportedEvent(string directory)
     {
         File.WriteAllBytes(Path.Combine(directory, Plugin), Fixture(false, update: true));
@@ -165,10 +139,9 @@ internal static class PlayerAbilityScriptContracts
         () => actor.BaseSpecial, _ => false, () => [], null, new FalloutPlayerInventory(), Key(7), () => Key(10), () => false,
         actorValues: actor);
     private static FalloutPlayerAbilityScripts Bind(FalloutPluginStack records, FalloutReferenceWorld world,
-        FalloutPlayerActorValues actor, FalloutPlayerSkills skills, FalloutPlayerAbilityScriptsSnapshot? restore = null,
-        FalloutPlayerAbilitySaveAdmission? originalAdmission = null)
+        FalloutPlayerActorValues actor, FalloutPlayerSkills skills, FalloutPlayerAbilityScriptsSnapshot? restore = null)
     {
-        var effects = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, restore, originalAdmission);
+        var effects = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, restore);
         var executor = new FalloutReferenceScripts(records, world, new FalloutQuestState(records),
             new((_, _) => throw new NotSupportedException("Unexpected fixture furniture query."),
                 _ => throw new NotSupportedException("Unexpected fixture presentation command."),

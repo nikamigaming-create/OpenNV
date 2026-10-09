@@ -134,7 +134,7 @@ public partial class RuntimeCoordinator
                         cell =>
                         {
                             cancellation.ThrowIfCancellationRequested();
-                            return FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, resolved.PersistentCell);
+                            return FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell);
                         });
                     foreach (var path in landscapes.Values.SelectMany(land => land.Textures.Values)
                         .SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
@@ -194,11 +194,20 @@ public partial class RuntimeCoordinator
     public override void _ExitTree()
     {
         if (_retiringNativeSession) GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=enter");
-        CancelNativeManualSave("Native session retired before the pending manual save could commit.");
-        DetachNativeCloseRequest();
-        CancelNativeLauncherEntry();
-        CancelNativeGridRead();
-        if (!_retiringNativeSession) return;
+        var failures = new List<Exception>();
+        void Retire(Action action) { try { action(); } catch (Exception error) { failures.Add(error); } }
+        Retire(RetireNativePluginCampaign);
+        Retire(RetireNativeExperienceHud);
+        Retire(() => CancelNativeManualSave("Native session retired before the pending manual save could commit.", allQueued: true));
+        Retire(DetachNativeCloseRequest);
+        Retire(CancelNativeLauncherEntry);
+        Retire(CancelNativeGridRead);
+        Retire(RequireNativeSourceCellRetirementBeforeWorldRelease);
+        if (!_retiringNativeSession)
+        {
+            if (failures.Count != 0) throw new AggregateException("Native session retirement retained failures.", failures);
+            return;
+        }
         // Session retirement has drained source workers. Detached prototypes are outside
         // the scene tree and must be released with the retired record owners.
         var retired = 0;
@@ -206,13 +215,19 @@ public partial class RuntimeCoordinator
         {
             if (_options.ContainsKey("live-harness") && retired % 16 == 0)
                 GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototype index={retired} source={path}");
-            prototype.Scene.Root.Free(); retired++;
+            Retire(prototype.Scene.Root.Free); retired++;
         }
         GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototypes-freed count={retired}");
         _nativeNifPrototypes.Clear();
-        _nativePrewarmedInitialCellRoot?.Free(); _nativePrewarmedInitialCellRoot = null;
-        _nativeReferences?.Dispose(); _nativePluginStack?.Dispose();
-        GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
+        Retire(() => FreeNativeSourceCellRoot(_nativePrewarmedInitialCellRoot)); _nativePrewarmedInitialCellRoot = null;
+        if (_nativePluginCampaign is null)
+        {
+            Retire(() => _nativeReferences?.Dispose());
+            Retire(() => _nativePluginStack?.Dispose());
+            GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
+        }
+        else failures.Add(new InvalidOperationException("Native child retirement is incomplete; its source/world owners remain retained."));
+        if (failures.Count != 0) throw new AggregateException("Native session retirement retained failures.", failures);
     }
 
     private void StageNativeExteriorGrid(PreparedExteriorGrid prepared)
@@ -404,7 +419,7 @@ public partial class RuntimeCoordinator
     {
         foreach (var cell in grid.Cells)
             root.AddChild(RuntimeNativeLandscapeTransportBuilder.Build(
-                FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, grid.PersistentCell),
+                FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell),
                 _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures));
         root.SetMeta("opennv_exterior_grid_cells", grid.Cells.Count);
         root.SetMeta("opennv_exterior_grid_radius", grid.Radius);

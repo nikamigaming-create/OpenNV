@@ -2,7 +2,7 @@ using Godot;
 
 namespace OpenNV.Runtime.Content;
 
-internal static class NativeOwnedSoundPlayback
+internal static partial class NativeOwnedSoundPlayback
 {
     private const FalloutSoundFlags SupportedTwoDimensionalFlags =
         FalloutSoundFlags.Loop |

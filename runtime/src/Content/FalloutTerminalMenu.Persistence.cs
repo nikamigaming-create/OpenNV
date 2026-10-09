@@ -4,7 +4,7 @@ internal sealed record FalloutTerminalClosedStageFailure(int Statement, int Stat
     FalloutQuestStageDriverFailure StageFailure);
 internal sealed record FalloutTerminalSavedReceipt(FalloutFormKey Page, string PageHash, int Entry,
     string FragmentHash, long Generation, FalloutTerminalSelectionState State, string? Error,
-    FalloutTerminalClosedStageFailure? ClosedStageFailure);
+    FalloutTerminalClosedStageFailure? ClosedStageFailure, FalloutScriptResultReceipt? ResultReceipt = null);
 internal sealed record FalloutTerminalClosedSnapshot(FalloutFormKey Reference, string ReferenceHash,
     FalloutFormKey Root, string RootHash, FalloutFormKey Page, string PageHash, long Generation,
     FalloutTerminalSavedReceipt? Receipt);
@@ -40,7 +40,7 @@ internal sealed partial class FalloutTerminalMenu
             CurrentPage.Record.FormKey, CurrentPage.SourceHash, Generation,
             receipt is null ? null : new(receipt.Selection.Page.Record.FormKey, receipt.Selection.Page.SourceHash,
                 receipt.Selection.Entry.Index, receipt.Selection.Entry.Program.Identity, receipt.Selection.Generation,
-                receipt.State, receipt.Error, _closedStageFailure));
+                receipt.State, receipt.Error, _closedStageFailure, receipt.ResultReceipt));
         ValidateClosed(_records, [saved], stageResults);
         return saved;
     }
@@ -57,7 +57,7 @@ internal sealed partial class FalloutTerminalMenu
         {
             var page = FalloutTerminal.Read(records, receipt.Page);
             LastReceipt = new(new(Reference, page, page.Entries.Single(entry => entry.Index == receipt.Entry), receipt.Generation),
-                receipt.State, receipt.Error);
+                receipt.State, receipt.Error, receipt.ResultReceipt);
             _closedStageFailure = receipt.ClosedStageFailure;
         }
     }
@@ -83,6 +83,11 @@ internal sealed partial class FalloutTerminalMenu
             var entry = page.Entries.SingleOrDefault(entry => entry.Index == receipt.Entry);
             if (entry is null || page.SourceHash != receipt.PageHash || entry.Program.Identity != receipt.FragmentHash)
                 throw new InvalidDataException("Saved terminal result differs from its winning page/fragment.");
+            if (receipt.State == FalloutTerminalSelectionState.Succeeded)
+                (receipt.ResultReceipt ?? throw new InvalidDataException("Saved terminal selection has no completed result owner."))
+                    .Require(entry.Program.Scope, item.Reference);
+            else if (receipt.ResultReceipt is not null)
+                throw new InvalidDataException("A failed terminal selection contains a completed result owner.");
             RequireReachablePage(records, item.Root, receipt.Page);
             if (receipt.ClosedStageFailure is { } failure)
             {

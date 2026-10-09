@@ -31,10 +31,7 @@ internal static class OwnedGameTimeCommandProbe
             var checkpointHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(checkpoint)));
             var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
             var opening = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-            var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records,
-                FalloutNativeVigorResolver.Resolve(records, opening), FalloutNativeTagSkillResolver.Resolve(records, controls),
-                FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
-                FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening)).State;
+            var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records).State;
             if (saved.Globals is null || saved.GameTime is null || saved.Quests is null || saved.Scripts?.Session is null)
                 throw new InvalidDataException("Time audit requires the complete selected-source clock, globals, quests and player session.");
             var calendar = FalloutCalendar.Read(Path.Combine(game, "FalloutNV.exe"));

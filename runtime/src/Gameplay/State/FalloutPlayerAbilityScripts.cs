@@ -37,8 +37,7 @@ internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetim
     private long _generation;
 
     internal FalloutPlayerAbilityScripts(FalloutPluginStack records, Func<IReadOnlyList<FalloutFormKey>> selection,
-        Func<FalloutCondition, float> condition, FalloutPlayerAbilityScriptsSnapshot? restore = null,
-        FalloutPlayerAbilitySaveAdmission? originalAdmission = null)
+        Func<FalloutCondition, float> condition, FalloutPlayerAbilityScriptsSnapshot? restore = null)
     {
         _records = records; _selection = selection; _condition = condition; _declarations = new(records);
         _player = FalloutPlayerActorValueSource.Read(records);
@@ -46,13 +45,10 @@ internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetim
         Validate(restore);
         if (restore.Player != _player.Player || restore.PlayerWinner != _player.PlayerWinner || restore.PlayerSha256 != _player.PlayerSha256)
             throw new InvalidDataException("Saved active effects differ from the winning engine-player source.");
-        if (originalAdmission?.PermitsInitialEffects(restore) != true)
-        {
-            var savedKeys = restore.Effects.Select(effect => (effect.Spell, effect.EffectOrdinal)).ToHashSet();
-            if (_selection().Distinct().SelectMany(form => _declarations.Scripts(form))
-                .Any(effect => !savedKeys.Contains((effect.Spell, effect.EffectOrdinal))))
-                throw new InvalidDataException("Current player ability state is missing a selected scripted-effect instance.");
-        }
+        var savedKeys = restore.Effects.Select(effect => (effect.Spell, effect.EffectOrdinal)).ToHashSet();
+        if (_selection().Distinct().SelectMany(form => _declarations.Scripts(form))
+            .Any(effect => !savedKeys.Contains((effect.Spell, effect.EffectOrdinal))))
+            throw new InvalidDataException("Current player ability state is missing a selected scripted-effect instance.");
         _generation = restore.LastGeneration;
         foreach (var saved in restore.Effects)
         {
@@ -184,6 +180,15 @@ internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetim
             _generation, _entries.Values.OrderBy(entry => entry.State.Generation)
                 .Select(entry => entry.State with { Locals = entry.Locals.Capture() }).ToArray());
     }
+    internal static void ValidateSource(FalloutPluginStack records, FalloutPlayerAbilityScriptsSnapshot state)
+    {
+        // Constructor source/cell admission does not execute Start or evaluate
+        // live conditions. The real restored driver owns selected-effect parity.
+        _ = new FalloutPlayerAbilityScripts(records,
+            () => state.Effects.Where(effect => effect.Active).Select(effect => effect.Spell).Distinct().ToArray(),
+            _ => throw new InvalidOperationException("Source validation cannot execute live ability conditions."), state);
+    }
+
     internal static void Validate(FalloutPlayerAbilityScriptsSnapshot state)
     {
         ArgumentNullException.ThrowIfNull(state);

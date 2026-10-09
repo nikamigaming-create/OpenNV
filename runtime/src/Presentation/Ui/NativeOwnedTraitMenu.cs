@@ -40,12 +40,13 @@ internal sealed partial class NativeOwnedTraitMenu : Control
         unbound = "source-back-and-other-menu-transitions,native-list-sort-ties,perk-eligibility-and-multirank,scrollbar-drag,focus-and-click-sounds,exact-layout-timing,retail-and-XR-pixels"
     };
 
-    internal NativeOwnedTraitMenu(FalloutPluginStack records, FalloutNativeTraitFarewellContract contract,
-        IReadOnlyList<FalloutNativeTraitIdentity> current, Action<IReadOnlyList<FalloutNativeTraitIdentity>> accepted, Action<Exception> failed)
+    internal NativeOwnedTraitMenu(FalloutPluginStack records, FalloutTraitMenuContract contract,
+        IReadOnlyList<FalloutNativeTraitIdentity> current, int playerLevel, Func<FalloutCondition, float> evaluate,
+        Action<IReadOnlyList<FalloutNativeTraitIdentity>> accepted, Action<Exception> failed)
     {
         Name = "TraitMenu"; ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Ignore;
         _records = records; _accepted = accepted; _failed = failed;
-        _selection = new(records, contract, current);
+        _selection = new(records, contract, current, playerLevel, evaluate);
         var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/trait_menu.xml")).Elements("menu").Single();
         _tiles = new(menu, name => FalloutGameSettingStrings.Read(records, name));
         XElement Named(string name) => menu.DescendantsAndSelf().Single(tile => (string?)tile.Attribute("name") == name);
@@ -59,7 +60,7 @@ internal sealed partial class NativeOwnedTraitMenu : Control
         {
             var tile = new XElement(template); tile.SetAttributeValue("name", "Trait_" + choice.Trait.RuntimeFormId);
             _list.Add(tile); _tiles.BindText(tile, "string", choice.Trait.DisplayName);
-            _tiles.Bind(tile, "listindex", _rows.Count); _tiles.Bind(tile, "_enabled", 1);
+            _tiles.Bind(tile, "listindex", _rows.Count); _tiles.Bind(tile, "_enabled", choice.Enabled ? 1 : 0);
             var font = _tiles.Font(tile.Descendants("text").Single());
             var button = new NativeBitmapMenuButton(font.Font, font.Atlas, _tiles.Color)
             { Name = "Trait_" + choice.Trait.RuntimeFormId, Text = choice.Trait.DisplayName, DrawText = false, FocusMode = FocusModeEnum.All };

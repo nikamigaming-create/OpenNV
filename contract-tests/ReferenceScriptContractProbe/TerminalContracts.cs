@@ -366,8 +366,8 @@ internal static partial class TerminalContracts
         [Field("ITXT", Text(text)), Field("RNAM", result.Length == 0 ? new byte[4] : Text(result)),
             Field("ANAM", [flags]), .. program, .. conditions];
     private static byte[][] Program(string source, params uint[] references) =>
-        [Field("SCHR", ScriptHeader((uint)references.Length, source.Length == 0 ? 0u : 1u, 0)),
-            .. (source.Length == 0 ? Array.Empty<byte[]>() : new[] { Field("SCDA", [1]), Field("SCTX", Text(source)) }),
+        [Field("SCHR", ScriptHeader((uint)references.Length, 0, 0)),
+            .. (source.Length == 0 ? Array.Empty<byte[]>() : new[] { Field("SCTX", Text(source)) }),
             .. references.Select(reference => Field("SCRO", UInt(reference)))];
     private static byte[] ScriptHeader(uint references, uint size, uint locals)
     { var data = new byte[20]; Put(data, 4, references); Put(data, 8, size); Put(data, 12, locals); data[18] = 1; return data; }

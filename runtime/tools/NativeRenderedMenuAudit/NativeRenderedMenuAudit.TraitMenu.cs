@@ -21,9 +21,10 @@ public partial class NativeRenderedMenuAudit
         {
             var source = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(source.PluginSources);
-            var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
-            var cell = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-            var contract = FalloutNativeTraitFarewellResolver.Resolve(records, controls, cell);
+            var contract = FalloutTraitMenuCatalogue.Read(records);
+            var level = FalloutPlayerActorValueSource.Read(records).Level;
+            float UnboundCondition(FalloutCondition condition) =>
+                throw new NotSupportedException($"Isolated trait fixture has no condition owner for {condition.Function}.");
             if (contract.MaximumTraits != 2 || contract.Traits.Count < 3)
                 throw new NotSupportedException("This owned fixture requires the selected two-choice source limit and three traits.");
             if (!source.TryRead("menus/trait_menu.xml", null, out var xml, out var identity)) throw new FileNotFoundException("Trait menu");
@@ -39,7 +40,7 @@ public partial class NativeRenderedMenuAudit
             var activeEntry = new RuntimeNativeTraitEntry(); entry = activeEntry; AddChild(activeEntry);
             entry.Accepted += selection => { accepted = selection; activeEntry.ReleasePause(); };
             entry.Failed += error => failed = error;
-            entry.Configure(records, contract, []);
+            entry.Configure(records, contract, [], level, UnboundCondition);
             menu = entry.GetChildren().OfType<NativeOwnedTraitMenu>().Single();
             var pausedTicks = ticks;
             var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
@@ -91,14 +92,14 @@ public partial class NativeRenderedMenuAudit
             if (GetTree().Paused || ticks == pausedTicks) throw new InvalidDataException("Done did not release native gameplay.");
             entry.ReleasePause(); entry.Free(); entry = null; menu = null;
             GetTree().Paused = true;
-            entry = new RuntimeNativeTraitEntry(); AddChild(entry); entry.Configure(records, contract, []);
+            entry = new RuntimeNativeTraitEntry(); AddChild(entry); entry.Configure(records, contract, [], level, UnboundCondition);
             entry.ReleasePause(); entry.Free(); entry = null;
             if (!GetTree().Paused) throw new InvalidDataException("Trait disposal resumed a previously paused tree.");
             GetTree().Paused = false;
-            entry = new RuntimeNativeTraitEntry(); AddChild(entry); entry.Configure(records, contract, []);
+            entry = new RuntimeNativeTraitEntry(); AddChild(entry); entry.Configure(records, contract, [], level, UnboundCondition);
             entry.Free(); entry = null;
             if (GetTree().Paused) throw new InvalidDataException("Trait tree exit leaked its pause.");
-            var zero = new FalloutTraitMenuSelection(records, contract, []); zero.Reset();
+            var zero = new FalloutTraitMenuSelection(records, contract, [], level, UnboundCondition); zero.Reset();
             if (zero.Submit().Count != 0) throw new InvalidDataException("Trait menu rejected zero selections.");
             if (!source.TryRead("menus/trait_menu.xml", null, out var after, out _) || !hash.AsSpan().SequenceEqual(SHA256.HashData(after)))
                 throw new InvalidDataException("Trait fixture changed owned XML.");

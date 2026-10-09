@@ -175,10 +175,11 @@ public partial class NativeActiveRadioAudit : Node
         speech.SayToCompleted += _ => throw new InvalidDataException("Radio invented a scripted SayToDone event.");
         var results = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
             effect => throw new NotSupportedException($"Radio fixture native effect {effect.Kind} has no owner."), Globals: globals));
-        speech.ExecuteResults = (info, reference, begin) =>
+        speech.ExecuteOwnedResults = (info, reference, begin) =>
         {
-            results.ExecuteResult(info, reference, begin);
+            var receipt = results.ExecuteResultOwned(info, reference, begin);
             _results.Add((info.Record.FormKey, begin));
+            return receipt;
         };
         speech.InfoCompleted += info => _notifications.Add(info);
         speech.ReportDivergence = _ => { };

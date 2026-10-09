@@ -7,8 +7,10 @@ namespace OpenNV.Runtime.Content;
 // set/if. Typed values still belong to the caller's real script state owner.
 internal static class FalloutNvseNumericExpression
 {
-    private sealed record Operand(Func<FalloutScriptValue> Value,
+    private sealed record Operand(Func<FalloutScriptValue> Value, FalloutScriptExpressionSyntax Syntax,
         Func<(Func<FalloutScriptValue> Read, Action<FalloutScriptValue> Write)>? Target = null);
+
+    private sealed record Parsed(Func<FalloutScriptValue> Value, int Count, FalloutScriptExpressionSyntax Syntax);
 
     internal static bool IsAssignment(string token) => token is "=" or ":=" or "+=" or "-=" or "*=" or "/=" or "%=" or "&=" or "|=";
 
@@ -29,17 +31,29 @@ internal static class FalloutNvseNumericExpression
     // a receiver, argument function or assignment while determining extent.
     internal static (Func<FalloutScriptValue> Value, int Count) ReadOperand(IReadOnlyList<string> tokens,
         FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function = null,
-        Func<string, string, FalloutScriptFunction>? userFunction = null) =>
-        Parse(tokens, values, function, userFunction, nvseLogical: true, operandOnly: true);
+        Func<string, string, FalloutScriptFunction>? userFunction = null)
+    {
+        var parsed = Parse(tokens, values, function, userFunction, nvseLogical: true, operandOnly: true);
+        return (parsed.Value, parsed.Count);
+    }
+
+    internal static FalloutScriptExpressionSyntax Syntax(IReadOnlyList<string> tokens,
+        FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function = null,
+        Func<string, string, FalloutScriptFunction>? userFunction = null, bool nvseLogical = true) =>
+        Parse(tokens, values, function, userFunction, nvseLogical, operandOnly: false).Syntax;
 
     // Visit the complete syntax, including short-circuited operands, without
     // reading values, invoking a command or consuming random/lifecycle state.
-    internal static void Inspect(IReadOnlyList<string> tokens, FalloutScriptValueContext values,
+    internal static FalloutScriptExpressionSyntax Inspect(IReadOnlyList<string> tokens, FalloutScriptValueContext values,
         Func<string, FalloutScriptFunction?>? function, Func<string, string, FalloutScriptFunction>? userFunction,
-        Action<string> inspectValue, bool nvseLogical = true) =>
-        _ = Parse(tokens, values, function, userFunction, nvseLogical, operandOnly: false, inspectValue);
+        Action<string> inspectValue, bool nvseLogical = true)
+    {
+        var parsed = Parse(tokens, values, function, userFunction, nvseLogical, operandOnly: false, inspectValue);
+        parsed.Syntax.RequireBasicUses();
+        return parsed.Syntax;
+    }
 
-    private static (Func<FalloutScriptValue> Value, int Count) Parse(IReadOnlyList<string> tokens,
+    private static Parsed Parse(IReadOnlyList<string> tokens,
         FalloutScriptValueContext values, Func<string, FalloutScriptFunction?>? function,
         Func<string, string, FalloutScriptFunction>? userFunction, bool nvseLogical, bool operandOnly,
         Action<string>? inspectValue = null)
@@ -55,9 +69,10 @@ internal static class FalloutNvseNumericExpression
                 token, tokens[at++]);
         }
 
-        IReadOnlyList<Func<FalloutScriptArgument>> Arguments(string name, FalloutScriptFunction command)
+        IReadOnlyList<(Func<FalloutScriptArgument> Value, FalloutScriptExpressionSyntax Syntax)> Arguments(
+            string name, FalloutScriptFunction command)
         {
-            var arguments = new List<Func<FalloutScriptArgument>>();
+            var arguments = new List<(Func<FalloutScriptArgument>, FalloutScriptExpressionSyntax)>();
             var argumentIndex = 0;
             while (argumentIndex < command.Arguments.Count || command.Variadic is not null)
             {
@@ -74,27 +89,46 @@ internal static class FalloutNvseNumericExpression
                     FalloutScriptArgumentKind.OptionalValue => FalloutScriptArgumentKind.Value,
                     _ => kind,
                 };
+                if (at < tokens.Count && tokens[at] == ",")
+                {
+                    ++at;
+                    if (at >= tokens.Count || tokens[at] is "," or ")" or "]")
+                        throw new InvalidDataException($"Script function {name} has an empty comma-delimited argument.");
+                }
                 if ((optional || variadic) && (at >= tokens.Count || !CanStartOptionalArgument(tokens[at], required)))
                     break;
                 if (required == FalloutScriptArgumentKind.Identifier)
                 {
                     if (at >= tokens.Count || !Identifier(tokens[at]))
                         throw new InvalidDataException($"Script function {name} needs an identifier argument.");
+                    var argumentStart = at;
                     var argumentName = tokens[at++];
-                    arguments.Add(() => new(0, argumentName));
+                    arguments.Add((() => new(0, argumentName), FalloutScriptExpressionSyntax.Create(
+                        FalloutScriptExpressionSyntaxKind.Identifier, argumentName, argumentStart, at,
+                        FalloutScriptExpressionCategory.Identifier)));
                 }
                 else
                 {
-                    var argument = Read(14, required == FalloutScriptArgumentKind.SourceString);
-                    arguments.Add(() =>
+                    // Pair parameters consume a complete pair expression and
+                    // both operands. Ordinary parameters keep primary/postfix
+                    // extents; their optional arguments cannot absorb infix RHS.
+                    var argument = Read(required == FalloutScriptArgumentKind.Pair ? 0 : 14,
+                        required == FalloutScriptArgumentKind.SourceString);
+                    if (required == FalloutScriptArgumentKind.Pair && argument.Syntax.Category is not
+                        (FalloutScriptExpressionCategory.Pair or FalloutScriptExpressionCategory.Dynamic))
+                        throw new InvalidDataException($"Script function {name} needs a pair argument.");
+                    arguments.Add((() =>
                     {
                         var value = argument.Value();
+                        if (required == FalloutScriptArgumentKind.Pair && value.Kind != FalloutScriptValueKind.Pair ||
+                            required != FalloutScriptArgumentKind.Pair && value.Kind == FalloutScriptValueKind.Pair)
+                            throw new InvalidDataException("Script argument differs from its declared transient-pair category.");
                         if (required == FalloutScriptArgumentKind.SourceString && value.Kind != FalloutScriptValueKind.String)
                             throw new InvalidDataException("Source-string argument requires a string value.");
                         if (required == FalloutScriptArgumentKind.Number && value.Kind == FalloutScriptValueKind.Array)
                             throw new InvalidDataException("Numeric script argument cannot use an array identity.");
                         return required == FalloutScriptArgumentKind.Number ? new(value.Number) : new(value, null);
-                    });
+                    }, argument.Syntax));
                 }
             }
             return arguments;
@@ -103,6 +137,7 @@ internal static class FalloutNvseNumericExpression
         Operand Read(int precedence, bool sourceString = false)
         {
             if (at >= tokens.Count) throw new InvalidDataException("Missing NVSE expression operand.");
+            var start = at;
             var token = tokens[at++];
             Operand left;
             if (token == "(")
@@ -110,6 +145,11 @@ internal static class FalloutNvseNumericExpression
                 left = Read(-1);
                 if (at >= tokens.Count || tokens[at++] != ")")
                     throw new InvalidDataException("Unclosed NVSE expression.");
+                left = left with
+                {
+                    Syntax = FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.Group,
+                    "()", start, at, left.Syntax.Category, left.Syntax)
+                };
             }
             else if (token is "-" or "+" or "$" or "!" ||
                 token.Equals("ToString", StringComparison.OrdinalIgnoreCase))
@@ -128,17 +168,21 @@ internal static class FalloutNvseNumericExpression
                         "!" => value.Truth ? 0 : 1,
                         _ => value.Stringize(values.FormName),
                     };
-                });
+                }, FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.Unary, token, start, at,
+                    token is "-" or "+" or "!" ? FalloutScriptExpressionCategory.Number : FalloutScriptExpressionCategory.String,
+                    operand.Syntax));
             }
             else if (token.Length >= 2 && token[0] == '"' && token[^1] == '"')
             {
                 var literal = FalloutScriptValue.String(token[1..^1]);
-                left = new(() => literal);
+                left = new(() => literal, FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.String,
+                    token, start, at, FalloutScriptExpressionCategory.String));
             }
             else if (TryLiteral(token, out var number))
             {
                 var literal = (FalloutScriptValue)Finite(number);
-                left = new(() => literal);
+                left = new(() => literal, FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.Number,
+                    token, start, at, FalloutScriptExpressionCategory.Number));
             }
             else if (!Identifier(token))
             {
@@ -146,8 +190,16 @@ internal static class FalloutNvseNumericExpression
             }
             else if (Resolve(token) is { } command)
             {
+                var identity = token.Split('.')[^1].Equals("call", StringComparison.OrdinalIgnoreCase)
+                    ? FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.Identifier,
+                        tokens[start + 1], start + 1, start + 2, FalloutScriptExpressionCategory.Identifier)
+                    : null;
                 var arguments = Arguments(token, command);
-                left = new(() => command.InvokeValue(arguments.Select(argument => argument()).ToArray()));
+                var children = identity is null ? arguments.Select(argument => argument.Syntax).ToArray() :
+                    new[] { identity }.Concat(arguments.Select(argument => argument.Syntax)).ToArray();
+                left = new(() => command.InvokeValue(arguments.Select(argument => argument.Value()).ToArray()),
+                    FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.Call, token, start, at,
+                        FalloutScriptExpressionCategory.Dynamic, children));
             }
             else
             {
@@ -156,6 +208,8 @@ internal static class FalloutNvseNumericExpression
                 if (inspectValue is not null && (!bareSourceName || values.HasValueOwner?.Invoke(token) == true))
                     inspectValue(token);
                 left = new(() => bareSourceName ? values.ReadSourceString(token) : values.Read(token),
+                    FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.Identifier, token, start, at,
+                        FalloutScriptExpressionCategory.Dynamic),
                     () => (() => values.Read(token), value => values.Write(token, value)));
             }
 
@@ -179,8 +233,9 @@ internal static class FalloutNvseNumericExpression
                         // stateful argument. Do not substitute a numeric ID,
                         // an EDID lookup, or the ambient calling reference.
                         FalloutScriptFunction.RequireReference(caller);
-                        return command.InvokeReferenceValue(caller, arguments.Select(argument => argument()).ToArray());
-                    });
+                        return command.InvokeReferenceValue(caller, arguments.Select(argument => argument.Value()).ToArray());
+                    }, FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.ReferenceCall, name, start, at,
+                        FalloutScriptExpressionCategory.Dynamic, [receiver.Syntax, .. arguments.Select(argument => argument.Syntax)]));
                     continue;
                 }
                 if (tokens[at] == "[")
@@ -196,7 +251,9 @@ internal static class FalloutNvseNumericExpression
                         var keyValue = key.Value();
                         return (() => arrays.Get(arrayValue, keyValue), value => arrays.Set(arrayValue, keyValue, value));
                     }
-                    left = new(() => Location().Read(), Location);
+                    left = new(() => Location().Read(), FalloutScriptExpressionSyntax.Create(
+                        FalloutScriptExpressionSyntaxKind.Index, "[]", start, at, FalloutScriptExpressionCategory.Dynamic,
+                        container.Syntax, key.Syntax), Location);
                     continue;
                 }
                 var priority = Priority(tokens[at]);
@@ -216,9 +273,12 @@ internal static class FalloutNvseNumericExpression
                         var value = op is "=" or ":="
                             ? right.Value()
                             : Apply(op[..1], location.Read(), right.Value(), values.Arrays);
+                        if (value.Kind == FalloutScriptValueKind.Pair)
+                            throw new InvalidDataException("A transient pair cannot be assigned to a variable or element.");
                         location.Write(value);
                         return value;
-                    });
+                    }, FalloutScriptExpressionSyntax.Create(FalloutScriptExpressionSyntaxKind.Assignment, op, start, at,
+                        right.Syntax.Category, before.Syntax, right.Syntax));
                 }
                 else
                 {
@@ -233,8 +293,12 @@ internal static class FalloutNvseNumericExpression
                             return nvseLogical
                                 ? value.Truth ? right.Value().Logical : 0
                                 : value.Truth && right.Value().Truth ? 1 : 0;
-                        return Apply(op, value, right.Value(), values.Arrays);
-                    });
+                        return op == "::" ? FalloutScriptValue.MakePair(value, right.Value()) :
+                            Apply(op, value, right.Value(), values.Arrays);
+                    }, FalloutScriptExpressionSyntax.Create(op == "::" ? FalloutScriptExpressionSyntaxKind.Pair :
+                        FalloutScriptExpressionSyntaxKind.Binary, op, start, at,
+                        op == "::" ? FalloutScriptExpressionCategory.Pair : FalloutScriptExpressionCategory.Dynamic,
+                        before.Syntax, right.Syntax));
                 }
             }
             return left;
@@ -245,7 +309,7 @@ internal static class FalloutNvseNumericExpression
             throw new NotSupportedException("NVSE expression has an unbound operation.");
         // Parse the complete expression before invoking any stateful command
         // or assignment. Short-circuited branches never read or write state.
-        return (expression.Value, at);
+        return new(expression.Value, at, expression.Syntax);
 
         bool CanStartOptionalArgument(string token, FalloutScriptArgumentKind required)
         {
@@ -273,9 +337,10 @@ internal static class FalloutNvseNumericExpression
 
     private static int Priority(string op) => op switch
     {
-        "=" or ":=" => 0,
-        "||" => 1,
-        "&&" or "+=" or "-=" or "*=" or "/=" or "%=" or "&=" or "|=" => 2,
+        "=" or ":=" or "+=" or "-=" or "*=" or "/=" or "%=" or "&=" or "|=" => 0,
+        "::" => 1,
+        "||" => 2,
+        "&&" => 3,
         "==" or "!=" => 4,
         "<" or ">" or "<=" or ">=" => 5,
         "|" => 6,

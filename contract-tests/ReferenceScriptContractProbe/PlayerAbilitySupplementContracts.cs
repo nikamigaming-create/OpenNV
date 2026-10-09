@@ -15,7 +15,7 @@ internal static class PlayerAbilitySupplementContracts
             using var records = FalloutPluginStack.Load(directory, ["Cells.esm"]);
             CheckOrderedSourceCells(records);
             CheckStrictCurrentAdmission(records, Path.Combine(directory, "current-save.json"));
-            Console.WriteLine("OPENNV_PLAYER_ABILITY_CURRENT_AUTHORITY_PASS currentMissingRefused=true originalV49Receipt=true sourceBoundInitialAuthority=true rawInitialPayload=true orderedDuplicates=true firstSlot=true formLow32=true paddingIgnored=true nativeReplay=unverified");
+            Console.WriteLine("OPENNV_PLAYER_ABILITY_CURRENT_AUTHORITY_PASS incompleteCurrentRefused=true priorSchemaRefused=true rawInitialPayload=true orderedDuplicates=true firstSlot=true formLow32=true paddingIgnored=true nativeReplay=unverified");
         }
         finally
         {
@@ -61,37 +61,18 @@ internal static class PlayerAbilitySupplementContracts
     private static void CheckStrictCurrentAdmission(FalloutPluginStack records, string path)
     {
         var actor = new FalloutPlayerActorValues(records);
-        var original = new FalloutNativeCampaignState(FalloutNativeCampaignSave.BeforeAbilityScriptsSchema,
+        var missing = new FalloutNativeCampaignState(FalloutNativeCampaignSave.ExpectedSchema,
             "authored-source", Key(0x800), "AuthoredQuest", 0, "Authored Player", null!, actor.BaseSpecial,
-            [], [], [], [], [], [], [], PlayerActorValues: actor.Capture(),
-            TagSkillSlots: FalloutPlayerTagSkills.FromLegacy([]), FactionRelations: []);
-        var receipt = FalloutPlayerAbilitySaveAdmission.FromOriginalHeader(original) ??
-            throw new InvalidOperationException("A genuine prior-schema input did not obtain its read receipt.");
-        var missing = original with { Schema = FalloutNativeCampaignSave.ExpectedSchema };
-        Require(FalloutPlayerAbilitySaveAdmission.FromOriginalHeader(missing) is null,
-            "A malformed current save fabricated a pre-owner admission receipt.");
-        Reject(() => FalloutPlayerAbilitySaveAdmission.Require(missing), "Current campaign save is missing");
-        FalloutPlayerAbilitySaveAdmission.Require(missing, receipt);
-        var current = receipt.CompleteOriginalRead(missing, records);
-        FalloutPlayerAbilitySaveAdmission.Require(current);
-        Require(receipt.PermitsInitialEffects(current.PlayerAbilityScripts!) &&
-            !receipt.PermitsInitialEffects(current.PlayerAbilityScripts! with { }),
-            "Original read admission escaped its exact source-published initial effect owner.");
-        Require(current.PlayerSkillValues is { Pools.Count: 0, Sources.Count: 0 } &&
-            current.PlayerAbilityScripts is { Effects.Count: 0, LastGeneration: 0 } &&
-            current.PlayerSkillValues.PlayerSha256 == actor.Source.PlayerSha256 &&
-            current.PlayerAbilityScripts.PlayerSha256 == actor.Source.PlayerSha256,
-            "Source-proven absent owners did not become actual source-bound initial authorities before current publication.");
-        Reject(() => FalloutPlayerAbilitySaveAdmission.Require(current with { PlayerSkillValues = null }));
-        Reject(() => FalloutPlayerAbilitySaveAdmission.Require(current with { PlayerAbilityScripts = null }));
-        Reject(() => FalloutPlayerAbilitySaveAdmission.Require(current with { PlayerSkillValues = null, PlayerAbilityScripts = null }));
-        Reject(() => FalloutPlayerAbilitySaveAdmission.FromOriginalHeader(original with { PlayerSkillValues = current.PlayerSkillValues }));
-        Reject(() => FalloutPlayerAbilitySaveAdmission.Require(missing with { PlayerName = "Different" }, receipt));
-        // Exercise the real Save.Write root hook, not only the new helper. The
-        // The fixture supplies the existing current-schema authorities so that
-        // this check reaches the new authority rejection at its normal position.
-        Reject(() => FalloutNativeCampaignSave.Write(path, missing), "Current campaign save is missing");
+            [], [], [], [], [], [], [], PlayerActorValues: actor.Capture(), FactionRelations: []);
+        // This deliberately incomplete current state must never acquire owners
+        // through a schema migration or publish a successful-looking save.
+        Reject(() => FalloutNativeCampaignSave.Write(path, missing), "missing an authoritative runtime owner");
         Require(!File.Exists(path), "Rejected current authority produced a save file.");
+        Reject(() => FalloutNativeCampaignSave.Write(path, missing with
+        {
+            Schema = "opennv-native-fnv-campaign-save/v49"
+        }), "current complete source-owned schema");
+        Require(!File.Exists(path), "Rejected prior schema produced a save file.");
     }
 
     private static byte[] Fixture()

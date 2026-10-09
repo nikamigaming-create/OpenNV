@@ -10,6 +10,7 @@
     <Compile Include="../../runtime/src/Content/FalloutScriptArrayStore.cs" Link="FalloutScriptArrayStore.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptArrayStore.Functions.cs" Link="FalloutScriptArrayStore.Functions.cs" />
     <Compile Include="../../runtime/src/Content/FalloutNvseNumericExpression.cs" Link="FalloutNvseNumericExpression.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutScriptExpressionSyntax.cs" Link="FalloutScriptExpressionSyntax.cs" />
     <Compile Include="../../runtime/src/Content/FalloutGameModeProgram.cs" Link="FalloutGameModeProgram.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptLocals.cs" Link="FalloutScriptLocals.cs" />
     <Compile Include="../../runtime/src/Content/FalloutScriptHeader.cs" Link="FalloutScriptHeader.cs" />

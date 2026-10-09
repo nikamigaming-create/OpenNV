@@ -118,7 +118,7 @@ internal partial class RuntimeNativeNpc
         _travelProgress?.Cancel();
         if (_packageEvents!.Active is null)
         {
-            if ((retainedAssignment is not null && retainedMotion is not null) || restored is not null)
+            if (initializing && ((retainedAssignment is not null && retainedMotion is not null) || restored is not null))
                 _packageEvents!.Restore(_packageIdleSource!, retainedAssignment?.Done ?? restored!.Complete);
             else
                 _packageEvents.Change(_packageIdleSource);

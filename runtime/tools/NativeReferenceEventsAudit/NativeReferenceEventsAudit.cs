@@ -20,6 +20,14 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--compiled-opening-state"])
+            {
+                ExerciseCompiledOpeningState(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--compiled-result-authority"])
+            {
+                ExerciseCompiledResultAuthority(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--image-space-clock"])
             {
                 ExerciseImageSpaceClock(); GetTree().Quit(); return;

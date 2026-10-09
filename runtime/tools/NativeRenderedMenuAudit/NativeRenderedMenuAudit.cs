@@ -14,6 +14,13 @@ public partial class NativeRenderedMenuAudit : Control
             {
                 await UiSystemColors(colorRoot, colorOptions); GetTree().Quit(); return;
             }
+            if (args.Length >= 8 && args[1] == "--speech-result-authority-negative")
+            {
+                await FinishedSpeechResultAuthorityNegative(args[0], args[2], args[3], args[4], args[5], args[6],
+                    short.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture), args[8..]);
+                GetTree().Quit();
+                return;
+            }
             if (args.Length >= 9 && args[1] == "--package-event-speech-cold")
             {
                 await PackageEventSpeechCold(args[0], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9..]);

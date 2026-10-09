@@ -4,22 +4,25 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal partial class RuntimeNativeNpc
 {
-    private sealed record PackageSelection(FalloutPluginRecord? Record, FalloutScriptPackage? Declaration);
+    private sealed record PackageSelection(FalloutPluginRecord? Record, FalloutScriptPackage? Declaration,
+        long OverrideRevision = 0, bool ScriptOverride = false);
     private PackageSelection? _requestedSelection;
     private FalloutFormKey? _selectedSourcePackage;
     private bool _sourceSelectionKnown;
     private string? _selectionCaptureBlocker;
     private Func<FalloutFormKey, FalloutFormKey, double>? _aiItemCount;
 
-    private PackageSelection SelectSourcePackage()
+    private PackageSelection SelectSourcePackage(bool? reevaluateScript = null)
     {
         _failedSelectionCondition = null;
-        var selected = FalloutAiPackages.Select(_aiStack!, Appearance.Npc, EvaluateSelectionCondition, _templates, _aiClock,
-                evaluateRunOn: true, eligible: package => _aiWorld?.PackageEligible(Appearance.Reference!.Value, package,
-                    _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true) ??
-                    throw new NotSupportedException("NPC package eligibility has no reference state owner."));
+        var world = _aiWorld ?? throw new NotSupportedException("NPC package selection has no reference state owner.");
+        var selected = _aiReferenceState?.PendingPackageChoice is { } choice ? choice.Bind(_aiStack!, _aiReferenceState) :
+            world.SelectActorPackage(Appearance.Reference!.Value, EvaluateSelectionCondition,
+                _templates, _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true,
+                reevaluateScript ?? !_bindingInitialBase, PackageLocationReached(_packageEvents?.Active?.Form));
         if (_aiReferenceState is not null) _aiReferenceState.SelectionFailure = null;
-        return new(selected, selected is null ? null : FalloutScriptPackage.Read(selected));
+        return new(selected, selected is null ? null : FalloutScriptPackage.Read(selected), ScriptPackageRevision,
+            selected is not null && _aiReferenceState?.ScriptPackage?.Package == selected.FormKey);
     }
 
     internal void EvaluatePackages(bool reset)
@@ -31,7 +34,7 @@ internal partial class RuntimeNativeNpc
         // performed by the ordinary actor frame, as it is for creatures. A
         // later native procedure fault is not the result of this void command.
         // Retain the selected result so random predicates are not drawn twice.
-        var selected = SelectSourcePackage();
+        var selected = SelectSourcePackage(reevaluateScript: true);
         if (_aiReferenceState is not null) ClearBindingFailure();
         if (reset) { _aiError = null; _packageIdleError = null; }
         _requestedSelection = selected;

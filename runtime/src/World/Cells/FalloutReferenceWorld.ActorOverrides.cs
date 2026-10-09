@@ -9,6 +9,8 @@ internal sealed partial class FalloutReferenceWorld
 {
     private readonly Dictionary<FalloutFormKey, FalloutActorOverrides> _actorOverrides = [];
     private readonly FalloutAbilityModifiers _perkAbilities = new(records);
+    internal Func<IReadOnlyList<FalloutFormKey>>? PlayerTraitSelection { get; set; }
+    internal Action<FalloutPerkQuestStage>? ExecutePerkQuestStage { get; set; }
     private static string RecordHash(FalloutPluginRecord record) => Convert.ToHexString(SHA256.HashData(record.ReadData())).ToLowerInvariant();
 
     private FalloutPluginRecord ActorOverrideSource(FalloutFormKey target)
@@ -50,7 +52,8 @@ internal sealed partial class FalloutReferenceWorld
             {
                 var seen = new HashSet<FalloutFormKey>();
                 foreach (var item in items)
-                    if (item is null || !seen.Add(item.Form) || item.Value < (signature == "FACT" ? -1 : 0) || item.Value > (signature == "FACT" ? 127 : 1) ||
+                    if (item is null || !seen.Add(item.Form) || item.Value < (signature == "FACT" ? -1 : 0) ||
+                        item.Value > (signature == "FACT" ? 127 : FalloutPerkDeclaration.Read(records.GetEffective(item.Form)).Ranks) ||
                         !FormOverride(item.Form, signature, item.Value).Sha256.Equals(item.Sha256, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidDataException("Saved actor perk/faction override is invalid or differs from source.");
             }
@@ -83,31 +86,64 @@ internal sealed partial class FalloutReferenceWorld
 
     internal void ChangePerk(FalloutFormKey reference, FalloutFormKey perk, bool add)
     {
-        var current = Overrides(reference);
-        var entry = FormOverride(perk, "PERK", add ? 1 : 0);
-        if (add) _ = _perkAbilities.Perk(perk);
-        _actorOverrides[reference] = current with { Perks = current.Perks.Where(item => item.Form != perk).Append(entry).ToArray() };
+        var maximum = FalloutPerkDeclaration.Read(records.GetEffective(perk)).Ranks;
+        if (maximum == 0) throw new InvalidDataException($"Perk {perk} has no declared acquired rank.");
+        SetPerkRank(reference, perk, add ? Math.Min(checked(PerkRank(reference, perk) + 1), maximum) : 0);
     }
 
-    internal IReadOnlyList<FalloutFormKey> AcquiredPerks(FalloutFormKey reference)
+    internal void SetPerkRank(FalloutFormKey reference, FalloutFormKey perk, int rank)
+    {
+        var maximum = FalloutPerkDeclaration.Read(records.GetEffective(perk)).Ranks;
+        if (rank < 0 || rank > maximum) throw new InvalidDataException($"Perk {perk} acquired rank is outside its winning declaration.");
+        if (PerkRank(reference, perk) == rank) return;
+        var current = Overrides(reference);
+        var entry = FormOverride(perk, "PERK", rank);
+        var stages = rank == 0 ? [] : _perkAbilities.Perk(perk, rank).QuestStages;
+        if (stages.Length != 0 && ExecutePerkQuestStage is null)
+            throw new NotSupportedException($"Perk {perk} requires its actual shared quest-stage executor.");
+        _actorOverrides[reference] = current with { Perks = current.Perks.Where(item => item.Form != perk).Append(entry).ToArray() };
+        foreach (var stage in stages.OrderByDescending(stage => stage.Priority)) ExecutePerkQuestStage!(stage);
+    }
+
+    internal int PerkRank(FalloutFormKey reference, FalloutFormKey perk)
+    {
+        _ = FalloutPerkDeclaration.Read(records.GetEffective(perk));
+        return AcquiredPerkRanks(reference).GetValueOrDefault(perk);
+    }
+
+    internal IReadOnlyDictionary<FalloutFormKey, int> AcquiredPerkRanks(FalloutFormKey reference)
     {
         var result = new Dictionary<FalloutFormKey, int>();
         var source = records.GetEffective(ActorBase(reference));
         foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "PRKR"))
         {
             var data = field.Data.Span;
-            if (data.Length != 8 || data[4] > 1) throw new NotSupportedException("Actor perk rank extent/rank is unbound.");
-            result[source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(data))] = data[4];
+            if (data.Length != 8) throw new NotSupportedException("Actor perk rank extent is unbound.");
+            var perk = source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(data));
+            var maximum = FalloutPerkDeclaration.Read(records.GetEffective(perk)).Ranks;
+            if (data[4] > maximum || !result.TryAdd(perk, data[4]))
+                throw new InvalidDataException("Actor source perk rank is invalid or repeats a PERK.");
         }
+        if (reference == records.RuntimeFormKey(0x14) && PlayerTraitSelection is { } traits)
+            foreach (var trait in traits())
+            {
+                var declaration = FalloutPerkDeclaration.Read(records.GetEffective(trait));
+                if (!declaration.Trait || declaration.Ranks == 0)
+                    throw new InvalidDataException("Player trait selection differs from its winning PERK.");
+                result[trait] = Math.Max(result.GetValueOrDefault(trait), 1);
+            }
         foreach (var item in _actorOverrides.GetValueOrDefault(reference)?.Perks ?? []) result[item.Form] = item.Value;
-        return result.Where(item => item.Value > 0).Select(item => item.Key).ToArray();
+        return result.Where(item => item.Value > 0).ToDictionary(item => item.Key, item => item.Value);
     }
 
+    internal IReadOnlyList<FalloutFormKey> AcquiredPerks(FalloutFormKey reference) => AcquiredPerkRanks(reference).Keys.ToArray();
+
     internal IEnumerable<FalloutPerkEntry> PerkEntries(FalloutFormKey reference) =>
-        AcquiredPerks(reference).SelectMany(perk => _perkAbilities.Perk(perk).Entries);
+        AcquiredPerkRanks(reference).SelectMany(perk => _perkAbilities.Perk(perk.Key, perk.Value).Entries)
+            .OrderByDescending(entry => entry.Priority);
 
     internal IEnumerable<FalloutAbilityModifier> PerkModifiers(FalloutFormKey reference) =>
-        AcquiredPerks(reference).SelectMany(perk => _perkAbilities.Perk(perk).Spells).Distinct().SelectMany(_perkAbilities.Spell);
+        AcquiredPerkRanks(reference).SelectMany(perk => _perkAbilities.Perk(perk.Key, perk.Value).Spells).Distinct().SelectMany(_perkAbilities.Spell);
 
     internal void ChangeFaction(FalloutFormKey reference, FalloutFormKey faction, int rank, bool changeBase)
     {

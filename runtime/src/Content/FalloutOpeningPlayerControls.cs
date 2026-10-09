@@ -58,7 +58,8 @@ internal sealed record FalloutOpeningControlStage(
     IReadOnlyList<FalloutPlayerControlCommand> Commands);
 
 internal sealed record FalloutOpeningControlGraph(
-    IReadOnlyDictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>> Quests)
+    IReadOnlyDictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>> Quests,
+    bool ResultDriven = false)
 {
     internal FalloutOpeningControlStage Stage(string questEditorId, short stage)
     {
@@ -76,7 +77,16 @@ internal static class FalloutOpeningPlayerControlResolver
 
     internal static FalloutOpeningControlGraph Resolve(
         FalloutPluginStack stack,
-        IReadOnlyList<string> questEditorIds)
+        IReadOnlyList<string> questEditorIds) => Resolve(stack, questEditorIds, diagnostic: true);
+
+    // The product catalog resolves identity and stage declarations only. Its
+    // shared result executor owns controls, conditionals, timers and mutations.
+    internal static FalloutOpeningControlGraph ResolveForExecution(
+        FalloutPluginStack stack,
+        IReadOnlyList<string> questEditorIds) => Resolve(stack, questEditorIds, diagnostic: false);
+
+    private static FalloutOpeningControlGraph Resolve(FalloutPluginStack stack,
+        IReadOnlyList<string> questEditorIds, bool diagnostic)
     {
         ArgumentNullException.ThrowIfNull(stack);
         ArgumentNullException.ThrowIfNull(questEditorIds);
@@ -95,15 +105,15 @@ internal static class FalloutOpeningPlayerControlResolver
                 throw new InvalidDataException(
                     $"Native opening requires exactly one winning {editorId} QUST; found {matches.Length}.");
             var quest = matches[0];
-            var stages = ReadStages(quest, editorId);
+            var stages = ReadStages(quest, editorId, diagnostic);
             quests.Add(editorId, stages);
         }
-        return new FalloutOpeningControlGraph(quests);
+        return new FalloutOpeningControlGraph(quests, ResultDriven: !diagnostic);
     }
 
     private static IReadOnlyDictionary<short, FalloutOpeningControlStage> ReadStages(
         FalloutPluginRecord quest,
-        string editorId)
+        string editorId, bool diagnostic)
     {
         var subrecords = quest.ReadSubrecords().ToArray();
         var result = new Dictionary<short, FalloutOpeningControlStage>();
@@ -117,10 +127,10 @@ internal static class FalloutOpeningPlayerControlResolver
             var end = index + 1;
             while (end < subrecords.Length && subrecords[end].Signature is not ("INDX" or "QOBJ"))
                 end++;
-            var sources = subrecords[(index + 1)..end]
+            var sources = diagnostic ? subrecords[(index + 1)..end]
                 .Where(value => value.Signature == "SCTX")
                 .Select(value => ReadSource(quest, value.Data.Span))
-                .ToArray();
+                .ToArray() : [];
             var source = string.Join(System.Environment.NewLine, sources);
             var commands = sources.SelectMany(value => ReadCommands(quest, value)).ToArray();
             if (!result.TryAdd(

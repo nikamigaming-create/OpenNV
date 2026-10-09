@@ -296,6 +296,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled(); return;
         }
         if (PresentationInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
+        if (SourceRestInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (!_modalInput && _furniturePhase == 0 && GetMeta("opennv_source_pipboy_enabled", false).AsBool() && inputEvent.IsActionPressed(input.PipBoy.Action))
         {
             OpenPipBoy?.Invoke(); GetViewport().SetInputAsHandled(); return;
@@ -362,7 +363,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         PublishXrPointer();
         if (_xr is not null && GetTree().Paused) return;
+        if (_playerPhysical?.Failure is not null) { Velocity = Vector3.Zero; return; }
         AdvanceExplosionExposure(delta);
+        if (AdvancePlayerKnockdown(delta)) return;
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
         var alive = IsDefeated?.Invoke() != true;

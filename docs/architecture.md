@@ -3,6 +3,12 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Current campaign saves capture skill pools, advancement and ability scripts from
+the same live player owners before validation. Their source identities and skill
+captures must agree exactly. Cold restore binds the actual ability lifecycle
+before evaluating restored skill formulas. Earlier OpenNV save schemas and empty
+owner promotion receipts have no admission path.
+
 The product launcher is native Godot UI with original decorative artwork and a
 persistent play dock. Play opens the source menu. New Game and Continue retain a
 one-shot typed request until source indexing and menu construction succeed, then
@@ -25,6 +31,193 @@ Runtime controller publication follows the original target chain into each nativ
 instance. Particle sphere/plane contacts and RGBA key interpolation use the same
 source graph, with distinct instance state and draw resources. Failed construction
 and retirement release only the resources owned by that instance.
+Native plugin CRT streams remain opaque pointers allocated by the exact selected
+x86 export provider. Import declarations, retained provider bytes and genuine IAT
+entries select that provider before the first file call. Native buffers and
+variadic cursors reach its real exports; C# retains route, error/result and
+generation/lifetime receipts. Winning read-only inputs and declared private write
+scopes decide paths before opening. Source absence/deletion cannot reopen a loser.
+Close retires the actual pointer once even when flushing fails; child closure
+precedes source/provider cleanup, and failed leases remain retained. The game's
+static CRT, whole BSFile construction and unified current/cold CRT stream graph
+remain separate required owners.
+
+Native profile imports call the selected Windows A/W functions with genuine
+buffers and raw return/error results. Directory searches retain genuine OS
+handles for the winning source/private backends, complete WIN32_FIND_DATA,
+winner metadata and exact retirement. No generated INI parser or extracted BSA
+filesystem replaces those owners. The module namespace hashes stack, selected
+module and canonical path into one directory identity. Actual filesystem calls
+use Windows extended paths; virtual caller paths preserve source semantics.
+
+Each restricted child's token retains its previous default object ACL and adds
+the exact module restricting SID for new objects. Readback verifies that default
+and the unchanged restricting SID; original input ACLs never change and the full
+kernel AccessCheck remains mandatory. Native metadata readers preserve their
+own stream cursor. Actual mapped CRT provider paths are joined by kernel file
+identity against the retained selected source, so WOW64 path spelling cannot
+reject the same backing file or admit another provider. Export pointers must
+still belong to that exact retained image. The original-plugin USER/GDI desktop
+and complete cold/static-CRT graph remain independent required owners.
+
+Actor process transfer retains the actual source package/value provider across
+old-owner retirement and new-owner publication. Original High initialization
+consumes a living native NIF/BPTD body lease and original node/controller lookup
+declarations. Runtime/common captures share the actor reference, selected source,
+process epoch and deletion state. Cold restoration creates fresh native owners
+without replaying copy or source writers. General queued-reference membership,
+CELL ExtraData9 and whole-Main/travel transactions remain independent owners.
+
+Sleep/wait source counting state is independent of gameplay Phase. Start commits
+counting, clears the action target, then clears the slider target before signed
+player hours. The actual attached view projects that same request's current
+source targets; visibility remains owned by the winning expressions. Every
+native publication obtains fresh winning tiles. Cold publication creates fresh
+view/input leases without replaying Start, a target receipt or a world hour.
+
+Trait selection reads the winning PERK selection header independently of nested
+PRKE effects. Trait/playable/optional hidden flags, minimum level, rank count and
+top-level CTDA remain source-owned; live condition evaluation and the original
+GMST limit control player input. Saved trait identity is checked against the
+winning records without depending on an opening quest, cell or farewell grant.
+The current campaign schema captures actual runtime owners before validation.
+Earlier OpenNV schemas and source-cursor promotions are not persistence inputs;
+the save browser and cold reader use the same current schema and source identity.
+
+Mutable player skill BASE/permanent pools retain their source formula and winning
+AVIF identity. Current progress joins these pools to actual player vitals and XP
+origin; SetInCharGen publishes its source flag and a later admitted player update
+owns advancement. Acquired PERK ranks select their original PRKE rank, source
+index and priority. Traits and scripted perks share the live rank owner; unknown
+effect, condition, subject or native menu arms remain explicit failures. The native
+level-up view publishes the shared live menu session and original UI declarations;
+its buttons commit that same skill/rank state. A process-local publication lease
+prevents cold menu replay. Numeric XP/skill-point entries use live actor conditions
+and Float32 operations; unowned acquired-entry ordering refuses before mutation.
+Skill-point capacity counts remaining actual source-arrow operations against
+current displayed skills and the winning tagged multiplier.
+
+Advancement rates separate the selected permanent-value getter from integer
+rounding, affine operands, source arithmetic and gained-level cadence. Exact
+selected executable/dependency/configuration identities admit these neutral
+declarations. Source GMST names or game/plugin display names cannot select the
+consumer. Typed activity observations retain Satisfied, Held and Unowned as
+distinct states. Required sleep/knockdown/frame/native-effect owners are explicit;
+registration or an absent producer never implies readiness.
+
+Player physical state leases the actual whole player body and shared vitals. Source
+EXPL damage commits once before knockdown consumes the actual damage prefix; source
+IDLE/KF recovery and chair motion own the same skeleton and collision capsule.
+Independent sleeping, actor sleeping and knocked queries share this state. Current
+campaign saves require physical source identities, native pose components, furniture
+reservation/placement, fractional phase clocks, attempted keys, RNG and sound
+history. Cold publication selects no branch and dispatches no saved key. Physical
+faults retain their committed prefix and block dependent source execution. The
+selected body must publish before source queries or advancement can observe normal
+state. Interrupted motion and death remain distinct owners.
+
+Sleep/wait retains the source player counter and UI countdown independently. Source
+furniture publication, rest admission, the persistent save queue, cumulative world
+time, fades and completed audio voices share current capture and cold validation.
+Actual campaign callbacks own restriction observations, source counting, each
+world/effect hour and completion. Exact finite named WAV cues use the selected
+original no-folder/no-RNG branch and the real shared native sound host. Their raw
+current FNAM is checked before canonicalization or native allocation, preserving
+directory requests and descriptor drift. Current cold sound state pins the
+playback/source history and constructs no random stream or voice. Missing world
+callbacks, random playback and folder/history selection remain explicitly unowned;
+an ordinary world tick or convenient random stream cannot stand in for their
+source behavior. Cold validation never replays these prefixes.
+
+XP notifications retain actual award order and source-selected tile declarations,
+raw wall-clock fades and a distinct pausable level-text timer. Genuine native draws,
+completed sound voices and current-owner retirement control visibility/lifetime;
+missing draws or voices never fabricate completion. The native flat HUD shares the
+driver's authoritative XP owner. Current saves require this owner and its selected
+source identity, and cold publication admits a new process/clock epoch without
+advancing offline time or replaying a notification prefix. Original HUD/interface
+flags and combat-group arbitration remain distinct required producers. Genuine HUD
+completion is driven by actual level-text hidden receipts and reset by an actual
+completed level-menu submission. Independent interface state consumes real pending
+container activation at factory entry. Cold snapshots require both owners; missing
+lockpick continuation remains unowned.
+
+CombatManager owns distinct ordered member/target lists and exact source actor
+identities before startup scripts execute. The driver's actual player update owns
+the public incoming-member combat flag, while XP reads the personal target list.
+Both share current groups without using one as the other's proxy. Target
+acquisition, provocation, assistance and player damage retain actual transition
+prefixes. Cold state restores source/order/clock/receipt identity without replaying
+target selection. Missing detection, reaction/election, controller end and target
+expiry inputs remain failures; full active-combat capture requires their genuine
+continuation. Pause holds this source update during finite save drains.
+
+Actor perception retains directional pending/committed caches, process epochs,
+source clocks and actual player/actor publication leases. The separate process
+manager owns ordered four-tier membership, factory prefixes and distinct FNV/FO3
+source scheduling. Original constructor inputs and selected Main settings decide
+registration; visual residency cannot decide the tier. Current saves require both
+owners and their constructor receipts. Cold construction replays no producer or
+factory prefix, and real native publication uses a new process lease. Missing
+election, common transfer, pair/light, controller and frame facts refuse their
+reached operations. Process retirement precedes its perception/source providers.
+Actor AI updates use their own source byte. CELL metadata loading, genuine native
+root/child publication, detach and destruction own distinct process phases; the
+current player CELL is separate from actor cohort membership. Mandatory cold state
+retains phase and source history without replaying saved factories or treating old
+native identities as new publication.
+
+SPECIAL menu requests use their compiled integer argument. The selected executable
+owns the reached menu type, XML/model arguments, integer bounds and presentation
+declarations. The product path has no named opening quest, trigger, tester reference
+or stage dependency, and the tag view requires its genuine source menu request.
+
+Persistent save requests share one ordered queue. Source invocations carry their
+actual compiled instruction and requester lease; player/native requests carry
+their actual distinct origin. Only the eligible head writer can capture and
+commit its destination. Current capture retains pending tails, source suspension
+joins, writer phase and process identity. Cold restoration admits a new queue
+epoch without replaying source prefixes. Manual preparation pauses source producers
+and the driver while allowing their finite audio voices to finish through their
+existing drain modes; cancellation owns one request.
+
+Compiled argument decoding reads the selected original executable's CommandInfo
+and ParamInfo declarations in process. Names/aliases, reference requirements,
+optional argument flags and categories belong to that selected image. Matching
+the public standard-parser declarations admits the argument layout, while the
+shared C# semantic owner separately admits execution by public API name. Source
+opcode positions do not choose query/effect roles, message parsing or optional
+effect restrictions. No persistent decoded
+command table or selected image address becomes a launch input.
+
+Native StringVar/ArrayVar tables join the same campaign script value/array stores.
+Their callbacks own exact module generations, caller/result targets and complete
+chunked extents. Borrowed strings, output Elements and source-declared native
+allocation/free thunks retain distinct actual lifetimes. Missing original Script,
+TESForm or heap owners refuse; callable registration and successful compilation
+do not establish original DLL compatibility. Private plugin I/O has a candidate
+restricted child token/job, selected input protection and scoped source/private
+routes before original entry. Original imports receive real Windows handles and
+module/callback generations; source archive handles, CRT/dynamic import families,
+co-save transactions and actual original execution remain independent owners.
+
+Quest and reference local owners retain every original ordered UInt64 cell,
+including duplicate IDs. Index lookup observes the first matching cell; numeric
+and reference operands observe their respective views of that same payload.
+SLSD initial payloads come from the original loader's complete scalar-prefix copy.
+Current cold snapshots bind the source hash, every ordinal/name/flag and all bits.
+Native local publication uses these actual owners, source SCDA slices and sealed
+linked metadata. It commits ordinal changes against the retained revision/prefix
+and refuses conflicting reentry or changed lifetimes. Cold loading retains reached
+script errors without clearing or retrying them.
+
+The actual campaign owns selected native-module generations and their original
+Script/TESForm projections. Top-level and nested compiled commands retain original
+SCDA argument slices; the plugin's original extraction call triggers the shared
+decoder. Constructor fields, contributor ModInfo/Quest objects and every reached
+used method require genuine owners. Missing actor/RTTI/fixed-address hooks refuse.
+Save capture requires idle callers and real co-save ownership. Native child closure
+precedes source/world retirement; failed closure retains those actual owners.
 
 UI system-color tokens share a C# palette reader. Explicit installation/profile
 packed HUD and Pip-Boy settings override their channels; absent overrides read

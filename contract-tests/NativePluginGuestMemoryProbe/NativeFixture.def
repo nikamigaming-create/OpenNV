@@ -13,3 +13,14 @@ EXPORTS
     OpenNvRaise=OpenNvRaise
     OpenNvHang=OpenNvHang
     OpenNvForeignCallback=OpenNvForeignCallback
+    OpenNvGuestReadDword=OpenNvGuestReadDword
+    OpenNvGuestWriteDword=OpenNvGuestWriteDword
+    OpenNvGuestQueryCdecl=OpenNvGuestQueryCdecl
+    OpenNvGuestDamageStdcall=_OpenNvGuestDamageStdcall@8
+    OpenNvGuestQueryThiscall=OpenNvGuestQueryThiscall
+    OpenNvGuestReenter=OpenNvGuestReenter
+    OpenNvGuestRemember=OpenNvGuestRemember
+    OpenNvGuestUseRemembered=OpenNvGuestUseRemembered
+    OpenNvGuestQueryOnDetach=OpenNvGuestQueryOnDetach
+    OpenNvGuestSetReadOnly=OpenNvGuestSetReadOnly
+    OpenNvGuestTamperState=OpenNvGuestTamperState

@@ -129,7 +129,8 @@ internal partial class RuntimeNativeNpc
             _aiPollRemaining = failure.PollRemaining; _aiScheduleTime = failure.ScheduleTime;
             _aiQuestRevision = _questState!.Revision; _aiActivityRevision = Activity.Revision;
         }
-        else _requestedSelection = new(package, declaration);
+        else _requestedSelection = new(package, declaration, ScriptPackageRevision,
+            _aiReferenceState?.ScriptPackage?.Package == package.FormKey);
         _selectedSourcePackage = package.FormKey; _sourceSelectionKnown = true;
         _selectionCaptureBlocker = _aiReferenceState!.ProcedureCaptureBlocker;
         RestoreBindingFailurePose(failure);

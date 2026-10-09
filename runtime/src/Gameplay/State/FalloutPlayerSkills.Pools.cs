@@ -117,7 +117,8 @@ internal sealed partial class FalloutPlayerSkills
 
     private void Publish(int value, FalloutPlayerSkillPools changed)
     {
-        if (!changed.IsFinite)
+        if (!changed.IsFinite || !float.IsFinite((float)((double)SkillFormula(value) + changed.BaseOffset +
+                changed.Permanent)))
             throw new InvalidDataException("Player skill pools exceed finite Float32 storage.");
         _skillPools[value] = changed;
         Changed?.Invoke();
@@ -141,6 +142,9 @@ internal sealed partial class FalloutPlayerSkills
             throw new InvalidDataException("Saved player skills differ from their winning player/stats/AVIF sources.");
         foreach (var value in snapshot.Pools.Keys) RequireSkill(value);
         var replacement = snapshot.Pools.ToDictionary(pair => pair.Key, pair => pair.Value);
+        foreach (var (value, pools) in replacement)
+            if (!float.IsFinite((float)((double)SkillFormula(value) + pools.BaseOffset + pools.Permanent)))
+                throw new InvalidDataException("Saved player skill formula/pools exceed finite storage.");
         _skillPools = replacement;
         Changed?.Invoke();
     }
@@ -159,6 +163,28 @@ internal sealed partial class FalloutPlayerSkills
             return new FalloutPlayerSkillSource(value, source.FormKey, source.Plugin.Name,
                 Convert.ToHexString(SHA256.HashData(source.ReadData())).ToLowerInvariant());
         }).ToArray();
+    }
+
+    internal static void ValidateValueSource(FalloutPluginStack records, FalloutPlayerSkillValuesSnapshot state)
+    {
+        ValidateValues(state);
+        var player = FalloutPlayerActorValueSource.Read(records);
+        if (state.Player != player.Player || state.PlayerWinner != player.PlayerWinner || state.PlayerSha256 != player.PlayerSha256 ||
+            state.StatsOwner != player.StatsOwner || state.StatsWinner != player.StatsWinner || state.StatsSha256 != player.StatsSha256)
+            throw new InvalidDataException("Saved skill values differ from the actual winning player/stats source.");
+        var slots = ReadSkillCatalogue(records);
+        var catalog = FalloutNativeTagSkillResolver.ResolveSkills(records);
+        foreach (var saved in state.Sources)
+        {
+            var slot = slots.SingleOrDefault(slot => slot.Value == saved.ActorValue);
+            if (slot.Name is null) throw new InvalidDataException("Saved skill pool has no selected source skill slot.");
+            var identity = catalog.Single(skill => FalloutNativeTagSkillResolver.ActorValueName(records, skill)
+                .Equals(slot.Name, StringComparison.OrdinalIgnoreCase));
+            var source = records.GetEffective(records.RuntimeFormKey(identity.RuntimeFormId));
+            if (source.FormKey != saved.Form || source.Plugin.Name != saved.Winner ||
+                Convert.ToHexString(SHA256.HashData(source.ReadData())).ToLowerInvariant() != saved.Sha256)
+                throw new InvalidDataException("Saved skill pool changed its winning AVIF identity.");
+        }
     }
 
     internal static void ValidateValues(FalloutPlayerSkillValuesSnapshot state)

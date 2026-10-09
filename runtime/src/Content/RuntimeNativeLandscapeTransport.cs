@@ -96,6 +96,8 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         root.SetMeta("opennv_land", source.Landscape.ToString());
         root.SetMeta("opennv_land_cell", source.ActiveCell.ToString());
         root.SetMeta("opennv_land_world", source.Worldspace.ToString());
+        root.SetMeta("opennv_land_height_owner", source.HeightDefault is { } defaults
+            ? $"WRLD-DNAM:{defaults.OwnerWorldspace}" : $"LAND-VHGT:{source.Landscape}");
         root.SetMeta("opennv_land_texture_count", textures.Count);
         root.SetMeta("opennv_source", "live-retail-files");
         root.AddChild(geometry);

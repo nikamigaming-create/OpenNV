@@ -104,6 +104,19 @@ internal static class FalloutAiPackages
     internal static FalloutPluginRecord TemplateOwner(FalloutPluginStack stack, FalloutPluginRecord record, ushort flag)
         => FalloutActorTemplateOwner.Resolve(stack, record, flag);
 
+    internal static bool OnPriorityList(FalloutPluginStack stack, FalloutFormKey actorBase,
+        FalloutFormKey package, FalloutActorTemplateSelection? selection = null)
+    {
+        var owner = FalloutActorTemplateOwner.Resolve(stack, stack.GetEffective(actorBase), 32, selection);
+        var found = false;
+        foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "PKID"))
+        {
+            if (field.Data.Length != 4) throw new InvalidDataException("Actor package identity has an invalid extent.");
+            if (owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) == package) found = true;
+        }
+        return found;
+    }
+
     internal static FalloutPluginRecord? Select(FalloutPluginStack stack, FalloutFormKey npc,
         Func<FalloutCondition, float> evaluate, FalloutActorTemplateSelection? selection = null, FalloutGameTime? clock = null,
         bool evaluateRunOn = false, Func<FalloutPluginRecord, bool>? eligible = null)

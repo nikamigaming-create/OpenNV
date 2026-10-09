@@ -6,7 +6,8 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed record FalloutActiveRadioVoiceSnapshot(FalloutActiveRadioConversationSnapshot Conversation,
     long Generation, int ResponseIndex, FalloutDialogueVoiceBinding Binding, string AudioSha256, string? LipSha256,
-    string DecodedSha256, FalloutPcmPlaybackSnapshot Samples, bool Advance, bool ForceSubtitles);
+    string DecodedSha256, FalloutPcmPlaybackSnapshot Samples, bool Advance, bool ForceSubtitles,
+    FalloutScriptResultReceipt? BeginResults = null, FalloutScriptResultReceipt? EndResults = null);
 
 internal partial class RuntimeNativeSpeech
 {
@@ -27,7 +28,7 @@ internal partial class RuntimeNativeSpeech
         if (voice.Info is null || voice.Radio is not { Active: true } radio || voice.Pcm is null || voice.Binding is null ||
             voice.ResponseSound is not null || voice.ResponseCompleted is not null || voice.PackageCompleted is not null ||
             voice.PackageEvent is not null || voice.NpcExchange is not null || voice.Listener is not null ||
-            voice.CommandKind != "radio-conversation" || voice.Command is null ||
+            voice.CommandKind != "radio-conversation" || voice.Command is null || !HasOwnedResultPrefix(voice) ||
             !_radioConversations.TryGetValue(voice.Reference, out var current) || !ReferenceEquals(current, radio) ||
             radio.Info != voice.Info || radio.Topic != voice.Topic || voice.Player.Stream != voice.Pcm.Stream ||
             !voice.Player.HasStreamPlayback() || (uint)voice.ResponseIndex >= voice.Info.Responses.Count) return false;
@@ -54,7 +55,7 @@ internal partial class RuntimeNativeSpeech
                         new FalloutActiveRadioVoiceSnapshot(voice.Radio!.CaptureActiveState(), voice.Generation,
                             voice.ResponseIndex, voice.Binding!, voice.Pcm!.Data.MediaSha256,
                             voice.LipSha256, voice.Pcm.Data.Sha256, voice.Pcm.Capture(), voice.Advance,
-                            voice.Command!.ForceSubtitles)).ToArray()
+                            voice.Command!.ForceSubtitles, voice.BeginResults, voice.EndResults)).ToArray()
             };
             ValidateFinishedState(_stack, _references!, snapshot);
             return snapshot;
@@ -80,6 +81,7 @@ internal partial class RuntimeNativeSpeech
                 voice.Conversation.Identity.CompletedLines >= voice.Generation || !world.IsEnabled(station.Reference) ||
                 (uint)voice.ResponseIndex >= info.Responses.Count)
                 throw new InvalidDataException("Active radio has an invalid station, response or voice generation.");
+            RequireResultPrefix(info, world.DialogueSubject(station.Reference), voice.BeginResults, voice.EndResults);
             var response = info.Responses[voice.ResponseIndex];
             var identity = info.Speaker is { } speaker ? FalloutDialogueSpeaker.Read(records, speaker) : world.DialogueIdentity(station.Reference);
             if (response.Sound is not null || response.SpeakerAnimation is not null || response.ListenerAnimation is not null)
@@ -98,6 +100,22 @@ internal partial class RuntimeNativeSpeech
                 !voice.Samples.Playing && !voice.Samples.StartPending && voice.Samples.Position != voice.Samples.Frames)
                 throw new InvalidDataException("Active radio has an invalid finite response clock.");
         }
+    }
+
+    private static bool HasOwnedResultPrefix(Voice voice)
+    {
+        if (voice.Info is null || voice.BeginResults is null || ((voice.Info.Flags & 8) != 0) != (voice.EndResults is not null)) return false;
+        try { RequireResultPrefix(voice.Info, voice.DialogueSubject, voice.BeginResults, voice.EndResults); return true; }
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException) { return false; }
+    }
+
+    private static void RequireResultPrefix(FalloutDialogueInfo info, FalloutFormKey caller,
+        FalloutScriptResultReceipt? begin, FalloutScriptResultReceipt? end)
+    {
+        if (begin is null || ((info.Flags & 8) != 0) != (end is not null))
+            throw new NotSupportedException("Active radio has no proven shared result-authority prefix; legacy results cannot be replayed or retroactively receipted.");
+        begin.Require(FalloutScriptScope.Dialogue(info.Record, true), caller);
+        end?.Require(FalloutScriptScope.Dialogue(info.Record, false), caller);
     }
 
     private static bool ValidMediaHash(string hash) => hash is { Length: 64 } && hash.All(Uri.IsHexDigit);
@@ -123,7 +141,7 @@ internal partial class RuntimeNativeSpeech
                 voice.Command = new(station.ToString(), "", radio.Topic!.Value.ToString(), saved.ForceSubtitles);
                 voice.CommandKind = "radio-conversation"; voice.Topic = radio.Topic;
                 voice.Info = radio.Info; voice.ResponseIndex = saved.ResponseIndex;
-                voice.Generation = saved.Generation;
+                voice.Generation = saved.Generation; voice.BeginResults = saved.BeginResults; voice.EndResults = saved.EndResults;
                 voice.CompletedCommands = snapshot.Voices.Single(history => history.Speaker == station).CompletedCommands;
                 voice.Player.Finished += () => voice.Advance = true;
                 // Prepare every original resource before publishing any channel.

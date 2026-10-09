@@ -46,7 +46,7 @@ internal static class SoundEmitterPersistenceContracts
     private static void RejectLegacySchema(FalloutAnimationSoundEventsSnapshot sounds)
     {
         var validate = typeof(FalloutNativeCampaignSave).GetMethod("Validate", BindingFlags.Static | BindingFlags.NonPublic)!;
-        foreach (var schema in new[] { FalloutNativeCampaignSave.FinishedRadioSchema, FalloutNativeCampaignSave.PlayerAudioSchema })
+        foreach (var schema in new[] { "opennv-native-fnv-campaign-save/v48", "opennv-native-fnv-campaign-save/v47" })
         foreach (var player in new[] { false, true })
         {
             var state = new FalloutNativeCampaignState(schema, "", default, "", 0, "", null!, null!, [], [], [], [], [], [], [],
