@@ -97,6 +97,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal void ApplySourceCamera(Transform3D transformFromFeet)
     {
         _sourceCamera = transformFromFeet;
+        PublishSelfCameraVisibility();
         if (_xr is not null) return;
         _camera.Transform = transformFromFeet * new Transform3D(new Basis(Vector3.Right, _pitchRadians), Vector3.Zero);
     }
@@ -119,6 +120,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal void ReleaseSourceCamera()
     {
         _sourceCamera = null;
+        PublishSelfCameraVisibility();
         if (_xr is not null) return;
         _camera.Transform = new Transform3D(new Basis(Vector3.Right, _pitchRadians),
             Vector3.Up * _configuration.Player.SpawnCenterHeightMeters + _configuration.Player.DesktopCameraOffsetMeters.Vector3());
@@ -230,6 +232,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             Far = configuration.Player.CameraFarMeters,
             Current = true,
         };
+        ConfigureSelfCameraVisibility();
         AddChild(_camera);
         GD.Print($"OPENNV_NATIVE_CAMERA_PROJECTION verticalFov={projection.VerticalFovDegrees:R} " +
             $"nearGameUnits={projection.NearGameUnits:R} source=caller-projection referenceAspect=4:3 " +

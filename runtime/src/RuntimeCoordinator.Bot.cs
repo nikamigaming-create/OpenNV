@@ -60,6 +60,7 @@ public partial class RuntimeCoordinator
     {
         var world = _nativeReferences ?? throw new InvalidOperationException("Reference world is not active.");
         var state = world.Get(reference);
+        var furniture = _nativePlayer?.ObserveFurnitureInteraction();
         var linked = world.GetLinkedRef(reference);
         var target = BotInteractionSourceState.StableEffects(NativeBotSourceState(state),
             linked is { } linkedReference ? NativeBotSourceState(world.Get(linkedReference)) : null);
@@ -73,11 +74,16 @@ public partial class RuntimeCoordinator
             settledPortal ? "portal:" + destination : null;
         var portal = NativeBotPortal(reference);
         var requested = _nativeOpeningStageDriver?.PendingConversationSpeaker == reference ? "conversation" :
+            furniture?.Reference == reference ? "furniture" :
             portal is { ActivationRequests: > 0 } ? "portal:" + portal.DestinationCell : null;
         return new(target, outcome, _nativeOpeningStageDriver?.ActiveMenus().Order().ToArray() ?? [], requested,
-            requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? portal!.ActivationRequests : 0,
-            settledPortal && outcome == "portal:" + destination ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
-            requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other);
+            requested == "furniture" ? furniture!.Ordinal :
+                requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? portal!.ActivationRequests : 0,
+            outcome == "furniture" ? BotInteractionOutcomeKind.Furniture :
+                settledPortal && outcome == "portal:" + destination ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
+            requested == "furniture" ? BotInteractionOutcomeKind.Furniture :
+                requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
+            requested == "furniture" && furniture!.Pending, outcome == "furniture" ? furniture!.Ordinal : 0);
     }
 
     internal static BotInteractionSourceState NativeBotSourceState(FalloutReferenceInstance state) =>
@@ -228,7 +234,8 @@ public partial class RuntimeCoordinator
             player.GetMeta("opennv_source_movement_enabled", false).AsBool() && !player.FurnitureActive,
             player.GetMeta("opennv_source_looking_enabled", false).AsBool(), resident && player.CollisionResident,
             player.BlockingShape, interaction.Revision.ToString(CultureInfo.InvariantCulture), travelReady, door,
-            _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask, player.ModalInput, loading, Combat: combatObservation);
+            _nativeQuestState?.ProgressRevision ?? 0, menus, controlMask, player.ModalInput, loading, Combat: combatObservation,
+            InteractionPending: interaction.PendingFurniture);
     }
 
     private static System.Numerics.Vector3 Vector3ToNumeric(Vector3 value) => new(value.X, value.Y, value.Z);

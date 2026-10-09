@@ -50,15 +50,19 @@ internal sealed record FalloutNativeCampaignState(
     IReadOnlyList<FalloutQuestStageResultSnapshot>? QuestStageResults = null,
     FalloutQuestStageDriverFailure? StageResultFailure = null,
     IReadOnlyList<FalloutTerminalClosedSnapshot>? TerminalResults = null,
-    FalloutPlayerPackageAudioSnapshot? PlayerPackageAudio = null);
+    FalloutPlayerPackageAudioSnapshot? PlayerPackageAudio = null,
+    FalloutPlayerSkillValuesSnapshot? PlayerSkillValues = null,
+    FalloutPlayerAbilityScriptsSnapshot? PlayerAbilityScripts = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
-    FalloutCampaignInventory Inventory);
+    FalloutCampaignInventory Inventory,
+    FalloutPlayerAbilitySaveAdmission? OriginalAbilityAdmission = null);
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v49";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v50";
+    internal const string BeforeAbilityScriptsSchema = "opennv-native-fnv-campaign-save/v49";
     internal const string FinishedRadioSchema = "opennv-native-fnv-campaign-save/v48";
     internal const string PlayerAudioSchema = "opennv-native-fnv-campaign-save/v47";
     internal const string ObjectPcmSchema = "opennv-native-fnv-campaign-save/v46";
@@ -143,7 +147,9 @@ internal static class FalloutNativeCampaignSave
         FalloutQuestStageDriverFailure? stageResultFailure = null,
         IReadOnlyList<FalloutTerminalClosedSnapshot>? terminalResults = null,
         IReadOnlyList<FalloutNativeSkillIdentity>? skillCatalog = null,
-        FalloutPlayerPackageAudioSnapshot? playerPackageAudio = null)
+        FalloutPlayerPackageAudioSnapshot? playerPackageAudio = null,
+        FalloutPlayerSkillValuesSnapshot? playerSkillValues = null,
+        FalloutPlayerAbilityScriptsSnapshot? playerAbilityScripts = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract ??
@@ -190,7 +196,8 @@ internal static class FalloutNativeCampaignSave
             PlayerViewPitchRadians: playerViewPitchRadians, EncounterZones: references is null ? null : [], PlayerActorValues: playerActorValues,
             TagSkillSlots: tagSkillSlots, FactionRelations: [], DetectionEvents: detectionEvents, FinishedSpeech: finishedSpeech,
             FinishedSpeechStage: finishedSpeechStage, QuestStageResults: questStageResults, StageResultFailure: stageResultFailure,
-            TerminalResults: references is null ? terminalResults : terminalResults ?? [], PlayerPackageAudio: playerPackageAudio);
+            TerminalResults: references is null ? terminalResults : terminalResults ?? [], PlayerPackageAudio: playerPackageAudio,
+            PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -219,8 +226,14 @@ internal static class FalloutNativeCampaignSave
         var state = JsonSerializer.Deserialize<FalloutNativeCampaignState>(
                 File.ReadAllText(fullPath)) ??
             throw new InvalidDataException($"Native campaign save is empty: {fullPath}");
-        Validate(state, expectedSaveCompatibilityId);
-        if (state.Schema == FinishedRadioSchema) state = state with { Schema = ExpectedSchema };
+        var originalAbilityAdmission = FalloutPlayerAbilitySaveAdmission.FromOriginalHeader(state);
+        if (originalAbilityAdmission is not null)
+        {
+            if (state.PlayerSkillValues is not null || state.PlayerAbilityScripts is not null)
+                throw new InvalidDataException("Earlier campaign schema cannot carry active-effect/skill state.");
+            state = state with { Schema = ExpectedSchema };
+        }
+        ValidateCore(state, expectedSaveCompatibilityId, originalAbilityAdmission);
         if (state.PlayerPackageAudio is { } playerAudio)
             FalloutAnimationSoundEvents.ValidateSource(playerAudio.Events, stack, stack.RuntimeFormKey(0x14));
         var activeCell = stack.GetEffective(state.ActiveCell);
@@ -336,7 +349,6 @@ internal static class FalloutNativeCampaignSave
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
             if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
-        if (state.Schema == PlayerAudioSchema) state = state with { Schema = ExpectedSchema };
         if (state.Schema is CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ObjectPcmSchema };
         if (state.Schema is not (ExpectedSchema or ObjectPcmSchema) && state.References is not null)
             state = state with
@@ -347,7 +359,9 @@ internal static class FalloutNativeCampaignSave
             };
         if (state.Schema is ExpectedSchema or ObjectPcmSchema && state.References is not null)
             state = state with { QuestStageResults = state.QuestStageResults ?? [], TerminalResults = state.TerminalResults ?? [] };
-        return new FalloutNativeCampaignRestore(state, inventory);
+        if (originalAbilityAdmission is not null) state = originalAbilityAdmission.CompleteOriginalRead(state, stack);
+        Validate(state, expectedSaveCompatibilityId);
+        return new FalloutNativeCampaignRestore(state, inventory, originalAbilityAdmission);
     }
 
     internal static void ValidateTraits(FalloutNativeTraitFarewellContract? contract, IReadOnlyList<FalloutNativeTraitIdentity> traits)
@@ -439,8 +453,14 @@ internal static class FalloutNativeCampaignSave
 
     private static void Validate(
         FalloutNativeCampaignState state,
-        string expectedSaveCompatibilityId)
+        string expectedSaveCompatibilityId) => ValidateCore(state, expectedSaveCompatibilityId, null);
+
+    private static void ValidateCore(
+        FalloutNativeCampaignState state,
+        string expectedSaveCompatibilityId,
+        FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        var abilityAuthorityState = state;
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
         if (state.Schema != ExpectedSchema && state.FinishedSpeech?.ActiveRadio is not null)
             throw new InvalidDataException("Legacy campaign schema contains future active radio continuation.");
@@ -588,6 +608,7 @@ internal static class FalloutNativeCampaignSave
             throw new InvalidDataException("Legacy campaign schema has dialogue completion.");
         if (state.Schema != ExpectedSchema && state.Schema != RadioSchema && state.Schema != DialoguePackageSchema && state.Schema != EditorTravelSchema && state.References?.Any(reference => reference.PackageMotion?.EditorTravel is not null) == true)
             throw new InvalidDataException("Legacy campaign schema has editor travel progress.");
+        FalloutPlayerAbilitySaveAdmission.Require(abilityAuthorityState, originalAbilityAdmission);
         state.Vitals?.Validate();
         if (state.PlayerActorValues is { } playerValues)
         {

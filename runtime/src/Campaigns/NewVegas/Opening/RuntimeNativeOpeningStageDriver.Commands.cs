@@ -183,6 +183,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         _scripts.References!.PlayerMoves.RequireSettled();
         if (SaveContinuationBlocker is { } blocker)
             throw new NotSupportedException($"Saving {blocker} requires continuation state.");
+        _playerAbilities.Synchronize();
+        var vitals = Vitals;
         var transform = _player.GlobalTransform;
         var rotation = transform.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
         var complete = _tagSkillContract is null ? !_scripts.Session.InCharGen :
@@ -193,10 +195,11 @@ internal partial class RuntimeNativeOpeningStageDriver
             _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
             QuestEditorId, Stage, complete, _player.ViewPitchRadians, _playerActorValues.Capture(), _tagSkills.Capture(),
             _scripts.References!.CaptureDetection(), _speech?.CaptureState(), CaptureFinishedSpeechStage(),
-            CaptureStageResults(), _stageResultDriverFailure, CaptureTerminalResults(), _skillCatalog, _playerPackage!.CaptureAudio());
+            CaptureStageResults(), _stageResultDriverFailure, CaptureTerminalResults(), _skillCatalog, _playerPackage!.CaptureAudio(),
+            playerSkillValues: _playerSkills.CaptureValues(), playerAbilityScripts: _playerAbilities.Capture());
         return state with
         {
-            Vitals = Vitals,
+            Vitals = vitals,
             WeaponHandling = _player.CaptureWeaponHandling(),
             Ingestibles = _ingestibles.Capture(),
             ActorOverrides = _scripts.References!.CaptureActorOverrides(),

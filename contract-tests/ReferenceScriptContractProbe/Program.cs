@@ -4,6 +4,24 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--player-ability-supplement-contracts"])
+{
+    PlayerAbilitySupplementContracts.Run();
+    return;
+}
+
+if (args is ["--audit-owned-player-ability", var abilityData, var abilitySpell])
+{
+    OwnedPlayerAbilityScriptProbe.Run(abilityData, abilitySpell);
+    return;
+}
+
+if (args is ["--player-ability-script-contracts"])
+{
+    PlayerAbilityScriptContracts.Run();
+    return;
+}
+
 if (args is ["--reference-access-contracts"])
 {
     ReferenceAccessContracts.Run();
@@ -925,6 +943,8 @@ else if (args is [var patrolRoot, "--patrols", var patrolOutput]) OwnedPatrolPro
 else if (args is [var recoveryRoot, "--script-recovery", var recoverySave, var recoveryOutput])
     OwnedScriptRecoveryProbe.Run(recoveryRoot, recoverySave, recoveryOutput);
 StageAndInventoryContracts.Run();
+PlayerAbilityScriptContracts.Run();
+PlayerAbilitySupplementContracts.Run();
 QuestStagePersistenceContracts.Run();
 QuestObjectContracts.Run();
 InventoryCommandContracts.Run();

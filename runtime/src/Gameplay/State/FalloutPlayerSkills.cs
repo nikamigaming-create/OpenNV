@@ -3,7 +3,7 @@ using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal sealed class FalloutPlayerSkills
+internal sealed partial class FalloutPlayerSkills
 {
     internal static string SkillName(FalloutPluginStack records, FalloutNativeSkillIdentity skill)
     {
@@ -65,7 +65,9 @@ internal sealed class FalloutPlayerSkills
 
     internal float Value(int value)
     {
+        SynchronizeAbilityScripts();
         if (value is >= 5 and <= 11 && _actorValues is not null) return _actorValues.ReadBoundedCurrent(value);
+        if (_skills.Any(skill => skill.Value == value)) return Math.Clamp(ReadSkill(value, FalloutActorValueRead.Current), 0, 100);
         if (!_evaluating.Add(value)) throw new NotSupportedException("Actor ability conditions have a recursive value dependency.");
         try
         {
@@ -85,14 +87,10 @@ internal sealed class FalloutPlayerSkills
             else if (value == 20) initial = (Value(7) + Setting("fAVDRadResistEnduranceOffset")) * Setting("fAVDRadResistEnduranceMult");
             else
             {
-                var skill = _skills.SingleOrDefault(skill => skill.Value == value);
-                if (skill.Name is null) throw new NotSupportedException($"Player value {value} is unbound.");
-                initial = Setting("fAVDSkill" + skill.Setting + "Base") +
-                    MathF.Floor(Setting("fAVDSkillPrimaryBonusMult") * Value(skill.Attribute)) +
-                    MathF.Ceiling(Setting("fAVDSkillLuckBonusMult") * Value(11)) + (_tagged(skill.Name) ? Setting("fAVDTagSkillBonus") : 0);
+                throw new NotSupportedException($"Player value {value} is unbound.");
             }
             foreach (var form in ConstantEffects())
-                foreach (var effect in _abilities.Spell(form))
+                foreach (var effect in OwnedModifiers(form))
                     if (effect.ActorValue == value && FalloutCondition.AllPass(effect.Conditions, Condition)) initial += effect.Amount;
             return Math.Clamp(initial, value is >= 5 and <= 11 ? 1 : 0, value is >= 5 and <= 11 ? 10 : 100);
         }
@@ -100,7 +98,7 @@ internal sealed class FalloutPlayerSkills
     }
 
     internal IReadOnlyList<FalloutAbilityModifier> Modifiers(int actorValue, FalloutActorValuePool pool) => ConstantEffects()
-        .SelectMany(form => _abilities.Spell(form)).Where(effect => effect.ActorValue == actorValue && effect.Pool == pool &&
+        .SelectMany(form => OwnedModifiers(form)).Where(effect => effect.ActorValue == actorValue && effect.Pool == pool &&
             FalloutCondition.AllPass(effect.Conditions, Condition)).ToArray();
 
     private IEnumerable<FalloutFormKey> Perks => _traits().Select(trait => _records.RuntimeFormKey(trait.RuntimeFormId)).Concat(_acquiredPerks()).Distinct();

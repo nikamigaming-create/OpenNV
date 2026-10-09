@@ -17,6 +17,7 @@ internal sealed class FalloutPlayerActorValues
     private Dictionary<int, FalloutActorValue> _values;
     private Func<int, FalloutActorValuePool, IReadOnlyList<FalloutAbilityModifier>>? _constantModifiers;
     private readonly HashSet<int> _evaluating = [];
+    private Action? _abilityLifecycle;
     internal event Action? Changed;
     internal FalloutPlayerActorValueSource Source => _source;
 
@@ -36,6 +37,13 @@ internal sealed class FalloutPlayerActorValues
         ArgumentNullException.ThrowIfNull(modifiers);
         if (_constantModifiers is not null) throw new InvalidOperationException("Player constant modifier owner is already bound.");
         _constantModifiers = modifiers;
+    }
+
+    internal void BindAbilityLifecycle(Action synchronize)
+    {
+        ArgumentNullException.ThrowIfNull(synchronize);
+        if (_abilityLifecycle is not null) throw new InvalidOperationException("Player active-effect lifecycle is already bound.");
+        _abilityLifecycle = synchronize;
     }
 
     internal static int SpecialValue(string name)
@@ -147,6 +155,7 @@ internal sealed class FalloutPlayerActorValues
 
     private float Evaluate(int actorValue, Func<float> read)
     {
+        _abilityLifecycle?.Invoke();
         _ = Value(actorValue);
         if (!_evaluating.Add(actorValue)) throw new NotSupportedException("Player ability conditions have a recursive actor value dependency.");
         try

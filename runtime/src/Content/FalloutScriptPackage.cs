@@ -169,9 +169,9 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
         if (compiled.Length > 1) throw new InvalidDataException("Package event repeats its compiled program.");
         var headers = Fields.Where(field => field.Signature == "SCHR").ToArray();
         if (headers.Length > 1 || headers.Length == 1 && (headers[0].Data.Length != 20 ||
-            BinaryPrimitives.ReadUInt32LittleEndian(headers[0].Data.Span[8..]) !=
+            FalloutScriptHeader.Read(headers[0].Data.Span).CompiledBytes !=
                 (compiled.Length == 0 ? 0 : compiled[0].Data.Length) ||
-            BinaryPrimitives.ReadUInt32LittleEndian(headers[0].Data.Span[4..]) !=
+            FalloutScriptHeader.Read(headers[0].Data.Span).ReferenceCount !=
                 Fields.Count(field => field.Signature is "SCRO" or "SCRV")))
             throw new InvalidDataException("Package event compiled extents disagree with its header.");
         if (compiled.Length == 1 && compiled[0].Data.Length != 0 && !FalloutDialogueTopic.CodeLines(Source).Any())

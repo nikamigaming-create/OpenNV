@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -6,7 +7,7 @@ internal sealed partial class RuntimeNativePlayerActor
 {
     // Reserved only for this player's camera-obstructing geometry. Lights and
     // other cameras retain the complete actor; the XR eyes exclude this layer.
-    internal const uint SelfHeadLayer = 1u << 19;
+    internal const uint SelfHeadLayer = FalloutNpcAppearanceSelfView.SelfHeadLayer;
     private readonly List<(GeometryInstance3D Mesh, GeometryInstance3D.ShadowCastingSetting Source, uint Layers)> _shadowMeshes = [];
     private readonly HashSet<GeometryInstance3D> _selfExcludedMeshes = [];
     private bool _trackedBodyView;
@@ -38,22 +39,7 @@ internal sealed partial class RuntimeNativePlayerActor
     internal void ShowTrackedBody(RuntimeNativePlayerActor firstPerson)
     {
         if (_first || !firstPerson._first) throw new InvalidOperationException("Tracked body requires the complete world outfit and authored first-person attachments.");
-        for (var index = 0; index < Actor.Parts.Count; index++)
-        {
-            var part = Actor.Appearance.Models[index];
-            // FNV BMDT: head/hair, headband through mask, and mouth object.
-            // xEdit's published wbDefinitionsFNV BMDT contract supplies the bits.
-            const uint headSlots = 0x00017e03;
-            var head = (part.BipedSlots & headSlots) != 0 || part.Role is "head" or "ears" or "mouth" or
-                "teeth-lower" or "teeth-upper" or "tongue" or "eye-left" or "eye-right" or "head-addon";
-            if (head)
-            {
-                if ((part.BipedSlots & 4) != 0)
-                    throw new NotSupportedException("Combined head/body equipment needs a source partition visibility binding.");
-                foreach (var mesh in Actor.Parts[index].Root.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())
-                    _selfExcludedMeshes.Add(mesh);
-            }
-        }
+        foreach (var mesh in NativePlayerSelfVisibility.HeadGeometry(Actor)) _selfExcludedMeshes.Add(mesh);
         // The original first-person weapon/device retain their authored action
         // channels. The world weapon supplies the shadow, with no second eye draw.
         foreach (var mesh in _weaponNodes.OfType<GeometryInstance3D>())

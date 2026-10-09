@@ -43,9 +43,10 @@ internal sealed record FalloutTerminalResultProgram(FalloutPluginRecord Terminal
         var header = Required(fields, "SCHR");
         if (header.Data.Length != 20) throw new InvalidDataException("Terminal result SCHR extent is invalid.");
         var bytes = header.Data.Span;
-        var referenceCount = BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]);
-        var compiledSize = BinaryPrimitives.ReadUInt32LittleEndian(bytes[8..]);
-        var variableCount = BinaryPrimitives.ReadUInt32LittleEndian(bytes[12..]);
+        var decodedHeader = FalloutScriptHeader.Read(bytes);
+        var referenceCount = decodedHeader.ReferenceCount;
+        var compiledSize = decodedHeader.CompiledBytes;
+        var variableCount = decodedHeader.VariableCount;
         var compiled = Optional(fields, "SCDA");
         if (compiledSize != (uint)(compiled?.Data.Length ?? 0))
             throw new InvalidDataException("Terminal result compiled extent disagrees with SCHR.");
@@ -104,7 +105,7 @@ internal sealed record FalloutTerminalResultProgram(FalloutPluginRecord Terminal
             throw new InvalidDataException("Terminal result SCRV has no declared local slot.");
         return new(terminal, entryIndex, identity, fields,
             source is { } text ? FalloutDialogueTopic.ScriptText(text.Data.Span) : "", compiledSize,
-            BinaryPrimitives.ReadUInt16LittleEndian(bytes[16..]), BinaryPrimitives.ReadUInt16LittleEndian(bytes[18..]),
+            decodedHeader.Type, decodedHeader.Flags,
             locals.Values.ToArray(), references.ToArray());
     }
 

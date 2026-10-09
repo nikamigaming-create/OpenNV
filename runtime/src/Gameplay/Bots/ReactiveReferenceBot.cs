@@ -7,7 +7,7 @@ internal sealed record BotObservation(string Scene, Vector3 Position, Vector3 Ca
     bool LookingEnabled, bool Resident, string? Blocker, string InteractionState, bool TravelReady = false,
     BotDoorObservation? Door = null, long ProgressRevision = 0, string ActiveMenus = "", int ControlMask = 0,
     bool ModalInput = false, bool Loading = false, string? ExecutionFault = null, bool Defeated = false,
-    BotCombatObservation? Combat = null);
+    BotCombatObservation? Combat = null, bool InteractionPending = false);
 
 internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, string? Error = null);
 
@@ -75,6 +75,7 @@ internal sealed partial class ReactiveReferenceBot
         controlWaitSeconds = _controlWaitSeconds,
         controlWaitLimitSeconds = ControlWaitLimitSeconds,
         controlWaitReason = _controlWaitReason,
+        interactionPending = _observation?.InteractionPending ?? false,
         progress = _progress,
         requestedDistanceMeters = _distance,
         approachDistanceMeters = _approachDistance,
@@ -218,8 +219,14 @@ internal sealed partial class ReactiveReferenceBot
             }
             if (_phase == "awaiting-interaction")
             {
-                _input(default, false); _waiting += seconds;
+                _input(default, false);
                 if (state.InteractionState != _interactionBefore) { Complete("interaction-observed"); return; }
+                // The exact activation-owned furniture reservation can still
+                // be approaching its source entry marker. Keep the global goal
+                // clock running, but do not time out this living owner as a
+                // no-op. Losing the reservation starts a fresh response bound.
+                if (state.InteractionPending) { _waiting = 0; return; }
+                _waiting += seconds;
                 if (_waiting > 3) throw new InvalidOperationException("Activation had no observed gameplay response.");
                 return;
             }

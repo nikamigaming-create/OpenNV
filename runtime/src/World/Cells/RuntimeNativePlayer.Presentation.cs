@@ -91,6 +91,7 @@ internal partial class RuntimeNativePlayer
 
     private void PublishThirdPersonCamera()
     {
+        PublishSelfCameraVisibility();
         if (_xr is not null) return;
         if (_sourceCamera is not null || _furniturePhase != 0) return;
         if (!_thirdPersonMode && _firstPerson is { Toddler: true })
@@ -236,6 +237,7 @@ internal partial class RuntimeNativePlayer
                     Far = 10,
                     KeepAspect = Camera3D.KeepAspectEnum.Height
                 };
+                _firstPersonCamera.CullMask = FalloutNpcAppearanceSelfView.CameraMask(_firstPersonCamera.CullMask, true);
                 _firstPersonView.AddChild(_firstPersonCamera);
                 var layer = new CanvasLayer { Name = "FirstPersonLayer", Layer = 1 }; AddChild(layer);
                 _firstPersonPixels = new TextureRect

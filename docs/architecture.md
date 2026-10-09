@@ -34,6 +34,33 @@ use the same component reader, and missing or malformed channels refuse
 publication. The no-system-color token leaves the canvas untinted. Native menu,
 name-entry and start-menu consumers use this owner without game-specific colors.
 
+Player self visibility follows the winning appearance part role and BMDT slots,
+including recursive zero-slot HDPT attachments. Complete head geometry retains
+its world visibility and shadow settings on a reserved layer; first-person,
+source-camera and furniture views exclude that layer. Third-person restores the
+authored camera mask. Mixed head/body partitions require their own source owner.
+
+Scripted constant abilities have independent instances keyed by spell and effect
+ordinal, exact winning source identities, ordered SLSD payload cells and retained
+failed prefixes. The shared script executor targets the genuine engine player.
+The admitted lifecycle executes ScriptEffectStart once; Update, Finish and
+unowned local/event types refuse. SCHR fields retain their separate reference,
+compiled-byte and variable counts. Source-text execution does not certify SCDA.
+
+Diagnostic furniture interaction observation follows the actual enabled source
+reference, exact seat reservation and living native body. Approach can suspend
+the short interaction-response deadline; it cannot establish completion. The
+matching successful activation publishes one ordinal and completes observation
+only when the player actually enters. Source faults and the overall deadline
+remain visible.
+
+Player skills combine source formulas with saved base offsets and permanent
+mutations. Current saves require the complete skill/effect pair, source joins,
+settled lifecycle and every selected scripted-effect instance on restore. Only
+an exact original pre-owner read can publish initial source-bound state through
+its private in-memory receipt. Save capture settles effects and derives vitals
+before capturing any player authority, preventing cold replay of a saved prefix.
+
 [Source convex lists](source-convex-list-collision.md) retain exact ordered
 declarations and publish separate convex leaves under their original body.
 Nested transforms, body mass, source filters and partial-construction retirement

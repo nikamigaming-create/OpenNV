@@ -360,10 +360,13 @@ public partial class RuntimeCoordinator
                     content.SaveCompatibilityId,
                     _nativePluginStack,
                     _nativeVigorContract, _nativeTagSkillContract, _nativeOpeningGrant, _nativeTraitFarewellContract);
+                if (_nativeOpeningRestore.State.PlayerSkillValues is null || _nativeOpeningRestore.State.PlayerAbilityScripts is null)
+                    throw new InvalidDataException("Continue requires current player skill/effect authority.");
             }
             catch (Exception exception) when (
                 exception is IOException or InvalidDataException or JsonException or NotSupportedException)
             {
+                _nativeOpeningRestore = null;
                 GD.PushWarning($"OPENNV_NATIVE_CONTINUE_REJECTED {exception.Message}");
             }
         }
