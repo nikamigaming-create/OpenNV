@@ -31,6 +31,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private readonly List<(XElement Tile, NativeBitmapMenuButton Button)> _buttons = [];
     private readonly Dictionary<string, XElement> _templates = [];
     private NativeOwnedWorldMap? _map;
+    private Control? _mapForeground;
     private int _offset;
     private int _statusMode;
     private float _textOffset;
@@ -114,7 +115,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         _displayedInventoryRevision = _inventory.Revision;
         SetMeta("opennv_page", (int)_state.Page);
         foreach (var child in GetChildren()) { RemoveChild(child); child.QueueFree(); }
-        _buttons.Clear(); _templates.Clear(); _map = null;
+        _buttons.Clear(); _templates.Clear(); _map = null; _mapForeground = null;
         try
         {
             var path = _state.Page switch { FalloutPipBoyPage.Stats => "stats", FalloutPipBoyPage.Items => "inventory", _ => "map" };
@@ -490,7 +491,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                     });
             }
             _map.Hovered += name => { Text("MM_Headline_LocationInfo", name.Length == 0 ? NameOf(sourceWorld) : name); QueueRedraw(); };
-            AddChild(_map); _map.CenterPlayer();
+            AddMapCanvas(_map); _map.CenterPlayer();
         }
         else if (_state.Selection == 0)
         {
@@ -499,7 +500,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             var map = (LocalMap ?? throw new InvalidOperationException("Local map is unavailable."))(_tiles.TileColor(clip));
             map.Position = _tiles.Position(clip);
             map.Size = new(_tiles.Number(clip, "width"), _tiles.Number(clip, "height"));
-            AddChild(map);
+            AddMapCanvas(map);
         }
         else if (_state.Selection == 2)
         {
@@ -535,6 +536,22 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             Bind("MM_TextScrollbar", "_current_value", _textOffset / 20);
         }
     }
+    private void AddMapCanvas(Control map)
+    {
+        // Paint the source background, then the map, then the original menu
+        // tiles. Input targets must also remain above the map's drag surface.
+        AddChild(map); MoveChild(map, 0);
+        var foreground = new Control { Name = "MapMenuForeground", MouseFilter = MouseFilterEnum.Ignore };
+        var background = Tile("MM_Background");
+        foreground.Draw += () =>
+        {
+            if (Error is not null) return;
+            try { _tiles.Draw(foreground, tile => tile != background); }
+            catch (Exception error) { Fail(error); QueueRedraw(); }
+        };
+        AddChild(foreground); MoveChild(foreground, 1); _mapForeground = foreground;
+    }
+
     private void ShowNotice(string text)
     {
         NativeOwnedMessageMenu? message = null;
@@ -596,7 +613,16 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     {
         if (Error is null)
         {
-            try { _tiles.Draw(this); }
+            try
+            {
+                if (_mapForeground is null) _tiles.Draw(this);
+                else
+                {
+                    var background = Tile("MM_Background");
+                    _tiles.Draw(this, tile => tile == background);
+                    _mapForeground.QueueRedraw();
+                }
+            }
             catch (Exception error) { Fail(error); }
         }
         if (Error is not null)

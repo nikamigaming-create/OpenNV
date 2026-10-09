@@ -418,7 +418,7 @@ internal sealed class NativeOwnedMenuTree
         var color = TileColor(tile);
         return new(color.R * brightness / 255, color.G * brightness / 255, color.B * brightness / 255, alpha);
     }
-    internal void Draw(CanvasItem canvas)
+    internal void Draw(CanvasItem canvas, Func<XElement, bool>? drawTile = null)
     {
         Rect2? Clip(XElement tile)
         {
@@ -437,7 +437,7 @@ internal sealed class NativeOwnedMenuTree
             if (!visible) return;
             var color = DrawingColor(tile);
             var clip = Clip(tile);
-            if (tile.Element("filename") is not null)
+            if (drawTile?.Invoke(tile) != false && tile.Element("filename") is not null)
             {
                 if (!_art.TryGetValue(tile, out var art)) _art[tile] = art = NativeOwnedUiArt.Read(tile, Filename(tile));
                 var size = new Vector2(Number(tile, "width"), Number(tile, "height"));
@@ -465,7 +465,7 @@ internal sealed class NativeOwnedMenuTree
                         NativeUiClip.Draw(canvas, art.Texture, sample.Destination, sample.Source, tint, clip);
                 }
             }
-            if (tile.Name == "text")
+            if (drawTile?.Invoke(tile) != false && tile.Name == "text")
             {
                 var font = Font(tile);
                 var origin = Position(tile);

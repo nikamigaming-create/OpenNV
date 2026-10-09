@@ -42,11 +42,18 @@ restarting Steam repaired it. Ordinary retail menu input was recorded and replay
 through C#. Independent saves are not a matched gameplay checkpoint, and adapter
 acknowledgements do not establish exact native consumption timing.
 
-Ordinary OpenNV Continue loaded the outdoor save. Skills, note text and the
+Ordinary source and packaged Release Continue loaded the outdoor save. Skills, note text and the
 resident Local Map were rendered and inspected. Recorded retail F1/F2/F3 inputs
 replayed through C# and left the actual menu on Data. The owned Pip-Boy and
 companion checks and byte-transport check pass. Successful ordinary fast-travel
-arrival remains to be exercised; it is not established by the menu checks.
+arrival remains to be exercised; it is not established by the menu checks. The
+packaged map click exposed a map canvas intercepting the Travel button. Map
+canvases now sit behind the authored menu art and interactive controls.
+
+The same outdoor run found a malformed/unsupported model aborting the whole
+exterior prefetch. Invalid model data now reaches the ordinary per-reference
+failure owner, which retains the missing reference and its error, while the
+remaining cell preparation can continue.
 
 Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
 statistics and all inventory actions remain incomplete. Outdoor play still
@@ -57,5 +64,6 @@ playability are not established. Do not equate these menu fixes with completion.
 The separate codex/full-runtime-owner-integration checkout owns the larger
 compiled gameplay/native startup candidate and is actively modified. Reuse its
 working implementations without publishing its unfinished native startup as
-game support. Publish the current runnable batch through a checked PR and advance
-the FNV Test package.
+game support. The runnable batch is tracked in PR 185 and the FNV Test shortcut
+selects its packaged Release. The next gameplay owners are the reached outdoor
+script and exterior-streaming failures and complete fast-travel consequences.
