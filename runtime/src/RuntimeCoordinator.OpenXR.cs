@@ -54,8 +54,11 @@ public partial class RuntimeCoordinator
         focused &= _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && _nativeOpeningStageDriver!.PipBoy.Available;
         _nativeOpeningStageDriver!.PipBoy.SetOpen(focused);
         if (focused)
-            _nativePipBoy.RefreshWorld(_nativeActiveCell!.Cell.Worldspace, NativePipBoyMapPosition(_nativePlayer!),
+        {
+            var map = NativePipBoyMapContext(_nativePlayer!);
+            _nativePipBoy.RefreshWorld(map.World, map.Position,
                 MathF.Atan2(-_nativePlayer!.GlobalBasis.Z.Z, -_nativePlayer.GlobalBasis.Z.X));
+        }
         _nativePipBoy.SetXrFocus(focused);
         _nativeXr.PointAtPipBoy = focused ? _nativePipBoy.PointFromXr : null;
         if (wasFocused && !focused) RequestNativePipBoySave();

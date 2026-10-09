@@ -24,6 +24,7 @@ internal sealed class GodotLauncherProfileStore
     private const string Schema = "opennv-godot-launcher-profiles/v1";
     private readonly string _path;
     private readonly string _saveRoot;
+    internal string? SelectedGame { get; private set; }
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -79,6 +80,17 @@ internal sealed class GodotLauncherProfileStore
 
     internal IReadOnlyList<string> EnabledMods(string campaignId) =>
         _profiles.GetValueOrDefault(campaignId)?.EnabledMods ?? [];
+
+    internal void SelectGame(string campaignId)
+    {
+        if (campaignId is not ("newvegas" or "fallout3" or "fallout1" or "fallout2"))
+            throw new ArgumentException("Select a base game before launching.", nameof(campaignId));
+        if (SelectedGame == campaignId) return;
+        var previous = SelectedGame;
+        SelectedGame = campaignId;
+        try { Persist(); }
+        catch { SelectedGame = previous; throw; }
+    }
 
     internal bool AutomaticModOrder(string campaignId) => _profiles.GetValueOrDefault(campaignId)?.AutomaticModOrder ?? true;
 
@@ -164,6 +176,9 @@ internal sealed class GodotLauncherProfileStore
                 return;
             if (!root.TryGetProperty("profiles", out var profiles) || profiles.ValueKind != JsonValueKind.Object)
                 return;
+            if (root.TryGetProperty("selectedGame", out var selection) && selection.ValueKind == JsonValueKind.String &&
+                selection.GetString() is "newvegas" or "fallout3" or "fallout1" or "fallout2")
+                SelectedGame = selection.GetString();
             foreach (var property in profiles.EnumerateObject())
             {
                 if (property.Value.ValueKind != JsonValueKind.Object)
@@ -197,6 +212,11 @@ internal sealed class GodotLauncherProfileStore
         {
             // Read-only or transient profile storage is reported when a user
             // explicitly registers a folder; startup stays usable.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // The folder picker must remain available when stored profiles
+            // cannot be read. An attempted save reports the storage error.
         }
         catch (InvalidOperationException)
         {
@@ -295,15 +315,18 @@ internal sealed class GodotLauncherProfileStore
         var directory = Path.GetDirectoryName(_path) ?? throw new InvalidOperationException(
             "Godot launcher profile path has no parent directory.");
         Directory.CreateDirectory(directory);
-        var temporary = _path + ".next";
+        var temporary = _path + "." + Guid.NewGuid().ToString("N") + ".next";
         var document = new
         {
             schema = Schema,
+            selectedGame = SelectedGame,
             profiles = _profiles,
         };
-        File.WriteAllText(
-            temporary,
-            JsonSerializer.Serialize(document, JsonOptions) + System.Environment.NewLine);
-        File.Move(temporary, _path, overwrite: true);
+        try
+        {
+            File.WriteAllText(temporary, JsonSerializer.Serialize(document, JsonOptions) + System.Environment.NewLine);
+            File.Move(temporary, _path, overwrite: true);
+        }
+        finally { File.Delete(temporary); }
     }
 }

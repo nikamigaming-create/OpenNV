@@ -43,6 +43,9 @@ internal static class RewardXpContracts
             fixture.Vitals.State == retained with { ExperiencePoints = retained.ExperiencePoints + 2 },
             "The owned Float32 XP modifier and source ceiling did not reach shared vitals.");
         var afterModifier = fixture.Vitals.State;
+        fixture.Perks[0] = new(9, 3, .9f, []);
+        Require(fixture.Experience.Reward(10) == 9, "XP-reducing perk did not modify a discovery award.");
+        afterModifier = fixture.Vitals.State;
         fixture.Perks.Add(new(9, 2, 3, []));
         Reject(() => fixture.Experience.Reward(1));
         Require(fixture.Vitals.State == afterModifier, "Missing acquired-entry ordering partially published another award.");

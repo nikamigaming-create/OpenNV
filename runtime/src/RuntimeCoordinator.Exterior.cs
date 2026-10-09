@@ -166,7 +166,7 @@ public partial class RuntimeCoordinator
                     }
                     // Prefetch does not admit or substitute a model. The ordinary
                     // reference owner still reports any enabled source failure.
-                    catch (Exception error) when (error is IOException or NotSupportedException) { return (Path: path, Nif: (FalloutNifFile?)null); }
+                    catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException) { return (Path: path, Nif: (FalloutNifFile?)null); }
                 }, cancellation)));
                 foreach (var item in prepared)
                     if (item.Nif is not null) models.Add(item.Path, item.Nif);

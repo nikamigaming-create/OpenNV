@@ -48,7 +48,10 @@ internal sealed partial class FalloutReferenceWorld
                 !RecordHash(ActorOverrideSource(snapshot.Target)).Equals(snapshot.SourceSha256, StringComparison.OrdinalIgnoreCase) ||
                 !admitted.TryAdd(snapshot.Target, snapshot)) throw new InvalidDataException("Saved actor overrides changed source or repeat a target.");
             if (snapshot.Alerted is not null) RequireAlertActor(snapshot.Target);
-            foreach (var (items, signature) in new[] { (snapshot.Perks, "PERK"), (snapshot.Factions, "FACT") })
+            if (snapshot.TeammatePerks is { Count: > 0 } && snapshot.Target != records.RuntimeFormKey(0x14))
+                throw new InvalidDataException("Shared teammate perks must be retained on the player.");
+            foreach (var (items, signature) in new[] { (snapshot.Perks, "PERK"), (snapshot.Factions, "FACT"),
+                (snapshot.TeammatePerks ?? [], "PERK") })
             {
                 var seen = new HashSet<FalloutFormKey>();
                 foreach (var item in items)
@@ -84,35 +87,44 @@ internal sealed partial class FalloutReferenceWorld
         foreach (var key in changedAppearance) _appearanceRevisions[key] = ++_appearanceRevision;
     }
 
-    internal void ChangePerk(FalloutFormKey reference, FalloutFormKey perk, bool add)
+    internal void ChangePerk(FalloutFormKey reference, FalloutFormKey perk, bool add, bool forTeammates = false)
     {
         var maximum = FalloutPerkDeclaration.Read(records.GetEffective(perk)).Ranks;
         if (maximum == 0) throw new InvalidDataException($"Perk {perk} has no declared acquired rank.");
-        SetPerkRank(reference, perk, add ? Math.Min(checked(PerkRank(reference, perk) + 1), maximum) : 0);
+        SetPerkRank(reference, perk,
+            add ? Math.Min(checked(PerkRank(reference, perk, forTeammates) + 1), maximum) : 0, forTeammates);
     }
 
-    internal void SetPerkRank(FalloutFormKey reference, FalloutFormKey perk, int rank)
+    internal void SetPerkRank(FalloutFormKey reference, FalloutFormKey perk, int rank, bool forTeammates = false)
     {
         var maximum = FalloutPerkDeclaration.Read(records.GetEffective(perk)).Ranks;
         if (rank < 0 || rank > maximum) throw new InvalidDataException($"Perk {perk} acquired rank is outside its winning declaration.");
-        if (PerkRank(reference, perk) == rank) return;
+        if (PerkRank(reference, perk, forTeammates) == rank) return;
         var current = Overrides(reference);
         var entry = FormOverride(perk, "PERK", rank);
         var stages = rank == 0 ? [] : _perkAbilities.Perk(perk, rank).QuestStages;
         if (stages.Length != 0 && ExecutePerkQuestStage is null)
             throw new NotSupportedException($"Perk {perk} requires its actual shared quest-stage executor.");
-        _actorOverrides[reference] = current with { Perks = current.Perks.Where(item => item.Form != perk).Append(entry).ToArray() };
+        if (forTeammates && reference == records.RuntimeFormKey(0x14))
+            _actorOverrides[reference] = current with
+            { TeammatePerks = (current.TeammatePerks ?? []).Where(item => item.Form != perk).Append(entry).ToArray() };
+        else
+            _actorOverrides[reference] = current with { Perks = current.Perks.Where(item => item.Form != perk).Append(entry).ToArray() };
         foreach (var stage in stages.OrderByDescending(stage => stage.Priority)) ExecutePerkQuestStage!(stage);
     }
 
-    internal int PerkRank(FalloutFormKey reference, FalloutFormKey perk)
+    internal int PerkRank(FalloutFormKey reference, FalloutFormKey perk, bool forTeammates = false)
     {
         _ = FalloutPerkDeclaration.Read(records.GetEffective(perk));
-        return AcquiredPerkRanks(reference).GetValueOrDefault(perk);
+        return AcquiredPerkRanks(reference, forTeammates).GetValueOrDefault(perk);
     }
 
-    internal IReadOnlyDictionary<FalloutFormKey, int> AcquiredPerkRanks(FalloutFormKey reference)
+    internal IReadOnlyDictionary<FalloutFormKey, int> AcquiredPerkRanks(FalloutFormKey reference, bool forTeammates = false)
     {
+        var player = records.RuntimeFormKey(0x14);
+        var shared = _actorOverrides.GetValueOrDefault(player)?.TeammatePerks ?? [];
+        if (forTeammates && reference == player)
+            return shared.Where(item => item.Value > 0).ToDictionary(item => item.Form, item => item.Value);
         var result = new Dictionary<FalloutFormKey, int>();
         var source = records.GetEffective(ActorBase(reference));
         foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "PRKR"))
@@ -133,10 +145,13 @@ internal sealed partial class FalloutReferenceWorld
                 result[trait] = Math.Max(result.GetValueOrDefault(trait), 1);
             }
         foreach (var item in _actorOverrides.GetValueOrDefault(reference)?.Perks ?? []) result[item.Form] = item.Value;
+        if (reference != player && Actor(reference).PlayerTeammate)
+            foreach (var item in shared.Where(item => item.Value > 0)) result[item.Form] = item.Value;
         return result.Where(item => item.Value > 0).ToDictionary(item => item.Key, item => item.Value);
     }
 
-    internal IReadOnlyList<FalloutFormKey> AcquiredPerks(FalloutFormKey reference) => AcquiredPerkRanks(reference).Keys.ToArray();
+    internal IReadOnlyList<FalloutFormKey> AcquiredPerks(FalloutFormKey reference, bool forTeammates = false) =>
+        AcquiredPerkRanks(reference, forTeammates).Keys.ToArray();
 
     internal IEnumerable<FalloutPerkEntry> PerkEntries(FalloutFormKey reference) =>
         AcquiredPerkRanks(reference).SelectMany(perk => _perkAbilities.Perk(perk.Key, perk.Value).Entries)

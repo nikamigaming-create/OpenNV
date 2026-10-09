@@ -142,7 +142,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
             {
                 var button = new NativeBitmapMenuButton(font.Font, font.Atlas, Colors.White) { Text = labels[index], DrawText = false };
                 var page = (FalloutPipBoyPage)index;
-                button.Pressed += () => menu.Select(page, page == FalloutPipBoyPage.Data ? 1 : 0);
+                button.Pressed += () => menu.Select(page);
                 AddChild(button); _buttons.Add((_surface.Geometry($"PipBoyButton0{index + 1}:0"), button));
                 var buttonMesh = _surface.Geometry($"PipBoyButton0{index + 1}:0");
                 _buttonParts[buttonMesh] = button; _buttonHitParts.Add(buttonMesh);

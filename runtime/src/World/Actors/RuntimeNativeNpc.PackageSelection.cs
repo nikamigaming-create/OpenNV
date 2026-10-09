@@ -46,8 +46,14 @@ internal partial class RuntimeNativeNpc
 
     private void BlockSelectionCapture(string message)
     {
-        if (_aiReferenceState is not { } state || state.ProcedureCaptureBlocker is not null &&
-            state.ProcedureCaptureBlocker != _selectionCaptureBlocker) return;
+        if (_aiReferenceState is not { } state) return;
+        // Cell replacement binds this controller before retiring the previous
+        // presentation. Adopt the same source failure through that current
+        // binding; a stale or unrelated owner cannot replace another blocker.
+        if (state.ProcedureCaptureBlocker is not null && state.ProcedureCaptureBlocker != _selectionCaptureBlocker &&
+            (state.ProcedureCaptureBlocker != message ||
+                !ReferenceEquals(state.CanCapturePackageBindingFailure, _bindingFailureReady) ||
+                !ReferenceEquals(state.CapturePackageBindingFailure, _bindingFailureCapture))) return;
         state.ProcedureCaptureBlocker = _selectionCaptureBlocker = message;
     }
 

@@ -31,6 +31,12 @@ public partial class RuntimeCoordinator
         layer.AddChild(_nativeHudMessages);
         layer.AddChild(_nativeSubtitles ?? throw new InvalidOperationException("Source subtitles were not prepared with the player.")); AddChild(layer);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;
+        _nativePlayer.OpenPipBoyPage += page =>
+        {
+            var state = _nativeOpeningStageDriver!.PipBoy;
+            state.Select(page, state.SelectionFor(page));
+            OpenNativePipBoy();
+        };
         _nativePlayer.OpenCombatWheel += OpenNativeCombatWheel;
         if (_nativeXr is not null)
         {
@@ -87,11 +93,19 @@ public partial class RuntimeCoordinator
     private NativeOwnedPipBoyMenu CreateNativePipBoyMenu(RuntimeNativePlayer player)
     {
         var driver = _nativeOpeningStageDriver!;
-        var source = NativePipBoyMapPosition(player);
+        var source = NativePipBoyMapContext(player);
         return new(_nativePluginStack!, driver.PipBoy, _nativeInventory, driver.Quests, _nativeReferences!,
             () => driver.Vitals, () => driver.Special, driver.PlayerName, driver.Skills, driver.Tags, driver.Traits,
-            _nativeActiveCell!.Cell.Worldspace, source,
-            MathF.Atan2(-player.GlobalBasis.Z.Z, -player.GlobalBasis.Z.X), driver.PlayerSkillValue, driver.UseAid, driver.Radio);
+            source.World, source.Position,
+            MathF.Atan2(-player.GlobalBasis.Z.Z, -player.GlobalBasis.Z.X), driver.PlayerSkillValue, driver.UseAid, driver.Radio)
+        {
+            FastTravel = RequestNativeFastTravel,
+            LocalMap = color => new NativeOwnedLocalMap(player.GetWorld3D(), player.GlobalPosition,
+                _nativeActiveCell!.Cell.Worldspace is null, color, MathF.Atan2(-player.GlobalBasis.Z.Z, -player.GlobalBasis.Z.X)),
+            ActiveEffects = () => driver.IngestibleState,
+            DateTimeText = NativePipBoyDateTime,
+            PlayNote = driver.PlayPipBoyNote
+        };
     }
     private static Vector3 NativePipBoyMapPosition(RuntimeNativePlayer player) =>
         new Vector3(player.GlobalPosition.X, -player.GlobalPosition.Z, player.GlobalPosition.Y) / player.UnitsToMeters;

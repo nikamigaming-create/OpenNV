@@ -69,6 +69,7 @@ internal static partial class NativeOwnedSoundPlayback
         try
         {
             ConfigureLoop(stream, descriptor);
+            var menuFeedback = descriptor.Flags.HasFlag(FalloutSoundFlags.MenuSound) && !descriptor.IsLooping;
             // Bare node first: each subsequent setter/registration is covered
             // by this exact created-node and fresh-resource exception owner.
             player = new NativeOwnedTwoDimensionalSoundPlayer();
@@ -76,9 +77,10 @@ internal static partial class NativeOwnedSoundPlayback
             player.Name = $"NativeSound_{descriptor.EditorId}";
             player.VolumeDb = -descriptor.StaticAttenuationDb;
             player.PitchScale = descriptor.FixedPitchScale;
+            player.ProcessMode = menuFeedback ? Node.ProcessModeEnum.Always : Node.ProcessModeEnum.Inherit;
             var actual = player;
             NativeOwnedSoundVoice.Bind(records, actual, descriptor.FormKey, () => null, "source-2D-or-menu",
-                () => actual.Playing, actual.StopFromSourceRegistry);
+                () => actual.Playing, actual.StopFromSourceRegistry, menuFeedback ? () => true : null);
             return actual;
         }
         catch (Exception original)

@@ -85,6 +85,14 @@ internal sealed record RecordedInputTape(RecordedInputHeader Header, IReadOnlyLi
                 if (input.GetProperty("leaseMilliseconds").GetInt32() is < 20 or > 1000)
                     throw new InvalidDataException("Recorded key lease is outside its native input contract.");
                 break;
+            case "mouse":
+                allowed = ["op", "button", "pressed", "leaseMilliseconds"];
+                if (input.GetProperty("button").GetString() is not ("Left" or "Right" or "Middle" or "Xbutton1" or "Xbutton2"))
+                    throw new InvalidDataException("Recorded mouse button is invalid.");
+                _ = input.GetProperty("pressed").GetBoolean();
+                if (input.GetProperty("leaseMilliseconds").GetInt32() is < 20 or > 1000)
+                    throw new InvalidDataException("Recorded mouse lease is outside its native input contract.");
+                break;
             case "look":
                 allowed = ["op", "dx", "dy"];
                 foreach (var name in new[] { "dx", "dy" })

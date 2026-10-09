@@ -219,6 +219,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _vitals = FalloutPlayerVitals.PrepareFromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
         _playerSkills.BindAbilityConditions(PlayerProgressCondition);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
+        _experience.BindPerkConditions(PlayerExperienceCondition);
         InitializePlayerProgress(restore is null ? null : restore.State.PlayerProgress ??
             throw new InvalidDataException("Current player progress is absent."));
         ConfigureExperienceNotifications(restore is null ? null : restore.State.ExperienceNotifications ??

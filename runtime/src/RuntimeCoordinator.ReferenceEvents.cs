@@ -14,6 +14,7 @@ public partial class RuntimeCoordinator
     {
         if (GetTree().Paused) return;
         if (_nativeCellProcessRetirements.Count != 0) ObservePendingNativeCellRetirements();
+        AdvanceNativePipBoyWorld(delta);
         AdvanceNativePlayerMoves();
         AdvanceNativeDeath();
         if (_nativeDeathPresented) return;

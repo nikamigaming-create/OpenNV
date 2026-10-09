@@ -1,184 +1,131 @@
 # Current work
 
-## Active objective
+## Active objective and today's release
 
-Complete standalone Fallout: New Vegas, standalone Fallout 3, TTW and every
-selected DLC/mod combination through owned winning data, shared C# gameplay,
-Godot presentation, ordinary input and complete current saves in flat/OpenXR.
-The scope includes all nine JAM modules, xNVSE, JIP LN, JohnnyGuitar, JFP and
-required dependencies. JFP's package identity remains unresolved. All 36 broad
+Complete standalone FNV, standalone FO3, TTW and every selected DLC/mod combination
+through owned winning data, shared C# gameplay, Godot, ordinary input and complete
+current saves in flat/OpenXR. All nine JAM modules, xNVSE, JIP LN, JohnnyGuitar,
+JFP and dependencies remain in scope. JFP identity is unresolved. All 36 broad
 requirements remain open; there is no campaign completion percentage.
-[implementation-plan.md](implementation-plan.md) preserves the full direction.
+[implementation-plan.md](implementation-plan.md) preserves the complete direction.
 
-Keep four implementation owners active. Primary alone integrates tracked code,
-builds, native/game processes, ordinary input, saves, recording and publication.
-Workers submit ignored immutable first-party proposals. Compile joined batches;
-combine broad checks about every four hours and before publication. Recording
-stays off except a specific private comparison, with temporary frames cleaned.
-Owned inputs remain read-only/private and never become packaged derivatives.
+October 9 priority: a tested public package and one pinned build for the user's
+evening playtest. Finish/publish the current code batch, then smoke-test fresh
+launcher profiles through FO3 vault exit; FNV Doc and Goodsprings; ED-E/companions;
+Pip-Boy inventory/maps/fast travel; save, quit and cold Continue. Repair every
+reached blocker. Stages, teleports, edited saves and counts cannot establish that
+ordinary route. Historical saves are not a release constraint.
 
-Today's release priority is a tested public package and one pinned build for
-the user's evening playtest. Finish the current source integration, publish it,
-then smoke-test fresh launcher profiles through the FO3 vault exit, FNV Doc and
-Goodsprings, ED-E/companions, Pip-Boy inventory/maps/fast travel and cold Continue.
-Fix every reached blocker. Keep one current package and the active work area;
-obsolete packages, run folders and proof dumps are cleanup targets.
+Keep one current package plus the active work area/candidate. Obsolete packages,
+run folders and proof dumps are cleanup targets. Automatic review rejected both
+bulk and explicitly named obsolete-package directory deletion with "blocked by
+policy". Cleanup and reclaimed space are not claimed. Owned retail inputs remain
+read-only; no assets, saves, executables, private addresses or derivatives publish.
 
 ## Current owners
 
-| Owner | Next substantial implementation |
+Keep all four implementation owners active. Primary alone integrates tracked
+source, builds, native/game processes, ordinary input, saves and publication.
+Workers supply compact ignored first-party additions and narrow hooks.
+
+| Owner | Current implementation |
 | --- | --- |
-| Primary | Join campaign/platform/loader lifetimes, player transitions and ordinary retail/input replay; complete the combined gate and publish checked source |
-| active_radio_save | Source file-manager startup modes, archive folder order and pre-registration invalidation search roots |
-| fo3_special_book | Actual product calling-thread x87/FISTP conversion and current/cold native thread ownership |
-| scope_plugin_audit | Common section placement in both actual native processes before pointer publication; preserve lazy Windows SDK admission |
+| Primary | Finish combined source publication, export one candidate and run the fresh ordinary smoke route |
+| active_radio_save | Actual multi-archive category/shadow order, directory weighting and separate byte winner |
+| fo3_special_book | Standalone FO3 source Main/Player and pending-transfer owners needed for Vault 101 |
+| scope_plugin_audit | Common section placement in both actual native processes before pointer publication, retaining lazy SDK admission |
 
-## Test build and source candidate
+Compile joined batches; combine broad checks about every four hours and before
+publication. Recording stays off except a specific private comparison; temporary
+frames are removed after inspection. Component checks do not certify games.
 
-The current FNV Test command and desktop shortcut select the independent
-`fnv-gameplay-5a156b84` packaged Release. Its process is currently running.
-Earlier selected couch/beard/save/cold/export checks do not dismiss
-the user's failed ordinary questionnaire and chair departure. Preserve the pin
-while a separate candidate gains ordinary exported acceptance.
+## Published gameplay and hot build
 
-Root works on `codex/full-runtime-owner-integration`, based on origin/main
-`1b159f3b9e00333eb926f3d1a7b19cd52f055175`. Checkpoint `282a1644` contains
-the broad runtime integration; `df959ddb` is its latest documentation checkpoint.
-The current protocol24/Main Player/Steam/CNG/mapping/terrain work is uncommitted.
-There is no new PR, origin push, Release package or pin advancement. Preserve
-protected compiled/runtime refs, managed worktrees and immutable proposals.
+Origin/main 3aaa48f4 includes checked PR185's launcher, Pip-Boy, travel, collision
+and save work. The actual FNV Test command/desktop shortcut select packaged
+Release fnv-gameplay-5a156b84, currently running. Root's separate branch is
+codex/full-runtime-owner-integration; source checkpoint78fd181b retains the
+joined batch, and integration with origin/main is underway. No root push/PR/new
+package for that batch is claimed yet.
 
-## Joined implementation and actual checks
+Published work supplies source Stats/note/quest bodies, resident Local Map,
+discovered destinations, F1/F2/F3 pages and separate teammate perks. Ordinary
+packaged movement discovered Goodsprings and awarded9XP with Skilled. Ordinary
+Pip-Boy travel reached a source-linked destination; settled save and another
+process's Continue retained destination/discovery/XP. Attached audio loops stop
+on actual unload; matching NPC package failures transfer to their current CELL
+controller. Validated source collision triangles repair the native trimesh crash.
+These observations do not certify the requested campaign or companion route.
 
-Shared current/cold script construction, command-table callbacks, native module
-declarations, compiled ability/challenge/statistic owners, complete DirectInput,
-source-versioned native Data, inventory pools and same-root exterior transactions
-are joined. Missing engine constructors, hooks, frame consumers and native cold
-memory remain visible. Source scans and component receipts do not certify games.
+Travel time/enemies/followers, complete inventory actions/General statistics,
+full scripts/AI, procedural trees, native mods and physical XR remain incomplete.
+Retail recording and C# delivery ran with independent saves; matched checkpoint
+and exact native timing remain unestablished. Malformed models retain reference
+failures. Today's smoke test must independently exercise the fresh exported path.
 
-Protocol23 joins actual selected Steam exports/vtables, callback member objects,
-source service constructor order and reverse shutdown/unregistration. Product
-construction retains a dedicated actual platform domain before native calls,
-binds both Main utility and Steam service owners and joins telemetry/save/
-retirement. Cold constructs a fresh process-local platform from unchanged inputs;
-it never restores SDK/account pointer memory. The source singleton constructs
-only at its actual getter. Startup reads the actual product WinMain vector in
-order and binds its selected configuration/source identity. Main utility commands
-own the independent suppression byte, bounded console submission, source
-diagnostic no-effect branch and mandatory shared script save schema4. No actual
-Steam constructor/pump or completed original mod Load is accepted. An ordinary
-visible candidate now completes JIP's actual Query; its Load remains refused.
+## Joined source candidate
 
-Main Player uses one replaceable pending transfer slot, not a FIFO. Its real
-async child returns before Steam and the second sample on the same Main caller.
-Source CELL DATA flags, Float32 FISTP rounding followed by signed grid shifts,
-actual MoveTo/door/CELL publication, overlap lifetime and current/cold source
-joins are integrated. Main Player and pending-consumer checks pass, including
-loader cancellation, task refcounts and the Empty branch's furniture/deferred
-tail. The integrated raw writer captures actual target placement at enqueue,
-retains Reference/WRLD/CELL priority and source callback context, and consumes
-captured values without rereading a moved target. The scalar owner is the actual
-physics character-controller field, tied to the current Player body/process and
-fresh cold rebind. The earlier animation-type hypothesis is removed. These new
-native movement/body consumers are unexecuted. Source Sky construction and the
-ordered transfer reset now join the actual Main/pending/process identity,
-current/cold instance ownership and native cloud-child order. Authored constructor,
-reset, interruption and cold contracts pass. Actual Clouds RTTI/Moon factories,
-weather frame writers, calling-thread rounding, proxy transforms, TLS and other
-native children remain refused.
+Protocol24 joins shared script/effect/actor current/cold state, actual Main Player
+pending transfers, Steam source/platform callbacks, complete DirectInput, native
+command/value/object owners, private CNG/mappings and same-root CELL/reference/LAND.
+Source background readers prepare the full C# graph and native declarations;
+actual Godot/native construction and return joins stay on Main. Retirement drains
+readers before independently closing source owners and preserving all failures.
 
-Borrowed engine callbacks now use source instruction-boundary classification,
-actual first-party callable pages, raw caller identity and checked retirement.
-Both constant Boolean source results and malformed/effectful refusals pass their
-authored reader cases. Original publication and execution remain unexecuted.
-There is no named-command exception or source bytecode executed as native code.
+Constant effects now construct the full independent selection before recursive
+Start/Finish queries. The combined script suite passes duplicate effects, cold
+state, quest stage and inventory cases. Corrupt archive retirement retains the
+exact actual background-reader failure; the reached negative corpus check passes.
 
-Shared source menu sound selection now owns the selected RNG, original path/hash
-rules, menu callers, anti-repeat slots and current/cold state. Authored contracts
-pass. Reached directory selection still needs source startup mode flags, archive
-order and genuine invalidation search-root visibility; a loose-folder observation
-cannot establish the source file-manager branch. Actual playback is unexecuted.
+Main Player preserves one replaceable pending slot and captured target placement.
+Source Sky reset/image-instance/cloud-child ownership joins current/cold state;
+authored reset/failure/cold checks pass. Actual calling-thread x87/FISTP and three
+Player conversion sites now join the existing adapter/save owner. New native/ISA/
+ordinary checks are unexecuted; cold requires a fresh actual thread binding. FO3's
+own Main/Player is under implementation. Sky frame/Clouds/Moon/TLS and other
+unowned producers remain explicit refusals.
 
-Private mappings and seven public CNG hash/provider operations retain actual
-handles, statuses, buffers and cleanup. Private-I/O preparation now retains the
-exact CNG source declaration without loading its DLL. The first actual consumer
-admits the provider once; failed admission cannot replay. Unused declarations
-retire without inventing Windows load/unload receipts. First-party Steam source
-hashing now uses C# retained files correlated with the real native file identity
-before and after reads, and a distinct actual Steam Load scope. It no longer
-requires native CNG admission. Original DLL CNG calls remain separate. Actual
-Steam Load hashing is unexecuted; source checks cannot be skipped.
+Borrowed constant Boolean leaves have source instruction classification and
+actual callable/readback/retirement. Authored reader cases pass; original native
+publication/invocation remains unexecuted. Actual JIP Query passed previously;
+completed original Load has not. FNVXR/ShowOff refusals remain visible.
 
-Restricted child creation retains a fresh hidden desktop, explicitly inherited
-minimal station/desktop handles and the exact creation process handle. Failed
-construction retains desktop/process/job/pipe/source owners until actual exit;
-campaign cleanup can retry remaining leases. Original input ACLs and existing
-Windows object ACLs are unchanged. AccessCheck uses the already retained
-restricted impersonation token directly. Native desktop observation is absent.
+Menu sounds own source RNG/path/hash/history/current-cold state. Actual archive
+startup modes, installation/DATA search roots, BSA type/hash/table order and
+invalidation read lifetimes are integrated; their new full-reader checks are
+unexecuted. Multi-archive order, invalidation/root mutations and native audio
+remain separate next owners. Never infer directory success from a loose folder.
 
-Actual selected USER32 now loads/releases under the same restricted JIP context,
-reaches expected authored-ABI refusal193 and retires the child normally with
-exit0. This repairs that dependency branch, not original JIP Query/Load. The
-separate actual KsecDD probe returned access denied with no acquired handle.
-BCrypt admission under that token remains an independent failure. The integrated
-CNG service admits only actual Windows provider operations, not game/mod code or
-caller pointers. It retains an explicit separate primitives loader reference;
-frontend admission does not imply eager dependency loading. A real Windows SDK
-run hashes 140,013 streamed authored bytes, matches the independent digest and
-closes handles/provider/process normally. Original-client token/output-slot
-publication and nonnull hash-object buffer sharing now retain original section
-handles, exact-address service views, SDK pins and actual unload scope. The real
-authored imported-provider run reaches an original-view/service address collision
-before shared SDK calls; that failure is retained. General allocation and actual
-original calls remain unaccepted. Source-derived pre-entry imports bind a first-party PE32
-provider through the real Windows loader and validate its actual original IAT
-entries. Both source and native Debug compile; actual original bcrypt import
-execution and unload-time calls remain unaccepted.
+An authored imported CNG caller passes real Windows SDK hashing of140,013 bytes
+through nonnull shared buffers, offset views, complete digest, actual DLL detach
+and normal process closure. Its explicit authored address layout establishes
+that case. The arbitrary OS-selected address collision remains open until common
+placement works. Kernelbase comparison and child-closure-dependent source leases
+repair the real reached failures. Original mod compatibility is unaccepted.
 
-Runtime Debug and x86 Debug compile with zero warnings/errors. The owned LAND
-construction audit passes interrupted allocation, actual borrower/foreign-parent
-refusal, exact retry, malformed extent before allocation and shared-texture
-lifetime. Actual native reference counts govern resource release; cleanup retains
-original errors. Pixels, GPU fence and retail terrain parity are unverified.
-The combined publication gate failed and is under repair. Reached fixture
-assumptions about source-only scripts, FIFO transfers, missing cold fields and
-source record boundaries are corrected without weakening production admission.
-The joined source batch compiles in C# and x86 Debug with zero warnings/errors.
-The joined effect owner now constructs all selected independent instances before
-any Start/Finish can recursively query them. Duplicate-effect Start and cold
-continuation pass; later combined fixture assumptions remain under repair.
+Win32 mutex create/open/wait/release/close ownership is integrated behind selected
+source/import/thread checks, real restricted Windows calls, aliases and ordered
+detach cleanup. The new fixture is uncompiled/unexecuted; native mutex cold
+reconstruction refuses. No handle count certifies global object destruction.
 
-## Ordinary gameplay and retail acceptance
+## Checks and ordinary acceptance
 
-The latest visible protocol23 candidate settled genuine ordinary New/Yes while
-the owned C# script task prepared the full graph in34.2 seconds; source
-declarations then returned in241 milliseconds. It reached the real foreground
-DirectInput wait. Windows activation did not establish the actual foreground
-owner, no device sample or original Load is invented, and the exact candidate
-was forcibly retired. Its current original user save hash is unchanged and no
-frames remain. Normal campaign/native retirement is not accepted from that kill.
+Preceding protocol23 C#/x86 Debug compile, combined script suite and selected
+owned LAND construction/borrower/retirement audit pass. Pixels/GPU/retail parity
+are unverified. The reached corrupt archive fixture repair passes. New combined
+protocol24/FISTP/merge needs compilation, selected owned audit and required
+Test-GodotRuntime/diff checks before push.
 
-The preceding protocol21 visible candidate published actual sample1 and completed
-the unchanged JIP Query after the general diagnostic read-role repair. Load then
-refused a borrowed engine execute pointer. The new shared callable owner requires
-actual original publication and invocation before that failure can close.
-FNVXR/ShowOff unsupported imports remain visible. Both background readers check
-the same source/campaign on return and drain before source release. Earlier
-recovery/ordinary Quit receipts retain their actual cursor/exit outcomes; all
-these candidates are retired and their input must not be reused.
+Latest root New/Yes candidate settled while the complete graph prepared in34.2s,
+then waited for actual foreground DirectInput. Activation produced no real sample;
+it was forcibly retired with recording off. Normal campaign/native retirement and
+original Load are not accepted from that kill. Its predecessor obtained sample1
+and JIP Query, then reached callback ownership refusal. Those candidates are retired.
 
-The separate pinned-package fresh-save run reached Doc's name/appearance pages
-and source stage55 through projected ordinary pointer targets, then ordinary
-Quit. It did not reach questionnaire/traits/chair departure. Those user failures,
-first-person body visibility and full FO3 text remain acceptance work. The shared
-FO3 source color repair has earlier dialogue/font receipts; complete moving
-menu/scene, audio and physical-XR acceptance are independent open requirements.
-
-There is no fresh matched retail opening recording, complete ordinary replay,
-campaign cold continuation or physical-headset acceptance for this wave. Private
-dependency diagnostics retain pre/post original file/save hashes, execute no
-original mod startup and establish no campaign progress. The original user save
-is never their output. Recording is off; no temporary frames remain.
+Questionnaire progression, post-trait chair departure, first-person beard and
+complete FO3 text remain ordinary exported acceptance work despite earlier checks.
+No fresh matched retail opening take, complete candidate campaign/cold route,
+ED-E interaction or physical-headset acceptance is claimed. Use fresh profiles.
 
 ## Retained full-source failures
 
@@ -199,16 +146,13 @@ are not converted into current gameplay passes.
 | TTW | 95,381 / 95,360 | 1,391,574 | 21 / 2,052 | 1,391,574 |
 | Combined | 95,382 / 95,361 | 1,391,576 | 21 / 2,052 | 1,391,576 |
 
+
 ## Next executable outcome
 
-Complete the combined effect/record/save fixture repairs without weakening
-production admission. Replay the integrated callback owner through actual JIP
-Load with a genuine foreground device and retain its next reached failure.
-Integrate source file-manager/archive ownership, calling-thread FISTP and actual
-mutex lifetimes, while preserving the shared CNG address-collision failure.
-Run the selected owned-data audit and required Test-GodotRuntime/diff checks
-before checked publication. Continue private retail recording and Godot replay; component
-passes cannot close question/chair failures. Publish checked slices through a
-PR, merge, synchronize clean main with origin/main and start a fresh codex branch.
-Advance a separate playable package and stable pin only after ordinary exported
-gameplay. The full-product goal and ten-minute follow-up stay active.
+Finish merged source/native compilation and repair reached failures. Run the
+selected owned audit and required publication check on the finished batch;
+publish a checked PR, merge, synchronize clean main with origin/main and start
+a fresh codex branch. Export one candidate, smoke-test the required ordinary
+launcher route and promote the hot pin after actual exported gameplay works.
+Continue all substantial next owners and the full-product goal until every
+campaign/system/mod/render/audio/UI/flat/XR requirement actually works.

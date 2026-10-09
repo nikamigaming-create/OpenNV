@@ -19,6 +19,7 @@ internal sealed partial class RuntimeLiveHarness
     private bool _replayCheckpointPrepared;
     private ulong _inputReplayRequest;
     private readonly Dictionary<MouseButton, Vector2> _heldPointerButtons = [];
+    private readonly Dictionary<MouseButton, ulong> _heldMouse = [];
     private readonly Dictionary<Key, ulong> _recordedHumanKeys = [];
     private const string HarnessInputMetadata = "opennv_harness_input";
     private long InputMicroseconds => checked((long)((decimal)(Stopwatch.GetTimestamp() - _inputStarted) * 1_000_000 / Stopwatch.Frequency));
@@ -131,6 +132,33 @@ internal sealed partial class RuntimeLiveHarness
             y = position.Y,
             button = button.ToString(),
             pressed
+        }, Json), stateKey);
+    }
+
+    private void SetMouseButton(MouseButton button, bool pressed, ulong lease)
+    {
+        var stateKey = _inputRecording is null ? null : _captureIdentity().StateKey;
+        var repeated = false;
+        if (pressed)
+        {
+            repeated = _heldMouse.ContainsKey(button);
+            _heldMouse[button] = Time.GetTicksMsec() + lease;
+        }
+        else if (!_heldMouse.Remove(button)) return;
+        if (!repeated)
+            ParseHarnessInput(new InputEventMouseButton
+            {
+                ButtonIndex = button,
+                Pressed = pressed,
+                Position = GetViewport().GetMousePosition(),
+                GlobalPosition = GetViewport().GetMousePosition(),
+            });
+        RecordInput(JsonSerializer.SerializeToElement(new
+        {
+            op = "mouse",
+            button = button.ToString(),
+            pressed,
+            leaseMilliseconds = pressed ? (int)lease : 20,
         }, Json), stateKey);
     }
 

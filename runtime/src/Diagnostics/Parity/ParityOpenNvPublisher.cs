@@ -19,6 +19,7 @@ internal sealed partial class ParityOpenNvPublisher : Node
             throw new InvalidOperationException("OpenNV parity publisher is already configured.");
         _capture = capture ?? throw new ArgumentNullException(nameof(capture));
         _ring = ParitySharedMemoryRing.CreateOrOpen(channel);
+        ProcessMode = ProcessModeEnum.Always;
         ProcessPhysicsPriority = int.MaxValue;
         if (captureDirectory is not null)
         {

@@ -303,6 +303,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         }
         if (PresentationInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (SourceRestInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
+        if (!_modalInput && _furniturePhase == 0 && GetMeta("opennv_source_pipboy_enabled", false).AsBool() &&
+            inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F1 or Key.F2 or Key.F3 } pageKey)
+        {
+            OpenPipBoyPage?.Invoke((OpenNV.Runtime.Gameplay.State.FalloutPipBoyPage)(pageKey.PhysicalKeycode - Key.F1));
+            GetViewport().SetInputAsHandled(); return;
+        }
         if (!_modalInput && _furniturePhase == 0 && GetMeta("opennv_source_pipboy_enabled", false).AsBool() && inputEvent.IsActionPressed(input.PipBoy.Action))
         {
             OpenPipBoy?.Invoke(); GetViewport().SetInputAsHandled(); return;
@@ -362,6 +368,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     }
 
     internal event Action? OpenPipBoy;
+    internal event Action<OpenNV.Runtime.Gameplay.State.FalloutPipBoyPage>? OpenPipBoyPage;
     internal event Action<bool>? OpenCombatWheel;
     internal event Action? OpenPauseMenu;
 

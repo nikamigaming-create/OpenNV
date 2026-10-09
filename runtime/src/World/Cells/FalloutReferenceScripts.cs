@@ -765,9 +765,10 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 {
                     var perk = bindings.Form(args[0].Identifier!);
                     if (perk.Signature != "PERK") throw new InvalidDataException("HasPerk argument is not PERK.");
-                    return world.PerkRank(Target(), perk.FormKey) > 0 ? 1 : 0;
+                    if (args.Count > 2) throw new InvalidDataException("HasPerk requires a perk and optional teammate flag.");
+                    return world.PerkRank(Target(), perk.FormKey, args.Count == 2 && args[1].Number != 0) > 0 ? 1 : 0;
                 })
-                { ReadOnly = true };
+                { Variadic = FalloutScriptArgumentKind.Number, ReadOnly = true };
             if (parts.Length <= 2 && operation == "getperkrank")
                 return new([FalloutScriptArgumentKind.Identifier, FalloutScriptArgumentKind.OptionalIdentifier], arguments =>
                 {
@@ -1190,8 +1191,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "sifh" or "setignorefriendlyhits" when arguments.Count == 1:
                     world.SetActorFlag(target, Boolean(arguments[0]), true);
                     break;
-                case "addperk" or "removeperk" when arguments.Count == 1:
-                    world.ChangePerk(target, bindings.Form(arguments[0]).FormKey, operation == "addperk");
+                case "addperk" or "removeperk" when arguments.Count is 1 or 2:
+                    world.ChangePerk(target, bindings.Form(arguments[0]).FormKey, operation == "addperk",
+                        arguments.Count == 2 && Number(arguments[1]) != 0);
                     break;
                 case "setcs" or "setcombatstyle" when arguments.Count == 1:
                     world.SetCombatStyle(target, bindings.Form(arguments[0]).FormKey);

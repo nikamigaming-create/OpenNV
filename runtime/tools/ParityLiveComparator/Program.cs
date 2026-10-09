@@ -40,12 +40,14 @@ if (outputRoot is not null)
 var rows = new List<JoinReport>(pairCount);
 var joiner = new ParityLiveJoiner(maximumPending);
 string? failure = null;
+long? firstRetailSequence = null, firstOpenNvSequence = null;
 try
 {
     using var retailRing = ParitySharedMemoryRing.CreateOrOpen(retailChannel);
     using var openNvRing = ParitySharedMemoryRing.CreateOrOpen(openNvChannel);
-    var nextRetailRingSequence = 1L;
-    var nextOpenNvRingSequence = 1L;
+    var nextRetailRingSequence = retailRing.EarliestAvailableSequence;
+    var nextOpenNvRingSequence = openNvRing.EarliestAvailableSequence;
+    firstRetailSequence = nextRetailRingSequence; firstOpenNvSequence = nextOpenNvRingSequence;
     var stopwatch = Stopwatch.StartNew();
     while (rows.Count < pairCount && stopwatch.Elapsed < TimeSpan.FromSeconds(timeoutSeconds))
     {
@@ -96,6 +98,8 @@ finally
                 retailChannel,
                 openNvChannel,
                 failure,
+                firstRetailSequence,
+                firstOpenNvSequence,
                 pendingRetail = joiner.PendingRetailFrames,
                 pendingOpenNv = joiner.PendingOpenNvFrames,
                 finalFrames = "unobserved",

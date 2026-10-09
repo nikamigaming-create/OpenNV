@@ -110,6 +110,7 @@ public partial class RuntimeCoordinator
             throw;
         }
         root.ProcessMode = ProcessModeEnum.Inherit;
+        NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(current);
         current.ProcessMode = ProcessModeEnum.Disabled;
         QueueNativeSourceCellRetirement(current);
     }

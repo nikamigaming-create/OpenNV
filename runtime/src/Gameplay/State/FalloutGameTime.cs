@@ -23,6 +23,7 @@ internal sealed partial class FalloutGameTime
     private float _previousHour;
     private bool _reconcileDaysPassed;
     internal float Hour => _globals.Get(_forms.Hour);
+    internal int Year => DatePart(_globals.Get(_forms.Year));
     internal float TimeScale => _globals.Get(_forms.TimeScale);
     internal float DaysPassed => _globals.Get(_forms.DaysPassed);
     internal int CalendarDays => _calendar.MonthDays.Sum(value => value);

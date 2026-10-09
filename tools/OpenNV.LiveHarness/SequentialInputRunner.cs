@@ -42,7 +42,7 @@ internal static class SequentialInputRunner
             {
                 "--record-retail-input" => RecordAsync(ReadConfiguration<RetailInputRecordConfiguration>(args[1]), cancellation.Token).GetAwaiter().GetResult(),
                 "--send-ordinary-input" => SendOrdinaryAsync(ReadConfiguration<OrdinaryInputDeliveryConfiguration>(args[1]), cancellation.Token).GetAwaiter().GetResult(),
-                _ => ReplayAsync(ReadConfiguration<GodotInputReplayConfiguration>(args[1]), args[0] == "--replay-unjoined-input", cancellation.Token).GetAwaiter().GetResult()
+                _ => ReplayAsync(ReadConfiguration<GodotInputReplayConfiguration>(args[1]), args[0] == "--replay-unjoined-input" ? true : null, cancellation.Token).GetAwaiter().GetResult()
             };
             Console.WriteLine(JsonSerializer.Serialize(report, Program.Json));
         }
@@ -129,7 +129,7 @@ internal static class SequentialInputRunner
             limits = new { configuration.MaximumDispatchLatenessMicroseconds, configuration.MaximumDeliveryWindowMicroseconds }
         });
         using var writer = new RecordedInputWriter(configuration.InputTapePath, header);
-        var held = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var held = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
         var completed = 0L;
         var maximumWindow = 0L;
         try
@@ -165,9 +165,8 @@ internal static class SequentialInputRunner
             finally { if (!ReferenceEquals(file, Console.In)) file.Dispose(); }
             // Normal completion explicitly retires every held key through the
             // same actual adapter. Lease expiry is still independently native.
-            foreach (var key in held.ToArray())
+            foreach (var input in held.Values.ToArray())
             {
-                var input = JsonSerializer.SerializeToElement(new { op = "key", key, pressed = false, leaseMilliseconds = 20 });
                 await Deliver(input, RetailCommand(input), SegmentClock()).ConfigureAwait(false);
             }
             if (HashFile(actualExecutable) != executableHash ||
@@ -208,10 +207,16 @@ internal static class SequentialInputRunner
             if (receipt.Delivered)
             {
                 writer.Append(observed, before, input); ++completed;
-                if (input.GetProperty("op").GetString() == "key")
+                if (input.GetProperty("op").GetString() is "key" or "mouse")
                 {
-                    var key = input.GetProperty("key").GetString()!;
-                    if (input.GetProperty("pressed").GetBoolean()) held.Add(key); else held.Remove(key);
+                    var operation = input.GetProperty("op").GetString()!;
+                    var field = operation == "key" ? "key" : "button";
+                    var name = input.GetProperty(field).GetString()!;
+                    var identity = operation + ":" + name;
+                    if (input.GetProperty("pressed").GetBoolean())
+                        held[identity] = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+                        { ["op"] = operation, [field] = name, ["pressed"] = false, ["leaseMilliseconds"] = 20 });
+                    else held.Remove(identity);
                 }
             }
             journal.Append("adapter-returned", observed, new { ordinal = receipt.Delivered ? completed : completed + 1,
@@ -225,13 +230,14 @@ internal static class SequentialInputRunner
         }
     }
 
-    private static async Task<object> ReplayAsync(GodotInputReplayConfiguration configuration, bool diagnostic, CancellationToken cancellation)
+    private static async Task<object> ReplayAsync(GodotInputReplayConfiguration configuration, bool? diagnosticSelection, CancellationToken cancellation)
     {
         Validate(configuration);
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         bounded.CancelAfter(configuration.MaximumDurationMilliseconds); cancellation = bounded.Token;
         var tape = RecordedInputTape.Read(configuration.InputTapePath);
-        if (tape.Unjoined != diagnostic)
+        var diagnostic = tape.Unjoined;
+        if (diagnosticSelection is { } selected && selected != diagnostic)
             throw new InvalidDataException("Unjoined diagnostics and checkpoint-bound replay use separate CLI routes; no join is inferred.");
         var clockOrigin = Stopwatch.GetTimestamp();
         var clock = Stopwatch.StartNew();
@@ -347,15 +353,36 @@ internal static class SequentialInputRunner
         return !string.IsNullOrWhiteSpace(key) ? key : throw new InvalidDataException("The independent retail observer has no neutral scene identity.");
     }
 
-    // Reuses the currently admitted HarnessWindow physical DIK mapping. Unknown
-    // devices/keys remain refusal; no SendInput, foreground or internal callback.
+    // Physical DirectInput scan codes, matching the runtime's NativeScriptKeys.
+    // Accept both digit spelling and Godot's KeyN spelling used in recordings.
     private static readonly Dictionary<string, int> RetailKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["W"] = 17, ["A"] = 30, ["S"] = 31, ["D"] = 32,
-        ["E"] = 18, ["F"] = 33, ["R"] = 19, ["Q"] = 16,
-        ["Space"] = 57, ["Tab"] = 15, ["Enter"] = 28, ["Escape"] = 1,
-        ["Up"] = 200, ["Down"] = 208, ["Left"] = 203, ["Right"] = 205,
-        ["Shift"] = 42, ["Control"] = 29, ["1"] = 2, ["2"] = 3
+        ["Escape"] = 1,
+        ["1"] = 2, ["2"] = 3, ["3"] = 4, ["4"] = 5, ["5"] = 6,
+        ["6"] = 7, ["7"] = 8, ["8"] = 9, ["9"] = 10, ["0"] = 11,
+        ["Key1"] = 2, ["Key2"] = 3, ["Key3"] = 4, ["Key4"] = 5, ["Key5"] = 6,
+        ["Key6"] = 7, ["Key7"] = 8, ["Key8"] = 9, ["Key9"] = 10, ["Key0"] = 11,
+        ["Minus"] = 12, ["Equal"] = 13, ["Backspace"] = 14, ["Tab"] = 15,
+        ["Q"] = 16, ["W"] = 17, ["E"] = 18, ["R"] = 19, ["T"] = 20,
+        ["Y"] = 21, ["U"] = 22, ["I"] = 23, ["O"] = 24, ["P"] = 25,
+        ["Bracketleft"] = 26, ["Bracketright"] = 27, ["Enter"] = 28,
+        ["Ctrl"] = 29, ["Control"] = 29,
+        ["A"] = 30, ["S"] = 31, ["D"] = 32, ["F"] = 33, ["G"] = 34,
+        ["H"] = 35, ["J"] = 36, ["K"] = 37, ["L"] = 38,
+        ["Semicolon"] = 39, ["Apostrophe"] = 40, ["Quoteleft"] = 41,
+        ["Shift"] = 42, ["Backslash"] = 43,
+        ["Z"] = 44, ["X"] = 45, ["C"] = 46, ["V"] = 47, ["B"] = 48,
+        ["N"] = 49, ["M"] = 50, ["Comma"] = 51, ["Period"] = 52, ["Slash"] = 53,
+        ["KpMultiply"] = 55, ["Alt"] = 56, ["Space"] = 57, ["Capslock"] = 58,
+        ["F1"] = 59, ["F2"] = 60, ["F3"] = 61, ["F4"] = 62, ["F5"] = 63,
+        ["F6"] = 64, ["F7"] = 65, ["F8"] = 66, ["F9"] = 67, ["F10"] = 68,
+        ["Numlock"] = 69, ["Scrolllock"] = 70, ["Kp7"] = 71, ["Kp8"] = 72,
+        ["Kp9"] = 73, ["KpSubtract"] = 74, ["Kp4"] = 75, ["Kp5"] = 76,
+        ["Kp6"] = 77, ["KpAdd"] = 78, ["Kp1"] = 79, ["Kp2"] = 80,
+        ["Kp3"] = 81, ["Kp0"] = 82, ["KpPeriod"] = 83, ["F11"] = 87, ["F12"] = 88,
+        ["KpEnter"] = 156, ["KpDivide"] = 181, ["Home"] = 199, ["Up"] = 200,
+        ["Pageup"] = 201, ["Left"] = 203, ["Right"] = 205, ["End"] = 207,
+        ["Down"] = 208, ["Pagedown"] = 209, ["Insert"] = 210, ["Delete"] = 211
     };
 
     private static string RetailCommand(JsonElement input)
@@ -368,12 +395,21 @@ internal static class SequentialInputRunner
                     throw new NotSupportedException("This physical key has no admitted native DIK/Godot mapping.");
                 return input.GetProperty("pressed").GetBoolean()
                     ? $"native.hold {scanCode} {input.GetProperty("leaseMilliseconds").GetInt32()}" : $"ReleaseKey {scanCode}";
+            case "mouse":
+                var mouseCode = input.GetProperty("button").GetString() switch
+                {
+                    "Left" => 256, "Right" => 257, "Middle" => 258,
+                    "Xbutton1" => 259, "Xbutton2" => 260,
+                    _ => throw new NotSupportedException("Unknown physical mouse button."),
+                };
+                return input.GetProperty("pressed").GetBoolean()
+                    ? $"native.hold {mouseCode} {input.GetProperty("leaseMilliseconds").GetInt32()}" : $"ReleaseKey {mouseCode}";
             case "look":
                 if (!input.GetProperty("dx").TryGetInt32(out var dx) || !input.GetProperty("dy").TryGetInt32(out var dy) ||
                     dx is < -32767 or > 32767 || dy is < -32767 or > 32767)
                     throw new InvalidDataException("Retail look requires bounded integral native mouse counts.");
                 return $"native.look {dx} {dy}";
-            default: throw new NotSupportedException("This retail recorder admits ordinary native key/look input; console, pointer, button callbacks and state writes are absent.");
+            default: throw new NotSupportedException("This retail recorder accepts physical keys, mouse buttons and relative mouse motion.");
         }
     }
 
