@@ -8,8 +8,9 @@ namespace OpenNV.Runtime.Diagnostics.Parity;
 internal sealed record RecordedInputPlugin(string Name, string Sha256);
 internal sealed record RecordedInputBinding(string CheckpointSha256, string StateKey,
     IReadOnlyList<RecordedInputPlugin> Plugins);
-internal sealed record RecordedInputHeader(string Schema, string Engine, RecordedInputBinding Binding,
-    string? RetailCheckpointSha256 = null);
+internal sealed record RecordedInputHeader(string Schema, string Engine, RecordedInputBinding? Binding,
+    string? RetailCheckpointSha256 = null, string Timing = "producer-monotonic",
+    string? RetailExecutableSha256 = null);
 internal sealed record RecordedInputStep(long Ordinal, long Microseconds, string StateKey, JsonElement Input);
 internal sealed record RecordedInputFooter(long Inputs, long Microseconds, string Sha256, bool Complete, string? Error);
 
@@ -19,6 +20,8 @@ internal sealed record RecordedInputTape(RecordedInputHeader Header, IReadOnlyLi
     RecordedInputFooter Footer)
 {
     internal const string Schema = "opennv-recorded-input/v1";
+    internal const string UnjoinedSchema = "opennv-unjoined-recorded-input/v1";
+    internal bool Unjoined => Header.Schema == UnjoinedSchema;
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
@@ -43,8 +46,18 @@ internal sealed record RecordedInputTape(RecordedInputHeader Header, IReadOnlyLi
 
     internal static void ValidateHeader(RecordedInputHeader header)
     {
-        ValidateBinding(header.Binding);
+        if (header is null) throw new InvalidDataException("Recorded input header is absent.");
+        if (header.Schema == UnjoinedSchema)
+        {
+            if (header.Engine != "retail" || header.Binding is not null || header.Timing != "receipt-observed" ||
+                !Hash(header.RetailExecutableSha256) || header.RetailCheckpointSha256 is not null && !Hash(header.RetailCheckpointSha256))
+                throw new InvalidDataException("An unjoined diagnostic must retain its actual retail source and cannot invent an OpenNV binding.");
+            return;
+        }
+        ValidateBinding(header.Binding ?? throw new InvalidDataException("A bound input segment has no actual OpenNV checkpoint binding."));
         if (header.Schema != Schema || header.Engine is not ("retail" or "opennv") ||
+            header.Timing is not ("producer-monotonic" or "receipt-observed") ||
+            header.RetailExecutableSha256 is not null && !Hash(header.RetailExecutableSha256) ||
             header.Engine == "retail" && !Hash(header.RetailCheckpointSha256))
             throw new InvalidDataException("Recorded input header or retail checkpoint identity is invalid.");
     }
@@ -71,6 +84,14 @@ internal sealed record RecordedInputTape(RecordedInputHeader Header, IReadOnlyLi
                 _ = input.GetProperty("pressed").GetBoolean();
                 if (input.GetProperty("leaseMilliseconds").GetInt32() is < 20 or > 1000)
                     throw new InvalidDataException("Recorded key lease is outside its native input contract.");
+                break;
+            case "mouse":
+                allowed = ["op", "button", "pressed", "leaseMilliseconds"];
+                if (input.GetProperty("button").GetString() is not ("Left" or "Right" or "Middle" or "Xbutton1" or "Xbutton2"))
+                    throw new InvalidDataException("Recorded mouse button is invalid.");
+                _ = input.GetProperty("pressed").GetBoolean();
+                if (input.GetProperty("leaseMilliseconds").GetInt32() is < 20 or > 1000)
+                    throw new InvalidDataException("Recorded mouse lease is outside its native input contract.");
                 break;
             case "look":
                 allowed = ["op", "dx", "dy"];
@@ -141,7 +162,7 @@ internal sealed record RecordedInputTape(RecordedInputHeader Header, IReadOnlyLi
         return new(header, inputs.AsReadOnly(), footer);
     }
 
-    private static void RequireUniqueFields(JsonElement element)
+    internal static void RequireUniqueFields(JsonElement element)
     {
         if (element.ValueKind == JsonValueKind.Object)
         {
@@ -168,10 +189,15 @@ internal sealed class RecordedInputWriter : IDisposable
     private bool _finished;
     internal RecordedInputWriter(string path, RecordedInputHeader header)
     {
-        RecordedInputTape.ValidateHeader(header);
-        _writer = new(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read), new UTF8Encoding(false))
-        { AutoFlush = true };
-        WriteHashed(header);
+        try
+        {
+            RecordedInputTape.ValidateHeader(header);
+            _writer = new(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read), new UTF8Encoding(false))
+            { AutoFlush = true };
+            try { WriteHashed(header); }
+            catch { _writer.Dispose(); throw; }
+        }
+        catch { _digest.Dispose(); throw; }
     }
     private void WriteHashed<T>(T value)
     {

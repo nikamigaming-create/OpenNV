@@ -19,6 +19,7 @@ internal sealed partial class RuntimeLiveHarness
     private bool _replayCheckpointPrepared;
     private ulong _inputReplayRequest;
     private readonly Dictionary<MouseButton, Vector2> _heldPointerButtons = [];
+    private readonly Dictionary<MouseButton, ulong> _heldMouse = [];
     private readonly Dictionary<Key, ulong> _recordedHumanKeys = [];
     private const string HarnessInputMetadata = "opennv_harness_input";
     private long InputMicroseconds => checked((long)((decimal)(Stopwatch.GetTimestamp() - _inputStarted) * 1_000_000 / Stopwatch.Frequency));
@@ -33,6 +34,7 @@ internal sealed partial class RuntimeLiveHarness
 
     private bool DispatchRecordedInput(JsonElement command, ulong request)
     {
+        if (DispatchSequentialRecordedInput(command, request)) return true;
         switch (command.GetProperty("op").GetString())
         {
             case "input.record.start":
@@ -68,8 +70,10 @@ internal sealed partial class RuntimeLiveHarness
                 var lateness = command.TryGetProperty("maximumLatenessMicroseconds", out var limit) ? limit.GetInt64() : 250_000;
                 // Validate the whole journal and binding before releasing or
                 // delivering any input. Retail measurements remain evidence.
-                var playback = new RecordedInputPlayback(tape, InputBinding(restored.Path), lateness);
+                var actualBinding = InputBinding(restored.Path);
+                var playback = new RecordedInputPlayback(tape, actualBinding, lateness);
                 _campaignBot.Stop(); _bot?.Stop(); ReleaseAll();
+                BeginReplayDeliveryJournal(command, tape, actualBinding, request);
                 _inputPlayback = playback; _inputTapePath = replayPath; _inputStarted = Stopwatch.GetTimestamp();
                 _inputReplayRequest = request;
                 _replayCheckpointPrepared = false;
@@ -128,6 +132,31 @@ internal sealed partial class RuntimeLiveHarness
             y = position.Y,
             button = button.ToString(),
             pressed
+        }, Json), stateKey);
+    }
+
+    private void SetMouseButton(MouseButton button, bool pressed, ulong lease)
+    {
+        var stateKey = _inputRecording is null ? null : _captureIdentity().StateKey;
+        var repeated = false;
+        if (pressed)
+        {
+            repeated = _heldMouse.ContainsKey(button);
+            _heldMouse[button] = Time.GetTicksMsec() + lease;
+        }
+        else if (!_heldMouse.Remove(button)) return;
+        if (!repeated)
+            ParseHarnessInput(new InputEventMouseButton
+            {
+                ButtonIndex = button,
+                Pressed = pressed,
+                Position = GetViewport().GetMousePosition(),
+                GlobalPosition = GetViewport().GetMousePosition(),
+            });
+        RecordInput(JsonSerializer.SerializeToElement(new
+        {
+            op = "mouse", button = button.ToString(), pressed,
+            leaseMilliseconds = pressed ? (int)lease : 20,
         }, Json), stateKey);
     }
 
@@ -225,13 +254,14 @@ internal sealed partial class RuntimeLiveHarness
 
     private void AdvanceInputPlayback()
     {
-        if (_inputPlayback?.Active != true) return;
+        if (_inputPlayback?.Active != true) { FinishReplayDeliveryJournal(); return; }
         _deliveringReplay = true;
         try
         {
             _inputPlayback.Advance(InputMicroseconds, () => _captureIdentity().StateKey, input =>
             {
                 Dispatch(input, 0);
+                RecordReplayDelivery(input);
                 AtomicWrite(Path.Combine(_directory, "input-replay.receipt.json"), JsonSerializer.Serialize(new
                 {
                     input = _inputPlayback.Cursor + 1,
@@ -243,6 +273,10 @@ internal sealed partial class RuntimeLiveHarness
                 }, Json));
             }, ReleaseAll);
         }
-        finally { _deliveringReplay = false; }
+        finally
+        {
+            _deliveringReplay = false;
+            if (_inputPlayback?.Active != true) FinishReplayDeliveryJournal();
+        }
     }
 }

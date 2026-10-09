@@ -36,16 +36,10 @@ internal sealed partial class NativeGodotLauncher
             try { _ = _profiles.ModStack(campaign.Id)!.Resolve(profile!.InstallRoot); }
             catch (Exception error) { setupReady = false; message = error.Message; }
         }
-        var unsupported = enabled.Where(id =>
-        {
-            var mod = _campaigns.Single(row => row.Id == id);
-            return !mod.Launchable || mod.Presentations.GetValueOrDefault(_selectedPresentation)?.Launchable != true;
-        }).ToArray();
         var route = campaign.Presentations.GetValueOrDefault(_selectedPresentation);
-        var launchable = setupReady && campaign.Launchable && route?.Launchable == true && unsupported.Length == 0 &&
+        var launchable = setupReady && campaign.Launchable && route?.Launchable == true &&
             (_selectedPresentation != "openxr" || XrAvailable);
-        _stackStatus.Text = !setupReady ? message : unsupported.Length != 0
-            ? "Enabled together · Gameplay in development: " + string.Join(", ", unsupported.Select(id => FalloutModCatalog.Get(id).Title))
+        _stackStatus.Text = !setupReady ? message
             : !campaign.Launchable || route?.Launchable != true ? route?.Status ?? campaign.Status
             : _selectedPresentation == "openxr" && !XrAvailable ? "Start OpenNV VR with your headset runtime active to use this mode."
             : string.Empty;

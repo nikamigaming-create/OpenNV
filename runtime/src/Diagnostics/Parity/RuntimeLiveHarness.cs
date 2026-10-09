@@ -150,6 +150,8 @@ internal sealed partial class RuntimeLiveHarness : Node
         }
         foreach (var key in _held.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
             SetKey(key, false, 0);
+        foreach (var button in _heldMouse.Where(pair => pair.Value <= now).Select(pair => pair.Key).ToArray())
+            SetMouseButton(button, false, 0);
         RenewRecordedHumanKeys(now);
         AdvanceInputPlayback();
         for (var index = 0; index < 32 && _checkpointTransitioning?.Invoke() != true; ++index)
@@ -197,14 +199,14 @@ internal sealed partial class RuntimeLiveHarness : Node
     {
         if (DispatchRecordedInput(command, request)) return;
         if (!_deliveringReplay && _inputPlayback?.Active == true &&
-            command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text" or "bot" or "campaign" or "checkpoint.load")
+            command.GetProperty("op").GetString() is "key" or "mouse" or "look" or "button" or "pointer" or "text" or "bot" or "campaign" or "checkpoint.load")
             _inputPlayback.Stop("Playback yielded to external input.", ReleaseAll);
         if (_inputRecording is not null && command.GetProperty("op").GetString() is "checkpoint.load" or "checkpoint.save" or "physics.sever")
             throw new InvalidOperationException("Finish the input segment before changing authoritative state through diagnostics.");
         if (DispatchCheckpoint(command, request)) return;
-        if (!_deliveringReplay && command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text" or "bot" or "physics.sever")
+        if (!_deliveringReplay && command.GetProperty("op").GetString() is "key" or "mouse" or "look" or "button" or "pointer" or "text" or "bot" or "physics.sever")
             _replayCheckpointPrepared = false;
-        if (command.GetProperty("op").GetString() is "key" or "look" or "button" or "pointer" or "text")
+        if (command.GetProperty("op").GetString() is "key" or "mouse" or "look" or "button" or "pointer" or "text")
         {
             _campaignBot.Stop();
             _bot?.Stop();
@@ -247,9 +249,10 @@ internal sealed partial class RuntimeLiveHarness : Node
                 var name = command.GetProperty("key").GetString()!;
                 var key = name switch
                 {
-                    "1" => Key.Key1,
-                    "2" => Key.Key2,
-                    _ => Enum.TryParse<Key>(name, true, out var parsed) && parsed != Key.None
+                    { Length: 1 } when char.IsAsciiDigit(name[0]) => Key.Key0 + (name[0] - '0'),
+                    "Control" => Key.Ctrl,
+                    _ => name.Length != 0 && !char.IsAsciiDigit(name[0]) && Enum.TryParse<Key>(name, true, out var parsed) &&
+                        Enum.IsDefined(parsed) && parsed != Key.None
                         ? parsed : throw new ArgumentException($"Unknown physical key: {name}"),
                 };
                 var pressed = command.GetProperty("pressed").GetBoolean();
@@ -257,6 +260,11 @@ internal sealed partial class RuntimeLiveHarness : Node
                 if (lease is < 20 or > 1000)
                     throw new ArgumentException("Input lease must be 20–1000 milliseconds.");
                 SetKey(key, pressed, (ulong)lease);
+                break;
+            case "mouse":
+                RecordedInputTape.ValidateInput(command);
+                SetMouseButton(Enum.Parse<MouseButton>(command.GetProperty("button").GetString()!),
+                    command.GetProperty("pressed").GetBoolean(), (ulong)command.GetProperty("leaseMilliseconds").GetInt32());
                 break;
             case "button":
                 DeliverObservedButton(command.GetProperty("path").GetString()!,
@@ -377,6 +385,8 @@ internal sealed partial class RuntimeLiveHarness : Node
         }
         foreach (var key in _held.Keys.ToArray())
             SetKey(key, false, 0);
+        foreach (var button in _heldMouse.Keys.ToArray())
+            SetMouseButton(button, false, 0);
         foreach (var (button, position) in _heldPointerButtons.ToArray())
             DeliverPointerButton(position, button, false);
     }
@@ -511,6 +521,7 @@ internal sealed partial class RuntimeLiveHarness : Node
                 viewports = renderTiming?.Viewports,
             },
             held = _held.Keys.Select(key => key.ToString()).ToArray(),
+            heldMouse = _heldMouse.Keys.Select(button => button.ToString()).ToArray(),
             controls,
             trace = _trace?.Status,
         };
@@ -606,6 +617,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         GD.Print($"OPENNV_LIVE_HARNESS_RETIRE phase=enter stateWritePending={_stateWrite is not null}");
         _bot?.Stop();
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
+        FinishReplayDeliveryJournal("Playback ended with its runtime owner.");
         FinishInputRecording("Recording ended with its runtime owner.");
         try { CompleteStateWrite(); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }

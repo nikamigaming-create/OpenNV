@@ -107,6 +107,8 @@ internal sealed partial class NativeGodotLauncher : Control
             return;
         _profiles = profiles ?? GodotLauncherProfileStore.Load();
         _campaigns = LoadManifest(out _launcherManifestSha256);
+        if (_profiles.SelectedGame is { } game && FallbackCampaigns.ContainsKey(game))
+            _selectedId = _selectedGameId = game;
         _configured = true;
     }
 
@@ -180,6 +182,7 @@ internal sealed partial class NativeGodotLauncher : Control
     private void ShowToast(string message)
     {
         _toast.Text = message;
+        _toast.Visible = message.Length != 0;
         _toast.AddThemeColorOverride("font_color", new Color(0.84f, 0.7f, 0.39f));
     }
 
@@ -238,11 +241,18 @@ internal sealed partial class NativeGodotLauncher : Control
             else
             {
                 var installation = NativeGameInstallation.Detect(path);
-                var expected = ExpectedNativeGame(campaign.Id);
-                if (installation.Game != expected)
-                    throw new InvalidDataException(
-                        $"That folder is {installation.Game}, but {campaign.Title} needs {expected}.");
-                _profiles.Save(campaign.Id, installation.InstallRoot);
+                var detected = installation.Game switch
+                {
+                    NativeGame.Fallout1 => "fallout1",
+                    NativeGame.Fallout2 => "fallout2",
+                    NativeGame.Fallout3 => "fallout3",
+                    NativeGame.FalloutNewVegas => "newvegas",
+                    _ => throw new NotSupportedException("The selected game has no launcher route."),
+                };
+                _profiles.Save(detected, installation.InstallRoot);
+                _profiles.SelectGame(detected);
+                _selectedId = _selectedGameId = detected;
+                _selectedPresentation = LaunchCampaign().DefaultPresentation;
             }
             _toast.Text = "Folder saved. Your original files stay in place.";
             _toast.AddThemeColorOverride("font_color", new Color(0.47f, 0.84f, 0.62f));
@@ -274,32 +284,29 @@ internal sealed partial class NativeGodotLauncher : Control
         var campaign = LaunchCampaign();
         if (!TryGetValidatedProfile(campaign.Id, out var profile, out var message) || profile is null)
         {
-            _toast.Text = message;
+            ShowToast(message);
             return;
         }
         var route = campaign.Presentations.GetValueOrDefault(_selectedPresentation);
         if (_selectedPresentation == "openxr" && !XrAvailable)
         {
-            _toast.Text = "Start OpenNV VR with your headset runtime active.";
+            ShowToast("Start OpenNV VR with your headset runtime active.");
             return;
         }
         if (!campaign.Launchable || route?.Launchable != true)
         {
-            _toast.Text = route?.Status ?? campaign.Status;
+            ShowToast(route?.Status ?? campaign.Status);
             return;
         }
 
         try
         {
             RequireLauncherEntry(campaign, entry);
+            _profiles.SelectGame(campaign.Id);
             var selection = _profiles.ModStack(campaign.Id);
             var mod = selection?.Resolve(profile.InstallRoot);
-            var unsupported = _profiles.EnabledMods(campaign.Id).Where(id =>
-                !_campaigns.Single(row => row.Id == id).Launchable ||
-                _campaigns.Single(row => row.Id == id).Presentations.GetValueOrDefault(_selectedPresentation)?.Launchable != true).ToArray();
-            if (unsupported.Length != 0)
-                throw new InvalidOperationException("Gameplay support is still in development for: " +
-                    string.Join(", ", unsupported.Select(id => FalloutModCatalog.Get(id).Title)));
+            // Selected packages use the base game's runtime. Package status is
+            // descriptive; source loading reports the actual missing capability.
             _launching = true;
             var request = new NativeGodotLauncherLaunchRequest(
                 campaign.Id,
