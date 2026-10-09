@@ -74,7 +74,10 @@ The reached post-travel save refusal came from old dust-devil PCM loops being
 cancelled when the previous cell root retired. Committed cell/reference unloads
 now explicitly end attached loops and retain that terminal state for saving.
 Finite audio tails keep their independent native host; unexpected destruction
-still reports cancellation. Post-transfer save/Continue is the immediate smoke.
+still reports cancellation. The destination NPC controller also adopts a matching
+retained package failure only through its current registered binding; the old
+controller cannot leave the new one unable to save. Post-transfer save/Continue
+is the immediate smoke.
 
 Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
 statistics and all inventory actions remain incomplete. Outdoor play still
