@@ -54,6 +54,7 @@ internal sealed class NativeNvseLocalContext
     internal ImmutableArray<NativeNvseLocalDeclaration> Declarations { get; }
     internal ulong[] Baseline { get; }
     internal int Active { get; set; }
+    internal int Retainers { get; set; }
     internal bool Retired { get; set; }
     internal NativeNvseLocalTransfer? Transfer { get; set; }
 

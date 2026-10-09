@@ -120,18 +120,31 @@ internal sealed partial class NativeGamebryoStartMenu : Control
         _music.Play();
     }
 
-    internal void SetReady(FalloutPluginStack stack, bool canContinue)
+    internal void BindIndexedSource(FalloutPluginStack stack)
     {
-        _records = stack;
+        ArgumentNullException.ThrowIfNull(stack);
+        if (_records is not null)
+        {
+            if (!ReferenceEquals(_records, stack)) throw new InvalidOperationException("Source menu cannot replace its indexed stack lifetime.");
+            return;
+        }
+        var strings = _actions.ToDictionary(action => action, action => FalloutGameSettingStrings.Read(stack, action));
         _background.SetCatalog(FalloutLoadingScreenCatalog.MainMenu(stack));
-        foreach (var action in _actions) _strings[action] = FalloutGameSettingStrings.Read(stack, action);
-        _canContinue = canContinue;
+        foreach (var (action, text) in strings) _strings.Add(action, text);
         for (var index = 0; index < _buttons.Count; ++index)
         {
             var action = _actions[index];
             _buttons[index].Text = _strings[action];
             _buttons[index].QueueRedraw();
         }
+        _records = stack;
+        Layout();
+    }
+
+    internal void SetReady(FalloutPluginStack stack, bool canContinue)
+    {
+        BindIndexedSource(stack);
+        _canContinue = canContinue;
         RefreshEnabled();
         _canvas.Visible = true;
         Layout();

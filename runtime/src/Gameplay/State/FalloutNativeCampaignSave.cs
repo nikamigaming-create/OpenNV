@@ -69,7 +69,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutActorProcessRuntimeSnapshot? ActorProcessRuntime = null, FalloutProcessCommonSnapshot? ActorProcessCommon = null,
     FalloutPlayerSkillValuesSnapshot? PlayerSkillValues = null, FalloutPlayerAbilityScriptsSnapshot? PlayerAbilityScripts = null,
     FalloutPlayerStatisticsSnapshot? PlayerStatistics = null, FalloutProcessQueueSnapshots? ProcessQueues = null,
-    FalloutIndexedInterfaceSoundSnapshot? IndexedInterfaceSounds = null);
+    FalloutIndexedInterfaceSoundSnapshot? IndexedInterfaceSounds = null,
+    FalloutSharedScriptRuntimeSnapshot? SharedScriptState = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -138,7 +139,8 @@ internal static partial class FalloutNativeCampaignSave
         FalloutActorProcessRuntimeSnapshot? actorProcessRuntime = null, FalloutProcessCommonSnapshot? actorProcessCommon = null,
         FalloutPlayerSkillValuesSnapshot? playerSkillValues = null, FalloutPlayerAbilityScriptsSnapshot? playerAbilityScripts = null,
         FalloutPlayerStatisticsSnapshot? playerStatistics = null, FalloutProcessQueueSnapshots? processQueues = null,
-        FalloutIndexedInterfaceSoundSnapshot? indexedInterfaceSounds = null)
+        FalloutIndexedInterfaceSoundSnapshot? indexedInterfaceSounds = null,
+        FalloutSharedScriptRuntimeSnapshot? sharedScriptState = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         ArgumentException.ThrowIfNullOrWhiteSpace(questEditorId);
@@ -191,7 +193,7 @@ internal static partial class FalloutNativeCampaignSave
             RestInterfaceSounds: restInterfaceSounds, InterfaceFades: interfaceFades, HardcoreNeeds: hardcoreNeeds,
             ActorUpdates: actorUpdates, CellProcesses: cellProcesses, ActorProcessRuntime: actorProcessRuntime, ActorProcessCommon: actorProcessCommon,
             PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts, PlayerStatistics: playerStatistics, ProcessQueues: processQueues,
-            IndexedInterfaceSounds: indexedInterfaceSounds);
+            IndexedInterfaceSounds: indexedInterfaceSounds, SharedScriptState: sharedScriptState);
         Validate(state, saveCompatibilityId);
         ValidateSaveOrderSource(records, state);
         ValidateExperienceNotificationSource(records, state);

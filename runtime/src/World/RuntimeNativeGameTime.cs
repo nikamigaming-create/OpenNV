@@ -39,7 +39,8 @@ internal sealed partial class RuntimeNativeGameTime : Node
     internal void StartSourceGameplayFrames()
     {
         if (!IsInsideTree() || IsQueuedForDeletion() || ProcessMode != ProcessModeEnum.Disabled ||
-            _restOwnsClock is null || _restWorldTime is null || _consumeSourceEffectFrame is null || _error is not null)
+            _restOwnsClock is null || _restWorldTime is null || _consumeSourceEffectFrame is null ||
+            _beginSourceDataFrame is null || _endSourceDataFrame is null || _error is not null)
             throw new InvalidOperationException("Gameplay frames require the living constructed source clock and its actual consumers.");
         ProcessMode = ProcessModeEnum.Always;
     }

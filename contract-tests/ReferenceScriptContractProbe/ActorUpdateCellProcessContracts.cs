@@ -31,6 +31,7 @@ internal static class ActorUpdateCellProcessContracts
         {
             File.Delete(Path.Combine(directory, "StatePatch.esp")); File.Delete(Path.Combine(directory, "State.esm")); Directory.Delete(directory);
         }
+        ExteriorSharedCellGraphContracts.Run();
         Console.WriteLine("OPENNV_ACTOR_UPDATE_CELL_PROCESS_CONTRACT_PASS actualReader=true bothSelectedContracts=true actorByteIndependentOfEnable=true signedIntToggleQuery=true scriptConsumerJoined=true winnerMasterBound=true sourcePhaseOrder=true incompleteRootHeld=true coldRequiresNewNativeAttachment=true priorIdsNotAuthority=true sourcePlacementDistinctFromAncestry=true retirementPrefixRetained=true native=unexecuted");
     }
     private static void ActorByte(FalloutPluginStack records, string image)
@@ -168,6 +169,8 @@ internal static class ActorUpdateCellProcessContracts
     {
         Require(owner.BeginDetach(lease, root, "authored-detach-entered"), "Detach guard rejected actual5/6.");
         foreach (var child in owner.ReadAttachment(lease).Children) owner.RetireChild(lease, child.Source, "authored-structural-child-retirement");
+        foreach (var cell in owner.ReadAttachment(lease).CellConsumers)
+            owner.RetireNativeCell(lease, cell.Source.Cell.Cell, "authored-structural-cell-scope-retirement");
         owner.CompleteDetach(lease, root, "authored-structural-root-retirement");
     }
     private static byte[] Plugin() => Join(Record("TES4", 0, Field("HEDR", new byte[12])), Actor("NPC_", 7),

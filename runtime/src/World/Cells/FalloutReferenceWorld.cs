@@ -922,6 +922,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         try
         {
             Retire(RetireSourceProcessQueues);
+            Retire(RetireCampaignScriptContexts);
             Retire(RetireActorProcessGraph);
             Retire(RetireCellProcesses);
             Retire(RetireActorUpdates);

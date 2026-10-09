@@ -6,7 +6,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
 {
     internal FalloutActorProcessRuntimeSnapshot Capture()
     {
-        RequireNotBusy();
+        RequireNotBusy(); RequireMainScriptClosureBoundary(retiring: false); RequireMainUtilityBoundary(retiring: false);
         return new(Schema, _source.Contract, _stack, _player, _process, _sequence, _forced, _travelCounter,
             _main.ToArray(), _travel, _actors.Values.ToArray(), _cold, CaptureMainFrame());
     }

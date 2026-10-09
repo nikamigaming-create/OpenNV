@@ -79,6 +79,9 @@ internal sealed partial class FalloutCellProcesses
                 owner.Children.Any(child => child.Phase is FalloutCellProcessChildPhase.Pending or FalloutCellProcessChildPhase.Failed) ||
                 owner.CellEpochs.Any(pair => RequireHealthy(pair.Key).Epoch != pair.Value || Require(pair.Key).Phase != FalloutCellProcessPhase.Attaching))
                 throw new InvalidDataException("Actual CELL attachment cannot publish an incomplete or foreign root/child graph.");
+            if (ActiveSharedGraph(attachment) is not null)
+                throw new InvalidOperationException("Shared CELL extension must publish through its actual target graph operation.");
+            RequireNativeCellsPublished(owner);
             for (var index = 0; index < owner.Children.Count; index++)
                 RequireExclusiveNativeChildren(owner, index, owner.Children[index].NativeObjects);
             _attachments[attachment] = owner with { RootPublished = true };
@@ -94,6 +97,8 @@ internal sealed partial class FalloutCellProcesses
         Operation(owner.CellEpochs.Keys.ToArray(), originalOwner, () =>
         {
             if (owner.NativeRoot != actualRoot || owner.Retired) throw new InvalidDataException("CELL detach has a foreign/retired native owner.");
+            if (ActiveSharedGraph(attachment) is not null)
+            { entered = BeginSharedRootRetirement(owner, actualRoot, originalOwner); return; }
             // Original public detach returns without phase writes outside5/6.
             if (owner.CellEpochs.Keys.All(cell => Require(cell).Phase is not
                 (FalloutCellProcessPhase.Attaching or FalloutCellProcessPhase.Attached))) return;
@@ -124,11 +129,13 @@ internal sealed partial class FalloutCellProcesses
         Operation(owner.CellEpochs.Keys.ToArray(), originalOwner, () =>
         {
             if (owner.NativeRoot != retiredRoot || owner.Retired || owner.Children.Any(child => child.Phase != FalloutCellProcessChildPhase.Retired) ||
+                owner.CellConsumers.Any(cell => cell.Phase != FalloutCellProcessChildPhase.Retired || cell.NativeObjects.Count != 0) ||
                 owner.CellEpochs.Any(pair => Require(pair.Key).Epoch != pair.Value || Require(pair.Key).Phase != FalloutCellProcessPhase.Detaching))
                 throw new InvalidDataException("CELL detach cannot discard outstanding child/native ownership.");
             _attachments[attachment] = owner with { Retired = true, RootPublished = false, NativeRoot = 0 };
             foreach (var cell in owner.CellEpochs.Keys)
                 Write(cell, FalloutCellProcessOperation.CompleteDetach, FalloutCellProcessPhase.DataLoaded, attachment, originalOwner);
+            SharedRootRetired(owner);
         });
     }
     internal FalloutCellProcessAttachment ReadAttachment(Guid identity) => RequireAttachment(identity);
@@ -137,8 +144,10 @@ internal sealed partial class FalloutCellProcesses
         var owner = RequireAttachment(identity);
         Operation(owner.CellEpochs.Keys.ToArray(), "actual-current-native-CELL-selection", () =>
         {
+            if (ActiveSharedGraph(identity) is not null)
+                throw new InvalidOperationException("Current selection requires a settled shared CELL graph.");
             var current = _source.ValidateCurrentScene(scene, owner.CellEpochs.Keys.ToArray());
-            if (!current.Select(child => child.Source).SequenceEqual(owner.Children.Select(child => child.Source)))
+            if (!SamePlacedChildren(current, owner.Children.Select(child => new FalloutCellProcessPlacedChild(child.Source, child.Placement))))
                 throw new NotSupportedException("Actual shared-root CELL/reference graph mutation has no joined source child lifecycle operation.");
         });
     }
@@ -148,8 +157,9 @@ internal sealed partial class FalloutCellProcesses
         var claimed = identities.ToHashSet();
         foreach (var attachment in _attachments.Values.Where(attachment => !attachment.Retired))
         {
-            if (claimed.Contains(attachment.NativeRoot) || attachment.Children.Where((_, index) =>
-                attachment.Identity != owner.Identity || index != child).Any(other => other.NativeObjects.Any(claimed.Contains)))
+            if (claimed.Contains(attachment.NativeRoot) || attachment.Children.Where(other =>
+                attachment.Identity != owner.Identity || other.Source.Reference != owner.Children[child].Source.Reference).Any(other => other.NativeObjects.Any(claimed.Contains)) ||
+                attachment.CellConsumers.Any(cell => cell.NativeObjects.Any(claimed.Contains)))
                 throw new InvalidDataException("CELL child borrowed a native root or another source child's living ownership.");
         }
     }

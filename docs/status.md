@@ -1,5 +1,31 @@
 # Product status
 
+The current local integration now includes source native startup declarations,
+retained command-table callbacks, shared script construction/current cold state,
+Main utilities, exterior same-root CELL/reference/LAND transactions and actual
+pre-return terrain allocation cleanup. Source-versioned native Data at protocol16
+joins complete DirectInput, shared controls/inventory and retained lambda values.
+Runtime, reference and native guest probe Debug builds pass without warnings or
+errors; the x86 Debug companion builds. Actual startup, Main children,
+ordinary streaming and campaign cold acceptance remain open. No new candidate
+is published or pinned. The immutable FNV test package remains unchanged.
+
+The indexed interface sound catalogue reader now shares decoded executable
+sections with instruction reads. Actual FNV and FO3 catalogue reads pass with
+unchanged originals; playback remains a separate open lane. PE declaration
+section padding no longer rejects the owned EXEs, xNVSE core or selected native
+DLLs. The installed core is 6.4.8; its published outer host layout matches 6.4.9,
+while the nested Data interface revision is separate. Admission retains the
+actual source version. These source reads do not establish original plugin
+Query/Load or gameplay compatibility.
+
+Ordinary candidate New/Yes still refuses JIP's pre-Query entry and unowned
+FNVXR/ShowOff imports. Same-source menu recovery and ordinary Quit now work.
+The recorder's fresh product check passes: a genuine delivered Quit receipt and
+exit code0 retain the last observed cursor explicitly as unsettled. Actual native
+device sampling is reached; original Query/Load remains absent. The original
+user save and immutable test package remain unchanged; recording is off.
+
 The fresh origin-based integration now combines the protected compiled/runtime
 candidate with merged NIF, launcher, couch/head visibility, ability and source-menu
 work. Runtime Debug compilation passes. Current saves require actual skill/effect
@@ -33,7 +59,7 @@ preserved, and the stable FNV Test shortcut still points to that package.
 The larger candidate now joins selected contributor parser, real binary buffer,
 OS metadata, shared loaded-file lifetime, callable binary members and selected
 UCRT streams, all sixteen real Windows profile entries and winning/private
-directory enumeration at managed/native protocol 13. C#,
+directory enumeration at managed/native protocol15. C#,
 x86 Debug and the joined source contract project compile. Complete BSFile/CRT,
 original DLL execution and native source-state cold gameplay remain unverified
 or unowned; source save admission remains refused. This is not complete-game

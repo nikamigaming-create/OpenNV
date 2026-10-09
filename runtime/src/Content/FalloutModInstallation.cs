@@ -39,9 +39,19 @@ internal sealed record FalloutModInstallation(
             : definition.PluginChoices.Any(name => folder.ResolveFile(name) is not null));
     }
 
-    internal RuntimeLiveContentSource OpenSource() => RuntimeLiveContentSource.Open(BaseInstallation.InstallRoot,
-        RuntimeLiveContentSource.FalloutNewVegasGame, ContentRoots.Skip(1).ToArray(),
-        ActivePlugins, settings: FalloutModCatalog.Get(Id).Settings);
+    internal RuntimeLiveContentSource OpenSource()
+    {
+        var source = RuntimeLiveContentSource.Open(BaseInstallation.InstallRoot,
+            RuntimeLiveContentSource.FalloutNewVegasGame, ContentRoots.Skip(1).ToArray(),
+            ActivePlugins, settings: FalloutModCatalog.Get(Id).Settings);
+        try
+        {
+            var host = Dependencies.SingleOrDefault(row => row.LogicalPath.Equals("nvse_1_4.dll", StringComparison.OrdinalIgnoreCase));
+            if (host?.SourcePath is { } path) source.BindNativePluginHostDependency(new(path, "actual-selected-mod-dependency:" + source.StackId));
+            return source;
+        }
+        catch { source.Dispose(); throw; }
+    }
 
     internal IReadOnlyList<FalloutModDependency> MissingDependencies =>
         Dependencies.Where(dependency => dependency.SourcePath is null).ToArray();

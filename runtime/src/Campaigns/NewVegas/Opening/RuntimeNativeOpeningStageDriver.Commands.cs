@@ -18,6 +18,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private NativeOwnedBarterMenu? _barterMenu;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveContinuationBlocker =>
+        _scripts.References!.CampaignSharedScriptSaveBlocker is { } sharedScript ? sharedScript :
         PlayerStatisticSaveBlocker is { } statistic ? statistic :
         _playerSkills.ValueConstructionSaveBlocker is { } skillConstruction ? skillConstruction :
         PlayerProgressSaveBlocker is { } progress ? progress :
@@ -51,6 +52,9 @@ internal partial class RuntimeNativeOpeningStageDriver
         sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
         playerProgress = PlayerProgressState,
         playerStatistics = PlayerStatisticState,
+        sharedScriptContexts = _scripts.References!.ScriptEngineContextState,
+        sourceMainScriptCaller = SourceMainScriptCallerState,
+        sourceMainUtilities = _scripts.References!.MainUtilityState,
         experienceNotifications = ExperienceNotificationState,
         interfaceActivationFrames = InterfaceActivationFrameState,
         playerPhysical = _player.PlayerPhysicalState,
@@ -205,7 +209,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             CaptureCurrentRestInterfaceSounds(), CaptureSourceInterfaceFade(), CaptureCurrentHardcoreNeeds(),
             CaptureSourceActorUpdates(), CaptureSourceCellProcesses(), CaptureCurrentProcessRuntime(), CaptureCurrentProcessCommon(),
             _playerSkills.CaptureValues(), _playerAbilities.Capture(), CaptureCurrentPlayerStatistics(), CaptureCurrentProcessQueues(),
-            CaptureSourceIndexedInterfaceSounds());
+            CaptureSourceIndexedInterfaceSounds(), _scripts.References.CaptureCampaignSharedScripts());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

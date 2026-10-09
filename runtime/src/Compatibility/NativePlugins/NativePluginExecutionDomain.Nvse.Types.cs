@@ -65,7 +65,7 @@ internal sealed class NativeNvsePlugin
 {
     internal ulong Generation { get; }
     internal ulong Module { get; }
-    internal uint Handle { get; }
+    internal uint Handle { get; set; }
     internal uint Image { get; }
     internal uint Interface { get; }
     internal uint Query { get; }

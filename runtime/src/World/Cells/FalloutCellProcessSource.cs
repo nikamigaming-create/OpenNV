@@ -64,7 +64,7 @@ internal sealed partial class FalloutCellProcessSource(FalloutPluginStack record
             throw new InvalidDataException("Native CELL attachment has an ambiguous or missing current source CELL.");
         var source = Read(scene.Cell.FormKey).Source;
         var actualDefinition = _scenes[scene.Cell.FormKey].Cell;
-        if (JsonSerializer.Serialize(actualDefinition) != JsonSerializer.Serialize(scene.Cell))
+        if (actualDefinition.Coordinates != scene.Cell.Coordinates || JsonSerializer.Serialize(actualDefinition) != JsonSerializer.Serialize(scene.Cell))
             throw new InvalidDataException("Native CELL definition differs from its winning source/inheritance.");
         foreach (var cell in cells)
             if (ReadIdentity(cell).Worldspace != source.Worldspace)
@@ -133,9 +133,9 @@ internal sealed partial class FalloutCellProcessSource(FalloutPluginStack record
         current.Validate(); _ = ReadIdentity(current.Cell); return current;
     }
     internal void ReleaseMetadata(FalloutFormKey cell)
-    { _decoded.Remove(cell); _scenes.Remove(cell); _placements.Remove(cell); _references.Remove(cell); }
+    { _decoded.Remove(cell); _scenes.Remove(cell); _placements.Remove(cell); _references.Remove(cell); _nativeCellSources.Remove(cell); }
     internal void ReleaseAllMetadata()
-    { _decoded.Clear(); _scenes.Clear(); _placements.Clear(); _references.Clear(); }
+    { _decoded.Clear(); _scenes.Clear(); _placements.Clear(); _references.Clear(); _nativeCellSources.Clear(); }
     private static string Digest(FalloutPluginRecord record) => Digest(record.ReadData());
     private static string Digest(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 }

@@ -343,6 +343,10 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         {
             uint value = 0; byte[]? typedReply = null;
             if (frame.Kind == NativePluginDomainMessage.IoCallback) typedReply = DispatchPrivateIo(frame, waitingCall);
+            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == 0x500)
+                typedReply = DispatchNvseData(frame, waitingCall);
+            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == CommandTableEvent)
+                typedReply = DispatchNvseCommandTable(frame, waitingCall);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= LocalBegin && frame.Operation <= LocalEnd)
                 typedReply = DispatchNvseLocals(frame);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= BinaryBegin && frame.Operation <= BinaryEnd)

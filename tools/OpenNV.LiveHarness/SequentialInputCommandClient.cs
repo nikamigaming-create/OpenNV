@@ -8,7 +8,8 @@ namespace OpenNV.LiveHarness;
 
 internal sealed record SequentialInputReceipt(long Request, long SentMicroseconds, long ObservedMicroseconds,
     bool Delivered, string Message, long? LoopNotification, JsonElement State,
-    long SentMonotonicTicks, long ObservedMonotonicTicks, long Frequency);
+    long SentMonotonicTicks, long ObservedMonotonicTicks, long Frequency,
+    bool RecipientExited = false, bool? CursorSettled = null, int? RecipientExitCode = null);
 
 // The separate private adapter owns retail device input. This client knows
 // only its public command/log envelope; it never calls a retail UI or engine API.
@@ -18,6 +19,7 @@ internal sealed class SequentialInputCommandClient : IDisposable
     private readonly int _processId, _timeoutMilliseconds;
     private readonly Func<long> _clock;
     private readonly FileStream _ownership;
+    private readonly Process _process;
     private readonly string _ownershipPath;
     private long _nextRequest, _retailLogOffset;
     private bool _disposed;
@@ -36,8 +38,12 @@ internal sealed class SequentialInputCommandClient : IDisposable
             process = Environment.ProcessId, targetProcess = processId, engine }, Program.Json);
         using var publication = LockWriter(_directory);
         _ownership = new(_ownershipPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read);
+        Process? process = null;
         try
         {
+            process = Process.GetProcessById(_processId);
+            _ = process.Handle; // Retain this recipient, including after exit; never reopen a reused PID.
+            _process = process;
             var identity = Encoding.UTF8.GetBytes(_token); _ownership.Write(identity); _ownership.Flush(true);
             var state = ReadState();
             var published = PublishedRequests(_directory);
@@ -71,6 +77,7 @@ internal sealed class SequentialInputCommandClient : IDisposable
         }
         catch
         {
+            process?.Dispose();
             _ownership.Dispose();
             File.Delete(_ownershipPath);
             throw;
@@ -79,11 +86,11 @@ internal sealed class SequentialInputCommandClient : IDisposable
 
     private static readonly Regex Returned = new("^returned request=([0-9]+) consoleAccepted=([01])$", RegexOptions.CultureInvariant);
     private static readonly Regex Dispatched = new("^dispatch request=([0-9]+) loopNotification=([0-9]+)$", RegexOptions.CultureInvariant);
+    private sealed class InputRecipientRetiredException() : IOException("The actual input process has retired.") { }
 
     internal JsonElement ReadState()
     {
-        using var process = Process.GetProcessById(_processId);
-        if (process.HasExited) throw new IOException("The actual input process has retired.");
+        if (_process.HasExited) throw new InputRecipientRetiredException();
         var path = Path.Combine(_directory, "live-state.json");
         // A live producer may briefly replace its state filename between two
         // successful observations. Wait only for that publication gap; never
@@ -93,7 +100,7 @@ internal sealed class SequentialInputCommandClient : IDisposable
         while (true)
         {
             try { state = ReadJson(path); break; }
-            catch (FileNotFoundException) when (publication.ElapsedMilliseconds < Math.Min(_timeoutMilliseconds, 250) && !process.HasExited)
+            catch (FileNotFoundException) when (publication.ElapsedMilliseconds < Math.Min(_timeoutMilliseconds, 250) && !_process.HasExited)
             { Thread.Sleep(5); }
         }
         if (state.GetProperty("process").GetInt32() != _processId)
@@ -119,15 +126,17 @@ internal sealed class SequentialInputCommandClient : IDisposable
         return state;
     }
 
-    internal async Task<SequentialInputReceipt> SendAsync(string command, CancellationToken cancellation)
+    internal async Task<SequentialInputReceipt> SendAsync(string command, CancellationToken cancellation, bool expectedRecipientExit = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (expectedRecipientExit && _engine != "opennv")
+            throw new ArgumentException("Expected recipient retirement requires an OpenNV delivery receipt.");
         if (command.Length is < 1 or > 4096 || command.IndexOfAny(['\r', '\n', '\0']) >= 0 ||
             _engine == "retail" && (Encoding.UTF8.GetByteCount(command) > 512 ||
                 !command.StartsWith("native.hold ", StringComparison.Ordinal) &&
                 !command.StartsWith("ReleaseKey ", StringComparison.Ordinal) && !command.StartsWith("native.look ", StringComparison.Ordinal)))
             throw new ArgumentException("Sequential retail recording admits bounded ordinary key/relative-look commands only.");
-        _ = ReadState();
+        var state = ReadState();
         var request = _nextRequest;
         var logPath = Path.Combine(_directory, "bridge.log");
         if (_engine == "retail")
@@ -151,7 +160,6 @@ internal sealed class SequentialInputCommandClient : IDisposable
         while (timeout.ElapsedMilliseconds < _timeoutMilliseconds)
         {
             cancellation.ThrowIfCancellationRequested();
-            var state = ReadState();
             if (_engine == "opennv")
             {
                 var receiptPath = Path.Combine(_directory, $"{request:D10}.receipt.json");
@@ -161,26 +169,44 @@ internal sealed class SequentialInputCommandClient : IDisposable
                     if (receipt.GetProperty("request").GetInt64() != request) throw new InvalidDataException("OpenNV acknowledged a different command request.");
                     var observed = _clock();
                     var observedTicks = Stopwatch.GetTimestamp();
+                    var delivered = receipt.GetProperty("delivered").GetBoolean();
+                    var message = receipt.GetProperty("message").GetString() ?? "";
                     // The real receipt can precede the asynchronous live-state
                     // publication. Preserve its timestamp and wait for that
                     // same entered command's cursor before releasing ownership.
-                    // No input is published again to settle this observation.
-                    while (state.GetProperty("nextCommandRequest").GetInt64() <= request)
+                    // An explicitly expected normal exit retains the actual last
+                    // observation instead of inventing a final cursor or state.
+                    while (true)
                     {
+                        cancellation.ThrowIfCancellationRequested();
+                        if (_process.HasExited)
+                        {
+                            if (!expectedRecipientExit || !delivered || _process.ExitCode != 0)
+                                throw new IOException("The acknowledged input recipient exited without the expected normal retirement; the entered input is not retried.");
+                            return new(request, sent, observed, delivered, message, null, state,
+                                sentTicks, observedTicks, Stopwatch.Frequency, true,
+                                state.GetProperty("nextCommandRequest").GetInt64() == checked(request + 1), _process.ExitCode);
+                        }
+                        try { state = ReadState(); }
+                        catch (InputRecipientRetiredException) when (expectedRecipientExit) { continue; }
+                        var cursor = state.GetProperty("nextCommandRequest").GetInt64();
+                        if (cursor > checked(request + 1))
+                            throw new IOException("A foreign command advanced OpenNV's cursor beyond the owned delivery.");
+                        if (cursor == checked(request + 1) && !expectedRecipientExit)
+                            return new(request, sent, observed, delivered, message, null, state,
+                                sentTicks, observedTicks, Stopwatch.Frequency, CursorSettled: true);
                         if (timeout.ElapsedMilliseconds >= _timeoutMilliseconds)
-                            throw new TimeoutException("OpenNV returned a command receipt but did not publish its committed cursor; the entered input is not retried.");
+                            throw new TimeoutException(expectedRecipientExit
+                                ? "OpenNV returned a command receipt but its expected normal exit was not observed; the entered input is not retried."
+                                : "OpenNV returned a command receipt but did not publish its committed cursor; the entered input is not retried.");
                         await Task.Delay(5, cancellation).ConfigureAwait(false);
-                        state = ReadState();
                     }
-                    if (state.GetProperty("nextCommandRequest").GetInt64() != checked(request + 1))
-                        throw new IOException("A foreign command advanced OpenNV's cursor beyond the owned delivery.");
-                    return new(request, sent, observed, receipt.GetProperty("delivered").GetBoolean(),
-                        receipt.GetProperty("message").GetString() ?? "", null, state,
-                        sentTicks, observedTicks, Stopwatch.Frequency);
                 }
+                state = ReadState();
             }
             else
             {
+                state = ReadState();
                 using var log = OpenShared(logPath);
                 if (log.Length < scannedBytes) throw new IOException("The native receipt stream lost its byte cursor.");
                 if (log.Length - _retailLogOffset > 1_048_576) throw new IOException("The native input receipt exceeded its bounded extent.");
@@ -296,11 +322,15 @@ internal sealed class SequentialInputCommandClient : IDisposable
     public void Dispose()
     {
         if (_disposed) return; _disposed = true;
-        using var writer = LockWriter(_directory);
-        bool same;
-        try { same = ReadOwnershipToken() == _token; }
-        finally { _ownership.Dispose(); }
-        if (!same) throw new IOException("The command channel ownership changed; its replacement is retained.");
-        File.Delete(_ownershipPath);
+        try
+        {
+            using var writer = LockWriter(_directory);
+            bool same;
+            try { same = ReadOwnershipToken() == _token; }
+            finally { _ownership.Dispose(); }
+            if (!same) throw new IOException("The command channel ownership changed; its replacement is retained.");
+            File.Delete(_ownershipPath);
+        }
+        finally { _ownership.Dispose(); _process.Dispose(); }
     }
 }

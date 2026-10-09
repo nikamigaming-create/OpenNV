@@ -10,5 +10,6 @@ internal static partial class FalloutNativeCampaignSave
         statistics.Validate();
         using var runtime = FalloutAdvancementRuntimeSource.Open(records);
         statistics.Source.RequireCurrent(FalloutMiscellaneousStatisticSource.Read(records, runtime.Receipt));
+        FalloutSharedScriptRuntimeSaveContract.RequireSource(records, runtime, state.SharedScriptState);
     }
 }

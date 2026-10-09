@@ -1278,7 +1278,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     host.Apply(new(FalloutReferenceEffectKind.AutoDisplayObjectives, source, Enable: Boolean(arguments[0])));
                     break;
                 case "addachievement" when parts.Length == 1 && arguments.Count == 1:
-                    host.Apply(new(FalloutReferenceEffectKind.Achievement, source, Value: checked((int)Index(Number(arguments[0])))));
+                    world.AddSourceAchievement(FalloutPlayerActorValues.SignedInteger(Number(arguments[0])));
                     break;
                 case "removeitem" when arguments.Count is 2 or 3:
                     var removed = Number(arguments[1]);

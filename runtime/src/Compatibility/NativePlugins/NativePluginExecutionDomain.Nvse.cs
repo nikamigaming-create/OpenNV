@@ -13,12 +13,13 @@ internal sealed partial class NativePluginExecutionDomain
     internal NativeNvsePlugin? NvsePlugin => _nvsePlugin;
 
     internal NativeNvsePlugin LoadNvseImage(NativeNvseHostSource host, string originalDll, string expectedSha256,
-        uint maximumInterfaceCallbacks = 16384)
+        uint maximumInterfaceCallbacks = 16384, uint sourcePluginHandle = 1)
     {
         VerifyOwner(); ArgumentNullException.ThrowIfNull(host);
         if (_callDepth != 0 || NativeModuleCount != 0 || _nvseHostSource is not null || _nvseImageAttempted)
             throw new InvalidOperationException("NVSE image admission requires an empty module/call/source owner.");
         if (maximumInterfaceCallbacks is 0 or > 1048576) throw new ArgumentOutOfRangeException(nameof(maximumInterfaceCallbacks));
+        if (sourcePluginHandle is 0 or uint.MaxValue) throw new ArgumentOutOfRangeException(nameof(sourcePluginHandle));
         var path = Path.GetFullPath(originalDll); var source = NativeNvseHostSource.Lease(path, expectedSha256, dll: true);
         var started = false;
         try
@@ -34,11 +35,11 @@ internal sealed partial class NativePluginExecutionDomain
             using var reader = Exchange(NativePluginDomainOperation.LoadNvse, Payload(writer =>
             {
                 WriteText(writer, path); WriteText(writer, host.RuntimeDirectory);
-                writer.Write(host.NvseVersion); writer.Write(host.RuntimeVersion); writer.Write(host.NoGore); writer.Write(maximumInterfaceCallbacks);
+                writer.Write(host.NvseVersion); writer.Write(host.RuntimeVersion); writer.Write(host.NoGore); writer.Write(maximumInterfaceCallbacks); writer.Write(sourcePluginHandle);
             }));
             var module = reader.ReadUInt64(); var image = reader.ReadUInt32(); var handle = reader.ReadUInt32();
             var nativeInterface = reader.ReadUInt32(); var query = reader.ReadUInt32(); var load = reader.ReadUInt32(); Finish(reader);
-            if (module == 0 || module >= uint.MaxValue || handle != module || image == 0 || nativeInterface == 0 || query == 0 || load == 0)
+            if (module == 0 || module >= uint.MaxValue || handle != sourcePluginHandle || image == 0 || nativeInterface == 0 || query == 0 || load == 0)
                 throw new InvalidDataException("Original NVSE image has no actual module/interface/Query/Load capability.");
             var plugin = new NativeNvsePlugin(Generation, module, handle, image, nativeInterface, query, load, path, expectedSha256.ToUpperInvariant());
             VerifyOwner(); _nvsePlugin = plugin; _nvseModuleSource = source; return plugin;
@@ -60,23 +61,25 @@ internal sealed partial class NativePluginExecutionDomain
         if (plugin.Phase != NativeNvsePhase.Mapped) throw new InvalidOperationException("Original NVSE Query has already been invoked.");
         return InvokeNvseInitialization(plugin, load: false);
     }
-    internal NativeNvseInitializationReceipt InitializeNvse(NativeNvsePlugin plugin)
+    internal NativeNvseInitializationReceipt InitializeNvse(NativeNvsePlugin plugin, uint? sourceLoadHandle = null)
     {
         VerifyNvse(plugin);
         var info = plugin.QueryReceipt?.Info;
         if (plugin.Phase != NativeNvsePhase.QueriedTrue || info is null || info.InfoVersion != 1 || info.Name.IsNull || info.Name.Bytes.IsEmpty)
             throw new InvalidOperationException("Original NVSE Load requires its actual successful Query and typed PluginInfo.");
-        return InvokeNvseInitialization(plugin, load: true);
+        if (sourceLoadHandle is 0 or uint.MaxValue) throw new ArgumentOutOfRangeException(nameof(sourceLoadHandle));
+        return InvokeNvseInitialization(plugin, load: true, sourceLoadHandle);
     }
-    private NativeNvseInitializationReceipt InvokeNvseInitialization(NativeNvsePlugin plugin, bool load)
+    private NativeNvseInitializationReceipt InvokeNvseInitialization(NativeNvsePlugin plugin, bool load, uint? sourceLoadHandle = null)
     {
         RequireNvseEmptyCall();
+        if (load) plugin.Handle = sourceLoadHandle ?? plugin.Handle;
         plugin.Phase = load ? NativeNvsePhase.Loading : NativeNvsePhase.Querying;
         ++_callDepth;
         try
         {
             using var reader = Exchange(load ? NativePluginDomainOperation.NvseLoad : NativePluginDomainOperation.NvseQuery,
-                Payload(writer => writer.Write(plugin.Module)));
+                Payload(writer => { writer.Write(plugin.Module); if (load) writer.Write(plugin.Handle); }));
             var raw = reader.ReadUInt32(); var stack = reader.ReadInt32(); var preserved = reader.ReadUInt32(); var exception = reader.ReadUInt32();
             var returned = reader.ReadUInt32(); var infoVersion = reader.ReadUInt32(); var version = reader.ReadUInt32(); var name = ReadNvseText(reader);
             var counts = ReadNvseCounts(reader); Finish(reader); CheckNvseBoundary(stack, preserved, exception);
@@ -96,7 +99,9 @@ internal sealed partial class NativePluginExecutionDomain
     // data. This does not manufacture PostLoad/DeferredInit or claim hooks work.
     internal uint DeliverNvseMessage(NativeNvsePlugin plugin, uint type, ReadOnlySpan<byte> payload)
     {
-        VerifyNvse(plugin); RequireNvseLoaded(plugin); RequireNvseEmptyCall();
+        VerifyNvse(plugin); RequireNvseEmptyCall();
+        if (!(plugin.Phase == NativeNvsePhase.LoadedTrue || plugin.Phase == NativeNvsePhase.QueriedTrue && type == 23 && payload.IsEmpty))
+            throw new InvalidOperationException("Original message lacks its actual queried/loaded source phase.");
         if (payload.Length > MaximumPayload - 256) throw new ArgumentOutOfRangeException(nameof(payload));
         var data = payload.ToArray(); ++_callDepth;
         try
@@ -142,7 +147,7 @@ internal sealed partial class NativePluginExecutionDomain
             var receipt = new NativeNvseRetirementReceipt(counts, false, false); plugin.Retirement = receipt;
             plugin.Registry.Retire(); plugin.Phase = NativeNvsePhase.Retired;
             _nvseModuleSource!.Dispose(); _nvseModuleSource = null; _nvseHostSource!.Retire(Generation); _nvseHostSource = null;
-            ClearNvseLocalCapabilities(); ClearNvseExpressionCapabilities(); ClearNvseValueCapabilities(); ClearNvseSourceObjects(); _nvsePlugin = null; VerifyOwner(); return receipt;
+            ClearNvseData(); ClearNvseCommandTable(); ClearNvseLocalCapabilities(); ClearNvseExpressionCapabilities(); ClearNvseValueCapabilities(); ClearNvseSourceObjects(); _nvsePlugin = null; VerifyOwner(); return receipt;
         }
         catch (NativePluginDomainRefusal) { throw; }
         catch (Exception error) { plugin.Phase = NativeNvsePhase.Faulted; throw Fatal(error); }
@@ -159,7 +164,7 @@ internal sealed partial class NativePluginExecutionDomain
         uint value;
         switch ((NativeNvseHostCall)frame.Operation)
         {
-            case NativeNvseHostCall.QueryInterface: value = registry.QueryInterface(frame.Id, reader.ReadUInt32(), _nvseValues is not null, _nvseScriptInterface); break;
+            case NativeNvseHostCall.QueryInterface: value = registry.QueryInterface(frame.Id, reader.ReadUInt32(), _nvseValues is not null, _nvseScriptInterface, _nvseCommandTable is not null, _nvseData is null ? 0 : _nvseDataVersion); break;
             case NativeNvseHostCall.SetOpcode: value = registry.SetOpcode(frame.Id, reader.ReadUInt32()); break;
             case NativeNvseHostCall.RegisterCommand:
                 {
@@ -200,6 +205,8 @@ internal sealed partial class NativePluginExecutionDomain
     {
         if (!ChildExited) throw new InvalidOperationException("Native source/capability owners require verified exact child closure.");
         ClearNvseBinaryAfterChildClosure();
+        ClearNvseData();
+        ClearNvseCommandTable();
         ClearNvseLocalCapabilities(); ClearNvseValueCapabilities(); _nvseHeapDeclaration = null;
         ClearNvseExpressionCapabilities(); ClearNvseSourceObjects();
         if (_nvsePlugin is not null)

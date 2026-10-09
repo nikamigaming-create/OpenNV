@@ -70,6 +70,10 @@ public partial class RuntimeCoordinator
         try
         {
             _ = owner.BeginDetach(); _nativeCellProcessRetirements.Add(root.GetInstanceId());
+            // Detached failed allocations and the actual native root retire
+            // independently; one failure cannot skip the other's destruction.
+            try { owner.RequestFailedTerrainConstructionRetirement(); }
+            catch (Exception error) { errors.Add(error); }
             if (queued) root.QueueFree(); else root.Free();
         }
         catch (Exception error) { errors.Add(error); }

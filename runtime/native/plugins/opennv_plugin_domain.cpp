@@ -4,6 +4,8 @@
 #include "opennv_plugin_domain.h"
 #include "opennv_plugin_guest_arena.h"
 #include "opennv_plugin_nvse.h"
+#include "opennv_plugin_command_table.h"
+#include "opennv_plugin_data.h"
 #include "opennv_plugin_expression.h"
 #include "opennv_plugin_values.h"
 #include "opennv_plugin_value_heap.h"
@@ -205,6 +207,8 @@ struct State {
     bool retired = false;
     GuestArena arena;
     std::unique_ptr<NvseRuntime> nvse;
+    std::unique_ptr<NativeCommandTableRuntime> command_table;
+    std::unique_ptr<NvseDataRuntime> data;
     std::unique_ptr<NvseExpressionRuntime> expressions;
     std::unique_ptr<NvseValueRuntime> values;
     std::unique_ptr<NvseValueHeap> value_heap;
@@ -362,6 +366,9 @@ std::uint32_t __stdcall stdcall_callback(void*, std::uint32_t event, std::uint32
 }
 HostCallbacks host_callbacks{sizeof(HostCallbacks), 1, nullptr, cdecl_callback, stdcall_callback};
 
+void* command_table_interface_address();
+void command_table_validate_all();
+void command_table_retire();
 void expression_initialize(void*);
 void expression_retire();
 void* values_interface(std::uint32_t);
@@ -395,7 +402,11 @@ void source_files_retire();
 void binary_files_retire_all();
 void* source_script_interface_address();
 void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
+void data_sync_if_bound();
+void* data_interface_address(std::uint32_t);
 #include "opennv_plugin_nvse.inc"
+#include "opennv_plugin_data.inc"
+#include "opennv_plugin_command_table.inc"
 #include "opennv_plugin_source_locals.inc"
 #include "opennv_plugin_expression.inc"
 #include "opennv_plugin_values.inc"

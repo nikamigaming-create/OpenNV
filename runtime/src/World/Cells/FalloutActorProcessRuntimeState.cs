@@ -32,6 +32,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     }
     internal bool HasActor(FalloutFormKey actor) => _actors.ContainsKey(actor);
     internal string? SaveBlocker => _busy ? "actual-source-process-runtime-consumer-in-flight" :
+        MainScriptCallerSaveBlocker is { } scripts ? scripts :
         MainFrameSaveBlocker is { } frame ? frame :
         _main.FirstOrDefault(item => item.Phase != FalloutMainProcessPhase.Complete) is { } main ?
             "actual-Main-source-operation:" + main.Owner + ":" + (main.Failure ?? main.Phase.ToString()) :
@@ -46,6 +47,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         _sequence,
         mainForcedProcessing = _forced,
         mainWord = _mainWord, mainWindows = _mainWindows.ToArray(), mainFrameBoundary = _mainFrameBoundary,
+        scriptCaller = MainScriptCallerState,
         playerTravelCounter = _travelCounter,
         main = _main.ToArray(),
         travel = _travel,
@@ -155,7 +157,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     private static string Message(Exception error) => string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
     public void Dispose()
     {
-        if (_disposed) return; RequireNotBusy();
+        if (_disposed) return; RequireNotBusy(); RequireMainScriptClosureBoundary(retiring: true); RequireMainUtilityBoundary(retiring: true);
         if (MainFrameSaveBlocker is not null || _main.Any(item => item.Phase != FalloutMainProcessPhase.Complete) || _travel is { Phase: not FalloutPlayerTravelPhase.Complete })
             throw new NotSupportedException("Source process runtime retains a live or failed Main/Player invocation.");
         _disposed = true; _actors.Clear();

@@ -15,14 +15,15 @@ internal sealed partial class FalloutCellProcesses
             {
                 AwaitingNativeAttachments = cold.AwaitingNativeAttachments.ToArray(),
                 PreviousAttachments = cold.PreviousAttachments.Select(CopyAttachment).ToArray()
-            } : null);
+            } : null, _sharedGraphs.Select(CopySharedGraph).ToArray());
     }
     private void Restore(FalloutCellProcessesSnapshot saved)
     {
         if (saved.Schema != Schema || saved.Stack != _stack || saved.Contract != _declaration.Contract ||
             saved.CapturedProcess == Guid.Empty || saved.CapturedProcess == _process || saved.Sequence is < 0 or long.MaxValue ||
-            saved.Cells is null || saved.Transitions is null || saved.Attachments is null)
+            saved.Cells is null || saved.Transitions is null || saved.Attachments is null || saved.SharedGraphs is null)
             throw new InvalidDataException("CELL continuation has an incomplete/foreign source or process identity.");
+        RequireCommittedSnapshot(saved);
         var cells = new Dictionary<FalloutFormKey, FalloutCellProcessEntry>(FalloutFormKeyComparer.Instance);
         foreach (var cell in saved.Cells)
         {
@@ -49,7 +50,7 @@ internal sealed partial class FalloutCellProcesses
                 if (!activeCells.Add(cell) || cells[cell].Epoch != epoch || cells[cell].Phase is not
                     (FalloutCellProcessPhase.Attaching or FalloutCellProcessPhase.Attached or FalloutCellProcessPhase.Detaching))
                     throw new InvalidDataException("CELL continuation crossed active native phase/epoch ownership.");
-            foreach (var identity in attachment.Children.SelectMany(child => child.NativeObjects).Prepend(attachment.NativeRoot).Where(identity => identity != 0))
+            foreach (var identity in attachment.Children.SelectMany(child => child.NativeObjects).Concat(attachment.CellConsumers.SelectMany(cell => cell.NativeObjects)).Prepend(attachment.NativeRoot).Where(identity => identity != 0))
                 if (!actualObjects.Add(identity)) throw new InvalidDataException("CELL continuation duplicated an actual native object owner.");
             if (attachment.RootPublished && (attachment.NativeRoot == 0 || attachment.Failure is not null ||
                 attachment.CellEpochs.Keys.Any(cell => cells[cell].Phase != FalloutCellProcessPhase.Attached) ||
@@ -60,6 +61,7 @@ internal sealed partial class FalloutCellProcesses
             if (cell.Phase is FalloutCellProcessPhase.Attaching or FalloutCellProcessPhase.Attached or FalloutCellProcessPhase.Detaching &&
                 !activeCells.Contains(cell.Source.Cell))
                 throw new InvalidDataException("CELL live phase has no native attachment source lease.");
+        ValidateSharedGraphHistory(saved, cells, attachments);
         ValidateTransitions(saved, cells, attachments);
         if (saved.ColdHandoff is { } previous)
         {
@@ -86,13 +88,15 @@ internal sealed partial class FalloutCellProcesses
         // Only after every source/history/native assertion passes does the new
         // process acquire the retained graph. No source callback is replayed.
         foreach (var (cell, state) in cells) _cells.Add(cell, state);
-        _transitions.AddRange(saved.Transitions); _sequence = saved.Sequence;
+        _transitions.AddRange(saved.Transitions); _sharedGraphs.AddRange(saved.SharedGraphs.Select(CopySharedGraph)); _sequence = saved.Sequence;
         foreach (var (identity, attachment) in attachments)
             _attachments.Add(identity, attachment with
             {
                 Process = _process,
                 NativeRoot = 0,
                 RootPublished = false,
+                CellConsumers = attachment.CellConsumers.Select(cell => attachment.Retired ? cell with { NativeObjects = [] } :
+                    ConstructNativeCell(cell.Source.Cell.Cell)).ToArray(),
                 Children = attachment.Children.Select(child => child with
                 {
                     Placement = child.Placement.Copy(),
@@ -106,11 +110,15 @@ internal sealed partial class FalloutCellProcesses
     }
     internal static void RequireCommittedSnapshot(FalloutCellProcessesSnapshot saved)
     {
-        if (saved.Cells.Any(cell => cell.Failure is not null || cell.Phase is FalloutCellProcessPhase.LoadingData or
+        if (saved.SharedGraphs is null || saved.SharedGraphs.Any(change => change.Failure is not null || change.Phase is not
+                (FalloutCellSharedGraphPhase.Complete or FalloutCellSharedGraphPhase.Cancelled or FalloutCellSharedGraphPhase.RootRetired)) ||
+            saved.Cells.Any(cell => cell.Failure is not null || cell.Phase is FalloutCellProcessPhase.LoadingData or
                 FalloutCellProcessPhase.ReleasingData or FalloutCellProcessPhase.Detaching or FalloutCellProcessPhase.Attaching) ||
             saved.ColdHandoff?.AwaitingNativeAttachments.Count > 0 ||
             saved.Attachments.Any(attachment => !attachment.Retired && (attachment.Failure is not null ||
-                !attachment.RootPublished || attachment.NativeRoot == 0 || attachment.Children.Any(child => child.Failure is not null ||
+                !attachment.RootPublished || attachment.NativeRoot == 0 || attachment.CellConsumers is null ||
+                attachment.CellConsumers.Any(cell => cell.Phase is not (FalloutCellProcessChildPhase.Published or FalloutCellProcessChildPhase.SourceNoDraw)) ||
+                attachment.Children.Any(child => child.Failure is not null ||
                     child.Phase is FalloutCellProcessChildPhase.Pending or FalloutCellProcessChildPhase.Failed or FalloutCellProcessChildPhase.Retired))))
             throw new NotSupportedException("Current committed save retained an unfinished/faulted CELL source/native operation.");
     }
@@ -125,6 +133,7 @@ internal sealed partial class FalloutCellProcesses
         foreach (var (cell, epoch) in attachment.CellEpochs)
             if (!cells.TryGetValue(cell, out var state) || epoch < 2 || epoch > state.Epoch)
                 throw new InvalidDataException("CELL attachment has a foreign source epoch.");
+        ValidateNativeCellContinuation(attachment);
         var references = new HashSet<FalloutFormKey>(FalloutFormKeyComparer.Instance);
         foreach (var child in attachment.Children)
         {
@@ -188,7 +197,7 @@ internal sealed partial class FalloutCellProcesses
             var nativeOperation = attaching || transition.Operation is FalloutCellProcessOperation.CompleteAttach or FalloutCellProcessOperation.BeginDetach or FalloutCellProcessOperation.CompleteDetach;
             if (transition.After != next.Phase || transition.CellEpoch != next.Epoch ||
                 nativeOperation && (transition.Attachment is not { } identity || !attachments.TryGetValue(identity, out var owner) ||
-                    !owner.CellEpochs.ContainsKey(transition.Cell) || !attaching && before.Attachment != transition.Attachment) ||
+                    !TransitionCellOwned(saved, transition, owner) || !attaching && before.Attachment != transition.Attachment) ||
                 !nativeOperation && transition.Attachment is not null)
                 throw new InvalidDataException("CELL operation history lost its original native attachment/epoch.");
             replay[transition.Cell] = next; previous = transition.Sequence;
@@ -201,5 +210,6 @@ internal sealed partial class FalloutCellProcesses
     {
         CellEpochs = attachment.CellEpochs.ToDictionary(pair => pair.Key, pair => pair.Value, FalloutFormKeyComparer.Instance),
         Children = attachment.Children.Select(child => child with { Placement = child.Placement.Copy(), NativeObjects = child.NativeObjects.ToArray() }).ToArray(),
+        CellConsumers = CopyNativeCells(attachment.CellConsumers),
     };
 }

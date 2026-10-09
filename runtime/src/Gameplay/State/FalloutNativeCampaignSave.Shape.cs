@@ -55,6 +55,8 @@ internal static partial class FalloutNativeCampaignSave
         ValidatePlayerProgress(state.PlayerProgress, state.Vitals, state.PlayerActorValues);
         ValidateCurrentPlayerAbilityState(state);
         state.PlayerStatistics.Validate();
+        FalloutSharedScriptRuntimeSaveContract.ValidateShape(state.SharedScriptState,
+            state.PlayerStatistics, state.ActorProcessRuntime);
         ValidateExperienceNotifications(state.ExperienceNotifications, state.Vitals);
         ValidateAdvancementFrameContinuation(state);
         state.PlayerPhysical.Validate();

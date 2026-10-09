@@ -28,6 +28,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     private readonly FalloutQuestScripts _scripts;
     private readonly FalloutReferenceWorld _world;
     private readonly FalloutNativePluginCampaignSelection? _selection;
+    private readonly FalloutNativePluginDataBindings? _dataBindings;
     private readonly List<Module> _modules = [];
     private readonly List<NativePluginExecutionDomain> _retiringDomains = [];
     private readonly List<FalloutNativePluginCampaignModule> _failures = [];
@@ -41,14 +42,18 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             ", Load=" + module.Load + "; " + (module.Failure ?? string.Join(", ", module.Unowned)))) is { Length: > 0 } failure ? failure : null;
 
     internal FalloutNativePluginCampaign(FalloutPluginStack records, FalloutQuestState quests,
-        FalloutQuestScripts scripts, string companion, string privateStateRoot, FalloutNativePluginCampaignSelection? selection)
+        FalloutQuestScripts scripts, string companion, string privateStateRoot, FalloutNativePluginCampaignSelection? selection,
+        FalloutNativePluginDataBindings? dataBindings = null)
     {
         _records = records; _source = records.OwnedSource ?? throw new NotSupportedException("Native campaign has no exact owned content source.");
         _quests = quests; _scripts = scripts; _world = scripts.References ?? throw new NotSupportedException("Native campaign has no actual reference world.");
-        _selection = selection;
+        _selection = selection; _dataBindings = dataBindings;
         if (!ReferenceEquals(_world.NativeSourceRecords, records) || !ReferenceEquals(quests.NativeSourceRecords, records))
             throw new InvalidDataException("Native campaign world/quest/selected records differ.");
-        var paths = _source.ResourcePathsUnder("NVSE/Plugins").Where(path => Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var paths = _source.ResourcePathsUnder("NVSE/Plugins").Where(path =>
+            Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
+            path.Replace('/', '\\').Split('\\').Length == 3 && _source.TryResolve(path, null, out var winner) &&
+            !winner.Contains("::", StringComparison.Ordinal)).ToArray();
         if (paths.Length == 0) return;
         if (selection is null || !ReferenceEquals(selection.Source, _source) || string.IsNullOrWhiteSpace(selection.LoadOrderOwner))
         {
@@ -60,15 +65,45 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             }
             return;
         }
-        if (selection.Modules.Count != paths.Length || selection.Modules.Select(row => row.LogicalPath).Distinct(StringComparer.OrdinalIgnoreCase).Count() != paths.Length ||
-            paths.Any(path => !selection.Modules.Any(row => StringComparer.OrdinalIgnoreCase.Equals(row.LogicalPath, path))))
-            throw new InvalidDataException("Native module admission omits, duplicates or adds a selected source winner.");
+        var selected = selection.Inventory.Where(row => row.Disposition == FalloutNativeModuleDisposition.SelectedPlugin).ToArray();
+        var physicalCandidates = selection.Inventory.Where(row => row.Disposition is FalloutNativeModuleDisposition.SelectedPlugin or
+            FalloutNativeModuleDisposition.LoaderNotPlugin or FalloutNativeModuleDisposition.SourceFailure).ToArray();
+        if (physicalCandidates.Length != paths.Length || paths.Any(path => !physicalCandidates.Any(row => StringComparer.OrdinalIgnoreCase.Equals(row.LogicalPath, path))) ||
+            selection.Modules.Count != selected.Length || selection.Modules.Select(row => row.LogicalPath).Distinct(StringComparer.OrdinalIgnoreCase).Count() != selected.Length ||
+            selected.Any(row => !selection.Modules.Any(module => module.LogicalPath == row.LogicalPath && module.Sha256 == row.Sha256 && module.QueryHandle == row.QueryHandle)))
+            throw new InvalidDataException("Native module declaration omits, duplicates or substitutes an actual source candidate/disposition.");
+        foreach (var row in physicalCandidates)
+        {
+            if (!_source.TryResolve(row.LogicalPath, null, out var current) || !StringComparer.OrdinalIgnoreCase.Equals(current, row.PhysicalPath) ||
+                !StringComparer.OrdinalIgnoreCase.Equals(HashLoose(current), row.Sha256))
+                throw new InvalidDataException("Native source candidate changed after declaration: " + row.LogicalPath);
+            if (row.Disposition == FalloutNativeModuleDisposition.SourceFailure)
+                _failures.Add(new(row.LogicalPath, row.PhysicalPath, row.Sha256, null, null, null, null, row.Failure, [], false));
+        }
         try
         {
-            foreach (var admission in selection.Modules) Admit(admission, companion, privateStateRoot);
+            foreach (var admission in selection.Modules) AdmitQuery(admission, companion, privateStateRoot);
+            foreach (var module in _modules.Where(module => module.Plugin.Phase == NativeNvsePhase.QueriedTrue))
+                InitializeStage(module, () => module.Domain.DeliverNvseMessage(module.Plugin, 23, []));
+            uint loadHandle = 0;
+            foreach (var module in _modules.Where(module => module.Plugin.Phase == NativeNvsePhase.QueriedTrue && module.ObjectFailure is null))
+            {
+                var actualHandle = checked(++loadHandle);
+                InitializeStage(module, () =>
+                {
+                    if (module.Admission.ExpressionAbi is { } expression)
+                        module.Domain.ConfigureNvseExpressionAbi(module.Plugin, expression);
+                    // An absent declaration leaves Init itself refused; clients
+                    // that never request it do not get a fabricated empty table.
+                    _ = module.Domain.InitializeNvse(module.Plugin, actualHandle); return 0;
+                });
+            }
+            foreach (var message in new uint[] { 0, 9 })
+                foreach (var module in _modules.Where(module => module.Plugin.Phase == NativeNvsePhase.LoadedTrue && module.ObjectFailure is null))
+                    InitializeStage(module, () => module.Domain.DeliverNvseMessage(module.Plugin, message, []));
             foreach (var module in _modules)
             {
-                if (module.Plugin.Phase != NativeNvsePhase.LoadedTrue || module.Plugin.Registry.UnownedRequests.Count != 0) continue;
+                if (module.Plugin.Phase != NativeNvsePhase.LoadedTrue || module.ObjectFailure is not null || module.Domain.Fault is not null || module.Plugin.Registry.UnownedRequests.Count != 0) continue;
                 foreach (var command in module.Plugin.Registry.Commands)
                 {
                     if (command.AssignedOpcode > ushort.MaxValue || !_commands.TryAdd(checked((ushort)command.AssignedOpcode), (module, command)))
@@ -81,9 +116,9 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             try { Dispose(); } catch (Exception retirement) { throw new FalloutNativePluginCampaignConstructionFault(error, retirement, this); }
             throw;
         }
-        // PostLoad/PostPostLoad, game-loop and co-save notifications require
-        // actual cross-module/native lifecycle producers. Successful Load alone
-        // does not manufacture any of those events.
+        // Only source loader completion events are produced above. Main-loop,
+        // gameplay, original cross-module hooks and co-save remain independent
+        // authoritative event owners; Load success cannot stand in for them.
     }
 
     public IReadOnlyList<FalloutNativePluginCampaignModule> Modules => _failures.Concat(_modules.Select(module =>
@@ -91,12 +126,17 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             module.Domain.Generation, module.Domain.ProcessId, module.Plugin.QueryReceipt?.Returned, module.Plugin.LoadReceipt?.Returned,
             module.Domain.Fault?.Reason ?? module.ObjectFailure ?? module.Domain.NvseSourceFileDiagnostics, module.Plugin.Registry.UnownedRequests.Select(row => row.Operation).ToArray(), module.Retired))).ToArray();
 
-    private void Admit(FalloutNativePluginModuleAdmission admission, string companion, string privateStateRoot)
+    private void AdmitQuery(FalloutNativePluginModuleAdmission admission, string companion, string privateStateRoot)
     {
         if (!_source.TryResolve(admission.LogicalPath, null, out var physical) || physical.Contains("::", StringComparison.Ordinal) ||
             !Path.GetFullPath(physical).Equals(Path.GetFullPath(admission.PhysicalPath), StringComparison.OrdinalIgnoreCase) ||
             !StringComparer.OrdinalIgnoreCase.Equals(HashLoose(physical), admission.Sha256))
             throw new InvalidDataException("Native module declaration differs from the exact selected loose winner.");
+        if (admission.QueryHandle is 0 or uint.MaxValue) throw new InvalidDataException("Selected original has no source Query handle rank.");
+        if (admission.PreEntryFailure is { } preEntry)
+        {
+            _failures.Add(new(admission.LogicalPath, physical, admission.Sha256, null, null, null, null, preEntry, [], false)); return;
+        }
         NativePluginExecutionDomain? domain = null; NativeNvseHostSource? host = null; NativePluginPrivateIo? io = null;
         NativeNvsePlugin? plugin = null;
         try
@@ -107,17 +147,14 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             io = FalloutNativePluginPrivateIo.Create(_source, physical, admission.Sha256, privateStateRoot,
                 admission.WriteScopes, admission.ReadDeclarations, admission.InputRoots, admission.ImportOwner, admission.NonIoImports);
             domain = new(companion, privateIo: io); io = null;
-            plugin = domain.LoadNvseImage(host, physical, admission.Sha256); host = null;
+            plugin = domain.LoadNvseImage(host, physical, admission.Sha256, sourcePluginHandle: admission.QueryHandle); host = null;
             domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues));
             domain.AttachNvseScriptInterface(plugin);
+            domain.AttachNvseCommandTable(plugin, new CampaignCommandTable(this));
+            if (_dataBindings is { } data) domain.AttachNvseData(plugin, new CampaignData(this, domain, plugin, data));
             if (admission.Heap is { } heap) domain.ConfigureNvseValueHeap(plugin, heap);
             if (admission.SourceFiles is { } files) domain.ConfigureNvseSourceFileMethods(plugin, files);
-            var query = domain.QueryNvse(plugin);
-            if (query.Returned)
-            {
-                domain.ConfigureNvseExpressionAbi(plugin, admission.ExpressionAbi);
-                _ = domain.InitializeNvse(plugin);
-            }
+            _ = domain.QueryNvse(plugin);
             _modules.Add(new(admission, domain, plugin)); domain = null;
         }
         catch (Exception error)
@@ -133,6 +170,20 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
                 plugin?.Registry.UnownedRequests.Select(row => row.Operation).ToArray() ?? [], domain?.NaturallyRetired ?? false));
         }
     }
+
+    private void InitializeStage(Module module, Func<uint> action)
+    {
+        try { _ = action(); }
+        catch (Exception error)
+        {
+            module.ObjectFailure = error.ToString();
+            // Preserve the original reached prefix and every callback. Never
+            // release guest-callable owners until the exact child has exited.
+            try { module.Domain.Dispose(); module.Retired = module.Domain.NaturallyRetired; }
+            catch (Exception retirement) { module.ObjectFailure += "\nNative retirement: " + retirement; }
+        }
+    }
+    internal IReadOnlyList<FalloutNativeModuleSource> SourceInventory => _selection?.Inventory ?? [];
 
     public FalloutCompiledCommandDeclaration? Declaration(ushort opcode)
     {
@@ -196,6 +247,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         RequireCurrent();
         if (ModuleFailure is { } failure) throw new NotSupportedException("Selected native module state is incomplete: " + failure);
         if (_active != 0) throw new InvalidOperationException("An original native caller still owns campaign state.");
+        RequireDataIdleForSave();
         var source = CaptureSourceContinuation();
         if (source is not null) RequireSourceContinuationCurrent(source);
         foreach (var module in _modules)

@@ -135,21 +135,21 @@ internal static partial class ChallengeContracts
         var fade = new FalloutInterfaceFade(fadeSource); var published = 0;
         fade.BindNative(new(_ => ++published, _ => { }, _ => --published));
         using var lease = owner.BindScriptFrameFade(fade);
-        Reject(() => owner.SampleScriptFrame(1, FalloutMainScriptSampleSite.AfterInterfaceUpdate));
-        owner.SampleScriptFrame(1, FalloutMainScriptSampleSite.BeforeInterfaceUpdate);
+        Reject(() => owner.SampleScriptFrame(1, FalloutMainScriptSampleSite.AfterMainChildren));
+        owner.SampleScriptFrame(1, FalloutMainScriptSampleSite.BeforeMainChildren);
         Reject(() => owner.CaptureScriptFrame());
-        Reject(() => owner.SampleScriptFrame(2, FalloutMainScriptSampleSite.BeforeInterfaceUpdate));
+        Reject(() => owner.SampleScriptFrame(2, FalloutMainScriptSampleSite.BeforeMainChildren));
         fade.Start(1, 0, false);
         Require(published == 1 && fade.QueryIncreasingOpaque(1).Value && owner.Observe().Allows,
             "Immediate event substituted a live fade query for the separately cached Main byte.");
-        owner.SampleScriptFrame(1, FalloutMainScriptSampleSite.AfterInterfaceUpdate);
+        owner.SampleScriptFrame(1, FalloutMainScriptSampleSite.AfterMainChildren);
         Require(!owner.Observe().Allows, "Source opaque increasing channel1 did not produce the independent cached blocker.");
         Reject(() => owner.RequireCurrent(initial));
         fade.End(1, false, () => new(false, "authored-global-force-not-set"));
         Require(!fade.QueryIncreasingOpaque(1).Value && !owner.Observe().Allows,
             "Downward fade guessed an early cached Main clear.");
-        owner.SampleScriptFrame(2, FalloutMainScriptSampleSite.BeforeInterfaceUpdate);
-        owner.SampleScriptFrame(2, FalloutMainScriptSampleSite.AfterInterfaceUpdate);
+        owner.SampleScriptFrame(2, FalloutMainScriptSampleSite.BeforeMainChildren);
+        owner.SampleScriptFrame(2, FalloutMainScriptSampleSite.AfterMainChildren);
         Require(owner.Observe().Allows, "Actual next Main sample did not consume the source direction/scalar.");
         var state = owner.CaptureScriptFrame(); var runtime = owner.Capture();
         using var cold = new FalloutActorProcessRuntimeState(declaration, "authored-current-Main", Key(0x14), Identity, runtime);
@@ -163,7 +163,7 @@ internal static partial class ChallengeContracts
         Reject(() => coldFade.QueryIncreasingOpaque(1));
         using var unbound = new FalloutActorProcessRuntimeState(declaration, "authored-unbound-Main", Key(0x14), Identity);
         unbound.ConstructScriptFrame(source, null);
-        Reject(() => unbound.SampleScriptFrame(1, FalloutMainScriptSampleSite.BeforeInterfaceUpdate));
+        Reject(() => unbound.SampleScriptFrame(1, FalloutMainScriptSampleSite.BeforeMainChildren));
         Require(unbound.CaptureScriptFrame() is { Frame: 1, FailureType: not null, Error: not null },
             "Missing actual channel producer cleared the genuine attempted Main write.");
         Reject(() => unbound.Observe());

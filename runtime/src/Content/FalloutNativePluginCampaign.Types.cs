@@ -6,10 +6,18 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutNativePluginModuleAdmission(string LogicalPath, string PhysicalPath, string Sha256,
     IReadOnlyList<NativePluginIoWriteScope> WriteScopes, IReadOnlyList<FalloutNativePluginIoReadDeclaration> ReadDeclarations,
     IReadOnlyList<string> InputRoots, string ImportOwner, IReadOnlySet<string> NonIoImports,
-    NativeNvseExpressionAbi ExpressionAbi, NativeNvseHeapDeclaration? Heap, NativeNvseFileDeclaration? SourceFiles = null);
+    NativeNvseExpressionAbi? ExpressionAbi, NativeNvseHeapDeclaration? Heap, NativeNvseFileDeclaration? SourceFiles = null)
+{
+    internal uint QueryHandle { get; init; }
+    internal string? PreEntryFailure { get; init; }
+    internal string? ExpressionDeclarationFailure { get; init; }
+}
 internal sealed record FalloutNativePluginCampaignSelection(RuntimeLiveContentSource Source,
     string RuntimeSha256, string NvsePath, string NvseSha256, bool? NoGore, string EditionOwner,
-    string LoadOrderOwner, IReadOnlyList<FalloutNativePluginModuleAdmission> Modules);
+    string LoadOrderOwner, IReadOnlyList<FalloutNativePluginModuleAdmission> Modules)
+{
+    internal IReadOnlyList<FalloutNativeModuleSource> Inventory { get; init; } = [];
+}
 internal sealed record FalloutNativePluginCampaignModule(string LogicalPath, string PhysicalPath, string Sha256,
     ulong? Generation, int? ProcessId, bool? Query, bool? Load, string? Failure,
     IReadOnlyList<string> Unowned, bool Retired);

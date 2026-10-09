@@ -3,6 +3,48 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Executable instruction and embedded-data readers share one in-process decoded
+section image. Packed source sections decode before table reads; original file
+bytes remain unchanged and no decoded launch asset is persisted. PE declaration
+readers scan the file-backed mapped section block after validating raw bounds,
+so alignment padding does not become a required virtual declaration extent.
+
+Native startup inventories the winning loose source modules and retains original
+Query ordering, completed Load ordering, imports, edition and actual version
+resources. Reviewed public host layouts select the owned xNVSE version rather
+than publishing a newer SDK version. Nested interfaces retain their separate
+revision and callable owner. Native command-table buffers copy borrowed source
+declarations and preserve actual registration, pointer, module and retirement
+lifetimes; foreign/global commands remain unowned. Source menu captions bind
+after indexing and before native startup, independently of gameplay admission,
+so a later failure retains a usable source-backed Quit control.
+
+Shared script construction reuses the actual campaign Main process before
+bootstrap. Current save/cold state carries the same interpreter, distinct Main
+cached fields and source caller prefix; failed children refuse playable saves.
+Native delivery attaches to the actual interface-fade lifetime and retires before
+that fade/process. Exterior graph changes preserve overlap epochs on the same
+living root and publish per-CELL reference and LAND consumers before releasing
+outgoing source data. Terrain constructors register before native allocation,
+retain actual private nodes/resources and cache transfers, and distinguish return
+from real parent publication. Failed allocations and whole-root destruction retire
+independently; source release waits for the actual private resource lifetime.
+
+Native Data uses the selected public interface revision, actual foreground
+DirectInput device state and the same C# control/inventory owners as gameplay.
+Native reader leases survive node exit until exact child closure. The current
+inventory scope wraps bound effect/script consumers inside the committed cumulative
+gameplay-clock lease, using its actual mutation identity. Whole-Main, paused/menu
+calls and genuine native temporary-reference constructors remain separate owners.
+The Main utility queue preserves signed duplicate IDs, source query order and
+failed effect prefixes. Platform interfaces and the independent suppression byte
+require real producers; missing services never become false/default success.
+
+Sequential input retains the actual recipient handle, command lease and first
+receipt timestamp. An explicit expected exit requires a genuine delivered receipt
+and observed normal process retirement. It retains the last published state and
+reports whether its cursor settled; it never invents a post-exit frame or replay.
+
 Current campaign saves capture skill pools, advancement and ability scripts from
 the same live player owners before validation. Their source identities and skill
 captures must agree exactly. Cold restore prepares stored player vitals, progress

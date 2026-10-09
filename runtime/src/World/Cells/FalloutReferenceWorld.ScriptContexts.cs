@@ -12,7 +12,8 @@ internal sealed partial class FalloutReferenceWorld
             "source-shared-immediate-script-interpreter-construction-unbound" :
             _processRuntime?.SourceScriptFrameSaveBlocker ?? (_processRuntime is null ? "source-Main-script-scalar-constructor-unbound" : null)) : null;
     internal void ConfigureCampaignScriptContexts(FalloutAdvancementRuntimeSource runtime,
-        FalloutScriptEngineContextsSnapshot? contexts, FalloutMainScriptFrameSnapshot? main)
+        FalloutScriptEngineContextsSnapshot? contexts, FalloutMainScriptFrameSnapshot? main,
+        FalloutMainScriptCallerSnapshot? failedCallerPrefix = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_scriptEngineContexts is not null || !CampaignChallengesConfigured || Challenges.Source is null ||
@@ -25,7 +26,13 @@ internal sealed partial class FalloutReferenceWorld
         try
         {
             candidate.RequireSources(records);
-            ProcessRuntime.ConstructScriptFrame(source, main);
+            if (failedCallerPrefix is not null)
+            {
+                if (main is null || contexts is null) throw new InvalidDataException("Failed Main caller requires its actual cached byte and interpreter continuation.");
+                FalloutActorProcessRuntimeState.ValidateMainScriptCaller(failedCallerPrefix);
+                FalloutActorProcessRuntimeState.RequireMainScriptSamples(failedCallerPrefix, main);
+            }
+            ProcessRuntime.ConstructScriptFrame(source, main, failedCallerPrefix?.LastCall is { Disposition: FalloutMainScriptCallerDisposition.Failed });
             BindChallengeGameModeSource(ProcessRuntime);
             _scriptEngineContexts = candidate;
         }

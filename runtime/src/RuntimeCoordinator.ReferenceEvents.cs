@@ -21,6 +21,11 @@ public partial class RuntimeCoordinator
         if (_nativeReferences is { } world && world.PlacementRevision != _nativePlacementRevision &&
             _nativeCurrentCellRoot is { } root && _nativeActiveCell is { } scene && !_nativeDoorLoading)
         {
+            if (scene.Cell.Worldspace is not null)
+            {
+                QueueNativeExteriorReferenceProjection(world, root, scene);
+                return;
+            }
             var moved = world.MovedSince(_nativePlacementRevision);
             var cells = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>()
                 .Where(land => _nativeWalkableGrid.Contains(land.Source.ActiveCoordinates))

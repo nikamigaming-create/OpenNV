@@ -26,10 +26,11 @@ internal sealed record FalloutCellProcessChild(FalloutCellProcessReference Sourc
     IReadOnlyList<ulong> NativeObjects, string? Owner, string? Failure);
 internal sealed record FalloutCellProcessAttachment(Guid Identity, Guid Process,
     [property: JsonConverter(typeof(FalloutCellProcessEpochsJson))] IReadOnlyDictionary<FalloutFormKey, long> CellEpochs, ulong NativeRoot,
-    IReadOnlyList<FalloutCellProcessChild> Children, bool RootPublished, bool Retired, string? Failure);
+    IReadOnlyList<FalloutCellProcessChild> Children, IReadOnlyList<FalloutCellNativeConsumers> CellConsumers,
+    bool RootPublished, bool Retired, string? Failure);
 internal sealed record FalloutCellProcessHandoff(Guid PreviousProcess, Guid CurrentProcess, long Sequence,
     IReadOnlyList<Guid> AwaitingNativeAttachments, IReadOnlyList<FalloutCellProcessAttachment> PreviousAttachments);
 internal sealed record FalloutCellProcessesSnapshot(string Schema, string Stack, string Contract,
     Guid CapturedProcess, long Sequence, IReadOnlyList<FalloutCellProcessEntry> Cells,
     IReadOnlyList<FalloutCellProcessTransition> Transitions, IReadOnlyList<FalloutCellProcessAttachment> Attachments,
-    FalloutCellProcessHandoff? ColdHandoff);
+    FalloutCellProcessHandoff? ColdHandoff, IReadOnlyList<FalloutCellSharedGraphChange> SharedGraphs);

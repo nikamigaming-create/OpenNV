@@ -321,6 +321,7 @@ void expression_statistics(const Frame& frame) {
     reply(frame, ERROR_SUCCESS, "", bytes);
 }
 void expression_command(const Frame& frame) {
+    command_table_validate_all();
     Reader reader{frame.payload}; const auto module = reader.get<std::uint64_t>(); const auto source = reader.get<std::uint32_t>(), opcode = reader.get<std::uint32_t>();
     const auto caller_id = reader.get<std::uint64_t>(), allocation = reader.get<std::uint64_t>();
     const auto script_data = reader.get<std::uint32_t>(), length = reader.get<std::uint32_t>();

@@ -51,11 +51,11 @@ internal sealed class NativeNvseHostSource : IDisposable
             if (gameVersion.FileMinorPart != 4 || gameVersion.FileBuildPart != 0 || gameVersion.FilePrivatePart != 525)
                 throw new NotSupportedException("Owned runtime has no reviewed New Vegas 1.4.0.525 target ABI declaration.");
             var packedNvse = Pack(nvseVersion.FileMinorPart, nvseVersion.FileBuildPart, nvseVersion.FilePrivatePart, 0);
-            // The reviewed public table layout is the selected xNVSE 6.4.9 SDK.
-            // Other declarations need their own exact layout review, not a newer
-            // fabricated version value in the same table.
-            if (packedNvse != Pack(6, 4, 9, 0))
-                throw new NotSupportedException("Owned xNVSE version has no reviewed 6.4.9 interface layout owner.");
+            // The published 6.4.8 and 6.4.9 host declarations have the same
+            // outer callable layout. Keep the actual selected version: nested
+            // interface revisions (notably Data v3/v4) have independent owners.
+            if (packedNvse != Pack(6, 4, 8, 0) && packedNvse != Pack(6, 4, 9, 0))
+                throw new NotSupportedException("Owned xNVSE version has no reviewed public host interface layout owner.");
             var packedRuntime = Pack(gameVersion.FileMinorPart, gameVersion.FileBuildPart, gameVersion.FilePrivatePart, sourceNoGore.Value ? 1 : 0);
             var result = new NativeNvseHostSource(runtime, runtimeSha256.ToUpperInvariant(), game, nvse,
                 nvseSha256.ToUpperInvariant(), dependency, stackIdentity.ToUpperInvariant(), sourceNoGore.Value,

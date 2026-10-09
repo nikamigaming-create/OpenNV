@@ -96,6 +96,8 @@ struct NvseRegisteredCommand {
     std::uint32_t original, opcode, execute, parse, evaluate, parameter_count, needs_parent, return_type;
     std::vector<NvseRegisteredParameter> parameter_declarations;
     std::unique_ptr<NvseParamInfo[]> owned_parameters;
+    NvseCommandInfo source_descriptor{};
+    std::string source_name, source_alias, source_help;
 };
 struct NvseRuntime {
     NvsePhase phase = NvsePhase::mapped;

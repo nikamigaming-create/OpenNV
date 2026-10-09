@@ -73,6 +73,7 @@ public partial class RuntimeCoordinator
             referenceEvents = _nativeReferenceEvents?.State,
             rigidBodies = detailed ? CaptureNativeRigidBodies() : null,
             nativePluginRetirementFailure = _nativePluginRetirementFailure,
+            nativeData = _nativePluginCampaign?.DataExecutionState,
             modelConstraints = detailed ? _nativeReferencePresentation?.Nodes.SelectMany(reference =>
                 OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<RuntimeNifHingeJoint>(reference.Value)
                     .Select(joint => new { reference = reference.Key.ToString(), joint = joint.State })).ToArray() : null,
@@ -328,6 +329,7 @@ public partial class RuntimeCoordinator
         _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId);
         _nativeReferences.ConfigureActualProcessRuntime(FalloutActorProcessRuntimeDeclaration.ForExecutable(
             FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId);
+        _nativeReferences.ConfigureCampaignSharedScripts(_nativeReferences.CampaignPlayerRuntimeSource, null);
         _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId);
         _nativeReferences.ConfigureSourceProcessQueues(FalloutActorProcessQueueDeclaration.ForExecutable(
             FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId);
@@ -381,6 +383,7 @@ public partial class RuntimeCoordinator
             if (_nativeSessionTransitioning) { CancelNativeLauncherEntry(); return; }
             var stack = _nativePluginStack ??
                 throw new InvalidOperationException("Native plugin stack was not indexed.");
+            menu.BindIndexedSource(stack);
             if (_nativeOpeningControls is not null) CreateNativeQuestScripts();
             menu.SetReady(stack, _nativeOpeningRestore is not null);
             if (_continueAfterRestart && _nativeOpeningRestore is not null)
@@ -552,6 +555,7 @@ public partial class RuntimeCoordinator
                 FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId,
                 restore.State.ActorProcessRuntime ?? throw new InvalidDataException("Current process runtime continuation is absent."),
                 restore.State.ActorProcessCommon ?? throw new InvalidDataException("Current common process continuation is absent."));
+            _nativeReferences.ConfigureCampaignSharedScripts(_nativeReferences.CampaignPlayerRuntimeSource, restore.State.SharedScriptState);
             _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId,
                 restore.State.ActorProcesses ?? throw new InvalidDataException("Current campaign has no actor process continuation."));
             _nativeReferences.ConfigureSourceProcessQueues(FalloutActorProcessQueueDeclaration.ForExecutable(
@@ -1261,7 +1265,8 @@ public partial class RuntimeCoordinator
         _nativePlayer.Configure(_configuration, transform);
         _nativePlayer.ConfigureInputControls(_nativeScriptStorage?.Controls ??
             throw new InvalidOperationException("Native input has no profile control owner."),
-            key => _nativeQuestScripts?.Scripts.Events.IsKeyPressed(key) == true);
+            key => _nativeQuestScripts?.Scripts.Events.IsKeyPressed(key) == true,
+            (_nativeDirectInput ?? throw new NotSupportedException("Player has no actual complete native input owner.")).State);
         _nativePlayer.ConfigureLocomotion(_nativePluginStack!, () => _nativeOpeningStageDriver?.Vitals);
         _nativePlayer.ConfigurePresentation(_nativePluginStack!, _nativeInventory,
             () => _nativeOpeningStageDriver!.PlayerAppearance, () => NativeAmbient(_nativeActiveCell!.Cell),
@@ -1345,13 +1350,19 @@ public partial class RuntimeCoordinator
         // This owner is part of the load transaction. Native bridge dispatch
         // logs _Ready exceptions without propagating them to that transaction.
         _nativeOpeningStageDriver.InitializeOwnedState();
+        _nativeOpeningStageDriver.AttachSourceMainScriptCaller();
         _nativeOpeningStageDriver.PublishPendingSourceRestMenu();
         _nativeOpeningStageDriver.AttachInterfaceActivationFrames();
         _nativeOpeningStageDriver.AttachSourceCombatGroups();
         AttachNativeExperienceHud(_nativeOpeningStageDriver);
         _nativeImageSpaceClock = new(_nativeImageSpaceState);
         AddChild(_nativeImageSpaceClock);
-        _nativeGameTimeAdapter!.StartSourceGameplayFrames();
+        var nativeCampaign = _nativePluginCampaign ?? throw new NotSupportedException("Gameplay has no actual native Data owner.");
+        _nativeGameTimeAdapter!.BindSourceDataFrame(
+            receipt => nativeCampaign.BeginDataFrame(receipt.Mutation),
+            receipt => nativeCampaign.EndDataFrame(receipt.Mutation));
+        _nativeGameTimeAdapter.StartSourceGameplayFrames();
+        _nativeOpeningStageDriver.StartSourceMainScriptCaller();
         GD.Print(
             $"OPENNV_NATIVE_PLAYER_START reference={_nativeReferences!.PlayerMoves.Next?.Destination} " +
             $"startupQuest={_nativeStartingQuest!.FormKey} startupStage={_nativeQuestState!.Stage(_nativeStartingQuest.FormKey)} " +

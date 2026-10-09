@@ -5,6 +5,7 @@ constexpr DWORD nvse_missing_owner_exception = 0xe04e5653U;
 NvseRuntime& nvse_owner() {
     if (!state || GetCurrentThreadId() != state->thread || !state->nvse || state->calls.empty())
         throw Fatal(ERROR_INVALID_THREAD_ID, "NVSE callback lacks its actual module/call/thread owner.");
+    data_sync_if_bound();
     return *state->nvse;
 }
 struct NvseInvocation {
@@ -13,6 +14,8 @@ struct NvseInvocation {
         if (owner.invocation_depth >= max_call_depth)
             throw Fatal(ERROR_STACK_OVERFLOW, "Original NVSE invocation/callback depth exceeded its native owner.");
         ++owner.invocation_depth;
+        try { data_sync_if_bound(); }
+        catch (...) { --owner.invocation_depth; throw; }
     }
     ~NvseInvocation() { --owner.invocation_depth; }
 };
@@ -116,6 +119,7 @@ void nvse_load_only() {
 bool nvse_register(NvseCommandInfo* pointer, std::uint8_t return_type, std::uint32_t required_version) {
     nvse_load_only();
     const auto raw = nvse_copy(pointer);
+    const auto source_name = nvse_string(raw.name, false), source_alias = nvse_string(raw.alias, true), source_help = nvse_string(raw.help, true);
     nvse_executable(raw.execute, true); nvse_executable(raw.evaluate, true);
     if (address(raw.parse) != nvse_expression_parser) nvse_executable(raw.parse, true);
     Bytes bytes; bytes.put(address(pointer)); bytes.put(raw.opcode);
@@ -145,6 +149,7 @@ bool nvse_register(NvseCommandInfo* pointer, std::uint8_t return_type, std::uint
             declaration.owned_parameters[index] = {parameter.name_address ? parameter.name.c_str() : nullptr, parameter.type, parameter.optional};
         }
     }
+    declaration.source_descriptor = raw; declaration.source_name = source_name; declaration.source_alias = source_alias; declaration.source_help = source_help;
     state->nvse->commands.push_back(std::move(declaration));
     return true;
 }
@@ -162,10 +167,12 @@ void* __cdecl nvse_query_interface(std::uint32_t id) {
         auto& owner = nvse_owner(); Bytes bytes; bytes.put(id);
         const auto admitted = nvse_host(NvseHostCall::query_interface, bytes);
         if (!admitted) return nullptr;
+        if (id == 3 && admitted == 2) return command_table_interface_address();
         if (id == 2 && admitted == 4) return &owner.tables->messaging;
         if (id == 0 && admitted == 2) return &owner.tables->serialization;
         if ((id == 4 && admitted == 1) || (id == 5 && admitted == 2)) return values_interface(id);
         if (id == 6 && admitted == 1) return source_script_interface_address();
+        if (id == 7 && (admitted == 3 || admitted == 4)) return data_interface_address(admitted);
         throw Fatal(ERROR_INVALID_DATA, "NVSE interface reply has no first-party native owner.");
     });
 }
@@ -179,10 +186,12 @@ const char* __cdecl nvse_runtime_directory() { return nvse_adapter([] { return n
 void __cdecl nvse_expression_utils(void* destination) { nvse_adapter([&] { expression_initialize(destination); }); }
 
 void nvse_check_call(const CallReceipt& receipt) {
+    command_table_validate_all();
     if (callback_fault.load()) throw Fatal(callback_fault.load(), state->callback_reason[0] ? state->callback_reason : "NVSE callback ownership failed.");
     if (receipt.exception_code) throw Fatal(receipt.exception_code, "Original NVSE module raised a structured exception.");
     if (receipt.stack_delta != 0 || receipt.preserved_registers != 7)
         throw Fatal(ERROR_INVALID_DATA, "Original NVSE ABI violated stack or EBX/ESI/EDI preservation.");
+    data_sync_if_bound();
 }
 bool nvse_equal(const std::string& first, const std::string& second) {
     // Public identifiers here use ASCII folding. Keep other raw declaration
@@ -296,9 +305,10 @@ void load_nvse(const Frame& frame) {
     Reader reader{frame.payload}; const auto path = path_from_utf8(reader.text());
     const auto directory = path_from_utf8(reader.text());
     const auto nvse_version = reader.get<std::uint32_t>(), runtime_version = reader.get<std::uint32_t>();
-    const auto no_gore = reader.get<std::uint32_t>(), budget = reader.get<std::uint32_t>(); reader.finish();
+    const auto no_gore = reader.get<std::uint32_t>(), budget = reader.get<std::uint32_t>();
+    const auto source_handle = reader.get<std::uint32_t>(); reader.finish();
     if (state->module || state->nvse_image_attempted) { reply(frame, ERROR_BUSY, "This generation already owns or attempted its one NVSE image lifetime."); return; }
-    if (!nvse_version || !runtime_version || no_gore > 1 || !budget || budget > 1048576) {
+    if (!nvse_version || !runtime_version || no_gore > 1 || !budget || budget > 1048576 || !source_handle || source_handle == nvse_invalid_handle) {
         reply(frame, ERROR_INVALID_DATA, "NVSE source ABI fields or work budget are invalid."); return;
     }
     if (!state->io) { reply(frame, ERROR_ACCESS_DENIED, "Original loader entry has no pre-entry private I/O restriction."); return; }
@@ -346,14 +356,18 @@ void load_nvse(const Frame& frame) {
     nvse_executable(query); nvse_executable(load_function);
     state->module_id = ++state->next_module;
     if (state->module_id >= nvse_invalid_handle) throw Fatal(ERROR_ARITHMETIC_OVERFLOW, "NVSE plugin handle identity exhausted.");
-    owner->handle = static_cast<std::uint32_t>(state->module_id); owner->query = address(query); owner->load = address(load_function);
+    owner->handle = source_handle; owner->query = address(query); owner->load = address(load_function);
     state->nvse = std::move(owner);
     Bytes data; data.put(state->module_id); data.put(address(loaded)); data.put(state->nvse->handle);
     data.put(address(state->nvse->tables)); data.put(state->nvse->query); data.put(state->nvse->load);
     reply(frame, ERROR_SUCCESS, "", data);
 }
 void nvse_stage(const Frame& frame, bool load_stage) {
-    Reader reader{frame.payload}; const auto module = reader.get<std::uint64_t>(); reader.finish();
+    Reader reader{frame.payload}; const auto module = reader.get<std::uint64_t>();
+    const auto load_handle = load_stage ? reader.get<std::uint32_t>() : 0U; reader.finish();
+    if (load_stage && (!load_handle || load_handle == nvse_invalid_handle)) {
+        reply(frame, ERROR_INVALID_DATA, "NVSE Load has no actual source handle rank."); return;
+    }
     if (!state->module || !state->nvse || module != state->module_id || !state->calls.empty()) {
         reply(frame, ERROR_INVALID_HANDLE, "NVSE stage lacks its empty current module/call owner."); return;
     }
@@ -362,12 +376,13 @@ void nvse_stage(const Frame& frame, bool load_stage) {
         reply(frame, ERROR_INVALID_STATE, "NVSE Query/Load source phase is not eligible."); return;
     }
     state->transaction_callbacks = 0; owner.interface_calls = 0;
+    if (load_stage) owner.handle = load_handle;
     state->calls.push_back(frame.header.id); owner.phase = load_stage ? NvsePhase::loading : NvsePhase::querying;
     CallReceipt receipt{};
     { NvseInvocation invocation(owner);
       if (load_stage) InvokeNvseOneGuarded(reinterpret_cast<void*>(owner.load), address(&owner.tables->core), &receipt);
       else InvokeGuarded(reinterpret_cast<void*>(owner.query), Abi::cdecl_call, nullptr, address(&owner.tables->core), address(&owner.info), &receipt); }
-    state->calls.pop_back(); nvse_check_call(receipt);
+    nvse_check_call(receipt); state->calls.pop_back();
     // MSVC's bool return lives in AL; the upper bits of EAX are not specified.
     const auto returned = receipt.result & 0xffU;
     if (returned > 1) throw Fatal(ERROR_INVALID_DATA, "Original NVSE bool return is invalid.");
@@ -382,8 +397,10 @@ void nvse_message(const Frame& frame) {
     Reader reader{frame.payload}; const auto module = reader.get<std::uint64_t>();
     const auto type = reader.get<std::uint32_t>(), length = reader.get<std::uint32_t>();
     const auto* payload = reader.bytes(length); reader.finish();
-    if (!state->nvse || module != state->module_id || !state->calls.empty() || state->nvse->phase != NvsePhase::loaded_true) {
-        reply(frame, ERROR_INVALID_STATE, "NVSE message lacks an initialized empty module/call owner."); return;
+    if (!state->nvse || module != state->module_id || !state->calls.empty() ||
+        !(state->nvse->phase == NvsePhase::loaded_true ||
+          (state->nvse->phase == NvsePhase::queried_true && type == 23 && length == 0))) {
+        reply(frame, ERROR_INVALID_STATE, "NVSE message lacks its actual queried/loaded empty module/call owner."); return;
     }
     state->calls.push_back(frame.header.id); state->nvse->interface_calls = 0; state->transaction_callbacks = 0;
     // The actual native pointer is valid for this synchronous callback only.
@@ -438,7 +455,8 @@ void unload_nvse(const Frame& frame) {
     state->nvse->tables = nullptr;
     if (!VirtualQuery(tables, &memory, sizeof(memory)) || memory.State != MEM_FREE)
         throw Fatal(ERROR_INVALID_DATA, "NVSE interface mapping remains after retirement.");
-    expression_retire(); values_heap_retire(); values_retire(); source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
+    state->data.reset();
+    command_table_retire(); expression_retire(); values_heap_retire(); values_retire(); source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
     Bytes data; nvse_counters(data); data.put(0U); data.put(0U);
     state->nvse.reset(); state->module = nullptr; state->module_id = 0;
     reply(frame, ERROR_SUCCESS, "", data);

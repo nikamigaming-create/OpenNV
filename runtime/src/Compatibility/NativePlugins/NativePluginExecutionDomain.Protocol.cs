@@ -43,7 +43,7 @@ internal sealed class NativePluginDomainRefusal(uint code, uint liveModules, str
 internal sealed partial class NativePluginExecutionDomain
 {
     internal const uint ProtocolMagic = 0x444e564f;
-    internal const uint ProtocolVersion = 13;
+    internal const uint ProtocolVersion = 16;
     internal const int MaximumPayload = 65536;
     internal const int NativeMaximumDepth = 8;
     private const int HeaderLength = 48;

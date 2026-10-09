@@ -44,6 +44,7 @@ public partial class RuntimeCoordinator
         var owner = RequireNativeSourceCellAttachment(root);
         if (!_nativeReferences!.CellProcesses.ReadAttachment(owner.Identity).RootPublished) owner.Publish(events);
         PublishNativeQueuedActorCallers(root);
+        if (root == _nativeCurrentCellRoot) _nativePlacementRevision = _nativeReferences!.PlacementRevision;
     }
     private void AttachCurrentNativePlayerCell()
     {
@@ -63,6 +64,7 @@ public partial class RuntimeCoordinator
     {
         ReapExteriorQueuedNpcRetirements();
         RequireNativeQueuedActorCallersSettledForCapture();
+        RequireNativeSharedGridSettledForCapture();
         ObservePendingNativeCellRetirements();
         foreach (var (root, owner) in _nativeCellProcessAttachments)
         {
@@ -119,6 +121,7 @@ public partial class RuntimeCoordinator
             foreach (var child in attachment.Children.Where(child => child.Phase != FalloutCellProcessChildPhase.Retired))
                 owner.ObserveRetiredChild(child.Source.Reference);
             owner.ObserveRetiredRoot();
+            ForgetRetiredNativeSharedGrid(identity);
             _nativeCellProcessRetirements.Remove(identity);
             _nativeCellProcessAttachments.Remove(identity);
             foreach (var cell in attachment.CellEpochs.Keys)

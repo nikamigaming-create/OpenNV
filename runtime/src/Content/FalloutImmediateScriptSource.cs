@@ -12,6 +12,7 @@ internal sealed record FalloutImmediateScriptSource(string EngineSha256, string 
         "shared-synchronous-interpreter-top-level-cache-nested-fresh-owner-restore-parent;" +
         "source-run-float32-seconds;immediate-object-script-player-fresh-event-list-seconds-zero;" +
         "filtered-block-has-no-compiled-execution-receipt;actual-entered-cursor-retirement-only";
+    internal static string CurrentContractSha256 => FalloutAdvancementRuntimeReceipt.Hash(Contract);
     internal string Identity => FalloutAdvancementRuntimeReceipt.Hash(EngineSha256 + "\0" + RuntimeSha256 + "\0" + ContractSha256);
     internal static FalloutImmediateScriptSource Read(FalloutAdvancementRuntimeReceipt runtime)
     {

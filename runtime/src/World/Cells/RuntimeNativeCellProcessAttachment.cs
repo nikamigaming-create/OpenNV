@@ -8,12 +8,13 @@ namespace OpenNV.Runtime.World.Cells;
 // Real Godot object lifetime supplies the native side of the C# CELL protocol.
 // A completed model callback, resource registration or detached root cannot
 // certify native tree publication. No complete-scene/parity claim lives here.
-internal sealed class RuntimeNativeCellProcessAttachment
+internal sealed partial class RuntimeNativeCellProcessAttachment
 {
     private readonly FalloutReferenceWorld _world;
     private readonly Node3D _root;
     private readonly ulong _rootIdentity;
     private RuntimeNativeReferenceEvents? _sourceEvents;
+    private FalloutCellScene _publishedScene;
     internal Guid Identity { get; }
     internal RuntimeNativeCellProcessAttachment(FalloutReferenceWorld world, Node3D root,
         FalloutCellScene scene, IReadOnlyList<FalloutFormKey> cells, Guid? coldAttachment = null)
@@ -21,7 +22,7 @@ internal sealed class RuntimeNativeCellProcessAttachment
         ArgumentNullException.ThrowIfNull(world); ArgumentNullException.ThrowIfNull(root);
         if (!GodotObject.IsInstanceValid(root) || root.IsQueuedForDeletion())
             throw new InvalidDataException("CELL attachment root is already retired.");
-        _world = world; _root = root; _rootIdentity = root.GetInstanceId();
+        _world = world; _root = root; _rootIdentity = root.GetInstanceId(); _publishedScene = scene;
         if (coldAttachment is { } previous)
         {
             world.CellProcesses.BeginColdAttachment(previous, scene, cells, _rootIdentity); Identity = previous;
@@ -100,7 +101,9 @@ internal sealed class RuntimeNativeCellProcessAttachment
                 _world.CellProcesses.FailChild(Identity, child.Source, error, "actual-native-source-reference-event-consumer-failed"); throw;
             }
         }
-        RequireLiveChildNodes();
+        BindNativeCellConsumers();
+        RequireLiveChildNodes(); RequireLiveNativeCells();
+        _world.CellProcesses.RequireCurrentAttachmentSelection(Identity, _publishedScene);
         _world.CellProcesses.PublishRoot(Identity, _rootIdentity, "actual-source-CELL-root-and-children-published-in-native-tree");
         _sourceEvents = sourceEvents;
     }
@@ -109,7 +112,8 @@ internal sealed class RuntimeNativeCellProcessAttachment
         RequireRoot(); var attachment = _world.CellProcesses.ReadAttachment(Identity);
         if (!attachment.RootPublished || attachment.Retired || attachment.NativeRoot != _rootIdentity || !_root.IsInsideTree())
             throw new NotSupportedException("CELL capture still requires genuine current native publication.");
-        RequireLiveChildNodes();
+        _world.CellProcesses.RequireCurrentAttachmentSelection(Identity, _publishedScene);
+        RequireLiveChildNodes(); RequireLiveNativeCells();
         foreach (var child in attachment.Children)
         {
             var events = _sourceEvents ?? throw new NotSupportedException("Current CELL capture lost its actual reference-event consumer.");
@@ -159,6 +163,8 @@ internal sealed class RuntimeNativeCellProcessAttachment
     {
         if (GodotObject.IsInstanceValid(GodotObject.InstanceFromId(_rootIdentity)))
             throw new InvalidOperationException("CELL root retirement still owns its native object.");
+        RequestFailedTerrainConstructionRetirement();
+        ObserveRetiredNativeCells();
         _world.CellProcesses.CompleteDetach(Identity, _rootIdentity, "actual-native-CELL-root-and-source-child-consumers-retired");
     }
     private FalloutCellProcessChild Child(FalloutFormKey reference) => _world.CellProcesses.ReadAttachment(Identity).Children

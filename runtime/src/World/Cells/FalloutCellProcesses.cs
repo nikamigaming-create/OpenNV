@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.World.Cells;
 // resident set or draw count never synthesizes an original CELL phase.
 internal sealed partial class FalloutCellProcesses : IDisposable
 {
-    internal const string Schema = "opennv-source-cell-processes/v1";
+    internal const string Schema = "opennv-source-cell-processes/v2";
     private readonly FalloutCellProcessDeclaration _declaration;
     private readonly FalloutCellProcessSource _source;
     private readonly string _stack;
@@ -27,7 +27,7 @@ internal sealed partial class FalloutCellProcesses : IDisposable
         _declaration = declaration; _source = new(records, currentPlacement); _stack = stack;
         if (restore is not null) Restore(restore);
     }
-    internal string? SaveBlocker => _busy ? "source-cell-process-operation-in-flight" :
+    internal string? SaveBlocker => SharedGraphSaveBlocker ?? (_busy ? "source-cell-process-operation-in-flight" :
         _cold?.AwaitingNativeAttachments.Count > 0 ? "source-cell-cold-native-attachment-not-rebound" :
         _cells.Values.FirstOrDefault(cell => cell.Failure is not null) is { } failed ?
             "source-cell-process:" + failed.Source.Cell + ":" + failed.Failure :
@@ -37,7 +37,7 @@ internal sealed partial class FalloutCellProcesses : IDisposable
         _attachments.Values.FirstOrDefault(attachment => !attachment.Retired &&
             (!attachment.RootPublished || attachment.Failure is not null || attachment.Children.Any(child =>
                 child.Phase is FalloutCellProcessChildPhase.Pending or FalloutCellProcessChildPhase.Failed))) is { } pending ?
-            "source-cell-native-attachment-incomplete:" + pending.Identity : null;
+            "source-cell-native-attachment-incomplete:" + pending.Identity : null);
     internal object State => new
     {
         source = _declaration.Contract,
@@ -46,6 +46,7 @@ internal sealed partial class FalloutCellProcesses : IDisposable
         cells = _cells.Values.ToArray(),
         attachments = _attachments.Values.ToArray(),
         transitions = _transitions.ToArray(),
+        sharedGraphs = _sharedGraphs.ToArray(),
         cold = _cold,
         saveBlocker = SaveBlocker,
         parity = "unmeasured"
@@ -102,7 +103,7 @@ internal sealed partial class FalloutCellProcesses : IDisposable
             _attachments.Add(identity, new(identity, _process, epochs, actualRoot,
                 children.Select(child => new FalloutCellProcessChild(child.Source, child.Placement.Copy(),
                     FalloutCellProcessChildPhase.Pending, [], null, null)).ToArray(),
-                false, false, null));
+                sourceCells.Select(ConstructNativeCell).ToArray(), false, false, null));
             foreach (var (cell, epoch) in epochs)
             {
                 _cells[cell] = Require(cell) with { Epoch = epoch };
@@ -140,6 +141,7 @@ internal sealed partial class FalloutCellProcesses : IDisposable
             {
                 NativeRoot = actualRoot,
                 CellEpochs = epochs,
+                CellConsumers = sourceCells.Select(ConstructNativeCell).ToArray(),
                 Children = children.Select(child => new FalloutCellProcessChild(child.Source, child.Placement.Copy(),
                     FalloutCellProcessChildPhase.Pending, [], null, null)).ToArray()
             };
@@ -173,7 +175,8 @@ internal sealed partial class FalloutCellProcesses : IDisposable
     private void RequireExclusiveNativeRoot(ulong actualRoot)
     {
         if (_attachments.Values.Any(attachment => !attachment.Retired &&
-            (attachment.NativeRoot == actualRoot || attachment.Children.Any(child => child.NativeObjects.Contains(actualRoot)))))
+            (attachment.NativeRoot == actualRoot || attachment.Children.Any(child => child.NativeObjects.Contains(actualRoot)) ||
+                attachment.CellConsumers.Any(cell => cell.NativeObjects.Contains(actualRoot)))))
             throw new InvalidDataException("CELL native root is still owned by another source attachment or child.");
     }
     private FalloutCellProcessEntry RequireHealthy(FalloutFormKey cell)
@@ -210,6 +213,7 @@ internal sealed partial class FalloutCellProcesses : IDisposable
         if (_disposed) return;
         if (_busy || _attachments.Values.Any(attachment => !attachment.Retired &&
             (attachment.NativeRoot != 0 || attachment.Children.Any(child => child.NativeObjects.Count != 0) ||
+                attachment.CellConsumers.Any(cell => cell.NativeObjects.Count != 0) ||
                 _cold?.AwaitingNativeAttachments.Contains(attachment.Identity) != true)))
             throw new NotSupportedException("Actual CELL lifecycle still owns live native attachment consumers.");
         // An unpublished cold intent owns no new-process native objects. Its

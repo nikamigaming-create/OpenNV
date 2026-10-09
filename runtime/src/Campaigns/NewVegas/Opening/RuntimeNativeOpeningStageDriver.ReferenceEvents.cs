@@ -305,7 +305,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _scripts.Session.SetPlayerYoung(effect.Enable);
                 break;
             case FalloutReferenceEffectKind.Achievement:
-                _scripts.Session.AddAchievement(effect.Value);
+                _scripts.References!.AddSourceAchievement(effect.Value);
                 break;
             case FalloutReferenceEffectKind.AddItem or FalloutReferenceEffectKind.EquipItem or FalloutReferenceEffectKind.RemoveItem:
                 InventoryCommands.Execute(new(effect.Kind switch

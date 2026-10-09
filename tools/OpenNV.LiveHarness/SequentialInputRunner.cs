@@ -21,7 +21,7 @@ internal sealed record GodotInputReplayConfiguration(string OpenNvCommandDirecto
 internal sealed record ScheduledOrdinaryInput(long Microseconds, JsonElement Input);
 
 internal sealed record OrdinaryInputDeliveryConfiguration(string CommandDirectory, string Engine,
-    int ProcessId, JsonElement Input, int ReceiptTimeoutMilliseconds = 5000);
+    int ProcessId, JsonElement Input, int ReceiptTimeoutMilliseconds = 5000, bool ExpectedRecipientExit = false);
 
 // This runner records acknowledged ordinary adapter requests, then delivers that
 // private tape to the existing Godot input owner. Retail state is never gameplay
@@ -75,7 +75,7 @@ internal static class SequentialInputRunner
         {
             var command = configuration.Engine == "retail" ? RetailCommand(configuration.Input) :
                 JsonSerializer.Serialize(configuration.Input, Program.Json);
-            var receipt = await client.SendAsync(command, cancellation).ConfigureAwait(false);
+            var receipt = await client.SendAsync(command, cancellation, configuration.ExpectedRecipientExit).ConfigureAwait(false);
             return new { schema = "opennv-ordinary-input-delivery/v1", engine = configuration.Engine,
                 process = configuration.ProcessId, input = configuration.Input, receipt,
                 ordinaryInput = true, gameplayEffect = "unverified", framesRecorded = false };

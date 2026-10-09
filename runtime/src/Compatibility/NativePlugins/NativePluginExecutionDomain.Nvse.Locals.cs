@@ -57,7 +57,7 @@ internal sealed partial class NativePluginExecutionDomain
     internal void RetireNvseLocalContext(NativeNvsePlugin plugin, NativeNvseLocalContext context)
     {
         VerifyNvseLocalContext(plugin, context); RequireNvseEmptyCall();
-        if (context.Active != 0 || context.Transfer is not null) throw new InvalidOperationException("An actual command still owns this event-list storage.");
+        if (context.Active != 0 || context.Transfer is not null || context.Retainers != 0) throw new InvalidOperationException("An actual command still owns this event-list storage.");
         try
         {
             using var reader = Exchange(NativePluginDomainOperation.NvseLocalRetire, Payload(writer => { writer.Write(plugin.Module); writer.Write(context.Id); }));

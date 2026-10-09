@@ -40,6 +40,7 @@ internal sealed partial class RuntimeNativeScriptEvents(FalloutScriptEvents even
     public override void _ExitTree()
     {
         Active = false;
+        UnbindDirectInput();
         if (!_drawConnected) return;
         RenderingServer.FramePreDraw -= BeforeDraw;
         _drawConnected = false;
@@ -70,6 +71,7 @@ internal sealed partial class RuntimeNativeScriptEvents(FalloutScriptEvents even
 
     public override void _Input(InputEvent input)
     {
+        if (_directInput is not null) return;
         if (!Active || invoker() is not { } invoke) return;
         foreach (var (key, down) in NativeScriptKeys.Read(input))
         {
