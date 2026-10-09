@@ -1,5 +1,15 @@
 # Product status
 
+The October 9 gameplay batch restores visible Pip-Boy Stats rows and note/quest
+bodies, adds resident Local Map and discovered-destination transfer, binds
+F1/F2/F3 page input, and retains companion perks separately from player perks.
+Large outdoor telemetry packets span ring slots without dropping fields. Ordinary
+retail input recording and C# delivery have run; the two saves have not been
+established as a matched gameplay checkpoint. Travel time/followers, complete
+inventory actions, source statistics, compiled scripts, AI, procedural trees,
+full native mods and complete campaigns remain open. See current-work.md for
+the active implementation and next runtime failures.
+
 Source-declared PC menu shortcuts share the native mouse actions. Rendered-menu
 input now clips the actual source triangles against the six camera planes and
 actual displayed/canvas clip extent, preserving material and reflection culling.

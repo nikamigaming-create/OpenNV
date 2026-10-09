@@ -5,14 +5,17 @@ namespace OpenNV.Runtime.Diagnostics.Parity;
 
 internal sealed class ParitySharedMemoryRing : IDisposable
 {
-    private static readonly byte[] Magic = "ONVPRNG1"u8.ToArray();
-    private const int Version = 1;
+    private static readonly byte[] Magic = "ONVPRNG2"u8.ToArray();
+    private const int Version = 2;
     private const int HeaderBytes = 64;
     private const int SlotHeaderBytes = 16;
+    private const int DirectoryEntryBytes = 16;
     private const long VersionOffset = 8;
     private const long CapacityOffset = 12;
     private const long SlotBytesOffset = 16;
     private const long WriteSequenceOffset = 24;
+    private const long NextSlotOffset = 32;
+    private const long EarliestSequenceOffset = 40;
     private readonly MemoryMappedFile _map;
     private readonly MemoryMappedViewAccessor _view;
     private readonly Mutex _mutex;
@@ -46,7 +49,7 @@ internal sealed class ParitySharedMemoryRing : IDisposable
             throw new ArgumentException("Parity shared-memory configuration is invalid.");
         var mapName = $"Local\\OpenNV.Parity.{channel}";
         var mutexName = $"Local\\OpenNV.Parity.{channel}.Mutex";
-        var totalBytes = checked(HeaderBytes + (long)capacity * (SlotHeaderBytes + slotBytes));
+        var totalBytes = checked(HeaderBytes + (long)capacity * (DirectoryEntryBytes + SlotHeaderBytes + slotBytes));
         var map = MemoryMappedFile.CreateOrOpen(
             mapName,
             totalBytes,
@@ -60,18 +63,35 @@ internal sealed class ParitySharedMemoryRing : IDisposable
 
     internal long Publish(ReadOnlySpan<byte> packet)
     {
-        if (packet.Length == 0 || packet.Length > _slotBytes)
-            throw new InvalidDataException("Parity telemetry packet does not fit its shared-memory slot.");
+        var fragments = checked((int)(((long)packet.Length + _slotBytes - 1) / _slotBytes));
+        if (packet.Length == 0 || fragments > _capacity)
+            throw new InvalidDataException($"Parity telemetry packet ({packet.Length} bytes) exceeds the ring's {_capacity * (long)_slotBytes}-byte capacity.");
         Enter();
         try
         {
             var sequence = checked(_view.ReadInt64(WriteSequenceOffset) + 1);
-            var slot = (int)((sequence - 1) % _capacity);
-            var offset = SlotOffset(slot);
-            _view.Write(offset + 8, 0);
-            _view.WriteArray(offset + SlotHeaderBytes, packet.ToArray(), 0, packet.Length);
-            _view.Write(offset, sequence);
-            _view.Write(offset + 8, packet.Length);
+            var first = _view.ReadInt32(NextSlotOffset);
+            var earliest = Math.Max(_view.ReadInt64(EarliestSequenceOffset), sequence - _capacity + 1);
+            var bytes = packet.ToArray();
+            // One complete frame may span several slots. Never truncate its
+            // fields to fit; publish the directory entry only after every byte.
+            for (var fragment = 0; fragment < fragments; fragment++)
+            {
+                var offset = SlotOffset((first + fragment) % _capacity);
+                earliest = Math.Max(earliest, _view.ReadInt64(offset) + 1);
+                var sourceOffset = fragment * _slotBytes;
+                var count = Math.Min(_slotBytes, bytes.Length - sourceOffset);
+                _view.WriteArray(offset + SlotHeaderBytes, bytes, sourceOffset, count);
+                _view.Write(offset, sequence);
+                _view.Write(offset + 8, count);
+                _view.Write(offset + 12, fragment);
+            }
+            var entry = DirectoryOffset(sequence);
+            _view.Write(entry, sequence);
+            _view.Write(entry + 8, first);
+            _view.Write(entry + 12, packet.Length);
+            _view.Write(NextSlotOffset, (first + fragments) % _capacity);
+            _view.Write(EarliestSequenceOffset, Math.Max(1, earliest));
             _view.Write(WriteSequenceOffset, sequence);
             _view.Flush();
             return sequence;
@@ -79,6 +99,16 @@ internal sealed class ParitySharedMemoryRing : IDisposable
         finally
         {
             _mutex.ReleaseMutex();
+        }
+    }
+
+    internal long EarliestAvailableSequence
+    {
+        get
+        {
+            Enter();
+            try { return _view.ReadInt64(EarliestSequenceOffset); }
+            finally { _mutex.ReleaseMutex(); }
         }
     }
 
@@ -115,7 +145,7 @@ internal sealed class ParitySharedMemoryRing : IDisposable
                 packet = [];
                 return false;
             }
-            var earliest = Math.Max(1, latest - _capacity + 1);
+            var earliest = _view.ReadInt64(EarliestSequenceOffset);
             if (requestedSequence < earliest)
                 throw new InvalidDataException(
                     $"Parity telemetry overrun: requested {requestedSequence}, earliest retained {earliest}, latest {latest}.");
@@ -142,6 +172,8 @@ internal sealed class ParitySharedMemoryRing : IDisposable
                 _view.Write(CapacityOffset, _capacity);
                 _view.Write(SlotBytesOffset, _slotBytes);
                 _view.Write(WriteSequenceOffset, 0L);
+                _view.Write(NextSlotOffset, 0);
+                _view.Write(EarliestSequenceOffset, 1L);
                 _view.Flush();
                 return;
             }
@@ -158,18 +190,32 @@ internal sealed class ParitySharedMemoryRing : IDisposable
     }
 
     private long SlotOffset(int slot) =>
-        HeaderBytes + (long)slot * (SlotHeaderBytes + _slotBytes);
+        HeaderBytes + (long)_capacity * DirectoryEntryBytes + (long)slot * (SlotHeaderBytes + _slotBytes);
+
+    private long DirectoryOffset(long sequence) =>
+        HeaderBytes + (sequence - 1) % _capacity * DirectoryEntryBytes;
 
     private byte[] ReadLocked(long sequence)
     {
-        var slot = (int)((sequence - 1) % _capacity);
-        var offset = SlotOffset(slot);
-        var committedSequence = _view.ReadInt64(offset);
-        var length = _view.ReadInt32(offset + 8);
-        if (committedSequence != sequence || length <= 0 || length > _slotBytes)
-            throw new InvalidDataException("Parity shared-memory slot is incomplete.");
+        var entry = DirectoryOffset(sequence);
+        var committedSequence = _view.ReadInt64(entry);
+        var first = _view.ReadInt32(entry + 8);
+        var length = _view.ReadInt32(entry + 12);
+        if (committedSequence != sequence || first < 0 || first >= _capacity ||
+            length <= 0 || length > (long)_slotBytes * _capacity)
+            throw new InvalidDataException("Parity shared-memory frame directory is incomplete.");
         var packet = new byte[length];
-        _view.ReadArray(offset + SlotHeaderBytes, packet, 0, length);
+        var destination = 0;
+        for (var fragment = 0; destination < length; fragment++)
+        {
+            var offset = SlotOffset((first + fragment) % _capacity);
+            var count = Math.Min(_slotBytes, length - destination);
+            if (_view.ReadInt64(offset) != sequence || _view.ReadInt32(offset + 8) != count ||
+                _view.ReadInt32(offset + 12) != fragment)
+                throw new InvalidDataException("Parity shared-memory frame is incomplete or overwritten.");
+            _view.ReadArray(offset + SlotHeaderBytes, packet, destination, count);
+            destination += count;
+        }
         return packet;
     }
 

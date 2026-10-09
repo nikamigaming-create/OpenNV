@@ -57,6 +57,14 @@ internal static class SoundCaptureDiagnosticContracts
             { End: FalloutAnimationSoundEnd.Cancelled, Error: "Actual emitter retirement." },
             "Cancellation diagnostics erased the actual reason or converted it to completion.");
         Reject(cancelled, caller, cancellation, sound, FalloutAnimationSoundEnd.Cancelled);
+        var unloaded = new FalloutAnimationSoundEvents(caller);
+        var unloadGeneration = unloaded.Begin(records, selected, "Sound: FixturePartial", true, [source.LogicalPath]);
+        unloaded.BindMedia(unloadGeneration, new string('a', 64));
+        unloaded.Complete(unloadGeneration, FalloutAnimationSoundEnd.SourceUnloaded);
+        var coldUnloaded = new FalloutAnimationSoundEvents(caller);
+        coldUnloaded.Restore(unloaded.Capture(), records);
+        Require(coldUnloaded.CaptureDiagnostic.Ready && coldUnloaded.Events.Single().End == FalloutAnimationSoundEnd.SourceUnloaded,
+            "Committed source unload lost its terminal audio state during cold capture.");
         var opaque = new FalloutAnimationSoundEvents(caller);
         opaque.Fail(null, "Missing source owner.");
         Require(!opaque.CaptureDiagnostic.Ready && opaque.CaptureDiagnostic.Unsettled.Count == 0 &&

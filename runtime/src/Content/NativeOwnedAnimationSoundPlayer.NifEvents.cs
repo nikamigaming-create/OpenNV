@@ -128,11 +128,27 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         else ((AudioStreamPlayer)node).Stop();
     }
 
+    internal static void UnloadSourceLoops(Node root)
+    {
+        foreach (var owner in OpenNV.Runtime.SceneGraph.NodeTraversal.SelfAndDescendants<NativeOwnedAnimationSoundPlayer>(root))
+        {
+            // A committed cell/reference unload ends its attached loops. Finite
+            // voices retain their independent host until actual playback ends.
+            foreach (var (node, voice) in owner._voices.ToArray())
+            {
+                if (voice.Loop.Mode == FalloutSoundLoopMode.None) continue;
+                StopVoice(node);
+                owner.FinishVoice(node, FalloutAnimationSoundEnd.SourceUnloaded);
+            }
+        }
+    }
+
     private void FinishVoice(Node node, FalloutAnimationSoundEnd end = FalloutAnimationSoundEnd.NativeFinished)
     {
         if (!_voices.TryGetValue(node, out var voice)) return;
         var completed = end is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped;
-        if (completed && voice.Pcm is { } pcm)
+        var settled = completed || end == FalloutAnimationSoundEnd.SourceUnloaded;
+        if (settled && voice.Pcm is { } pcm)
         {
             try { pcm.RequireHealthy(); }
             catch (InvalidDataException error)
@@ -152,7 +168,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         if (voice.Generation is { } generation)
         {
             if (end == FalloutAnimationSoundEnd.NativeFinished) voice.SaveDrain?.NativeFinished();
-            if (completed) _events!.Complete(generation, end);
+            if (settled) _events!.Complete(generation, end);
             else
             {
                 _lostCaptureAtRetirement = true;

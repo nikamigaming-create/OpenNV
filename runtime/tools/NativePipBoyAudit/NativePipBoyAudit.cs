@@ -45,9 +45,10 @@ public partial class NativePipBoyAudit : Node
             AddChild(menu);
             var failures = new List<string>();
             var selections = new[] { (FalloutPipBoyPage.Stats, 0), (FalloutPipBoyPage.Stats, 1),
-                (FalloutPipBoyPage.Stats, 2), (FalloutPipBoyPage.Stats, 3),
+                (FalloutPipBoyPage.Stats, 2), (FalloutPipBoyPage.Stats, 3), (FalloutPipBoyPage.Stats, 4),
                 (FalloutPipBoyPage.Items, 0), (FalloutPipBoyPage.Items, 1), (FalloutPipBoyPage.Items, 2),
-                (FalloutPipBoyPage.Items, 3), (FalloutPipBoyPage.Items, 4), (FalloutPipBoyPage.Data, 1), (FalloutPipBoyPage.Data, 2) };
+                (FalloutPipBoyPage.Items, 3), (FalloutPipBoyPage.Items, 4), (FalloutPipBoyPage.Data, 1), (FalloutPipBoyPage.Data, 2),
+                (FalloutPipBoyPage.Data, 3) };
             foreach (var (page, index) in selections)
             {
                 menu.Select(page, index);

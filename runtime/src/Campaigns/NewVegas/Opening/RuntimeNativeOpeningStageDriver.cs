@@ -242,6 +242,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _playerAbilities.Synchronize();
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
+        _experience.BindPerkConditions(PlayerExperienceCondition);
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);

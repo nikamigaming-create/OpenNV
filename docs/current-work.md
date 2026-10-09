@@ -2,48 +2,93 @@
 
 ## Active objective
 
-Make standalone Fallout: New Vegas, Fallout 3, TTW and the selected mod stack
-playable from user-owned files in flat/OpenXR. JAM, JIP LN, JohnnyGuitar and their
-actual dependencies remain required. The current direction prioritizes working
-code, main updates and usable builds. Previous OpenNV saves and schemas do not
-constrain implementation. Compile and run practical smoke checks after meaningful
-code batches; do not substitute proof reports or new test projects for gameplay.
+Make Fallout: New Vegas, Fallout 3, TTW and the selected mod stack playable from
+owned files in flat/OpenXR. JAM, JIP LN, JohnnyGuitar and their dependencies remain
+in scope. Prioritize substantial working code, main publication and usable
+builds. Existing saves do not constrain implementation. Use practical smoke
+checks after code batches and reuse the existing retail observation/input tools.
 
 ## Current implementation
 
-The launcher accepts an installed game's folder and selects the matching game,
-remembers that selection, and displays launch errors immediately. Enabled mod
-packages now enter their base game's runtime after actual source/dependency
-resolution; descriptive mod-readiness metadata no longer disables Play. Missing
-files and reached unsupported behavior still report their actual errors.
+The launcher accepts the installed game's folder, selects the matching game,
+remembers the selection and presents launch failures. Selected mods enter after
+actual file/dependency resolution; catalog readiness labels do not disable Play.
+The retail native input recorder and C# replay are integrated. Menu feedback
+finishes during pause without blocking a save.
 
-The isolated `codex/retail-gameplay-replay` batch brings the existing retail input
-recorder and native C# replay onto current main without the unfinished native
-integration branch. Keyboard replay includes all number keys and Ctrl; the retail
-adapter covers the standard physical keyboard and five mouse buttons. Mouse
-leases release on expiry, stop and runtime retirement. The replay CLI selects the
-recorded tape's mode automatically; a recording without a matched checkpoint does
-not claim matching gameplay state.
+The Pip-Boy batch initializes the original Stats list extents, binds note/quest
+bodies, supports indexed XML text expressions and scrolling, lists acquired
+perks and quest items, and exposes CND/RAD/EFF and General summaries. F1/F2/F3
+open/switch pages, retaining each page's tab. Local Map renders resident geometry.
+World Map selects discovered destinations and enters the shared cell-transfer
+owner through the source-linked arrival point. Nearby map discovery persists
+and awards the source XP setting. Notes
+use their original text/image/sound/voice records. Radio selection can be stopped.
 
-Finite menu feedback continues during pause and does not block a world save.
-Actor, dialogue and looping audio keep their own continuation requirements.
+Teammate perk commands retain a separate player-owned list. Current teammates
+consume it through existing perk effects; dismissal removes that inheritance.
+Saves restore both lists independently.
 
-## Live result and remaining work
+The parity transport now spans a large frame across shared-memory slots instead
+of rejecting an outdoor scene. Canonical bytes remain unchanged. Live comparison
+can attach to the retained ring, and publication continues while menus pause the
+world. The input client tolerates brief Windows state-publication sharing races.
 
-Ordinary launcher Play and Continue loaded the owned FNV installation. Ordinary
-input advanced the opening to stage 110, released furniture and restored movement
-and looking. The run exposed a save interruption caused by an active Vito-Matic
-menu cue; the batch fixes that presentation/audio boundary. The source parser
-still rejects the broken SMG's stale, unbalanced SCTX. Its original compiled
-program must be executed through the general compiled-script path.
+## Actual run and next work
 
-The external retail diagnostic loader reached a Steam startup error. A normal
-Steam launch opened retail, but no fresh recording/replay pair has completed.
-Complete FNV, FO3, TTW, native DLL compatibility, all mod behavior and headset
-playability are not established by this opening run.
+The real retail executable runs through the established native device bridge.
+Steam's stale active-process registration caused the earlier startup failure;
+restarting Steam repaired it. Ordinary retail menu input was recorded and replayed
+through C#. Independent saves are not a matched gameplay checkpoint, and adapter
+acknowledgements do not establish exact native consumption timing.
 
-The larger `codex/full-runtime-owner-integration` checkout is still being edited
-by the separate active chat. Its unfinished native startup, compiled scripts and
-world changes are not merged merely because they exist. Publish working changes
-through a PR, update main, and advance the runnable test package. The next work is
-ordinary progression and the reached compiled-script/native-mod failures.
+Ordinary source and packaged Release Continue loaded the outdoor save. Skills,
+note text and the resident Local Map were rendered and inspected. Recorded retail
+F1/F2/F3 inputs replayed through C# and left the actual menu on Data. The owned
+Pip-Boy and companion checks and byte-transport check pass. The packaged World
+Map control accepts the actual click and displays the source undiscovered-location
+message. Map canvases sit behind the authored art and interactive controls.
+Ordinary walking and jumping reach the next prepared exterior region. Quicksave
+finishes after the outstanding finite ambient voices complete.
+
+The same outdoor run found a malformed/unsupported model aborting the whole
+exterior prefetch. Invalid model data now reaches the ordinary per-reference
+failure owner, which retains the missing reference and its error, while the
+remaining cell preparation can continue.
+
+A packaged cold load exposed a native crash in Mesh.CreateTrimeshShape while
+constructing packed NIF collision. The builder now supplies validated source
+triangles directly to the concave physics shape, preserving vertex transforms,
+winding, backface collision and face-material order without a temporary render
+mesh. A fresh packaged Continue loads all 49 resident cells and remains alive.
+
+Walking into Goodsprings discovery range exposed the shared XP owner's refusal
+of Skilled's XP entry. The existing integration branch's numeric perk dispatcher
+now serves RewardXP and discovery here, with live player conditions and upward
+rounding. A fresh packaged Continue discovers Goodsprings, awards 9 XP with
+Skilled, and the ordinary Pip-Boy Travel click reaches its source-linked arrival
+in another cell. Loading closes, floor contact settles and movement resumes.
+Multiple simultaneous XP entries and full level-up remain separately unbound.
+
+The reached post-travel save refusal came from old dust-devil PCM loops being
+cancelled when the previous cell root retired. Committed cell/reference unloads
+now explicitly end attached loops and retain that terminal state for saving.
+Finite audio tails keep their independent native host; unexpected destruction
+still reports cancellation. The destination NPC controller also adopts a matching
+retained package failure only through its current registered binding; the old
+controller cannot leave the new one unable to save. Post-transfer save/Continue
+both succeed in the packaged runtime: a fresh process restores the destination
+cell, discovered marker and 9 XP, with no pending actor procedure captures.
+
+Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
+statistics and all inventory actions remain incomplete. Outdoor play still
+exposes compiled-script, AI procedure, SpeedTree and LOD material omissions.
+Complete FNV/FO3/TTW campaigns, every selected native DLL/mod, and headset
+playability are not established. Do not equate these menu fixes with completion.
+
+The separate codex/full-runtime-owner-integration checkout owns the larger
+compiled gameplay/native startup candidate and is actively modified. Reuse its
+working implementations without publishing its unfinished native startup as
+game support. The runnable batch is tracked in PR 185 and the FNV Test shortcut
+selects its packaged Release. The next gameplay owners are the reached outdoor
+script and exterior-streaming failures and complete fast-travel consequences.

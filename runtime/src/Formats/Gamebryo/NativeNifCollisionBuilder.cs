@@ -141,18 +141,24 @@ internal static partial class NativeNifCollisionBuilder
                         data.SubShapes.Sum(value => checked((long)value.VertexCount)) != data.Vertices.Length)
                         throw new InvalidDataException(
                             $"NIF packed data {data.Block.Index} sub-shape vertices do not cover its vertex table.");
-                    var mesh = new ArrayMesh();
-                    var arrays = new Godot.Collections.Array();
-                    arrays.Resize((int)Mesh.ArrayType.Max);
-                    arrays[(int)Mesh.ArrayType.Vertex] = data.Vertices.Select(vertex =>
-                        ConvertScaled(vertex, packed.Scale, unitsToMetres)).ToArray();
-                    arrays[(int)Mesh.ArrayType.Index] = data.Triangles.SelectMany(triangle =>
-                        new[] { (int)triangle.A, (int)triangle.B, (int)triangle.C }).ToArray();
-                    mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-                    var concave = mesh.CreateTrimeshShape() as ConcavePolygonShape3D ??
-                        throw new InvalidOperationException(
-                            $"Godot could not create packed collision shape {packed.Block.Index}.");
-                    concave.BackfaceCollision = true;
+                    var vertices = data.Vertices.Select(vertex => ConvertScaled(vertex, packed.Scale, unitsToMetres)).ToArray();
+                    if (data.Triangles.Length == 0 || vertices.Any(vertex => !vertex.IsFinite()))
+                        throw new InvalidDataException($"NIF packed collision {packed.Block.Index} has no triangles or non-finite vertices.");
+                    var faces = new Vector3[checked(data.Triangles.Length * 3)];
+                    for (var index = 0; index < data.Triangles.Length; index++)
+                    {
+                        var triangle = data.Triangles[index];
+                        if (triangle.A >= vertices.Length || triangle.B >= vertices.Length || triangle.C >= vertices.Length)
+                            throw new InvalidDataException($"NIF packed collision {packed.Block.Index} triangle {index} exceeds its vertex table.");
+                        faces[index * 3] = vertices[triangle.A];
+                        faces[index * 3 + 1] = vertices[triangle.B];
+                        faces[index * 3 + 2] = vertices[triangle.C];
+                    }
+                    // Collision already owns exact source triangles. Build its
+                    // physics shape directly, without a temporary rendered mesh
+                    // and native Mesh.CreateTrimeshShape resource lifetime.
+                    var concave = new ConcavePolygonShape3D { BackfaceCollision = true };
+                    concave.SetFaces(faces);
                     var materials = (data.SubShapes.Length != 0 ? data.SubShapes : packed.SubShapes).Select(value => value.Material).Distinct().ToArray();
                     var packedNode = Add(owner, output, concave, localTransform, packed.Block.Index, materials.Length == 1 ? materials[0] : null);
                     if (materials.Length > 1)

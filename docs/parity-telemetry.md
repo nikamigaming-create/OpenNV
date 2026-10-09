@@ -84,8 +84,11 @@ node merely because their wall-clock timestamps are close.
 `--parity-channel <name>` enables the OpenNV physics-frame producer. The named
 Windows mapping is `Local\OpenNV.Parity.<name>`. It uses 128 one-megabyte slots
 by default, keeps a monotonically increasing ring sequence, and commits the
-payload before publishing the new sequence. Readers request every sequence in
-order. If a requested sequence has already been overwritten, the read fails;
+payload before publishing the new sequence. Ring version 2 splits a large scene
+across slots and reassembles its complete original packet. The live comparator
+starts at each ring's oldest retained frame and reports those starting sequences;
+it does not require attachment before the games start. Readers then request every
+sequence in order. If a requested sequence has already been overwritten, the read fails;
 telemetry loss is never reported as parity.
 
 Adding `--parity-capture <new-private-directory>` samples at the render

@@ -124,6 +124,12 @@ public partial class NativePcmPlaybackAudit
             if (!GetTree().Paused || !drain.ObserveFinished() ||
                 events.Events.Single(entry => entry.Generation == finiteGeneration).End != FalloutAnimationSoundEnd.NativeFinished)
                 throw new InvalidDataException("Actual finite save drain was blocked by PCM suspension or lost native Finished.");
+            NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(actor);
+            NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(coldActor);
+            if (owner.ActiveNativeVoices.Count != 0 || coldOwner.ActiveNativeVoices.Count != 0 ||
+                events.Capture().Events.Single(entry => entry.Generation == generation).End != FalloutAnimationSoundEnd.SourceUnloaded ||
+                coldEvents.Capture().Events.Single().End != FalloutAnimationSoundEnd.SourceUnloaded)
+                throw new InvalidDataException("Committed source unload retained a native loop or lost its saved terminal state.");
         }
         finally
         {

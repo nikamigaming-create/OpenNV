@@ -59,6 +59,18 @@ internal static class OwnedCompanionGameplayProbe
         if (!cold.Get(actor).PlayerTeammate || !cold.AcquiredPerks(actor).Contains(suite) || cold.ActorFactions(actor)[teammateFaction] != 1 ||
             cold.CombatStyle(actor)?.WeaponRestriction != 2 || !cold.IgnoresFriendlyHits(actor))
             throw new InvalidDataException("Cold restoration lost recruited actor state.");
+        var player = records.RuntimeFormKey(0x14);
+        world.ChangePerk(actor, suite, false);
+        world.ChangePerk(player, suite, true, forTeammates: true);
+        if (world.AcquiredPerks(player).Contains(suite) || !world.AcquiredPerks(player, forTeammates: true).Contains(suite) ||
+            !world.AcquiredPerks(actor).Contains(suite))
+            throw new InvalidDataException("The shared teammate perk leaked into the player's own list or missed the teammate.");
+        world.SetPlayerTeammate(actor, false);
+        if (world.AcquiredPerks(actor).Contains(suite)) throw new InvalidDataException("A dismissed teammate retained the shared perk.");
+        world.SetPlayerTeammate(actor, true);
+        cold.RestoreActorOverrides(world.CaptureActorOverrides());
+        if (!cold.AcquiredPerks(actor).Contains(suite) || !cold.AcquiredPerks(player, forTeammates: true).Contains(suite))
+            throw new InvalidDataException("Cold restoration lost the shared teammate perk.");
         world.DamageActor(actor, records.RuntimeFormKey(0x14), 0, 20, 1, 1, globals);
         var combatEnd = scripts.Dispatch(actor, "OnCombatEnd");
         if (combatEnd.Error is not null || world.Health(actor).Current != world.Health(actor).Base || world.ActorValue(actor, "aggression") != 0)

@@ -41,7 +41,11 @@ internal partial class RuntimeNativeReferencePresentation : Node
                 UnbindObjectAnimation(key);
                 GamebryoReferenceEnableRuntime.Apply(node, false);
                 if (retainWarm?.Invoke(previous[key]) == true) _warmNodes.Add(key, (previous[key], node));
-                else node.QueueFree();
+                else
+                {
+                    NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
+                    node.QueueFree();
+                }
             }
             _enabled.Remove(key); _fadeGeometry.Remove(key); _publishedOpacity.Remove(key);
         }
@@ -55,6 +59,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
             else if (retainWarm?.Invoke(warm.Source) != true)
             {
                 _warmNodes.Remove(key);
+                NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(warm.Node);
                 warm.Node.QueueFree();
             }
         }

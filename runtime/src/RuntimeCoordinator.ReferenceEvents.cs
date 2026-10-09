@@ -13,6 +13,7 @@ public partial class RuntimeCoordinator
     public override void _Process(double delta)
     {
         if (GetTree().Paused) return;
+        AdvanceNativePipBoyWorld(delta);
         AdvanceNativePlayerMoves();
         AdvanceNativeDeath();
         if (_nativeDeathPresented) return;

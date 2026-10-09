@@ -199,11 +199,28 @@ internal sealed class NativeOwnedMenuTree
             return literal.StartsWith("entity_-", StringComparison.Ordinal)
                 ? (_stringSetting ?? throw new NotSupportedException("Owned string setting has no record owner."))(literal[8..]) : literal;
         }
-        var copy = property.Elements().SingleOrDefault();
+        var operations = property.Elements().ToArray();
+        var copy = operations.LastOrDefault();
         if (copy?.Name != "copy" || copy.Attribute("src") is not { } source || copy.Attribute("trait") is not { } key)
             throw new NotSupportedException("Owned text expression has an unbound operation.");
         if (!_evaluatingText.Add((tile, trait))) throw new InvalidDataException("Owned text expression contains a cycle.");
-        try { return String(Owner(tile, source.Value), key.Value); }
+        try
+        {
+            var selectedTrait = key.Value;
+            if (operations.Length > 1)
+            {
+                // Native menus select strings using a numeric expression
+                // followed by a copy of a trait prefix, e.g. _Title_3.
+                if (!selectedTrait.EndsWith('_'))
+                    throw new NotSupportedException("Owned text expression has no indexed trait selector.");
+                var selector = FalloutMenuXml.Number(new XElement("selector", operations[..^1]),
+                    (owner, name) => Number(Owner(tile, owner), name));
+                if (!float.IsFinite(selector) || selector != MathF.Truncate(selector) || selector < int.MinValue || (double)selector > int.MaxValue)
+                    throw new InvalidDataException("Owned text selector is not an integral trait index.");
+                selectedTrait += ((int)selector).ToString(CultureInfo.InvariantCulture);
+            }
+            return String(Owner(tile, source.Value), selectedTrait);
+        }
         finally { _evaluatingText.Remove((tile, trait)); }
     }
 
@@ -401,7 +418,7 @@ internal sealed class NativeOwnedMenuTree
         var color = TileColor(tile);
         return new(color.R * brightness / 255, color.G * brightness / 255, color.B * brightness / 255, alpha);
     }
-    internal void Draw(CanvasItem canvas)
+    internal void Draw(CanvasItem canvas, Func<XElement, bool>? drawTile = null)
     {
         Rect2? Clip(XElement tile)
         {
@@ -420,7 +437,7 @@ internal sealed class NativeOwnedMenuTree
             if (!visible) return;
             var color = DrawingColor(tile);
             var clip = Clip(tile);
-            if (tile.Element("filename") is not null)
+            if (drawTile?.Invoke(tile) != false && tile.Element("filename") is not null)
             {
                 if (!_art.TryGetValue(tile, out var art)) _art[tile] = art = NativeOwnedUiArt.Read(tile, Filename(tile));
                 var size = new Vector2(Number(tile, "width"), Number(tile, "height"));
@@ -448,7 +465,7 @@ internal sealed class NativeOwnedMenuTree
                         NativeUiClip.Draw(canvas, art.Texture, sample.Destination, sample.Source, tint, clip);
                 }
             }
-            if (tile.Name == "text")
+            if (drawTile?.Invoke(tile) != false && tile.Name == "text")
             {
                 var font = Font(tile);
                 var origin = Position(tile);
