@@ -3,7 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace OpenNV.Runtime.Content;
 
-internal static class FalloutScriptLocals
+internal enum FalloutScriptDeclarationAuthority { Automatic, SourceDiagnostic, CompiledVanilla }
+
+internal static partial class FalloutScriptLocals
 {
     internal static FalloutPluginRecord? AttachedScript(FalloutPluginStack records, FalloutPluginRecord owner)
     {
@@ -24,43 +26,44 @@ internal static class FalloutScriptLocals
             StringComparer.OrdinalIgnoreCase);
 
     internal static IReadOnlyDictionary<string, FalloutScriptLocalDeclaration> ReadDeclarations(
-        FalloutPluginRecord script)
+        FalloutPluginRecord script, FalloutScriptDeclarationAuthority authority = FalloutScriptDeclarationAuthority.Automatic)
     {
         if (script.Signature != "SCPT") throw new InvalidDataException("Variable declaration owner is not SCPT.");
         var variables = new Dictionary<string, (uint Index, byte Flags)>(StringComparer.OrdinalIgnoreCase);
-        var declarations = new Dictionary<uint, (byte Flags, string Name)>();
-        uint? index = null;
-        byte flags = 0;
-        foreach (var field in script.ReadSubrecords())
+        var fields = script.ReadSubrecords().ToArray();
+        var metadata = ReadMetadata(script);
+        foreach (var entry in metadata)
         {
-            if (field.Signature == "SLSD")
-            {
-                if (field.Data.Length != 24 || index is not null)
-                    throw new InvalidDataException("Script variable declaration extent or name is invalid.");
-                index = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span);
-                flags = field.Data.Span[16];
-            }
-            if (field.Signature != "SCVR") continue;
-            if (index is null) throw new InvalidDataException("Script variable identity is ambiguous.");
-            var name = FalloutDialogueTopic.Text(field.Data.Span);
-            if (declarations.TryGetValue(index.Value, out var previous))
-            {
-                // SLSD has an index, one flag byte and 19 unused bytes. Owned
-                // duplicate declarations contain different compiler padding;
-                // only the slot, name and flags define the same local.
-                if (previous.Name != name || previous.Flags != flags)
-                    throw new InvalidDataException($"Conflicting duplicate script variable slot {index} in {script.FormKey}.");
-            }
-            else
-            {
-                if (!variables.TryAdd(name, (index.Value, flags)))
-                    throw new InvalidDataException("Script variable identity is ambiguous.");
-                declarations.Add(index.Value, (flags, name));
-            }
-            index = null;
+            var value = (entry.Index, entry.StorageFlags);
+            // Name lookup, like index lookup, returns the first matching entry.
+            variables.TryAdd(entry.Name, value);
         }
-        if (index is not null) throw new InvalidDataException("Script variable has no source name.");
 
+        if (authority == FalloutScriptDeclarationAuthority.CompiledVanilla ||
+            authority == FalloutScriptDeclarationAuthority.Automatic && fields.Any(field => field.Signature == "SCDA"))
+        {
+            // Vanilla event-list storage is scalar; SCRV marks the reference
+            // slots in that same compiled list. SCTX cannot change the kind or
+            // introduce a slot when instructions are present. Extension handle
+            // registration/operations require their own reached opcode owner.
+            var references = new HashSet<uint>();
+            foreach (var field in fields.Where(field => field.Signature == "SCRV"))
+            {
+                if (field.Data.Length != 4)
+                    throw new InvalidDataException("Compiled reference local extent is invalid.");
+                var slot = BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span);
+                if (slot == 0 || !metadata.Any(entry => entry.Index == slot && entry.StorageFlags == 0))
+                    throw new InvalidDataException("Compiled reference local has no floating SLSD slot.");
+                references.Add(slot);
+            }
+            if (metadata.Any(value => value.Index == 0 || value.StorageFlags > 1))
+                throw new NotSupportedException("Compiled local storage flag/index has no vanilla scalar owner.");
+            return variables.ToDictionary(pair => pair.Key,
+                pair => new FalloutScriptLocalDeclaration(pair.Value.Index,
+                    references.Contains(pair.Value.Index) && !HasMixedStorage(script, pair.Value.Index)
+                        ? FalloutScriptLocalKind.Form : FalloutScriptLocalKind.Number),
+                StringComparer.OrdinalIgnoreCase);
+        }
         var sourceKinds = ReadSourceKinds(script);
         if (sourceKinds.Keys.Any(name => !variables.ContainsKey(name)))
             throw new InvalidDataException("Script source declares a variable without a compiled slot.");
@@ -68,6 +71,36 @@ internal static class FalloutScriptLocals
             pair => new FalloutScriptLocalDeclaration(pair.Value.Index,
                 sourceKinds.GetValueOrDefault(pair.Key, FalloutScriptLocalKind.Number)),
             StringComparer.OrdinalIgnoreCase);
+    }
+
+    internal static void RequireCompiledValue(FalloutPluginRecord script, uint slot, double value)
+    {
+        if (!double.IsFinite(value)) throw new InvalidDataException("Compiled local is not finite.");
+        if (!ReadStorageKinds(script, FalloutScriptDeclarationAuthority.CompiledVanilla).TryGetValue(slot, out var kind))
+            throw new InvalidDataException("Compiled local has no declared storage slot.");
+        // A numeric declaration and a reference declaration can address the
+        // same original cell. Its backing payload is Float64 bits; the reached
+        // operand/assignment supplies the view and validates its own domain.
+        if (HasMixedStorage(script, slot)) return;
+        var fields = script.ReadSubrecords().Where(field => field.Signature == "SLSD" &&
+            field.Data.Length == 24 && BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) == slot).ToArray();
+        var integer = fields[0].Data.Span[16] == 1;
+        if ((integer || kind == FalloutScriptLocalKind.Form) &&
+            (value != Math.Truncate(value) || value < (integer ? int.MinValue : 0d) ||
+                value > (integer ? int.MaxValue : uint.MaxValue)))
+            throw new NotSupportedException("Compiled local value is outside its exact scalar storage domain.");
+    }
+
+    internal static IReadOnlyDictionary<uint, FalloutScriptLocalKind> ReadStorageKinds(FalloutPluginRecord script,
+        FalloutScriptDeclarationAuthority authority = FalloutScriptDeclarationAuthority.Automatic)
+    {
+        var named = ReadDeclarations(script, authority);
+        var compiled = authority == FalloutScriptDeclarationAuthority.CompiledVanilla ||
+            authority == FalloutScriptDeclarationAuthority.Automatic && script.ReadSubrecords().Any(field => field.Signature == "SCDA");
+        return ReadMetadata(script).GroupBy(entry => entry.Index).ToDictionary(group => group.Key,
+            group => compiled ? HasReferenceView(script, group.Key) && !HasMixedStorage(script, group.Key)
+                ? FalloutScriptLocalKind.Form : FalloutScriptLocalKind.Number
+                : group.Select(entry => named[entry.Name].Kind).Distinct().Single());
     }
 
     private static IReadOnlyDictionary<string, FalloutScriptLocalKind> ReadSourceKinds(

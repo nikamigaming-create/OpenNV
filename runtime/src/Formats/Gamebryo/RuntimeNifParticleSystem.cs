@@ -14,7 +14,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private readonly Dictionary<string, float> _rates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _speeds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _lifespans = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, float> _remainders = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _remainders = new(StringComparer.Ordinal);
     private readonly Dictionary<int, FalloutNifMeshData> _meshes = [];
     private IReadOnlyDictionary<int, Node3D> _nodes = null!;
     private readonly Random _random = new();
@@ -44,9 +44,15 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     internal long DeathCount { get; private set; }
     internal double SimulatedSeconds { get; private set; }
     internal bool EmissionEnabled { get; set; } = true;
-    internal void SetOutputEncoding(bool encoded) => ((ShaderMaterial)_draw.Mesh.SurfaceGetMaterial(0)).SetShaderParameter("source_store_encoded", encoded);
+    internal void SetOutputEncoding(bool encoded)
+    {
+        RequireConfigured();
+        ((ShaderMaterial)_draw.Mesh.SurfaceGetMaterial(0)).SetShaderParameter("source_store_encoded", encoded);
+    }
     internal void ResetCompleted()
     {
+        RequireConfigured();
+        if (_advancing) throw new InvalidOperationException("Particle reset cannot reenter an advancing lifetime.");
         if (ActiveCount != 0) throw new InvalidOperationException("Live particles cannot be recycled.");
         foreach (var modifier in _modifiers)
         {
@@ -57,6 +63,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             { _speeds[modifier.Name] = mesh.Emitter.Speed; _lifespans[modifier.Name] = mesh.Emitter.Life; }
         }
         foreach (var name in _rates.Keys) { _rates[name] = 0; _remainders[name] = 0; }
+        ResetLifecycle();
         BirthCount = DeathCount = CollisionCount = 0; SimulatedSeconds = 0; EmissionEnabled = false;
         _nextBoundsRefresh = 0; _publishedBounds = default;
     }
@@ -84,9 +91,21 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         }).ToArray(),
         // Packed fields preserve float32 values, including signed zero; the
         // render trace stores these exact bytes alongside the MultiMesh buffer.
+        lifecycle = LifecycleObservation,
+        keyColorOwners = _keyColors.Select(pair => new
+        {
+            modifier = pair.Key,
+            data = pair.Value.Source.Block.Index,
+            keys = pair.Value.Source.Keys.Length,
+            interpolation = pair.Value.Source.Interpolation,
+            clock = "particle-age / birth-lifespan",
+            nativeRetailParity = "unverified"
+        }).ToArray(),
         encoding = "particle:position3,velocity3,age,life,radius,angle,spin,color4:f32-le;texture:i32-le",
         state = System.Convert.ToBase64String(ObservationBytes()),
-        missing = new[] { "retail-particle-identity-and-random-sequence-join", "retail-modifier-motion-parity", "retail-plane-sidedness-and-moving-plane-response" },
+        missing = new[] { "retail-particle-identity-and-random-sequence-join", "retail-modifier-motion-parity", "retail-plane-sidedness-and-moving-plane-response",
+            "retail-sphere-initial-overlap-and-moving-collider-response", "retail-color-curve-clock-and-pixels", "retail-spawn-variation-equations",
+            "retail-particle-birth-event-time-and-order", "complete-particle-lifecycle-event-sink" },
     };
 
     private byte[] ObservationBytes()
@@ -109,7 +128,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     {
         internal Vector3 Position, Velocity;
         internal float Age, Life, Radius, Angle, Spin, MotionSeconds;
-        internal int Texture;
+        internal int Texture, SourceBirth;
+        internal long Identity, ParentIdentity;
+        internal ushort Generation;
         internal Color InitialColor;
     }
 
@@ -120,7 +141,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             b.Position.DistanceSquaredTo(Origin).CompareTo(a.Position.DistanceSquaredTo(Origin));
     }
 
-    internal void Configure(FalloutNifFile file, FalloutNifParticleSystem source,
+    private void ConfigureSource(FalloutNifFile file, FalloutNifParticleSystem source,
         IReadOnlyDictionary<int, Node3D> nodes, Material material, float units)
     {
         _source = source; _nodes = nodes; _units = units;
@@ -140,6 +161,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 throw new InvalidDataException("Particle modifier has a wrong target or duplicate name.");
             switch (modifier)
             {
+                case FalloutNifParticleColorKeys colors:
+                    ConfigureColorKeys(file, colors);
+                    break;
                 case FalloutNifParticleColliderManager manager:
                     ConfigureColliders(file, manager);
                     break;
@@ -169,16 +193,16 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                         _meshes.TryAdd(index, data);
                     }
                     break;
-                case FalloutNifParticleAgeDeath { SpawnOnDeath: true }:
-                case FalloutNifParticleSpawn { Generations: > 0 }:
-                    throw new NotSupportedException("Secondary particle generations have no runtime owner.");
+                case FalloutNifParticleSpawn spawn:
+                    FalloutNifParticleSpawnRules.Validate(spawn);
+                    break;
                 case FalloutNifParticleGrowFade grow when grow.Grow < 0 || grow.Fade < 0 || grow.Scale < 0:
                     throw new InvalidDataException("Particle growth contains a negative duration or scale.");
                 case FalloutNifParticleGravity gravity:
                     RequireNode(gravity.Object);
                     if (gravity.ForceType > 1 || gravity.Decay < 0 || gravity.Turbulence < 0 || gravity.TurbulenceScale < 0)
                         throw new NotSupportedException("Particle gravity has an invalid force, decay or turbulence declaration.");
-                    if (gravity.Turbulence > 0) _turbulence ??= new FastNoiseLite { Seed = _random.Next() };
+                    if (gravity.Turbulence > 0) _turbulence ??= CreateParticleTurbulence();
                     break;
                 case FalloutNifParticleDrag drag:
                     RequireNode(drag.Object);
@@ -192,6 +216,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                     break;
             }
         }
+        ConfigureSpawning(file);
         if (!_modifiers.OfType<FalloutNifParticleAgeDeath>().Any() ||
             !_modifiers.Any(value => value.Block.TypeName == "NiPSysPositionModifier") ||
             !_modifiers.OfType<FalloutNifParticleBounds>().Any())
@@ -201,22 +226,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         if (material is not ShaderMaterial shader || shader.ResourceName != NativeNifEffectMaterial.ResourceIdentity)
             throw new NotSupportedException("Particle material has no admitted source shader.");
         shader.SetShaderParameter("source_particle_atlas", _data.HasTextureIndices);
-        _draw = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseColors = true,
-            UseCustomData = true,
-            Mesh = new QuadMesh { Size = Vector2.One * 2, Material = shader },
-            InstanceCount = _data.Maximum,
-            VisibleInstanceCount = 0,
-        };
-        _visual = new MultiMeshInstance3D
-        {
-            Name = "SourceParticles",
-            Multimesh = _draw,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
-        };
-        AddChild(_visual);
+        ConfigureParticleDraw(shader);
         SetMeta("opennv_particle_source_capacity", _data.Maximum);
         SetMeta("opennv_particle_owner", "direct-nif-instance-simulation");
     }
@@ -237,39 +247,57 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
 
     internal RuntimeNifControllerChannel Bind(FalloutNifFile file, FalloutNifControllerLink link)
     {
+        RequireConfigured();
         if (link.ControllerType == "NiPSysEmitterLifeSpanCtlr" && link.Variable2.Length == 0 && _lifespans.ContainsKey(link.Variable1))
         {
             var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
             return new(time =>
             {
+                RequireConfigured();
                 var value = sampler.Sample(time);
-                if (value < 0) throw new InvalidDataException("Particle emitter lifespan is negative.");
+                if (!float.IsFinite(value) || value < 0) throw new InvalidDataException("Particle emitter lifespan is not finite/nonnegative.");
                 _lifespans[link.Variable1] = value;
             });
         }
         if (link.ControllerType == "NiPSysEmitterSpeedCtlr" && link.Variable2.Length == 0 && _speeds.ContainsKey(link.Variable1))
         {
             var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
-            return new(time => _speeds[link.Variable1] = sampler.Sample(time));
+            return new(time =>
+            {
+                RequireConfigured();
+                var speed = sampler.Sample(time);
+                if (!float.IsFinite(speed)) throw new InvalidDataException("Particle emitter speed is not finite.");
+                _speeds[link.Variable1] = speed;
+            });
         }
         if (!_active.ContainsKey(link.Variable1)) throw new InvalidDataException("Particle controller targets a missing modifier.");
         if (link.ControllerType == "NiPSysEmitterCtlr" && link.Variable2 == "BirthRate" && _rates.ContainsKey(link.Variable1))
         {
             var sampler = new FalloutNifFloatAnimation(file, link.Interpolator);
-            return new(time => _rates[link.Variable1] = Math.Max(0, sampler.Sample(time)));
+            return new(time =>
+            {
+                RequireConfigured();
+                var rate = sampler.Sample(time);
+                if (!float.IsFinite(rate)) throw new InvalidDataException("Particle emitter birth rate is not finite.");
+                _rates[link.Variable1] = Math.Max(0, rate);
+            });
         }
         if (link.ControllerType == "NiPSysEmitterCtlr" && link.Variable2 == "EmitterActive" && _rates.ContainsKey(link.Variable1) ||
             link.ControllerType == "NiPSysModifierActiveCtlr" && link.Variable2.Length == 0)
         {
             var sampler = new FalloutNifBoolAnimation(file, link.Interpolator);
-            return new(time => _active[link.Variable1] = sampler.Sample(time), sampler.BoundaryTimes);
+            return new(time =>
+            {
+                RequireConfigured();
+                _active[link.Variable1] = sampler.Sample(time);
+            }, sampler.BoundaryTimes);
         }
         throw new NotSupportedException($"Particle channel {link.Variable1}/{link.Variable2} is unsupported.");
     }
 
     public override void _Ready()
     {
-        if (_draw is null) throw new InvalidOperationException("Particle instance has no source configuration.");
+        RequireConfigured();
         if (_source.WorldSpace) { _visual.TopLevel = true; _visual.GlobalTransform = Transform3D.Identity; }
         ResetParentMotion();
     }
@@ -282,26 +310,31 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
 
     internal void Advance(float delta)
     {
+        RequireConfigured();
         if (!float.IsFinite(delta) || delta < 0) throw new ArgumentOutOfRangeException(nameof(delta));
-        var remaining = delta;
-        while (remaining > 0)
+        if (_advancing) throw new InvalidOperationException("Particle lifetime cannot reenter an advance.");
+        var end = SimulatedSeconds + delta;
+        if (!double.IsFinite(end)) throw new InvalidDataException("Particle lifetime clock overflowed.");
+        _advancing = true;
+        try
         {
-            var step = Math.Min(remaining, 1f / 60f);
-            Step(step); remaining -= step;
+            double remaining = delta;
+            while (remaining > 0)
+            {
+                var step = (float)Math.Min(remaining, 1f / 60f);
+                var next = remaining - step;
+                if (step <= 0 || next >= remaining)
+                    throw new InvalidDataException("Particle lifetime cannot represent advancing time.");
+                _stepOrdinal = checked(_stepOrdinal + 1);
+                Step(step); remaining = Math.Max(0, next); SimulatedSeconds += step;
+            }
+            SimulatedSeconds = end;
         }
-        SimulatedSeconds += delta;
+        finally { _advancing = false; }
     }
 
     private void Step(float delta)
     {
-        for (var i = ActiveCount - 1; i >= 0; i--)
-        {
-            _particles[i].Age += delta;
-            if (_particles[i].Age >= _particles[i].Life)
-            {
-                _particles[i] = _particles[--ActiveCount]; DeathCount++;
-            }
-        }
         for (var i = 0; i < ActiveCount; i++) _particles[i].MotionSeconds = delta;
         foreach (var modifier in _modifiers)
         {
@@ -309,13 +342,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             if (modifier is FalloutNifParticleVolumeEmitter or FalloutNifParticleMeshEmitter)
             {
                 if (!EmissionEnabled) continue;
-                var births = _remainders[modifier.Name] + _rates[modifier.Name] * delta;
-                var count = (int)births;
-                _remainders[modifier.Name] = births - count;
-                var available = Math.Min(count, _particles.Length - ActiveCount);
-                for (var i = 0; i < available; i++)
-                { Emit(modifier); _particles[ActiveCount - 1].MotionSeconds = delta; }
+                EmitScheduled(modifier, delta);
             }
+            else if (modifier is FalloutNifParticleAgeDeath age) AgeAndRetire(age, delta);
             else if (modifier is FalloutNifParticleColliderManager manager) Collide(manager);
             else if (modifier is FalloutNifParticleGravity gravity)
             {
@@ -435,6 +464,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             Life = Math.Max(float.Epsilon, Vary(_lifespans[emitter.Name], emitter.LifeVariation)),
             Radius = Math.Max(0, Vary(emitter.Radius, emitter.RadiusVariation)) * _units * transform.Basis.Scale.Abs().X,
             InitialColor = ToColor(emitter.Color),
+            SourceBirth = emitter.Block.Index,
             Texture = _data.Subtextures.Length == 0 ? 0 : _random.Next(_data.Subtextures.Length),
         };
         if (_source.WorldSpace && _parentSeconds > 0 && _parentVelocity is { } inherit && _active[inherit.Name])
@@ -445,7 +475,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             particle.Spin = rotation.Speed + rotation.SpeedVariation * Centered() * 2;
             if (rotation.RandomSign && _random.Next(2) == 0) particle.Spin = -particle.Spin;
         }
-        _particles[ActiveCount++] = particle; BirthCount++;
+        AppendParticle(particle, false, modifier.Block.Index, "emitter");
     }
 
     private FalloutNifVector3 Direction(FalloutNifParticleEmitter emitter)
@@ -482,6 +512,8 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
 
     internal void Publish()
     {
+        RequireConfigured();
+        if (_advancing) throw new InvalidOperationException("Particle publication cannot reenter an advancing lifetime.");
         if (_visibleCount != ActiveCount) { _draw.VisibleInstanceCount = ActiveCount; _visibleCount = ActiveCount; }
         if (ActiveCount == 0) return;
         var camera = GetViewport().GetCamera3D();
@@ -493,6 +525,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         {
             _distanceOrder.Origin = _source.WorldSpace ? camera.GlobalPosition : ToLocal(camera.GlobalPosition);
             Array.Sort(_particles, 0, ActiveCount, _distanceOrder);
+            ReindexParticles();
         }
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = -minimum;
@@ -506,9 +539,11 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 if (!_active[modifier.Name]) continue;
                 if (modifier is FalloutNifParticleGrowFade grow)
                 {
-                    radius *= GrowFadeScale(grow, particle.Age, particle.Life);
+                    radius *= GrowFadeScale(grow, particle.Age, particle.Life, particle.Generation);
                 }
                 else if (modifier is FalloutNifParticleColor colors) color = ParticleColor(colors, particle.Age / particle.Life);
+                else if (modifier is FalloutNifParticleColorKeys keys)
+                    color = ToColor(_keyColors[keys.Block.Index].Sample(particle.Age / particle.Life));
             }
             var transform = new Transform3D(basis * new Basis(Vector3.Back, particle.Angle) *
                 Basis.FromScale(Vector3.One * radius), particle.Position);

@@ -36,6 +36,8 @@ internal sealed partial class RuntimeNativeCreature
     internal object AiState => new
     {
         package = _aiPackage?.FormKey.ToString(),
+        scriptPackage = _aiState?.ScriptPackage,
+        pendingChoice = _aiState?.PendingPackageChoice,
         failedSelection = _failedPackage?.ToString(),
         follow = _followPackage,
         dialogue = _dialoguePackage,
@@ -67,14 +69,16 @@ internal sealed partial class RuntimeNativeCreature
         _aiItemCount = itemCount;
         _aiState = world.Get(Appearance.Reference!.Value);
         world.BindActorAlert(Appearance.Reference!.Value, Activity);
-        _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiPackage?.FormKey;
+        _aiState.QueryCurrentPackage = _currentPackageQuery = () => _aiState.PendingPackageChoice is { } choice
+            ? choice.Bind(records, _aiState)?.FormKey : _aiPackage?.FormKey;
         _packageEvents = new(DispatchPackageEvent);
         if (world.UnloadedPackages is { } unloaded)
             unloaded.BindNative(Appearance.Reference!.Value, _packageEvents);
         else if (_aiState.DeferredPackageContinuation is { } deferred)
             deferred.BindNative(records, _aiState, _packageEvents);
         _aiState.CapturePackageAssignment = _packageAssignmentCapture = () => _initialPackageSelected
-            ? FalloutActorPackageAssignment.Capture(records, _packageEvents) : _aiState.PackageAssignment;
+            ? FalloutActorPackageAssignment.Capture(records, _packageEvents, _boundScriptPackageRevision) : _aiState.PackageAssignment;
+        RestoreScriptPackageLifecycle();
         RestoreEventIdle();
     }
 
@@ -83,8 +87,9 @@ internal sealed partial class RuntimeNativeCreature
         if (_aiRecords is null) throw new NotSupportedException("Creature has no package owner.");
         if (_aiState?.ScriptError is { } error) throw new NotSupportedException(error);
         _aiError = null;
-        // Script evaluation may precede native enable/materialization in the
-        // same source event. Evaluate on the next resident physics step.
+        // Consume selection now; the native body applies it on its ordinary
+        // physics step. Saving cannot redraw its predicates on restoration.
+        _aiWorld!.QueueActorPackageChoice(Appearance.Reference!.Value, SelectSourcePackage(reevaluateScript: true));
         _evaluateRequested = true;
     }
 
@@ -167,15 +172,16 @@ internal sealed partial class RuntimeNativeCreature
         var retained = !_initialPackageSelected ? _aiState!.PackageMotion : null;
         var restoreTravel = retained?.Travel is not null;
         var restoreGuard = retained?.Guard is not null;
+        var choice = _aiState!.PendingPackageChoice;
         var selected = restoreTravel || restoreGuard ? _aiRecords!.GetEffective(retained!.Package) :
-            FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
-                evaluateRunOn: true,
-                eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
-                    _aiPackage?.FormKey, _packageEvents?.Done == true));
+            choice is not null ? choice.Bind(_aiRecords!, _aiState) : SelectSourcePackage(reevaluateScript: _initialPackageSelected);
+        var selectionRevision = ScriptPackageRevision;
+        _observedScriptPackageRevision = _bindingScriptPackageRevision = selectionRevision;
+        if (!restoreTravel && !restoreGuard) _aiState.PendingPackageChoice = null;
         if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)
         { _failedPackage = previousFailure; return; }
         _aiError = null;
-        if (_aiPackage?.FormKey == selected?.FormKey) return;
+        if (_aiPackage?.FormKey == selected?.FormKey && _aiState.ScriptPackage?.Pending != true) return;
         _failedPackage = selected?.FormKey;
         var source = selected is null ? null : FalloutScriptPackage.Read(selected);
         FalloutFollowPackage? follow = null;
@@ -195,7 +201,12 @@ internal sealed partial class RuntimeNativeCreature
             }
             else throw new NotSupportedException($"Creature package {source.Form} procedure {source.Procedure} is unbound.");
         }
-        var restoredDialogue = !_initialPackageSelected && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
+        var restoredDialogue = !_initialPackageSelected && _aiState.ScriptPackage?.Pending != true && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
+        if (!restoreTravel && !restoreGuard && _packageEvents!.Active is { } active &&
+            (active.Form != selected?.FormKey || _aiState.ScriptPackage?.Pending == true))
+            _packageEvents.Change(null);
+        if (selectionRevision != ScriptPackageRevision || !restoreTravel && !restoreGuard &&
+            _aiState.PendingPackageChoice is not null) { _evaluateRequested = true; return; }
         if (travel is not null) BeginTravel(selected!, restoreTravel);
         else { _travelPackage = null; _travelProgress = null; _travelDestination = null; }
         if (guard is not null)
@@ -247,8 +258,10 @@ internal sealed partial class RuntimeNativeCreature
             _packageClock -= delta;
             var scheduleTime = _aiClock?.ScheduleTime();
             if (scheduleTime is { } moment) scheduleTime = moment with { Hour = MathF.Floor(moment.Hour) };
-            if (!_initialPackageSelected || !PackageEndIdlePending && !(_travelPackage?.MustReach == true && _travelProgress?.Complete == false) &&
-                (_evaluateRequested || _packageClock <= 0 || scheduleTime != _aiScheduleTime || _aiQuestRevision != _aiQuests!.Revision))
+            if (!_initialPackageSelected || _aiState?.PendingPackageChoice is not null ||
+                _aiState?.ScriptPackage?.Pending == true || ScriptPackageRevision != _observedScriptPackageRevision ||
+                !PackageEndIdlePending && (_evaluateRequested || _packageClock <= 0 ||
+                    scheduleTime != _aiScheduleTime || _aiQuestRevision != _aiQuests!.Revision))
             {
                 _evaluateRequested = false; _packageClock = 10;
                 _aiScheduleTime = scheduleTime;

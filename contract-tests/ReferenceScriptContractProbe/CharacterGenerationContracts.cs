@@ -63,7 +63,7 @@ internal static class CharacterGenerationContracts
                 if (effect.Kind == FalloutReferenceEffectKind.PlayerYouth) scripts.Session.SetPlayerYoung(effect.Enable);
                 else if (effect.Kind == FalloutReferenceEffectKind.PlayerToddler) scripts.Session.SetPlayerToddler(effect.Enable);
                 else if (effect.Kind == FalloutReferenceEffectKind.PlayerScale) scripts.Session.SetPlayerScale(effect.Scale);
-                else if (effect.Kind == FalloutReferenceEffectKind.CharacterGeneration) scripts.Session.SetInCharGen(effect.Enable, vitals.RequireLevelUpOwner);
+                else if (effect.Kind == FalloutReferenceEffectKind.CharacterGeneration) scripts.Session.SetInCharGen(effect.Enable);
                 else throw new InvalidDataException("Unexpected effect.");
             }, InCharGen: () => scripts.Session.InCharGen));
             void Run(string body) => executor.ExecuteProgram(records.GetEffective(Key(0x601)), records.GetEffective(Key(0x600)),
@@ -111,13 +111,13 @@ internal static class CharacterGenerationContracts
                 "Deferred XP changed level, disappeared during SPECIAL derivation or healed damage.");
             var coldVitals = new FalloutPlayerVitals(records, Key(7), special,
                 JsonSerializer.Deserialize<GameplayVitals>(JsonSerializer.Serialize(vitals.State))!);
-            Reject(coldVitals.RequireLevelUpOwner);
+            Require(coldVitals.State == vitals.State, "Cold state changed the earned XP before an admitted player update.");
             var before = vitals.State;
-            Reject(() => Run("SetInCharGen 0\nset sample to 99"));
-            Require(scripts.Session.InCharGen && vitals.State == before && quests.Variable(Key(0x601), 1) == 0,
-                "Unsupported earned level-up cleared chargen, lost XP or ran its suffix.");
-            Reject(() => scripts.Session.SetInCharGen(false, null));
-            Require(scripts.Session.InCharGen, "Missing player owner cleared character-generation state.");
+            Run("SetInCharGen 0\nset sample to 99");
+            Require(!scripts.Session.InCharGen && vitals.State == before && quests.Variable(Key(0x601), 1) == 99,
+                "Character-generation publication consumed earned XP or prevented its source suffix.");
+            scripts.Session.SetInCharGen(false);
+            Require(!scripts.Session.InCharGen, "Character-generation state did not retain the original flag.");
             Reject(() => vitals.Publish(before with { ExperiencePoints = -1 }));
             Reject(() => vitals.Publish(before with { NextLevelExperiencePoints = 0 }));
             Require(vitals.State == before, "Invalid vitals partially published.");

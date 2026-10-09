@@ -21,13 +21,36 @@ internal sealed record FalloutTerminalResultProgram(FalloutPluginRecord Terminal
     IReadOnlyList<FalloutTerminalScriptReference> References)
 {
     internal bool HasSource => FalloutDialogueTopic.CodeLines(Source).Any();
-
-    internal void RequireSourceExecution()
+    internal FalloutScriptScope Scope
     {
-        if (CompiledSize != 0 && !HasSource)
-            throw new NotSupportedException($"TERM {Terminal.FormKey} entry {EntryIndex} has a compiled-only result.");
-        if (HasSource && CompiledSize == 0)
-            throw new InvalidDataException("Terminal result source has no compiled program extent.");
+        get
+        {
+            var scope = Fields as FalloutScriptScope ??
+                throw new InvalidDataException("Terminal execution requires its original reader-owned menu scope.");
+            scope.RequireSource(Terminal);
+            var original = FalloutScriptScope.TerminalResult(Terminal, EntryIndex);
+            if (scope.ScopeSha256 != original.ScopeSha256)
+                throw new InvalidDataException("Terminal result differs from its original menu-entry boundary.");
+            return scope;
+        }
+    }
+    internal bool HasProgram => FalloutScriptResultReceipt.HasProgram(Scope);
+    internal bool HasExecutableBody => CompiledProgram is { } compiled
+        ? compiled.ResultInstructions().Any() : HasSource;
+    internal FalloutCompiledScriptProgram? CompiledProgram => Scope.Compiled
+        ? FalloutCompiledScriptProgram.Read(Terminal, Scope, standalone: false) : null;
+
+    internal void RequireExecution()
+    {
+        if (CompiledProgram is { } compiled)
+        {
+            if (compiled.LocalCount != 0)
+                throw new NotSupportedException("Terminal result embedded local state requires an event-list owner.");
+            _ = FalloutCompiledControlFlow.Read(compiled.ResultInstructions());
+            return;
+        }
+        if (CompiledSize != 0)
+            throw new InvalidDataException("Terminal result has a declared byte extent without an original SCDA field.");
         if (HasSource && (Type is not (0 or 1) || Flags != 1))
             throw new NotSupportedException("Terminal result script type or execution flags have no source owner.");
         // The shared result interpreter binds world/quest locals to their
@@ -35,6 +58,12 @@ internal sealed record FalloutTerminalResultProgram(FalloutPluginRecord Terminal
         // lifetime; never substitute an unrelated attached slot with that index.
         if (HasSource && (Locals.Count != 0 || References.Any(reference => reference.LocalIndex is not null)))
             throw new NotSupportedException("Terminal result embedded locals have no event-list state owner.");
+    }
+
+    internal void RequireSourceExecution()
+    {
+        FalloutCompiledScriptProgram.RequireDiagnosticOnly(Terminal, Fields, $"TERM-entry-{EntryIndex}");
+        RequireExecution();
     }
 
     internal static FalloutTerminalResultProgram Read(FalloutPluginStack records, FalloutPluginRecord terminal,
@@ -49,7 +78,7 @@ internal sealed record FalloutTerminalResultProgram(FalloutPluginRecord Terminal
         var compiled = Optional(fields, "SCDA");
         if (compiledSize != (uint)(compiled?.Data.Length ?? 0))
             throw new InvalidDataException("Terminal result compiled extent disagrees with SCHR.");
-        var source = Optional(fields, "SCTX");
+        var source = compiled is null ? Optional(fields, "SCTX") : null;
         var references = new List<FalloutTerminalScriptReference>();
         var locals = new Dictionary<uint, FalloutTerminalLocal>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -128,11 +157,11 @@ internal sealed record FalloutTerminalEntry(int Index, string Text, string Resul
 
     internal void RequireSelectionEffects()
     {
-        Program.RequireSourceExecution();
+        Program.RequireExecution();
         // A result may read/remove its displayed note. Until the native engine
         // order is established, inventory-before-script and script-before-
         // inventory are different behaviors, not interchangeable conveniences.
-        if (AddNote && Note is not null && Program.CompiledSize != 0)
+        if (AddNote && Note is not null && Program.HasExecutableBody)
             throw new NotSupportedException("Terminal AddNote/result order has no shared source engine owner.");
     }
 }
@@ -144,8 +173,6 @@ internal sealed record FalloutTerminal(FalloutPluginRecord Record, string Source
     internal const uint MenuId = 1057;
     private static readonly HashSet<string> EntryFields = new(StringComparer.Ordinal)
     { "ITXT", "RNAM", "ANAM", "INAM", "TNAM", "SCHR", "SCDA", "SCTX", "SLSD", "SCVR", "SCRO", "SCRV", "CTDA" };
-    private static readonly HashSet<string> ProgramFields = new(StringComparer.Ordinal)
-    { "SCHR", "SCDA", "SCTX", "SLSD", "SCVR", "SCRO", "SCRV" };
 
     internal static FalloutTerminal Read(FalloutPluginStack records, FalloutFormKey form)
     {
@@ -190,7 +217,7 @@ internal sealed record FalloutTerminal(FalloutPluginRecord Record, string Source
                 var index = entries.Count;
                 var identity = FragmentHash(sourceHash, index);
                 var program = FalloutTerminalResultProgram.Read(records, record, index, identity,
-                    selected.Where(field => ProgramFields.Contains(field.Signature)).ToArray());
+                    FalloutScriptScope.TerminalResult(record, index));
                 entries.Add(new(index, itemText, resultText, (FalloutTerminalEntryFlags)entryFlags[0], note, submenu, conditions, program));
                 start = end;
             }

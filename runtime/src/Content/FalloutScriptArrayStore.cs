@@ -202,6 +202,8 @@ internal sealed partial class FalloutScriptArrayStore
     {
         var data = Data(array);
         ValidateKey(data, key);
+        if (value.Kind == FalloutScriptValueKind.Pair)
+            throw new InvalidDataException("Transient pairs cannot be stored as array elements.");
         if (value.Kind == FalloutScriptValueKind.Array) _ = RequireReference(value);
         if (data.Kind == FalloutScriptArrayKind.Array && key.Number > data.Count)
             throw new InvalidDataException("Packed script array assignment would create a gap.");
@@ -214,6 +216,24 @@ internal sealed partial class FalloutScriptArrayStore
         if (data.Kind == FalloutScriptArrayKind.StringMap) data.Strings[key.Text] = value;
         else data.Numbers[key.Number] = value;
         if (newKey) ++_elementCount;
+    }
+
+    internal FalloutScriptValue Map(IReadOnlyList<FalloutScriptPair> pairs)
+    {
+        if (pairs.Count == 0) return FalloutScriptValue.Array(0);
+        var keyKind = pairs[0].Key.Kind;
+        if (keyKind is not (FalloutScriptValueKind.String or FalloutScriptValueKind.Number))
+            throw new InvalidDataException("Map construction requires a numeric or string first key.");
+        var map = Construct(keyKind == FalloutScriptValueKind.String ? FalloutScriptArrayKind.StringMap : FalloutScriptArrayKind.Map);
+        foreach (var pair in pairs)
+        {
+            // The producer's map contract selects the first key domain and
+            // ignores other key domains. All argument expressions have already
+            // executed in order; no skipped key can suppress an operand effect.
+            if (pair.Key.Kind != keyKind) continue;
+            Set(map, pair.Key, pair.Value);
+        }
+        return map;
     }
 
     internal void Append(FalloutScriptValue array, FalloutScriptValue value)

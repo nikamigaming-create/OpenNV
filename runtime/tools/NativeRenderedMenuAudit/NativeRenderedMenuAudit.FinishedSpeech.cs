@@ -287,10 +287,11 @@ public partial class NativeRenderedMenuAudit
                     ApplyFinishedSpeechLook(nextBody, records, effect);
                     nextLookEffects.Add(effect);
                 }));
-            settledSpeech.ExecuteResults = (info, speaker, begin) =>
+            settledSpeech.ExecuteOwnedResults = (info, speaker, begin) =>
             {
-                nextResults.ExecuteResult(info, speaker, begin);
+                var result = nextResults.ExecuteResultOwned(info, speaker, begin);
                 results.Add((info.Record.FormKey, speaker, begin));
+                return result;
             };
             settledSpeech.SayTo(actor.FormKey, playerKey, topic.Topic.FormKey, true);
             var nextVoice = FinishedSpeechVoice(settledSpeech, actor.FormKey);
@@ -307,7 +308,7 @@ public partial class NativeRenderedMenuAudit
             RequireFinished(settledSpeech.CaptureFinishedState().Voices.Single().Generation == 2 &&
                 settledSpeech.CaptureFinishedState().Voices.Single().CompletedCommands == 2 && completedInfos.Count == 2,
                 "New native generation failed to commit independently of the previous receipt.");
-            await FinishedSpeechResultNegative(records, configuration, settledWorld, settledQuests, actor.FormKey, topic.Topic.FormKey);
+            await FinishedSpeechResultNegative(records, configuration, settledWorld, settledQuests, body, actor.FormKey, topic.Topic.FormKey);
             RequireFinished(inputs.Where((record, index) => Hash(record) != hashes[index]).Any() == false &&
                 executableHash == ExecutableHash(),
                 "Owned native speech audit modified source bytes.");
@@ -339,8 +340,8 @@ public partial class NativeRenderedMenuAudit
                     lipSha256 = active.GetProperty("lipSha256").GetString(),
                     selected.Responses.Count,
                     audioEnds,
-                    sourceBeginResultPresent = FalloutDialogueTopic.CodeLines(selected.BeginScript).Any(),
-                    sourceEndResultPresent = FalloutDialogueTopic.CodeLines(selected.EndScript).Any(),
+                    authoredBeginResultPresent = FalloutScriptResultReceipt.HasProgram(FalloutScriptScope.Dialogue(selected.Record, true)),
+                    authoredEndResultPresent = FalloutScriptResultReceipt.HasProgram(FalloutScriptScope.Dialogue(selected.Record, false)),
                     actualResultCalls = actualResultCount
                 },
                 fixture = new
@@ -457,8 +458,12 @@ public partial class NativeRenderedMenuAudit
         // Intentional negative phases remain visible without generating Godot
         // ERROR output that would falsely look like a failing native fixture.
         speech.ReportDivergence = value => GD.Print("OPENNV_NATIVE_FINISHED_SPEECH_OBSERVED " + value);
-        speech.ExecuteResults = (info, speaker, begin) =>
-        { scripts.ExecuteResult(info, speaker, begin); results.Add((info.Record.FormKey, speaker, begin)); };
+        speech.ExecuteOwnedResults = (info, speaker, begin) =>
+        {
+            var result = scripts.ExecuteResultOwned(info, speaker, begin);
+            results.Add((info.Record.FormKey, speaker, begin));
+            return result;
+        };
         speech.SayToCompleted += receipt =>
         {
             receipts.Add(receipt);

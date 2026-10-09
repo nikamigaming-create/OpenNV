@@ -6,7 +6,7 @@ using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
-internal sealed class RuntimeNativePlayerPackage
+internal sealed partial class RuntimeNativePlayerPackage
 {
     private readonly FalloutPluginStack _stack;
     private readonly RuntimeNativePlayer _player;
@@ -37,9 +37,11 @@ internal sealed class RuntimeNativePlayerPackage
 
     internal RuntimeNativePlayerPackage(FalloutPluginStack stack, RuntimeNativePlayer player,
         FalloutScriptSession session, FalloutReferenceWorld world, Func<FalloutFormKey> cell,
-        FalloutPlayerPackageAudioSnapshot? audio = null)
+        FalloutPlayerPackageAudioSnapshot? audio = null,
+        Action<FalloutPackageEvent, Action<FalloutScriptResultReceipt>>? executeResult = null)
     {
         _stack = stack; _player = player; _session = session; _world = world; _cell = cell;
+        _executeResult = executeResult;
         // The engine player reference exists independently of placed ACHR
         // records. Its audio history outlives every individual package.
         _soundEvents = new(stack.RuntimeFormKey(0x14));
@@ -57,6 +59,7 @@ internal sealed class RuntimeNativePlayerPackage
     internal FalloutFormKey? CurrentPackage => _package?.Form;
     internal FalloutPlayerPackageAudioSnapshot CaptureAudio()
     {
+        RequireHealthy();
         if (_sounds is not null && !_sounds.CanCaptureSilent)
             throw new NotSupportedException("Player package audio requires its native playback continuation.");
         _soundRandom ??= new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
@@ -75,6 +78,9 @@ internal sealed class RuntimeNativePlayerPackage
         loopStart = _playback?.LoopStart,
         loopEnd = _playback?.LoopEnd,
         eventKind = _eventKind,
+        exitAction = _exitAction,
+        resultReceipts = _results.Values,
+        failure = _failure,
         pendingPackage = _pendingPackage?.Form.ToString(),
         animatedPathNodes = _animation?.AnimatedPathNodes,
         unboundOtherTargets = _animation?.UnboundOtherTargets,
@@ -85,29 +91,30 @@ internal sealed class RuntimeNativePlayerPackage
         textKeyEvents = _textKeyEvents,
         unboundTextKeys = _unboundTextKeys,
         sounds = _sounds?.State,
-        unbound = new[] { "unreached-destination-traversal", "editor-location-semantics", "nonempty-event-scripts-and-topics",
-            "end-animation-and-script-execution", "body-animation-targets", "matched-event-timing" },
+        unbound = new[] { "unreached-destination-traversal", "editor-location-semantics",
+            "player-topic-voice", "body-animation-targets", "matched-event-timing" },
         parity = "unmeasured"
     };
 
     internal void Apply(FalloutFormKey? form)
     {
+        RequireHealthy();
+        try { ApplyCore(form); }
+        catch (Exception error)
+        {
+            _failure = error.Message;
+            throw;
+        }
+    }
+
+    private void ApplyCore(FalloutFormKey? form)
+    {
         if (form is null)
         {
-            _package?.EventPrograms.GetValueOrDefault("POEA")?.RequireEmptyScript();
-            if (_package?.Events.GetValueOrDefault("POEA") is not null)
-                throw new NotSupportedException("Player package exit animation requires deferred removal ownership.");
-            // Removal clears the script assignment, including an uncommitted
-            // replacement. A completed outgoing clip must not reinstall it.
-            // Validate the reached exit behavior before discarding that state.
-            _pendingPackage = null; _pendingPackageHash = null;
-            _package = null;
-            _packageHash = null;
-            _animation = null; _playback = null;
-            _idle = null;
-            _cursor = 0; _eventKind = null; _complete = false; _elapsed = 0; _wait = 0;
-            _player.ReleaseSourceCamera();
-            _session.PublishPlayerPackage(null);
+            if (_package is null) return;
+            if (_exitAction == "remove") return;
+            BeginExit("remove");
+            Publish();
             return;
         }
         var record = _stack.GetEffective(form.Value);
@@ -124,14 +131,17 @@ internal sealed class RuntimeNativePlayerPackage
         }
         if (_package is not null)
         {
-            _package.EventPrograms.GetValueOrDefault("POCA")?.RequireEmptyScript();
+            PrepareEvent(_package, "POCA");
             if (_package.Events.GetValueOrDefault("POCA") is { } change)
             {
                 _ = Clip(change);
                 if (_package.Form != package.Form) PrepareEvent(package, "POBA");
                 _pendingPackage = package; _pendingPackageHash = hash;
-                _complete = false; _wait = 0;
+                _complete = false; _wait = 0; _exitAction = null;
                 var previous = _package.Form;
+                var revision = _assignmentRevision;
+                DispatchResult(_package, "POCA");
+                if (_assignmentRevision != revision || _pendingPackage is null) { Publish(); return; }
                 Start(change, "POCA", retainSameIdle: _playback?.Endless == true); Publish();
                 // A forever-loop event is a pose, not an assignment barrier.
                 // The next package can own that same live IDLE without replaying
@@ -139,6 +149,13 @@ internal sealed class RuntimeNativePlayerPackage
                 if (_playback!.Endless) { CommitPending(true); Publish(); }
                 GD.Print($"OPENNV_NATIVE_PLAYER_PACKAGE_CHANGE source={previous} next={package.Form} idle={change} owner=source-poca-clock parity=unmeasured");
                 return;
+            }
+            if (_package.Form != package.Form)
+            {
+                var previous = _package;
+                var revision = _assignmentRevision;
+                DispatchResult(previous, "POCA");
+                if (_assignmentRevision != revision) { Publish(); return; }
             }
         }
         var eventName = _package?.Form == package.Form ? "POCA" : "POBA";
@@ -148,7 +165,17 @@ internal sealed class RuntimeNativePlayerPackage
 
     private void PrepareEvent(FalloutScriptPackage package, string eventName)
     {
-        package.EventPrograms.GetValueOrDefault(eventName)?.RequireEmptyScript();
+        if (package.EventPrograms.GetValueOrDefault(eventName) is { } program)
+        {
+            program.ValidateScript();
+            if (program.CompiledProgram is { } compiled)
+            {
+                if (compiled.LocalCount != 0) throw new NotSupportedException("Player package embedded locals have no event-list owner.");
+                _ = FalloutCompiledControlFlow.Read(compiled.ResultInstructions());
+            }
+            else _ = FalloutGameModeProgram.Read("begin Result\n" + program.Source + "\nend", "Result");
+            if (_executeResult is null) throw new NotSupportedException("Player package result has no shared execution owner.");
+        }
         // Validate the reached event's owned resource before changing assignment.
         if (package.Events.GetValueOrDefault(eventName) is { } first) _ = Clip(first);
     }
@@ -156,11 +183,16 @@ internal sealed class RuntimeNativePlayerPackage
     private void Assign(FalloutScriptPackage package, string hash, string eventName, bool retainSameIdle = false)
     {
         PrepareEvent(package, eventName);
+        if (_package?.Form != package.Form) _results.Clear();
         _package = package;
         _packageHash = hash;
+        var revision = checked(++_assignmentRevision);
         _cursor = 0;
         _complete = false;
         _wait = 0;
+        _exitAction = null;
+        DispatchResult(package, eventName);
+        if (_assignmentRevision != revision) return;
         if (package.Events.GetValueOrDefault(eventName) is { } animation)
         {
             var listIndex = package.Idles.ToList().IndexOf(animation);
@@ -204,11 +236,16 @@ internal sealed class RuntimeNativePlayerPackage
             throw new NotSupportedException($"PACK {_package.Form} has not reached its owned reference location; player package traversal is unbound.");
     }
 
-    private void Publish() => _session.PublishPlayerPackage(_package is null ? null : new(_package.Form, _packageHash!,
-        _animation is null ? null : _idle, _animation is null ? null : _clips[_idle!.Value].Hash, _cursor,
-        _animation is not null && _eventKind is not null, _complete, _animation is null ? 0 : _elapsed, _wait,
-        _eventKind, _pendingPackage?.Form, _pendingPackageHash, _playback?.Capture(),
-        _animation is null ? null : _clips[_idle!.Value].IdleHash, _soundRandom?.State));
+    private void Publish()
+    {
+        if (_failure is not null) return;
+        _session.PublishPlayerPackage(_package is null ? null : new(_package.Form, _packageHash!,
+            _animation is null ? null : _idle, _animation is null ? null : _clips[_idle!.Value].Hash, _cursor,
+            _animation is not null && _eventKind is not null, _complete, _animation is null ? 0 : _elapsed, _wait,
+            _eventKind, _pendingPackage?.Form, _pendingPackageHash, _playback?.Capture(),
+            _animation is null ? null : _clips[_idle!.Value].IdleHash, _soundRandom?.State,
+            _results.Values.OrderBy(result => result.Kind, StringComparer.Ordinal).ToArray(), _exitAction));
+    }
 
     internal void Restore(FalloutPlayerScriptPackageSnapshot saved)
     {
@@ -216,6 +253,10 @@ internal sealed class RuntimeNativePlayerPackage
         var record = _stack.GetEffective(saved.Package);
         var package = FalloutScriptPackage.Read(record);
         RequirePackage(package);
+        var results = RestoreResults(package, saved.EventResults!);
+        RequireSavedEvent(package, "POBA", results);
+        RequireSavedEvent(package, saved.Phase, results);
+        if (saved.Complete) RequireSavedEvent(package, "POEA", results);
         var hash = Convert.ToHexString(SHA256.HashData(record.ReadData()));
         if (!hash.Equals(saved.PackageSha256, StringComparison.OrdinalIgnoreCase) || saved.Cursor > package.Idles.Count ||
             saved.Wait > package.IdleTimer || saved.Complete && !package.DoOnce || saved.Idle is not null && saved.Wait != 0)
@@ -226,32 +267,17 @@ internal sealed class RuntimeNativePlayerPackage
         {
             if (!(saved.Phase is { } phase ? package.Events.GetValueOrDefault(phase) == idle : package.Idles.Contains(idle)))
                 throw new InvalidDataException("Saved player idle does not belong to its source package phase.");
-            if (saved.Phase is { } eventKind) package.EventPrograms.GetValueOrDefault(eventKind)?.RequireEmptyScript();
             var clip = Clip(idle);
-            var sequence = clip.Animation.Sequence;
             if (!clip.Hash.Equals(saved.AnimationSha256, StringComparison.OrdinalIgnoreCase) ||
-                saved.IdleSha256 is { } idleHash && !clip.IdleHash.Equals(idleHash, StringComparison.OrdinalIgnoreCase))
+                !clip.IdleHash.Equals(saved.IdleSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Saved player package animation differs from its owned clip.");
-            if (saved.Playback is { } phaseSnapshot)
-            {
-                if (!clip.Timing.AdmitsAdditionalLoops(phaseSnapshot.SelectedAdditionalLoops))
-                    throw new InvalidDataException("Saved player IDLE loop selection differs from its winning timing.");
-                playback = Clock(clip, phaseSnapshot.SelectedAdditionalLoops);
-                playback.Restore(phaseSnapshot);
-                if (Math.Abs(playback.ElapsedSeconds - saved.Elapsed) > Math.Max(1e-8, saved.Elapsed * 1e-10))
-                    throw new InvalidDataException("Saved player camera phase differs from its elapsed clock.");
-            }
-            else
-            {
-                // Old snapshots did not select random repeat counts. Restore only
-                // a deterministic source selection, without rerolling or sound replay.
-                if (saved.Elapsed > (double)(sequence.StopTime - sequence.StartTime) / sequence.Frequency)
-                    throw new InvalidDataException("Legacy player camera elapsed time exceeds its saved clip.");
-                var repeats = clip.Timing.SelectAdditionalLoops(_ =>
-                    throw new NotSupportedException("Legacy player camera lacks its selected random IDLE repetitions."));
-                playback = Clock(clip, repeats);
-                playback.Advance(saved.Elapsed);
-            }
+            var phaseSnapshot = saved.Playback ?? throw new InvalidDataException("Player package animation has no exact saved clock.");
+            if (!clip.Timing.AdmitsAdditionalLoops(phaseSnapshot.SelectedAdditionalLoops))
+                throw new InvalidDataException("Saved player IDLE loop selection differs from its winning timing.");
+            playback = Clock(clip, phaseSnapshot.SelectedAdditionalLoops);
+            playback.Restore(phaseSnapshot);
+            if (Math.Abs(playback.ElapsedSeconds - saved.Elapsed) > Math.Max(1e-8, saved.Elapsed * 1e-10))
+                throw new InvalidDataException("Saved player camera phase differs from its elapsed clock.");
             animation = clip.Animation;
             if (saved.Phase == "POCA" && saved.PendingPackage is null && !playback.Endless)
                 throw new InvalidDataException("Settled player change pose is not an endless source IDLE.");
@@ -271,6 +297,9 @@ internal sealed class RuntimeNativePlayerPackage
         _package = package; _packageHash = hash; _idle = saved.Idle; _cursor = saved.Cursor;
         _animation = animation; _playback = playback;
         _eventKind = saved.Phase; _pendingPackage = pending; _pendingPackageHash = saved.PendingPackageSha256;
+        _exitAction = saved.ExitAction;
+        _results.Clear();
+        foreach (var result in results) _results.Add(result.Kind, result);
         _complete = saved.Complete; _elapsed = saved.Elapsed; _wait = saved.Wait;
         if (_soundRandom is not null && soundRandom is not null) _soundRandom.Restore(soundRandom.State);
         else _soundRandom = soundRandom;
@@ -280,8 +309,14 @@ internal sealed class RuntimeNativePlayerPackage
 
     private void NextIdle()
     {
-        if (_package is null || _package.Idles.Count == 0 || _complete) { _animation = null; _playback = null; return; }
+        if (_package is null || _complete) { _animation = null; _playback = null; return; }
         RequireLocation();
+        if (_package.Idles.Count == 0)
+        {
+            _animation = null; _playback = null; _idle = null;
+            if (_package.DoOnce) BeginExit("complete");
+            return;
+        }
         if (!_package.RunInSequence && _package.Idles.Count > 1)
             throw new NotSupportedException("Random package idle selection needs the authoritative RNG owner.");
         var cursor = _cursor >= _package.Idles.Count ? 0 : _cursor;
@@ -345,17 +380,19 @@ internal sealed class RuntimeNativePlayerPackage
 
     internal void Advance(double delta)
     {
+        RequireHealthy();
         if (!double.IsFinite(delta) || delta < 0) throw new ArgumentOutOfRangeException(nameof(delta));
         if (_world.PlayerMoves.Pending) return;
         _textKeyEvents.Clear();
         try { AdvanceCore(delta); }
+        catch (Exception error) { _failure = error.Message; throw; }
         finally { Publish(); }
     }
 
     private void AdvanceCore(double delta)
     {
-        // A legacy snapshot can retain the old pending infinite event. Settle
-        // that assignment on advancement while preserving its restored pose.
+        // A restored outgoing pose settles the pending assignment without
+        // replaying its already committed result or starting another clock.
         if (_pendingPackage is not null && _eventKind == "POCA" && _playback?.Endless == true) CommitPending(true);
         // Keep the unused part of a frame across clip and idle-wait boundaries.
         // Dropping it on every loop accumulates camera phase drift.
@@ -387,14 +424,18 @@ internal sealed class RuntimeNativePlayerPackage
                 CommitPending(false);
                 continue;
             }
+            if (_eventKind == "POEA")
+            {
+                FinishExit();
+                return;
+            }
             if (_eventKind is not null) { _eventKind = null; NextIdle(); continue; }
             if (_package.RunInSequence && _cursor < _package.Idles.Count) { NextIdle(); continue; }
             if (_package.DoOnce)
             {
-                _package.EventPrograms.GetValueOrDefault("POEA")?.RequireEmptyScript();
-                if (_package.Events.GetValueOrDefault("POEA") is not null)
-                    throw new NotSupportedException("Completing a player package with an end animation requires its deferred completion owner.");
-                _complete = true; return;
+                BeginExit("complete");
+                if (_animation is not null) continue;
+                return;
             }
             _cursor = 0;
             _wait = _package.IdleTimer;

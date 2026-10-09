@@ -42,6 +42,7 @@ internal sealed partial class FalloutQuestScripts
 
     private void ContinueMissingCommand(Instance instance, FalloutQuestScriptHost? host)
     {
+        FalloutQuestScriptAuthority.RequireSourceExecution(instance.Script);
         var error = instance.Error!;
         // Admission is capability-specific, never quest/location-specific.
         // Non-missing failures and unowned operations remain latched. The

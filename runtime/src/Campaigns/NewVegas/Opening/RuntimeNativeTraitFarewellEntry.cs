@@ -13,12 +13,12 @@ internal partial class RuntimeNativeTraitEntry : CanvasLayer
     internal event Action<IReadOnlyList<FalloutNativeTraitIdentity>>? Accepted;
     internal event Action<Exception>? Failed;
 
-    internal void Configure(FalloutPluginStack records, FalloutNativeTraitFarewellContract contract,
-        IReadOnlyList<FalloutNativeTraitIdentity> current)
+    internal void Configure(FalloutPluginStack records, FalloutTraitMenuContract contract,
+        IReadOnlyList<FalloutNativeTraitIdentity> current, int playerLevel, Func<FalloutCondition, float> evaluate)
     {
         Name = "NativeTraitEntry"; Layer = 120;
         ProcessMode = ProcessModeEnum.Always;
-        _menu = new(records, contract, current, selection => Accepted?.Invoke(selection), error => Failed?.Invoke(error));
+        _menu = new(records, contract, current, playerLevel, evaluate, selection => Accepted?.Invoke(selection), error => Failed?.Invoke(error));
         AddChild(_menu);
         Input.MouseMode = Input.MouseModeEnum.Visible;
         _pausedTree = GetTree();

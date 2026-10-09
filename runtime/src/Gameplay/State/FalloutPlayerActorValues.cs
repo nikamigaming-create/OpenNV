@@ -20,14 +20,10 @@ internal sealed class FalloutPlayerActorValues
     internal event Action? Changed;
     internal FalloutPlayerActorValueSource Source => _source;
 
-    internal FalloutPlayerActorValues(FalloutPluginStack records, FalloutPlayerActorValuesSnapshot? restore = null,
-        FalloutNativeSpecialState? legacy = null)
+    internal FalloutPlayerActorValues(FalloutPluginStack records, FalloutPlayerActorValuesSnapshot? restore = null)
     {
-        if (restore is not null && legacy is not null)
-            throw new InvalidDataException("Player values have two competing restore authorities.");
         _source = FalloutPlayerActorValueSource.Read(records);
-        var initial = legacy?.Values ?? _source.Special;
-        _values = Enumerable.Range(5, 7).ToDictionary(value => value, value => new FalloutActorValue(initial[value - 5]));
+        _values = Enumerable.Range(5, 7).ToDictionary(value => value, value => new FalloutActorValue(_source.Special[value - 5]));
         if (restore is not null) Restore(restore);
     }
 
@@ -48,8 +44,11 @@ internal sealed class FalloutPlayerActorValues
         throw new NotSupportedException($"Player actor value {actorValue} has no base/formula pool owner.");
 
     internal float ReadBase(int actorValue) => Value(actorValue).Base;
-    internal float ReadPermanent(int actorValue) => Evaluate(actorValue, () => Math.Clamp(ReadBase(actorValue) +
-        Pool(actorValue, FalloutActorValuePool.Permanent), 1, 10));
+    // Source-selected consumers apply their own descriptor/getter bounds to
+    // this Float32 sum. UI/permanent reads retain their independent bounds.
+    internal float ReadRawPermanent(int actorValue) => Evaluate(actorValue, () => ReadBase(actorValue) +
+        Pool(actorValue, FalloutActorValuePool.Permanent));
+    internal float ReadPermanent(int actorValue) => Math.Clamp(ReadRawPermanent(actorValue), 1, 10);
     internal float ReadCurrent(int actorValue) => Evaluate(actorValue, () =>
         // The native float getter sums temporary, permanent and damage pools
         // with a wider intermediate before returning its Float32 result.
@@ -74,7 +73,7 @@ internal sealed class FalloutPlayerActorValues
         // value while keeping the older integer view representable.
         if (value == 2147483648f) return int.MaxValue;
         if (value < int.MinValue || (double)value > int.MaxValue)
-            throw new NotSupportedException("Player base value exceeds the legacy seven-integer view.");
+            throw new NotSupportedException("Player base value exceeds the seven-integer SPECIAL menu view.");
         return checked((int)value);
     }
 

@@ -1,5 +1,49 @@
 # Product status
 
+The current greenfield integration candidate adds compiled startup/query/effect
+owners, player package result execution, typed NIF physics and particle families,
+source trait selection and complete current-state capture. Actor script-package
+overrides, mutable player skills/XP, queued advancement and native NVSE interface
+registration, source-declared expression caller/token utilities and the native
+source level-up interface are integrated candidates. The latest C# runtime and
+x86 companion integration compilation pass with zero warnings/errors. Current
+entry9/22 numeric consumers retain Float32 storage, live actor conditions and
+explicit unknown ordering; skill allocation uses the actual current owner.
+The common persistent save queue and selected executable command metadata are
+integrated; the latest Debug runtime build passes after both joins. Neutral
+source-selected advancement getter/rate declarations and prefix/retirement fixes
+are also integrated and compile. XP notification lifecycle, genuine native HUD,
+mandatory cold state and selected advancement binding are integrated candidates.
+Private native plugin I/O and pre-entry protection are integrated and compile.
+The SPECIAL tester now uses actual source-menu declarations instead of an opening
+quest contract, and tag selection requires its real source request. Original
+HUD/interface frame producers, current snapshots and genuine native local storage
+are now integrated and compile. Player physical activity now joins the actual player
+body, authoritative damage/vitals, shared source queries, mandatory current saves
+and advancement observations before source execution. Furniture-body factories are
+removed and player appearance resolves its canonical engine base. The combined
+runtime and script-probe Debug builds pass with zero warnings/errors. Actual
+sleep/wait/time/effect continuation remains under parallel implementation. Actual
+CombatManager lists, source acquisition/assistance/provocation/damage joins, personal
+XP count and the separately cached public player combat flag are integrated and
+compile. Construction precedes startup scripts; driver attachment retains the same
+source/cold owner. Mandatory saves retain settled lists and real update receipts.
+Active controller/tactic/timer continuation, detection and reaction/election remain
+open. The campaign native service and original-object/method call path
+now join coordinator construction, compiled dispatch, deferred argument decoding,
+save admission and retirement. Ordered quest/reference local cells preserve
+duplicate IDs, mixed views, original initializer bits and complete current cold
+snapshots; cold loads retain saved script errors. Runtime and x86 companion Debug
+compilation pass with zero warnings/errors after these joins. Selected DLL/loader
+declarations and complete Script/ModInfo/Quest constructor fields remain under
+implementation; original DLL execution is still unverified. StringVar/ArrayVar
+allocation/interfaces now join the actual shared campaign stores and typed result
+targets. Native Debug compilation and runtime Debug compilation, including
+source-name command dispatch, pass with zero warnings/errors. Actual original
+DLL entry, value-table execution, objects and used hooks remain unverified.
+Earlier successful gates and owned observations do not accept these
+candidate changes; their combined broad/native/owned execution remains pending.
+
 The expanded corpus/quest audits finish independently for FNV, FO3, TTW and
 the exact combined selection. All winning/deleted payload layouts and discovered
 winning loose/BSA reads retain identities and individual outcomes, and every
@@ -29,12 +73,27 @@ repair. The selected full ADDN catalog, unused models, typed roles, cached cycle
 and all original text-key/sound variant declarations now have source audit
 owners. Native instances, composed collision, emitters and audio decoding remain
 independent unverified owners. Implicit actor KF/IDLE/ANIO dependencies and typed
-controller joins remain open. The immutable FNV full scene sweep finishes all
+controller joins have candidate declaration owners but remain unverified in
+runtime execution. The immutable FNV full scene sweep finishes all
 44,517 cells and 520,570 winning graph rows with 895 retained graph failure
 events, natural failure exit and false readiness. Resource and reference failures
 remain separate lanes. Graph/hash invariants do not certify the 520,503
-unverified runtime-owner rows. Standalone FO3 is scanning all 50,755 cells, with
-TTW and combined queued. The full required runtime gate and diff check pass. Direct statement
+unverified runtime-owner rows. The immutable standalone FO3 sweep also finishes
+naturally with failure: 50,754 completed reports from 50,755 selected cells,
+854,257 winning graph rows, one retained cell-audit error and 1,396 source graph
+failure events. Its 854,196 unverified runtime-owner rows keep readiness false.
+The retained cell failure binds an ambiguous source declaration under the old
+reader; current compiled-local authority remains a separate unverified candidate.
+The immutable TTW sweep also finishes naturally with failure: 95,360 completed
+reports from 95,381 selected cells, 1,391,574 winning graph rows, 21 cell-audit
+errors and 2,052 source graph failure events. All 1,391,574 runtime-owner rows
+remain unverified and readiness false. The immutable combined sweep also finishes
+naturally with failure: 95,361 completed reports from 95,382 selected cells,
+1,391,576 winning graph rows, 21 cell-audit errors and 2,052 source graph failure
+events. All 1,391,576 runtime-owner rows remain unverified and readiness false.
+All four exact selections have retired naturally; none accepts the current
+implementation candidate. The previously
+published full required runtime gate and diff check pass. Direct statement
 name counts exclude expression/legacy-argument calls; those inventories remain
 unknown while source exists or layouts are unread. Compiled execution coverage
 stays independently unknown.

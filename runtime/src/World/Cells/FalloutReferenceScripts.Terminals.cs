@@ -11,7 +11,7 @@ internal sealed partial class FalloutReferenceScripts
             ? failure : null;
     // The actual placed terminal remains the caller even in a child TERM page.
     // The selected page and source ordinal supply only the compiled result scope.
-    internal void ExecuteTerminalResult(FalloutTerminalSelection selection)
+    internal FalloutScriptResultReceipt ExecuteTerminalResult(FalloutTerminalSelection selection)
     {
         if (selection is null || selection.Generation <= 0 || selection.Entry.Index < 0)
             throw new InvalidDataException("Terminal result has no source selection receipt.");
@@ -26,13 +26,9 @@ internal sealed partial class FalloutReferenceScripts
         var entry = current.Entries[selection.Entry.Index];
         if (entry.Program.Identity != selection.Entry.Program.Identity)
             throw new InvalidDataException("Terminal result fragment differs from its selection receipt.");
-        entry.Program.RequireSourceExecution();
-        var program = FalloutGameModeProgram.Read("begin Result\n" + entry.Program.Source + "\nend", "Result");
-        try { Execute(selection.Reference, Bindings(reference, current.Record, entry.Program.Fields), program, null, 0); }
-        catch (Exception error)
-        {
-            _terminalResultFailure = new(selection, program.LastStatement, program.StatementCount, error);
-            throw;
-        }
+        entry.Program.RequireExecution();
+        _terminalResultFailure = null;
+        return ExecuteScopeOwned(entry.Program.Scope, selection.Reference, reference,
+            (program, error) => _terminalResultFailure = new(selection, program.LastStatement, program.StatementCount, error));
     }
 }

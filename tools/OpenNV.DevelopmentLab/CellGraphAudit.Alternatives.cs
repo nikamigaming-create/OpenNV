@@ -30,7 +30,9 @@ internal static partial class CellGraphAudit
         public List<object> Landscapes { get; } = [];
         public List<object> Failures { get; } = [];
         public AlternativeQueryReuse? QueryReuse { get; set; }
-        public string Domain { get; init; } = "Finite authored actor/template/list/inventory/race/headpart/armor/model/texture declarations for every winning placed base. Both enabled states share source declarations; deleted bases are retained and never substituted. Arbitrary script-created resources and state combinations remain unverified.";
+        public ActorAnimationInspection? ActorAnimations { get; set; }
+        public IncomingAnimationInspection? IncomingAnimations { get; set; }
+        public string Domain { get; init; } = "Finite authored actor/template/list/inventory/race/headpart/armor/model/texture declarations for every winning actor and placed base, with all winning/deleted IDLE/ANIO and incoming PACK/IDLM/INFO animation declarations. Both enabled states share source declarations; deleted bases are retained and never substituted. Arbitrary script-created resources and state combinations remain unverified.";
     }
 
     // Enumerate declarations, not random seeds or one fabricated saved choice.
@@ -42,6 +44,12 @@ internal static partial class CellGraphAudit
         var resources = new Dictionary<string, ResourceRow>(StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<FalloutFormKey>(FalloutFormKeyComparer.Instance);
         var active = new HashSet<FalloutFormKey>(FalloutFormKeyComparer.Instance);
+        var actorAnimations = new SourceActorAnimationDependencies(source, records).Read();
+        result.ActorAnimations = actorAnimations;
+        result.IncomingAnimations = new SourceIncomingAnimationDependencies(source, records, actorAnimations).Read();
+        foreach (var dependency in actorAnimations.DependencyEdges) _ = ReadResource(dependency.Path, dependency.Kind);
+        foreach (var actor in actorAnimations.Records.Where(row => row.Signature is "NPC_" or "CREA"))
+            Visit(ParseForm(actor.Form), null, "authored-actor-source", -1, null);
         foreach (var graphRow in graph.Rows.Values.Where(row => !row.Deleted && PlacedSignatures.Contains(row.Signature)))
         {
             if (graphRow.ParentCell is null || !selected.Contains(ParseForm(graphRow.ParentCell))) continue;
@@ -106,17 +114,18 @@ internal static partial class CellGraphAudit
             {
                 var definition = graph.Definitions.GetValueOrDefault(cell) ?? throw new InvalidDataException("LAND owner has no bound CELL definition.");
                 var world = definition.Worldspace ?? throw new InvalidDataException("LAND CELL has no source worldspace.");
-                var persistent = queries.PersistentCell(world);
                 var baseRows = lands.Length == 1 ? lands[0].ReadSubrecords().Where(field => field.Signature == "BTXT").ToArray() : [];
                 var needsDefault = baseRows.Length < 4 || baseRows.Any(field => field.Data.Length >= 4 && BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) == 0);
                 var defaults = needsDefault ? FalloutLandscapeTransportResolver.ReadDefaultTexture(FalloutInstallationSettings.Read(source)) : null;
-                var land = FalloutLandscapeTransportResolver.ResolveCell(records, definition, persistent, defaults);
+                var land = FalloutLandscapeTransportResolver.ResolveCell(records, definition, defaults);
                 foreach (var texture in land.Textures.Values)
                 {
                     _ = ReadResource(texture.DiffusePath, "texture");
                     if (texture.NormalPath is { } normal) _ = ReadResource(normal, "texture");
                 }
-                result.Landscapes.Add(new { cell = cell.ToString(), landscape = land.Landscape.ToString(), persistent = persistent.ToString(),
+                result.Landscapes.Add(new { cell = cell.ToString(), landscape = land.Landscape.ToString(), world = world.ToString(),
+                    heightOwner = land.HeightDefault is null ? "authored-VHGT" : "winning-WRLD-DNAM",
+                    heightDefault = land.HeightDefault, persistentResidency = "independent runtime owner; not a LAND declaration prerequisite",
                     vertices = land.Heights.Length, land.Flags, land.BaseLayers, land.AlphaLayers,
                     textures = land.Textures.Values, nativeHeightfieldMaterialsAndPixels = "unverified" });
             }

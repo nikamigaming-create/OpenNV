@@ -86,9 +86,11 @@ internal static class OwnedPlayerActorValueProbe
         Require(rejected && JsonSerializer.Serialize(cold.Capture()) == coldBefore, "Failed owned source restore partially changed player values.");
         var guarded = executor.Activate(bookReference, records.RuntimeFormKey(0x14));
         Require(guarded.Error is null && attempts == 1, "Owned stage guard replayed a retired book command.");
-        var migrated = new FalloutPlayerActorValues(records, legacy: initial); Bind(migrated);
+        var migrated = new FalloutPlayerActorValues(records);
+        foreach (var value in Enumerable.Range(5, 7)) migrated.WriteBaseInteger(value, initial.Values[value - 5]);
+        Bind(migrated);
         Require(migrated.Capture().Values.Values.All(value => value.Permanent == 0 && value.Temporary == 0 && value.Damage == 0) &&
-            Enumerable.Range(5, 7).Select(migrated.ReadPermanent).SequenceEqual(initialPermanent), "Owned legacy migration baked source modifiers into BASE.");
+            Enumerable.Range(5, 7).Select(migrated.ReadPermanent).SequenceEqual(initialPermanent), "Owned source modifiers were baked into assigned BASE values.");
         Require(sourceHash.AsSpan().SequenceEqual(SHA256.HashData(records.GetEffective(source.Player).ReadData())), "Owned player input changed.");
         Console.WriteLine(JsonSerializer.Serialize(new
         {

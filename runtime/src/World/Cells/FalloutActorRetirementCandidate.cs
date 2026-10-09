@@ -127,6 +127,8 @@ internal sealed class FalloutActorRetirementCandidate
         _state.CorpseEquipmentCaptureBlocker,
         animation = _state.Animation.Capture(),
         _state.PackageAssignment,
+        _state.ScriptPackage,
+        _state.PendingPackageChoice,
         _state.PackageMotion,
         _state.PendingPackageSelection,
         _state.FurnitureContinuation,

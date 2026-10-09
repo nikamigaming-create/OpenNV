@@ -4,14 +4,17 @@ using System.Security.Cryptography;
 
 namespace OpenNV.Runtime.World.Cells;
 
-internal sealed record FalloutActorPackageAssignment(FalloutFormKey Package, string Sha256, bool Done)
+internal sealed record FalloutActorPackageAssignment(FalloutFormKey Package, string Sha256, bool Done,
+    long ScriptPackageRevision = 0)
 {
-    internal static FalloutActorPackageAssignment? Capture(FalloutPluginStack records, FalloutPackageEvents? events) => events?.Active is { } active
-        ? new(active.Form, Convert.ToHexString(SHA256.HashData(records.GetEffective(active.Form).ReadData())), events.Done) : null;
+    internal static FalloutActorPackageAssignment? Capture(FalloutPluginStack records, FalloutPackageEvents? events,
+        long scriptPackageRevision = 0) => events?.Active is { } active
+        ? new(active.Form, Convert.ToHexString(SHA256.HashData(records.GetEffective(active.Form).ReadData())), events.Done, scriptPackageRevision) : null;
     internal void Validate()
     {
         if (Package.ObjectId == 0 || string.IsNullOrWhiteSpace(Package.OwnerPlugin) ||
-            Sha256 is not { Length: 64 } || !Sha256.All(Uri.IsHexDigit))
+            Sha256 is not { Length: 64 } || !Sha256.All(Uri.IsHexDigit) ||
+            ScriptPackageRevision < 0 || ScriptPackageRevision == long.MaxValue)
             throw new InvalidDataException("Saved actor package assignment is invalid.");
     }
 
@@ -27,7 +30,7 @@ internal sealed record FalloutActorPackageAssignment(FalloutFormKey Package, str
 
 // Assignment exists independently of a resident body. This owner never
 // invents native movement, arrival, actor presentation or package completion.
-internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, FalloutReferenceWorld world,
+internal sealed partial class FalloutUnloadedActorPackages(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutQuestState quests, FalloutGameTime? clock, FalloutGlobalState? globals,
     Action<FalloutPackageEvent, FalloutFormKey> execute, Func<int> playerLevel,
     Func<FalloutFormKey, int>? sitting = null)
@@ -46,18 +49,26 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         value.Value.LastEvent,
         value.Value.Revision,
         deferred = world.Get(value.Key).DeferredPackageContinuation,
+        scriptPackage = world.Get(value.Key).ScriptPackage,
         procedure = "deferred-to-resident-native-owner"
     }).ToArray();
 
-    internal FalloutFormKey? CurrentPackage(FalloutFormKey actor)
+    internal FalloutFormKey? CurrentPackage(FalloutFormKey actor) => SelectUnloadedPackage(actor, reevaluateScript: false);
+
+    private FalloutFormKey? SelectUnloadedPackage(FalloutFormKey actor, bool reevaluateScript)
     {
         if (world.IsResident(actor)) throw new NotSupportedException($"Resident actor {actor} has no native package owner.");
         var state = world.Get(actor);
         FalloutReferencePackageEvents.RequireActor(records, actor);
         if (state.ScriptError is { } failure) throw new NotSupportedException(failure);
-        if (state.PendingPackageSelection is { } pending) return pending.Package;
-        if (state.PackageBindingFailure is { } stopped) return stopped.Package;
-        if (state.SelectionFailure is not null) return null;
+        if (state.Deleted) return null;
+        if (!reevaluateScript && state.PendingPackageChoice is { } choice) return choice.Bind(records, state)?.FormKey;
+        if (state.ScriptPackage?.Pending != true)
+        {
+            if (state.PendingPackageSelection is { } pending) return pending.Package;
+            if (state.PackageBindingFailure is { } stopped) return stopped.Package;
+            if (state.SelectionFailure is not null) return null;
+        }
         var templates = state.Templates ?? world.InitializeActorTemplates(actor, playerLevel(), globals);
         if (!_actors.TryGetValue(actor, out var events))
         {
@@ -71,14 +82,38 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
             else if (state.PackageAssignment is { } retained)
                 retained.Bind(records, events);
             else _deferred.Add(actor);
+            _boundScriptPackageRevisions[actor] = state.PackageAssignment?.ScriptPackageRevision ?? 0;
         }
         if (!_evaluating.Add(actor)) return events.Active?.Form;
         try
         {
-            var selected = FalloutAiPackages.Select(records, state.Base, condition => Evaluate(actor, condition),
-                templates, clock, evaluateRunOn: true,
-                eligible: package => world.PackageEligible(actor, package, clock, events.Active?.Form, events.Done));
-            try { events.Change(selected is null ? null : FalloutScriptPackage.Read(selected)); }
+            var pendingChoice = state.PendingPackageChoice;
+            var selected = pendingChoice is not null ? pendingChoice.Bind(records, state) :
+                world.SelectActorPackage(actor, condition => Evaluate(actor, condition),
+                    templates, clock, events.Active?.Form, events.Done, reevaluateScript,
+                    world.RetainedPackageLocationReached(actor, events.Active?.Form));
+            var selectionRevision = world.ActorScriptPackageRevision(actor);
+            if (world.HasRetainedNativePackageState(actor) && (events.Active?.Form != selected?.FormKey ||
+                state.ScriptPackage is { Pending: true }))
+            {
+                if (pendingChoice is null) world.QueueActorPackageChoice(actor, selected);
+                return selected?.FormKey;
+            }
+            _bindingScriptPackageRevisions[actor] = selectionRevision;
+            try
+            {
+                if (events.Active is { } previousPackage && (previousPackage.Form != selected?.FormKey ||
+                    state.ScriptPackage is { Pending: true } slot && slot.Package == selected?.FormKey))
+                    events.Change(null);
+                if (selectionRevision != world.ActorScriptPackageRevision(actor))
+                {
+                    _pollRemaining = 0;
+                    Remember(actor, events);
+                    return state.ScriptPackage?.Package ?? events.Active?.Form;
+                }
+                events.Change(selected is null ? null : FalloutScriptPackage.Read(selected));
+                if (ReferenceEquals(state.PendingPackageChoice, pendingChoice)) state.PendingPackageChoice = null;
+            }
             catch
             {
                 state.DeferredPackageContinuation = null;
@@ -97,9 +132,15 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
     internal void Retain(FalloutFormKey actor, FalloutPackageEvents events)
     {
         if (_actors.ContainsKey(actor)) throw new InvalidOperationException("Actor already has an unloaded package lifecycle.");
+        var state = world.Get(actor);
+        _boundScriptPackageRevisions[actor] = (state.CapturePackageAssignment?.Invoke() ?? state.PackageAssignment)?.ScriptPackageRevision ?? 0;
         var retained = new FalloutPackageEvents((package, kind) => Dispatch(actor, package, kind));
         if (events.Error is { } failure) world.Get(actor).ScriptError ??= failure;
-        else if (events.Active is { } active) retained.Restore(active, events.Done);
+        else
+        {
+            if (events.Active is { } active) retained.Restore(active, events.Done);
+            retained.RestoreHistory(events.Revision, events.LastEvent, events.LastPackage);
+        }
         _actors.Add(actor, retained);
         _deferred.Remove(actor);
         world.Get(actor).DeferredPackageContinuation = null;
@@ -164,7 +205,8 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
     private void Remember(FalloutFormKey actor, FalloutPackageEvents events)
     {
         var state = world.Get(actor);
-        state.PackageAssignment = FalloutActorPackageAssignment.Capture(records, events);
+        state.PackageAssignment = FalloutActorPackageAssignment.Capture(records, events,
+            _boundScriptPackageRevisions.GetValueOrDefault(actor));
         state.DeferredPackageContinuation = _deferred.Contains(actor)
             ? FalloutActorDeferredPackageContinuation.Capture(records, state, events) : null;
     }
@@ -172,6 +214,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
     private void Dispatch(FalloutFormKey actor, FalloutScriptPackage package, string kind)
     {
         var state = world.Get(actor);
+        var startedRevision = BeginScriptPackageEvent(actor, package, kind);
         try
         {
             if (kind == "POBA") world.MarkPackageStart(actor, records.GetEffective(package.Form), clock);
@@ -184,6 +227,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
             if (package.EventPrograms.GetValueOrDefault(kind) is { } program) execute(program, actor);
             if (package.Events.GetValueOrDefault(kind) is not null)
                 throw new NotSupportedException("Unloaded package event idle requires its native animation continuation.");
+            CompleteScriptPackageEvent(actor, package, kind, startedRevision);
         }
         catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
         { state.ScriptError ??= $"Package {kind} {package.Form}: {error.Message}"; throw; }

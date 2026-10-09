@@ -82,7 +82,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (Dead || _state.Unconscious) return;
         if (_world.IgnoresFriendlyHits(_state.Reference) &&
             (attacker == _records.RuntimeFormKey(0x14) && _state.PlayerTeammate || _world.ActorRelation(_state.Reference, attacker) >= 2)) return;
-        _state.Engagement ??= new(attacker);
+        if (_state.Engagement is null) _world.SelectSourceCombatTarget(_state.Reference, attacker);
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
         NotifyAssistance(attacker);
     }
@@ -124,7 +124,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var radius = ThreatRadius(threat);
         if (!float.IsFinite(radius) || radius <= 0 || _actor.GlobalPosition.DistanceTo(origin) > radius ||
             !CanSeePoint(opponent?.BodyTargetPoint() ?? player!.CombatTargetPoint, opponent)) return false;
-        _state.Engagement = new(attacker);
+        _world.SelectSourceCombatTarget(_state.Reference, attacker, FalloutCombatGroupTransitionKind.AssistanceJoin, victim.Reference);
         _assistsReceived++;
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
         _assistanceError = null;

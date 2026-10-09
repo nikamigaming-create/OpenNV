@@ -19,10 +19,7 @@ internal static partial class NativeOwnedNavigationAudit
         var checkpointBytes = File.ReadAllBytes(checkpoint);
         var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
         var opening = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-        var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records,
-            FalloutNativeVigorResolver.Resolve(records, opening), FalloutNativeTagSkillResolver.Resolve(records, controls),
-            FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
-            FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening)).State;
+        var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records).State;
         var parts = identity.Split(':');
         if (parts.Length != 2) throw new ArgumentException("Owned actor route needs plugin:hex-object-id.");
         var caller = new FalloutFormKey(parts[0], Convert.ToUInt32(parts[1], 16));

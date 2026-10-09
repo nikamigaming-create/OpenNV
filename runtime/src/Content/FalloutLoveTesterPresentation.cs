@@ -20,34 +20,21 @@ internal sealed record FalloutLoveTesterPresentation(
 
 internal static partial class FalloutExecutableStringTable
 {
-    internal static FalloutLoveTesterPresentation ReadLoveTester(string path, IReadOnlyCollection<string> sequences)
-    {
-        var (code, image) = Load(path);
-        return ReadLoveTesterDeclarations(code, image.Literal, image.Read, sequences);
-    }
-
     // Read compiler-emitted resource arguments, numeric declarations and the
     // ordered animation table. No owned code is executed and no addresses or
     // extracted resources become a persistent launch input.
-    internal static FalloutLoveTesterPresentation ReadLoveTesterDeclarations(byte[] code,
-        Func<uint, string?> literal, Func<uint, int, byte[]> read, IReadOnlyCollection<string> sequences)
+    private static FalloutLoveTesterPresentation ReadLoveTesterDeclarations(byte[] code,
+        Func<uint, string?> literal, Func<uint, int, byte[]> read, IReadOnlyCollection<string> sequences, LoveTesterBootstrap bootstrap)
     {
         var pushes = new List<(int Offset, string Value)>();
         for (var at = 0; at < code.Length - 5; at++)
             if (code[at] == 0x68 && literal(U32(code, at + 1)) is { Length: > 0 } value)
                 pushes.Add((at, value));
-        var models = pushes.Where(item => item.Value.EndsWith("NV_VitoMaticVigorTester_Activate.NIF", StringComparison.OrdinalIgnoreCase) &&
-            item.Offset >= 10 && code.AsSpan(item.Offset - 10, 10).SequenceEqual(new byte[] { 0x6a, 0, 0x6a, 0, 0x6a, 0, 0x6a, 1, 0x6a, 0 })).ToArray();
-        if (models.Length != 1) throw new NotSupportedException("Owned LoveTester model declarations are unbound.");
-        var animated = models[0];
-        var cabinet = pushes.First(item => item.Offset > animated.Offset && item.Value.EndsWith(".NIF", StringComparison.OrdinalIgnoreCase));
-        if (!cabinet.Value.EndsWith("NV_VitoMaticVigorTester_Cabinet.NIF", StringComparison.OrdinalIgnoreCase))
-            throw new NotSupportedException("Owned LoveTester cabinet declaration is unbound.");
-        var initial = pushes.First(item => item.Offset > cabinet.Offset && sequences.Contains(item.Value));
-        var cameraName = pushes.First(item => item.Offset > initial.Offset && item.Value == "Surgery3DCamera");
-        var cameraStart = cameraName.Offset;
-        while (cameraStart > initial.Offset && !code.AsSpan(cameraStart, 5).SequenceEqual(new byte[] { 0x55, 0x8b, 0xec, 0x6a, 0xff })) cameraStart--;
-        if (cameraStart <= initial.Offset) throw new NotSupportedException("Owned LoveTester camera owner is unbound.");
+        var animated = bootstrap.Animated;
+        var cabinet = bootstrap.Cabinet;
+        var initial = pushes.First(item => item.Offset > cabinet.Offset && item.Offset < bootstrap.InitializerEnd && sequences.Contains(item.Value));
+        var cameraName = pushes.Single(item => item.Offset >= bootstrap.CameraStart && item.Offset < bootstrap.CameraEnd && item.Value == "Surgery3DCamera");
+        var cameraStart = bootstrap.CameraStart;
         float F32(uint address) => BitConverter.ToSingle(read(address, 4));
         float F64(uint address) => (float)BitConverter.ToDouble(read(address, 8));
         List<(int Offset, float Value)> References(int start, int end, byte first, byte second, Func<uint, float> number)
@@ -101,7 +88,7 @@ internal static partial class FalloutExecutableStringTable
         if (numbers.Any(value => !float.IsFinite(value)) || width[0].Value <= 0 || cameraFloats[0].Value <= 0 ||
             cameraFactors[1].Value <= 0 || lightColors[0].Value < 0 || lightRadius[0].Value <= 0)
             throw new InvalidDataException("Owned LoveTester declaration has invalid numeric values.");
-        return new(animated.Value, cabinet.Value, angles, offsets[0], offsets[4], offsets[1], width[0].Value,
+        return new(OwnedLoveTesterMesh(animated.Value), OwnedLoveTesterMesh(cabinet.Value), angles, offsets[0], offsets[4], offsets[1], width[0].Value,
             cameraFloats[0].Value, cameraFactors[1].Value, lightColors[0].Value, lightRadius[0].Value,
             pairs[0].forward.Names, pairs[0].backward.Names);
     }

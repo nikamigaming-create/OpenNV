@@ -15,14 +15,16 @@ public partial class NativeActorPerformanceAudit
         short stage, string[] dependencies)
     {
         var fixture = new Node3D(); AddChild(fixture);
+        FalloutPluginStack? recordOwner = null;
+        FalloutReferenceWorld? worldOwner = null;
         try
         {
             var installation = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(baseRoot);
             RuntimeLiveContentSource.Configure(baseRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
                 installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
             var content = RuntimeLiveContentSource.Current!;
-            using var records = FalloutPluginStack.Load(content.PluginSources);
-            using var world = new FalloutReferenceWorld(records);
+            var records = recordOwner = FalloutPluginStack.Load(content.PluginSources);
+            var world = worldOwner = new FalloutReferenceWorld(records);
             var caller = FalloutDialogueTopic.Find(records, "ACHR", actorId).FormKey;
             var quest = FalloutDialogueTopic.Find(records, "QUST", questId).FormKey;
             var quests = new FalloutQuestState(records); quests.EnterStage(quest, stage);
@@ -79,7 +81,19 @@ public partial class NativeActorPerformanceAudit
                 condition => quests.Evaluate(condition), templates: reference => world.Get(reference).Templates,
                 quests: quests, playerFemale: () => false, references: world);
             speech.PrepareSubtitle = _ => { };
-            speech.ExecuteResults = (_, _, _) => throw new NotSupportedException("This isolated audio fixture does not execute campaign results.");
+            var resultInvocations = 0;
+            var results = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
+                _ => throw new NotSupportedException("This isolated audio fixture does not execute campaign results."), Globals: globals));
+            speech.ExecuteOwnedResults = (info, speaker, begin) =>
+            {
+                if (!NativeAuthoredResultAudit.IsEmpty(records, info, begin))
+                    throw new NotSupportedException("This isolated audio fixture does not execute campaign results.");
+                var receipt = results.ExecuteResultOwned(info, speaker, begin);
+                if (receipt.CommittedSteps != 0)
+                    throw new InvalidDataException("Result-free package executed an authored result instruction.");
+                ++resultInvocations;
+                return receipt;
+            };
             speech.SayToCompleted += _ => throw new InvalidDataException("Package speech invented a script SayToDone event.");
             fixture.AddChild(speech);
             var requests = 0; var completions = 0; Action? retired = null;
@@ -109,9 +123,18 @@ public partial class NativeActorPerformanceAudit
             if (requests != 1 || completions != 0 || Done() || !speech.IsTalking(caller) ||
                 voice.GetProperty("audioSha256").ValueKind != JsonValueKind.String || voice.GetProperty("lipSha256").ValueKind != JsonValueKind.String)
                 throw new InvalidDataException("Package did not retain its real owned voice/lip continuation.");
+            var selectedIdentity = voice.GetProperty("info").GetString() ??
+                throw new InvalidDataException("Actual package voice has no selected INFO identity.");
+            var selectedInfo = FalloutDialogueTopic.Read(records, source.Topic!.Value).Infos
+                .Single(info => info.Record.FormKey.ToString() == selectedIdentity);
+            if (!NativeAuthoredResultAudit.IsEmpty(records, selectedInfo, true) ||
+                !NativeAuthoredResultAudit.IsEmpty(records, selectedInfo, false))
+                throw new NotSupportedException("This isolated audio fixture does not execute campaign results.");
+            var expectedResultInvocations = NativeAuthoredResultAudit.Invocations(selectedInfo);
             var deadline = Time.GetTicksMsec() + 20000;
             while (speech.Active && speech.Error is null && Time.GetTicksMsec() < deadline) await Frame();
-            if (speech.Active || speech.Error is not null || requests != 1 || completions != 1 || !Done())
+            if (speech.Active || speech.Error is not null || requests != 1 || completions != 1 || !Done() ||
+                resultInvocations != expectedResultInvocations)
                 throw new InvalidDataException(speech.Error ?? "Package did not complete once after actual audio finished.");
             var revision = JsonSerializer.SerializeToElement(actor.AiState).GetProperty("packageEvents").GetProperty("Revision").GetInt64();
             retired!();
@@ -130,12 +153,22 @@ public partial class NativeActorPerformanceAudit
             retired();
             if (JsonSerializer.SerializeToElement(actor.AiState).GetProperty("packageEvents").GetProperty("Revision").GetInt64() != replacedRevision)
                 throw new InvalidDataException("Old audio completed a replacement package.");
-            if (!sourceHash.AsSpan().SequenceEqual(SHA256.HashData(package.ReadData())))
+            if (resultInvocations != expectedResultInvocations ||
+                !sourceHash.AsSpan().SequenceEqual(SHA256.HashData(package.ReadData())))
                 throw new InvalidDataException("Dialogue audit modified its owned package.");
             GD.Print($"OPENNV_NATIVE_DIALOGUE_PACKAGE_PASS actor={caller} package={package.FormKey} optionalLocation=true ownedNavm=true ownedKf=true " +
                 "nativeCapsule=true blockedWall=true targetRange=true ownedAudio=true ownedLip=true completionAfterAudio=true eventOnce=true replacementGuard=true " +
+                $"originalResultScopes=true authoredResultInvocations={resultInvocations} " +
                 "pendingSaveRefused=true scriptEvent=false recording=false fixture=synthetic-floor-wall-player campaign=unverified parity=unverified");
         }
-        finally { fixture.Free(); RuntimeLiveContentSource.Clear(); }
+        finally
+        {
+            try { fixture.Free(); }
+            finally
+            {
+                try { worldOwner?.Dispose(); }
+                finally { recordOwner?.Dispose(); RuntimeLiveContentSource.Clear(); }
+            }
+        }
     }
 }

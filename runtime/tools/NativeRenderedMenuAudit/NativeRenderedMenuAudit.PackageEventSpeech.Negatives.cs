@@ -22,7 +22,17 @@ public partial class NativeRenderedMenuAudit
             AddChild(body); body.SetProcess(false); body.SetPhysicsProcess(false);
             speech = PackageSpeechOwner(records, configuration, world, quests, initialSaid.ToHashSet());
             var results = 0; var infos = 0; var sourceCompletions = 0; var callbackPrefix = 0; var nextEnded = 0;
-            speech.ExecuteResults = (_, _, _) => { ++results; throw new InvalidDataException("Original result-free INFO invented results."); };
+            var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
+                _ => throw new InvalidDataException("Original result-free package reached an effect.")));
+            speech.ExecuteOwnedResults = (info, caller, begin) =>
+            {
+                RequireFinished(NativeAuthoredResultAudit.IsEmpty(records, info, begin), "Package callback test reached a nonempty original result scope.");
+                var result = scripts.ExecuteResultOwned(info, caller, begin);
+                RequireFinished(result.CommittedSteps == 0, "Package callback test executed a result instruction.");
+                ++results;
+                return result;
+            };
+            var expectedResults = NativeAuthoredResultAudit.Invocations(FalloutDialogueTopic.Decode(records.GetEffective(expectedInfo)));
             speech.InfoCompleted += info => { RequireFinished(info == expectedInfo, "Callback fixture changed original INFO."); ++infos; };
             speech.SayToCompleted += _ => ++sourceCompletions;
             AddChild(speech); speech.StartPackageEventTopic(actor, package, eventKind, topic);
@@ -47,7 +57,7 @@ public partial class NativeRenderedMenuAudit
             var deadline = Time.GetTicksMsec() + 25000;
             while (callbackPrefix == 0 && native.Error is null && Time.GetTicksMsec() < deadline)
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            RequireFinished(callbackPrefix == 1 && ends == original.Responses.Count && results == 0 && sourceCompletions == 0 &&
+            RequireFinished(callbackPrefix == 1 && ends == original.Responses.Count && results == expectedResults && sourceCompletions == 0 &&
                 random == JsonSerializer.Serialize(world.ScriptValues.Capture()),
                 native.Error ?? "Package completion callback did not consume exactly one original audio prefix.");
             var state = JsonSerializer.SerializeToElement(native.State);
@@ -65,7 +75,7 @@ public partial class NativeRenderedMenuAudit
                 RequireFinished(!native.CanCaptureFinishedState, "Active native response was admitted before save capture.");
                 await WaitFinishedSpeech(native, allowFailure: false);
                 var settled = native.CaptureFinishedState();
-                RequireFinished(nextEnded == 1 && callbackPrefix == 1 && infos == 1 && results == 0 && sourceCompletions == 0 &&
+                RequireFinished(nextEnded == 1 && callbackPrefix == 1 && infos == 1 && results == expectedResults && sourceCompletions == 0 &&
                     settled.Voices.Single() == new FalloutNativeVoiceHistory(actor, 2, 0) &&
                     settled is { CompletedPackages: 0, RequestedPackageEventTopics: 1, CompletedPackageEventTopics: 1 },
                     "Reentrant native generation lost its independent completion or replayed original package history.");
@@ -81,7 +91,7 @@ public partial class NativeRenderedMenuAudit
                 RejectFinished(() => native.CaptureFinishedState(), "Incomplete package callback was saved without continuation state.");
                 RequireFinished(!native.CanCaptureFinishedState, "Ended but opaque package callback was admitted before save capture.");
                 native._Process(0); native._Process(0);
-                RequireFinished(callbackPrefix == 1 && native.Error == callbackError && results == 0 && sourceCompletions == 0 &&
+                RequireFinished(callbackPrefix == 1 && native.Error == callbackError && results == expectedResults && sourceCompletions == 0 &&
                     random == JsonSerializer.Serialize(world.ScriptValues.Capture()),
                     "Failed native package callback replayed committed results/counters/RNG.");
                 GD.Print("OPENNV_NATIVE_PACKAGE_SPEECH_CALLBACK_FAILURE_PASS actualOwnedAudioEnd=true " +

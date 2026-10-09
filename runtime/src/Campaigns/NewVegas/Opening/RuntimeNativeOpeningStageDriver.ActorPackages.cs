@@ -17,7 +17,12 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (_pluginStack.GetEffective(state.Base).Signature is not ("NPC_" or "CREA"))
             throw new InvalidDataException("Package evaluation target is not an actor.");
         if (!world.IsEnabled(reference)) return;
-        if (!world.IsResident(reference)) { _ = world.CurrentPackage(reference); return; }
+        if (!world.IsResident(reference))
+        {
+            (world.UnloadedPackages ?? throw new NotSupportedException("Actor has no unloaded package election owner."))
+                .EvaluatePackages(reference, reset);
+            return;
+        }
         // Enable-parent changes can make a source actor resident before its
         // next presentation update. Use the same source factory as that update
         // instead of treating the missing node as a missing gameplay actor.

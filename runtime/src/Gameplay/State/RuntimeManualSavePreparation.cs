@@ -12,16 +12,11 @@ internal static class RuntimeManualSaveSourceBoundary
 {
     internal static RuntimeManualSaveAdmission Observe(FalloutScriptManualSaveRequests requests, bool autoSaveRequested = false)
     {
-        if (requests.WritingRequestedSlot)
-            return new(RuntimeManualSaveAdmissionKind.Refused, "source-manual-save-writing");
+        if (autoSaveRequested) throw new InvalidDataException("A Boolean cannot authorize an AutoSave request; the actual source lease must enqueue it.");
+        if (requests.WritingRequestedSlot) return new(RuntimeManualSaveAdmissionKind.Refused, "ordered-save-writing");
         try { requests.RequireCapture(); }
-        catch (NotSupportedException error)
-        {
-            return new(RuntimeManualSaveAdmissionKind.Refused,
-                $"source-manual-save: {error.Message} generation={requests.Receipt?.Generation} disposition={requests.Receipt?.Disposition ?? "entered-source-invocation"}");
-        }
-        return autoSaveRequested ? new(RuntimeManualSaveAdmissionKind.Refused, "concurrent-auto-save") :
-            new(RuntimeManualSaveAdmissionKind.Ready);
+        catch (NotSupportedException error) { return new(RuntimeManualSaveAdmissionKind.Refused, "source-save: " + error.Message); }
+        return new(RuntimeManualSaveAdmissionKind.Ready);
     }
 }
 
@@ -88,6 +83,7 @@ internal static class RuntimeManualSaveFeedback
     {
         var message = receipt.Disposition switch
         {
+            "pending" when receipt.Preparation is null => "Save queued. " + (receipt.DeferredBy ?? "Waiting for its ordered preparation") + ". Gameplay continues until preparation owns the pause.",
             "pending" => receipt.Preparation is { RemainingVoices.Count: > 0 } preparation
                 ? $"Saving... Waiting for {preparation.RemainingVoices.Count} original finite sound(s) to report native Finished. Gameplay is paused. Cancel leaves the previous Continue save intact."
                 : "Saving... Preparing a complete checkpoint. Gameplay is paused; no new save exists yet.",
@@ -97,12 +93,10 @@ internal static class RuntimeManualSaveFeedback
             "cancelled" => "Requested save cancelled; its slot was not committed: " + receipt.Error,
             _ => throw new InvalidDataException("Manual save has no verified visible disposition.")
         };
-        if (receipt.OrderedSourceSave is { } source)
-        {
-            message += source.Disposition == "completed"
-                ? $" Original ForceSave committed its own slot {source.Slot:N} before this requested slot."
-                : $" Original ForceSave {source.Slot:N} remains {source.Disposition}: {source.Error ?? "awaiting its original writer"}.";
-        }
+        if (receipt.OrderedRequests is { Count: > 0 } ordered)
+            message += $" Earlier requests: {ordered.Count(row => row.Disposition == RuntimeSaveRequestDisposition.Completed)} committed, " +
+                $"{ordered.Count(row => row.Disposition == RuntimeSaveRequestDisposition.Pending)} pending, " +
+                $"{ordered.Count(row => row.Disposition == RuntimeSaveRequestDisposition.Failed)} failed.";
         return message + (receipt.CleanupError is null ? "" : " Cleanup failed: " + receipt.CleanupError);
     }
 }

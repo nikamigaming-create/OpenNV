@@ -1,5 +1,11 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args.Length == 3 && args[0] == "--test-native-guest-arena")
+{
+    NativeGuestArenaContracts.Run(args[1], args[2]);
+    return;
+}
+
 if (args.Length == 3 && args[0] == "--test-native-domain")
 {
     NativeExecutionContracts.Run(args[1], args[2]);

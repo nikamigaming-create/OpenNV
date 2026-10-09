@@ -97,8 +97,10 @@ internal static partial class EscortContracts
     private static byte[] FaultFixture()
     {
         var source = Package(9, 200);
-        var header = new byte[20]; BitConverter.GetBytes(1u).CopyTo(header, 8);
-        var result = Join(Field("POEA", []), Field("SCHR", header), Field("SCDA", [0]),
+        // This fixture exercises the explicit source-diagnostic owner.
+        // Dummy bytes cannot authorize a compiled package result prefix.
+        var header = new byte[20];
+        var result = Join(Field("POEA", []), Field("SCHR", header),
             Field("SCTX", Encoding.ASCII.GetBytes("ModAV Variable05 1\nUnsupportedPackageCommand\0")));
         var actorData = new byte[24]; actorData[8] = 1;
         var reference = Record("ACRE", 0x90, Field("NAME", BitConverter.GetBytes(0x81u)), Field("DATA", new byte[24]));

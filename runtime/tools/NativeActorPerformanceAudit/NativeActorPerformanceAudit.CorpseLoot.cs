@@ -26,10 +26,7 @@ public partial class NativeActorPerformanceAudit
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
             var opening = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-            var restored = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records,
-                FalloutNativeVigorResolver.Resolve(records, opening), FalloutNativeTagSkillResolver.Resolve(records, controls),
-                FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
-                FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening));
+            var restored = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records);
             var saved = restored.State;
             var fields = actorId.Split(':');
             if (fields.Length != 2) throw new ArgumentException("Equipped loot requires plugin:hex-reference.");

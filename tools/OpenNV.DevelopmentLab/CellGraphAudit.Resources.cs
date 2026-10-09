@@ -106,6 +106,8 @@ internal static partial class CellGraphAudit
                         try
                         {
                             var obj = nif.ReadObject(block.Index); row.DecodedBlocks++;
+                            SourceControllerLinks.Inspect(nif, obj, row);
+                            SourcePhysicsDeclarations.Inspect(nif, obj, row);
                             if (obj is FalloutNifGeometry geometry)
                             {
                                 row.Geometry++;

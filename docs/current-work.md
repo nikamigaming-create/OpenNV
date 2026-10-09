@@ -2,289 +2,196 @@
 
 ## Active objective
 
-Complete standalone FNV, standalone Fallout 3, TTW, all selected DLCs/mods and
-their combined behavior in flat/OpenXR. The user requires all nine JAM modules,
-JIP, JohnnyGuitar and JFP. JFP's package identity remains unresolved. Every
-winning source entity, gameplay effect, save/audio/UI owner, draw, frame and
-final pixel belongs to acceptance. [implementation-plan.md](implementation-plan.md)
-defines the complete graph, ordinary campaigns, cold continuation, matched
-retail evidence and checked publication. All 36 broad requirements remain open;
-component checks establish no completion percentage.
+Complete standalone Fallout: New Vegas, standalone Fallout 3, TTW, every selected
+DLC/mod and their combined behavior in flat/OpenXR. The requested stack includes
+all nine JAM modules, xNVSE, JIP LN, JohnnyGuitar, JFP and every required dependency.
+JFP's exact package identity remains unresolved. All 36 broad requirements remain
+open. Counts, registration, compilation and earlier footage establish no campaign
+completion percentage. The complete direction is in [implementation-plan.md](implementation-plan.md).
 
-All four owners remain active. Primary integrates, builds, plays and publishes
-serially. The user prioritizes complete data/scene/selection audits before broad
-repeated gameplay. Parallel owners trace incoming animation declarations,
-classify the completed scene failures and establish xNVSE pair-expression
-grammar. Primary executes the complete audit lanes and integrates general
-source owners. The shared source color binding fixes the reproduced black FO3
-text.
-C# remains authoritative;
-owned files are read-only inputs and private observations never become gameplay
-authority. Recording and trace stay off outside a specific visual check.
+The user requires substantial greenfield code batches, maximum parallel ownership
+and no earlier OpenNV/save compatibility. Compile during integration; execute
+combined broad/native/owned checks at roughly four-hour intervals and before
+publication. The active ten-minute implementation follow-up checks actual code,
+keeps available slots assigned and resumes substantive work. Recording and trace
+remain off outside a specific visual check. Owned inputs remain read-only/private;
+C# owns formats/gameplay/persistence and Godot adapts presentation/input/OpenXR.
 
-## Verified state
+## Current owners
 
-Independent corpus/quest audits finish against all four exact launcher selections
-with unchanged audit binaries and natural nonzero exits. Every discovered winning
-payload/layout and loose/BSA resource has an accounting disposition; refused
-members retain no successful byte evidence. Deleted winners remain counted;
-all raw program fields and source bodies have dispositions.
+| Owner | Active implementation |
+| --- | --- |
+| Primary | Frozen packet integration, actual driver/coordinator/capture/lifecycle joins, retained source-data failures and combined compilation/publication |
+| active_radio_save | Source menu shortcut packet frozen; general source-screen projection and clipping owners |
+| fo3_special_book | Source Actor AI update byte and genuine CELL load/attach/detach/release producers |
+| scope_plugin_audit | Loaded-source and binary-file members, separate logical/backend positions and native callable-page ownership |
 
-| Selection | Winning records | Deleted winners | Winning resources | Corpus / quest failures |
+The three parallel owners submit immutable first-party source proposals. Primary
+alone controls tracked integration, builds, native/game processes, input, saves
+and publication. A completed owner moves directly to the next missing capability.
+
+The reported first-person beard and post-trait couch failure are repaired in the
+separate immutable Release `fnv-dev-6c79290edde5`, pinned at
+`local/releases/FNV Test.cmd`. Ordinary test/questionnaire/tag/trait gameplay,
+exit/movement, complete ability save/cold state, selected owned ability and the
+mandatory runtime gate pass. The exported executable also enters/exits the couch,
+moves and quits with exit code 0; the user's original save is unchanged. PR 182
+is pushed and its CI merge is pending. Preserve this delivered package while
+integrating the larger current/compiled candidate; it is not campaign completion.
+Next primary joins are SourceFiles18 -> LoadedFiles13 and the retained rest,
+detection/process and source constructor-registration proposals. Source-only
+packets and successful compilation remain distinct from executed gameplay.
+
+## Integrated candidate
+
+The current feature branch is `codex/compiled-authority-world-dependencies`, based
+on `9c1a694fbce0a5d3f5374a4febf30c83af8c3862`. The substantial uncommitted candidate
+contains compiled SCDA execution/scheduling and current cursors, result-driven
+startup/control bindings, actual PACK/TERM/quest result scopes and source save
+requester leases. Actor KF/IDLE/ANIO, PACK/IDLM/INFO/controller dependencies,
+LAND/primitive declarations, unsized NIF headers, typed blend/constraint declarations
+and particle color/collision/lifecycle owners are integrated. Actor script-package
+overrides join resident/unloaded selection and genuine lifecycle receipts.
+
+Persistent player skills, actor-value pools, XP, advancement/menu state and
+acquired PERK ranks share actual gameplay owners. Source PERK/GMST trait selection
+and native level-up presentation use winning source declarations. Numeric entry9/22
+consumers preserve Float32 operations and live conditions; acquired multiple-entry
+ordering remains unowned. The rate selector now uses neutral getter/operand/
+rounding/cadence declarations bound to exact executable/dependency/configuration
+identities. Root binds current native source/activity and XP lifecycle before source
+execution. XP requests retain their real award sequence, distinct wall/pausable
+timers, native draw and audio receipts, selected source declarations and mandatory
+cold state. Flat native HUD publication and retirement are joined; XR HUD surfaces,
+active-meter retargeting and other unowned arms remain
+explicit failures. Original HUD completion/reset and independent container-interface
+frame producers are integrated with actual completed level-menu submission, source
+factory-entry consumption, multi-level notification continuation and mandatory
+current snapshots. Actual lockpick continuation remains unowned. Clock/award-owner
+retirement now completes each cleanup independently and retains original errors.
+Player physical activity is now integrated with the actual player body, live vitals,
+current actor values and source IDLE/KF recovery. Source explosion damage commits
+once; simulation and recovery share the original knocked query value1. Mandatory
+current saves retain furniture reservation/placement, fractional physical clocks,
+complete bones, attempted keys, RNG and sound history. Awake/upright observations
+require actual healthy native body publication before source execution. Independent
+IsPCSleeping, actor sleep and knocked queries bind the same owners; retained physical
+faults stop dependent script execution. Obsolete furniture-body factories are removed.
+The actual sleep/wait consumer, active sleep continuation, interruption/death and
+camera/headset acceptance remain open. Player appearance now resolves the canonical
+engine base instead of an editor-name search.
+Required absent physical/frame/native-effect facts never default to Ready.
+Native attachment, mutation, submission and post-completion retirement faults retain
+the actual prefix and cannot replay through a cold publication.
+
+The one persistent save queue joins distinct SCDA/native/player origins, original
+writer destinations, current capture, source suspension, process identity and
+finite-audio-safe manual preparation. Historical checkpoint/schema promotion is
+removed. Selected executable CommandInfo/ParamInfo owns command names, argument
+types/optional flags and reference requirements. Public API names choose admitted
+shared semantic owners instead of assumed opcode positions. Twenty-eight additional
+existing gameplay consumers now enter compiled dispatch, including ordinary name,
+tag and trait input, activation, sound, detection and recipe/barter/idle effects.
+The tag menu requires its genuine source request. The SPECIAL tester reads the
+actual command-forwarded menu identity, XML/model declarations and attribute
+bounds from the selected executable; source input supplies its allocation total.
+Product launch no longer depends on an authored quest/trigger/stage contract.
+
+Native NVSE registration/messaging/serialization, expression caller/token utilities
+and all StringVar/ArrayVar callable entries are integrated candidates. Values,
+arrays and typed results join the campaign stores; source-declared heap thunks,
+native Element buffers and borrowed strings retain actual allocation lifetimes.
+Original Script/TESForm projections, original DLL entry, hooks and complete plugin
+behavior remain open. Private I/O now has a candidate restricted child lifetime,
+pre-entry input protection, original import adapters and actual scoped private
+config/state/diagnostic routes. It fixes two concrete callback/module-receipt
+dispatch omissions discovered after value integration. Actual restricted-token,
+ACL, original DLL entry and route execution remain unverified. Genuine quest and
+retained-reference local storage, exact original SCDA caller identity, read-only
+native linked metadata, complete streamed cells, callback mutation/reentry barriers
+and quarantine retirement are integrated. The campaign service now joins real
+selected-module ownership, top-level and nested compiled callers, original payload
+slices, deferred argument decoding, save admission and child-closure-dependent
+retirement. Original Script/TESForm projections and used public methods are
+implemented candidates; absent constructor, ModInfo/Quest, actor, RTTI and
+fixed-address hook owners remain visible failures before original acceptance.
+
+Quest and reference event lists now own every ordered UInt64 payload directly.
+First-ID lookup is a view of those cells. Original duplicate IDs and mixed numeric/
+reference views are preserved instead of rejected or flattened. Both selected
+original loaders establish the SLSD initial payload; current saves require the
+complete source/order/flag/payload snapshot. Native mutations publish by ordinal
+against the real campaign owner's retained prefix. Cold loading retains original
+script errors without a compatibility retry or silent clearing.
+
+Actual ordered CombatManager lists now join source target acquisition, provocation,
+assistance, player damage, cold state and independent retirement. XP observes the
+personal target count; public player combat queries observe their separately cached
+incoming-member flag at the actual update. Construction precedes bootstrap scripts,
+and cold/driver attachment reuses that same source lifetime. Pause holds the source
+update during finite save drains. Current saves require the real group owner;
+active controller/auxiliary/target-timer continuation, living detection, reactions
+and companion election remain open. Selected native module failures now stop
+dependent gameplay and refuse complete capture with missing module state.
+
+## Verified state and limits
+
+The latest combined runtime Debug integration build, ReferenceScriptContractProbe
+compilation, native x86 companion compilation and native-domain probe compilation
+exit zero with no warnings/errors. Source-rate integration and source-name command
+roles, XP/HUD/cold joins, original frame producers, private I/O, genuine source local
+storage, source SPECIAL selection and complete physical-state joins are included.
+The latest runtime Debug and x86 companion Debug builds also include the campaign
+service and complete ordered-local joins, with zero warnings/errors. The current
+script and native-domain probes also compile with zero warnings/errors for that
+follow-on; no original DLL or candidate campaign execution has occurred.
+Broad/native/owned execution of this candidate is outstanding.
+Earlier merged checks and immutable observations do not accept it.
+
+The unchanged complete owned corpus and quest lanes have these retained failures:
+
+| Selection | Winning records | Winning resources | Corpus / quest failures |
+| --- | ---: | ---: | ---: |
+| FNV | 628,463 | 181,963 | 55 / 52 |
+| FO3 | 930,306 | 159,163 | 36 / 37 |
+| TTW | 1,556,615 | 330,173 | 11 / 5 |
+| Combined | 1,556,976 | 330,362 | 17 / 11 |
+
+The immutable full CELL/reference/alternative sweeps have now all finished and
+retired naturally with failed exits. Their original receipts remain unchanged:
+
+| Selection | Selected / completed cells | Winning graph rows | Cell errors / graph failure events | Runtime rows unverified |
 | --- | ---: | ---: | ---: | ---: |
-| FNV | 628,463 | 68 | 181,963 | 55 / 52 |
-| FO3 | 930,306 | 62 | 159,163 | 36 / 37 |
-| TTW | 1,556,615 | 0 | 330,173 | 11 / 5 |
-| Combined | 1,556,976 | 0 | 330,362 | 17 / 11 |
+| FNV | 44,517 / 44,517 | 520,570 | 0 / 895 | 520,503 |
+| FO3 | 50,755 / 50,754 | 854,257 | 1 / 1,396 | 854,196 |
+| TTW | 95,381 / 95,360 | 1,391,574 | 21 / 2,052 | 1,391,574 |
+| Combined | 95,382 / 95,361 | 1,391,576 | 21 / 2,052 | 1,391,576 |
 
-Corpus rows bind the checked archive owner; quest rows bind the newer matching
-event-label parser owner. Their independent binaries and original receipts
-remain retained. Six original matching-label scripts now parse independently
-in FNV, TTW and combined, with identical source bytes and complete raw-field
-report hashes. All unrelated failures are unchanged. Fresh complete corpus and
-configured-subset reads under that parser remain pending; no failed historical
-receipt is rewritten. Bare End or an optional exact matching event name shares
-the existing scope checks. Debug/Release contracts retain nine malformed-scope
-refusals. Parsing neither invokes an event nor admits compiled execution.
+All four retain false readiness. These scans bind their earlier unchanged Release
+binaries, independently of this candidate. The configured JAM/TTW/NMC subset lane
+also remains failed; missing JohnnyGuitar/Stewie selections have unknown denominators.
+Arbitrary packages/orders/settings and all ordinary native effects remain scope.
 
-The combined quest lane retains 5,332 unbound statements and 90,052 uninspected
-commands. Its 155,200 program rows include 27,057 with compiled bytes and seven
-compiled-only programs. Compiled execution ownership remains unmeasured; static
-inspection makes no owner-count claim. Failed audits remain failures, and every
-selection keeps runtime readiness false. Fresh Release corpus scans read every
-winning payload/layout with zero unread winners and complete byte evidence for
-all winning resources in all four selections. They preserve every remaining
-parser/local-layout failure and finish naturally with failure under unchanged
-binaries. The earlier strict reader's four source-encoding refusals remain in
-their original receipts. The shared record/archive owner validates exact
-stored/fixed/dynamic final extent and output/history/window bounds, with the actual
-inflater independently owning alphabet admission. The rebuilt archive reader now
-also admits source-proven exact declared-empty and checksum-absent header/body
-encodings without game/path exceptions. Actual Debug/Release record, archive,
-Huffman and corpus contracts pass. Four independently selected original members
-pass exact encoding/decoded-count/hash checks with unchanged container hashes.
-Framed bad-Adler and malformed bodies remain refused without cached evidence;
-the record checksum compatibility case remains separate. Complete corpus reads
-establish the new encoding owner; its configured subset sweep and full scene
-dependency reads remain pending. Earlier failures remain bound to their original
-binaries.
+Earlier ordinary builds reached FNV's farewell/Goodsprings, FO3's birthday/Amata
+stage21 and TTW's vault exit. Those reached states and old cold receipts are
+historical component evidence, not acceptance of the greenfield save schema or
+this branch. The shared source color owner repaired reproduced black FO3 dialogue
+and passed original menu font checks in all four selections. Source physics,
+rendering/audio, later campaigns, every mod outcome and physical headset parity
+remain independent open requirements. [status.md](status.md) retains the detailed
+verified component boundaries and original failures.
 
-The configured JAM/TTW/NMC on/off sweep visits all eight subsets with unchanged
-binaries and a natural failed exit. Six selections retain their source failures;
-TTW and TTW+NMC without JAM refuse the missing JohnnyGuitar and Stewie roots.
-Those refusals keep unknown winning denominators. These byte reads also bind the
-prior archive reader. Unconfigured packages, arbitrary orders/settings, JAM
-toggles and native behavior remain independent coverage dimensions.
-Fresh matching-label Release quest scans finish against all four exact selections
-with zero unread winners, complete raw-field/body dispositions, zero admitted
-world instances and 52/37/5/11 failures. Every process exits naturally with
-failure, retaining unchanged binaries and false runtime readiness. Expression
-call counts and compiled execution owners remain null, not zero.
-Focused corpus/quest/cell and final default contracts pass in Debug and Release;
-the full required runtime gate also passes after dependency integration.
-Direct statement
-names now exclude expression/legacy argument calls, whose null denominators
-remain explicitly unknown. Compiled execution coverage is independent.
+## Next integration and publication
 
-Ordinary FNV creation reaches stage 200, accepts the original farewell/Hardcore
-choice and exits to Goodsprings. Its complete v48 checkpoint cold-Continues in
-another process with the walked position, 120 HP, 27 entries and unchanged bytes.
-Simulator wrist/controller input equips/reloads the source pistol, selects Easy
-Pete's voiced dialogue and kills resident source coyotes. Sunny/Cheyenne,
-complete combat, creatures, world/campaign coverage and retail parity remain open.
+Continue original sleep/wait/time/effect ownership, plugin object/method ownership,
+combat-group/XP arbitration and retained general source-data failures
+without named-content shortcuts or fabricated readiness. Replace obsolete authored
+save fixtures with the current unified queue
+in the later combined validation window; do not preserve old owner behavior.
 
-Standalone FO3's immutable stage-14 checkpoint cold-restores at 100 HP with both
-inventory entries. Source NPC door access and complete capsule navigation let
-Dad finish the playpen/room route. Ordinary activation/movement reaches the
-SPECIAL book; geometry pointer input allocates its original 40 points as
-6/6/6/5/6/6/5. Dad's actual bookshelf package, dialogue and escort reach CG01
-stage 100. The original age/equipment/movie handoff reaches CG02 birthday stage
-12. Source optimized inventory/radio notices, dialogue speaker admission before
-quest priority and GetSitting's actual declared subject are independently checked.
-Ordinary replay reaches Amata's source-package greeting, selects two original
-responses, receives the skill-book gift and reaches stage 21 without a blocking
-driver error. Both processes quit naturally with code zero and a clean footer.
-The automatic save remains deferred by six unchanged legacy birth loops; the
-manual attempt fails concurrent-auto-save without writing either checkpoint.
-Later childhood/vault exit/Megaton and complete cold checkpoints remain open.
-Paul's actual FO3 Eat procedure remains unbound; TTW independently overrides
-that package to Travel. Food election, used-item idle, consumption/effect timing
-and genuine procedure completion need owners.
-
-TTW ordinary input completes the original key/combat/terminal/tunnel route and
-vault exit to stage 150. Its immutable walked exterior checkpoint cold-Continues
-at the saved position with 115 HP, 8/14 rounds, nine entries and unchanged bytes.
-All 121 selected LOD tiles remain resident with pending zero. Simulator input
-walks around canyon colliders and kills the resident molerat. Megaton/Union
-Station/Mojave/Benny, return travel, full campaigns and DLCs remain open.
-
-Save v49 retains bounded active source-radio PCM continuation. Typed primary
-source-bone continuation retains source reference/NIF/bone identity and the
-fractional clock, rebuilds the canonical adapter before any key, and preserves
-257 exact samples without replay. Native mixer faults refuse Finished/Stop
-success. Genuine living TTW creature source-key completion and cold skeleton
-reconstruction pass with its complete unchanged reference/enable/script graph;
-dead and effectively disabled owners refuse dispatch. Anonymous legacy birth
-loops, independent ANIO and disabled/off-cell emitter semantics remain unowned.
-A separate terminal capture-delegate lifetime repair is source-only and unrun.
-No missing history is cleared or retroactively completed. Save ordering requires
-a persistent request owner; clearing the pending-auto flag is not a repair.
-
-Failed mesh/skin/collision/hinge construction retires its detached partial native
-graph. Native static/dynamic failures, independent instances, source poses and
-clean resource checks pass. Source convex lists now retain their complete ordered
-declarations and create separate convex leaves under one original body. Actual
-Debug/Release readers, authored transformed/nested/gap/256-leaf contacts and
-original FO3 vault-door/light whole-model checks pass with unchanged source bytes
-and clean natural retirement. The full required runtime gate passes. A fresh
-ordinary FO3 replay traverses the playpen door, completes the original 40-point
-book, Dad's route and CG01 stage 100, and reaches birthday stage 12 and Amata's
-source greeting. Existing source/model/AI/save errors and modal bot timeout
-remain visible; this is not a complete scene or campaign pass. Ordinary motion
-of the selected convex door/light and matched physics remain unverified. See
-[source convex lists](source-convex-list-collision.md).
-
-Winning-NIF discovery inspects 17,153 of 17,163 FO3 models, finding 71 convex
-lists in 66 models and retaining ten unsupported headers. FNV inspects 20,532
-of 20,542 with zero lists found and ten refusals. Exact TTW and combined
-selections independently inspect 32,518 of 32,537 with zero lists found and 19
-refusals. Every source audit exits with failure. Unknown older/UserVersion2/LOD
-layouts prevent complete absence or format-support claims; implement their
-actual layouts rather than deleting reader guards. Other phantom/light,
-material/filter/query/dynamics and source model failures remain open.
-
-Shared UI system colors now select complete source INI RGB components when no
-installation/profile layer supplies a packed override. Executable packed storage
-initialized to zero no longer makes FO3 dialogue black. Explicit overrides,
-including authored black, remain authoritative. Synthetic component/override,
-arbitrary palette and malformed/missing-owner contracts pass. Actual original
-dialogue-tree font output passes independently in FNV, FO3, TTW and the combined
-selection with unchanged source bytes, no retained frames and clean natural
-native/wrapper exits. The required runtime gate passes. Full menu/state coverage and matched retail pixels remain
-unverified; these checks establish the shared color owner only.
-
-The pinned engine candidate repairs actual interaction-profile and unsupported
-marker retirement errors. A fresh TTW XR Continue/menu Quit naturally retires
-both processes with code zero, all 396 prototypes and a clean resource footer.
-Its original door-controller and 565 missing SpeedTree refusals remain visible.
-The separate actual worker regression reproduces exactly three shutdown failures
-in the unrepaired engine. The repaired engine passes all ten assertions,
-including no failure cleanup, and naturally exits zero. This establishes the
-selected worker owner only. Repeated same-interface XR sessions, language TLS
-detach, extension/provider/consumer retirement, creation epochs and future
-completion callbacks remain independent gates. The installed engine is unchanged.
-Core/typed/creation/future proposals are not native acceptance.
-
-The x64 C# to x86 Windows execution domain is checked and published. Actual
-Debug/Release authored loader/TLS/import/entry, scalar cdecl/stdcall/thiscall,
-nested callbacks, correlated/malformed faults, quotas/deadlines and native
-retirement pass. The build preserves its parent environment and excludes binary
-objects from Godot imports. Selected original xNVSE/JIP/JohnnyGuitar source-memory
-audits preserve unchanged DLL hashes without loading those DLLs. Original NVSE
-interfaces, game-object projection, Query/Load/PostLoad, used hooks and
-serialization remain absent. JAM's nine ordinary outcomes, MCM, JFP and complete
-combined-stack behavior remain open. No managed replacement or registration
-check establishes unchanged-DLL compatibility.
-
-Reached rendering/navigation errors include SpeedTree procedural geometry,
-property-free draws, water/degenerate materials, fade/LOD completeness, upload
-spikes, creature pursuit/melee, child hands/wrist presentation, generic loose
-object persistence and remaining joints. The requested three-game simulator
-MP4 decodes cleanly and has been played/inspected. Dark/missing presentation,
-stereo, physical headset and matched retail acceptance remain open.
-
-## Next owner and outcome
-
-Execute complete source CELL/world/reference/alternative graphs and configured
-mod-subset audits. Scene selection includes exterior/disconnected/empty cells
-and deleted/disabled/orphan declarations. Focused Debug/Release source, cache-role,
-output-boundary, compression, exact floor-candidate and source-query-reuse
-contracts pass. The original modeled-light floor omission is reproduced and
-repaired through shared placement; enabled/disabled, transformed and differently
-scaled authored comparisons pass with native readiness still false. Disabled
-source NAVM adjacency now uses the existing shared bounds/reciprocity rules
-without activating those meshes. Exact winning external targets now validate
-triangle bounds for every entry, including disabled/unused declarations and
-overriding masters. Missing/deleted/wrong-type/unsupported targets retain source
-refusals. Authored Debug/Release checks pass; excluded flag-8 adjacency, external
-type semantics and native path contacts remain explicitly uninspected.
-Typed convex-list attribution contracts also pass: ordered source declarations
-name the existing native implementation while retaining uninspected floor
-projection, unverified admission and the original failed status.
-The old NIF audit's invented texture prefix is reproduced as a wrong-source
-failure with valid decoys. Shared native path normalization, raw alias/empty-slot
-rows, malformed sibling continuation and exact loose/BSA winner identities pass
-in Debug and Release. Sky/tile consumer policies remain explicitly uninspected.
-The old geometry audit's wrong-type Data-link false success is independently
-reproduced before repair. Actual typed mesh-data links, source extents,
-triangle/strip/segmented/shared targets, later siblings and null/malformed refusals
-pass in Debug and Release. Native geometry admission remains unverified.
-ADDN nested model and animation sound omissions independently reproduce before
-their repairs. Debug/Release contracts now retain the complete selected ADDN
-catalog, unused model roots, typed resource roles, cached cycles, 68 authored
-cases and a deep graph. Sound contracts retain every original key/segment/time
-bit and all unselected winning variants without claiming audio decode or native
-emitter admission. Final default contracts pass in both configurations.
-The complete FNV scene sweep finishes all 44,517 cells and 520,570 winning graph
-rows under immutable Release binaries. It exits naturally with failure, retaining
-895 source graph failure events and false source/runtime readiness. Resource,
-alternative and selected-reference failures are separate retained lanes; 895 is
-not their combined total. The 520,503 unverified runtime-owner rows are not
-playable entities. Graph/hash invariants pass without certifying native scenes.
-Standalone FO3 is still scanning all 50,755 selected cells; TTW and combined
-remain queued. New-reader selection subsets remain unverified.
-The full required runtime gate passes, including native project loading, and
-the diff check is clean.
-Implicit actor KF/IDLE/ANIO and typed controller proposals are frozen but unbuilt
-and unexecuted. Integrate their add-only files and narrow shared hooks after an
-actual old-owner regression, then run Debug/Release and original-data checks.
-Incoming PACK/IDLM/INFO animation links and xNVSE pair-expression syntax remain
-separate source owners. A read-only implementation
-review retains fixed bootstrap-cell, eager named opening-contract, source-comment
-and named autosave dependencies as open data-driven runtime divergences.
-The general archive encoding owner passes the selected original members and all
-four complete corpus reads. Use streamed compressed private reports on C: to retain complete
-rows without filling D:. Unknown or uninspected owners and failed rows cannot
-return readiness. Other valid selections/settings remain independent coverage
-dimensions. Fix retained source and runtime failures before broad repeated
-gameplay. The reviewed
-compiled-authority, audio lifetime, native arena and XR proposals remain queued
-source-only until integrated and executed. Selected checks, the required gate
-and checked publication remain mandatory; static parsing alone cannot establish
-runtime, save or final-pixel acceptance.
-
-## Private continuation
-
-Owned inputs, saves, media and diagnostics remain private. Use cloned checkpoints.
-
-- FNV Goodsprings: tmp/development-lab/loading-saving-fnv-20261007, slot
-  100c5809e3aa4af5b4fe7801cfbd954a, SHA256
-  A4F3B58394F7326A56D7E96821DAB2A79A77FC7996C07B98ECEE26B5011A6C3A.
-- FO3 toddler: tmp/development-lab/loading-saving-fo3-20261007, slot
-  5341c6a0d9f146ddb7f141a4b1237961, SHA256
-  340C3CC918A528BBCE18FE18F276C4D3CD8F81C5F3965F2922DF46845BEAC012.
-- TTW exterior: tmp/development-lab/loading-saving-ttw-20261007, slot
-  f657f146263a477a889668cc57b6f136, SHA256
-  99A3A0D51E88DB36B7D35030AB45FC2FA8E825EC5E5102EF930DE35472D930F0.
-
-Latest ordinary FO3 evidence:
-tmp/development-lab/full-scope-audit-20261007/ordinary-fo3-convex-20261008.
-Shared source UI colors:
-tmp/development-lab/source-ui-colors-20261008.
-Complete source denominator integration and four corpus/quest results:
-tmp/development-lab/complete-source-denominators-root-20261008.
-Matching event-label regression and original-field verification:
-tmp/development-lab/source-event-end-labels-root-20261008.
-New complete scene/subset outputs:
-C:/Users/nbrys/AppData/Local/OpenNV/private-audits/complete-source-denominators-20261008.
-Fresh clean TTW XR quit:
-tmp/development-lab/full-scope-xr-ttw-door-lifetime-20261008.
-Integrated native host and collision evidence respectively:
-tmp/development-lab/native-plugin-domain-next/root-integrated-20261008 and
-tmp/development-lab/convex-list-next/root-integrated-20261008.
-Actual worker baseline/repaired results:
-tmp/development-lab/openxr-repeat-session-next/worker-regression.
-Requested MP4:
-local/recordings/showcase-20261007/opennv-three-games-vr-showcase.mp4.
-Keep immutable checkpoints, requested deliverables and diagnostics needed by
-active owners; temporary frame recordings must not accumulate.
+After the combined batch, run the selected owned-data audit, required
+`scripts/Test-GodotRuntime.ps1` with the pinned Godot console executable and
+`git diff --check`. Fix actual failures, then publish a checked PR, merge and
+verify local main equals origin/main before the next fresh branch. Matched retail
+behavior/pixels are additionally required for any parity claim. No current
+candidate publication or full-game readiness claim has been made.

@@ -26,10 +26,7 @@ public partial class NativeDefaultActivationAudit
             var checkpointBytes = File.ReadAllBytes(checkpoint);
             var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
             var openingCell = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-            var restored = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records,
-                FalloutNativeVigorResolver.Resolve(records, openingCell), FalloutNativeTagSkillResolver.Resolve(records, controls),
-                FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
-                FalloutNativeTraitFarewellResolver.Resolve(records, controls, openingCell));
+            var restored = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records);
             var saved = restored.State;
             if (saved.References is null || saved.Quests is null || saved.Globals is null || saved.Vitals is null)
                 throw new InvalidDataException("Owned default-loot proof requires a recognized complete source checkpoint.");

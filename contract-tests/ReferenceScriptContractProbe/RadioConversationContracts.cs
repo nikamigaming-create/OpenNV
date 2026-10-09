@@ -4,6 +4,7 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.Gameplay.State;
 
 internal static class RadioConversationContracts
 {
@@ -77,10 +78,19 @@ internal static class RadioConversationContracts
             "Cold radio failed to evaluate the next source link against changed quest state.");
         var samples = new FalloutPcmPlaybackSnapshot(120, 32000, 1, 48000,
             new(FalloutSoundLoopMode.None, 0, 0), 33.25, 0, true, false);
+        var info = FalloutDialogueTopic.Decode(records.GetEffective(Key(301)));
+        var results = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
+            _ => throw new InvalidDataException("Empty result dispatched an effect.")));
+        var caller = world.DialogueSubject(Key(900));
+        var beginReceipt = results.ExecuteResultOwned(info, caller, true);
+        var endReceipt = results.ExecuteResultOwned(info, caller, false);
+        Require(beginReceipt.Authority == FalloutScriptResultAuthority.None && beginReceipt.Invocation == 0 &&
+            endReceipt.Authority == FalloutScriptResultAuthority.None && world.ScriptManualSaves.EnteredInvocations == 0,
+            "Source absence invented an executed instruction or lease.");
         var voice = new FalloutActiveRadioVoiceSnapshot(saved, 1, 0,
             new(Key(10), Key(10), Key(20), "Voice", Key(301), "Radio.esm", 1,
                 "sound/voice/radio.esm/voice/source_0000012d_1.ogg", "sound/voice/radio.esm/voice/source_0000012d_1.lip"),
-            new('a', 64), null, new('b', 64), samples, false, false);
+            new('a', 64), null, new('b', 64), samples, false, false, beginReceipt, endReceipt);
         var history = new FalloutNativeFinishedSpeechSnapshot([new(Key(900), 1, 0)], 0, 0, 0, 0, 0, null,
             SettledHistory: new FalloutSpeechCompletionEvents().CaptureHistory(), FinishedRadio: [], ActiveRadio: [voice]);
         RuntimeNativeSpeech.ValidateFinishedState(records, world, history);
@@ -89,6 +99,22 @@ internal static class RadioConversationContracts
         world.SetBroadcastState(Key(900), 0);
         void RejectVoice(FalloutActiveRadioVoiceSnapshot invalid) => Reject(() =>
             RuntimeNativeSpeech.ValidateFinishedState(records, world, history with { ActiveRadio = [invalid] }));
+        RejectVoice(voice with { BeginResults = null });
+        RejectVoice(voice with { EndResults = null });
+        RejectVoice(voice with { BeginResults = beginReceipt with { Caller = Key(10) } });
+        RejectVoice(voice with { BeginResults = endReceipt });
+        RejectVoice(voice with { BeginResults = beginReceipt with { Invocation = 1 } });
+        RejectVoice(voice with { BeginResults = beginReceipt with { Completed = false } });
+        var minimal = new FalloutNativeCampaignState(FalloutNativeCampaignSave.ExpectedSchema, "", default, "", 0, "",
+            null!, null!, [], [], [], [], [], [], [], FinishedSpeech: history);
+        FalloutNativeCampaignSave.ValidateResultAuthorityVersion(minimal);
+        Reject(() => FalloutNativeCampaignSave.ValidateResultAuthorityVersion(minimal with
+        { Schema = "opennv-native-fnv-campaign-save/v49" }));
+        Reject(() => FalloutNativeCampaignSave.ValidateResultAuthorityVersion(minimal with
+        { Schema = "opennv-native-fnv-campaign-save/v49", FinishedSpeech = history with
+            { ActiveRadio = [voice with { BeginResults = null, EndResults = null }] } }));
+        FalloutNativeCampaignSave.ValidateResultAuthorityVersion(minimal with
+        { Schema = "opennv-native-fnv-campaign-save/v49", FinishedSpeech = history with { ActiveRadio = [] } });
         RejectVoice(voice with { Generation = 2 });
         RejectVoice(voice with { ResponseIndex = 1 });
         RejectVoice(voice with { Binding = voice.Binding with { Actor = Key(11) } });

@@ -15,11 +15,24 @@ internal sealed class FalloutNewGameBootstrap
     private readonly FalloutReferenceWorld _world;
     private readonly FalloutQuestStages _stages;
     private readonly FalloutPluginStack _records;
-    private bool _started;
+    private bool _started, _placementCompleted;
+    private readonly Func<bool> _canContinue;
+    private FalloutNewGamePlacement? _preparedPlacement;
+    internal bool PlacementPreparing => _preparedPlacement is not null;
+    internal bool PresentationBlocked => !_canContinue();
     internal FalloutPluginRecord Quest { get; }
     internal FalloutPlayerControlState Controls { get; private set; } = FalloutPlayerControlState.AllEnabled;
     internal FalloutQuestScriptHost Host { get; }
-    internal object State => new { quest = Quest.FormKey, started = _started, controls = Controls, stages = _stages.Errors };
+    internal object State => new
+    {
+        quest = Quest.FormKey,
+        started = _started,
+        controls = Controls,
+        stages = _stages.Errors,
+        placementPreparing = PlacementPreparing,
+        placementCompleted = _placementCompleted,
+        placement = _preparedPlacement is { } prepared ? new { prepared.Move, prepared.Placement } : null
+    };
     private readonly List<FalloutReferenceScriptEffect> _playerPackages = [];
     internal IReadOnlyList<FalloutQuestStageResultSnapshot> CaptureStageResults() => _stages.CaptureResults();
 
@@ -48,20 +61,36 @@ internal sealed class FalloutNewGameBootstrap
         FalloutQuestState quests, FalloutQuestScripts scripts, FalloutReferenceWorld world,
         Action<FalloutFormKey, FalloutScriptBindings, string, IReadOnlyList<string>> command,
         Action<FalloutReferenceScriptEffect> effect, Func<bool> canContinue, FalloutGlobalState? globals = null,
-        FalloutGameTime? gameTime = null)
+        FalloutGameTime? gameTime = null, FalloutInventoryCommands? inventory = null,
+        Func<int>? playerLevel = null)
     {
         _records = records; _quests = quests; _scripts = scripts; _world = world;
+        _canContinue = canContinue ?? throw new ArgumentNullException(nameof(canContinue));
         Quest = StartingQuest(records, settings);
         var executor = new FalloutReferenceScripts(records, world, quests,
             new((_, _) => throw new NotSupportedException("Startup furniture query has no resident actor."), Apply,
                 scripts.MessageResults.Take, Globals: globals, Command: command, Events: scripts.Events,
                 LocationSpecificLoadScreensOnly: () => scripts.Session.LocationSpecificLoadScreensOnly,
-                InCharGen: () => scripts.Session.InCharGen, IsHardcore: () => scripts.Session.Hardcore, GameTime: gameTime));
-        _stages = new(records, quests, executor.StageSteps,
+                InCharGen: () => scripts.Session.InCharGen, IsHardcore: () => scripts.Session.Hardcore, GameTime: gameTime,
+                Inventory: inventory, PlayerLevel: playerLevel));
+        _stages = new(records, quests, (owner, fields, _) =>
+        {
+            if (!FalloutCompiledScriptProgram.HasProgram(fields))
+            {
+                if (fields.Any(field => field.Signature is "SCHR" or "SCTX" or "SCDA"))
+                    throw new NotSupportedException("Startup result requires its original compiled program; diagnostic source fallback is refused.");
+                return Array.Empty<bool>();
+            }
+            return executor.StageSteps(owner, fields, "");
+        },
             condition => FalloutPlatformConditions.Evaluate(condition) ?? quests.Evaluate(condition), canContinue);
         Host = new((quest, stage) => () => _stages.Enter(quest, stage),
             _ => throw new NotSupportedException("Startup player actor-value query has no player state owner."),
-            executor.ExecuteProgram, executor.InvokeFunction, GameTime: gameTime);
+            executor.ExecuteProgram, executor.InvokeFunction, GameTime: gameTime,
+            ExecuteCompiledProgram: executor.ExecuteProgram, CanContinueCompiled: _ => canContinue() && !_stages.HasPendingResults);
+        world.ExecutePerkQuestStage = effect => _stages.Enter(effect.Quest,
+            effect.Stage <= short.MaxValue ? (short)effect.Stage :
+                throw new NotSupportedException("Startup perk quest stage requires the original unsigned stage owner."));
 
         void Apply(FalloutReferenceScriptEffect change)
         {
@@ -81,7 +110,7 @@ internal sealed class FalloutNewGameBootstrap
                     scripts.Session.LocationSpecificLoadScreensOnly = change.Enable;
                     break;
                 case FalloutReferenceEffectKind.CharacterGeneration:
-                    scripts.Session.SetInCharGen(change.Enable, null);
+                    scripts.Session.SetInCharGen(change.Enable);
                     break;
                 case FalloutReferenceEffectKind.PlayerToddler:
                     scripts.Session.SetPlayerToddler(change.Enable);
@@ -95,6 +124,9 @@ internal sealed class FalloutNewGameBootstrap
                 case FalloutReferenceEffectKind.ScriptPackage when change.Target == records.RuntimeFormKey(0x14):
                     if (change.Argument is { } package) _ = FalloutScriptPackage.Read(records.GetEffective(package));
                     _playerPackages.Add(change);
+                    break;
+                case FalloutReferenceEffectKind.Message when change.Message is { } messageCall:
+                    scripts.ShowCompiledMessage(change.Target ?? throw new InvalidDataException("Compiled message target is absent."), messageCall);
                     break;
                 case FalloutReferenceEffectKind.Message:
                     var owner = records.GetEffective(change.Source);
@@ -112,6 +144,10 @@ internal sealed class FalloutNewGameBootstrap
     internal void Start()
     {
         if (_started) throw new InvalidOperationException("New-game bootstrap was already started.");
+        var attached = FalloutScriptLocals.AttachedScript(_records, Quest);
+        if (attached is not null && !FalloutCompiledScriptProgram.HasProgram(attached.ReadSubrecords().ToArray()))
+            throw new NotSupportedException("Startup SCPT requires its original compiled program; diagnostic source fallback is refused.");
+        _scripts.RequireQuestExecution(Quest.FormKey);
         _started = true;
         _scripts.Host = Host;
         _quests.SetRunning(Quest.FormKey, true);
@@ -123,12 +159,47 @@ internal sealed class FalloutNewGameBootstrap
         _scripts.RequireQuestExecution(Quest.FormKey);
     }
 
-    internal void Advance(double seconds, IEnumerable<uint> menus)
+    internal void Advance(double seconds, IEnumerable<uint>? menus)
     {
         if (!_started) throw new InvalidOperationException("New-game bootstrap has not started.");
+        if (_placementCompleted) return;
+        if (_preparedPlacement is { } prepared) { RequirePlacementOwner(prepared); return; }
         _stages.Continue();
         _scripts.Advance(seconds, gameMode: false, menus: menus);
         _scripts.RequireQuestExecution(Quest.FormKey);
+    }
+
+    internal float EvaluateCondition(FalloutCondition condition) =>
+        FalloutPlatformConditions.Evaluate(condition) ?? _quests.Evaluate(condition);
+
+    internal FalloutNewGamePlacement? PreparePlacement()
+    {
+        if (!_started) throw new InvalidOperationException("New-game bootstrap has not started.");
+        if (_placementCompleted) throw new InvalidOperationException("Initial source placement was already published.");
+        _scripts.RequireQuestExecution(Quest.FormKey);
+        if (_preparedPlacement is { } existing) { RequirePlacementOwner(existing); return existing; }
+        if (!_canContinue() || _stages.HasPendingResults || _scripts.HasPendingStartupExecution || _scripts.HasQueuedMessage)
+            return null;
+        var placement = Placement();
+        if (placement is null) return null;
+        var move = _world.PlayerMoves.Next ?? throw new InvalidOperationException("Initial source movement disappeared during admission.");
+        _preparedPlacement = new(move, placement);
+        return _preparedPlacement;
+    }
+
+    internal void CompletePlacement(FalloutNewGamePlacement prepared)
+    {
+        RequirePlacementOwner(prepared);
+        _world.PlayerMoves.Complete(prepared.Move);
+        _preparedPlacement = null;
+        _placementCompleted = true;
+    }
+
+    private void RequirePlacementOwner(FalloutNewGamePlacement prepared)
+    {
+        if (!ReferenceEquals(_preparedPlacement, prepared) || !ReferenceEquals(_world.PlayerMoves.Next, prepared.Move))
+            throw new InvalidOperationException("Initial source placement lost its exact admitted movement owner.");
+        if (_world.PlayerMoves.Error is { } error) throw new NotSupportedException(error);
     }
 
     internal FalloutReferencePlacement? Placement()

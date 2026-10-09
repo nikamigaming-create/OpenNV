@@ -9,6 +9,7 @@ internal sealed record FalloutUserFunction(FalloutPluginRecord Script, FalloutGa
     {
         if (script.Signature != "SCPT") throw new InvalidDataException("User function target is not SCPT.");
         var fields = script.ReadSubrecords().ToArray();
+        FalloutCompiledScriptProgram.RequireDiagnosticOnly(script, fields, "Function");
         var header = fields.Single(field => field.Signature == "SCHR").Data;
         if (header.Length != 20 || BinaryPrimitives.ReadUInt16LittleEndian(header.Span[16..]) != 0)
             throw new NotSupportedException("User function must be an object-type source script.");
@@ -54,6 +55,8 @@ internal sealed class FalloutUserFunctionFrame(FalloutUserFunction definition, F
         get => _result;
         set
         {
+            if (value.Kind == FalloutScriptValueKind.Pair)
+                throw new InvalidDataException("Transient pairs cannot become a stored function result.");
             if (value.Kind == FalloutScriptValueKind.Array) arrays.Retain(value);
             if (_result.Kind == FalloutScriptValueKind.Array) arrays.Release(_result);
             _result = value;

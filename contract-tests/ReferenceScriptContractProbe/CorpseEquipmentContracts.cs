@@ -242,7 +242,7 @@ internal static class CorpseEquipmentContracts
 
     private static void LegacySchemaBoundary(FalloutReferenceSnapshot corpse, string directory)
     {
-        var legacy = new FalloutNativeCampaignState(FalloutNativeCampaignSave.ActivationRelaySchema, "synthetic", Key(0x800),
+        var legacy = new FalloutNativeCampaignState("opennv-native-fnv-campaign-save/v44", "synthetic", Key(0x800),
             "Fixture", 1, "Player", null!, null!, [], [], [], [], [true, true, true, true, true, true, true],
             [0, 0, 0], [0, 0, 0], References: [corpse]);
         var path = Path.Combine(directory, "must-not-write.json");

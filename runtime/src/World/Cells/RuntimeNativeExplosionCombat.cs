@@ -94,7 +94,8 @@ internal static class RuntimeNativeExplosionCombat
             if (playerPart is { } part)
             {
                 if (damagePlayer is null) throw new NotSupportedException("Explosion hit the player without a player damage owner.");
-                damagePlayer(damage, part);
+                player.ApplyPlayerExplosionDamage(explosion, damage, part, point,
+                    !explosion.PushesSourceOnly || player == shooter || shooter.IsAncestorOf(player), damagePlayer);
             }
         }
 
@@ -175,7 +176,7 @@ internal static class RuntimeNativeExplosionCombat
             pushedBodies,
             playerPart,
             visualUnbound = explosion.HasUnpresentedVisuals,
-            boundary = "source EXPL radius, LOS, knockdown, rigid impulses and object damage;distance attenuation, player knockdown, enchantment, placed objects, IPDS projection and retail parity remain open",
+            boundary = "source EXPL radius, LOS, typed actor/player knockdown, rigid impulses and object damage;distance attenuation, player death, enchantment, placed objects, IPDS projection and retail parity remain open",
         };
     }
 

@@ -18,32 +18,48 @@ public partial class RuntimeCoordinator
 
     private RuntimeManualSaveReceipt RequestNativeManualSave(RuntimeManualSaveOrigin origin)
     {
-        var source = RuntimeLiveContentSource.Current;
-        var identity = source?.SaveCompatibilityId ?? "unbound-source";
-        if (_nativeManualSaves.Pending && _nativeManualSaves.Receipt!.SourceCompatibilityId != identity)
-            CancelNativeManualSave("The selected source stack changed before manual save committed.");
-        var receipt = _nativeManualSaves.Request(_nativeManualSaveSession, identity, Engine.GetProcessFrames(), origin);
-        GD.Print($"OPENNV_NATIVE_MANUAL_SAVE_REQUEST generation={receipt.Generation} slot={receipt.Slot:N} count={receipt.RequestCount} origin={origin} disposition=pending");
-        if (_nativeManualSavePreparation is not null)
+        var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Manual input has no selected source owner.");
+        if (_nativeSessionTransitioning || _retiringNativeSession || _nativeDoorLoading ||
+            _nativePlayer is null || _nativeActiveCell is null || _nativeOpeningStageDriver is null ||
+            _nativePluginStack is null || _nativeReferences is null || _nativeQuestScripts is null)
+            throw new InvalidOperationException("Manual input has no settled native session/source owner.");
+        if (origin == RuntimeManualSaveOrigin.PlayerInput && (_nativePlayer.ModalInput || GetTree().Paused) ||
+            origin == RuntimeManualSaveOrigin.SessionMenu && _nativeSessionMenu is null)
+            throw new InvalidOperationException("Manual save input has no matching actual player or session-menu owner.");
+        _nativeManualSaves.Bind(_nativeOpeningStageDriver.ManualSourceSaveRequests, _nativeManualSaveSession, source.SaveCompatibilityId);
+        var receipt = _nativeManualSaves.Request(_nativeManualSaveSession, source.SaveCompatibilityId, Engine.GetProcessFrames(), origin,
+            CreateNativeSaveSite());
+        GD.Print($"OPENNV_NATIVE_MANUAL_SAVE_REQUEST order={receipt.Order} generation={receipt.Generation} slot={receipt.Slot:N} origin={origin} disposition=pending");
+        PumpNativeOrderedManualSave();
+        return _nativeManualSaves.Find(receipt.Order);
+    }
+
+    private void PumpNativeOrderedManualSave()
+    {
+        if (_nativeManualSavePreparation is not null || _nativeSessionTransitioning || _retiringNativeSession ||
+            _nativeDoorLoading || _nativePlayer is null || _nativeActiveCell is null || _nativeOpeningStageDriver is null ||
+            _nativePluginStack is null || _nativeReferences is null || _nativeQuestScripts is null || RuntimeLiveContentSource.Current is not { } source) return;
+        var driver = _nativeOpeningStageDriver;
+        _nativeManualSaves.Bind(driver.ManualSourceSaveRequests, _nativeManualSaveSession, source.SaveCompatibilityId);
+        if (!_nativeManualSaves.Pending) return;
+        var request = driver.ManualSourceSaveRequests.Order.Find(_nativeManualSaves.Receipt!.Order);
+        if (request.Native!.Cell != _nativeActiveCell.Cell.FormKey ||
+            request.Native.Session == _nativeManualSaveSession && _nativeManualSaves.Receipt.Origin == RuntimeManualSaveOrigin.SessionMenu && _nativeSessionMenu is null)
         {
-            PublishNativeManualSave(receipt);
-            return receipt;
+            CancelNativeManualSave("The actual manual input cell or session-menu owner retired before preparation.");
+            return;
+        }
+        if (driver.ManualSourceSaveRequests.PreparationBlocker(_nativeManualSaves.Receipt!.Order) is { } waiting)
+        {
+            _nativeManualSaves.ObserveQueueDeferral(waiting);
+            PublishNativeManualSave(_nativeManualSaves.Receipt!);
+            return;
         }
         try
         {
-            if (_nativeSessionTransitioning || _retiringNativeSession || _nativeDoorLoading ||
-                _nativePlayer is null || _nativeActiveCell is null || _nativeOpeningStageDriver is null ||
-                _nativePluginStack is null || _nativeReferences is null || _nativeQuestScripts is null || source is null)
-                throw new InvalidOperationException("Manual save has no settled native session/source owner.");
-            if (_nativeOpeningStageDriver.Vitals.HitPoints <= 0)
-                throw new InvalidOperationException("Load an earlier save after death; the previous Continue save is preserved.");
-            if (origin == RuntimeManualSaveOrigin.PlayerInput && (_nativePlayer.ModalInput || GetTree().Paused) ||
-                origin == RuntimeManualSaveOrigin.SessionMenu && _nativeSessionMenu is null)
-                throw new InvalidOperationException("Manual save input has no matching player or session-menu owner.");
-            var player = _nativePlayer; var driver = _nativeOpeningStageDriver; var records = _nativePluginStack;
+            var player = _nativePlayer; var records = _nativePluginStack;
             var world = _nativeReferences; var root = _nativeCurrentCellRoot; var cell = _nativeActiveCell.Cell.FormKey;
-            var scripts = _nativeQuestScripts;
-            var menu = _nativeSessionMenu;
+            var scripts = _nativeQuestScripts; var menu = _nativeSessionMenu;
             string? Invalidation() =>
                 _nativeSessionTransitioning || _retiringNativeSession ? "Native session transition started before manual save committed." :
                 _nativeDoorLoading || _nativeLoadingLayer is not null ? "Native loading began before manual save committed." :
@@ -64,13 +80,13 @@ public partial class RuntimeCoordinator
                     return new(RuntimeManualSaveAdmissionKind.Refused, "unsupported-native-menu");
                 return driver.ObserveManualSaveAdmission(_nativeManualSavePreparation?.SourceOrder, _nativeManualSaves.Receipt);
             }
-            var preparation = new RuntimeNativeManualSavePreparation(_nativeManualSaves, _nativeManualSaveSession, identity,
+            var preparation = new RuntimeNativeManualSavePreparation(_nativeManualSaves, _nativeManualSaveSession, source.SaveCompatibilityId,
                 player, records.SoundVoices, Invalidation, Admission, CreateNativeCheckpoint,
-                PublishNativeManualSave, () => _nativeManualSavePreparation = null, sourceProducers: [scripts],
-                sourceRequests: driver.ManualSourceSaveRequests, originalSourceBlocker: driver.ObserveOriginalSourceManualSaveBlocker);
+                PublishNativeManualSave, NativeOrderedManualSaveSettled, sourceProducers: [scripts],
+                sourceRequests: driver.ManualSourceSaveRequests, originalSourceBlocker: driver.ObserveOriginalSourceManualSaveBlocker,
+                driverProducer: driver);
             _nativeManualSavePreparation = preparation;
-            AddChild(preparation);
-            preparation.Begin();
+            AddChild(preparation); preparation.Begin();
         }
         catch (Exception error)
         {
@@ -79,7 +95,13 @@ public partial class RuntimeCoordinator
             PublishNativeManualSave(_nativeManualSaves.Receipt!);
             GD.PushError($"OPENNV_NATIVE_SAVE_SLOT_FAILURE {error}");
         }
-        return _nativeManualSaves.Receipt!;
+    }
+
+    private void NativeOrderedManualSaveSettled()
+    {
+        _nativeManualSavePreparation = null;
+        _nativeManualSaves.RetirePreparation();
+        if (_nativeManualSaves.Queued) Callable.From(PumpNativeOrderedManualSave).CallDeferred();
     }
 
     private void PublishNativeManualSave(RuntimeManualSaveReceipt receipt)
@@ -108,11 +130,16 @@ public partial class RuntimeCoordinator
 
     private void CancelNativeManualSaveFromInput() => CancelNativeManualSave("Player cancelled save preparation; the previous Continue save is retained.");
 
-    private void CancelNativeManualSave(string reason)
+    private void CancelNativeManualSave(string reason, bool allQueued = false)
     {
-        if (!_nativeManualSaves.Pending) return;
+        if (!_nativeManualSaves.Pending && !(allQueued && _nativeManualSaves.Queued)) return;
         if (_nativeManualSavePreparation is { } preparation) preparation.Cancel(reason);
-        else { _nativeManualSaves.Cancel(reason); PublishNativeManualSave(_nativeManualSaves.Receipt!); }
+        else if (_nativeManualSaves.Pending)
+        {
+            _nativeManualSaves.Cancel(reason); PublishNativeManualSave(_nativeManualSaves.Receipt!);
+            NativeOrderedManualSaveSettled();
+        }
+        if (allQueued) _nativeManualSaves.CancelQueued(reason);
         GD.Print($"OPENNV_NATIVE_MANUAL_SAVE_CANCELLED generation={_nativeManualSaves.Receipt!.Generation} reason={reason}");
     }
 

@@ -326,7 +326,7 @@ if (args[0] == "exterior")
         scene = DescribeScene(selected.Scene),
         landscapes = selected.Cells.Select(cell =>
         {
-            var land = FalloutLandscapeTransportResolver.ResolveCell(records, cell, selected.PersistentCell);
+            var land = FalloutLandscapeTransportResolver.ResolveCell(records, cell);
             return new
             {
                 cell = cell.FormKey.ToString(),

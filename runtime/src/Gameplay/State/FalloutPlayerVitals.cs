@@ -3,7 +3,7 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal sealed class FalloutPlayerVitals
+internal sealed partial class FalloutPlayerVitals
 {
     private readonly double _baseHealth;
     private readonly double _healthEndurance, _healthLevel, _apBase, _apAgility, _xpBase, _xpBump;
@@ -30,15 +30,10 @@ internal sealed class FalloutPlayerVitals
         Publish(current with { HitPoints = current.MaximumHitPoints, HitPointFraction = 0, LimbDamage = null });
     }
     internal void Publish(GameplayVitals state) { state.Validate(); _state = state; }
-    internal void RequireLevelUpOwner()
-    {
-        if (State.ExperiencePoints >= State.NextLevelExperiencePoints)
-            throw new NotSupportedException("Earned player XP requires the source level-cap, skill/perk allocation and LevelUpMenu owners.");
-    }
-
     internal int ExperienceThreshold(int level)
     {
-        if (level <= 1) return 0;
+        if (level < 1) throw new InvalidDataException("Player XP threshold requires a positive level.");
+        if (level == 1) return 0;
         var value = (level - 1) * ((level - 2) * _xpBump / 2 + _xpBase);
         if (!double.IsFinite(value) || value < 0 || value > int.MaxValue || value != Math.Truncate(value))
             throw new NotSupportedException("Source XP threshold exceeds admitted integral player storage.");
@@ -101,7 +96,9 @@ internal sealed class FalloutPlayerVitals
 
     private void SetDerived(GameplayVitals derived)
     {
-        if (_state.MaximumHitPoints == derived.MaximumHitPoints && _state.MaximumActionPoints == derived.MaximumActionPoints) return;
+        if (_state.MaximumHitPoints == derived.MaximumHitPoints && _state.MaximumActionPoints == derived.MaximumActionPoints &&
+            _state.Level == derived.Level && _state.ExperiencePoints == derived.ExperiencePoints &&
+            _state.NextLevelExperiencePoints == derived.NextLevelExperiencePoints) return;
         var hitPoints = Math.Clamp(derived.MaximumHitPoints - (_state.MaximumHitPoints - _state.ExactHitPoints), 0, derived.MaximumHitPoints);
         var displayed = checked((int)MathF.Ceiling(hitPoints));
         var state = derived with

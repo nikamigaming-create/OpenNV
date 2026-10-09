@@ -209,13 +209,16 @@ internal sealed partial class FalloutDialogueTopic
         var begin = new List<string>();
         var end = new List<string>();
         var afterNext = false;
+        var beginScope = FalloutScriptScope.Dialogue(record, true);
+        var endScope = FalloutScriptScope.Dialogue(record, false);
         for (var index = 0; index < fields.Length; ++index)
         {
             var field = fields[index];
             if (field.Signature == "NEXT") { afterNext = true; continue; }
             if (field.Signature == "SCTX")
             {
-                (afterNext ? end : begin).Add(ScriptText(field.Data.Span));
+                if (!(afterNext ? endScope : beginScope).Compiled)
+                    (afterNext ? end : begin).Add(ScriptText(field.Data.Span));
                 continue;
             }
             if (field.Signature == "CTDA") { conditions.Add(field.Data.ToArray()); continue; }

@@ -4,6 +4,121 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--native-source-construction-contracts"])
+{
+    NativeSourceConstructionContracts.Run();
+    return;
+}
+
+if (args is ["--combat-group-contracts"])
+{
+    CombatGroupContracts.Run();
+    return;
+}
+
+if (args is ["--player-physical-contracts"])
+{
+    PlayerPhysicalActivityContracts.Run();
+    return;
+}
+
+if (args is ["--experience-notification-contracts"])
+{
+    ExperienceNotificationContracts.Run();
+    return;
+}
+
+if (args is ["--unified-save-order-contracts"])
+{
+    CompiledScriptContracts.SaveOrder();
+    return;
+}
+
+if (args is ["--actor-script-package-contracts"])
+{
+    ActorScriptPackageContracts.Run();
+    return;
+}
+
+if (args is ["--player-progress-contracts"])
+{
+    PlayerAdvancementContracts.Run();
+    LevelUpPerkSourceContracts.Run();
+    LevelUpMenuPublicationContracts.Run();
+    return;
+}
+
+if (args is ["--compiled-opening-catalog-contracts"])
+{
+    CompiledScriptContracts.OpeningCatalog();
+    return;
+}
+if (args is ["--compiled-consumer-admission-contracts"])
+{
+    CompiledScriptContracts.ConsumerAdmission();
+    return;
+}
+if (args is ["--compiled-quest-recurrence-contracts"])
+{
+    CompiledScriptContracts.QuestRecurrence();
+    return;
+}
+if (args.Length >= 4 && args[0] == "--audit-owned-compiled-quest-recurrence")
+{
+    OwnedCompiledQuestRecurrenceProbe.Run(args[1], args[2], args[3], args[4..]);
+    return;
+}
+if (args is ["--compiled-quest-authority-contracts"])
+{
+    CompiledScriptContracts.QuestScheduling();
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-owned-compiled-quest-authority-installation")
+{
+    OwnedCompiledQuestSchedulingProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
+if (args is ["--compiled-result-authority-contracts"])
+{
+    CompiledScriptContracts.ResultAuthority();
+    return;
+}
+if (args is ["--compiled-nested-result-contracts"])
+{
+    CompiledScriptContracts.NestedResults();
+    return;
+}
+if (args is ["--compiled-script-contracts"])
+{
+    CompiledScriptContracts.Run();
+    return;
+}
+if (args.Length >= 12 && args[0] == "--audit-owned-compiled-result")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    uint Form(string value) => uint.Parse(value, System.Globalization.NumberStyles.HexNumber, invariant);
+    OwnedCompiledScriptProbe.Result(args[1], args[2], args[3], new(args[4], Form(args[5])), args[6],
+        new(args[7], Form(args[8])), uint.Parse(args[9], invariant), double.Parse(args[10], invariant), args[11], args[12..]);
+    return;
+}
+if (args.Length >= 3 && args[0] == "--audit-owned-compiled-framing-installation")
+{
+    OwnedCompiledScriptProbe.FramingInstallation(args[1], args[2], args[3..]);
+    return;
+}
+if (args.Length >= 5 && args[0] == "--audit-owned-compiled-framing")
+{
+    OwnedCompiledScriptProbe.Framing(args[1], args[2], args[3], args[4], args[5..]);
+    return;
+}
+if (args.Length >= 12 && args[0] == "--audit-owned-compiled-refusal")
+{
+    var invariant = System.Globalization.CultureInfo.InvariantCulture;
+    uint Form(string value) => uint.Parse(value, System.Globalization.NumberStyles.HexNumber, invariant);
+    OwnedCompiledScriptProbe.Refusal(args[1], args[2], args[3], new(args[4], Form(args[5])), args[6],
+        new(args[7], Form(args[8])), uint.Parse(args[9], invariant), args[10], args[11], args[12..]);
+    return;
+}
 if (args is ["--reference-access-contracts"])
 {
     ReferenceAccessContracts.Run();
@@ -612,11 +727,27 @@ try
     }
     CellReviewContracts.Run(records);
     ExplosionContracts.Run(records);
-    Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x502))));
+    var aliasedLocals = FalloutScriptLocals.Read(records.GetEffective(Key(0x502)));
+    Require(aliasedLocals.Count == 2 && aliasedLocals["count"] == 1 && aliasedLocals["conflictingName"] == 1,
+        "Original local index aliases lost their independent ordered declarations.");
     var paddedLocals = FalloutScriptLocals.Read(records.GetEffective(Key(0x504)));
-    Require(paddedLocals.Count == 1 && paddedLocals["COUNTER"] == 7, "Unused compiler padding changed local slot identity.");
-    Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x505))));
-    Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x506))));
+    Require(paddedLocals.Count == 1 && paddedLocals["COUNTER"] == 7, "Non-identity local fields changed first-match lookup.");
+    var paddedScript = records.GetEffective(Key(0x504));
+    var paddedStorage = new FalloutScriptLocalStorage(paddedScript, FalloutScriptLocalStorage.ReadInitialPayloads(paddedScript));
+    var originalPayloads = paddedStorage.Capture().Entries.Select(entry => entry.Bits).ToArray();
+    Require(originalPayloads.Length == 2 && originalPayloads[0] != originalPayloads[1],
+        "The copied source initializer payloads were discarded or aliases were flattened.");
+    paddedStorage.Write(7, 19);
+    Require(paddedStorage.Read(7) == 19 && paddedStorage.ReadEntry(1) == originalPayloads[1],
+        "A scalar assignment changed another original event-list entry with the same ID.");
+    var mixedLocals = FalloutScriptLocals.ReadMetadata(records.GetEffective(Key(0x505)));
+    Require(mixedLocals.Count == 2 && mixedLocals[0].StorageFlags == 1 && mixedLocals[1].StorageFlags == 0,
+        "Mixed original local flags were rejected or reordered.");
+    var repeatedNameScript = records.GetEffective(Key(0x506));
+    var repeatedNames = FalloutScriptLocals.Read(repeatedNameScript);
+    Require(repeatedNames.Count == 1 && repeatedNames["counter"] == 7 &&
+        FalloutScriptLocals.ReadStorageKinds(repeatedNameScript).Keys.Order().SequenceEqual(new uint[] { 7, 8 }),
+        "First-name lookup erased another source local cell.");
     Reject(() => FalloutScriptLocals.Read(records.GetEffective(Key(0x508))));
     Require(FalloutScriptLocals.ReadDeclarations(records.GetEffective(Key(0x509))).Count == 2,
         "Compiled numeric local admission rejected source name spelling or trailing author notes.");
@@ -724,9 +855,9 @@ try
     reparsed.Restore([priorParseFailure]);
     reparsed.LoadCell(firstCell);
     var reparsedScripts = new FalloutReferenceScripts(records, reparsed, quests, new((_, _) => false, _ => { }));
-    Require(reparsedScripts.Dispatch(Key(0x901), "GameMode").Error is null &&
+    Require(reparsedScripts.Dispatch(Key(0x901), "GameMode").Error == priorParseFailure.ScriptError &&
         reparsed.Get(Key(0x901)).Read(2) == priorParseFailure.Variables[2],
-        "Cold restoration retained a stale parse rejection or reset script locals.");
+        "Cold restoration retried a retained parse rejection or reset script locals.");
     using var rejected = new FalloutReferenceWorld(records);
     Reject(() => rejected.Restore([snapshots[0], snapshots[0]]));
     Require(rejected.InstanceCount == 0, "Failed restore partially published reference state.");
@@ -853,6 +984,19 @@ finally
     Directory.Delete(directory);
 }
 
+CompiledScriptContracts.Run();
+ActorScriptPackageContracts.Run();
+NativeSourceConstructionContracts.Run();
+CombatGroupContracts.Run();
+PlayerAdvancementContracts.Run();
+PlayerPhysicalActivityContracts.Run();
+LevelUpPerkSourceContracts.Run();
+LevelUpMenuPublicationContracts.Run();
+CompiledScriptContracts.NestedResults();
+CompiledScriptContracts.ResultAuthority();
+CompiledScriptContracts.QuestRecurrence();
+CompiledScriptContracts.ConsumerAdmission();
+CompiledScriptContracts.OpeningCatalog();
 ConversationContracts.Run();
 ConversationSpeakerAdmissionContracts.Run();
 ActorSourceContracts.Run();
@@ -892,6 +1036,7 @@ PlayerMoveContracts.Run();
 LoadingScreenContracts.Run();
 CharacterGenerationContracts.Run();
 RewardXpContracts.Run();
+ExperienceNotificationContracts.Run();
 PlayerScriptPackageContracts.Run();
 PackageEventContracts.Run();
 ReferencePackageEventContracts.Run();

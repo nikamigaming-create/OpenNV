@@ -13,9 +13,7 @@ internal sealed record NativeLoveTesterTarget(string Geometry, Vector2 Center, R
 /// <summary>The LoveTester menu is its owned animated NIF, with XML input routing.</summary>
 internal sealed partial class NativeOwnedLoveTesterMenu : Control
 {
-    internal const string MenuPath = "menus/chargen/love_tester_menu.xml";
-    private const string ModelInterface = "meshes/architecture/GoodSprings/NV_VitoMaticVigorTester_Activate.NIF";
-    private readonly FalloutNativeVigorContract _contract;
+    private readonly FalloutNativeSpecialAllocation _contract;
     private readonly FalloutPluginStack _records;
     private readonly FalloutInstallationSettings _settings;
     private readonly FalloutLoveTesterPresentation _declaration;
@@ -46,7 +44,8 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         targets = Targets.Select(target => new { target.Geometry, center = new[] { target.Center.X, target.Center.Y }, target.InFront }).ToArray()
     };
 
-    internal NativeOwnedLoveTesterMenu(FalloutNativeVigorContract contract, FalloutNativeSpecialState initial, FalloutPluginStack records)
+    internal NativeOwnedLoveTesterMenu(FalloutLoveTesterSource source, FalloutNativeSpecialAllocation contract,
+        FalloutNativeSpecialState initial, FalloutPluginStack records)
     {
         Name = "LoveTesterMenu"; ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Stop;
         _contract = contract; _state = initial; _records = records;
@@ -55,14 +54,14 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         FalloutNifFile ReadModel(string path)
         {
             if (!content.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException(path);
-            SetMeta("opennv_love_tester_" + (path == ModelInterface ? "cards" : "cabinet"), identity);
+            SetMeta("opennv_love_tester_" + (path == source.AnimatedModel ? "cards" : "cabinet"), identity);
             return FalloutNifFile.Read(bytes);
         }
-        _source = ReadModel(ModelInterface);
+        _source = ReadModel(source.AnimatedModel);
         var sequences = _source.Blocks.Where(block => block.TypeName == "NiControllerSequence")
             .Select(block => ((FalloutNifControllerSequence)_source.ReadObject(block.Index)).Name).ToArray();
-        _declaration = FalloutExecutableStringTable.ReadLoveTester(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!, "FalloutNV.exe"), sequences);
-        var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read(MenuPath)).Elements("menu").Single();
+        _declaration = source.ReadPresentation(sequences);
+        var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read(source.MenuPath)).Elements("menu").Single();
         if ((string?)menu.Attribute("name") != "LoveTesterMenu" || menu.Element("alpha")?.Value.Trim() != "0")
             throw new NotSupportedException("LoveTester visible XML requires a separate tile presentation owner.");
         foreach (var mapping in menu.Elements().Where(element => element.Name.LocalName.StartsWith('x') && element.Element("ref") is not null))
@@ -121,7 +120,7 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
         }
         foreach (var sourceName in _actions.Keys.Where(name => name.EndsWith(":0", StringComparison.Ordinal)))
             if (!_geometry.ContainsKey(sourceName)) throw new InvalidDataException($"Owned LoveTester target is missing: {sourceName}.");
-        SetMeta("opennv_ui_source", MenuPath); SetMeta("opennv_ui_presentation", "owned-nif-controller-manager-and-dds");
+        SetMeta("opennv_ui_source", source.MenuPath); SetMeta("opennv_ui_presentation", "owned-nif-controller-manager-and-dds");
         SetMeta("opennv_ui_unbound", "matched-pixels,render-target-postprocessing,gamepad-repeat-timing");
         Resized += Layout; Refresh();
     }
@@ -243,7 +242,7 @@ internal sealed partial class NativeOwnedLoveTesterMenu : Control
     private void Submit()
     {
         if (_state.Values.Sum() != _contract.RequiredTotal) { Play("UIActivateNothing"); return; }
-        FalloutNativeVigorResolver.Validate(_contract, _state);
+        _contract.Validate(_state);
         Play("OBJBookSpecialNumberFinished", surviveMenu: true); _accepted = true; Accepted?.Invoke(_state);
     }
 

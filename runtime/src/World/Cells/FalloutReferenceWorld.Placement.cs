@@ -117,7 +117,7 @@ internal sealed partial class FalloutReferenceWorld
             {
                 _residentReferences.Remove(key);
                 var instance = _instances[key];
-                if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; }
+                if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; RetireDeletedActorScriptPackage(instance); }
             }
         }
         foreach (var key in newKeys.Except(oldKeys)) _residentReferences[key] = _residentReferences.GetValueOrDefault(key) + 1;

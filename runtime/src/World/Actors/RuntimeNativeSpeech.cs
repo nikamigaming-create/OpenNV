@@ -19,6 +19,7 @@ internal partial class RuntimeNativeSpeech : Node
         internal FalloutFormKey? Topic;
         internal FalloutFormKey? Listener;
         internal FalloutDialogueInfo? Info;
+        internal FalloutScriptResultReceipt? BeginResults, EndResults;
         internal int ResponseIndex;
         internal FalloutDialogueSpeaker? Identity;
         internal FalloutDialogueVoiceBinding? Binding;
@@ -73,7 +74,9 @@ internal partial class RuntimeNativeSpeech : Node
     private FalloutFormKey? _lastDisabledParticipant;
     private readonly SortedSet<string> _unbound = new(StringComparer.Ordinal);
     internal IReadOnlyCollection<string> Unbound => _unbound;
+    // Source diagnostic callback compatibility does not create a binary result receipt.
     internal Action<FalloutDialogueInfo, FalloutFormKey, bool>? ExecuteResults { get; set; }
+    internal Func<FalloutDialogueInfo, FalloutFormKey, bool, FalloutScriptResultReceipt>? ExecuteOwnedResults { get; set; }
     internal event Action<FalloutFormKey>? InfoCompleted;
     internal event Action<FalloutSpeechCompletionReceipt>? SayToCompleted;
     internal Action<FalloutSpeechSubtitle>? PrepareSubtitle { get; set; }
@@ -405,8 +408,9 @@ internal partial class RuntimeNativeSpeech : Node
             exchange.Completion = new(exchange.Speaker, new HashSet<FalloutFormKey> { exchange.Topic },
                 info.Record.FormKey, voice.Generation);
         if ((info.Flags & 4) != 0) _said.Add(info.Record.FormKey);
-        RunResults(info, voice.DialogueSubject, true);
-        if ((info.Flags & 8) != 0) RunResults(info, voice.DialogueSubject, false);
+        voice.BeginResults = null; voice.EndResults = null;
+        voice.BeginResults = RunResults(info, voice.DialogueSubject, true);
+        if ((info.Flags & 8) != 0) voice.EndResults = RunResults(info, voice.DialogueSubject, false);
         PlayResponse(voice);
     }
 
@@ -596,7 +600,7 @@ internal partial class RuntimeNativeSpeech : Node
             voice.Info = null; voice.Lip = null; voice.LipWeights = [];
             if (IsInstanceValid(voice.Speaker)) voice.Speaker!.ClearSpeechFace();
             GD.Print($"OPENNV_NATIVE_SPEECH_END info={completed.Record.FormKey} speaker={voice.Reference} owner=audio-finished");
-            if ((completed.Flags & 8) == 0) RunResults(completed, voice.DialogueSubject, false);
+            if ((completed.Flags & 8) == 0) voice.EndResults = RunResults(completed, voice.DialogueSubject, false);
         }
         if (voice.Radio is null && voice.NpcExchange is null && packageCompleted is null && completedTopic is { } sourceTopic)
         {
@@ -674,10 +678,21 @@ internal partial class RuntimeNativeSpeech : Node
         }
     }
 
-    private void RunResults(FalloutDialogueInfo info, FalloutFormKey speaker, bool begin)
+    private FalloutScriptResultReceipt? RunResults(FalloutDialogueInfo info, FalloutFormKey speaker, bool begin)
     {
-        if (!FalloutDialogueTopic.CodeLines(begin ? info.BeginScript : info.EndScript).Any()) return;
+        var scope = FalloutScriptScope.Dialogue(info.Record, begin);
+        if (!FalloutScriptResultReceipt.HasProgram(scope)) return FalloutScriptResultReceipt.CompleteAbsent(scope, speaker);
+        if (ExecuteOwnedResults is { } owned)
+        {
+            var receipt = owned(info, speaker, begin);
+            receipt.Require(scope, speaker);
+            return receipt;
+        }
+        if (scope.Compiled) throw new NotSupportedException($"INFO {info.Record.FormKey} has no shared compiled result owner.");
         (ExecuteResults ?? throw new NotSupportedException($"INFO {info.Record.FormKey} has no result-script owner."))(info, speaker, begin);
+        // An opaque Action may execute source effects but proves no consumption
+        // receipt; active cold continuation remains visibly unowned.
+        return null;
     }
 
     private static void ClearResponseSound(Voice voice)

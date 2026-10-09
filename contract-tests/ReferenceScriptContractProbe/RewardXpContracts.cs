@@ -51,10 +51,10 @@ internal static class RewardXpContracts
         var beforeOverflow = fixture.Vitals.State;
         Reject(() => fixture.Experience.Reward(2147483520));
         Require(fixture.Vitals.State == beforeOverflow, "Signed XP overflow was hidden by cap clamping or partially published.");
-        var session = new FalloutScriptSession(); session.SetInCharGen(true, null);
-        Reject(() => session.SetInCharGen(false, fixture.Vitals.RequireLevelUpOwner));
-        Require(session.InCharGen && fixture.Vitals.State.ExperiencePoints == 200 && fixture.Vitals.State.Level == 1,
-            "Level-up refusal discarded consumed XP or falsely left character generation.");
+        var session = new FalloutScriptSession(); session.SetInCharGen(true);
+        session.SetInCharGen(false);
+        Require(!session.InCharGen && fixture.Vitals.State.ExperiencePoints == 200 && fixture.Vitals.State.Level == 1,
+            "Character-generation publication consumed XP before an admitted level-up update.");
     }
 
     private static void ObjectAndCold()

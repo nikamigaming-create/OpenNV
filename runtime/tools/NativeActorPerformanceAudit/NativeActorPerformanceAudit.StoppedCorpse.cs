@@ -27,13 +27,10 @@ public partial class NativeActorPerformanceAudit
             {
                 var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
                 var opening = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-                campaign = FalloutNativeCampaignSave.Read(path, content.SaveCompatibilityId, records,
-                    FalloutNativeVigorResolver.Resolve(records, opening), FalloutNativeTagSkillResolver.Resolve(records, controls),
-                    FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
-                    FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening)).State;
+                campaign = FalloutNativeCampaignSave.Read(path, content.SaveCompatibilityId, records).State;
             }
-            if (campaign.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.ActivationRelaySchema or FalloutNativeCampaignSave.NativeSoundHistorySchema or FalloutNativeCampaignSave.TerminalResultsSchema or FalloutNativeCampaignSave.FactionRelationSchema or
-                FalloutNativeCampaignSave.DeathHistorySchema) || campaign.SaveCompatibilityId != content.SaveCompatibilityId)
+            if (campaign.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or "opennv-native-fnv-campaign-save/v44" or "opennv-native-fnv-campaign-save/v43" or "opennv-native-fnv-campaign-save/v42" or "opennv-native-fnv-campaign-save/v38" or
+                "opennv-native-fnv-campaign-save/v37") || campaign.SaveCompatibilityId != content.SaveCompatibilityId)
                 throw new InvalidDataException("Reached corpse fixture belongs to another schema or complete source stack.");
             static FalloutFormKey Identity(string text)
             {

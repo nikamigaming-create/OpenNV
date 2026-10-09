@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutQuestSnapshot(FalloutFormKey Quest, short Stage, bool Completed,
     IReadOnlyList<short> EnteredStages, IReadOnlyDictionary<uint, double> Variables,
     IReadOnlyList<FalloutQuestObjectiveSnapshot>? Objectives = null, bool? Running = null, FalloutFormKey? NextQuest = null,
-    bool Active = false);
+    bool Active = false, FalloutScriptLocalStorageSnapshot? LocalStorage = null);
 
 internal sealed record FalloutQuestObjectiveSnapshot(uint Index, bool Displayed, bool Completed);
 internal sealed record FalloutQuestObjectiveCommand(string QuestEditorId, uint Index, bool Display, bool Value);
@@ -18,18 +18,30 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
 {
     private sealed class State
     {
+        private static readonly IReadOnlyDictionary<uint, double> EmptyVariables = new Dictionary<uint, double>();
         internal short Stage;
         internal bool Completed;
         internal bool Running;
         internal FalloutFormKey? NextQuest;
         internal bool Active;
         internal readonly HashSet<short> Stages = [];
-        internal readonly Dictionary<uint, double> Variables = [];
+        internal FalloutScriptLocalStorage? Locals;
+        internal IReadOnlyDictionary<uint, double> Variables => Locals is null ? EmptyVariables : Locals;
         internal readonly Dictionary<uint, string> ObjectiveText = [];
         internal readonly Dictionary<uint, FalloutQuestObjectiveSnapshot> Objectives = [];
     }
 
     private readonly Dictionary<FalloutFormKey, State> _states = [];
+    internal FalloutPluginStack NativeSourceRecords => stack;
+    internal object NativeLocalIdentity(FalloutFormKey quest) => Require(quest);
+    internal FalloutScriptLocalStorage? NativeLocalStorage(FalloutFormKey quest) => Require(quest).Locals;
+    internal void NativeLocalMutation(FalloutFormKey quest, object identity, FalloutScriptLocalStorage locals)
+    {
+        var state = Require(quest);
+        if (!ReferenceEquals(state, identity) || !ReferenceEquals(state.Locals, locals))
+            throw new InvalidOperationException("Native quest local mutation changed its actual campaign owner.");
+        ++Revision;
+    }
     internal long Revision { get; private set; }
     // Bot progress excludes recurring variable/timer writes and stage reentry.
     internal long ProgressRevision { get; private set; }
@@ -48,7 +60,8 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     internal IReadOnlyList<FalloutQuestSnapshot> Capture() => _states.OrderBy(pair => stack.RuntimeFormId(pair.Key))
         .Select(pair => new FalloutQuestSnapshot(pair.Key, pair.Value.Stage, pair.Value.Completed,
             pair.Value.Stages.Order().ToArray(), new Dictionary<uint, double>(pair.Value.Variables),
-            pair.Value.Objectives.Values.OrderBy(value => value.Index).ToArray(), pair.Value.Running, pair.Value.NextQuest, pair.Value.Active)).ToArray();
+            pair.Value.Objectives.Values.OrderBy(value => value.Index).ToArray(), pair.Value.Running, pair.Value.NextQuest, pair.Value.Active,
+            pair.Value.Locals?.Capture())).ToArray();
 
     internal object ObjectiveState => new
     {
@@ -108,6 +121,9 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
             var state = validated.Require(snapshot.Quest);
             if (!state.Variables.Keys.Order().SequenceEqual(snapshot.Variables.Keys.Order()))
                 throw new InvalidDataException("Saved quest variables differ from the winning script declarations.");
+            var localOwner = FalloutScriptLocals.AttachedScript(stack, stack.GetEffective(snapshot.Quest));
+            if (localOwner is not null && FalloutCompiledScriptProgram.HasProgram(localOwner.ReadSubrecords().ToArray()))
+                foreach (var (index, value) in snapshot.Variables) FalloutScriptLocals.RequireCompiledValue(localOwner, index, value);
             if (snapshot.Objectives is null && state.Objectives.Count != 0)
                 throw new InvalidDataException("Saved quest objectives are absent; their state cannot be inferred from quest stages.");
             var objectives = snapshot.Objectives ?? [];
@@ -121,7 +137,10 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
             state.NextQuest = snapshot.NextQuest;
             state.Active = snapshot.Active;
             state.Stages.UnionWith(snapshot.EnteredStages);
-            foreach (var (key, value) in snapshot.Variables) state.Variables[key] = value;
+            if (state.Locals is { } locals)
+                locals.Restore(snapshot.LocalStorage ?? throw new InvalidDataException("Saved quest has no complete ordered local storage."), snapshot.Variables);
+            else if (snapshot.LocalStorage is not null)
+                throw new InvalidDataException("Saved ordered locals have no attached quest script.");
             foreach (var objective in objectives) state.Objectives[objective.Index] = objective;
         }
         _states.Clear();
@@ -158,13 +177,8 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
                 state.ObjectiveText[index] = FalloutDialogueTopic.Text(field.Data.Span);
             }
         }
-        var scripts = record.ReadSubrecords().Where(field => field.Signature == "SCRI").ToArray();
-        if (scripts.Length != 0)
-        {
-            var script = stack.GetEffective(FalloutDialogueTopic.RequiredForm(record, "SCRI"));
-            if (script.Signature != "SCPT") throw new InvalidDataException("Quest script target is not SCPT.");
-            foreach (var index in FalloutScriptLocals.Read(script).Values) state.Variables.Add(index, 0);
-        }
+        if (FalloutScriptLocals.AttachedScript(stack, record) is { } script)
+            state.Locals = new(script, FalloutScriptLocalStorage.ReadInitialPayloads(script));
         _states.Add(quest, state);
         return state;
     }
@@ -287,10 +301,17 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     internal void SetVariable(FalloutFormKey quest, uint index, double value)
     {
         if (!double.IsFinite(value)) throw new InvalidDataException("Non-finite quest variable.");
-        var previous = Variable(quest, index);
-        if (previous == value) return;
-        Require(quest).Variables[index] = value;
+        RequireVariableStorage(quest, index, value);
+        var locals = Require(quest).Locals ?? throw new InvalidDataException("Quest has no source local storage.");
+        if (!locals.Write(index, value)) return;
         Revision++;
+    }
+
+    private void RequireVariableStorage(FalloutFormKey quest, uint index, double value)
+    {
+        var script = FalloutScriptLocals.AttachedScript(stack, stack.GetEffective(quest));
+        if (script is not null && FalloutCompiledScriptProgram.HasProgram(script.ReadSubrecords().ToArray()))
+            FalloutScriptLocals.RequireCompiledValue(script, index, value);
     }
 
     internal float Evaluate(FalloutCondition condition)

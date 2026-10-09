@@ -2,6 +2,15 @@
 
 ## Complete-game direction and execution
 
+The October 8 direction treats the engine as greenfield. Replace incomplete
+owners and remove obsolete adapters freely; preserving earlier OpenNV schemas
+or implementation behavior is not an acceptance requirement. Implement general
+source-driven capabilities in substantial parallel batches. Keep the candidate
+compilable during integration and defer broad validation to combined candidates
+at roughly four-hour intervals. Do not repeat full gates after each small patch.
+Testing follows the implementation batch and retained source failures drive
+the next engine owners. Owned game inputs remain read-only and private.
+
 The October 7 full-scope direction is complete Fallout: New Vegas, Fallout 3,
 TTW, the selected combined stack, all nine JAM modules, JIP LN, JohnnyGuitar,
 JFP and every required dependency. Keep the original eleven mod targets, all
@@ -18,19 +27,43 @@ requirements without limiting newly discovered behavior.
 ### Parallel ownership
 
 Use all available agent slots for independent owners. The current four-slot
-allocation is primary integration/audit execution/live evidence/publication,
-implicit actor KF/IDLE/ANIO source closure, typed controller-link admission, and
-source-selected startup ownership. Addon-model and animation-sound dependencies
-are integrated with actual Debug/Release contracts. Complete corpus/program-body packets are
-integrated and their four independent owned runs retain failures. The configured
-subset sweep retains its source/dependency refusals; new-reader subsets remain
-next and full scene sweeps are running under immutable binaries. The source Eat, compiled SCDA/result/save,
-native-plugin and OpenXR proposals remain queued for integration and execution.
+allocation is original player sleep/wait/time/effect ownership, living actor detection
+and selected loader/native constructor/ModInfo/Quest ownership, with primary
+integrating the combined runtime, source-selected SPECIAL menu and complete
+current-state capture. Player physical activity, real body publication, shared
+sleep/knocked queries and mandatory physical saves are integrated and compile;
+actual sleep time/effects, native continuation and camera/headset acceptance remain open.
+The campaign native service and original-object/method caller path are integrated
+and compile. Actual ordered quest/reference locals preserve duplicate IDs, mixed
+views, source initializer bits and complete cold state. Native argument decoding
+is deferred from real SCDA slices, and source/world retirement waits for native
+child closure. Original DLL execution and every used hook remain separate owners.
+CombatManager target/member lists, original personal XP count, cached public combat
+flag and real acquisition/provocation/assistance/damage joins are also integrated
+and compile. Construct source groups before startup and retain the same cold owner
+at native attachment. Detection/reaction/election and active combat timers remain
+the next shared gameplay owners.
+Compiled execution/scheduling/startup, player PACK results, actor/idle/controller
+dependencies, LAND/primitive declarations, typed NIF physics, particle
+color/collision/lifecycle, compiled query/effect joins, actor script-package
+overrides, persistent player skills/XP, source-selected neutral advancement rates,
+the native level-up interface, native NVSE
+interfaces, source-declared expression caller/token utilities, native
+StringVar/ArrayVar allocation/interfaces, the unified
+persistent save queue and selected executable command metadata are integrated
+candidates. XP/HUD/cold lifecycle, selected advancement binding and private original-
+plugin I/O, original HUD/interface frame producers and genuine native local storage
+are integrated and compile. The active ten-minute implementation follow-up checks actual code and
+ownership, assigns available slots and continues substantial implementation.
+Parallel owners implement the largest source-proven failure families. Complete source
+scans already running under immutable binaries continue independently; their
+failed receipts cannot become current candidate acceptance. Native-plugin,
+OpenXR and ordinary campaign owners remain active scope after this batch.
 Reassign a finished slot to the next proven
 failure: creature terrain navigation, SpeedTree geometry, material/LOD coverage,
 compiled SCDA, unchanged x86 plugin execution, then remaining campaign owners.
-One owner controls builds, game processes, input, checkpoint writes and checked
-publication. Parallel owners coordinate files, submit bounded proposals and do
+One owner controls builds, game processes, input, checkpoint writes and
+publication. Parallel owners coordinate files, submit implementation proposals and do
 not run competing live sessions or mutate another owner's source/save state.
 
 ### Source and acceptance matrix
@@ -38,7 +71,7 @@ not run competing live sessions or mutate another owner's source/save state.
 | Scope | Complete acceptance outcome | First remaining owners |
 | --- | --- | --- |
 | Standalone FNV plus owned DLCs | Fresh launcher New Game, full opening/tutorial, connected world, all authored quests/branches and systems, persistent outcomes and cold continuation | Reached scripts, Sunny/Cheyenne/tutorial, complete combat/advancement, materials/vegetation/LOD and world/campaign coverage |
-| Standalone FO3 plus owned DLCs | Fresh ordinary birth/childhood/G.O.A.T./Escape, exterior/Megaton, complete campaign/DLC/system behavior and cold continuation | Reached birthday/NPC/result-script owners, legacy loop saving, child presentation, later opening and independent source audit |
+| Standalone FO3 plus owned DLCs | Fresh ordinary birth/childhood/G.O.A.T./Escape, exterior/Megaton, complete campaign/DLC/system behavior and cold continuation | Reached birthday/NPC/result-script owners, source audio-loop continuation, child presentation, later opening and independent source audit |
 | TTW plus its dependency graph | Complete Capital campaign and DLCs, source power/ticket/train route to Mojave, both campaigns/DLCs, return travel and cold outcomes | Exterior creature paths/trees, Megaton/Union Station, train requirements, source scripts and Benny reset/gear consequences |
 | Combined selected stack | Same routes with authored winners, dependency behavior, configured options and interactions intact | Full source selection/settings identity, SCDA, native extensions, MCM and ordinary multi-mod gameplay |
 | JAM | Dynamic Crosshair, Hit Marker, Hit Indicator, Visual Objectives, Hold Breath, Sprint, Bullet Time, Weapon Wheel and Loot Menu, with complete MCM configuration | Remaining source syntax/effects, hit contexts/events, HUD/MCM, input/AP/timing/inventory owners and unchanged dependencies |

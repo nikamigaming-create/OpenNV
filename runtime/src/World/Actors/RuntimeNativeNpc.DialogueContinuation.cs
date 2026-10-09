@@ -32,7 +32,7 @@ internal partial class RuntimeNativeNpc
         if (_aiReferenceState?.ProcedureCaptureBlocker != FalloutActorDialogueContinuation.CaptureBlocker) return null;
         if (!CanCaptureDialogueContinuation()) throw new NotSupportedException("Dialogue still has an outstanding voice, route or pose continuation.");
         var lifecycle = _packageEvents!;
-        var saved = new FalloutActorDialogueContinuation(FalloutActorPackageAssignment.Capture(_aiStack!, lifecycle)!,
+        var saved = new FalloutActorDialogueContinuation(FalloutActorPackageAssignment.Capture(_aiStack!, lifecycle, _boundScriptPackageRevision)!,
             lifecycle.Revision, lifecycle.LastEvent, lifecycle.LastPackage,
             lifecycle.LastPackage is { } previous ? FalloutActorFurnitureContinuation.RecordHash(_aiStack!.GetEffective(previous)) : null,
             WriteFurniturePose(Transform), [_dialogueWaitPosition.X, _dialogueWaitPosition.Y, _dialogueWaitPosition.Z],

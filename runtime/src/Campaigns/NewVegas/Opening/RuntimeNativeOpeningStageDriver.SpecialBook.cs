@@ -13,7 +13,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (BlockingExecutionError is not null || _specialBookEntry is not null || _nameEntry is not null ||
             _raceSexEntry is not null || _vigorEntry is not null || _tagSkillEntry is not null ||
-            _traitEntry is not null || _recipeMenu is not null || _barterMenu is not null)
+            _traitEntry is not null || _recipeMenu is not null || _barterMenu is not null || _levelUpEntry is not null)
             throw new InvalidOperationException("SPECIAL book cannot open while another menu owns input or its driver has failed.");
 
         var entry = new RuntimeNativeSpecialAllocationEntry();

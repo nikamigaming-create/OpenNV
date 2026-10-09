@@ -8,7 +8,7 @@ public partial class RuntimeCoordinator
 {
     private void AdvanceNativePlayerMoves()
     {
-        if (_nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession ||
+        if (_nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession || _nativeBootstrap?.PlacementPreparing == true ||
             _nativeReferences is not { } references || references.PlayerMoves.Next is not { } move ||
             _nativePlayer is not { } player || _nativeOpeningStageDriver is not { } driver || _nativeActiveCell is not { } active)
             return;

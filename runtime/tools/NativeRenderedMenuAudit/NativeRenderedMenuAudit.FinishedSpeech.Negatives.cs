@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime;
@@ -62,11 +63,12 @@ public partial class NativeRenderedMenuAudit
     }
 
     private async Task FinishedSpeechResultNegative(FalloutPluginStack records, RuntimeConfiguration configuration,
-        FalloutReferenceWorld world, FalloutQuestState quests, FalloutFormKey actor, FalloutFormKey topic)
+        FalloutReferenceWorld world, FalloutQuestState quests, RuntimeNativeNpc body, FalloutFormKey actor, FalloutFormKey topic)
     {
-        // Real native audio completes. Only this negative substitutes an
-        // independent first-party result body/callback after selection; its
-        // behavior is not attributed to the original INFO result script.
+        // The original selected INFO and its canonical end scope execute through
+        // the shared owner. This negative then injects a first-party owner fault,
+        // not an unknown SCDA instruction or an original-plugin failure. The
+        // genuine receipt is withheld; it never stamps native completion.
         var resultSpeech = new RuntimeNativeSpeech();
         try
         {
@@ -76,15 +78,23 @@ public partial class NativeRenderedMenuAudit
                 dialogueRandom: world.ScriptValues.RandomBounded, references: world);
             resultSpeech.PrepareSubtitle = _ => { };
             resultSpeech.ReportDivergence = value => GD.Print("OPENNV_NATIVE_FINISHED_SPEECH_EXPECTED_RESULT_FAULT " + value);
-            var prefixes = 0; var sourceCompletions = 0; var notifications = 0; var ended = 0;
-            const string resultError = "Isolated native INFO end-result prefix remains incomplete.";
-            // Original begin results still use their real C# source owner.
-            var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
-                _ => throw new InvalidDataException("Result-negative fixture reached an unrelated original effect.")));
-            resultSpeech.ExecuteResults = (info, speaker, begin) =>
+            var prefixes = 0; var sourceCompletions = 0; var notifications = 0; var ended = 0; var looks = 0; var invocations = 0;
+            FalloutScriptResultReceipt? completedEnd = null;
+            const string resultError = "Isolated native result owner failed after its original compiled prefix.";
+            var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, effect =>
             {
-                if (begin) { scripts.ExecuteResult(info, speaker, true); return; }
-                ++prefixes;
+                RequireFinished(effect.Kind == FalloutReferenceEffectKind.HeadTracking,
+                    "Result-negative fixture reached an unrelated original result effect.");
+                ApplyFinishedSpeechLook(body, records, effect); ++looks;
+            }));
+            resultSpeech.ExecuteOwnedResults = (info, speaker, begin) =>
+            {
+                var scope = FalloutScriptScope.Dialogue(info.Record, begin);
+                RequireFinished(scope.Compiled, "Result-negative fixture needs an original authored SCDA scope.");
+                var receipt = scripts.ExecuteResultOwned(info, speaker, begin); ++invocations;
+                receipt.Require(scope, speaker);
+                if (begin) return receipt;
+                completedEnd = receipt; ++prefixes;
                 throw new NotSupportedException(resultError);
             };
             resultSpeech.SayToCompleted += _ => ++sourceCompletions;
@@ -92,22 +102,52 @@ public partial class NativeRenderedMenuAudit
             AddChild(resultSpeech);
             resultSpeech.SayTo(actor, records.RuntimeFormKey(0x14), topic, true);
             var voice = FinishedSpeechVoice(resultSpeech, actor);
-            var infoField = FinishedSpeechVoiceField(voice, "Info");
             var actual = FinishedSpeechField<FalloutDialogueInfo>(voice, "Info");
-            RequireFinished(actual.Responses.Count > 0 && resultSpeech.Error is null,
-                "Result-negative fixture selected no original voice.");
-            infoField.SetValue(voice, actual with { EndScript = "Set syntheticResultPrefix to syntheticResultPrefix + 1", Flags = (byte)(actual.Flags & ~8) });
+            var end = FalloutScriptScope.Dialogue(actual.Record, false);
+            RequireFinished(actual.Responses.Count > 0 && end.Compiled && (actual.Flags & 8) == 0 && resultSpeech.Error is null,
+                "Result-negative fixture requires real audio and an original compiled end result scheduled at audio end.");
+            var hash = Convert.ToHexString(SHA256.HashData(actual.Record.ReadData()));
             var player = FinishedSpeechField<AudioStreamPlayer>(voice, "Player");
             player.Finished += () => ++ended;
             RequireFinished(player.Playing, "Result-negative fixture did not play the actual source audio.");
             await WaitFinishedSpeech(resultSpeech, allowFailure: true);
             RequireFinished(resultSpeech.Error == resultError && ended == actual.Responses.Count && !player.Playing &&
-                !resultSpeech.IsTalking(actor) && !resultSpeech.CanCaptureFinishedFailure &&
-                prefixes == 1 && sourceCompletions == 0 && notifications == 0,
-                resultSpeech.Error ?? "Unfinished actual native result phase was promoted to ended source completion.");
-            RejectFinished(() => resultSpeech.CaptureFinishedState(), "Incomplete native INFO end results became a durable finished receipt.");
-            GD.Print("OPENNV_NATIVE_FINISHED_SPEECH_RESULTS_NEGATIVE_PASS actualOwnedAudioEnd=true syntheticResultPrefix=1 " +
-                "sourceCompletionNotEntered=true nativeCaptureRefused=true campaign=unverified recording=false");
+                !resultSpeech.IsTalking(actor) && !resultSpeech.CanCaptureFinishedFailure && !resultSpeech.CanCaptureState &&
+                prefixes == 1 && looks == 1 && invocations == NativeAuthoredResultAudit.Invocations(actual) &&
+                completedEnd is { Authority: FalloutScriptResultAuthority.CompiledVanilla, Completed: true, CommittedSteps: > 0 } &&
+                FinishedSpeechVoiceField(voice, "EndResults").GetValue(voice) is null && sourceCompletions == 0 && notifications == 0,
+                resultSpeech.Error ?? "Actual native end owner failure became successful source completion.");
+            completedEnd!.Require(end, actor);
+            RejectFinished(() => resultSpeech.CaptureFinishedState(), "Unfinished result owner became a durable native receipt.");
+            RejectFinished(() => resultSpeech.CaptureState(), "Unfinished result owner became a capturable radio prefix.");
+            var random = JsonSerializer.Serialize(world.ScriptValues.Capture());
+            resultSpeech._Process(0); resultSpeech._Process(0);
+            RejectFinished(() => resultSpeech.SayTo(actor, records.RuntimeFormKey(0x14), topic, true),
+                "Failed result owner admitted a second original prefix.");
+            RequireFinished(prefixes == 1 && looks == 1 && invocations == NativeAuthoredResultAudit.Invocations(actual) &&
+                sourceCompletions == 0 && notifications == 0 && resultSpeech.Error == resultError &&
+                random == JsonSerializer.Serialize(world.ScriptValues.Capture()) &&
+                hash == Convert.ToHexString(SHA256.HashData(actual.Record.ReadData())),
+                "Result owner fault replayed its original effects/RNG or modified the original INFO.");
+            GD.Print("OPENNV_NATIVE_FINISHED_SPEECH_RESULTS_NEGATIVE_PASS " + JsonSerializer.Serialize(new
+            {
+                runtimeMvid = typeof(RuntimeNativeSpeech).Module.ModuleVersionId,
+                info = actual.Record.FormKey.ToString(),
+                winner = actual.Record.Plugin.Name,
+                infoSha256 = hash,
+                end.ScopeSha256,
+                receipt = completedEnd,
+                actualOwnedAudioEnd = true,
+                originalCompiledResultExecuted = true,
+                originalLookEffects = looks,
+                syntheticOwnerCallbackFault = true,
+                sourceCompletionNotEntered = true,
+                receiptNotInstalled = true,
+                nativeCaptureRefused = true,
+                noReplay = true,
+                campaign = "unverified",
+                recording = false
+            }));
         }
         finally { resultSpeech.Free(); }
     }

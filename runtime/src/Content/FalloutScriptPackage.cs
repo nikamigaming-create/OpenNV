@@ -84,14 +84,12 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         }
         var events = new Dictionary<string, FalloutFormKey?>();
         var programs = new Dictionary<string, FalloutPackageEvent>();
-        var eventFields = new List<FalloutPluginSubrecord>();
         string? currentEvent = null;
         void FinishEvent()
         {
             if (currentEvent is null) return;
-            if (!programs.TryAdd(currentEvent, new(record, currentEvent, eventFields.ToArray())))
+            if (!programs.TryAdd(currentEvent, new(record, currentEvent, FalloutScriptScope.PackageEvent(record, currentEvent))))
                 throw new InvalidDataException("Package repeats an event declaration.");
-            eventFields.Clear();
         }
         foreach (var field in fields)
         {
@@ -107,8 +105,6 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
                     record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span))))
                     throw new InvalidDataException("Package event has an invalid animation identity.");
             }
-            if (currentEvent is not null && field.Signature is not ("POBA" or "POEA" or "POCA"))
-                eventFields.Add(field);
         }
         FinishEvent();
         return new(record.FormKey, FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "EDID").Data.Span),
@@ -129,6 +125,23 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
 internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string Kind,
     IReadOnlyList<FalloutPluginSubrecord> Fields)
 {
+    internal FalloutScriptScope Scope
+    {
+        get
+        {
+            var scope = Fields as FalloutScriptScope ??
+                throw new InvalidDataException("Package event execution requires its original reader-owned scope.");
+            scope.RequireSource(Package);
+            var original = FalloutScriptScope.PackageEvent(Package, Kind);
+            if (scope.ScopeSha256 != original.ScopeSha256)
+                throw new InvalidDataException("Package event differs from its original lifecycle boundary.");
+            return scope;
+        }
+    }
+
+    internal FalloutCompiledScriptProgram? CompiledProgram => Scope.Compiled
+        ? FalloutCompiledScriptProgram.Read(Package, Scope, standalone: false) : null;
+
     internal FalloutFormKey? Topic
     {
         get
@@ -145,6 +158,7 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
     {
         get
         {
+            FalloutCompiledScriptProgram.RequireDiagnosticOnly(Package, Fields, "PACK-" + Kind);
             var source = Fields.Where(subrecord => subrecord.Signature == "SCTX").ToArray();
             if (source.Length > 1) throw new InvalidDataException("Package event repeats its source program.");
             return source.Length == 0 ? "" : FalloutDialogueTopic.ScriptText(source[0].Data.Span);
@@ -152,7 +166,16 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
     }
 
     internal void RequireEmptyScript()
-        => ExecuteScript(_ => throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event script execution is unbound."));
+    {
+        if (CompiledProgram is { } compiled)
+        {
+            if (compiled.ResultInstructions().Any() || compiled.LocalCount != 0)
+                throw new NotSupportedException($"PACK {Package.FormKey} {Kind} requires its compiled lifecycle executor.");
+            RequireEmptyTopic();
+            return;
+        }
+        ExecuteScript(_ => throw new NotSupportedException($"PACK {Package.FormKey} {Kind} event script execution is unbound."));
+    }
 
     internal void ExecuteScript(Action<string> execute)
     {
@@ -174,11 +197,9 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
             BinaryPrimitives.ReadUInt32LittleEndian(headers[0].Data.Span[4..]) !=
                 Fields.Count(field => field.Signature is "SCRO" or "SCRV")))
             throw new InvalidDataException("Package event compiled extents disagree with its header.");
-        if (compiled.Length == 1 && compiled[0].Data.Length != 0 && !FalloutDialogueTopic.CodeLines(Source).Any())
-            throw new NotSupportedException($"PACK {Package.FormKey} {Kind} compiled program has no source execution owner.");
-        if (FalloutDialogueTopic.CodeLines(Source).Any() &&
-            (headers.Length != 1 || compiled.Length != 1 || compiled[0].Data.Length == 0))
-            throw new InvalidDataException("Package event source has no complete compiled program owner.");
+        if (CompiledProgram is not null) return;
+        if (FalloutDialogueTopic.CodeLines(Source).Any() && headers.Length != 1)
+            throw new InvalidDataException("Package diagnostic source has no original SCHR scope.");
     }
 
     internal void RequireEmptyTopic()

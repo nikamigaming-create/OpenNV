@@ -16,7 +16,6 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator
 {
-    private const string NativeNewVegasInitialCellPlugin = "FalloutNV" + ".esm";
     private const int NativeMenuCanvasLayer = 100;
     private FalloutPluginStack? _nativePluginStack;
     private FalloutQuestState? _nativeQuestState;
@@ -31,7 +30,6 @@ public partial class RuntimeCoordinator
     private RuntimeNativeGameTime? _nativeGameTimeAdapter;
     private string? _nativeGameTimeUnbound;
     private readonly FalloutPlayerInventory _nativeInventory = new();
-    private FalloutCellScene? _nativeInitialCell;
     private FalloutCellScene? _nativeActiveCell;
     private Node3D? _nativeCurrentCellRoot;
     private readonly Dictionary<string, RuntimeNativeNifPrototype> _nativeNifPrototypes =
@@ -40,11 +38,7 @@ public partial class RuntimeCoordinator
     private RuntimeNativePlayer? _nativePlayer;
     private FalloutOpeningControlGraph? _nativeOpeningControls;
     private FalloutOpeningStageTransitionGraph? _nativeOpeningTransitions;
-    private FalloutOpeningInventoryGrant? _nativeOpeningGrant;
     private FalloutNativeRaceSexContract? _nativeRaceSexContract;
-    private FalloutNativeVigorContract? _nativeVigorContract;
-    private FalloutNativeTagSkillContract? _nativeTagSkillContract;
-    private FalloutNativeTraitFarewellContract? _nativeTraitFarewellContract;
     private FalloutNativeCampaignRestore? _nativeOpeningRestore;
     private RuntimeNativeOpeningStageDriver? _nativeOpeningStageDriver;
     private bool _nativeContinueOpening;
@@ -78,6 +72,7 @@ public partial class RuntimeCoordinator
             },
             referenceEvents = _nativeReferenceEvents?.State,
             rigidBodies = detailed ? CaptureNativeRigidBodies() : null,
+            nativePluginRetirementFailure = _nativePluginRetirementFailure,
             modelConstraints = detailed ? _nativeReferencePresentation?.Nodes.SelectMany(reference =>
                 OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<RuntimeNifHingeJoint>(reference.Value)
                     .Select(joint => new { reference = reference.Key.ToString(), joint = joint.State })).ToArray() : null,
@@ -150,6 +145,14 @@ public partial class RuntimeCoordinator
                 blockingError = _nativeOpeningStageDriver.BlockingExecutionError,
                 stageResults = _nativeOpeningStageDriver.StageResultState,
                 saveRequest = _nativeOpeningStageDriver.SaveRequestState,
+                playerProgress = _nativeOpeningStageDriver.PlayerProgressState,
+                experienceNotifications = _nativeOpeningStageDriver.ExperienceNotificationState,
+                interfaceActivationFrames = _nativeOpeningStageDriver.InterfaceActivationFrameState,
+                combatGroups = _nativeOpeningStageDriver.CombatGroupState,
+                advancementRuntime = _nativeOpeningStageDriver.PlayerAdvancementRuntimeState,
+                playerPhysical = _nativePlayer?.PlayerPhysicalState,
+                nativePlugins = _nativeOpeningStageDriver.NativePluginExecutionState,
+                levelUp = _nativeOpeningStageDriver.PlayerLevelUpMenuState,
             },
             movies = GetChildren().OfType<NativeGamebryoMovie>()
                 .Concat(_nativeOpeningStageDriver?.GetChildren().OfType<NativeGamebryoMovie>() ?? [])
@@ -193,10 +196,11 @@ public partial class RuntimeCoordinator
             subtitles = _nativeSubtitles?.State,
             pipBoy = _nativePipBoy?.State,
             playerPresentation = _nativePlayer?.PresentationState,
-            questScriptsUnbound = _nativeContinueOpening && _nativeOpeningRestore?.State.Scripts is null ? "Legacy save has no quest script state." : null,
+            questScriptsUnbound = _nativeContinueOpening && _nativeOpeningRestore?.State.Scripts is null ? "Current campaign save has no quest script state." : null,
             playerPackage = _nativeOpeningStageDriver?.PlayerPackageState,
             characterCreation = _nativeOpeningStageDriver?.CharacterCreationState,
             traitMenu = _nativeOpeningStageDriver?.TraitMenuState,
+            levelUpMenu = _nativeOpeningStageDriver?.PlayerLevelUpMenuState,
             vigor = _nativeOpeningStageDriver?.VigorState,
             specialBook = _nativeOpeningStageDriver?.SpecialBookState,
             imageSpace = cellChildren is null ? null : cellNodes.OfType<RuntimeNativeImageSpace>().Select(presenter => new
@@ -281,11 +285,8 @@ public partial class RuntimeCoordinator
             if (_options.ContainsKey("new-game"))
             {
                 InitializeNativePlayerInventory();
-                if (!NativeUsesOpeningStart)
-                {
-                    CreateNativeQuestScripts();
-                    await BootstrapNativeNewGame();
-                }
+                CreateNativeQuestScripts();
+                await BootstrapNativeNewGame();
                 _nativeMenuRead = LoadNativeInitialCell();
                 await _nativeMenuRead;
             }
@@ -311,45 +312,15 @@ public partial class RuntimeCoordinator
         _nativeReferences?.Dispose();
         _nativeReferences = new(_nativePluginStack, auxiliary: _nativeScriptStorage.Auxiliary,
             ini: _nativeScriptStorage.Ini, ui: _nativeUi, controls: _nativeScriptStorage.Controls);
-        _nativeInitialCell = content.Campaign == RuntimeLiveContentSource.Fallout3Game ? null :
-            FalloutCellSceneReader.Read(_nativePluginStack, new(NativeNewVegasInitialCellPlugin, 0x103df9));
+        _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId);
         _nativeStartingQuest = FalloutNewGameBootstrap.StartingQuest(_nativePluginStack, FalloutInstallationSettings.Read(content));
         _nativeGlobals = FalloutGlobalState.Read(_nativePluginStack);
         _nativeGameTime = new(_nativeGlobals, FalloutGameTimeBindings.Read(_nativePluginStack),
-            FalloutCalendar.Read(Path.Combine(Path.GetDirectoryName(content.ContentRoot)!,
-                content.Game == RuntimeLiveContentSource.Fallout3Game ? "Fallout3.exe" : "FalloutNV.exe")));
+            FalloutCalendar.Read(content.FalloutExecutablePath));
         _nativeSkyLighting = new(_nativePluginStack, FalloutGameSettingFloats.ReadRetained(_nativePluginStack, "fDaytimeColorExtension", nameof(FalloutSkyLightingState)));
         _nativeRaceSexContract = FalloutNativeRaceSexResolver.Resolve(_nativePluginStack);
-        _nativeOpeningControls = new(new Dictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>>(StringComparer.OrdinalIgnoreCase));
+        _nativeOpeningControls = new(new Dictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>>(StringComparer.OrdinalIgnoreCase), ResultDriven: true);
         _nativeOpeningTransitions = new([]);
-        _nativeOpeningGrant = null;
-        _nativeVigorContract = null;
-        _nativeTagSkillContract = null;
-        _nativeTraitFarewellContract = null;
-        if (content.Campaign == RuntimeLiveContentSource.FalloutNewVegasGame)
-        {
-            _nativeOpeningControls = FalloutOpeningPlayerControlResolver.Resolve(
-                _nativePluginStack,
-                ["VCG00", "VCG01"]);
-            _nativeOpeningGrant = FalloutOpeningInventoryGrantResolver.Resolve(
-                _nativePluginStack,
-                _nativeOpeningControls,
-                "VCG01");
-            _nativeVigorContract = FalloutNativeVigorResolver.Resolve(
-                _nativePluginStack,
-                _nativeInitialCell!);
-            _nativeOpeningTransitions = FalloutOpeningStageTransitionResolver.Resolve(
-                _nativePluginStack,
-                _nativeOpeningControls, executeGameMode: true);
-            _nativeOpeningTransitions = FalloutOpeningStageTransitionResolver.AddDialogueWaits(
-                _nativeOpeningControls, _nativeOpeningTransitions);
-            _nativeTagSkillContract = FalloutNativeTagSkillResolver.Resolve(
-                _nativePluginStack, _nativeOpeningControls);
-            _nativeTraitFarewellContract = FalloutNativeTraitFarewellResolver.Resolve(
-                _nativePluginStack,
-                _nativeOpeningControls,
-                _nativeInitialCell!);
-        }
         _nativeOpeningRestore = null;
         if (File.Exists(savePath))
         {
@@ -358,8 +329,7 @@ public partial class RuntimeCoordinator
                 _nativeOpeningRestore = FalloutNativeCampaignSave.Read(
                     savePath,
                     content.SaveCompatibilityId,
-                    _nativePluginStack,
-                    _nativeVigorContract, _nativeTagSkillContract, _nativeOpeningGrant, _nativeTraitFarewellContract);
+                    _nativePluginStack);
             }
             catch (Exception exception) when (
                 exception is IOException or InvalidDataException or JsonException or NotSupportedException)
@@ -373,9 +343,7 @@ public partial class RuntimeCoordinator
         GD.Print(
             $"OPENNV_NATIVE_STACK_READY edition={content.Edition} campaign={content.Campaign} " +
             $"game={content.Game} plugins={_nativePluginStack.Plugins.Count} " +
-            $"records={_nativePluginStack.EffectiveRecordCount} cell={_nativeInitialCell?.Cell.FormKey.ToString() ?? "source-startup-pending"} " +
-            $"references={_nativeInitialCell?.References.Count} " +
-            $"models={_nativeInitialCell?.BaseObjects.Values.Count(value => value.ModelPath is not null)} " +
+            $"records={_nativePluginStack.EffectiveRecordCount} cell=source-startup-pending " +
             $"pluginOpenMs={loadMetrics.PluginHeaderScan.TotalMilliseconds:F1} " +
             $"winnerIndexMs={loadMetrics.WinnerConstruction.TotalMilliseconds:F1} " +
             $"archiveWinnerWaitMs={archiveWarmupWait.Elapsed.TotalMilliseconds:F1}");
@@ -441,6 +409,7 @@ public partial class RuntimeCoordinator
         });
         layer.AddChild(menu);
         AddChild(layer);
+        _nativeStartMenuLayer = layer;
         _nativeMenuRead = IndexNativeLiveStackForMenu(sources, menu);
     }
 
@@ -459,9 +428,10 @@ public partial class RuntimeCoordinator
             if (!_nativeContinueOpening)
             {
                 InitializeNativePlayerInventory();
-                if (!NativeUsesOpeningStart) await BootstrapNativeNewGame();
+                await BootstrapNativeNewGame();
             }
             await LoadNativeInitialCell();
+            if (ReferenceEquals(_nativeStartMenuLayer, layer)) _nativeStartMenuLayer = null;
             layer.QueueFree();
         }
         catch (Exception error)
@@ -508,13 +478,13 @@ public partial class RuntimeCoordinator
             throw new InvalidOperationException("Live retail source was cleared during startup.");
         var stack = _nativePluginStack ??
             throw new InvalidOperationException("Native plugin stack was not indexed.");
-        var startupPlacement = _nativeContinueOpening ? null : _nativeBootstrap?.Placement();
-        var cell = _nativeContinueOpening ? FalloutCellSceneReader.Read(stack, _nativeOpeningRestore!.State.ActiveCell) :
-            startupPlacement is not null ? FalloutCellSceneReader.Read(stack, startupPlacement.Cell) :
-            _nativeInitialCell ?? throw new InvalidOperationException("Native initial CELL was not decoded.");
-        var transition = _nativeContinueOpening || startupPlacement is not null
-            ? null
-            : FalloutDoorTransitionResolver.ResolveInteriorExits(stack, cell).Single();
+        var startup = _nativeContinueOpening ? null : (_nativeBootstrap ??
+            throw new InvalidOperationException("New Game has no configured source bootstrap.")).PreparePlacement() ??
+            throw new InvalidOperationException("New Game has no admitted original player movement.");
+        var startupPlacement = startup?.Placement;
+        var cell = FalloutCellSceneReader.Read(stack, _nativeContinueOpening ?
+            _nativeOpeningRestore!.State.ActiveCell : startupPlacement!.Cell);
+        FalloutDoorTransition? transition = null;
         var restore = _nativeContinueOpening
             ? _nativeOpeningRestore ?? throw new InvalidOperationException(
                 "Native Continue was selected without a valid cold save.")
@@ -525,15 +495,19 @@ public partial class RuntimeCoordinator
             // Restore builds presentation against the restored world instead.
             _nativePrewarmedInitialCellRoot?.Free();
             _nativePrewarmedInitialCellRoot = null;
+            RetireNativePluginCampaign();
             _nativeReferences?.Dispose();
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
                 ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
-            if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
-            else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
+            _nativeReferences.Restore(restore.State.References ??
+                throw new InvalidDataException("Current campaign has no retained reference state."));
             _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
             _nativeReferences.RestoreDetection(restore.State.DetectionEvents);
             _nativeReferences.RestoreFactionRelations(restore.State.FactionRelations);
+            var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Cold combat groups have no selected source.");
+            _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId,
+                restore.State.CombatGroups ?? throw new InvalidDataException("Current campaign has no combat group continuation."));
         }
         else if (_nativeBootstrap is null)
         {
@@ -580,21 +554,19 @@ public partial class RuntimeCoordinator
         var activeScene = cell;
         FalloutExteriorGridScene? grid = null;
         float[]? position = null;
-        if (!sourceSide)
+        if (startupPlacement is not null) position = startupPlacement.Position;
+        else if (restore is not null)
         {
-            if (restore is null)
-                throw new NotSupportedException($"Saved CELL {activeCell} has no world streaming owner.");
-            activeScene = FalloutCellSceneReader.Read(stack, activeCell);
-            var restored = FalloutNativeCampaignSave.RestorePlayerPosition(restore.State, _configuration.Player.SpawnCenterHeightMeters);
+            var restored = FalloutNativeCampaignSave.RestorePlayerPosition(restore.State);
             var units = _configuration.World.GameUnitsToMeters;
             position = [restored[0] / units, -restored[2] / units, restored[1] / units];
-            if (activeScene.Cell.Worldspace is { } world)
-            {
-                grid = ResolveExterior(world, position);
-                if (activeCell != grid.Scene.Cell.FormKey && activeCell != grid.PersistentCell)
-                    throw new InvalidDataException($"Saved CELL {activeCell} does not contain the saved exterior position.");
-                activeScene = grid.Scene;
-            }
+        }
+        if (activeScene.Cell.Worldspace is { } world)
+        {
+            grid = ResolveExterior(world, position ?? throw new InvalidDataException("First exterior placement has no authoritative position."));
+            if (activeCell != grid.Scene.Cell.FormKey && activeCell != grid.PersistentCell)
+                throw new InvalidDataException($"Source CELL {activeCell} does not contain the admitted exterior position.");
+            activeScene = grid.Scene;
         }
         activeScene = _nativeReferences!.ComposeResidency(activeScene, grid?.Cells);
         if (grid is not null) grid = grid with { Scene = activeScene };
@@ -616,29 +588,17 @@ public partial class RuntimeCoordinator
         AddChild(root);
         foreach (var sounds in root.FindChildren("*", "", true, false).OfType<NativeOwnedAnimationSoundPlayer>())
             sounds.RequirePcmRestored();
-        if (restore is null || restore.State.Scripts is not null)
-        {
-            // New Game retains the timers already running behind StartMenu.
-            // Continue replaces that menu session with the saved clocks.
-            if (restore is not null || _nativeQuestScripts is null) CreateNativeQuestScripts(restore?.State.Scripts);
-        }
-        else if (_nativeQuestScripts is not null)
-        {
-            RemoveChild(_nativeQuestScripts);
-            _nativeQuestScripts.QueueFree();
-            _nativeQuestScripts = null;
-        }
+        // Cold publication requires the current script owner and its clocks.
+        if (restore is not null || _nativeQuestScripts is null)
+            CreateNativeQuestScripts(restore is null ? null : restore.State.Scripts ??
+                throw new InvalidDataException("Current campaign save has no script continuation owner."));
         if (activeScene.Cell.Lighting is not null)
             AddNativeCellEnvironment(root, activeScene);
         else if (grid is not null)
             AddExteriorEnvironment(root, activeScene.Cell);
-        AddNativePlayer(cell, startupPlacement);
+        AddNativePlayer(activeScene, startupPlacement);
         SetNativeActiveCell(root, activeScene);
         _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
-        if (_nativeQuestScripts is not null) _nativeQuestScripts.ActivateWorld(restore is not null);
-        if (startupPlacement is not null)
-            _nativeReferences.PlayerMoves.Complete(_nativeReferences.PlayerMoves.Next ??
-                throw new InvalidOperationException("Initial player placement lost its queued source request."));
         AddNativeGameplayHud();
         if (grid is not null)
         {
@@ -646,6 +606,8 @@ public partial class RuntimeCoordinator
             await root.GetChildren().OfType<RuntimeNativeExteriorLod>().Single()
                 .PrepareInitialSelection(GetViewport().GetCamera3D().GlobalPosition);
         }
+        if (startup is not null) _nativeBootstrap!.CompletePlacement(startup);
+        if (_nativeQuestScripts is not null) _nativeQuestScripts.ActivateWorld(restore is not null);
         GD.Print(
             $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
             $"restored={(restore is not null)} sourceSide={sourceSide}");
@@ -653,12 +615,15 @@ public partial class RuntimeCoordinator
 
     private void CreateNativeQuestScripts(FalloutQuestScriptsSnapshot? restore = null)
     {
+        RetireNativePluginCampaign();
         var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
         var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals,
             _nativeReferences, NativeScriptEvents(), _nativeScriptStorage);
-        scripts.EvaluateMessageCondition = condition => (_nativeOpeningStageDriver ??
-            throw new InvalidOperationException("Message conditions have no player gameplay owner.")).EvaluateMessageCondition(condition);
+        scripts.EvaluateMessageCondition = condition => _nativeOpeningStageDriver is { } driver
+            ? driver.EvaluateMessageCondition(condition) : (_nativeBootstrap ??
+                throw new NotSupportedException("Pre-world message conditions have no source bootstrap owner.")).EvaluateCondition(condition);
         scripts.ActiveMenus = NativeActiveMenus;
+        scripts.StartupMenus = NativeStartupMenus;
         scripts.SoundUnitsToMetres = _configuration.World.GameUnitsToMeters;
         scripts.SoundReference = reference => _nativePluginStack!.RuntimeFormId(reference) == 0x14 ? _nativePlayer :
             (_nativeReferencePresentation ?? throw new NotSupportedException("Script sound world presentation is not resident."))
@@ -670,6 +635,7 @@ public partial class RuntimeCoordinator
             _nativeQuestScripts.QueueFree();
         }
         _nativeQuestScripts = scripts;
+        BindNativePluginCampaign();
         AddChild(scripts);
     }
 
@@ -1015,7 +981,7 @@ public partial class RuntimeCoordinator
         if (baseObject.Signature == "DOOR" && reference.Teleport is not null)
             AddNativeDoorPortal(instance, reference);
         else if (baseObject.Signature == "DOOR" || RuntimeNativeDoorMotion.HasOpenClose(controllers))
-            RuntimeNativeDoorMotion.Attach(instance, _nativeReferences!.Get(reference.FormKey), controllers, SaveNativeInteraction);
+            RuntimeNativeDoorMotion.Attach(instance, _nativeReferences!.Get(reference.FormKey), controllers, () => RequestNativeInteractionSave(reference.FormKey));
     }
 
     private static ParityCategory ParityCategoryFor(string signature) => signature switch
@@ -1148,8 +1114,7 @@ public partial class RuntimeCoordinator
         }
         finally { CloseNativeLoadingScreens(); }
         foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
-        if (_nativeReferences!.PlayerMoves.Pending) _nativeOpeningStageDriver!.RequestWorldSave();
-        else _nativeOpeningStageDriver!.PersistWorldState(targetScene.Cell.FormKey);
+        RequestNativeDoorTransportSave(active.Cell.FormKey, reference.FormKey, entry.Door);
         GD.Print(
             $"OPENNV_NATIVE_DOOR_STREAM source={active.Cell.FormKey} destination={targetScene.Cell.FormKey} " +
             $"door={reference.FormKey} " +
@@ -1211,19 +1176,10 @@ public partial class RuntimeCoordinator
     {
         if (_nativePlayer is not null)
             throw new InvalidOperationException("Native player was already created.");
-        var start = startupPlacement is null && !_nativeContinueOpening ? FalloutNewGamePlayerStartResolver.Resolve(
-            _nativePluginStack ?? throw new InvalidOperationException("Native plugin stack was not indexed."),
-            initialCell) : null;
-        var transform = startupPlacement is not null ? NativePlayerPlacementTransform(startupPlacement) :
-            start is not null ? ReferenceTransform(start.Reference) : Transform3D.Identity;
+        if (!_nativeContinueOpening && startupPlacement is null)
+            throw new InvalidOperationException("New Game player has no admitted source placement.");
+        var transform = startupPlacement is not null ? NativePlayerPlacementTransform(startupPlacement) : Transform3D.Identity;
         _nativePlayer = new RuntimeNativePlayer();
-        _nativePlayer.CreateFurnitureBody = () => RuntimeNativeNpc.Create(
-            (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Player appearance owner is absent.")).PlayerAppearance
-                with
-            { Reference = _nativePluginStack!.RuntimeFormKey(0x14) },
-            RuntimeLiveContentSource.Current!, _configuration.World.GameUnitsToMeters,
-            (appearance, part, nif, geometry) => NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
-                NativeAmbient(_nativeActiveCell?.Cell ?? throw new InvalidOperationException("Player body has no active cell."))));
         _nativePlayer.ActivateReference = collider => _nativeReferenceEvents?.TryActivate(collider) == true;
         _nativePlayer.NoActivationFeedback = () =>
             (_nativeQuestScripts ?? throw new InvalidOperationException("Native activation feedback has no quest session."))
@@ -1254,8 +1210,7 @@ public partial class RuntimeCoordinator
             : null;
         if (restore is not null)
             _nativePlayer.RestoreTransform(
-                FalloutNativeCampaignSave.RestorePlayerPosition(restore.State,
-                    _configuration.Player.SpawnCenterHeightMeters),
+                FalloutNativeCampaignSave.RestorePlayerPosition(restore.State),
                 restore.State.PlayerRotation, FalloutNativeCampaignSave.RestorePlayerViewPitch(restore.State));
         AddChild(_nativePlayer);
         if (_nativeXr is not null) _nativePlayer.AttachXr(_nativeXr);
@@ -1266,6 +1221,7 @@ public partial class RuntimeCoordinator
             PrepareSubtitle = _nativeSubtitles.Prepare,
             SourceManualSaveWriter = CreateNativeCheckpoint,
             SourceManualSaveBlocker = NativeSourceManualSaveBlocker,
+            OrderedSaveQueueChanged = PumpNativeOrderedManualSave,
             ReferencePresentation = () => _nativeReferencePresentation ??
                 throw new InvalidOperationException("Native reference presentation is absent."),
             SayToCompleted = receipt => _nativeOpeningStageDriver!.DispatchSpeechCompletion(receipt),
@@ -1278,7 +1234,6 @@ public partial class RuntimeCoordinator
             _nativePlayer,
             _nativeRaceSexContract ??
                 throw new InvalidOperationException("Native race/sex contract was not resolved."),
-            _nativeVigorContract, _nativeTagSkillContract, _nativeTraitFarewellContract,
             _nativePluginStack ??
                 throw new InvalidOperationException("Native plugin stack was not indexed."),
             RequireOption(_options, "save-path"),
@@ -1298,19 +1253,30 @@ public partial class RuntimeCoordinator
             () => _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeImageSpace>().SingleOrDefault() ??
                 throw new InvalidOperationException("Rendered creation has no world image-space owner."),
             _nativeStartingQuest?.ReadSubrecords().Where(field => field.Signature == "EDID")
-                .Select(field => FalloutDialogueTopic.Text(field.Data.Span)).Single() ?? "VCG00",
-            0, _nativeBootstrap?.Controls, restore is null ? _nativeBootstrap?.CaptureStageResults() : null);
+                .Select(field => FalloutDialogueTopic.Text(field.Data.Span)).Single() ??
+                throw new NotSupportedException("Configured startup quest has no source identity for the current gameplay owner."),
+            0, _nativeBootstrap?.Controls, restore is null ? _nativeBootstrap?.CaptureStageResults() : null,
+            restore is null ? _nativeBootstrapCharacter : null);
         AddChild(_nativeOpeningStageDriver);
+        _nativeOpeningStageDriver.AttachExperiencePauseClock();
+        _nativeOpeningStageDriver.ConfigureCurrentPlayerAdvancement();
+        _nativeOpeningStageDriver.ConfigureCurrentPlayerPhysicalActivity(restore is null ? null :
+            restore.State.PlayerPhysical ?? throw new InvalidDataException("Current campaign has no player physical continuation."),
+            reference => (_nativeReferenceEvents ?? throw new NotSupportedException("Player furniture has no resident presentation owner."))
+                .PlayerFurniturePlacement(reference));
         // This owner is part of the load transaction. Native bridge dispatch
         // logs _Ready exceptions without propagating them to that transaction.
         _nativeOpeningStageDriver.InitializeOwnedState();
+        _nativeOpeningStageDriver.AttachInterfaceActivationFrames();
+        _nativeOpeningStageDriver.AttachSourceCombatGroups();
+        AttachNativeExperienceHud(_nativeOpeningStageDriver);
         _nativeImageSpaceClock = new(_nativeImageSpaceState);
         AddChild(_nativeImageSpaceClock);
         GD.Print(
-            $"OPENNV_NATIVE_PLAYER_START reference={start?.Reference.FormKey ?? _nativeReferences!.PlayerMoves.Next?.Destination} " +
-            $"quest={start?.Quest ?? _nativeStartingQuest!.FormKey} stage={start?.Stage ?? 0} " +
+            $"OPENNV_NATIVE_PLAYER_START reference={_nativeReferences!.PlayerMoves.Next?.Destination} " +
+            $"startupQuest={_nativeStartingQuest!.FormKey} startupStage={_nativeQuestState!.Stage(_nativeStartingQuest.FormKey)} " +
             $"restored={(restore is not null)} inventory={restore?.Inventory.Items.Count ?? 0} " +
-            "owner=character-body controls=live-qust-sctx source=live-retail-files");
+            "owner=character-body controls=actual-shared-result-effects source=live-retail-files");
     }
 
     private void AddNativeCellEnvironment(Node3D root, FalloutCellScene cell)

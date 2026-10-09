@@ -40,6 +40,7 @@ internal static class NativeExecutionContracts
             ManagedCallbackDeadline(companion, fixture);
             NativeExecutionProtocolContracts.Run(companion);
             NativeFaultEnvelopeContracts.Run(companion);
+            NativeGuestArenaContracts.Run(companion, fixtureDirectory);
         }
         finally
         {

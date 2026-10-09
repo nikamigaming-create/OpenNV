@@ -42,7 +42,7 @@ internal static class NvseNumericProbe
             "if 0\nlet timer := Tick\nelse\nresult += 2\nendif");
         Require(state["result"] == 6 && state["other"] == 4 && calls == 0,
             "Eval conditions, assignment results or inactive branches differ.");
-        Require(Evaluate("charge += 0 || 9") == 7 && state["charge"] == 7,
+        Require(Evaluate("charge += 0 || 9") == 16 && state["charge"] == 16,
             "Compound assignment lost its documented precedence relative to logical OR.");
         Require(Evaluate("0b101 & 0x3") == 1 && Evaluate("-7.9 % 3.8") == -1 &&
             Evaluate("24 / 2 % 5 * 2") == 4 && Evaluate("1 == 3 & 1") == 1 &&
