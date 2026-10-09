@@ -1,7 +1,7 @@
 # Product status
 
-The FNV first-person beard and post-trait sofa trap are repaired in the current
-publication candidate. A private ordinary replay performs Continue, Vito-Matic,
+The FNV first-person beard and post-trait sofa trap are repaired in the pinned
+development Release. A private ordinary replay performs Continue, Vito-Matic,
 the questionnaire, tags and Skilled/Wild Wasteland selection, reaches stage 110,
 exits the source sofa with Activate and moves 2.6 metres with forward input. The
 seated first-person native frame is beard-free. F5, quit, cold Continue and another
@@ -9,8 +9,10 @@ F5 preserve all 13 skill pools at +5 and the completed effect's exact local stat
 the original user save remains unchanged. Cold quit exits 0 and telemetry
 publication retains zero failures. Focused source/ordered-local/current-save
 checks and the actual owned Skilled ability audit pass. The required Release/Debug
-publication gate, native Godot checks and diff check pass. The refreshed immutable
-Release package and checked merge remain next. An independent
+publication gate, native Godot checks and diff check pass. The immutable export
+also observes the real furniture approach/entry, exits with Activate, moves
+2.76 metres and quits with exit code 0. The refreshed Release is pinned and the
+checked merge remains next. An independent
 reached malformed source-text script still refuses; its compiled execution owner
 and matched retail acceptance remain open.
 
@@ -19,7 +21,7 @@ FNV/TTW launcher-stack checks. Actual FNV New Game enters the source confirmatio
 cancel and source-menu quit preserve the user's save. Native pixels are inspected
 at 1440x900 and the minimum 1060x700 setup window. Original artwork, persistent
 play controls, source-menu entry actions and packaged build identity are present.
-The standalone FNV development Release package `fnv-dev-0a592d3cb1c8` is pinned
+The standalone FNV development Release package `fnv-dev-6c79290edde5` is pinned
 at `local/releases/FNV Test.cmd`. Its clean source commit, toolchain and 201 file
 hashes are retained; exported launcher startup matches the package identity and
 loads the refreshed artwork. The package includes Godot/.NET and first-party
