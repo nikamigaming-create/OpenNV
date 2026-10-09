@@ -24,9 +24,9 @@ presentation/input/OpenXR.
 | Owner | Current implementation |
 | --- | --- |
 | Primary | Ordinary gameplay/input, retail recordings and Godot replay; join broad source-driven fixes and publish usable builds |
-| active_radio_save | Sequential private retail input recording and checkpoint-bound ordinary Godot replay |
-| fo3_special_book | Actual Main/frame dispatch, queued-reference priority and caller-selected inline/queued reads |
-| scope_plugin_audit | General source-indexed interface audio, live playback and independent voice retirement |
+| active_radio_save | Actual shared script-context construction, cold/save lifetimes and the two ordered original Main sampling sites |
+| fo3_special_book | Exterior shared-root CELL graph extension, per-CELL LAND consumers and actual outgoing child retirement |
+| scope_plugin_audit | Winning loose native-plugin discovery, original PE/PDB declarations and source-ordered ordinary startup |
 
 Parallel owners submit immutable first-party source proposals. They do not mutate
 tracked code or run competing builds/game/save/publication sessions. Their next
@@ -54,9 +54,16 @@ Root branch: `codex/full-runtime-owner-integration`, based on origin/main
 `1b159f3b9e00333eb926f3d1a7b19cd52f055175`. The protected
 `codex/compiled-authority-world-dependencies` checkpoint `a9fac69e` remains intact.
 Root checkpoints `83628419`, `40aa09b8` and `bce71a62` join that code with merged
-NIF, launcher, source-menu and couch/head repairs. The uncommitted batch now also
+NIF, launcher, source-menu and couch/head repairs. Local checkpoint `dd22e234`
 joins challenge transactions, queued references/CELL ExtraData9 and effect
-lifecycles. Combined runtime Debug compilation passes with zero warnings/errors.
+lifecycles with clean Debug compilation. The next uncommitted batch joins private
+ordinary input recording/replay, actual Main/frame declarations, source queue
+priorities, queued native actor assembly/publication and presentation-thread
+binding, indexed interface audio and nested challenge/script-context owners.
+The combined runtime and reference project Debug build passes with zero warnings
+or errors. Actual script-context construction/cold/save and ordered Main caller
+joins are the current script owner's next packet; component APIs alone do not
+complete that runtime path.
 The publication gate has reached general fixture/format integration failures and
 has not passed. This candidate is not yet published or accepted through ordinary
 campaign cold continuation. The full-product goal and ten-minute follow-up are
@@ -165,13 +172,45 @@ four selections. Full menu/scene/audio/rendering and matched moving retail/heads
 acceptance are independent open requirements. [status.md](status.md) records
 current capability boundaries.
 
+## Reached ordinary startup failure
+
+A fresh private FNV process loaded its ten selected source plugins and native
+source menu. Actual viewport input selected New and Yes, with returned delivery
+receipts. New Game then refused the installed native modules because no exact
+runtime/edition/loader/import/object declaration producer was bound. Recovery
+and Quit independently failed because the queued-work registry retained the
+indexing worker thread rather than its actual presentation lifetime. Native queued
+callers and one-time actual presentation-thread binding are integrated and compile;
+ordinary recovery/Quit execution is pending. The native-module declaration
+producer is under implementation. The first startup failure remains primary.
+
+The input publisher now reads its Windows lease with compatible sharing, sends
+one compact command and waits for the same acknowledged command's actual
+published cursor before releasing ownership. The original receipt timestamp is
+retained; no ordinary input is resent to settle asynchronous publication. Ordinary Quit
+returned a delivery receipt but did not exit; root stopped only that verified
+private Godot process. The original user save hash is unchanged. Recording was
+off. Private continuation is
+`tmp/development-lab/ordinary-gameplay-20261009-090331-ffbf2114`; it contains
+the actual state, command receipts and independent startup/cleanup errors.
+
+A separate fresh save on the immutable FNV test package reached Doc's name-entry
+screen through ordinary New/Yes, source-data item popups and name confirmation.
+The original reference-script parser divergence remains retained. That run is
+still under investigation; it does not close question progression or chair exit.
+Single requested viewport readbacks are temporary and deleted after inspection;
+continuous recording is off. The larger candidate's binary script authority and
+native-module refusal remain separate from this pinned executable's behavior.
+
 ## Next executable outcome
 
 Run the ordinary retail recording -> shared C# implementation -> ordinary Godot
 replay loop. The existing external capture recipe has no standalone FNV opening
-route; the general input/capture owner is being implemented instead. No fresh
-retail opening take or new ordinary gameplay acceptance exists for this batch.
-Finish Main/priority and indexed audio joins, preserve every reached divergence,
+route; the general input/capture owner is integrated and its retail recording and
+Godot replay remain unexecuted. No fresh retail opening take or campaign gameplay
+acceptance exists for this batch. Bind the real native-module admission producer,
+finish script-context construction/cold/save and Main caller joins, and replay
+ordinary New/Yes after shared construction and retirement fixes. Preserve every reached divergence,
 and repair broad integration failures in the publication batch. Complete selected
 owned audits, required Test-GodotRuntime and diff check before
 pushing. Publish a checked PR, merge, verify clean local main equals origin/main

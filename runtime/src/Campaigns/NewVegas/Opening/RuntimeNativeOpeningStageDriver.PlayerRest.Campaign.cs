@@ -125,10 +125,11 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (_campaignRestRetired || _restInterfaceSounds is not null || !IsInsideTree())
             throw new InvalidOperationException("Rest cue playback has no new living campaign publication.");
-        var sounds = new FalloutRestInterfaceSounds(_pluginStack, PlayerRest, _restInterfaceSoundRestore);
+        var sounds = new FalloutRestInterfaceSounds(_pluginStack, PlayerRest, _restInterfaceSoundRestore,
+            RequireIndexedInterfaceSounds().Source);
         _restInterfaceSounds = sounds;
         _restInterfaceSoundsNative = NativeOwnedRestInterfaceSounds.Attach(this, _pluginStack,
-            PlayerRest, sounds, RetainCurrentPlayerRestFailure);
+            PlayerRest, sounds, RetainCurrentPlayerRestFailure, _indexedInterfaceSoundsNative);
     }
     internal void BindActualHardcoreNeeds(FalloutPlayerHardcoreNeeds actualNeeds)
     {

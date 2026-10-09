@@ -7,7 +7,9 @@ internal enum FalloutRestInterfaceCueKind { Start, Cancel }
 internal enum FalloutRestInterfaceVoiceState { Requested, NativeAllocated, NativeStarted, NativeFinished, Failed, SessionRetired }
 internal sealed record FalloutRestInterfaceVoice(long Sequence, long RequestOrdinal, FalloutRestInterfaceCueKind Kind,
     FalloutRestInterfaceCue Source, FalloutRestInterfaceVoiceState State, RuntimeSaveProcessIdentity Process,
-    ulong? NativePlayer, string? Failure, bool NativeVoiceRetired = false);
+    ulong? NativePlayer, string? Failure, bool NativeVoiceRetired = false,
+    long? IndexedOrdinal = null, bool NativeObjectRetired = false, bool NativeMediaRetired = false,
+    bool NativeFinishObserved = false);
 internal sealed record FalloutRestInterfaceSoundSnapshot(string Schema, string SourceSha256,
     string PlaybackSourceSha256, long LastSequence, IReadOnlyList<FalloutRestInterfaceVoice> Voices, string? Failure);
 
@@ -15,9 +17,10 @@ internal sealed record FalloutRestInterfaceSoundSnapshot(string Schema, string S
 // receipts. Active native menu audio has no invented cold sample cursor.
 internal sealed class FalloutRestInterfaceSounds
 {
-    internal const string Schema = "opennv-rest-interface-sounds/v2";
+    internal const string Schema = "opennv-rest-interface-sounds/v3";
     private readonly FalloutPluginStack _records;
     private readonly FalloutSleepWait _rest;
+    private readonly FalloutInterfaceSoundCatalogue? _catalogue;
     private readonly List<FalloutRestInterfaceVoice> _voices = [];
     private Guid? _native;
     private long _sequence;
@@ -27,7 +30,7 @@ internal sealed class FalloutRestInterfaceSounds
     internal string? Failure => _failure;
     internal bool Active => _voices.Any(row => row.State is FalloutRestInterfaceVoiceState.Requested or
         FalloutRestInterfaceVoiceState.NativeAllocated or FalloutRestInterfaceVoiceState.NativeStarted ||
-        row.NativePlayer is not null && !row.NativeVoiceRetired);
+        row.NativePlayer is not null && (!row.NativeVoiceRetired || !row.NativeObjectRetired || !row.NativeMediaRetired));
     internal string? SaveBlocker => Active ? "source-finite-audio" : null;
     internal object State => new
     {
@@ -40,10 +43,13 @@ internal sealed class FalloutRestInterfaceSounds
     };
 
     internal FalloutRestInterfaceSounds(FalloutPluginStack records, FalloutSleepWait rest,
-        FalloutRestInterfaceSoundSnapshot? restore = null)
+        FalloutRestInterfaceSoundSnapshot? restore = null, FalloutIndexedInterfaceSoundSource? indexedSource = null)
     {
         ArgumentNullException.ThrowIfNull(records); ArgumentNullException.ThrowIfNull(rest);
-        _records = records; _rest = rest; Source = FalloutRestInterfaceSoundSource.Read(records, rest.Source);
+        if (indexedSource is not null && !ReferenceEquals(indexedSource.Records, records))
+            throw new InvalidDataException("Rest cue reuse has another actual source record owner.");
+        _records = records; _rest = rest; _catalogue = indexedSource?.Catalogue;
+        Source = FalloutRestInterfaceSoundSource.Read(records, rest.Source, _catalogue);
         PlaybackSource = FalloutMenuCuePlaybackSource.Read(rest.Source); PlaybackSource.Validate();
         if (restore is null) return;
         if (restore.Schema != Schema || restore.SourceSha256 != Source.Identity || restore.Voices is null ||
@@ -56,9 +62,12 @@ internal sealed class FalloutRestInterfaceSounds
             if (row.Sequence != _voices.Count + 1L || row.RequestOrdinal <= 0 || row.RequestOrdinal > rest.RequestOrdinal ||
                 !Enum.IsDefined(row.Kind) || !Enum.IsDefined(row.State) || row.Source != Cue(row.Kind) ||
                 row.State is FalloutRestInterfaceVoiceState.Requested or FalloutRestInterfaceVoiceState.NativeAllocated or FalloutRestInterfaceVoiceState.NativeStarted ||
-                row.NativePlayer is not null && !row.NativeVoiceRetired ||
+                row.NativePlayer is not null && (!row.NativeVoiceRetired || !row.NativeObjectRetired || !row.NativeMediaRetired) ||
                 row.NativePlayer == 0 || row.NativePlayer is null && row.NativeVoiceRetired || row.Process is null ||
-                row.State == FalloutRestInterfaceVoiceState.NativeFinished && (row.NativePlayer is null || !row.NativeVoiceRetired) ||
+                row.IndexedOrdinal is <= 0 || row.NativePlayer is not null && row.IndexedOrdinal is null ||
+                row.NativePlayer is null && (row.NativeObjectRetired || row.NativeMediaRetired || row.NativeFinishObserved) ||
+                row.State == FalloutRestInterfaceVoiceState.NativeFinished &&
+                    (row.NativePlayer is null || !row.NativeVoiceRetired || !row.NativeFinishObserved) ||
                 row.State == FalloutRestInterfaceVoiceState.SessionRetired && (row.NativePlayer is null || !row.NativeVoiceRetired) ||
                 (row.State is FalloutRestInterfaceVoiceState.Failed or FalloutRestInterfaceVoiceState.SessionRetired) != (row.Failure is not null) ||
                 row.Failure is not null && string.IsNullOrWhiteSpace(row.Failure) ||
@@ -75,7 +84,7 @@ internal sealed class FalloutRestInterfaceSounds
     internal Guid BindNative()
     {
         if (_native is not null || Active) throw new InvalidOperationException("Rest sounds have another native publication or an unresolved active voice.");
-        Source.RequireSource(_records, _rest.Source);
+        Source.RequireSource(_records, _rest.Source, _catalogue);
         return (_native = Guid.NewGuid()).Value;
     }
 
@@ -98,7 +107,7 @@ internal sealed class FalloutRestInterfaceSounds
     internal void NativeAllocated(Guid lease, long sequence, ulong player)
     {
         RequireNative(lease); var index = Index(sequence); var row = _voices[index];
-        if (player == 0 || row.State != FalloutRestInterfaceVoiceState.Requested)
+        if (player == 0 || row.State != FalloutRestInterfaceVoiceState.Requested || row.IndexedOrdinal is null)
             throw new InvalidOperationException("Rest sound has no unique actual native allocation receipt.");
         _voices[index] = row with { State = FalloutRestInterfaceVoiceState.NativeAllocated, NativePlayer = player };
     }
@@ -116,7 +125,8 @@ internal sealed class FalloutRestInterfaceSounds
         RequireNative(lease); var index = Index(sequence); var row = _voices[index];
         if (row.State != FalloutRestInterfaceVoiceState.NativeStarted || row.NativePlayer != player)
             throw new InvalidOperationException("Rest sound has no matching once-only actual Finished callback.");
-        _voices[index] = row with { State = FalloutRestInterfaceVoiceState.NativeFinished, NativeVoiceRetired = true };
+        _voices[index] = row with { State = FalloutRestInterfaceVoiceState.NativeFinished,
+            NativeVoiceRetired = true, NativeFinishObserved = true };
     }
 
     internal void Failed(Guid lease, long? sequence, Exception error)
@@ -125,8 +135,6 @@ internal sealed class FalloutRestInterfaceSounds
         _failure ??= failure;
         if (sequence is not { } value) return;
         var index = Index(value); var row = _voices[index];
-        if (row.State is FalloutRestInterfaceVoiceState.NativeFinished or FalloutRestInterfaceVoiceState.SessionRetired)
-            return;
         _voices[index] = row with { State = FalloutRestInterfaceVoiceState.Failed, Failure = row.Failure ?? failure };
     }
 
@@ -154,11 +162,25 @@ internal sealed class FalloutRestInterfaceSounds
         };
     }
 
-    internal void NativeDestroyed(Guid lease, long sequence, ulong player) => NativeStopped(lease, sequence, player);
+    internal void NativeDestroyed(Guid lease, long sequence, ulong player, bool actualPlayerGone, bool actualStreamGone)
+    {
+        RequireNative(lease); var index = Index(sequence); var row = _voices[index];
+        if (row.NativePlayer != player || !row.NativeVoiceRetired || !actualPlayerGone || !actualStreamGone)
+            throw new InvalidOperationException("Rest cue has no actual original player and stream deletion receipt.");
+        _voices[index] = row with { NativeObjectRetired = true, NativeMediaRetired = true };
+    }
+    internal void IndexedEntered(Guid lease, long sequence, long indexedOrdinal)
+    {
+        RequireNative(lease); var index = Index(sequence); var row = _voices[index];
+        if (indexedOrdinal <= 0 || row.IndexedOrdinal is not null || row.State != FalloutRestInterfaceVoiceState.Requested)
+            throw new InvalidOperationException("Rest cue has no unique genuine shared indexed caller receipt.");
+        _voices[index] = row with { IndexedOrdinal = indexedOrdinal };
+    }
+    internal FalloutRestInterfaceVoice Voice(long sequence) => _voices[Index(sequence)];
 
     internal bool FinishedVoice(Guid lease, long sequence)
     {
-        RequireNative(lease); return _voices[Index(sequence)].State == FalloutRestInterfaceVoiceState.NativeFinished;
+        RequireNative(lease); return _voices[Index(sequence)].NativeFinishObserved;
     }
 
     internal FalloutRestObservation ObserveNativePublication() => _failure is { } failure ?
@@ -186,7 +208,7 @@ internal sealed class FalloutRestInterfaceSounds
     {
         if (SaveBlocker is { } blocker)
             throw new NotSupportedException("Rest interface sound capture requires " + blocker + "; active cold sample continuation is unowned.");
-        Source.RequireSource(_records, _rest.Source);
+        Source.RequireSource(_records, _rest.Source, _catalogue);
         return new(Schema, Source.Identity, PlaybackSource.Identity, _sequence, _voices.ToArray(), _failure);
     }
 

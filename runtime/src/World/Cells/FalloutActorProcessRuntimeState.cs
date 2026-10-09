@@ -18,7 +18,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     private FalloutPlayerTravelReceipt? _travel;
     private FalloutActorProcessRuntimeHandoff? _cold;
     private long _sequence, _callbackFault;
-    private bool _forced, _busy, _disposed;
+    private bool _busy, _disposed;
     private int _travelCounter;
     internal FalloutActorProcessRuntimeState(FalloutActorProcessRuntimeDeclaration source, string stack,
         FalloutFormKey player, Func<FalloutFormKey, FalloutCombatActorIdentity> identity,
@@ -26,11 +26,13 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     {
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack); ArgumentNullException.ThrowIfNull(identity);
         _source = source; _stack = stack; _player = player; _identity = identity;
+        ConstructSourceMainFrame();
         _forced = source.InitialMainForcedProcessing; _travelCounter = source.InitialPlayerTravelCounter;
         if (restore is null) Construct(player); else Restore(restore);
     }
     internal bool HasActor(FalloutFormKey actor) => _actors.ContainsKey(actor);
     internal string? SaveBlocker => _busy ? "actual-source-process-runtime-consumer-in-flight" :
+        MainFrameSaveBlocker is { } frame ? frame :
         _main.FirstOrDefault(item => item.Phase != FalloutMainProcessPhase.Complete) is { } main ?
             "actual-Main-source-operation:" + main.Owner + ":" + (main.Failure ?? main.Phase.ToString()) :
         _travel is { Phase: not FalloutPlayerTravelPhase.Complete } travel ?
@@ -43,6 +45,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         process = _process,
         _sequence,
         mainForcedProcessing = _forced,
+        mainWord = _mainWord, mainWindows = _mainWindows.ToArray(), mainFrameBoundary = _mainFrameBoundary,
         playerTravelCounter = _travelCounter,
         main = _main.ToArray(),
         travel = _travel,
@@ -89,7 +92,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     }
     internal Guid BeginMain(FalloutMainProcessOperation operation, string owner)
     {
-        RequireNotBusy(); ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        RequireMainWriterOutsideWindow(); RequireNotBusy(); ArgumentException.ThrowIfNullOrWhiteSpace(owner);
         if (!Enum.IsDefined(operation) || _main.Any(item => item.Phase != FalloutMainProcessPhase.Complete))
             throw new InvalidOperationException("The actual Main source operation is already active or has a retained failure.");
         var identity = Guid.NewGuid(); var sequence = Next();
@@ -99,7 +102,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     }
     internal void CompleteMain(Guid invocation, string owner)
     {
-        RequireNotBusy(); var index = _main.FindIndex(item => item.Invocation == invocation);
+        RequireMainWriterOutsideWindow(); RequireNotBusy(); var index = _main.FindIndex(item => item.Invocation == invocation);
         if (index < 0 || _main[index].Owner != owner || _main[index].Phase != FalloutMainProcessPhase.Entered)
             throw new InvalidDataException("Main completion lost its real invoking load/update owner.");
         // Called only after the actual load/update consumers returned. Failure
@@ -107,11 +110,12 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         // a successful completion or an automatic flag-clear operation.
         _main[index] = _main[index] with { Phase = FalloutMainProcessPhase.ConsumersReturned, LastChanged = Next() };
         _forced = false;
+        CompleteSourceMainWord(_main[index].Operation);
         _main[index] = _main[index] with { Phase = FalloutMainProcessPhase.Complete, LastChanged = Next() };
     }
     internal void FailMain(Guid invocation, string owner, Exception error)
     {
-        RequireNotBusy(); var index = _main.FindIndex(item => item.Invocation == invocation);
+        RequireMainWriterOutsideWindow(); RequireNotBusy(); var index = _main.FindIndex(item => item.Invocation == invocation);
         if (index < 0 || _main[index].Owner != owner || _main[index].Phase == FalloutMainProcessPhase.Complete)
             throw new InvalidDataException("Main failure has no still-owned real source invocation.");
         _main[index] = _main[index] with
@@ -152,7 +156,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     public void Dispose()
     {
         if (_disposed) return; RequireNotBusy();
-        if (_main.Any(item => item.Phase != FalloutMainProcessPhase.Complete) || _travel is { Phase: not FalloutPlayerTravelPhase.Complete })
+        if (MainFrameSaveBlocker is not null || _main.Any(item => item.Phase != FalloutMainProcessPhase.Complete) || _travel is { Phase: not FalloutPlayerTravelPhase.Complete })
             throw new NotSupportedException("Source process runtime retains a live or failed Main/Player invocation.");
         _disposed = true; _actors.Clear();
     }

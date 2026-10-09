@@ -15,7 +15,7 @@ internal sealed partial class FalloutQueuedReferences
             if (SaveBlocker is { } failure) throw new NotSupportedException(failure);
             return new(Schema, _stack, _source.Contract, _process, _sequence,
                 _objects.Values.OrderBy(value => value.Entered).ToArray(),
-                _map.Select(value => new FalloutQueuedReferenceMapEntry(value.Key, value.Value)).ToArray(), _cold);
+                _map.Select(value => new FalloutQueuedReferenceMapEntry(value.Key, value.Value)).ToArray(), _cold, TaskPriorities.Capture());
         }
     }
     private void Restore(FalloutQueuedReferencesSnapshot snapshot)
@@ -44,6 +44,7 @@ internal sealed partial class FalloutQueuedReferences
             snapshot.ColdHandoff is { } cold && (cold.PreviousProcess == Guid.Empty || cold.CurrentProcess != snapshot.CapturedProcess ||
                 cold.PreviousProcess == cold.CurrentProcess || cold.Sequence < 1 || cold.Sequence > snapshot.Sequence))
             throw new InvalidDataException("Saved source queued-reference graph is incomplete or has a foreign process epoch.");
+        ValidateTaskPriorityJoin(snapshot);
         foreach (var item in snapshot.Objects)
         {
             ValidateSource(item.Source);

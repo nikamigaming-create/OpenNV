@@ -4,7 +4,11 @@ internal partial class RuntimeNativeOpeningStageDriver
 {
     public override void _ExitTree()
     {
+        try { RetireSourceIndexedInterfacePlayback(); }
+        catch (Exception error) { RetainDriverFailure(error); }
         try { RetireCurrentCampaignRest(); }
+        catch (Exception error) { RetainDriverFailure(error); }
+        try { RetireSourceIndexedInterfaceState(); }
         catch (Exception error) { RetainDriverFailure(error); }
         try { DisposeSourcePlayerAdvancement(); }
         catch (Exception error) { RetainDriverFailure(error); }

@@ -44,17 +44,19 @@ internal sealed class ProjectedSurfaceInputRouter
         }
         if (!_pointerInside)
             _target.NotifyMouseEntered();
-        _pointerInside = true;
-        _lastTargetPosition = targetPosition;
         Push(input, targetPosition);
+        _pointerInside = true;
     }
 
     private void Push(InputEvent input, Vector2 targetPosition)
     {
-        var forwarded = (InputEventMouse)input.Duplicate();
+        using var forwarded = (InputEventMouse)input.Duplicate();
         forwarded.Position = targetPosition;
         forwarded.GlobalPosition = targetPosition;
+        if (forwarded is InputEventMouseMotion motion)
+            motion.Relative = _pointerInside ? targetPosition - _lastTargetPosition : Vector2.Zero;
         _target.PushInput(forwarded, true);
+        _lastTargetPosition = targetPosition;
     }
 
     private bool TryMap(Vector2 hostPosition, out Vector2 targetPosition)

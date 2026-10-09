@@ -1,11 +1,28 @@
 using System.Buffers.Binary;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Content;
 
+internal sealed record FalloutChallengeGameModeFilter(double Scalar, bool MenuMode,
+    FalloutChallengeGameModeObservation? Predicate)
+{
+    internal void Validate()
+    {
+        if (Scalar is not (0 or 1) || MenuMode && (Scalar != 0 || Predicate is not null) ||
+            !MenuMode && (Predicate is null || Predicate.Ordinal <= 0 ||
+                !FalloutAdvancementRuntimeReceipt.Digest(Predicate.EngineSha256) ||
+                !FalloutAdvancementRuntimeReceipt.Digest(Predicate.ProducerSha256) ||
+                Scalar != (Predicate.Allows ? 1 : 0)))
+            throw new InvalidDataException("Immediate GameMode lost its actual menu-short-circuit or cached Main scalar.");
+    }
+}
 internal sealed record FalloutChallengeRewardEventSnapshot(int Ordinal, string EventScopeSha256,
     bool Attempted, bool Filtered, FalloutCompiledCursorSnapshot Cursor,
-    FalloutCompiledSliceReceipt? Receipt, string? FailureType, string? Error);
+    FalloutCompiledSliceReceipt? Receipt, string? FailureType, string? Error)
+{
+    public FalloutChallengeGameModeFilter? GameMode { get; init; }
+}
 internal sealed record FalloutChallengeRewardSnapshot(long DispatchOrdinal, FalloutFormKey Challenge,
     FalloutFormKey Program, FalloutFormKey Target, string RecordSha256, string ScopeSha256,
     string ProgramSha256, IReadOnlyList<FalloutScriptEffectLocalCell> Locals,
@@ -25,14 +42,18 @@ internal sealed record FalloutChallengeRewardSnapshot(long DispatchOrdinal, Fall
             var row = Events[ordinal];
             if (row is null || row.Ordinal != ordinal || !FalloutAdvancementRuntimeReceipt.Digest(row.EventScopeSha256) ||
                 row.Cursor is null || row.Cursor.Branches is null || !row.Attempted && (row.Filtered || row.Receipt is not null || row.Error is not null) ||
-                row.Filtered && row.Receipt is not null || (row.Error is null) != (row.FailureType is null) ||
+                row.Filtered && (row.Receipt is not null || row.GameMode?.Scalar != 0) ||
+                !row.Attempted && row.GameMode is not null || row.GameMode?.Scalar == 0 && !row.Filtered ||
+                (row.Error is null) != (row.FailureType is null) ||
                 row.Receipt is { } receipt && (receipt.Caller != Target || receipt.Program != Program ||
                     receipt.RecordSha256 != RecordSha256 || receipt.ScopeSha256 != ScopeSha256 || receipt.ProgramSha256 != ProgramSha256 ||
                     receipt.EventScopeSha256 != row.EventScopeSha256 || receipt.EventOrdinal != ordinal || receipt.Event != 0 ||
                     receipt.Error != row.Error || receipt.Disposition == "suspended" ||
-                    !FalloutChallengeRewardInvocation.SameCursor(receipt.Cursor, row.Cursor)) ||
+                    !FalloutChallengeRewardInvocation.SameCursor(receipt.Cursor, row.Cursor) ||
+                    receipt.Invocation != 0 && row.GameMode?.Scalar != 1) ||
                 Disposition == "completed" && (!row.Attempted || !row.Filtered && row.Receipt?.Disposition != "completed" || row.Error is not null))
                 throw new InvalidDataException("Immediate challenge event lost its genuine filter/cursor/retired lease.");
+            row.GameMode?.Validate();
         }
         if (Disposition == "authored-empty" && Events.Count != 0 || Disposition == "completed" && Events.Count == 0)
             throw new InvalidDataException("Authored empty challenge script invented executable events.");
@@ -133,10 +154,13 @@ internal sealed class FalloutChallengeRewardInvocation : IFalloutCompiledEventLo
             throw new InvalidDataException("Immediate challenge event entered another actual shared lease.");
         ActiveCompiledInvocation = true;
     }
-    internal void Filtered()
+    internal bool Filter(FalloutChallengeGameModeFilter actual)
     {
         if (_activeCursor is null || ActiveCompiledInvocation) throw new InvalidOperationException("Filtered challenge event has already entered execution.");
-        _events[_activeOrdinal] = _events[_activeOrdinal] with { Filtered = true };
+        actual.Validate();
+        if (_events[_activeOrdinal].GameMode is not null) throw new InvalidOperationException("Immediate GameMode predicate was evaluated twice.");
+        _events[_activeOrdinal] = _events[_activeOrdinal] with { Filtered = actual.Scalar == 0, GameMode = actual };
+        return actual.Scalar != 0;
     }
     internal void Retired(FalloutScriptManualSaveRequests requests, FalloutCompiledSliceReceipt receipt)
     {

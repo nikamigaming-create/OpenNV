@@ -15,7 +15,9 @@ internal static class FalloutActorProcessRuntimeSaveContract
         FalloutActorProcessRuntimeState.Validate(runtime); FalloutActorProcessCommonState.Validate(common);
         FalloutActorProcessManager.ValidateShape(processes);
         if (runtime.Contract != common.Contract || runtime.Stack != common.Stack || runtime.Stack != processes.Stack ||
-            runtime.Player != processes.Player || runtime.MainOperations.Any(item => item.Phase != FalloutMainProcessPhase.Complete) ||
+            runtime.Player != processes.Player || runtime.MainFrame.Boundary is not null ||
+            runtime.MainFrame.Windows.Any(window => window.Next != FalloutMainQueueFrameStep.Complete || window.Failure is not null) ||
+            runtime.MainOperations.Any(item => item.Phase != FalloutMainProcessPhase.Complete) ||
             runtime.Travel is { Phase: not FalloutPlayerTravelPhase.Complete } || runtime.Actors.Any(actor => actor.Failure is not null) ||
             common.Current.Any(actor => actor.Boundary is not null) || common.Transfer is { Failure: not null } or { Initialized: false })
             throw new NotSupportedException("Current runtime/common process retains its real source invocation or unowned writer.");

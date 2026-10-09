@@ -20,13 +20,21 @@ internal enum FalloutChallengePrefix
 internal sealed record FalloutChallengeAttempt(FalloutFormKey Form, string SourceSha256,
     int Before, int After, uint FlagsBefore, FalloutChallengePrefix Prefix,
     FalloutChallengeRewardSnapshot? Reward = null, long? CompletionStatisticOrdinal = null,
-    long? NoticeOrdinal = null, string? FailureType = null, string? Error = null);
+    long? NoticeOrdinal = null, string? FailureType = null, string? Error = null,
+    long? InterfaceCueOrdinal = null);
 internal sealed record FalloutChallengeDispatch(long Ordinal, long ThroughOrdinal, uint Event, int Amount,
     ushort Value1, ushort Value2, ushort Value3, FalloutFormKey? Primary, FalloutFormKey? Secondary,
     FalloutStatisticMutation? Statistic, FalloutFormKey? ScriptedTarget, long BucketGeneration,
     IReadOnlyList<FalloutChallengeAttempt> Attempts, IReadOnlyList<FalloutChallengeDispatch> Children,
-    bool Complete, bool RebuildEntered, string? FailureType, string? Error);
-internal sealed record FalloutChallengeBucket(uint Event, IReadOnlyList<FalloutFormKey> Members);
+    bool Complete, bool RebuildEntered, string? FailureType, string? Error)
+{
+    public IReadOnlyList<FalloutChallengeCursorObservation> Traversal { get; init; } = [];
+    public long BucketGenerationAfter { get; init; }
+}
+internal sealed record FalloutChallengeCursorObservation(uint Event, long Node, bool StableHead,
+    long ConstructedGeneration, long ObservedGeneration, string Operation, FalloutFormKey? Form, string? Error);
+internal sealed record FalloutChallengeBucket(uint Event, IReadOnlyList<FalloutFormKey> Members,
+    IReadOnlyList<FalloutFormKey>? Excluded = null);
 internal sealed record FalloutChallengesSnapshot(IReadOnlyList<FalloutChallengeSnapshot> Entries,
     int ChallengesCompleted, FalloutChallengeEventSource? Source, string RegistrySha256,
     long BucketGeneration, IReadOnlyList<FalloutChallengeBucket> Buckets,
@@ -52,10 +60,11 @@ internal sealed record FalloutChallengesSnapshot(IReadOnlyList<FalloutChallengeS
         for (var index = 0; index < Buckets.Count; ++index)
         {
             var bucket = Buckets[index];
-            if (bucket is null || bucket.Event != index || bucket.Members is null ||
-                bucket.Members.Any(form => !forms.Contains(form) || !bucketed.Add(form)))
+            if (bucket is null || bucket.Event != index || bucket.Members is null || bucket.Excluded is null ||
+                bucket.Members.Concat(bucket.Excluded).Any(form => !forms.Contains(form) || !bucketed.Add(form)))
                 throw new InvalidDataException("Saved source challenge buckets are missing, duplicated or reordered.");
         }
+        if (!bucketed.SetEquals(forms)) throw new InvalidDataException("Source challenge active/excluded buckets lost registered members.");
         if (LastDispatch is not { } root) return;
         var nextOrdinal = root.Ordinal;
         ValidateDispatch(root);
@@ -66,7 +75,8 @@ internal sealed record FalloutChallengesSnapshot(IReadOnlyList<FalloutChallengeS
         {
             if (dispatch.Ordinal != nextOrdinal++ || dispatch.ThroughOrdinal < dispatch.Ordinal ||
                 dispatch.Event is not (11 or 13) || dispatch.Amount == 0 || dispatch.BucketGeneration <= 0 ||
-                dispatch.BucketGeneration > BucketGeneration || dispatch.Attempts is null || dispatch.Children is null ||
+                dispatch.BucketGeneration > BucketGeneration || dispatch.BucketGenerationAfter < dispatch.BucketGeneration ||
+                dispatch.BucketGenerationAfter > BucketGeneration || dispatch.Traversal is null || dispatch.Attempts is null || dispatch.Children is null ||
                 (dispatch.Error is null) != (dispatch.FailureType is null) ||
                 (dispatch.Error is null) != dispatch.Complete || dispatch.Complete && dispatch.RebuildEntered &&
                 dispatch.BucketGeneration == BucketGeneration ||
@@ -76,6 +86,15 @@ internal sealed record FalloutChallengesSnapshot(IReadOnlyList<FalloutChallengeS
                     dispatch.Statistic.SourceSha256 != Source?.StatisticSourceSha256) ||
                 dispatch.Event == 13 && (dispatch.Statistic is not null || dispatch.ScriptedTarget is null || dispatch.Amount != 1))
                 throw new InvalidDataException("Challenge dispatch lacks its actual source request/prefix.");
+            foreach (var read in dispatch.Traversal)
+                if (read is null || read.Event != dispatch.Event || read.Node <= 0 ||
+                    read.StableHead != (read.ConstructedGeneration == 0) || read.ConstructedGeneration < 0 ||
+                    read.ConstructedGeneration > read.ObservedGeneration || read.ObservedGeneration < dispatch.BucketGeneration ||
+                    read.ObservedGeneration > dispatch.BucketGenerationAfter ||
+                    read.Operation is not ("read" or "next" or "read-refusal" or "next-refusal") ||
+                    read.Operation.EndsWith("-refusal", StringComparison.Ordinal) != (read.Error is not null) ||
+                    read.Form is { } value && !forms.Contains(value) || read.Error is not null && dispatch.Error is null)
+                    throw new InvalidDataException("Challenge traversal lost its genuine node/generation retirement prefix.");
             foreach (var attempt in dispatch.Attempts)
             {
                 if (attempt is null || !forms.Contains(attempt.Form) ||
@@ -83,7 +102,7 @@ internal sealed record FalloutChallengesSnapshot(IReadOnlyList<FalloutChallengeS
                     attempt.After != unchecked(attempt.Before + dispatch.Amount) || !Enum.IsDefined(attempt.Prefix) ||
                     (attempt.Error is null) != (attempt.FailureType is null) ||
                     (attempt.Error is null) != (attempt.Prefix == FalloutChallengePrefix.Complete) ||
-                    attempt.CompletionStatisticOrdinal is <= 0 || attempt.NoticeOrdinal is <= 0)
+                    attempt.CompletionStatisticOrdinal is <= 0 || attempt.NoticeOrdinal is <= 0 || attempt.InterfaceCueOrdinal is <= 0)
                     throw new InvalidDataException("Challenge attempt has no genuine progress/callback prefix.");
                 attempt.Reward?.Validate();
             }

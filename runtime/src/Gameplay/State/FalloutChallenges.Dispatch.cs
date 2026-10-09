@@ -13,10 +13,11 @@ internal sealed partial class FalloutChallenges
         _executing.Push(frame);
         try
         {
-            var members = _buckets[checked((int)kind)].ToArray();
             var rebuild = false;
-            foreach (var form in members)
+            for (FalloutChallengeBuckets.Node? node = _buckets.Head(kind); node is not null; node = Next(node))
             {
+                var candidate = Read(node);
+                if (candidate is not { } form) continue;
                 var definition = Definition(form); var state = _state[form];
                 if (state.Error is not null) throw new InvalidOperationException("Source challenge retains a refused attempted completion: " + state.Error);
                 if (state.Completed && !definition.Recurring || definition.StartDisabled && !state.Unlocked) continue;
@@ -49,14 +50,10 @@ internal sealed partial class FalloutChallenges
             if (rebuild)
             {
                 frame.RebuildEntered = true;
-                // The original callback rebuilds mutable linked buckets. An
-                // outer interior node can be retired by a nested completion;
-                // that memory/lifetime behavior is not yet an owned contract.
-                if (_executing.Count != 1)
-                    throw new NotSupportedException("source-challenge-nested-linked-bucket-retirement-unowned");
                 RebuildBuckets();
             }
             frame.Complete = true;
+            frame.BucketGenerationAfter = _bucketGeneration;
             return frame.Capture(_events);
         }
         catch (Exception failure)
@@ -64,7 +61,26 @@ internal sealed partial class FalloutChallenges
             frame.FailureType = failure.GetType().FullName ?? failure.GetType().Name;
             frame.Error = failure.Message; throw;
         }
-        finally { frame.ThroughOrdinal = _events; _executing.Pop(); }
+        finally
+        {
+            frame.ThroughOrdinal = _events; frame.BucketGenerationAfter = _bucketGeneration;
+            if (!ReferenceEquals(_executing.Pop(), frame))
+                throw new InvalidOperationException("Challenge dispatch retirement lost its actual synchronous parent.");
+        }
+
+        FalloutFormKey? Read(FalloutChallengeBuckets.Node node)
+        {
+            try { var form = FalloutChallengeBuckets.Read(node); Observe(node, "read", form, null); return form; }
+            catch (Exception error) { Observe(node, "read-refusal", null, error.Message); throw; }
+        }
+        FalloutChallengeBuckets.Node? Next(FalloutChallengeBuckets.Node node)
+        {
+            try { var next = FalloutChallengeBuckets.Next(node); Observe(node, "next", next?.Value, null); return next; }
+            catch (Exception error) { Observe(node, "next-refusal", null, error.Message); throw; }
+        }
+        void Observe(FalloutChallengeBuckets.Node node, string operation, FalloutFormKey? form, string? error) =>
+            frame.Traversal.Add(new(node.Event, node.Identity, node.StableHead, node.ConstructedGeneration,
+                _bucketGeneration, operation, form, error));
     }
     private bool Complete(FalloutChallengeDefinition definition, AttemptFrame attempt, DispatchFrame frame)
     {
@@ -135,6 +151,6 @@ internal sealed partial class FalloutChallenges
         attempt.Value = attempt.Value with { Prefix = FalloutChallengePrefix.NoticeQueued, NoticeOrdinal = after };
         if (!completed) return;
         attempt.Value = attempt.Value with { Prefix = FalloutChallengePrefix.InterfaceCueEntered };
-        throw new NotSupportedException("source-challenge-interface-cue-index21-native-producer-unbound");
+        PlayInterfaceCompletion(attempt);
     }
 }

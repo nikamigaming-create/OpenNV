@@ -15,8 +15,7 @@ internal sealed partial class FalloutChallenges
         ObjectDisposedException.ThrowIf(_retired, this);
         if (_executing.Count != 0) throw new InvalidOperationException("A source challenge completion is still executing its attempted suffix.");
         var saved = new FalloutChallengesSnapshot(_registrationOrder.Select(form => _state[form]).ToArray(), ChallengesCompleted, Source,
-            _registrySha256, _bucketGeneration, _buckets.Select((members, index) =>
-                new FalloutChallengeBucket((uint)index, members.ToArray())).ToArray(), _events,
+            _registrySha256, _bucketGeneration, _buckets.Capture(), _events,
             _last?.Capture() ?? _restoredLast);
         saved.Validate(); return saved;
     }
@@ -41,21 +40,26 @@ internal sealed partial class FalloutChallenges
         }
         foreach (var bucket in snapshot.Buckets)
         {
-            var sourceOrder = _registrationOrder.Where(form => _definitions[form].Type == bucket.Event).ToArray();
-            if (!bucket.Members.SequenceEqual(sourceOrder.Where(bucket.Members.Contains)))
-                throw new InvalidDataException("Saved challenge bucket order differs from genuine source registration.");
-            var required = sourceOrder.Where(form => !entries[form].Completed || _definitions[form].Recurring).ToArray();
-            if (required.Any(form => !bucket.Members.Contains(form)) || snapshot.LastDispatch?.Error is null &&
-                !bucket.Members.SequenceEqual(required))
-                throw new InvalidDataException("Saved challenge buckets lost a living source member or invented a retired one.");
+            if (bucket.Members.Concat(bucket.Excluded!).Any(form => _definitions[form].Type != bucket.Event))
+                throw new InvalidDataException("Saved source bucket contains another event family's registered challenge.");
+            foreach (var form in bucket.Excluded!)
+                if (!entries[form].Completed && (!_definitions[form].StartDisabled || entries[form].Unlocked))
+                    throw new InvalidDataException("Saved excluded bucket lost an enabled living source member.");
+            foreach (var form in bucket.Members)
+                if (_definitions[form].StartDisabled && !entries[form].Unlocked ||
+                    entries[form].Completed && !entries[form].Unlocked && snapshot.LastDispatch?.Error is null)
+                    throw new InvalidDataException("Saved active bucket invented an unenabled or fully retired source member.");
+            // Unlock prepends a formerly excluded member; a nested rebuild can
+            // replace the head during traversal. The exact current mutable
+            // order is saved state, not a sorted reconstruction of source rows.
         }
         RequireRewardSources(snapshot.LastDispatch);
         RequireStatisticSources(snapshot.LastDispatch);
+        RequireInterfaceSoundSources(snapshot.LastDispatch);
         if (snapshot.ChallengesCompleted != ChallengesCompleted)
             throw new InvalidDataException("Challenge completed count differs from the actual restored statistic counter.");
         foreach (var entry in snapshot.Entries) _state[entry.Form] = entry;
-        for (var index = 0; index < _buckets.Length; ++index)
-        { _buckets[index].Clear(); _buckets[index].AddRange(snapshot.Buckets[index].Members); }
+        _buckets.Restore(snapshot.Buckets, snapshot.BucketGeneration);
         _bucketGeneration = snapshot.BucketGeneration; _events = snapshot.Events;
         _restoredLast = snapshot.LastDispatch; Restored = true;
         // A closed callback prefix is evidence only. No script, counter, notice,
@@ -79,13 +83,17 @@ internal sealed partial class FalloutChallenges
                 attempt.NoticeOrdinal is not null && (attempt.Prefix < FalloutChallengePrefix.NoticeQueued ||
                     Source?.ShowNotices != true || definition.Name.Length == 0 || definition.Description.Length == 0) ||
                 completed && Source?.ShowNotices == true && definition.Name.Length != 0 && definition.Description.Length != 0 &&
-                    attempt.Prefix == FalloutChallengePrefix.Complete)
+                    attempt.Prefix >= FalloutChallengePrefix.InterfaceCueReturned && attempt.InterfaceCueOrdinal is null)
                 throw new InvalidDataException("Saved challenge attempt invented an unreached or unowned completion suffix.");
             if (attempt.Reward is { } reward)
             {
                 if (definition.Script != reward.Program || reward.Challenge != attempt.Form || reward.DispatchOrdinal != dispatch.Ordinal)
                     throw new InvalidDataException("Saved challenge reward is not its actual completion script.");
                 reward.RequireSource(_records);
+                foreach (var row in reward.Events)
+                    if (row.GameMode?.Predicate is { } predicate && (predicate.EngineSha256 != Source?.EngineSha256 ||
+                        Source is null || predicate.ProducerSha256 != FalloutImmediateScriptSource.Read(Source).Identity))
+                        throw new InvalidDataException("Cold immediate filter read another selected Main scalar producer.");
                 if (scriptReturned && reward.Disposition is not ("completed" or "authored-empty"))
                     throw new InvalidDataException("Challenge completion passed an unretired source reward.");
             }

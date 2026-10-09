@@ -14,7 +14,7 @@ internal sealed partial class FalloutChallenges
     private readonly Dictionary<FalloutFormKey, FalloutChallengeDefinition> _definitions = [];
     private readonly Dictionary<FalloutFormKey, FalloutChallengeSnapshot> _state = [];
     private readonly List<FalloutFormKey> _registrationOrder = [];
-    private readonly List<FalloutFormKey>[] _buckets = Enumerable.Range(0, 14).Select(_ => new List<FalloutFormKey>()).ToArray();
+    private readonly FalloutChallengeBuckets _buckets = new();
     private readonly Stack<DispatchFrame> _executing = [];
     private DispatchFrame? _last;
     private FalloutChallengeDispatch? _restoredLast;
@@ -66,6 +66,7 @@ internal sealed partial class FalloutChallenges
         _ = Definition(form);
         RequireSource();
         _state[form] = _state[form] with { RuntimeFlags = _state[form].RuntimeFlags | 1u };
+        _buckets.Unlock(_definitions[form].Type, form, _bucketGeneration);
     }
     internal void BindStatistics(FalloutPlayerStatistics statistics)
     {
@@ -106,14 +107,15 @@ internal sealed partial class FalloutChallenges
     }
     private void RebuildBuckets()
     {
-        foreach (var bucket in _buckets) bucket.Clear();
+        _buckets.Clear();
+        _bucketGeneration = checked(_bucketGeneration + 1);
         foreach (var form in _registrationOrder)
         {
             var definition = _definitions[form];
-            if (!_state[definition.Record.FormKey].Completed || definition.Recurring)
-                _buckets[checked((int)definition.Type)].Add(definition.Record.FormKey);
+            var state = _state[form];
+            var active = !state.Completed && (!definition.StartDisabled || state.Unlocked);
+            _buckets.Prepend(definition.Type, form, active, _bucketGeneration);
         }
-        _bucketGeneration = checked(_bucketGeneration + 1);
     }
     internal void RequireReward(FalloutChallengeRewardInvocation invocation)
     {
@@ -126,7 +128,7 @@ internal sealed partial class FalloutChallenges
     {
         if (_retired) return;
         if (_executing.Count != 0) throw new InvalidOperationException("Challenge retirement reentered an actual completion prefix.");
-        _retired = true; _rewardExecutor = null;
+        _retired = true; _rewardExecutor = null; _interfaceSounds = null; _buckets.Clear();
     }
     private sealed class AttemptFrame(FalloutChallengeAttempt value)
     {
@@ -141,11 +143,14 @@ internal sealed partial class FalloutChallenges
         internal long ThroughOrdinal = ordinal;
         internal readonly List<AttemptFrame> Attempts = [];
         internal readonly List<DispatchFrame> Children = [];
+        internal readonly List<FalloutChallengeCursorObservation> Traversal = [];
+        internal long BucketGenerationAfter;
         internal bool Complete, RebuildEntered;
         internal string? FailureType, Error;
         internal FalloutChallengeDispatch Capture(long? through = null) => new(Ordinal, through ?? ThroughOrdinal,
             kind, amount, value1, 0, 0, null, null, statistic, scripted, generation,
             Attempts.Select(attempt => attempt.Capture()).ToArray(), Children.Select(child => child.Capture()).ToArray(),
-            Complete, RebuildEntered, FailureType, Error);
+            Complete, RebuildEntered, FailureType, Error)
+        { Traversal = Traversal.ToArray(), BucketGenerationAfter = BucketGenerationAfter };
     }
 }

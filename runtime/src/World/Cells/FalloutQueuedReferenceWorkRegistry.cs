@@ -3,7 +3,7 @@ namespace OpenNV.Runtime.World.Cells;
 // Retains only actual admitted source-factory work, not every asset Task. The
 // native retirement callback remains owned through failures and is consumed
 // on the constructing thread after the real Task has returned.
-internal sealed class FalloutQueuedReferenceWorkRegistry(FalloutQueuedReferences source) : IDisposable
+internal sealed partial class FalloutQueuedReferenceWorkRegistry(FalloutQueuedReferences source) : IDisposable
 {
     private sealed class Work(Action retire)
     {
@@ -12,7 +12,7 @@ internal sealed class FalloutQueuedReferenceWorkRegistry(FalloutQueuedReferences
         internal Exception? Failure;
     }
     private readonly Dictionary<Guid, Work> _work = [];
-    private readonly int _thread = Environment.CurrentManagedThreadId;
+    private int _thread = Environment.CurrentManagedThreadId;
     private long _reentry;
     private bool _busy, _stopping, _disposed;
     internal FalloutQueuedReferenceRead<T> Begin<T>(Guid identity, string owner,
@@ -78,6 +78,6 @@ internal sealed class FalloutQueuedReferenceWorkRegistry(FalloutQueuedReferences
     public void Dispose()
     {
         if (_disposed) return;
-        _ = StopAndReadTasks(); RetireReturnedWork(); _disposed = true;
+        _ = StopAndReadTasks(); RetireReturnedWork(); _disposed = true; _nativePresentationOwner = null;
     }
 }

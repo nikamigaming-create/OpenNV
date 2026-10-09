@@ -9,7 +9,10 @@ internal sealed record FalloutChallengeEventSource(string EngineSha256, string R
     string StatisticSourceSha256, string ContractSha256, FalloutIniValue NoticeSetting,
     string SettingsSha256, ushort CompletionStatistic, uint StatisticEvent)
 {
-    private const string Contract = "source-CHAL-registration-order;event11-null-form-filters;" +
+    private const string Contract = "source-CHAL-registration-order-prepended-into-stable-head-linked-buckets;" +
+        "active-and-excluded-source-flag-partitions;unlock-sets-bit-then-prepends-and-removes;" +
+        "callbacks-before-current-node-next;global-rebuild-retires-interiors-preserves-heads;" +
+        "retired-cursor-refusal-retains-committed-prefix;event11-null-form-filters;" +
         "signed-int32-progress-add-and-threshold;original-word-filters;" +
         "immediate-object-script-player-event-list;completion-statistic-call;" +
         "source-notice-setting-HUD-before-interface-cue;raw-runtime-flags;" +

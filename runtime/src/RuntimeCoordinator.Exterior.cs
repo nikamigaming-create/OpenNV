@@ -58,6 +58,7 @@ public partial class RuntimeCoordinator
         maximumUploadMilliseconds = _nativeGridMaximumUploadMilliseconds,
         maximumUploadSource = _nativeGridMaximumUploadSource,
         preparingNpcs = _nativeGridNpcPreparations.Count,
+        retainedNpcPublications = _nativeGridNpcPublications.Count, queuedActorCallers = NativeQueuedActorCallerState,
         lastCommitMilliseconds = _nativeGridCommitMilliseconds,
         lastCommitPhasesMilliseconds = _nativeGridCommitPhases,
         error = _nativeGridError
@@ -65,6 +66,7 @@ public partial class RuntimeCoordinator
 
     private void AdvanceNativeExteriorStreaming(double delta)
     {
+        ReapExteriorQueuedNpcRetirements();
         if (_nativeStreamRoot is not null && _nativeStreamRoot != _nativeCurrentCellRoot)
         {
             foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
@@ -181,14 +183,20 @@ public partial class RuntimeCoordinator
 
     private void CancelNativeGridRead()
     {
-        foreach (var preparation in _nativeGridNpcPreparations) preparation.Dispose();
-        _nativeGridNpcPreparations.Clear();
-        _nativeGridReadCancellation?.Cancel();
-        _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
+        var failures = new List<Exception>();
+        try { RequestExteriorQueuedNpcRetirement(); } catch (Exception error) { failures.Add(error); }
+        try { ReapExteriorQueuedNpcRetirements(); } catch (Exception error) { failures.Add(error); }
+        try
+        {
+            _nativeGridReadCancellation?.Cancel();
+            _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
+        }
+        catch (Exception error) { failures.Add(error); }
         if (_nativeGridRead is { } abandoned)
             _ = abandoned.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         _nativeGridRead = null;
+        if (failures.Count != 0) throw new AggregateException("Exterior read/native caller cancellation retains independent failures.", failures);
     }
 
     public override void _ExitTree()
@@ -220,13 +228,14 @@ public partial class RuntimeCoordinator
         GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototypes-freed count={retired}");
         _nativeNifPrototypes.Clear();
         Retire(() => FreeNativeSourceCellRoot(_nativePrewarmedInitialCellRoot)); _nativePrewarmedInitialCellRoot = null;
-        if (_nativePluginCampaign is null)
+        if (_nativePluginCampaign is null && _nativeQueuedActorCallers.Count == 0 &&
+            _nativeGridNpcPreparations.Count == 0 && _nativeGridNpcPublications.Count == 0)
         {
             Retire(() => _nativeReferences?.Dispose());
             Retire(() => _nativePluginStack?.Dispose());
             GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
         }
-        else failures.Add(new InvalidOperationException("Native child retirement is incomplete; its source/world owners remain retained."));
+        else failures.Add(new InvalidOperationException("Native child or queued caller retirement is incomplete; its source/world owners remain retained."));
         if (failures.Count != 0) throw new AggregateException("Native session retirement retained failures.", failures);
     }
 
@@ -254,6 +263,7 @@ public partial class RuntimeCoordinator
             {
                 var before = root.GetChildCount();
                 RuntimeNativeNpc? preparedNpc = null;
+                var cancelled = false;
                 try
                 {
                     var model = grid.Scene.BaseObjects[reference.Base].ModelPath;
@@ -261,8 +271,8 @@ public partial class RuntimeCoordinator
                     {
                         if (npc is null)
                         {
-                            // Bound both jobs and completed bodies awaiting GPU
-                            // publication; worker slots alone do not bound memory.
+                            // Bound real decoder/assembly inputs. Transferred
+                            // bodies retain separate source publication owners.
                             if (_nativeGridNpcPreparations.Count >= FalloutContentWorkers.Concurrency) return false;
                             npc = PrepareExteriorNpc(reference);
                         }
@@ -271,7 +281,10 @@ public partial class RuntimeCoordinator
                             var armor = _nativeReferences.EquippedArmor(reference.FormKey,
                                 _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
                             if (!armor.SequenceEqual(npc.Appearance.EquippedArmor))
-                            { ReleaseExteriorNpc(npc); npc = null; return false; }
+                            {
+                                if (ReleaseExteriorNpc(npc, cancel: true)) npc = null;
+                                return false;
+                            }
                             if (!npc.Advance(this, grid.Scene, out preparedNpc)) return false;
                         }
                     }
@@ -288,6 +301,8 @@ public partial class RuntimeCoordinator
                 }
                 catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
                 {
+                    cancelled = true;
+                    if (npc is not null) RetainNativeQueuedCallerFailure(npc.Caller, error);
                     if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
                     while (root.GetChildCount() > before) root.GetChild(before).Free();
                     _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
@@ -295,7 +310,7 @@ public partial class RuntimeCoordinator
                         _nativeActorDivergences[reference.FormKey.ToString()] = error.Message;
                     GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey}: {error.Message}");
                 }
-                ReleaseExteriorNpc(npc); npc = null;
+                if (ReleaseExteriorNpc(npc, cancel: cancelled)) npc = null;
                 return true;
             }
             ));
@@ -316,6 +331,10 @@ public partial class RuntimeCoordinator
             phaseStarted = now;
         }
         var root = _nativeCurrentCellRoot!; var grid = _nativeGridPending!;
+        // A renderer grid is not an original CELL graph publication. Require
+        // the actual source attachment to have admitted the selected delta.
+        RequireNativeSourceCellSelection(root, grid.Scene);
+        PublishExteriorQueuedNpcCallers(root);
         var previous = _nativeActiveCell!.Cell.FormKey;
         var retained = grid.Cells.Select(cell => cell.FormKey).ToHashSet();
         ++_nativeGridGeneration;

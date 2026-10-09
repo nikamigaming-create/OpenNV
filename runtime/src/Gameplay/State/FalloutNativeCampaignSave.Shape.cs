@@ -25,8 +25,13 @@ internal static partial class FalloutNativeCampaignSave
             state.RestInterfaceSounds is null || state.InterfaceFades is null ||
             state.ActorUpdates is null || state.CellProcesses is null || state.ActorProcessRuntime is null || state.ActorProcessCommon is null ||
             state.PlayerSkillValues is null || state.PlayerAbilityScripts is null || state.PlayerStatistics is null || state.ProcessQueues is null ||
-            state.Scripts.Challenges is null)
+            state.Scripts.Challenges is null || state.IndexedInterfaceSounds is null)
             throw new InvalidDataException("Campaign state is missing an authoritative runtime owner.");
+        if (state.IndexedInterfaceSounds.Schema != FalloutIndexedInterfaceSounds.Schema ||
+            state.IndexedInterfaceSounds.Voices is null ||
+            state.IndexedInterfaceSounds.LastOrdinal != state.IndexedInterfaceSounds.Voices.Count ||
+            state.IndexedInterfaceSounds.Voices.Any(voice => voice is null || voice.Pending))
+            throw new InvalidDataException("Current indexed audio has no settled source/native continuation.");
         ValidateResultAuthorityVersion(state);
         state.PlayerPackageAudio.Events.Validate();
         if (state.Scripts.Session?.PlayerPackage?.SoundRandomState is { } packageRandom &&

@@ -8,7 +8,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
     {
         RequireNotBusy();
         return new(Schema, _source.Contract, _stack, _player, _process, _sequence, _forced, _travelCounter,
-            _main.ToArray(), _travel, _actors.Values.ToArray(), _cold);
+            _main.ToArray(), _travel, _actors.Values.ToArray(), _cold, CaptureMainFrame());
     }
     private void Restore(FalloutActorProcessRuntimeSnapshot saved)
     {
@@ -22,6 +22,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         }
         _forced = saved.MainForcedProcessing; _travelCounter = saved.PlayerTravelCounter; _sequence = saved.Sequence;
         _main.AddRange(saved.MainOperations); _travel = saved.Travel;
+        RestoreMainFrame(saved.MainFrame);
         _cold = new(saved.CapturedProcess, _process, Next());
         // No source writer, hour, completion or constructor is replayed. A
         // failed/in-flight original invocation remains failed/in-flight.
@@ -37,9 +38,10 @@ internal sealed partial class FalloutActorProcessRuntimeState
     {
         if (saved is null || saved.Schema != Schema || saved.Contract is not { Length: 64 } || !saved.Contract.All(Uri.IsHexDigit) ||
             string.IsNullOrWhiteSpace(saved.Stack) || saved.CapturedProcess == Guid.Empty || saved.Sequence < 0 ||
-            saved.MainOperations is null || saved.Actors is null || saved.Actors.Any(actor => actor is null || actor.Source is null) ||
+            saved.MainOperations is null || saved.MainOperations.Any(value => value is null) || saved.Actors is null || saved.Actors.Any(actor => actor is null || actor.Source is null) ||
             saved.Actors.Select(actor => actor.Source.Reference).Distinct(FalloutFormKeyComparer.Instance).Count() != saved.Actors.Count)
             throw new InvalidDataException("Process runtime snapshot has no complete source/current lifetime.");
+        ValidateRuntimeMainFrame(saved);
         var active = 0; long previous = 0; var identities = new HashSet<Guid>();
         foreach (var item in saved.MainOperations)
         {

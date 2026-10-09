@@ -31,12 +31,22 @@ internal static partial class NativeOwnedSoundPlayback
         // request has no world position or underwater listener relationship.
         var menuFlags = descriptor.Flags & ~(FalloutSoundFlags.EnvironmentIgnored | FalloutSoundFlags.MuteWhenSubmerged);
         var player = CreateTwoDimensional(descriptor with { LogicalPath = selected, Flags = menuFlags | FalloutSoundFlags.MenuSound }, records);
-        player.SetMeta("opennv_menu_sound_source", descriptor.FormKey.ToString());
-        player.SetMeta("opennv_menu_sound_source_flags", (int)descriptor.Flags);
-        player.SetMeta("opennv_menu_sound_variant", selected);
-        player.SetMeta("opennv_menu_sound_random_before", before.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        player.SetMeta("opennv_menu_sound_random_after", random.State.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        return player;
+        try
+        {
+            player.SetMeta("opennv_menu_sound_source", descriptor.FormKey.ToString());
+            player.SetMeta("opennv_menu_sound_source_flags", (int)descriptor.Flags);
+            player.SetMeta("opennv_menu_sound_variant", selected);
+            player.SetMeta("opennv_menu_sound_random_before", before.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            player.SetMeta("opennv_menu_sound_random_after", random.State.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return player;
+        }
+        catch (Exception original)
+        {
+            try { player.Free(); }
+            catch (Exception cleanup)
+            { throw new AggregateException("Menu voice retained original metadata and native retirement failures.", original, cleanup); }
+            throw;
+        }
     }
 
     internal static AudioStreamPlayer CreateTwoDimensional(FalloutSoundRecord descriptor, FalloutPluginStack records)
@@ -53,17 +63,37 @@ internal static partial class NativeOwnedSoundPlayback
                 "random frequency, environmental, envelope, timed, or nonpositive pitch behavior");
 
         var stream = NativeOwnedMediaLoader.LoadAudio(descriptor.LogicalPath);
-        ConfigureLoop(stream, descriptor);
-        var player = new AudioStreamPlayer
+        NativeOwnedTwoDimensionalSoundPlayer? player = null;
+        try
         {
-            Name = $"NativeSound_{descriptor.EditorId}",
-            Stream = stream,
-            VolumeDb = -descriptor.StaticAttenuationDb,
-            PitchScale = descriptor.FixedPitchScale,
-        };
-        NativeOwnedSoundVoice.Bind(records, player, descriptor.FormKey, () => null, "source-2D-or-menu",
-            () => player.Playing, player.Stop);
-        return player;
+            ConfigureLoop(stream, descriptor);
+            // Bare node first: each subsequent setter/registration is covered
+            // by this exact created-node and fresh-resource exception owner.
+            player = new NativeOwnedTwoDimensionalSoundPlayer();
+            player.AdoptDecodedStream(stream);
+            player.Name = $"NativeSound_{descriptor.EditorId}";
+            player.VolumeDb = -descriptor.StaticAttenuationDb;
+            player.PitchScale = descriptor.FixedPitchScale;
+            var actual = player;
+            NativeOwnedSoundVoice.Bind(records, actual, descriptor.FormKey, () => null, "source-2D-or-menu",
+                () => actual.Playing, actual.StopFromSourceRegistry);
+            return actual;
+        }
+        catch (Exception original)
+        {
+            List<Exception> failures = [original];
+            var adopted = player?.OwnsDecodedStream == true;
+            try
+            {
+                if (adopted) player!.ReleaseDecodedStream();
+                else stream.Dispose();
+            }
+            catch (Exception cleanup) { failures.Add(cleanup); }
+            if (player is not null)
+                try { player.Free(); } catch (Exception cleanup) { failures.Add(cleanup); }
+            if (failures.Count == 1) throw;
+            throw new AggregateException("2D sound construction retained original and created-resource cleanup failures.", failures);
+        }
     }
 
     internal static NativeOwnedSoundPlayer3D CreateThreeDimensional(

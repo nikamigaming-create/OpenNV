@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.World.Cells;
 
 // Exact source metadata is reused in memory. This is not transformed geometry,
 // native publication, or a claim that all CELL fields have a gameplay owner.
-internal sealed class FalloutCellProcessSource(FalloutPluginStack records,
+internal sealed partial class FalloutCellProcessSource(FalloutPluginStack records,
     Func<FalloutPlacedReference, FalloutReferencePlacement>? currentPlacement = null)
 {
     private readonly Dictionary<FalloutFormKey, FalloutCellProcessData> _decoded = new(FalloutFormKeyComparer.Instance);

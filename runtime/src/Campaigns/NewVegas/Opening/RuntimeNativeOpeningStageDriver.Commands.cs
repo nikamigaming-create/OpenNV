@@ -25,6 +25,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         InterfaceActivationFrameSaveBlocker is { } activation ? activation :
         _player.PlayerPhysicalSaveBlocker is { } physical ? physical :
         CampaignRestSaveBlocker is { } rest ? rest :
+        SourceIndexedInterfaceSoundSaveBlocker is { } interfaceSound ? interfaceSound :
         ActorUpdateSaveBlocker is { } actorUpdate ? actorUpdate :
         CellProcessSaveBlocker is { } cellProcess ? cellProcess :
         ActualProcessRuntimeSaveBlocker is { } processRuntime ? processRuntime :
@@ -54,6 +55,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         interfaceActivationFrames = InterfaceActivationFrameState,
         playerPhysical = _player.PlayerPhysicalState,
         playerRest = CampaignRestState,
+        indexedInterfaceSounds = SourceIndexedInterfaceSoundState,
         combatGroups = CombatGroupState,
         actorPerception = ActorPerceptionState,
         actorProcesses = ActorProcessState,
@@ -202,7 +204,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             CaptureCurrentPlayerRest(), CaptureCurrentRestAutoSave(), CaptureCurrentRestWorldTime(),
             CaptureCurrentRestInterfaceSounds(), CaptureSourceInterfaceFade(), CaptureCurrentHardcoreNeeds(),
             CaptureSourceActorUpdates(), CaptureSourceCellProcesses(), CaptureCurrentProcessRuntime(), CaptureCurrentProcessCommon(),
-            _playerSkills.CaptureValues(), _playerAbilities.Capture(), CaptureCurrentPlayerStatistics(), CaptureCurrentProcessQueues());
+            _playerSkills.CaptureValues(), _playerAbilities.Capture(), CaptureCurrentPlayerStatistics(), CaptureCurrentProcessQueues(),
+            CaptureSourceIndexedInterfaceSounds());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

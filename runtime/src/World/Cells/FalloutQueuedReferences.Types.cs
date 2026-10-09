@@ -21,7 +21,8 @@ internal sealed record FalloutQueuedReferenceEntry(Guid Identity, FalloutQueuedR
 internal sealed record FalloutQueuedReferenceMapEntry(FalloutFormKey Reference, Guid Value);
 internal sealed record FalloutQueuedReferencesSnapshot(string Schema, string Stack, string Contract,
     Guid CapturedProcess, long Sequence, IReadOnlyList<FalloutQueuedReferenceEntry> Objects,
-    IReadOnlyList<FalloutQueuedReferenceMapEntry> Map, FalloutActorProcessRuntimeHandoff? ColdHandoff);
+    IReadOnlyList<FalloutQueuedReferenceMapEntry> Map, FalloutActorProcessRuntimeHandoff? ColdHandoff,
+    FalloutQueuedTaskPrioritySnapshot TaskPriorities);
 
 // The runtime must supply the original factory's actual early inputs. The
 // unrelated Main flag and projectile/Actor field are not derived from pause,

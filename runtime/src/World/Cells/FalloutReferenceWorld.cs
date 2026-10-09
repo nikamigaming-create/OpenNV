@@ -926,6 +926,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             Retire(RetireCellProcesses);
             Retire(RetireActorUpdates);
             Retire(RetireCombatGroups);
+            Retire(RetireCampaignIndexedInterfaceSounds);
             Retire(RetireCampaignChallenges);
             Retire(RetirePlayerStatistics);
             Retire(RetireCampaignPlayerRuntime);

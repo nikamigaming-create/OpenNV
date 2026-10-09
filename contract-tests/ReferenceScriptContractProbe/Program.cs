@@ -60,6 +60,12 @@ if (args is ["--test-source-rest-cues"])
     return;
 }
 
+if (args is ["--test-indexed-interface-sounds"])
+{
+    IndexedInterfaceSoundContracts.Run();
+    return;
+}
+
 if (args is ["--test-rest-interface-consumers"])
 {
     RestWorldConsumerContracts.Run();
@@ -93,6 +99,12 @@ if (args is ["--actor-update-cell-process-contracts"])
 if (args is ["--actor-constructor-source-contracts"])
 {
     ActorConstructorSourceContracts.Run();
+    return;
+}
+
+if (args is ["--main-frame-dispatch-contracts"])
+{
+    MainFrameDispatchContracts.Run();
     return;
 }
 
@@ -1104,6 +1116,7 @@ ActorPerceptionContracts.Run();
 ActorProcessContracts.Run();
 ActorProcessRuntimeContracts.Run();
 ProcessQueueContracts.Run();
+MainFrameDispatchContracts.Run();
 ActorConstructorSourceContracts.Run();
 ActorUpdateCellProcessContracts.Run();
 SleepWaitContracts.Run();
@@ -1111,6 +1124,7 @@ RestHostContracts.Run();
 RestMenuControlContracts.Run();
 RestWorldConsumerContracts.Run();
 SourceRestCueContracts.Run();
+IndexedInterfaceSoundContracts.Run();
 PlayerAdvancementContracts.Run();
 PlayerPhysicalActivityContracts.Run();
 LevelUpPerkSourceContracts.Run();

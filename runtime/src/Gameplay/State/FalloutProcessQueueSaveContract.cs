@@ -12,6 +12,7 @@ internal static class FalloutProcessQueueSaveContract
             throw new InvalidDataException("Current save omitted its actual loader/CELL/pending process continuation.");
         FalloutReferenceWorld.ValidateSourceProcessQueueShape(queues);
         FalloutActorProcessManager.ValidateShape(processes); FalloutCellProcesses.RequireCommittedSnapshot(cells);
+        FalloutSourceFrameDispatchSaveContract.ValidateShape(queues, cells);
         if (queues.Loader.Stack != processes.Stack || queues.Loader.Stack != cells.Stack ||
             queues.CurrentLists.Unowned.Count != 0 || queues.Cells.Cells.Any(cell => cell.Failure is not null) ||
             queues.Reevaluation.Invocations.Any(call => call.Failure is not null || call.Phase is not
@@ -53,6 +54,7 @@ internal static class FalloutProcessQueueSaveContract
         var declaration = FalloutActorProcessQueueDeclaration.ForExecutable(
             FalloutActorProcessDeclaration.Read(source.FalloutExecutablePath).ExecutableSha256);
         var saved = queues!;
+        FalloutSourceFrameDispatchSaveContract.ValidateSource(records, saved);
         if (saved.Loader.Contract != declaration.Contract || saved.Loader.Stack != source.StackId)
             throw new InvalidDataException("Process queue continuation changed its selected executable/configuration/source stack.");
         foreach (var queued in saved.Loader.Objects)

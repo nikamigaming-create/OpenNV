@@ -426,8 +426,8 @@ internal sealed class HarnessWindow : Form
             throw new ArgumentException("Command must be a single bounded line.");
         if (target == "retail" && command.TrimStart().StartsWith("native.click", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Internal retail UI callbacks are disabled. Use ordinary keyboard input.");
-        var sequence = _nextCommands[target]++;
-        AtomicWrite(Path.Combine(EngineDirectory(target), $"{sequence:D10}.command"), command);
+        var sequence = SequentialInputCommandClient.PublishHarnessCommand(EngineDirectory(target), _nextCommands[target], command);
+        _nextCommands[target] = checked(sequence + 1);
         if (record) Log(driver, target, "sent", $"#{sequence} {action}: {command}");
     }
 

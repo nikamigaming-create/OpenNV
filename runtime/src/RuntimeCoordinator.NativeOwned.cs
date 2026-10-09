@@ -291,6 +291,7 @@ public partial class RuntimeCoordinator
         {
             _nativeMenuRead = Task.Run(() => IndexNativeLiveStack(source.PluginSources));
             await _nativeMenuRead;
+            BindActualNativeQueuedCallerThread();
             if (_options.ContainsKey("new-game"))
             {
                 InitializeNativePlayerInventory();
@@ -376,6 +377,7 @@ public partial class RuntimeCoordinator
         try
         {
             await Task.Run(() => IndexNativeLiveStack(sources));
+            BindActualNativeQueuedCallerThread();
             if (_nativeSessionTransitioning) { CancelNativeLauncherEntry(); return; }
             var stack = _nativePluginStack ??
                 throw new InvalidOperationException("Native plugin stack was not indexed.");
@@ -529,7 +531,9 @@ public partial class RuntimeCoordinator
                 restore.State.PlayerStatistics ??
                 throw new InvalidDataException("Current campaign has no player statistics continuation."),
                 restore.State.Scripts?.Challenges ??
-                throw new InvalidDataException("Current campaign has no challenge continuation."));
+                throw new InvalidDataException("Current campaign has no challenge continuation."),
+                restore.State.IndexedInterfaceSounds ??
+                throw new InvalidDataException("Current campaign has no indexed interface sound continuation."));
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             _nativeReferences.Restore(restore.State.References ??
                 throw new InvalidDataException("Current campaign has no retained reference state."));
@@ -661,6 +665,7 @@ public partial class RuntimeCoordinator
 
     private void CreateNativeQuestScripts(FalloutQuestScriptsSnapshot? restore = null)
     {
+        BindActualNativeQueuedCallerThread();
         RetireNativePluginCampaign();
         var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
         var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals,
@@ -731,7 +736,7 @@ public partial class RuntimeCoordinator
                 if (_nativeSessionTransitioning || _retiringNativeSession)
                     throw new OperationCanceledException("CELL construction session retired.");
                 referenceWatch.Restart();
-                PlaceNativeCellReference(root, cell, reference);
+                await PlaceNativeCellReferenceResponsive(root, cell, reference);
                 referenceWatch.Stop();
                 if (referenceWatch.Elapsed.TotalMilliseconds > maximumReferenceMilliseconds)
                 {
@@ -764,6 +769,7 @@ public partial class RuntimeCoordinator
 
     private void BeginNativeCellRoot(Node3D root, FalloutCellScene cell, IReadOnlyList<FalloutFormKey>? sourceCells)
     {
+        BindActualNativeQueuedCallerThread();
         _ = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was cleared during CELL streaming.");
         _nativeReferences!.EnterEncounterCell(cell.Cell.FormKey,
@@ -878,13 +884,8 @@ public partial class RuntimeCoordinator
                     Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "source-leveled-none"));
                     return;
                 }
-                var equippedArmor = _nativeReferences!.EquippedArmor(reference.FormKey,
-                    _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
-                var actor = preparedNpc ?? RuntimeNativeNpc.Create(_nativePluginStack!, source, reference,
-                    _configuration.World.GameUnitsToMeters, (appearance, part, nif, geometry) =>
-                        NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
-                            NativeAmbient(cell.Cell)), equippedArmor, selection, _nativeReferences.ActorAppearanceOverride(reference.FormKey));
-                if (preparedNpc is not null) actor.BindSourceBehavior(_nativePluginStack!, selection);
+                var actor = preparedNpc ?? CreateNativeQueuedNpc(root, cell, reference);
+                actor.BindSourceBehavior(_nativePluginStack!, selection);
                 SynchronizeNativeNpcAppearance(actor, cell);
                 actor.Transform = ReferenceTransform(reference);
                 try { actor.ConfigureContactShapes(_configuration.Player.CollisionLayer); }
@@ -930,6 +931,11 @@ public partial class RuntimeCoordinator
             {
                 _nativeActorDivergences[reference.FormKey.ToString()] = error.Message;
                 GD.PushError($"OPENNV_NATIVE_NPC_DIVERGENCE reference={reference.FormKey}: {error.Message}");
+                if (FindNativeQueuedActorCaller(root, reference.FormKey) is { } caller)
+                {
+                    RetainNativeQueuedCallerFailure(caller, error);
+                    throw;
+                }
             }
             return;
         }
@@ -1323,7 +1329,9 @@ public partial class RuntimeCoordinator
                 throw new NotSupportedException("Configured startup quest has no source identity for the current gameplay owner."),
             0, _nativeBootstrap?.Controls, restore is null ? _nativeBootstrap?.CaptureStageResults() : null,
             restore is null ? _nativeBootstrapCharacter : null);
+        _nativeOpeningStageDriver.PrepareSourceIndexedInterfaceSounds();
         AddChild(_nativeOpeningStageDriver);
+        _nativeOpeningStageDriver.BindSourceIndexedInterfacePlayback();
         _nativeOpeningStageDriver.AttachExperiencePauseClock();
         AttachCurrentNativePlayerCell();
         _nativeOpeningStageDriver.ConfigureCurrentPlayerAdvancement();

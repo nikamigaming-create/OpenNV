@@ -19,11 +19,13 @@ internal sealed partial class FalloutReferenceScripts
     {
         if (!OwnsChallengeCampaign(records, reward.Owner) || !_challengeRewards.Add(reward))
             throw new InvalidOperationException("Immediate challenge executor lacks its current campaign completion owner.");
+        FalloutScriptEngineContexts.Lease? context = null;
         try
         {
+            context = world.EnterChallengeScriptContext(reward);
             reward.Begin(records);
             var program = reward.Program;
-            if (program.CodeBytes == 0) { reward.AuthoredEmpty(); return; }
+            if (program.CodeBytes == 0) { reward.AuthoredEmpty(); context.Returned(); return; }
             if (program.Events.Count == 0)
                 throw new NotSupportedException("Nonempty immediate challenge SCDA has no owned event extent.");
             for (var ordinal = 0; ordinal < program.Events.Count; ++ordinal)
@@ -34,7 +36,7 @@ internal sealed partial class FalloutReferenceScripts
                 Exception? retainedFailure = null;
                 try
                 {
-                    if (!world.RequireChallengeImmediateGameMode()) { reward.Filtered(); continue; }
+                    if (!reward.Filter(world.RequireChallengeImmediateGameModeScalar(reward))) continue;
                     foreach (var _ in CompiledSteps(reward.Target, program, block, 0,
                         observeInvocation: actual => { entered = actual; reward.ObserveEntered(actual); },
                         cursor: cursor, canContinue: () => true, localAuthority: reward)) { }
@@ -64,7 +66,13 @@ internal sealed partial class FalloutReferenceScripts
                         0, cursor.State with { Branches = cursor.State.Branches.ToArray() }, disposition, failure);
             }
             reward.Completed();
+            context.Returned();
         }
-        finally { _challengeRewards.Remove(reward); }
+        catch (Exception failure) { context?.Fail(failure); throw; }
+        finally
+        {
+            try { context?.Dispose(); }
+            finally { _challengeRewards.Remove(reward); }
+        }
     }
 }

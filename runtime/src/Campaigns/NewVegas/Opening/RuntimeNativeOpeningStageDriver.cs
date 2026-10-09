@@ -69,9 +69,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         get => _executionError;
         private set { _executionError = value; _stageResultDriverFailure = null; }
     }
-    internal string? ExecutionFault => ExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
+    internal string? ExecutionFault => ExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? SourceIndexedInterfaceSoundFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
     internal string? BlockingExecutionError => _stageResultDriverFailure?.Error == ExecutionError ? null : ExecutionError;
-    internal string? BlockingExecutionFault => BlockingExecutionError ?? PlayerStatisticFailure ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
+    internal string? BlockingExecutionFault => BlockingExecutionError ?? PlayerStatisticFailure ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? SourceIndexedInterfaceSoundFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 

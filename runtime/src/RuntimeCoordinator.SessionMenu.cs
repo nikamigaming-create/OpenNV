@@ -222,6 +222,7 @@ public partial class RuntimeCoordinator
     {
         GetTree().Paused = true;
         var pending = StopActualQueuedSourceReads().ToList();
+        pending.AddRange(RequestNativeQueuedActorCallerRetirement());
         pending.AddRange(_nativeGridNpcPreparations.Select(item => item.ReadTask));
         if (_nativeMenuRead is { } menuRead) pending.Add(menuRead);
         if (_nativePlayerMoveRead is { } moveRead) pending.Add(moveRead);
@@ -232,7 +233,10 @@ public partial class RuntimeCoordinator
         CancelNativeGridRead();
         try { await Task.WhenAll(pending); }
         catch (Exception readError) { GD.Print($"OPENNV_SESSION_OLD_READ_FINISHED {readError.Message}"); }
-        RetireReturnedActualQueuedSourceReads();
+        ReapExteriorQueuedNpcRetirements();
+        // Transferred bodies retire through their actual CELL root below.
+        // Registry destruction cannot precede those native consumers.
+        if (_nativeQueuedActorCallers.Count == 0) RetireReturnedActualQueuedSourceReads();
     }
 
     private void OnNativeCloseRequested() => QuitNativeSession();

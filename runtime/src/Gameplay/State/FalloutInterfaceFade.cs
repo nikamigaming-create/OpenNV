@@ -24,7 +24,7 @@ internal sealed record FalloutInterfaceFadeNativeHost(Action<FalloutInterfaceFad
 // Source-owned fade channels are independent from IMADs, calendar TimeScale,
 // save-writer completion and the console-open predicate. All three channels
 // share the original release hold and are advanced in physical catalog order.
-internal sealed class FalloutInterfaceFade
+internal sealed partial class FalloutInterfaceFade
 {
     internal const string Schema = "opennv-source-interface-fade/v1";
     internal FalloutInterfaceFadeSource Source { get; }

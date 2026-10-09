@@ -42,8 +42,8 @@ public partial class RuntimeCoordinator
     private void PublishNativeSourceCellAttachment(Node3D root, RuntimeNativeReferenceEvents events)
     {
         var owner = RequireNativeSourceCellAttachment(root);
-        if (_nativeReferences!.CellProcesses.ReadAttachment(owner.Identity).RootPublished) return;
-        owner.Publish(events);
+        if (!_nativeReferences!.CellProcesses.ReadAttachment(owner.Identity).RootPublished) owner.Publish(events);
+        PublishNativeQueuedActorCallers(root);
     }
     private void AttachCurrentNativePlayerCell()
     {
@@ -61,6 +61,8 @@ public partial class RuntimeCoordinator
     }
     private void ObserveNativeCellProcessesForCapture()
     {
+        ReapExteriorQueuedNpcRetirements();
+        RequireNativeQueuedActorCallersSettledForCapture();
         ObservePendingNativeCellRetirements();
         foreach (var (root, owner) in _nativeCellProcessAttachments)
         {
@@ -75,6 +77,7 @@ public partial class RuntimeCoordinator
     }
     private void FreeNativeSourceCellRoot(Node3D? root)
     {
+        BindActualNativeQueuedCallerThread();
         if (root is null || !GodotObject.IsInstanceValid(root))
         {
             ObservePendingNativeCellRetirements(); return;
@@ -87,14 +90,12 @@ public partial class RuntimeCoordinator
                 throw new NotSupportedException("Failed CELL construction retains its actual native root; its incomplete source operation must retire first.");
             root.Free(); return;
         }
-        _ = owner.BeginDetach(); _nativeCellProcessRetirements.Add(identity);
-        root.Free();
-        ObservePendingNativeCellRetirements();
+        RetireEnteredNativeQueuedCellRoot(root, owner, queued: false);
     }
     private void QueueNativeSourceCellRetirement(Node3D root)
     {
-        var owner = RequireNativeSourceCellAttachment(root); _ = owner.BeginDetach();
-        _nativeCellProcessRetirements.Add(root.GetInstanceId()); root.QueueFree();
+        BindActualNativeQueuedCallerThread();
+        RetireEnteredNativeQueuedCellRoot(root, RequireNativeSourceCellAttachment(root), queued: true);
     }
     private void RetireFailedNativeSourceCellRoot(Node3D? root, Exception originalFailure)
     {
@@ -108,9 +109,11 @@ public partial class RuntimeCoordinator
     private void ObservePendingNativeCellRetirements()
     {
         if (_nativeReferences is null) return;
+        RetireReturnedNativeQueuedActorCallers();
         foreach (var identity in _nativeCellProcessRetirements.ToArray())
         {
             if (GodotObject.IsInstanceValid(GodotObject.InstanceFromId(identity))) continue;
+            if (HasNativeQueuedActorCallers(identity)) continue;
             var owner = _nativeCellProcessAttachments[identity];
             var attachment = _nativeReferences.CellProcesses.ReadAttachment(owner.Identity);
             foreach (var child in attachment.Children.Where(child => child.Phase != FalloutCellProcessChildPhase.Retired))
@@ -135,6 +138,8 @@ public partial class RuntimeCoordinator
     private void RetireNativeSourceCellAttachments()
     {
         var failures = new List<Exception>();
+        try { _ = RequestNativeQueuedActorCallerRetirement(); }
+        catch (Exception error) { failures.Add(error); }
         foreach (var (identity, owner) in _nativeCellProcessAttachments.ToArray())
         {
             if (_nativeReferences!.CellProcesses.ReadAttachment(owner.Identity).Retired) continue;
@@ -152,11 +157,18 @@ public partial class RuntimeCoordinator
         if (_nativeReferences?.CellProcessesConfigured == true && _nativeReferences.CellProcesses.Capture().Attachments.Any(
             attachment => !attachment.Retired && attachment.NativeRoot != 0))
             failures.Add(new NotSupportedException("CELL retirement retains a failed or unmatched actual native attachment operation."));
+        try { ReapExteriorQueuedNpcRetirements(); RequireNativeQueuedActorCallersRetired(); }
+        catch (Exception error) { failures.Add(error); }
+        try { RetireReturnedActualQueuedSourceReads(); }
+        catch (Exception error) { failures.Add(error); }
         if (failures.Count > 0) throw new AggregateException("Native CELL retirement retains original outstanding owners/errors.", failures);
         _nativePlayerProcessCellLease?.Dispose(); _nativePlayerProcessCellLease = null;
     }
     private void RequireNativeSourceCellRetirementBeforeWorldRelease()
     {
+        ReapExteriorQueuedNpcRetirements();
+        RequireNativeQueuedActorCallersRetired();
+        RetireReturnedActualQueuedSourceReads();
         ObservePendingNativeCellRetirements();
         if (_nativeCellProcessAttachments.Count != 0 || _nativeCellProcessRetirements.Count != 0)
             throw new NotSupportedException("Native CELL sources still own actual attachment consumers; retire before scene/source teardown.");

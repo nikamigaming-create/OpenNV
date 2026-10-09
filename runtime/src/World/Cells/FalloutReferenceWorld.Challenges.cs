@@ -40,20 +40,5 @@ internal sealed partial class FalloutReferenceWorld
         if (_challengeGameModeSource is not null) throw new InvalidOperationException("Challenge GameMode source lifetime is already bound.");
         _challengeGameModeSource = producer ?? throw new ArgumentNullException(nameof(producer));
     }
-    internal bool RequireChallengeImmediateGameMode()
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        // The original menu test short circuits before its independent source
-        // predicate. A filtered block owns no executed instruction/receipt.
-        if (!Menus.GameMode) return false;
-        var producer = _challengeGameModeSource ??
-            throw new NotSupportedException("source-challenge-immediate-GameMode-independent-predicate-unbound");
-        var observation = producer.Observe();
-        if (observation is null || observation.Ordinal <= 0 ||
-            observation.EngineSha256 != Challenges.Source?.EngineSha256 ||
-            !FalloutAdvancementRuntimeReceipt.Digest(observation.ProducerSha256))
-            throw new InvalidDataException("Challenge GameMode observation has no current selected original predicate owner.");
-        producer.RequireCurrent(observation); return observation.Allows;
-    }
     private void RetireCampaignChallenges() => _campaignChallenges?.Retire();
 }

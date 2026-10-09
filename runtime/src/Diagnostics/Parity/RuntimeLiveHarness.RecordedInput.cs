@@ -33,6 +33,7 @@ internal sealed partial class RuntimeLiveHarness
 
     private bool DispatchRecordedInput(JsonElement command, ulong request)
     {
+        if (DispatchSequentialRecordedInput(command, request)) return true;
         switch (command.GetProperty("op").GetString())
         {
             case "input.record.start":
@@ -68,8 +69,10 @@ internal sealed partial class RuntimeLiveHarness
                 var lateness = command.TryGetProperty("maximumLatenessMicroseconds", out var limit) ? limit.GetInt64() : 250_000;
                 // Validate the whole journal and binding before releasing or
                 // delivering any input. Retail measurements remain evidence.
-                var playback = new RecordedInputPlayback(tape, InputBinding(restored.Path), lateness);
+                var actualBinding = InputBinding(restored.Path);
+                var playback = new RecordedInputPlayback(tape, actualBinding, lateness);
                 _campaignBot.Stop(); _bot?.Stop(); ReleaseAll();
+                BeginReplayDeliveryJournal(command, tape, actualBinding, request);
                 _inputPlayback = playback; _inputTapePath = replayPath; _inputStarted = Stopwatch.GetTimestamp();
                 _inputReplayRequest = request;
                 _replayCheckpointPrepared = false;
@@ -225,13 +228,14 @@ internal sealed partial class RuntimeLiveHarness
 
     private void AdvanceInputPlayback()
     {
-        if (_inputPlayback?.Active != true) return;
+        if (_inputPlayback?.Active != true) { FinishReplayDeliveryJournal(); return; }
         _deliveringReplay = true;
         try
         {
             _inputPlayback.Advance(InputMicroseconds, () => _captureIdentity().StateKey, input =>
             {
                 Dispatch(input, 0);
+                RecordReplayDelivery(input);
                 AtomicWrite(Path.Combine(_directory, "input-replay.receipt.json"), JsonSerializer.Serialize(new
                 {
                     input = _inputPlayback.Cursor + 1,
@@ -243,6 +247,10 @@ internal sealed partial class RuntimeLiveHarness
                 }, Json));
             }, ReleaseAll);
         }
-        finally { _deliveringReplay = false; }
+        finally
+        {
+            _deliveringReplay = false;
+            if (_inputPlayback?.Active != true) FinishReplayDeliveryJournal();
+        }
     }
 }

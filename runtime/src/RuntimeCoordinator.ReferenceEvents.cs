@@ -13,6 +13,7 @@ public partial class RuntimeCoordinator
     public override void _Process(double delta)
     {
         if (GetTree().Paused) return;
+        if (_nativeCellProcessRetirements.Count != 0) ObservePendingNativeCellRetirements();
         AdvanceNativePlayerMoves();
         AdvanceNativeDeath();
         if (_nativeDeathPresented) return;

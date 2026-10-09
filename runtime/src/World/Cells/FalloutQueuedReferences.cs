@@ -26,6 +26,7 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
     {
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack); ArgumentNullException.ThrowIfNull(identity);
         _source = source; _stack = stack; _identity = identity; _reprioritize = reprioritize;
+        ConstructTaskPriorities(restore);
         // Both selected loader constructors create an empty actual map. No
         // actor cohort or current scene is inserted as a substitute.
         if (restore is not null) Restore(restore);
@@ -58,7 +59,7 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
                 if (_retiring) return "actual-queued-reference-loader-retirement-entered";
                 return _objects.Values.FirstOrDefault(item => item.Phase != FalloutQueuedReferencePhase.Destroyed ||
                     item.Failure is not null || item.Boundary is not null) is { } item ?
-                    "actual-queued-reference:" + item.Source.Reference + ":" + (item.Failure ?? item.Boundary ?? item.Phase.ToString()) : null;
+                    "actual-queued-reference:" + item.Source.Reference + ":" + (item.Failure ?? item.Boundary ?? item.Phase.ToString()) : TaskPriorities.SaveBlocker;
             }
         }
     }
@@ -66,7 +67,7 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
     {
         get { lock (_gate) return new { source = _source.Contract, process = _process, _sequence,
             map = _map.Select(item => new FalloutQueuedReferenceMapEntry(item.Key, item.Value)).ToArray(),
-            objects = _objects.Values.ToArray(), cold = _cold, saveBlocker = SaveBlocker }; }
+            objects = _objects.Values.ToArray(), tasks = TaskPriorities.State, cold = _cold, saveBlocker = SaveBlocker }; }
     }
 
     internal FalloutQueuedReferenceRequest Request(FalloutFormKey reference, int priority,
@@ -90,28 +91,25 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
                 if (item.Source != source || !item.Mapped || item.Phase >= FalloutQueuedReferencePhase.MapRemoved)
                     throw new InvalidDataException("Source queued-reference map contains a foreign or retired value.");
                 if (item.Boundary is not null) throw new NotSupportedException(item.Boundary);
-                var changed = item.Priority != priority;
+                var currentPriority = TaskPriorities.ReadPriority(existing);
+                if (currentPriority != item.Priority) throw new InvalidDataException("Queued map byte and actual source task key disagree.");
+                var changed = currentPriority != priority;
                 if (changed)
                 {
-                    // Both originals visit their owned child tasks and then
-                    // the actual task manager. A byte store alone would lose
-                    // that entered consumer and its dispatch ordering.
-                    if (_reprioritize is null)
-                    {
-                        const string missing = "actual-source-queued-child-priority-and-task-manager-consumer-unbound";
-                        _objects[existing] = item with { Boundary = missing, Changed = Next() };
-                        throw new NotSupportedException(missing);
-                    }
-                    try { Callback(() => { _reprioritize(existing, priority); return true; }); }
+                    // The actual source constructor/key owner admits state0
+                    // and refuses an entered opaque dispatch. A separately
+                    // bound consumer remains ordered after that real owner.
+                    try { Callback(() => { TaskPriorities.Reprioritize(existing, priority); _reprioritize?.Invoke(existing, priority); return true; }); }
                     catch (Exception error)
                     {
                         _objects[existing] = item with { Failure = item.Failure ?? Message(error), Changed = Next() }; throw;
                     }
-                    _objects[existing] = item with { Priority = unchecked((byte)priority), Changed = Next() };
+                    _objects[existing] = item with { Priority = TaskPriorities.ReadPriority(existing), Changed = Next() };
                 }
                 return new(FalloutQueuedReferenceRequestDisposition.Existing, existing, changed, inputs.Owner);
             }
             var identity = Guid.NewGuid(); var sequence = Next();
+            TaskPriorities.Construct(identity, unchecked((byte)priority));
             var queued = new FalloutQueuedReferenceEntry(identity, source, unchecked((byte)priority), FalloutQueuedReferencePhase.Constructed,
                 true, true, false, [], sequence, sequence, inputs.Owner, null, null, false);
             _objects.Add(identity, queued);
@@ -223,6 +221,7 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
             if (!item.CallerOwned) return;
             if (item.Mapped || item.Consumers.Any(value => !value.Returned) || item.Phase != FalloutQueuedReferencePhase.MapRemoved)
                 throw new NotSupportedException("Queued-reference caller cannot destroy a still-owned map or child.");
+            TaskPriorities.Retire(identity);
             _objects[identity] = item with { CallerOwned = false, Phase = FalloutQueuedReferencePhase.Destroyed, Changed = Next() };
         }
     }
@@ -317,6 +316,7 @@ internal sealed partial class FalloutQueuedReferences : IDisposable
             if (_objects.Values.FirstOrDefault(item => item.Mapped || item.CallerOwned || item.OpaqueOwnership ||
                 item.Consumers.Any(value => !value.Returned)) is { } stillOwned)
                 throw new NotSupportedException("Source queued loader retains an actual object/consumer: " + stillOwned.Source.Reference);
+            _taskPriorities.Dispose();
             _disposed = true; _map.Clear(); _objects.Clear();
         }
     }

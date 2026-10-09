@@ -123,7 +123,8 @@ internal sealed partial class FalloutReferenceScripts
             target => LocalScript(target.FormKey));
         Func<string, FalloutScriptFunction?>? sharedFunction = null;
         Action<string, IReadOnlyList<string>>? sharedCommand = null;
-        _ = Steps(caller, bindings, null, action, seconds, budget: budget,
+        var sourceSeconds = (double?)world.CompiledScriptSeconds(seconds) ?? seconds;
+        _ = Steps(caller, bindings, null, action, sourceSeconds, budget: budget,
             bindCompiledOwners: (function, command) => { sharedFunction = function; sharedCommand = command; },
             compiledStatement: () => current, effectLocals: localAuthority?.Locals);
         FalloutCompiledOperandContext operands = null!;
@@ -132,12 +133,38 @@ internal sealed partial class FalloutReferenceScripts
             NativeQuery);
         var saveProgram = FalloutScriptSaveProgram.Capture(program, block);
         var saveScope = executionScope ?? saveProgram.EventScopeSha256 ?? program.Scope.ScopeSha256;
-        return cursor is null
-            ? world.ScriptManualSaves.ExecuteCompiled(caller, program.Source, program.ProgramSha256,
-                ExecuteInstructions(), saveScope, observeInvocation, saveProgram)
-            : world.ScriptManualSaves.ExecuteCompiledSlice(caller, program.Source, program.ProgramSha256,
-                ExecuteInstructions(), saveScope, cursor,
-                canContinue ?? (() => true), observeInvocation, saveProgram);
+        return ExecuteSourceCall();
+
+        IEnumerable<bool> ExecuteSourceCall()
+        {
+            using var context = world.EnterCompiledScriptContext(caller, program, seconds, action, localAuthority);
+            var steps = cursor is null
+                ? world.ScriptManualSaves.ExecuteCompiled(caller, program.Source, program.ProgramSha256,
+                    ExecuteInstructions(), saveScope, Observe, saveProgram)
+                : world.ScriptManualSaves.ExecuteCompiledSlice(caller, program.Source, program.ProgramSha256,
+                    ExecuteInstructions(), saveScope, cursor, canContinue ?? (() => true), Observe, saveProgram);
+            IEnumerator<bool> enumerator;
+            try { enumerator = steps.GetEnumerator(); }
+            catch (Exception failure) { context?.Fail(failure); throw; }
+            try
+            {
+                while (true)
+                {
+                    bool moved;
+                    try { moved = enumerator.MoveNext(); }
+                    catch (Exception failure) { context?.Fail(failure); throw; }
+                    if (!moved) { context?.Returned(); yield break; }
+                    yield return enumerator.Current;
+                }
+            }
+            finally
+            {
+                try { enumerator.Dispose(); }
+                catch (Exception failure) { context?.Fail(failure); throw; }
+            }
+            void Observe(FalloutScriptManualSaveRequests.Entered actual)
+            { context?.Observe(actual); observeInvocation?.Invoke(actual); }
+        }
 
         IEnumerable<bool> ExecuteInstructions()
         {

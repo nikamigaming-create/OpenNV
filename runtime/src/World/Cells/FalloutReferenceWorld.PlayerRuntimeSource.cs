@@ -20,7 +20,8 @@ internal sealed partial class FalloutReferenceWorld
     }
 
     internal void ConfigureCampaignPlayerRuntime(FalloutHudNotifications notifications,
-        FalloutPlayerStatisticsSnapshot? restore = null, FalloutChallengesSnapshot? challenges = null)
+        FalloutPlayerStatisticsSnapshot? restore = null, FalloutChallengesSnapshot? challenges = null,
+        FalloutIndexedInterfaceSoundSnapshot? interfaceSounds = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_campaignPlayerRuntimeSource is not null || _campaignPlayerRuntimeFailure is not null)
@@ -32,17 +33,19 @@ internal sealed partial class FalloutReferenceWorld
             var statistics = FalloutMiscellaneousStatisticSource.Read(records, source.Receipt);
             var challengeSource = statistics.ChallengeEvent == 11 ? FalloutChallengeEventSource.Read(statistics,
                 FalloutInstallationSettings.Read(source.OwnedSource).NumericIni) : null;
-            if (restore is not null && challenges is null)
-                throw new InvalidDataException("Current campaign has no challenge dispatch/source continuation.");
+            if (restore is not null && (challenges is null || interfaceSounds is null))
+                throw new InvalidDataException("Current campaign has no challenge dispatch/indexed sound continuation.");
             ConfigureCampaignChallenges(notifications, challengeSource);
             ConfigurePlayerStatistics(source.Receipt, new(null, null, null), restore);
             if (challengeSource is not null) Challenges.BindStatistics(PlayerStatistics);
+            ConfigureCampaignIndexedInterfaceSounds(source, interfaceSounds);
             if (challenges is not null) Challenges.Restore(challenges);
             _campaignPlayerRuntimeSource = source;
         }
         catch (Exception failure)
         {
             var errors = new List<Exception> { failure };
+            try { RetireCampaignIndexedInterfaceSounds(); } catch (Exception cleanup) { errors.Add(cleanup); }
             try { RetireCampaignChallenges(); } catch (Exception cleanup) { errors.Add(cleanup); }
             try { RetirePlayerStatistics(); } catch (Exception cleanup) { errors.Add(cleanup); }
             try { source?.Dispose(); } catch (Exception cleanup) { errors.Add(cleanup); }

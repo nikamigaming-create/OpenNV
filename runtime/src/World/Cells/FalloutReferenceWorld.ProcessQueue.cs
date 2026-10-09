@@ -19,7 +19,7 @@ internal sealed partial class FalloutReferenceWorld
     private long _currentCellReferenceRevision, _currentCellReferenceMembership;
 
     internal bool SourceProcessQueuesConfigured => _queuedReferences is not null && _queuedReferenceWork is not null && _actorLoaderFields is not null &&
-        _processReevaluation is not null && _cellExtraProcess is not null;
+        _processReevaluation is not null && _cellExtraProcess is not null && _sourceQueuePriority is not null;
     private FalloutQueuedReferences QueuedReferences => _queuedReferences ??
         throw new NotSupportedException("Actual selected source queued-reference loader is absent.");
     private FalloutActorLoaderFields ActorLoaderFields => _actorLoaderFields ??
@@ -32,13 +32,13 @@ internal sealed partial class FalloutReferenceWorld
         _processReevaluation is null && _cellExtraProcess is null ? null : new
     {
         loader = _queuedReferences?.State, reevaluation = _processReevaluation?.State,
-        cells = _cellExtraProcess?.State, unownedCurrentLists = _unownedCellReferenceLists.ToArray()
+        cells = _cellExtraProcess?.State, mainFrame = SourceMainFrameState, unownedCurrentLists = _unownedCellReferenceLists.ToArray()
     };
     internal string? SourceProcessQueueSaveBlocker => !SourceProcessQueuesConfigured ? "actual-source-process-queue-owner-absent" :
         QueuedReferences.SaveBlocker ?? ActorLoaderFields.SaveBlocker ?? ProcessReevaluation.SaveBlocker ?? CellExtraProcess.SaveBlocker ??
-        _unownedCellReferenceLists.Values.FirstOrDefault();
+        _sourceQueuePriority?.SaveBlocker ?? _unownedCellReferenceLists.Values.FirstOrDefault();
     internal string? SourceProcessQueueRuntimeBoundary => !SourceProcessQueuesConfigured ? "actual-source-process-queue-owner-absent" :
-        ProcessReevaluation.RuntimeBoundary;
+        QueuedReferences.TaskPriorities.RuntimeBoundary ?? ProcessReevaluation.RuntimeBoundary;
 
     internal void ConfigureSourceProcessQueues(FalloutActorProcessQueueDeclaration declaration, string stack,
         FalloutProcessQueueSnapshots? restore = null)
@@ -63,6 +63,7 @@ internal sealed partial class FalloutReferenceWorld
         FalloutProcessReevaluationState? pending = null; FalloutCellExtraProcessState? cells = null;
         try
         {
+            ConstructSourceFrameDispatch(stack, restore?.FrameDispatch);
             loader = new(declaration, stack, ReadQueuedReferenceSource, restore?.Loader);
             fields = new(declaration, stack, ReadCombatActorIdentity, restore?.ActorFields);
             pending = new(declaration, stack, ReadCombatActorIdentity, ReadActualProcessReevaluation,
@@ -86,6 +87,7 @@ internal sealed partial class FalloutReferenceWorld
             var failures = new List<Exception> { original };
             foreach (var owner in new IDisposable?[] { cells, pending, fields, loader })
                 try { owner?.Dispose(); } catch (Exception error) { failures.Add(error); }
+            try { RetireSourceFrameDispatch(); } catch (Exception error) { failures.Add(error); }
             if (failures.Count > 1)
             {
                 _queuedReferences = loader; _actorLoaderFields = fields; _processReevaluation = pending; _cellExtraProcess = cells;
@@ -136,10 +138,10 @@ internal sealed partial class FalloutReferenceWorld
         var hasFlag = source.ReferenceSignature is "ACHR" or "ACRE" || source.EnginePlayer;
         var flags = hasFlag ? ActorLoaderFields.Read(reference) : new FalloutActorProcessFact<uint>(null,
             "source-reference-class-does-not-enter-Actor-loader-word");
-        // A constructor alone does not own Main's separate secondary bit.
-        // This fact is consumed only when its actual forced bit is set.
+        // Both independent flags come from the same actual source Main
+        // word. Its window bit is consumed only on the source forced arm.
         return QueuedReferences.Request(reference, priority, new(ProcessRuntime.MainForcedProcessing,
-            new(null, "actual-source-Main-secondary-queue-bit-producer-unbound"),
+            ProcessRuntime.MainPermitsForcedQueue,
             new(source.BaseSignature == "SCPT", "actual-source-base-SCPT-factory-early-return"),
             new(hasFlag, "actual-selected-source-Actor-reference-queue-word-guard"), flags, owner));
     }
@@ -218,6 +220,7 @@ internal sealed partial class FalloutReferenceWorld
         // An exception retains the failed owner and every dependent provider.
         _queuedReferenceWork?.Dispose(); _queuedReferenceWork = null;
         _queuedReferences?.Dispose(); _queuedReferences = null;
+        RetireSourceFrameDispatch();
         _cellExtraProcess?.Dispose(); _cellExtraProcess = null;
         _processReevaluation?.Dispose(); _processReevaluation = null;
         _actorLoaderFields?.Dispose(); _actorLoaderFields = null;

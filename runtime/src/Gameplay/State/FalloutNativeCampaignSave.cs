@@ -68,7 +68,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutActorUpdateSnapshot? ActorUpdates = null, FalloutCellProcessesSnapshot? CellProcesses = null,
     FalloutActorProcessRuntimeSnapshot? ActorProcessRuntime = null, FalloutProcessCommonSnapshot? ActorProcessCommon = null,
     FalloutPlayerSkillValuesSnapshot? PlayerSkillValues = null, FalloutPlayerAbilityScriptsSnapshot? PlayerAbilityScripts = null,
-    FalloutPlayerStatisticsSnapshot? PlayerStatistics = null, FalloutProcessQueueSnapshots? ProcessQueues = null);
+    FalloutPlayerStatisticsSnapshot? PlayerStatistics = null, FalloutProcessQueueSnapshots? ProcessQueues = null,
+    FalloutIndexedInterfaceSoundSnapshot? IndexedInterfaceSounds = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -136,7 +137,8 @@ internal static partial class FalloutNativeCampaignSave
         FalloutActorUpdateSnapshot? actorUpdates = null, FalloutCellProcessesSnapshot? cellProcesses = null,
         FalloutActorProcessRuntimeSnapshot? actorProcessRuntime = null, FalloutProcessCommonSnapshot? actorProcessCommon = null,
         FalloutPlayerSkillValuesSnapshot? playerSkillValues = null, FalloutPlayerAbilityScriptsSnapshot? playerAbilityScripts = null,
-        FalloutPlayerStatisticsSnapshot? playerStatistics = null, FalloutProcessQueueSnapshots? processQueues = null)
+        FalloutPlayerStatisticsSnapshot? playerStatistics = null, FalloutProcessQueueSnapshots? processQueues = null,
+        FalloutIndexedInterfaceSoundSnapshot? indexedInterfaceSounds = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         ArgumentException.ThrowIfNullOrWhiteSpace(questEditorId);
@@ -188,7 +190,8 @@ internal static partial class FalloutNativeCampaignSave
             SleepWait: sleepWait, RestAutoSave: restAutoSave, RestWorldTime: restWorldTime,
             RestInterfaceSounds: restInterfaceSounds, InterfaceFades: interfaceFades, HardcoreNeeds: hardcoreNeeds,
             ActorUpdates: actorUpdates, CellProcesses: cellProcesses, ActorProcessRuntime: actorProcessRuntime, ActorProcessCommon: actorProcessCommon,
-            PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts, PlayerStatistics: playerStatistics, ProcessQueues: processQueues);
+            PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts, PlayerStatistics: playerStatistics, ProcessQueues: processQueues,
+            IndexedInterfaceSounds: indexedInterfaceSounds);
         Validate(state, saveCompatibilityId);
         ValidateSaveOrderSource(records, state);
         ValidateExperienceNotificationSource(records, state);
@@ -293,9 +296,14 @@ internal static partial class FalloutNativeCampaignSave
         {
             new FalloutQuestObjectFlags(stack).Restore(savedScripts.Session?.QuestObjects);
             using (var challengeWorld = new FalloutReferenceWorld(stack))
+            {
                 challengeWorld.ConfigureCampaignPlayerRuntime(new(), state.PlayerStatistics ??
                     throw new InvalidDataException("Current challenge state has no player statistics."),
-                    savedScripts.Challenges ?? throw new InvalidDataException("Current challenge state is absent."));
+                    savedScripts.Challenges ?? throw new InvalidDataException("Current challenge state is absent."),
+                    state.IndexedInterfaceSounds ?? throw new InvalidDataException("Current indexed audio state is absent."));
+                challengeWorld.CampaignIndexedInterfaceSounds.RequireRestContinuation(state.RestInterfaceSounds ??
+                    throw new InvalidDataException("Current rest sound caller state is absent."));
+            }
             using var radioWorld = new FalloutReferenceWorld(stack);
             new FalloutRadioStations(stack, radioWorld, new()).Restore(savedScripts.Radio);
             validatedValues = new FalloutScriptValueStore();

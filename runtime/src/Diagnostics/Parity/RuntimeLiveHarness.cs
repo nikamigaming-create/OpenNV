@@ -606,6 +606,7 @@ internal sealed partial class RuntimeLiveHarness : Node
         GD.Print($"OPENNV_LIVE_HARNESS_RETIRE phase=enter stateWritePending={_stateWrite is not null}");
         _bot?.Stop();
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
+        FinishReplayDeliveryJournal("Playback ended with its runtime owner.");
         FinishInputRecording("Recording ended with its runtime owner.");
         try { CompleteStateWrite(); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }

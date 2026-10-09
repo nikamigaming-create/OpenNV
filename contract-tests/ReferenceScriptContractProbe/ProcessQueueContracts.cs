@@ -6,7 +6,7 @@ using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
-internal static class ProcessQueueContracts
+internal static partial class ProcessQueueContracts
 {
     private const string Stack = "authored-actual-queue-CELL-selection";
     private static readonly FalloutFormKey Cell = Key(0x901), Npc = Key(0x902), Creature = Key(0x903), Other = Key(0x904);
@@ -16,7 +16,7 @@ internal static class ProcessQueueContracts
             "c3f97c2255fa041a851c17cf372d69aaadd8694e2dc4230ba556001bbfbd2f3e" })
         {
             var declaration = FalloutActorProcessQueueDeclaration.ForExecutable(image);
-            QueueMap(declaration); ActualTaskLifetime(declaration); CellCount(declaration); PendingOrder(declaration); KnownNull3D(declaration);
+            QueueMap(declaration); ActualTaskLifetime(declaration); ActualNativeCallerThread(declaration); CellCount(declaration); PendingOrder(declaration); KnownNull3D(declaration);
         }
         Console.WriteLine("OPENNV_PROCESS_QUEUE_CONTRACT_PASS exactMapValue=true callerAndConsumersRetained=true cancellationNotCompletion=true actualTaskReturned=true nativeOwningThread=true failedRetirementPrefix=true loaderRejectsCreationDuringRetirement=true CELLFirstCreationBeforeWalk=true rawDisabledLowGuard=true processUnknownRefused=true storedCountWrap=true pendingUniqueOrder=true independentSourceFields=true retirementEpoch=true coldNewProcessNoReplay=true originalDispatchAndNativeExecution=unexecuted");
     }
@@ -57,9 +57,14 @@ internal static class ProcessQueueContracts
         retiring.RetireUnstarted(held, "actual-never-entered-read-cancel"); retiring.Dispose();
         var priority = new FalloutQueuedReferences(declaration, Stack, Queued);
         var priorityIdentity = priority.Request(Npc, 0, Inputs()).Identity!.Value;
-        Reject(() => priority.Request(Npc, 256, Inputs()));
-        Require(priority.SaveBlocker is not null, "An absent original child/task-manager priority consumer became a byte-only success.");
-        priority.RetireUnstarted(priorityIdentity, "actual-unstarted-priority-failure-retirement"); priority.Dispose();
+        var reprioritized = priority.Request(Npc, 256, Inputs());
+        Require(reprioritized.Identity == priorityIdentity && reprioritized.PriorityChanged &&
+            priority.TaskPriorities.ReadPriority(priorityIdentity) == 0,
+            "The genuine constructor-state packed key owner lost full-integer arithmetic.");
+        priority.TaskPriorities.SourceDispatchEntered(priorityIdentity, "authored-actual-native-dispatch");
+        Reject(() => priority.Request(Npc, 0, Inputs()));
+        Require(priority.SaveBlocker is not null, "An entered original opaque task-state producer became ready from a CLR Task.");
+        priority.RetireUnstarted(priorityIdentity, "actual-unstarted-read-owner-retirement"); priority.Dispose();
     }
     private static void ActualTaskLifetime(FalloutActorProcessQueueDeclaration declaration)
     {
