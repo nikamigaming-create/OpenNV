@@ -5,6 +5,7 @@
     <Compile Include="../../runtime/src/Content/FalloutContentWorkers.cs" Link="FalloutContentWorkers.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundLoop.cs" Link="FalloutSoundLoop.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.Particles.cs" Link="FalloutNifFile.Particles.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.ParticleShapesColors.cs" Link="FalloutNifFile.ParticleShapesColors.cs" />
     <Compile Include="../../runtime/src/Content/FalloutAnimationSound.cs" Link="FalloutAnimationSound.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundRecord.cs" Link="FalloutSoundRecord.cs" />
     <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
@@ -23,6 +24,7 @@
     <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
     <Compile Include="../../runtime/src/Content/FalloutIdleAnimationPlayback.cs" Link="FalloutIdleAnimationPlayback.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.cs" Link="FalloutNifFile.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.Physics.cs" Link="FalloutNifFile.Physics.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifMorphAnimation.cs" Link="FalloutNifMorphAnimation.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifSkinContract.cs" Link="FalloutNifSkinContract.cs" />
     <Compile Include="../../runtime/src/Content/FalloutSoundRandomState.cs" Link="FalloutSoundRandomState.cs" />

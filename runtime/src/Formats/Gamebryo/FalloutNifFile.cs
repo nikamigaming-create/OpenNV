@@ -7,6 +7,7 @@ internal sealed partial class FalloutNifFile
 {
     internal const uint Version = 0x14020007;
     internal const uint UserVersion = 11;
+    private const uint UnsizedVersion = 0x14000004;
     private const byte LittleEndian = 1;
     private const int MaximumTableEntries = 1_000_000;
     private const int MaximumShaderTextureCount = 32;
@@ -17,7 +18,12 @@ internal sealed partial class FalloutNifFile
     private const uint TbcKeyType = 3;
     private const uint XyzRotationKeyType = 4;
     private const uint ConstantKeyType = 5;
+    private const uint UnsizedUserVersion2 = 11;
+    private const uint GeometryVersion2Early = 14;
     private const uint GeometryVersion2Legacy = 21;
+    private const uint GeometryVersion2MaterialTransition = 26;
+    private const uint RefractionVersion2Minimum = 15;
+    private const uint ParallaxVersion2Minimum = 25;
     private const uint WideAvFlagsVersion2Minimum = 27;
     private const uint MaterialColorsVersion2Maximum = 25;
     private const uint EmissiveMultipleVersion2Minimum = 22;
@@ -35,7 +41,8 @@ internal sealed partial class FalloutNifFile
     private const int HavokUnknownSixFloatBytes = 24;
     private const int HavokTransformMatrixValues = 16;
     private static readonly HashSet<uint> SupportedUserVersion2 =
-        [GeometryVersion2Legacy, AnimationVersion2Legacy, AnimationVersion2Minimum, GeometryVersion2Minimum,
+        [GeometryVersion2Early, GeometryVersion2Legacy, GeometryVersion2MaterialTransition,
+            AnimationVersion2Legacy, AnimationVersion2Minimum, GeometryVersion2Minimum,
             AnimationVersion2Alternate, GeometryVersion2Current];
 
     private readonly ReadOnlyMemory<byte> _payload;
@@ -48,6 +55,7 @@ internal sealed partial class FalloutNifFile
 
     private FalloutNifFile(
         ReadOnlyMemory<byte> payload,
+        uint fileVersion,
         uint userVersion2,
         IReadOnlyList<string> strings,
         IReadOnlyList<FalloutNifBlock> blocks,
@@ -55,6 +63,7 @@ internal sealed partial class FalloutNifFile
         Action<FalloutNifReadRange>? observe)
     {
         _payload = payload;
+        FileVersion = fileVersion;
         UserVersion2 = userVersion2;
         Strings = strings;
         Blocks = blocks;
@@ -63,6 +72,7 @@ internal sealed partial class FalloutNifFile
         _observe = observe;
     }
 
+    internal uint FileVersion { get; }
     internal uint UserVersion2 { get; }
     internal IReadOnlyList<string> Strings { get; }
     internal IReadOnlyList<FalloutNifBlock> Blocks { get; }
@@ -72,17 +82,24 @@ internal sealed partial class FalloutNifFile
     {
         var cursor = new NifCursor(payload.Span, "NIF", observe);
         var header = cursor.ReadLineAscii("header");
-        if (!string.Equals(header, "Gamebryo File Format, Version 20.2.0.7", StringComparison.Ordinal))
+        var fileVersion = header switch
+        {
+            "Gamebryo File Format, Version 20.2.0.7" => Version,
+            "Gamebryo File Format, Version 20.0.0.4" => UnsizedVersion,
+            _ => 0U,
+        };
+        if (fileVersion == 0)
             throw new InvalidDataException($"Unsupported NIF header: {header}");
-        if (cursor.ReadUInt32("version") != Version)
-            throw new InvalidDataException("NIF binary version differs from its 20.2.0.7 header.");
+        if (cursor.ReadUInt32("version") != fileVersion)
+            throw new InvalidDataException("NIF binary version differs from its header.");
         if (cursor.ReadByte("endian") != LittleEndian)
             throw new InvalidDataException("Only little-endian Fallout NIF files are supported.");
         if (cursor.ReadUInt32("user version") != UserVersion)
             throw new InvalidDataException("Only Bethesda user version 11 NIF files are supported.");
         var blockCount = cursor.ReadCount32("block count", MaximumTableEntries);
         var userVersion2 = cursor.ReadUInt32("user version 2");
-        if (!SupportedUserVersion2.Contains(userVersion2))
+        if (fileVersion == UnsizedVersion ? userVersion2 != UnsizedUserVersion2 :
+            !SupportedUserVersion2.Contains(userVersion2))
             throw new InvalidDataException($"Unsupported Fallout NIF user version 2: {userVersion2}");
 
         for (var index = 0; index < 3; ++index)
@@ -103,17 +120,22 @@ internal sealed partial class FalloutNifFile
                 throw new InvalidDataException($"NIF block {index} has an invalid type index.");
         }
         var blockSizes = new uint[blockCount];
-        for (var index = 0; index < blockSizes.Length; ++index)
-            blockSizes[index] = cursor.ReadUInt32($"block size {index}");
+        if (fileVersion == Version)
+            for (var index = 0; index < blockSizes.Length; ++index)
+                blockSizes[index] = cursor.ReadUInt32($"block size {index}");
 
-        var stringCount = cursor.ReadCount32("string count", MaximumTableEntries);
-        var maximumStringBytes = cursor.ReadUInt32("maximum string length");
-        var strings = new string[stringCount];
-        for (var index = 0; index < strings.Length; ++index)
+        var strings = Array.Empty<string>();
+        if (fileVersion == Version)
         {
-            strings[index] = cursor.ReadSizedUtf8($"string {index}", maximumStringBytes);
-            if ((uint)Encoding.UTF8.GetByteCount(strings[index]) > maximumStringBytes)
-                throw new InvalidDataException($"NIF string {index} exceeds the declared maximum length.");
+            var stringCount = cursor.ReadCount32("string count", MaximumTableEntries);
+            var maximumStringBytes = cursor.ReadUInt32("maximum string length");
+            strings = new string[stringCount];
+            for (var index = 0; index < strings.Length; ++index)
+            {
+                strings[index] = cursor.ReadSizedUtf8($"string {index}", maximumStringBytes);
+                if ((uint)Encoding.UTF8.GetByteCount(strings[index]) > maximumStringBytes)
+                    throw new InvalidDataException($"NIF string {index} exceeds the declared maximum length.");
+            }
         }
 
         var groupCount = cursor.ReadCount32("group count", MaximumTableEntries);
@@ -122,11 +144,31 @@ internal sealed partial class FalloutNifFile
 
         var blocks = new FalloutNifBlock[blockCount];
         for (var index = 0; index < blocks.Length; ++index)
+            blocks[index] = new FalloutNifBlock(index, blockTypes[typeIndices[index]], 0, 0);
+        if (fileVersion == UnsizedVersion)
         {
-            var size = checked((int)blockSizes[index]);
-            var offset = cursor.Offset;
-            cursor.Skip(size, $"block {index}");
-            blocks[index] = new FalloutNifBlock(index, blockTypes[typeIndices[index]], offset, size);
+            // Older files have neither declared block sizes nor indexed strings.
+            // Index exact field extents through the same bounded decoders. An
+            // unknown layout cannot be skipped to a guessed next block/footer.
+            var indexOwner = new FalloutNifFile(payload, fileVersion, userVersion2, strings, blocks, [], null);
+            for (var index = 0; index < blocks.Length; ++index)
+            {
+                var offset = cursor.Offset;
+                var block = blocks[index] with { Offset = offset };
+                RequireUnsizedLayout(block);
+                _ = indexOwner.DecodeObjectFields(block, ref cursor);
+                blocks[index] = block with { Size = cursor.Offset - offset };
+            }
+        }
+        else
+        {
+            for (var index = 0; index < blocks.Length; ++index)
+            {
+                var size = checked((int)blockSizes[index]);
+                var offset = cursor.Offset;
+                cursor.Skip(size, $"block {index}");
+                blocks[index] = blocks[index] with { Offset = offset, Size = size };
+            }
         }
         var rootCount = cursor.ReadCount32("root count", MaximumTableEntries);
         if (cursor.Remaining != checked(rootCount * sizeof(int)))
@@ -138,7 +180,18 @@ internal sealed partial class FalloutNifFile
             RequireReference(roots[index], blocks.Length, $"root {index}", allowNull: false);
         }
         cursor.RequireEnd();
-        return new FalloutNifFile(payload, userVersion2, strings, blocks, roots, observe);
+        return new FalloutNifFile(payload, fileVersion, userVersion2, strings, blocks, roots, observe);
+    }
+
+    private static void RequireUnsizedLayout(FalloutNifBlock block)
+    {
+        // These families have complete 20.0.0.4 field extents. Other modern
+        // decoders cannot establish an older block boundary by inheritance alone.
+        if (block.TypeName is not ("NiNode" or "NiTriShape" or "NiTriStrips" or
+            "NiTriShapeData" or "NiTriStripsData" or "NiMaterialProperty" or "BSXFlags" or
+            "NiStringExtraData" or "bhkBoxShape" or "bhkRigidBody" or "bhkRigidBodyT" or "bhkCollisionObject"))
+            throw new NotSupportedException(
+                $"NIF block {block.Index} type {block.TypeName} has no 20.0.0.4 sequential layout decoder.");
     }
 
     internal FalloutNifObject ReadObject(int blockIndex)
@@ -153,7 +206,13 @@ internal sealed partial class FalloutNifFile
     {
         var block = Blocks[blockIndex];
         var cursor = BlockCursor(block);
-        FalloutNifObject result = block.TypeName switch
+        var result = DecodeObjectFields(block, ref cursor);
+        cursor.RequireEnd();
+        return result;
+    }
+
+    private FalloutNifObject DecodeObjectFields(FalloutNifBlock block, ref NifCursor cursor) =>
+        block.TypeName switch
         {
             "NiNode" or "NiBone" or "BSFadeNode" or "BSMultiBoundNode" or "BSRangeNode" or "BSBlastNode" or "BSDamageStage" or "NiBillboardNode" or "BSValueNode" or "BSMasterParticleSystem" or "BSOrderedNode" => ReadNode(block, ref cursor),
             "NiAmbientLight" => ReadAmbientLight(block, ref cursor),
@@ -162,12 +221,14 @@ internal sealed partial class FalloutNifFile
             "NiParticleSystem" => ReadParticleSystem(block, ref cursor),
             "NiPSysData" => ReadParticleData(block, ref cursor),
             "NiPSysAgeDeathModifier" or "NiPSysColliderManager" or "NiPSysMeshEmitter" or "NiPSysBoxEmitter" or "NiPSysCylinderEmitter" or "NiPSysSphereEmitter" or
-                "NiPSysSpawnModifier" or "NiPSysGrowFadeModifier" or "BSPSysSimpleColorModifier" or
+                "NiPSysSpawnModifier" or "NiPSysGrowFadeModifier" or "BSPSysSimpleColorModifier" or "NiPSysColorModifier" or
                 "NiPSysRotationModifier" or "NiPSysBombModifier" or "NiPSysGravityModifier" or "NiPSysDragModifier" or
                 "NiPSysPositionModifier" or "NiPSysBoundUpdateModifier" or "BSParentVelocityModifier" or "BSWindModifier" => ReadParticleModifier(block, ref cursor),
             "NiPSysEmitterCtlr" or "BSPSysMultiTargetEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or "NiPSysEmitterLifeSpanCtlr" or
                 "NiPSysModifierActiveCtlr" or "NiPSysUpdateCtlr" => ReadParticleController(block, ref cursor),
             "NiPSysPlanarCollider" => ReadParticlePlanarCollider(block, ref cursor),
+            "NiPSysSphericalCollider" => ReadParticleSphericalCollider(block, ref cursor),
+            "NiColorData" => ReadColorData(block, ref cursor),
             "NiTriShapeData" => ReadTriShapeData(block, ref cursor),
             "NiTriStripsData" => ReadTriStripsData(block, ref cursor),
             "NiSkinInstance" or "BSDismemberSkinInstance" => ReadSkinInstance(block, ref cursor),
@@ -203,6 +264,7 @@ internal sealed partial class FalloutNifFile
                 ReadTimeController(ref cursor, "emittance controller"), ReadReference(ref cursor, "emittance interpolator")),
             "BSRefractionStrengthController" => new FalloutNifRefractionController(block,
                 ReadTimeController(ref cursor, "refraction controller"), ReadReference(ref cursor, "refraction interpolator")),
+            "bhkBlendController" => ReadBlendController(block, ref cursor),
             "NiTransformController" => ReadTransformController(block, ref cursor),
             "NiFloatExtraDataController" => new FalloutNifFloatExtraDataController(block,
                 ReadTimeController(ref cursor, "float extra-data controller"),
@@ -227,6 +289,8 @@ internal sealed partial class FalloutNifFile
             "bhkBlendCollisionObject" => ReadBlendCollisionObject(block, ref cursor),
             "bhkSimpleShapePhantom" => ReadSimpleShapePhantom(block, ref cursor),
             "bhkRigidBody" or "bhkRigidBodyT" => ReadRigidBody(block, ref cursor),
+            "bhkRagdollConstraint" or "bhkLimitedHingeConstraint" or "bhkMalleableConstraint" => ReadRagdollDeclaration(block, ref cursor),
+            "bhkHingeConstraint" => ReadHingeDeclaration(block, ref cursor),
             "bhkMoppBvTreeShape" => ReadMoppShape(block, ref cursor),
             "bhkPackedNiTriStripsShape" => ReadPackedShape(block, ref cursor),
             "hkPackedNiTriStripsData" => ReadPackedData(block, ref cursor),
@@ -248,11 +312,8 @@ internal sealed partial class FalloutNifFile
             "NiTexturingProperty" => ReadTexturingProperty(block, ref cursor),
             "NiSourceTexture" => ReadSourceTexture(block, ref cursor),
             _ => throw new NotSupportedException(
-                $"NIF block {blockIndex} type {block.TypeName} has no native runtime decoder."),
+                $"NIF block {block.Index} type {block.TypeName} has no native runtime decoder."),
         };
-        cursor.RequireEnd();
-        return result;
-    }
 
     internal FalloutNifNode ReadNode(int blockIndex) =>
         ReadObject(blockIndex) as FalloutNifNode ??
@@ -262,10 +323,18 @@ internal sealed partial class FalloutNifFile
     {
         RequireReference(blockIndex, Blocks.Count, "constraint block", allowNull: false);
         var block = Blocks[blockIndex];
+        var cursor = BlockCursor(block);
+        return ReadConstraintHeader(block, ref cursor);
+    }
+
+    private FalloutNifConstraintHeader ReadConstraintHeader(FalloutNifBlock block, ref NifCursor cursor)
+    {
+        var blockIndex = block.Index;
+        if (FileVersion != Version)
+            throw new NotSupportedException("NIF joint descriptors require their complete modern source layout.");
         if (block.TypeName is not ("bhkRagdollConstraint" or "bhkMalleableConstraint" or "bhkLimitedHingeConstraint" or "bhkHingeConstraint"))
             throw new NotSupportedException(
                 $"NIF constraint block {blockIndex} type {block.TypeName} has no identity contract.");
-        var cursor = BlockCursor(block);
         var entityCount = cursor.ReadUInt32("constraint entity count");
         if (entityCount != 2)
             throw new InvalidDataException(
@@ -499,15 +568,27 @@ internal sealed partial class FalloutNifFile
         var av = ReadAvObject(ref cursor, block.TypeName);
         var data = ReadReference(ref cursor, "geometry data");
         var skin = ReadReference(ref cursor, "skin instance");
-        var materialCount = cursor.ReadCount32("material count", MaximumTableEntries);
+        var materialCount = 0;
+        if (FileVersion == UnsizedVersion)
+        {
+            if (cursor.ReadBoolean("legacy has shader"))
+            {
+                _ = ReadStringReference(ref cursor, "legacy shader name");
+                _ = cursor.ReadInt32("legacy shader extra data");
+                throw new NotSupportedException(
+                    $"NIF geometry {block.Index} has a legacy named shader without a runtime owner.");
+            }
+        }
+        else
+            materialCount = cursor.ReadCount32("material count", MaximumTableEntries);
         var materialNames = new string[materialCount];
         for (var index = 0; index < materialNames.Length; ++index)
             materialNames[index] = ReadStringReference(ref cursor, $"material name {index}");
         var materialExtraData = new int[materialCount];
         for (var index = 0; index < materialExtraData.Length; ++index)
             materialExtraData[index] = cursor.ReadInt32($"material extra data {index}");
-        var activeMaterial = cursor.ReadInt32("active material");
-        var dirty = cursor.ReadBoolean("dirty flag");
+        var activeMaterial = FileVersion == UnsizedVersion ? -1 : cursor.ReadInt32("active material");
+        var dirty = FileVersion != UnsizedVersion && cursor.ReadBoolean("dirty flag");
         var segments = Array.Empty<FalloutNifGeometrySegment>();
         if (block.TypeName == "BSSegmentedTriShape")
         {
@@ -534,6 +615,8 @@ internal sealed partial class FalloutNifFile
     {
         var start = cursor;
         var prefix = ReadMeshPrefix(ref cursor);
+        if (FileVersion == UnsizedVersion)
+            return ReadMeshTail(block, ref cursor, prefix, (byte)(prefix.StoredUvSets & 0x3f), strips);
         if (prefix.StoredUvSets <= 1)
             return ReadMeshTail(block, ref cursor, prefix, prefix.StoredUvSets, strips);
         FalloutNifMeshData? match = null;
@@ -1047,10 +1130,14 @@ internal sealed partial class FalloutNifFile
         var environmentMapScale = cursor.ReadFiniteSingle("environment map scale");
         var textureClampMode = cursor.ReadUInt32("texture clamp mode");
         var textureSet = ReadReference(ref cursor, "shader texture set");
-        var refractionStrength = cursor.ReadFiniteSingle("refraction strength");
-        var refractionFirePeriod = cursor.ReadInt32("refraction fire period");
-        var unknownFloat4 = cursor.ReadFiniteSingle("shader unknown float 4");
-        var unknownFloat5 = cursor.ReadFiniteSingle("shader unknown float 5");
+        var refractionStrength = UserVersion2 >= RefractionVersion2Minimum
+            ? cursor.ReadFiniteSingle("refraction strength") : 0.0f;
+        var refractionFirePeriod = UserVersion2 >= RefractionVersion2Minimum
+            ? cursor.ReadInt32("refraction fire period") : 0;
+        var unknownFloat4 = UserVersion2 >= ParallaxVersion2Minimum
+            ? cursor.ReadFiniteSingle("shader parallax maximum passes") : 4.0f;
+        var unknownFloat5 = UserVersion2 >= ParallaxVersion2Minimum
+            ? cursor.ReadFiniteSingle("shader parallax scale") : 1.0f;
         return new FalloutNifShaderProperty(block, objectNet.Name, objectNet.ExtraData,
             objectNet.Controller, smooth, shaderType, shaderFlags, shaderFlags2,
             environmentMapScale, textureClampMode, textureSet, refractionStrength,
@@ -1701,6 +1788,8 @@ internal sealed partial class FalloutNifFile
 
     private string ReadStringReference(ref NifCursor cursor, string label)
     {
+        if (FileVersion == UnsizedVersion)
+            return cursor.ReadSizedUtf8(label, checked((uint)cursor.Remaining));
         var reference = cursor.ReadInt32(label);
         if (reference == -1)
             return string.Empty;

@@ -194,6 +194,9 @@ internal sealed class RuntimeNativeNifSkeleton
             return;
         }
         var source = Source.ReadNode(blockIndex);
+        var controllerChain = FalloutNifNodeControllerChain.Read(Source, source);
+        foreach (var blend in controllerChain.OfType<FalloutNifBlendController>())
+            FalloutNifNodeControllerChain.RequireDormantBlend(source, blend);
         if (string.IsNullOrWhiteSpace(source.Name) || !_boneIndices.TryAdd(source.Name, _boneIndices.Count))
             throw new InvalidDataException("NIF skeleton has an unnamed or duplicate bone identity.");
         var index = Node.AddBone(source.Name);
@@ -203,6 +206,8 @@ internal sealed class RuntimeNativeNifSkeleton
         Node.SetBoneRest(index, Convert(source.Transform));
         Node.SetBoneMeta(index, "opennv_nif_block", blockIndex);
         Node.SetBoneMeta(index, "opennv_nif_controller", source.Controller);
+        Node.SetBoneMeta(index, "opennv_nif_controller_chain",
+            controllerChain.Select(value => value.Block.Index).ToArray());
         Node.SetBoneMeta(index, "opennv_nif_collision", source.CollisionObject);
         Node.SetBoneMeta(index, "opennv_nif_flags", source.Flags);
         foreach (var extra in source.ExtraData.Where(reference => reference >= 0)

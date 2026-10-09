@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
-internal readonly record struct FalloutNifParticlePlaneHit(float Fraction, Vector3 Point, Vector3 Normal);
+internal readonly record struct FalloutNifParticleCollisionHit(float Fraction, Vector3 Point, Vector3 Normal);
 
 internal static class FalloutNifParticlePlane
 {
@@ -17,7 +17,7 @@ internal static class FalloutNifParticlePlane
 
     // Sweep the source point against the front of the declared local plane.
     // Particle radius belongs to drawing and does not enlarge its collider.
-    internal static FalloutNifParticlePlaneHit? Sweep(Vector3 start, Vector3 velocity, float seconds,
+    internal static FalloutNifParticleCollisionHit? Sweep(Vector3 start, Vector3 velocity, float seconds,
         float width, float height, Vector3 xAxis, Vector3 yAxis)
     {
         Validate(width, height, xAxis, yAxis);

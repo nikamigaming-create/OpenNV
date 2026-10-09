@@ -747,133 +747,6 @@ internal static partial class RuntimeNativeNifMeshBuilder
             return false;
         }
 
-        private void ValidateNodeController(FalloutNifNode owner, Node3D node)
-        {
-            if (owner.Controller == -1)
-                return;
-            if (_source.Blocks[owner.Controller].TypeName == "bhkBlendController")
-            {
-                node.SetMeta("opennv_nif_blend_controller", owner.Controller);
-                node.SetMeta("opennv_nif_blend_controller_pinned", true);
-                return;
-            }
-            var controller = _source.ReadObject(owner.Controller);
-            if (controller is FalloutNifVisibilityController constantVisibility &&
-                constantVisibility.Time.Flags == DormantManagerFlags && constantVisibility.Time.Target == owner.Block.Index &&
-                constantVisibility.Time.UnknownInteger == 0 &&
-                new FalloutNifBoolAnimation(_source, constantVisibility.Interpolator).ConstantValue is { } constantVisible)
-            {
-                // A time controller whose complete boolean stream is constant
-                // needs no animation clock. Preserve false as well as true;
-                // changing visibility still requires its animation owner.
-                node.Visible = constantVisible;
-                node.SetMeta("opennv_nif_constant_visibility_controller", constantVisibility.Block.Index);
-                if (constantVisibility.Time.NextController == -1) return;
-                controller = _source.ReadObject(constantVisibility.Time.NextController);
-            }
-            if (controller is FalloutNifVisibilityController visibility && ExternalTransformTargets?.Contains(owner.Name) == true &&
-                (visibility.Time.Flags & 0x0040) != 0 && visibility.Time.Target == owner.Block.Index)
-            {
-                // The controller range can include an export preroll (for
-                // example -1/30s hidden, 0s visible). Its initial clock is zero
-                // plus phase, not the first authored key. The selected KF may
-                // subsequently override this node's visibility.
-                node.Visible = new FalloutNifBoolAnimation(_source, visibility.Interpolator)
-                    .Sample((float)FalloutNifControllerClock.Resolve(visibility.Time, 0));
-                node.SetMeta("opennv_nif_external_visibility_controller", visibility.Block.Index);
-                if (visibility.Time.NextController == -1) return;
-                controller = _source.ReadObject(visibility.Time.NextController);
-            }
-            if (controller is FalloutNifVisibilityController directVisibility &&
-                directVisibility.Time.Target == owner.Block.Index && directVisibility.Time.UnknownInteger == 0)
-            {
-                if ((directVisibility.Time.Flags & 0x20) == 0)
-                    BuildDirectVisibilityController(directVisibility, node);
-                if (directVisibility.Time.NextController == -1) return;
-                controller = _source.ReadObject(directVisibility.Time.NextController);
-            }
-            if (controller is FalloutNifBoneLodController boneLod)
-            {
-                ValidateBoneLodController(owner, node, boneLod);
-                controller = _source.ReadObject(boneLod.Time.NextController);
-            }
-            if (controller is FalloutNifTransformController direct)
-            {
-                if (ExternalTransformTargets?.Contains(owner.Name) == true &&
-                    (direct.Time.Flags & 0x0040) != 0 && direct.Time.NextController == -1 &&
-                    direct.Time.Target == owner.Block.Index)
-                {
-                    // Externally controlled transform: the selected KF
-                    // supplies this node's clock and values, not an auto-loop.
-                    node.SetMeta("opennv_nif_external_transform_controller", direct.Block.Index);
-                    return;
-                }
-                if (TryPreserveConstantBindTransform(owner, node, direct))
-                    return;
-                if (TryApplyStaticTransformController(owner, node, direct))
-                    return;
-                if (TryBuildDirectTransformController(owner, node, direct))
-                    return;
-                if (direct.Time.Flags is not (DormantDirectTransformFlags or DormantMultiTargetFlags or DormantManagerFlags) ||
-                    direct.Time.Frequency != 1.0f || direct.Time.Phase != 0.0f ||
-                    direct.Time.StartTime != float.MaxValue || direct.Time.StopTime != float.MinValue ||
-                    direct.Time.Target != owner.Block.Index || direct.Interpolator != -1)
-                    throw new NotSupportedException(
-                        $"NIF node {owner.Block.Index} has an unsupported direct transform controller " +
-                        $"block={direct.Block.Index} next={direct.Time.NextController} " +
-                        $"flags=0x{direct.Time.Flags:x4} frequency={direct.Time.Frequency:R} " +
-                        $"phase={direct.Time.Phase:R} start={direct.Time.StartTime:R} " +
-                        $"stop={direct.Time.StopTime:R} target={direct.Time.Target} " +
-                        $"interpolator={direct.Interpolator}.");
-                node.SetMeta("opennv_nif_dormant_transform_controller", direct.Block.Index);
-                node.SetMeta("opennv_nif_dormant_transform_next", direct.Time.NextController);
-                return;
-            }
-            if (controller is not FalloutNifControllerManager manager ||
-                manager.Time.Flags != DormantManagerFlags || manager.Time.Frequency != 1.0f ||
-                manager.Time.Phase != 0.0f || manager.Time.StartTime != float.MaxValue ||
-                manager.Time.StopTime != float.MinValue || manager.Time.Target != owner.Block.Index ||
-                manager.Time.UnknownInteger != 0 || manager.Cumulative || manager.Sequences.Length == 0 ||
-                manager.ObjectPalette == -1 || manager.Time.NextController == -1)
-                throw new NotSupportedException(
-                    $"NIF node {owner.Block.Index} ({owner.Name}) has an unsupported active controller contract: {controller}.");
-            if (_source.ReadObject(manager.Time.NextController) is not
-                FalloutNifMultiTargetTransformController multi ||
-                multi.Time.NextController != -1 || multi.Time.Flags != DormantMultiTargetFlags ||
-                multi.Time.Frequency != 1.0f || multi.Time.Phase != 0.0f ||
-                multi.Time.StartTime != float.MaxValue || multi.Time.StopTime != float.MinValue ||
-                multi.Time.Target != owner.Block.Index || multi.Time.UnknownInteger != 0 ||
-                multi.ExtraTargets.Any(reference => reference != -1 &&
-                    _source.ReadObject(reference) is not (FalloutNifNode or FalloutNifGeometry or FalloutNifParticleSystem)))
-                throw new NotSupportedException(
-                    $"NIF controller manager {manager.Block.Index} has an unsupported target chain.");
-            if (_source.ReadObject(manager.ObjectPalette) is not FalloutNifDefaultAvObjectPalette palette ||
-                palette.UnknownInteger != 0 || palette.Objects.Length == 0)
-                throw new NotSupportedException(
-                    $"NIF controller manager {manager.Block.Index} has an unsupported object palette.");
-            foreach (var sequenceReference in manager.Sequences)
-            {
-                // An authored sequence can carry a clock and text keys without
-                // any pose/material channels. Keep its manager and event owner.
-                if (_source.ReadObject(sequenceReference) is not FalloutNifControllerSequence sequence ||
-                    sequence.Manager != manager.Block.Index ||
-                    sequence.TextKeys == -1 ||
-                    _source.ReadObject(sequence.TextKeys) is not FalloutNifTextKeyExtraData ||
-                    sequence.CycleType is not (0U or 2U) ||
-                    sequence.ControlledBlocks.Any(link => link.Interpolator == -1 ||
-                        link.Controller == -1 || link.Priority != 0 ||
-                        link.ControllerType is not ("NiTransformController" or "NiVisController" or
-                            "NiTextureTransformController" or "NiMaterialColorController" or "NiAlphaController" or
-                            "BSMaterialEmittanceMultController" or "BSRefractionStrengthController" or
-                            "NiGeomMorpherController" or "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or
-                            "NiPSysEmitterLifeSpanCtlr" or "NiPSysModifierActiveCtlr")))
-                    throw new NotSupportedException(
-                        $"NIF controller manager {manager.Block.Index} has an unsupported sequence chain.");
-            }
-            _controllerManagers.Add(manager);
-            node.SetMeta("opennv_nif_dormant_controller_manager", manager.Block.Index);
-        }
-
         private void BuildDirectVisibilityController(FalloutNifVisibilityController controller, Node3D node)
         {
             FalloutNifControllerClock.Validate(controller.Time);
@@ -891,7 +764,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             Node3D node,
             FalloutNifTransformController controller)
         {
-            if (controller.Time.NextController != -1 || controller.Time.Flags != DormantManagerFlags ||
+            if (controller.Time.Flags != DormantManagerFlags ||
                 controller.Time.Frequency != 1.0f || controller.Time.Phase != 0.0f ||
                 controller.Time.StopTime <= controller.Time.StartTime ||
                 controller.Time.Target != owner.Block.Index || controller.Time.UnknownInteger != 0 ||
@@ -929,8 +802,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             Node3D node,
             FalloutNifTransformController controller)
         {
-            if (controller.Time.NextController != -1 ||
-                controller.Time.StopTime <= controller.Time.StartTime ||
+            if (controller.Time.StopTime <= controller.Time.StartTime ||
                 controller.Time.Target != owner.Block.Index || controller.Time.UnknownInteger != 0 ||
                 controller.Interpolator == -1 ||
                 _source.ReadObject(controller.Interpolator) is not FalloutNifTransformInterpolator interpolator ||
@@ -973,8 +845,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             Node3D node,
             FalloutNifTransformController controller)
         {
-            if (controller.Time.NextController != -1 ||
-                controller.Time.StopTime != controller.Time.StartTime ||
+            if (controller.Time.StopTime != controller.Time.StartTime ||
                 controller.Time.Target != owner.Block.Index || controller.Interpolator == -1 ||
                 _source.ReadObject(controller.Interpolator) is not FalloutNifTransformInterpolator interpolator)
                 return false;

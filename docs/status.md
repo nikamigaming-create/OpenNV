@@ -1,5 +1,17 @@
 # Product status
 
+The current independent runtime slice implements source NIF sized/unsized extents,
+typed blend/joint/motor declarations, native controller-chain binding, particle
+sphere/plane contacts and source RGBA keys. Construction/retirement preserves
+independent instance ownership. Its required Release/Debug runtime gate, native
+controller-chain and particle checks pass. Owned reads decode all newly owned
+declarations in the selected investigation families. Complete model reads retain
+gravity-controller, breakable/prismatic-joint and orient-action failures; earlier
+header families retain binary-extra-data and user-version-12 refusals. All original
+archives remain unchanged. Full scene/pixel acceptance, complete campaigns and
+the complete selected mod stack remain unfinished. A pinned standalone FNV
+development package and stable local launch path are being prepared.
+
 The expanded corpus/quest audits finish independently for FNV, FO3, TTW and
 the exact combined selection. All winning/deleted payload layouts and discovered
 winning loose/BSA reads retain identities and individual outcomes, and every

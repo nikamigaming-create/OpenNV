@@ -14,19 +14,29 @@ internal static partial class RuntimeNativeNifMeshBuilder
             if (geometry.SkinInstance != -1 || geometry.CollisionObject != -1 || geometry.MaterialNames.Length != 0 ||
                 geometry.Dirty || geometry.ExtraData.Any(index => index != -1))
                 throw new NotSupportedException($"Particle geometry {geometry.Block.Index} has unsupported attachments.");
-            var runtime = new RuntimeNifParticleSystem
+            var transform = ConvertTransform(geometry.Transform);
+            var runtime = new RuntimeNifParticleSystem();
+            var nodeAdded = false; var particleAdded = false;
+            try
             {
-                Name = $"NifParticleSystem{source.Block.Index}",
-                Transform = ConvertTransform(geometry.Transform),
-                Visible = (geometry.Flags & 1) == 0,
-                ProcessPriority = 1,
-            };
-            runtime.SetMeta("opennv_nif_block", source.Block.Index);
-            runtime.SetMeta("opennv_nif_source_name", geometry.Name);
-            _nodes.Add(source.Block.Index, runtime);
-            _particles.Add(source.Block.Index, (source, runtime));
-            NodeCount++;
-            return runtime;
+                runtime.Name = $"NifParticleSystem{source.Block.Index}";
+                runtime.Transform = transform;
+                runtime.Visible = (geometry.Flags & 1) == 0;
+                runtime.ProcessPriority = 1;
+                runtime.SetMeta("opennv_nif_block", source.Block.Index);
+                runtime.SetMeta("opennv_nif_source_name", geometry.Name);
+                _nodes.Add(source.Block.Index, runtime); nodeAdded = true;
+                _particles.Add(source.Block.Index, (source, runtime)); particleAdded = true;
+                NodeCount++;
+                return runtime;
+            }
+            catch
+            {
+                if (particleAdded) _particles.Remove(source.Block.Index);
+                if (nodeAdded) _nodes.Remove(source.Block.Index);
+                runtime.Free();
+                throw;
+            }
         }
 
         private void ConfigureParticleSystems()

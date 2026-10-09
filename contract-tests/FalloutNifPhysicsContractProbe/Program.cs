@@ -3,6 +3,9 @@ using System.Text;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
+if (args.Length >= 3 && args[0] == "--block-declarations")
+    return NifBlockDeclarationAudit.Run(args[1], args[2..]);
+
 RagdollConstraintContracts.Run();
 HingeConstraintContracts.Run();
 ConvexListContracts.Run();
@@ -107,6 +110,8 @@ if (args.Length == 1)
 }
 else if (args.Length != 0)
     throw new ArgumentException("Use no arguments for synthetic contracts, or one owned Data directory/BSA path.");
+
+return 0;
 
 static byte[] WrapBody(byte[] body, string type, uint version)
 {

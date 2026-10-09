@@ -3,6 +3,15 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+NIF header versions select their original sized or unsized block envelopes.
+Unsized blocks advance through a complete admitted field decoder before the next
+block begins; unknown layouts refuse instead of guessing an extent. The shared
+reader retains blend-controller links and typed Havok joint/motor declarations.
+Runtime controller publication follows the original target chain into each native
+instance. Particle sphere/plane contacts and RGBA key interpolation use the same
+source graph, with distinct instance state and draw resources. Failed construction
+and retirement release only the resources owned by that instance.
+
 UI system-color tokens share a C# palette reader. Explicit installation/profile
 packed HUD and Pip-Boy settings override their channels; absent overrides read
 the complete original INI RGB component declaration. Zero-initialized executable
