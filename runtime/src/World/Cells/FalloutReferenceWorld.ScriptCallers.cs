@@ -15,7 +15,9 @@ internal sealed partial class FalloutReferenceWorld
         CampaignChallengesConfigured && Challenges.Source is not null ?
         _campaignSharedScriptConstructionFailure is not null ? "source-shared-script-construction-failed:" + _campaignSharedScriptConstructionFailure.Message :
         !CampaignSharedScriptRuntimeConfigured ? "source-shared-script-context-Main-caller-construction-unbound" :
-        _scriptEngineContexts!.SaveBlocker ?? ProcessRuntime.MainScriptCallerSaveBlocker ?? ProcessRuntime.MainPlayerCellSaveBlocker ?? ProcessRuntime.MainUtilitySaveBlocker ??
+        SourceMutableNativePublicationSaveBlocker ?? _scriptEngineContexts!.SaveBlocker ??
+            ProcessRuntime.SourceMainInterfaceSaveBlocker ?? ProcessRuntime.SourceMainCachedTailSaveBlocker ??
+            ProcessRuntime.MainScriptCallerSaveBlocker ?? ProcessRuntime.MainPlayerCellSaveBlocker ?? ProcessRuntime.MainUtilitySaveBlocker ??
             ProcessRuntime.MainUtilityCommandSaveBlocker ?? ProcessRuntime.PlatformStartupSaveBlocker ?? ProcessRuntime.SourceScriptFrameSaveBlocker : null;
     internal void ConfigureCampaignSharedScripts(FalloutAdvancementRuntimeSource runtime, FalloutSharedScriptRuntimeSnapshot? restore)
     {
@@ -37,6 +39,7 @@ internal sealed partial class FalloutReferenceWorld
         {
             ConfigureCampaignScriptContexts(runtime, restore?.Contexts, restore?.MainField, restore?.MainCaller);
             ProcessRuntime.ConstructMainScriptCaller(FalloutMainScriptCallerSource.Read(FalloutImmediateScriptSource.Read(runtime.Receipt)), restore?.MainCaller);
+            PrepareCampaignSourceMainTail(restore?.MainCaller.CachedTail);
             if (restore is not null) ProcessRuntime.RestoreMainUtilities(restore.Utilities);
             var utility = FalloutMainUtilitySource.Read(CampaignMainScriptSource);
             ConstructCampaignUtilityCommands(FalloutExecutableStringTable.ReadMainUtilityCommandSource(runtime.OwnedSource.FalloutExecutablePath, utility),

@@ -55,7 +55,8 @@ internal sealed partial class RuntimeNativeCreature
         if (saved.IdleState.ActiveAnimation is { } active) StartCollectionIdle(active.Idle, active);
     }
 
-    private void StartCollectionIdle(FalloutFormKey form, FalloutActorPackageIdleAnimation? saved = null)
+    private void StartCollectionIdle(FalloutFormKey form, FalloutActorPackageIdleAnimation? saved = null,
+        FalloutSandboxNativeIdleContinuation? nativeChild = null)
     {
         var record = _aiRecords!.GetEffective(form);
         var idle = FalloutActorIdleSource.Resolve(_aiRecords, record);
@@ -65,14 +66,19 @@ internal sealed partial class RuntimeNativeCreature
         var sequence = animation.Sequence;
         if (saved is not null)
         {
-            saved.Validate(_aiRecords, _collectionSource!.Form);
+            if (nativeChild is null) saved.Validate(_aiRecords, _collectionSource!.Form);
+            else
+            {
+                nativeChild.ValidateSource(_aiRecords, _aiWorld!, Appearance.Reference!.Value);
+                if (nativeChild.Animation != saved) throw new InvalidDataException("Cold creature KF differs from its actual retained IDLM child.");
+            }
             if (!saved.Sha256.Equals(owned.Hash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Cold creature collection KF differs from its winning resource.");
         }
         var repeats = saved?.Clock.SelectedAdditionalLoops ?? data.SelectAdditionalLoops(_aiState!.SoundRandom.NextBounded);
         var clock = new FalloutIdleAnimationPlayback(sequence.StartTime, sequence.StopTime, sequence.Frequency,
             sequence.CycleType, animation.TextKeys.Select(key => (key.Time, key.Value)).ToArray(), repeats);
-        var basis = saved is not null && _aiState!.PackageCollection?.UsesPackageBase == true
+        var basis = saved is not null && (nativeChild?.UsesPackageBase ?? _aiState!.PackageCollection?.UsesPackageBase) == true
             ? (Combat ?? throw new NotSupportedException("Cold collection has no actual package base owner."))
                 .RestoredCollectionBase(_collectionSource!.Form)
             : CollectionBaseLayer();
@@ -158,8 +164,8 @@ internal sealed partial class RuntimeNativeCreature
 
     private FalloutActorPackageCollectionContinuation? CaptureCollection()
     {
-        if (_sandboxNativeAction is not null && !_sandboxNativeRetired)
-            throw new NotSupportedException("Sandbox creature IDLM clock cannot be captured as its parent PACK collection.");
+        var nativeChild = _sandboxNativeAction is not null && !_sandboxNativeRetired;
+        if (nativeChild) _ = CaptureSandboxNativeIdle(_sandboxNativeAction!);
         if (_collectionSource is null || _collection is null)
         {
             if (_collectionReplays.Remaining.Count != 0)
@@ -169,7 +175,7 @@ internal sealed partial class RuntimeNativeCreature
         if (_collectionFailure is not null || _aiState!.ScriptError is not null || Error is not null)
             throw new NotSupportedException("Creature collection retains an entered failed suffix: " + (_collectionFailure ?? _aiState?.ScriptError ?? Error));
         FalloutActorPackageIdleAnimation? active = null;
-        if (_collectionClock is { Complete: false } clock)
+        if (_collectionClock is { Complete: false } clock && !nativeChild)
         {
             if (_eventIdleClock is not null || _collectionAnimation is null || _collectionIdle is null || _collectionMediaSha256 is null)
                 throw new NotSupportedException("Creature collection has an overlapping or unbound animation owner.");

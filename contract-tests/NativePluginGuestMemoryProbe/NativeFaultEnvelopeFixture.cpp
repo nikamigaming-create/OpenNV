@@ -39,14 +39,16 @@ int wmain(int argc, wchar_t** argv) {
     const auto reason_length = static_cast<std::uint32_t>(std::strlen(reason));
     std::uint32_t code = OPENNV_FAULT_ENVELOPE_MODE == 5 ? 0U : ERROR_INVALID_DATA;
     FrameHeader fault{protocol_magic, protocol_version, static_cast<std::uint32_t>(Kind::fault),
-        request.operation, generation, request.id, request.parent, 8U + reason_length, 0};
+        request.operation, generation, request.id, request.parent, 12U + reason_length, 0};
     if constexpr (OPENNV_FAULT_ENVELOPE_MODE == 1) ++fault.id;
     if constexpr (OPENNV_FAULT_ENVELOPE_MODE == 2) ++fault.parent;
     if constexpr (OPENNV_FAULT_ENVELOPE_MODE == 3) ++fault.operation;
     if constexpr (OPENNV_FAULT_ENVELOPE_MODE == 4) ++fault.generation;
     auto length = reason_length;
+    std::uint32_t exception_captured = 0;
     if (!transfer(output, &fault, sizeof(fault), true) || !transfer(output, &code, sizeof(code), true) ||
         !transfer(output, &length, sizeof(length), true) ||
-        !transfer(output, const_cast<char*>(reason), reason_length, true)) return 2;
+        !transfer(output, const_cast<char*>(reason), reason_length, true) ||
+        !transfer(output, &exception_captured, sizeof(exception_captured), true)) return 2;
     return 3;
 }

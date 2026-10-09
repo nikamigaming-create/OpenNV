@@ -41,6 +41,7 @@ internal partial class NativeOwnedDialogueMenu
     {
         var errors = new List<Exception>();
         try { RetireStandaloneDialog(); } catch (Exception error) { errors.Add(error); }
+        try { RetireSourceMainDialog(); } catch (Exception error) { errors.Add(error); }
         try { _viewportLayout?.Dispose(); } catch (Exception error) { errors.Add(error); }
         if (errors.Count != 0) throw new AggregateException("Dialog source/native lifetime retirement failed.", errors);
     }

@@ -60,6 +60,7 @@ internal sealed partial class NativePluginDomainChild : IDisposable
             start.Environment["TEMP"] = temp; start.Environment["TMP"] = temp;
             var env = string.Join('\0', start.Environment.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase).Select(pair => pair.Key + "=" + pair.Value)) + "\0\0";
             environment = Marshal.StringToHGlobalUni(env);
+            AppendSourceAddressSpaceArguments(start, io.SourceAddressSpace);
             var command = new StringBuilder(Quote(start.FileName));
             foreach (var argument in start.ArgumentList) command.Append(' ').Append(Quote(argument));
             var startup = new StartupInfoEx
@@ -84,6 +85,7 @@ internal sealed partial class NativePluginDomainChild : IDisposable
             var limits = new ExtendedLimit { Basic = new BasicLimit { Flags = 0x2008, ActiveProcessLimit = 1 } };
             if (!SetInformationJobObject(job, 9, ref limits, (uint)Marshal.SizeOf<ExtendedLimit>()) || !AssignProcessToJobObject(job, process))
                 throw new Win32Exception(Marshal.GetLastWin32Error());
+            if (io.SourceAddressSpace is { } sourceAddressSpace) ReserveSourceAddressSpace(process, sourceAddressSpace);
             if (ResumeThread(thread) != 1) throw new Win32Exception(Marshal.GetLastWin32Error(), "Native restricted primary thread did not resume from its owned suspension.");
             thread.Dispose(); thread = null;
             inputRead.Dispose(); inputRead = null; outputWrite.Dispose(); outputWrite = null; errorWrite.Dispose(); errorWrite = null;

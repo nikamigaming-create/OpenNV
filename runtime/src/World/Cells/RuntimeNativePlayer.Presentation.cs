@@ -138,12 +138,12 @@ internal partial class RuntimeNativePlayer
             try { RebuildPresentation(equipment); }
             catch (Exception error)
             {
-                _presentationError = error.Message;
+                _presentationError = error.ToString();
                 if (_firstPerson is not null) _firstPerson.Visible = false;
                 if (_thirdPerson is not null) _thirdPerson.Visible = false;
                 if (_firstPersonPixels is not null) _firstPersonPixels.Visible = false;
                 PresentationChanged?.Invoke();
-                GD.PushError("OPENNV_PLAYER_PRESENTATION_UNBOUND " + error.Message);
+                GD.PushError("OPENNV_PLAYER_PRESENTATION_UNBOUND " + error);
             }
             if (changing && _presentationError is null && _weaponHandling!.Drawn) RequestWeaponAction("equip");
         }

@@ -58,5 +58,6 @@ extern "C" __declspec(naked) std::uint32_t __cdecl InvokeNvseCommand(
 }
 static void InvokeNvseCommandGuarded(void* function, const std::uint32_t* arguments, opennv_domain::CallReceipt* receipt) {
     __try { InvokeNvseCommand(function, arguments, receipt); }
-    __except (EXCEPTION_EXECUTE_HANDLER) { receipt->exception_code = GetExceptionCode(); }
+    __except (opennv_domain::CaptureNativeException(GetExceptionInformation(), GetExceptionCode(),
+        &receipt->exception_code, &receipt->exception)) { }
 }

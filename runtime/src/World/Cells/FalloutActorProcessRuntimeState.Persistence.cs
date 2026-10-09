@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -8,7 +9,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
     {
         RequireNotBusy(); RequireMainScriptClosureBoundary(retiring: false); RequireMainUtilityBoundary(retiring: false);
         return new(Schema, _source.Contract, _stack, _player, _process, _sequence, _forced, _travelCounter,
-            _main.ToArray(), _travel, _actors.Values.ToArray(), _cold, CaptureMainFrame(), CaptureSourceFistp(), CaptureStandaloneMain());
+            _main.ToArray(), _travel, _actors.Values.ToArray(), _cold, CaptureMainFrame(), CaptureSourceFistp(), CaptureStandaloneMain(),
+            _cachedSourceTimer is null ? null : CaptureSourceCachedTimer());
     }
     private void Restore(FalloutActorProcessRuntimeSnapshot saved)
     {
@@ -42,6 +44,13 @@ internal sealed partial class FalloutActorProcessRuntimeState
             saved.Actors.Select(actor => actor.Source.Reference).Distinct(FalloutFormKeyComparer.Instance).Count() != saved.Actors.Count)
             throw new InvalidDataException("Process runtime snapshot has no complete source/current lifetime.");
         ValidateRuntimeMainFrame(saved); ValidateRuntimeSourceFistp(saved);
+        if (saved.CachedTimer is { } timer)
+        {
+            FalloutSourceFrameTimerState.Validate(timer);
+            if (timer.CapturedProcess != saved.CapturedProcess ||
+                FalloutActorProcessRuntimeDeclaration.ForExecutable(timer.Source.EngineSha256).Contract != saved.Contract)
+                throw new InvalidDataException("Cached timer continuation differs from the same captured Main and selected executable.");
+        }
         if (saved.StandaloneMain is { } standalone) ValidateStandaloneMain(standalone, saved);
         var active = 0; long previous = 0; var identities = new HashSet<Guid>();
         foreach (var item in saved.MainOperations)

@@ -8,7 +8,7 @@ internal enum FalloutMainScriptCallerStep
     FirstSample, FinalPredicateBefore, ForeignMenu, ContextKind, KindThreePrelude, Player,
     SteamCallbacks, MainHold, TimedContexts, MenuGateAfter, GuiModeAfter, FirstPredicateAfter,
     SecondSample, FinalPredicateAfter, MenuBeforeStore, FirstBeforeStore, FinalBeforeStore,
-    MenuAfterStore, FirstAfterStore, FinalAfterStore,
+    MenuAfterStore, FirstAfterStore, FinalAfterStore, CachedTailBefore, CachedTimer, CachedTailAfter,
 }
 internal enum FalloutMainScriptCallerDisposition { Entered, ScopeReturned, InputSuppressed, Failed }
 internal sealed record FalloutMainScriptChild(FalloutMainScriptCallerStep Step, long Entered, long? Returned,
@@ -23,7 +23,9 @@ internal sealed record FalloutMainContextTimeWrite(long Mutation, Guid Invocatio
 internal sealed record FalloutMainScriptCallerSnapshot(string Schema, FalloutMainScriptCallerSource Source,
     string Stack, Guid CapturedProcess, long Changed, long Calls, uint ContextTimeBits, long ContextTimeWrites,
     FalloutMainContextTimeWrite? LastContextTimeWrite, FalloutMainScriptCall? LastCall,
-    FalloutActorProcessRuntimeHandoff? ColdHandoff, FalloutMainInterfaceCachedFields CachedInterfaceFields);
+    FalloutActorProcessRuntimeHandoff? ColdHandoff, FalloutMainInterfaceCachedFields CachedInterfaceFields,
+    OpenNV.Runtime.Gameplay.State.FalloutMainInterfaceSnapshot? Interface = null,
+    FalloutMainCachedTailSnapshot? CachedTail = null);
 
 // A token exists only while the same Main owner is actually invoking this
 // child. The delivery frame is correlation, not a source-frame receipt.

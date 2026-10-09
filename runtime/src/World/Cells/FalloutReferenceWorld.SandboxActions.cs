@@ -58,12 +58,6 @@ internal sealed partial class FalloutReferenceWorld
         ObjectDisposedException.ThrowIf(_disposed, this);
         return (_sandboxSourceProducers ?? throw new NotSupportedException("Sandbox calendar window and independent dialogue-process scalar producers are unowned.")).Context(actor);
     }
-    internal float SandboxActionElapsedSeconds(FalloutFormKey actor)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        return (_sandboxSourceProducers ?? throw new NotSupportedException("Sandbox global-time action delta/unit conversion producer is unowned.")).ActionElapsedSeconds(actor);
-    }
-
     internal FalloutSandboxPublishedReference RequireSandboxPublication(FalloutFormKey reference)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

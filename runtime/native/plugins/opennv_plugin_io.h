@@ -2,6 +2,7 @@
 #include "opennv_plugin_domain.h"
 #include "opennv_plugin_crt.h"
 #include "opennv_plugin_crt_support.h"
+#include "opennv_plugin_crt_standard.h"
 #include "opennv_plugin_find.h"
 #include "opennv_plugin_crypto.h"
 #include "opennv_plugin_cng_service.h"
@@ -24,6 +25,8 @@ struct PluginIoRuntime {
     std::set<std::string> non_io_imports;
     std::map<std::uint32_t, PluginIoFile> files;
     std::unique_ptr<PluginCrtRuntime> crt;
+    std::unique_ptr<CppRuntimeProvider> cpp;
+    std::unique_ptr<PluginCrtStandardRuntime> standard;
     std::unique_ptr<PluginCrtSupportRuntime> crt_support;
     std::unique_ptr<PluginFindRuntime> find;
     std::unique_ptr<PluginCryptoRuntime> crypto;
@@ -34,6 +37,7 @@ struct PluginIoRuntime {
     std::vector<PluginIoEvent> pending;
     std::vector<std::pair<void**, void*>> imports;
     HANDLE stdin_file = INVALID_HANDLE_VALUE, stdout_file = INVALID_HANDLE_VALUE, stderr_file = INVALID_HANDLE_VALUE;
+    bool stdout_crt_owned = false, stderr_crt_owned = false;
     bool loader_retiring = false;
     std::uint32_t callbacks = 0, bound_imports = 0;
     std::uint64_t transaction = 0;
@@ -41,8 +45,8 @@ struct PluginIoRuntime {
     ~PluginIoRuntime() {
         for (const auto& file : files) CloseHandle(file.second.handle);
         if (stdin_file != INVALID_HANDLE_VALUE) CloseHandle(stdin_file);
-        if (stdout_file != INVALID_HANDLE_VALUE) CloseHandle(stdout_file);
-        if (stderr_file != INVALID_HANDLE_VALUE) CloseHandle(stderr_file);
+        if (stdout_file != INVALID_HANDLE_VALUE && !stdout_crt_owned) CloseHandle(stdout_file);
+        if (stderr_file != INVALID_HANDLE_VALUE && !stderr_crt_owned) CloseHandle(stderr_file);
     }
 };
 }

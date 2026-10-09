@@ -400,9 +400,11 @@ void expression_command(const Frame& frame) {
     if (expression_scalar(expression_begin_event, begin) != 1) throw Fatal(ERROR_INVALID_DATA, "C# command caller refused its retained parameter copy.");
     CallReceipt receipt{};
     { NvseInvocation invocation(*state->nvse); InvokeNvseCommandGuarded(reinterpret_cast<void*>(function), caller.frame.data(), &receipt); }
+    const auto stage = "NVSE command " + std::to_string(opcode);
+    nvse_check_exception(receipt, stage, function);
     source_local_sync(false);
     array_objects_refresh_all();
-    nvse_check_call(receipt);
+    nvse_check_call(receipt, stage, function);
     for (const auto& evaluator : expression.evaluators) if (evaluator->caller == caller_id)
         throw Fatal(ERROR_INVALID_DATA, "Original command returned with a live evaluator/token lifetime.");
     if (!std::isfinite(result) || offset < start || offset > end || caller.created != caller.destroyed)

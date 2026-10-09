@@ -34,6 +34,12 @@ internal static class NativeNifSkyMaterial
         result.SetMeta("opennv_sky_object_type", declaration.SkyObjectType);
         result.SetMeta("opennv_sky_property_block", declaration.Block.Index);
         result.SetShaderParameter("rgb_multiplier", 1f);
+        if (declaration.SkyObjectType == 3)
+        {
+            result.SetShaderParameter("cloud_map", default(Variant));
+            result.SetShaderParameter("cloud_map_blend", default(Variant));
+            result.SetShaderParameter("source_cloud_blend", 0f);
+        }
         // Weather supplies each cloud layer's texture. The model's editor
         // texture can be absent from the shipped installation.
         if (declaration.SkyObjectType == 5 && declaration.FileName.Length != 0)

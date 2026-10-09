@@ -151,9 +151,11 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
                 selection.NvsePath, selection.NvseSha256, _source.StackId, selection.NoGore, selection.EditionOwner);
             io = FalloutNativePluginPrivateIo.Create(_source, physical, admission.Sha256, privateStateRoot,
                 admission.WriteScopes, admission.ReadDeclarations, admission.InputRoots, admission.ImportOwner, admission.NonIoImports);
+            io.BindSourceAddressSpace(host);
             domain = new(companion, privateIo: io); io = null;
             domain.BindCngSystemServiceBuild(companion);
             domain.BindNativeImportProviderBuild(companion);
+            BindNativeWindowProcess(domain);
             plugin = domain.LoadNvseImage(host, physical, admission.Sha256, sourcePluginHandle: admission.QueryHandle); host = null;
             domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues, _records, domain, plugin));
             domain.AttachNvseScriptInterface(plugin);
@@ -267,6 +269,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             module.Domain.RequireNvseSourceFilesSaveOwned(); module.Domain.RequireNvseBinarySaveOwned();
             module.Domain.RequirePrivateCrtSaveOwned(); module.Domain.RequirePrivateProfileDirectorySaveOwned();
             module.Domain.RequirePrivateCryptoMappingSaveOwned(); module.Domain.RequirePrivateMutexSaveOwned();
+            module.Domain.RequireWindowProcessColdCapture();
         }
         if (_modules.Any(module => module.Plugin.Registry.SerializationHistory.Count != 0))
             throw new NotSupportedException("Original plugin co-save callback state has no current unified campaign writer/reader owner.");

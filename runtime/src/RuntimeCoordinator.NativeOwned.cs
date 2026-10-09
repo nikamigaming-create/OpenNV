@@ -51,6 +51,7 @@ public partial class RuntimeCoordinator
     {
         static float[] Vector(Vector3 value) => [value.X, value.Y, value.Z];
         static object? MovieField(Node movie, string key) => movie.HasMeta(key) ? movie.GetMeta(key).Obj : null;
+        var playerDriver = NativePlayerSetupPrepared ? _nativeOpeningStageDriver : null;
         var camera = GetViewport().GetCamera3D();
         var cellChildren = _nativeCurrentCellRoot?.GetChildren();
         var cellNodes = cellChildren?.ToArray() ?? [];
@@ -84,6 +85,8 @@ public partial class RuntimeCoordinator
                 _nativeReferences.ResidentCellCount,
                 _nativeReferences.ScriptDefinitionCount,
                 playerStatistics = _nativeReferences.PlayerStatisticState,
+                sourceMutablePublication = _nativeReferences.SourceMutableNativePublicationState,
+                sourceMutableSaveBlocker = _nativeReferences.SourceMutableNativePublicationSaveBlocker,
                 retirementFailure = _nativeReferences.WorldRetirementFailure,
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
@@ -102,7 +105,8 @@ public partial class RuntimeCoordinator
             },
             ui = _nativeUi?.State,
             terminal = _nativeTerminalMenu?.Observation,
-            terminalSessions = _nativeOpeningStageDriver?.TerminalState,
+            playerSetup = new { phase = _nativePlayerSetupPhase.ToString(), failure = _nativePlayerSetupFailure },
+            terminalSessions = NativePlayerSetupPrepared ? playerDriver?.TerminalState : null,
             bootstrap = _nativeBootstrap?.State,
             loading = _nativeLoadingScreens?.State,
             loadingFeedback = _loadingScreen?.State ?? _nativeLoadingProgress?.State,
@@ -110,7 +114,7 @@ public partial class RuntimeCoordinator
             exteriorLod = cellNodes.OfType<RuntimeNativeExteriorLod>().SingleOrDefault()?.State,
             exteriorStreaming = NativeStreamingState,
             resourceCache = RuntimeLiveContentSource.Current?.CacheState,
-            player = _nativePlayer is null ? null : new
+            player = !NativePlayerSetupPrepared || _nativePlayer is null ? null : new
             {
                 position = Vector(_nativePlayer.GlobalPosition),
                 viewPitchRadians = _nativePlayer.ViewPitchRadians,
@@ -138,35 +142,35 @@ public partial class RuntimeCoordinator
                 near = camera.Near,
                 far = camera.Far,
             },
-            opening = _nativeOpeningStageDriver is null ? null : new
+            opening = !NativePlayerSetupPrepared || playerDriver is null ? null : new
             {
-                quest = _nativeOpeningStageDriver.QuestEditorId,
-                stage = _nativeOpeningStageDriver.Stage,
-                timerSeconds = _nativeOpeningStageDriver.TimerSeconds,
-                pending = _nativeOpeningStageDriver.PendingBlockers.ToArray(),
-                headTrackingCommands = _nativeOpeningStageDriver.HeadTrackingCommands,
-                error = _nativeOpeningStageDriver.ExecutionError,
-                blockingError = _nativeOpeningStageDriver.BlockingExecutionError,
-                stageResults = _nativeOpeningStageDriver.StageResultState,
-                saveRequest = _nativeOpeningStageDriver.SaveRequestState,
-                playerProgress = _nativeOpeningStageDriver.PlayerProgressState,
-                playerStatistics = _nativeOpeningStageDriver.PlayerStatisticState,
-                experienceNotifications = _nativeOpeningStageDriver.ExperienceNotificationState,
-                interfaceActivationFrames = _nativeOpeningStageDriver.InterfaceActivationFrameState,
-                combatGroups = _nativeOpeningStageDriver.CombatGroupState,
-                actorPerception = _nativeOpeningStageDriver.ActorPerceptionState,
-                actorProcesses = _nativeOpeningStageDriver.ActorProcessState,
-                actualProcessRuntime = _nativeOpeningStageDriver.ActualProcessRuntimeState,
-                actualProcessCommon = _nativeOpeningStageDriver.ActualProcessCommonState,
-                actorUpdates = _nativeOpeningStageDriver.ActorUpdateState,
-                cellProcesses = _nativeOpeningStageDriver.CellProcessState,
-                advancementRuntime = _nativeOpeningStageDriver.PlayerAdvancementRuntimeState,
+                quest = playerDriver.QuestEditorId,
+                stage = playerDriver.Stage,
+                timerSeconds = playerDriver.TimerSeconds,
+                pending = playerDriver.PendingBlockers.ToArray(),
+                headTrackingCommands = playerDriver.HeadTrackingCommands,
+                error = playerDriver.ExecutionError,
+                blockingError = playerDriver.BlockingExecutionError,
+                stageResults = playerDriver.StageResultState,
+                saveRequest = playerDriver.SaveRequestState,
+                playerProgress = playerDriver.PlayerProgressState,
+                playerStatistics = playerDriver.PlayerStatisticState,
+                experienceNotifications = playerDriver.ExperienceNotificationState,
+                interfaceActivationFrames = playerDriver.InterfaceActivationFrameState,
+                combatGroups = playerDriver.CombatGroupState,
+                actorPerception = playerDriver.ActorPerceptionState,
+                actorProcesses = playerDriver.ActorProcessState,
+                actualProcessRuntime = playerDriver.ActualProcessRuntimeState,
+                actualProcessCommon = playerDriver.ActualProcessCommonState,
+                actorUpdates = playerDriver.ActorUpdateState,
+                cellProcesses = playerDriver.CellProcessState,
+                advancementRuntime = playerDriver.PlayerAdvancementRuntimeState,
                 playerPhysical = _nativePlayer?.PlayerPhysicalState,
-                nativePlugins = _nativeOpeningStageDriver.NativePluginExecutionState,
-                levelUp = _nativeOpeningStageDriver.PlayerLevelUpMenuState,
+                nativePlugins = playerDriver.NativePluginExecutionState,
+                levelUp = playerDriver.PlayerLevelUpMenuState,
             },
             movies = GetChildren().OfType<NativeGamebryoMovie>()
-                .Concat(_nativeOpeningStageDriver?.GetChildren().OfType<NativeGamebryoMovie>() ?? [])
+                .Concat(playerDriver?.GetChildren().OfType<NativeGamebryoMovie>() ?? [])
                 .Where(movie => !movie.IsQueuedForDeletion()).Select(movie => new
                 {
                     source = MovieField(movie, "opennv_movie_source"),
@@ -188,11 +192,11 @@ public partial class RuntimeCoordinator
                 marker.State.Visible,
                 marker.State.CanTravel,
             }).ToArray(),
-            speech = _nativeOpeningStageDriver?.SpeechState,
+            speech = playerDriver?.SpeechState,
             soundVoices = _nativePluginStack?.SoundVoices.State,
             soundPaths = _nativePluginStack?.SoundPaths.State,
-            questProgress = _nativeOpeningStageDriver?.Quests.ProgressState,
-            conversation = _nativeOpeningStageDriver?.ConversationState,
+            questProgress = playerDriver?.Quests.ProgressState,
+            conversation = playerDriver?.ConversationState,
             questScripts = _nativeQuestScripts?.Observe(detailed),
             numericGameSettings = _nativePluginStack?.NumericSettings.State,
             gameTime = _nativeGameTimeAdapter?.State,
@@ -202,19 +206,19 @@ public partial class RuntimeCoordinator
             sourceSky = _nativeSkyLighting?.SourceTransferState,
             wind = cellChildren?.OfType<RuntimeNativeWind>().SingleOrDefault()?.State,
             playerInventory = _nativeInventory.Items,
-            ingestibles = _nativeOpeningStageDriver?.IngestibleState,
+            ingestibles = playerDriver?.IngestibleState,
             gameplayHud = _nativeGameplayHud?.State,
             hudMessages = _nativeHudMessages?.State,
             subtitles = _nativeSubtitles?.State,
             pipBoy = _nativePipBoy?.State,
             playerPresentation = _nativePlayer?.PresentationState,
             questScriptsUnbound = _nativeContinueOpening && _nativeOpeningRestore?.State.Scripts is null ? "Current campaign save has no quest script state." : null,
-            playerPackage = _nativeOpeningStageDriver?.PlayerPackageState,
-            characterCreation = _nativeOpeningStageDriver?.CharacterCreationState,
-            traitMenu = _nativeOpeningStageDriver?.TraitMenuState,
-            levelUpMenu = _nativeOpeningStageDriver?.PlayerLevelUpMenuState,
-            vigor = _nativeOpeningStageDriver?.VigorState,
-            specialBook = _nativeOpeningStageDriver?.SpecialBookState,
+            playerPackage = playerDriver?.PlayerPackageState,
+            characterCreation = playerDriver?.CharacterCreationState,
+            traitMenu = playerDriver?.TraitMenuState,
+            levelUpMenu = playerDriver?.PlayerLevelUpMenuState,
+            vigor = playerDriver?.VigorState,
+            specialBook = playerDriver?.SpecialBookState,
             imageSpace = cellChildren is null ? null : cellNodes.OfType<RuntimeNativeImageSpace>().Select(presenter => new
             {
                 active = presenter.Frame?.Active.Select(modifier => new
@@ -322,7 +326,7 @@ public partial class RuntimeCoordinator
             throw new InvalidDataException("Native save path has no profile directory."), "script-config");
         _nativeScriptStorage = FalloutScriptStorage.Open(content, scriptOverlay);
         _nativeUi = FalloutUiComponentStore.Open(_nativePluginStack);
-        _nativeReferences?.Dispose();
+        RetireNativeReferenceWorld();
         _nativeReferences = new(_nativePluginStack, auxiliary: _nativeScriptStorage.Auxiliary,
             ini: _nativeScriptStorage.Ini, ui: _nativeUi, controls: _nativeScriptStorage.Controls);
         _nativeReferences.ConfigureCampaignPlayerRuntime(_nativeInventory.Notifications);
@@ -496,6 +500,7 @@ public partial class RuntimeCoordinator
     {
         _pendingSaveActivation?.RequireSelected(Path.GetFullPath(RequireOption(_options, "save-path")));
         var wasPaused = GetTree().Paused;
+        var completed = false;
         GetTree().Paused = true;
         try
         {
@@ -503,10 +508,11 @@ public partial class RuntimeCoordinator
             if (DisplayServer.GetName() != "headless")
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             await PopulateNativeInitialCell();
+            completed = true;
         }
         finally
         {
-            GetTree().Paused = wasPaused || _nativeSessionTransitioning || _retiringNativeSession;
+            GetTree().Paused = !completed || wasPaused || _nativeSessionTransitioning || _retiringNativeSession;
         }
         if (_pauseAfterCheckpointLoad)
         {
@@ -544,7 +550,7 @@ public partial class RuntimeCoordinator
             FreeNativeSourceCellRoot(_nativePrewarmedInitialCellRoot);
             _nativePrewarmedInitialCellRoot = null;
             RetireNativePluginCampaign();
-            _nativeReferences?.Dispose();
+            RetireNativeReferenceWorld();
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
                 ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
             _nativeReferences.ConfigureCampaignPlayerRuntime(_nativeInventory.Notifications,
@@ -578,6 +584,7 @@ public partial class RuntimeCoordinator
             _nativeReferences.ConfigureSourceProcessQueues(FalloutActorProcessQueueDeclaration.ForExecutable(
                 FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId,
                 restore.State.ProcessQueues ?? throw new InvalidDataException("Current campaign has no actual process queue continuation."));
+            _nativeReferences.PublishSourceMutableNativeOwners(this);
         }
         else if (_nativeBootstrap is null)
         {
@@ -610,6 +617,7 @@ public partial class RuntimeCoordinator
             }
             if (_nativeGameTime is not null)
             {
+                ConfigureCurrentImagePhase(restore?.State.ImagePhaseClock);
                 _nativeGameTimeAdapter = new(_nativeGameTime);
                 AddChild(_nativeGameTimeAdapter);
             }
@@ -679,9 +687,9 @@ public partial class RuntimeCoordinator
             AddNativeCellEnvironment(root, activeScene);
         else if (grid is not null)
             AddExteriorEnvironment(root, activeScene.Cell);
+        SetNativeActiveCell(root, activeScene);
         if (startup is not null) _nativeBootstrap!.TransferPlacementToMain(startup);
         AddNativePlayer(activeScene, startupPlacement);
-        SetNativeActiveCell(root, activeScene);
         _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
         AddNativeGameplayHud();
         if (grid is not null)
@@ -696,6 +704,7 @@ public partial class RuntimeCoordinator
             _nativeBootstrap!.CompletePlacement(startup);
         }
         if (_nativeQuestScripts is not null) _nativeQuestScripts.ActivateWorld(restore is not null);
+        PublishNativePlayerGameplay();
         GD.Print(
             $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
             $"restored={(restore is not null)} sourceSide={sourceSide}");
@@ -724,6 +733,7 @@ public partial class RuntimeCoordinator
             !ReferenceEquals(_nativePluginStack, records) || !ReferenceEquals(_nativeQuestState, quests) ||
             !ReferenceEquals(_nativeReferences, references) || !ReferenceEquals(_nativeInventory, inventory))
             throw new OperationCanceledException("Script preparation returned after its actual campaign retired.");
+        references.PublishSourceMutableNativeOwners(this);
         GD.Print($"OPENNV_NATIVE_SCRIPT_PREPARATION phase=read-returned elapsedMs={preparation.ElapsedMilliseconds}");
         var scripts = new RuntimeNativeQuestScripts(records, inventory, prepared);
         scripts.EvaluateMessageCondition = condition => _nativeOpeningStageDriver is { } driver
@@ -1311,14 +1321,14 @@ public partial class RuntimeCoordinator
         root.AddChild(light);
     }
 
-    private void AddNativePlayer(FalloutCellScene initialCell, FalloutReferencePlacement? startupPlacement = null)
+    private void PrepareNativePlayer(FalloutCellScene initialCell, FalloutReferencePlacement? startupPlacement = null)
     {
         if (_nativePlayer is not null)
             throw new InvalidOperationException("Native player was already created.");
         if (!_nativeContinueOpening && startupPlacement is null)
             throw new InvalidOperationException("New Game player has no admitted source placement.");
         var transform = startupPlacement is not null ? NativePlayerPlacementTransform(startupPlacement) : Transform3D.Identity;
-        _nativePlayer = new RuntimeNativePlayer();
+        _nativePlayer = new RuntimeNativePlayer { ProcessMode = ProcessModeEnum.Disabled };
         _nativePlayer.ActivateReference = collider => _nativeReferenceEvents?.TryActivate(collider) == true;
         _nativePlayer.NoActivationFeedback = () =>
             (_nativeQuestScripts ?? throw new InvalidOperationException("Native activation feedback has no quest session."))
@@ -1358,6 +1368,7 @@ public partial class RuntimeCoordinator
             () => _nativeXr is null && !_nativeDoorLoading && !GetTree().Paused, _nativeUi);
         _nativeOpeningStageDriver = new RuntimeNativeOpeningStageDriver
         {
+            ProcessMode = ProcessModeEnum.Disabled,
             PrepareSubtitle = _nativeSubtitles.Prepare,
             SourceManualSaveWriter = CreateNativeCheckpoint,
             SourceManualSaveBlocker = NativeSourceManualSaveBlocker,
@@ -1402,14 +1413,17 @@ public partial class RuntimeCoordinator
         _nativeOpeningStageDriver.BindSourceIndexedInterfacePlayback();
         _nativeOpeningStageDriver.AttachExperiencePauseClock();
         AttachCurrentNativePlayerCell();
-        _nativeOpeningStageDriver.ConfigureCurrentPlayerAdvancement();
         _nativeOpeningStageDriver.ConfigureCurrentPlayerPhysicalActivity(restore is null ? null :
             restore.State.PlayerPhysical ?? throw new InvalidDataException("Current campaign has no player physical continuation."),
             reference => (_nativeReferenceEvents ?? throw new NotSupportedException("Player furniture has no resident presentation owner."))
                 .PlayerFurniturePlacement(reference));
         _nativeOpeningStageDriver.ConfigureCurrentCampaignRest(_nativeGameTimeAdapter ??
             throw new NotSupportedException("Rest has no actual native world clock."), () => CreateNativeSaveSite(), restore?.State);
+        BindNativeReferenceEvents(_nativeCurrentCellRoot ??
+            throw new InvalidOperationException("Player construction has no attached source CELL."), initialCell);
         _nativePlayer.PublishRequiredPlayerPhysicalBody();
+        if (restore is not null && _nativeReferences!.SourceLinkedPlayerConstructed)
+            _nativeReferences.RebindSourcePlayerLinkedCell(initialCell.Cell.FormKey);
         // This owner is part of the load transaction. Native bridge dispatch
         // logs _Ready exceptions without propagating them to that transaction.
         _nativeOpeningStageDriver.InitializeOwnedState();
@@ -1420,7 +1434,9 @@ public partial class RuntimeCoordinator
         _nativeOpeningStageDriver.AttachInterfaceActivationFrames();
         _nativeOpeningStageDriver.AttachSourceCombatGroups();
         AttachNativeExperienceHud(_nativeOpeningStageDriver);
-        _nativeImageSpaceClock = new(_nativeImageSpaceState);
+        _nativeImageSpaceClock = new(_nativeImageSpaceState,
+            _nativeGameTime ?? throw new NotSupportedException("Image phase has no actual calendar producer."),
+            _nativeReferences!.ActualSourceProcessIdentity);
         AddChild(_nativeImageSpaceClock);
         var nativeCampaign = _nativePluginCampaign ?? throw new NotSupportedException("Gameplay has no actual native Data owner.");
         _nativeGameTimeAdapter!.BindSourceDataFrame(
@@ -1489,7 +1505,8 @@ public partial class RuntimeCoordinator
             _configuration.FalloutEnvironment.ImageSpace, _configuration.Capture,
             _configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer);
         var presenter = new RuntimeNativeImageSpace();
-        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime);
+        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime,
+            _nativeReferences!.ActualSourceProcessIdentity);
         root.AddChild(presenter);
         root.SetMeta("opennv_source_image_space", imageSpace.Form.ToString());
         root.SetMeta("opennv_source_image_space_version", imageSpace.FormVersion);

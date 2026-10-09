@@ -20,6 +20,7 @@ internal static class NativeCngSharedContracts
             using var host = NativeNvseHostSource.Open(runtime, originals[runtime], nvse, originals[nvse], stack,
                 false, "authored-caller-selected-owned-standard-edition");
             using var io = new NativePluginPrivateIo(selection);
+            io.BindSourceAddressSpace(host);
             using var domain = new NativePluginExecutionDomain(companion, TimeSpan.FromSeconds(30), privateIo: io);
             domain.BindCngSystemServiceBuild(companion);
             domain.BindNativeImportProviderBuild(companion);

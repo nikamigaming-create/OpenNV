@@ -34,14 +34,19 @@ internal static partial class FalloutExecutableStringTable
         foreach (var tile in FalloutExperienceHudSource.Tiles)
             if (!ExperienceHasLiteral(code, image.Literal, tile))
                 throw new NotSupportedException($"Selected XP tile association is absent: {tile}.");
-        foreach (var declaration in new[] { "+%i", "%i", "fHudOpacity:Interface", "_x_min", "_x_max", "UILevelUpText" })
+        foreach (var declaration in new[] { "+%i", "%i", "_x_min", "_x_max", "UILevelUpText" })
             if (!ExperienceHasLiteral(code, image.Literal, declaration))
                 throw new NotSupportedException($"Selected XP declaration association is absent: {declaration}.");
+        // INI settings belong to their typed registry. Optimized images can
+        // preinitialize these descriptors without pushing a name in .text.
+        var opacity = ReadIniDeclarations(original).Where(row => row.Name == "fHudOpacity:Interface").ToArray();
+        if (opacity.Length != 1 || opacity[0].Collection != FalloutIniCollection.Prefs || opacity[0].Kind != 'f')
+            throw new NotSupportedException("Experience HUD opacity has no unique typed source preference declaration.");
         var contract = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sha + "\0experience-hud-queue-tile-clock-v1\0" +
             Convert.ToHexString(SHA256.HashData(body))))).ToLowerInvariant();
         var (insetX, insetY) = ExperienceInsets(code, image.Literal);
         var result = new FalloutExperienceHudDeclaration(sha, contract, fade, fade, threshold, textFade, hold, nextTimestamp,
-            insetX, insetY, "+%i", "%i", "fHudOpacity:Interface", "UIPopUpExperienceUp", "UILevelUpText");
+            insetX, insetY, "+%i", "%i", opacity[0].Name, "UIPopUpExperienceUp", "UILevelUpText");
         result.Validate(); return result;
     }
 

@@ -2,6 +2,19 @@
 // Include after State/Fatal and before the source-file/binary-family includes.
 // One process generation retains its fixed-address reservations to closure.
 std::unique_ptr<OriginalCallablePages> original_callable_pages;
+void source_image_address_space(const Frame& frame) {
+    Reader reader{frame.payload}; const auto base = reader.get<std::uint32_t>(), bytes = reader.get<std::uint32_t>(); reader.finish();
+    if (!state->calls.empty() || state->module || !original_callable_pages)
+        throw Fatal(ERROR_INVALID_STATE, "Source image observation lacks its idle pre-module native owner.");
+    try {
+        const auto actual = original_callable_pages->source_image_identity();
+        if (actual[0] != base || actual[1] != bytes)
+            throw CallablePageFailure(ERROR_INVALID_DATA, "Source image observation changed its selected address identity.");
+        Bytes result; for (const auto value : actual) result.put(value);
+        reply(frame, ERROR_SUCCESS, "", result);
+    }
+    catch (const CallablePageFailure& error) { throw Fatal(error.code, error.what()); }
+}
 std::uint64_t source_callables_acquire(const std::vector<CallableEntry>& calls) {
     if (!state->calls.empty()) throw Fatal(ERROR_BUSY, "Source callable publication overlaps an actual native call.");
     try {

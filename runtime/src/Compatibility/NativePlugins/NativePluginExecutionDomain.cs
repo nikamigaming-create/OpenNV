@@ -35,7 +35,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     internal int ProcessId { get; }
     internal uint NativeThread { get; private set; }
     internal bool NaturallyRetired => _retired;
-    internal bool ResourcesRetired => _disposed && ChildExited && _process.ResourcesRetired && _privateIo is null && ImportProviderSourcesRetired && MutexNamespaceOwnersRetired;
+    internal bool ResourcesRetired => _disposed && ChildExited && _process.ResourcesRetired && _privateIo is null && ImportProviderSourcesRetired && MutexNamespaceOwnersRetired && WindowProcessOwnersRetired;
     internal bool ChildExited { get => Volatile.Read(ref _childExited); private set => Volatile.Write(ref _childExited, value); }
     internal int? ChildExitCode { get; private set; }
     internal NativePluginTokenObjectReceipt? ObjectSecurity => _process.ObjectSecurity;
@@ -86,6 +86,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             if (NativeThread == 0 || reader.ReadUInt32() != 32 || reader.ReadUInt32() != MaximumPayload || reader.ReadUInt32() != NativeMaximumDepth)
                 throw new InvalidDataException("Native companion pointer width or protocol capability drifted.");
             Finish(reader);
+            ReadSourceAddressSpace(privateIo);
             if (privateIo is not null) PreparePrivateIo(privateIo);
         }
         catch (Exception error)
@@ -196,6 +197,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             try { if (!SharedPlacementOwnersRetired) ClearSharedPlacementsAfterChildExit(); } catch (Exception error) { failures.Add(error); }
             try { if (!ImportProviderSourcesRetired) ClearNativeImportProvidersAfterChildExit(); } catch (Exception error) { failures.Add(error); }
             try { if (!MutexNamespaceOwnersRetired) ClearMutexNamespacesAfterChildExit(); } catch (Exception error) { failures.Add(error); }
+            try { if (!WindowProcessOwnersRetired) ClearWindowProcessAfterChildExit(); } catch (Exception error) { failures.Add(error); }
             try { if (_privateIo is not null) ClearPrivateIo(); } catch (Exception error) { failures.Add(error); }
             if (failures.Count != 0) throw FaultException(new AggregateException("Independent native source/section retries failed.", failures));
             return;
@@ -210,6 +212,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                 if (_nvsePlugin is not null) UnloadNvse(_nvsePlugin);
                 RequireSteamRetired();
                 RetireNativeImportProviders();
+                RetireProductWindowCalls();
                 RequirePrivateIoRetired();
                 ReleaseGuestResources();
                 using var reader = Exchange(NativePluginDomainOperation.Retire, []);
@@ -285,17 +288,20 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         throw new InvalidDataException("Native fault does not belong to its waiting call frame.");
                     using var fault = Reader(frame.Payload); var code = fault.ReadUInt32(); var reason = ReadText(fault);
                     if (operation == NativePluginDomainOperation.SteamProvider) RetainSteamFault(fault);
+                    var observedException = ReadNativeException(fault, frame, code, reason);
                     Finish(fault);
                     if (code == 0 || reason.Length == 0)
                         throw new InvalidDataException("Native fault lacks a failure code or reason.");
-                    MarkFault(new InvalidDataException(reason), code); throw FaultException();
+                    MarkFault(new InvalidDataException(reason), code);
+                    RetainNativeException(observedException, frame);
+                    throw FaultException();
                 }
                 if (frame.Kind is NativePluginDomainMessage.Callback or NativePluginDomainMessage.StateQuery or NativePluginDomainMessage.NvseCallback or NativePluginDomainMessage.IoCallback)
                 {
                     var steamSourceCallback = operation == NativePluginDomainOperation.SteamProvider &&
                         frame.Kind == NativePluginDomainMessage.NvseCallback && (frame.Operation == SteamCallbackEvent || frame.Operation == SteamSourceHashEvent);
                     if (!steamSourceCallback && !IsOriginalLoaderCallback(operation, frame) && operation is not (NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
-                        NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.UnloadNvse))
+                        NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.UnloadNvse or NativePluginDomainOperation.CrtRuntime or NativePluginDomainOperation.WindowProcess))
                         throw new InvalidDataException("A native callback arrived outside its executable call owner.");
                     DispatchCallback(frame, request); continue;
                 }
@@ -318,11 +324,13 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         NativePluginDomainOperation.NvseObjectBind or NativePluginDomainOperation.NvseObjectRetire or NativePluginDomainOperation.NvseScriptInterface or
                         NativePluginDomainOperation.NvseObjectRefresh or NativePluginDomainOperation.NvseLocalAttachScript or
                         NativePluginDomainOperation.NvseFileMethods or NativePluginDomainOperation.NvseBinaryMethods or
-                        NativePluginDomainOperation.NvseBinaryBind or NativePluginDomainOperation.NvseBinaryRetire => 1U,
+                        NativePluginDomainOperation.NvseBinaryBind or NativePluginDomainOperation.NvseBinaryRetire or
+                        NativePluginDomainOperation.CrtRuntime => 1U,
                         NativePluginDomainOperation.GuestCapabilities or NativePluginDomainOperation.GuestAllocate or
                         NativePluginDomainOperation.GuestRead or NativePluginDomainOperation.GuestWrite or
                         NativePluginDomainOperation.GuestRelease or NativePluginDomainOperation.GuestBindState or
                         NativePluginDomainOperation.GuestStatistics or NativePluginDomainOperation.GuestSeal => NativeModuleCount,
+                        NativePluginDomainOperation.WindowProcess => NativeModuleCount,
                         NativePluginDomainOperation.SteamProvider => NativeModuleCount,
                         NativePluginDomainOperation.ImportProviders => _importProvidersRetiring ? 0U : NativeModuleCount,
                         _ => 0U,

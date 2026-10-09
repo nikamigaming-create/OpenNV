@@ -31,7 +31,7 @@ internal sealed partial class FalloutReferenceWorld
             FalloutActorProcessQueueDeclaration.ForExecutable(image).Contract == snapshot.Loader.Contract) ??
             throw new InvalidDataException("Source queue snapshot lost its selected original declaration.");
         if (snapshot.FrameDispatch.Priority.Contract != FalloutMainFrameDeclaration.ForExecutable(executable).Contract ||
-            snapshot.FrameDispatch.Priority.Stack != snapshot.Loader.Stack)
+            snapshot.FrameDispatch.Priority.Stack != snapshot.Loader.Stack || snapshot.CurrentLists.Links.Source.EngineSha256 != executable)
             throw new InvalidDataException("Main cache and loader changed their selected source/order binding.");
         if (snapshot.Loader.Stack != snapshot.ActorFields.Stack || snapshot.Loader.Stack != snapshot.Reevaluation.Stack ||
             snapshot.Loader.Stack != snapshot.Cells.Stack || snapshot.Loader.Stack != snapshot.CurrentLists.Stack ||

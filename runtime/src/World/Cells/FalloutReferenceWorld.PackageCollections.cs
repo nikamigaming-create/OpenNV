@@ -30,7 +30,17 @@ internal sealed partial class FalloutReferenceWorld
         if (saved.Area.Cell != area.Cell || saved.Area.Radius != area.Radius ||
             (saved.Area.Center is null) != (area.Center is null) || saved.Area.Center is { } center && !center.SequenceEqual(area.Center!))
             throw new InvalidDataException("Cold Sandbox area differs from its source location graph.");
-        if (saved.SelectedIndex is not null)
-            throw new NotSupportedException("Cold Sandbox native action requires its specific publication/clock continuation owner.");
+        if (saved.SelectedIndex is { } selected)
+        {
+            var native = saved.NativeIdle ?? throw new NotSupportedException("Cold Sandbox action has no specific native child continuation.");
+            native.ValidateSource(records, this, snapshot.Reference);
+            if (saved.ActionTime is null || native.Selection != saved.Candidates[selected] || snapshot.PackageCollection is not { } parent ||
+                parent.IdleState.ActiveAnimation is not null || parent.AnimationRevision != native.AnimationRevision ||
+                records.GetEffective(snapshot.Base).Signature == "NPC_" && parent.RandomState != native.RandomState ||
+                records.GetEffective(snapshot.Base).Signature == "CREA" && snapshot.SoundRandomState != native.RandomState)
+                throw new InvalidDataException("Cold Sandbox child differs from the actual parent replay, source time or shared RNG owner.");
+            if (saved.ActionTime.Source.EngineSha256 != CampaignPlayerRuntimeSource.Receipt.EngineSha256)
+                throw new InvalidDataException("Cold Sandbox action time differs from the selected actual executable.");
+        }
     }
 }

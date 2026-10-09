@@ -22,9 +22,9 @@ internal sealed partial class FalloutSkyTransferState
     private FalloutSkyResetCall? _last;
     private Exception? _callbackViolation;
     private FalloutSkyChildBinding _cloudBinding = new(FalloutSkyChildDisposition.ConstructorNull, null, null);
-    private FalloutSkyChildBinding _moonBinding = new(FalloutSkyChildDisposition.ConstructorNull, null, null);
+    private FalloutSkyChildBinding _precipitationBinding = new(FalloutSkyChildDisposition.ConstructorNull, null, null);
     private IFalloutSkyResetChild? _clouds;
-    private IFalloutSkyResetChild? _moon;
+    private IFalloutSkyResetChild? _precipitation;
     private readonly Dictionary<FalloutSourceSkyImageSlot, FalloutSourceSkyImageModifier> _instances = [];
     internal Guid Identity { get; } = Guid.NewGuid();
     internal FalloutSkyTransferDeclaration Source { get; }
@@ -43,7 +43,7 @@ internal sealed partial class FalloutSkyTransferState
     internal string? SaveBlocker => _retirementFailure ?? (_retired ? "source-Sky-retired" :
         _last is { Returned: false } ? "source-Sky-reset-entered-prefix/" + (_last.Error ?? _last.EnteredChild.ToString()) :
         _cloudBinding.Disposition == FalloutSkyChildDisposition.Published && _clouds is null ? "source-Sky-cold-Clouds-republication-pending" :
-        _moonBinding.Disposition == FalloutSkyChildDisposition.Published && _moon is null ? "source-Sky-cold-Moon-republication-pending" : null);
+        _precipitationBinding.Disposition == FalloutSkyChildDisposition.Published && _precipitation is null ? "source-Sky-cold-Precipitation-republication-pending" : null);
     internal object State => new
     {
         source = Source,
@@ -53,6 +53,7 @@ internal sealed partial class FalloutSkyTransferState
         flags = Flags,
         mode = Mode,
         hourBits = HourBits,
+        moonHourStore = _moonHourStore,
         blendBits = BlendBits,
         transitionBits = TransitionBits,
         climate = Climate,
@@ -61,8 +62,9 @@ internal sealed partial class FalloutSkyTransferState
         overrideWeather = OverrideWeather,
         targetWeather = TargetWeather,
         times = TimeCaches,
+        standaloneBaseTimes = CaptureStandaloneBaseTimes(),
         clouds = _cloudBinding,
-        moon = _moonBinding,
+        precipitation = _precipitationBinding,
         images = OrderedInstances(),
         lastCall = _last,
         cold = _handoff,
@@ -78,6 +80,7 @@ internal sealed partial class FalloutSkyTransferState
         if (string.IsNullOrWhiteSpace(stack) || !float.IsFinite(daytimeExtension) || daytimeExtension < 0)
             throw new InvalidDataException("Source Sky omitted its immutable selection or actual GMST producer.");
         Source = source; _records = records; _images = images; _stack = stack; _daytimeExtension = daytimeExtension;
+        RequireStandaloneExtensionSource();
         HourBits = source.ConstructorClockBits; _changed = 1;
     }
     internal void BindProcess(Guid process)
@@ -137,7 +140,9 @@ internal sealed partial class FalloutSkyTransferState
     {
         RequireWriter(); _ = FalloutClimateLighting.Read(_records.GetEffective(climate));
         if (Climate == climate) return;
-        Climate = climate; Flags |= 0x3f00; Next();
+        Climate = climate;
+        if (!Source.IsStandalone) Flags |= 0x3f00;
+        Next();
         Reset(NewContext(FalloutSkyResetOrigin.ClimateSelection, null, null), RequireLiving, publishFields);
         Flags |= 0x40; Next();
     }
@@ -145,18 +150,12 @@ internal sealed partial class FalloutSkyTransferState
     {
         ArgumentNullException.ThrowIfNull(require); ArgumentNullException.ThrowIfNull(publishFields);
         var completed = new List<FalloutSkyResetStep>();
+        var combinedFlags = SelectedResetFlags(context);
         _last = new(context, Next(), [], null, false, null, null);
         try
         {
-            Step(FalloutSkyResetStep.DirtyStore, () => Flags |= 1);
-            Step(FalloutSkyResetStep.OverrideNull, () => { OverrideWeather = null; publishFields(FalloutSkyResetStep.OverrideNull); });
-            Step(FalloutSkyResetStep.PreviousNull, () => { PreviousWeather = null; publishFields(FalloutSkyResetStep.PreviousNull); });
-            Step(FalloutSkyResetStep.CurrentNull, () => { CurrentWeather = null; publishFields(FalloutSkyResetStep.CurrentNull); });
-            Step(FalloutSkyResetStep.TransitionFlagClear, () => Flags &= ~8u);
-            Step(FalloutSkyResetStep.TransitionZero, () => TransitionBits = 0);
-            Step(FalloutSkyResetStep.Clouds, () => ResetChild(_cloudBinding, _clouds, "Clouds", context));
-            Step(FalloutSkyResetStep.Moon, () => ResetChild(_moonBinding, _moon, "Moon", context));
-            Step(FalloutSkyResetStep.ImageInstances, UpdateResetImages);
+            foreach (var step in ResetSteps(Source))
+                Step(step, () => ApplySelectedResetStep(step, combinedFlags, context, publishFields));
             require(); _last = _last with { Changed = Next(), EnteredChild = null, Returned = true };
         }
         catch (Exception error)
@@ -186,7 +185,8 @@ internal sealed partial class FalloutSkyTransferState
         if (_last is not { Returned: true, FailureType: null, Error: null } call || receipt.Sky != Identity ||
             receipt.Process != _process || receipt.Main != invocation.Main.Identity || receipt.Request != request.Identity ||
             call.Context.Call != receipt.Call || call.Context.Main != receipt.Main || call.Context.Request != receipt.Request ||
-            receipt.Returned != call.Changed || receipt.SourceContract != Source.Contract || call.Completed.Count != 9)
+            receipt.Returned != call.Changed || receipt.SourceContract != Source.Contract ||
+            call.Context.Origin != FalloutSkyResetOrigin.PlayerTransfer || !call.Completed.SequenceEqual(ResetSteps(Source)))
             throw new InvalidDataException("Sky transfer did not return all actual original children for this exact pending request.");
     }
 }

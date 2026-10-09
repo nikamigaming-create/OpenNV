@@ -7,13 +7,24 @@ internal sealed record FalloutSharedScriptRuntimeSnapshot(string Schema, Fallout
     FalloutMainScriptFrameSnapshot MainField, FalloutMainScriptCallerSnapshot MainCaller,
     FalloutMainUtilitySnapshot Utilities, FalloutMainPlayerCellSnapshot PlayerCell, FalloutMainUtilityCommandSnapshot UtilityCommands)
 {
-    internal const string CurrentSchema = "opennv-shared-script-runtime/v4";
+    internal const string CurrentSchema = "opennv-shared-script-runtime/v5";
     internal void Validate(FalloutActorProcessRuntimeSnapshot runtime)
     {
         if (Schema != CurrentSchema || Contexts is null || MainField is null || MainCaller is null || Utilities is null || PlayerCell is null || UtilityCommands is null || runtime is null)
             throw new InvalidDataException("Current script runtime omitted an actual shared context/Main field/caller owner.");
         FalloutScriptEngineContexts.Validate(Contexts); FalloutActorProcessRuntimeState.ValidateMainScriptCaller(MainCaller);
         FalloutActorProcessRuntimeState.RequireMainScriptSamples(MainCaller, MainField);
+        if (MainCaller.Source.HasNewVegasChildren)
+        {
+            var ui = MainCaller.Interface ?? throw new InvalidDataException("Current Main omitted its actual interface owner.");
+            FalloutMainInterfaceState.RequirePlayable(ui);
+            var tail = MainCaller.CachedTail ?? throw new InvalidDataException("Current Main omitted its actual cached tail.");
+            FalloutMainCachedTailState.Validate(tail);
+            if (tail.Source.Main != MainCaller.Source || tail.Stack != MainCaller.Stack ||
+                tail.CapturedProcess != MainCaller.CapturedProcess ||
+                tail.LastAttempt is not { Phase: FalloutMainCachedTailPhase.LocalReturned, Failure: null })
+                throw new NotSupportedException("Current Main tail has no matching actual returned local/source/process boundary.");
+        }
         FalloutActorProcessRuntimeState.ValidateMainUtilities(Utilities);
         FalloutActorProcessRuntimeState.RequireMainUtilityCaller(Utilities, MainCaller);
         FalloutActorProcessRuntimeState.RequireMainPlayerCellCaller(PlayerCell, MainCaller);

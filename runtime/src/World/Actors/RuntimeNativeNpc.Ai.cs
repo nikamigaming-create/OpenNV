@@ -355,6 +355,7 @@ internal partial class RuntimeNativeNpc
 
     private double PreparePackageIdle(double delta)
     {
+        EnsureRestoredSandboxNativeIdle();
         if (_sandboxNativeAction is not null && !_sandboxNativeRetired) return PrepareSandboxMarkerIdle(delta);
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
             _aiError is not null || _sitting is 2 or 4 || _travelActive || _escortPackage is not null && _escortProgress?.Complete != true ||

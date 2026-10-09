@@ -13,10 +13,7 @@ internal sealed partial class FalloutReferenceWorld
     private FalloutProcessReevaluationState? _processReevaluation;
     private FalloutCellExtraProcessState? _cellExtraProcess;
     private FalloutProcessQueueSnapshots? _processQueueRestore;
-    private readonly Dictionary<FalloutFormKey, (string Graph, long Revision,
-        IReadOnlyDictionary<FalloutFormKey, long> Membership)> _currentCellReferenceLists = new(FalloutFormKeyComparer.Instance);
     private readonly Dictionary<FalloutFormKey, string> _unownedCellReferenceLists = new(FalloutFormKeyComparer.Instance);
-    private long _currentCellReferenceRevision, _currentCellReferenceMembership;
 
     internal bool SourceProcessQueuesConfigured => _queuedReferences is not null && _queuedReferenceWork is not null && _actorLoaderFields is not null &&
         _processReevaluation is not null && _cellExtraProcess is not null && _sourceQueuePriority is not null;
@@ -35,13 +32,14 @@ internal sealed partial class FalloutReferenceWorld
             reevaluation = _processReevaluation?.State,
             cells = _cellExtraProcess?.State,
             mainFrame = SourceMainFrameState,
+            linkedReferences = SourceCellLinkState,
             unownedCurrentLists = _unownedCellReferenceLists.ToArray()
         };
     internal string? SourceProcessQueueSaveBlocker => !SourceProcessQueuesConfigured ? "actual-source-process-queue-owner-absent" :
         QueuedReferences.SaveBlocker ?? ActorLoaderFields.SaveBlocker ?? ProcessReevaluation.SaveBlocker ?? CellExtraProcess.SaveBlocker ??
-        _sourceQueuePriority?.SaveBlocker ?? _unownedCellReferenceLists.Values.FirstOrDefault();
+        _sourceQueuePriority?.SaveBlocker ?? SourceCellLinkSaveBlocker ?? _unownedCellReferenceLists.Values.FirstOrDefault();
     internal string? SourceProcessQueueRuntimeBoundary => !SourceProcessQueuesConfigured ? "actual-source-process-queue-owner-absent" :
-        QueuedReferences.TaskPriorities.RuntimeBoundary ?? ProcessReevaluation.RuntimeBoundary;
+        QueuedReferences.TaskPriorities.RuntimeBoundary ?? ProcessReevaluation.RuntimeBoundary ?? SourceCellLinkSaveBlocker;
 
     internal void ConfigureSourceProcessQueues(FalloutActorProcessQueueDeclaration declaration, string stack,
         FalloutProcessQueueSnapshots? restore = null)
@@ -67,6 +65,11 @@ internal sealed partial class FalloutReferenceWorld
         try
         {
             ConstructSourceFrameDispatch(stack, restore?.FrameDispatch);
+            if (restore is null)
+            {
+                if (FalloutSourceCellReferenceLinksDeclaration.Supports(declaration.ExecutableSha256)) ConfigureSourceCellLinks(stack);
+            }
+            else RestoreSourceCurrentCellLists(restore.CurrentLists);
             loader = new(declaration, stack, ReadQueuedReferenceSource, restore?.Loader);
             fields = new(declaration, stack, ReadCombatActorIdentity, restore?.ActorFields);
             pending = new(declaration, stack, ReadCombatActorIdentity, ReadActualProcessReevaluation,
@@ -83,7 +86,6 @@ internal sealed partial class FalloutReferenceWorld
             {
                 fields.RequireActors(actors); pending.RequireActors(ActorProcesses.Capture().Actors);
             }
-            if (restore is not null) RestoreSourceCurrentCellLists(restore.CurrentLists);
         }
         catch (Exception original)
         {
@@ -91,6 +93,7 @@ internal sealed partial class FalloutReferenceWorld
             foreach (var owner in new IDisposable?[] { cells, pending, fields, loader })
                 try { owner?.Dispose(); } catch (Exception error) { failures.Add(error); }
             try { RetireSourceFrameDispatch(); } catch (Exception error) { failures.Add(error); }
+            try { RetireSourceCellLinks(); } catch (Exception error) { failures.Add(error); }
             if (failures.Count > 1)
             {
                 _queuedReferences = loader; _actorLoaderFields = fields; _processReevaluation = pending; _cellExtraProcess = cells;
@@ -166,14 +169,13 @@ internal sealed partial class FalloutReferenceWorld
         return new(ReadCombatActorIdentity(actor), epoch, process.Level,
             process.Level is null ? null : ReadProcessElection(actor, epoch), ProcessRuntime.Life(actor),
             process.Level is null ? new(null, "actual-null-process-has-no-common-request-byte") : ProcessCommon.ReadSourceRequestFlags(actor, epoch),
-            actor == _enginePlayer ? new(null, "actual-current-Player-reference-flags-producer-unbound") :
-                new(ReadActualCurrentReferenceFlags(actor), "actual-current-reference-source-flags"), ProcessRuntime.PlayerTravelCounter,
+            new(ReadActualCurrentReferenceFlags(actor), "actual-current-reference-source-flags"), ProcessRuntime.PlayerTravelCounter,
             "actual-selected-manager-process-reevaluation");
     }
     private uint ReadActualCurrentReferenceFlags(FalloutFormKey actor)
     {
         if (actor == _enginePlayer)
-            throw new NotSupportedException("Original current Player reference flags are distinct from its canonical source identity.");
+            return ReadSourceCanonicalPlayerReferenceFlags();
         var instance = Get(actor); var flags = records.GetEffective(actor).Flags;
         flags = instance.Enabled ? flags & ~FalloutActorProcessQueueDeclaration.DisabledReferenceFlag :
             flags | FalloutActorProcessQueueDeclaration.DisabledReferenceFlag;
@@ -227,7 +229,7 @@ internal sealed partial class FalloutReferenceWorld
         _cellExtraProcess?.Dispose(); _cellExtraProcess = null;
         _processReevaluation?.Dispose(); _processReevaluation = null;
         _actorLoaderFields?.Dispose(); _actorLoaderFields = null;
-        _currentCellReferenceLists.Clear(); _unownedCellReferenceLists.Clear();
+        _unownedCellReferenceLists.Clear();
         _processQueueDeclaration = null; _processQueueStack = null; _processQueueRestore = null;
     }
 }

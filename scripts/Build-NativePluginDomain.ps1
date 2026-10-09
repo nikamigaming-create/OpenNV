@@ -42,7 +42,8 @@ function Invoke-Compile([string[]]$CompilerArguments) {
 Push-Location $output
 try {
     Invoke-Compile @((Join-Path $repository 'runtime/native/plugins/opennv_plugin_domain.cpp'),
-        "/Fo$output/opennv_plugin_domain.obj", '/link', '/MACHINE:X86', "/OUT:$output/opennv_plugin_domain.exe")
+        "/Fo$output/opennv_plugin_domain.obj", '/link', '/MACHINE:X86', '/BASE:0x68000000', '/DYNAMICBASE:NO',
+        "/OUT:$output/opennv_plugin_domain.exe")
     Invoke-Compile @('/DOPENNV_SYSTEM_CNG_SERVICE', (Join-Path $repository 'runtime/native/plugins/opennv_plugin_domain.cpp'),
         "/Fo$output/opennv_cng_service.obj", '/link', '/MACHINE:X86', "/OUT:$output/opennv_cng_service.exe")
     Invoke-Compile @('/LD', (Join-Path $repository 'runtime/native/plugins/opennv_plugin_cng_import_provider.cpp'),
@@ -72,6 +73,14 @@ try {
         "/OUT:$fixtures/opennv_crt_fixture.dll", "/IMPLIB:$output/crt-fixture.lib")
     & $compiler @crtArguments
     if ($LASTEXITCODE -ne 0) { throw 'Authored public-ABI CRT fixture compilation failed.' }
+    $cppArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/LD',
+        (Join-Path $fixtureSource 'NativeCppStreamsFixture.cpp'),
+        "/Fo$output/cpp-streams-fixture.obj", '/link', '/MACHINE:X86',
+        "/DEF:$fixtureSource/NativeCrtFixture.def",
+        "/OUT:$fixtures/opennv_cpp_streams_fixture.dll",
+        "/IMPLIB:$output/cpp-streams-fixture.lib")
+    & $compiler @cppArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Actual authored C++ stream fixture compilation failed.' }
     Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeCngSharedFixture.cpp'), "/Fo$output/cng-shared-fixture.obj", '/link',
         '/MACHINE:X86', '/ENTRY:DllMain@12', "/DEF:$fixtureSource/NativeCrtFixture.def", "/OUT:$fixtures/opennv_cng_shared_fixture.dll",
         "/IMPLIB:$output/cng-shared-fixture.lib", 'bcrypt.lib', 'kernel32.lib')
@@ -83,6 +92,7 @@ try {
         'fixtures/opennv_domain_fixture_dependency.dll', 'fixtures/opennv_domain_fixture_reject.dll', 'missing-import/opennv_domain_fixture.dll')
     $files += @(0..6 | ForEach-Object { "protocol-fixtures/opennv_fault_envelope_$_.exe" })
     $files += 'fixtures/opennv_crt_fixture.dll'
+    $files += 'fixtures/opennv_cpp_streams_fixture.dll'
     $files += 'fixtures/opennv_cng_shared_fixture.dll'
     $files += 'fixtures/opennv_mutex_fixture.dll'
     $files += 'providers/cng/bcrypt.dll'

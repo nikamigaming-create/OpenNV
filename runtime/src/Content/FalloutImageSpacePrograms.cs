@@ -15,8 +15,7 @@ internal sealed record FalloutImageSpacePrograms(FalloutImageSpaceKernels Kernel
         var settings = FalloutInstallationSettings.Read(source);
         var path = $"shaders/shaderpackage{settings.Renderer.ShaderPackage:000}.sdp";
         if (!source.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException(path);
-        var executable = Path.Combine(Path.GetDirectoryName(source.ContentRoot)!,
-            source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe");
+        var executable = source.FalloutExecutablePath;
         FalloutDoubleVisionPhase? phase = null;
         string? phaseError = null;
         try { phase = FalloutExecutableStringTable.ReadDoubleVisionPhase(executable); }

@@ -18,18 +18,20 @@ internal sealed class NativeNvseHostSource : IDisposable
     internal string NvseSha256 { get; }
     internal string StackIdentity { get; }
     internal string EditionDeclarationOwner { get; }
+    internal NativePluginSourceAddressSpace SourceAddressSpace { get; }
     internal uint NvseVersion { get; }
     internal uint RuntimeVersion { get; }
     internal uint NoGore { get; }
     internal string RuntimeDirectory => Path.GetDirectoryName(RuntimePath)! + Path.DirectorySeparatorChar;
     private NativeNvseHostSource(string runtime, string runtimeHash, FileStream runtimeLease,
         string nvse, string nvseHash, FileStream nvseLease, string stack, bool noGore, string editionOwner,
-        uint nvseVersion, uint runtimeVersion)
+        uint nvseVersion, uint runtimeVersion, NativePluginSourceAddressSpace sourceAddressSpace)
     {
         RuntimePath = runtime; RuntimeSha256 = runtimeHash; _runtimeLease = runtimeLease;
         NvsePath = nvse; NvseSha256 = nvseHash; _nvseLease = nvseLease;
         StackIdentity = stack; NoGore = noGore ? 1U : 0U; EditionDeclarationOwner = editionOwner;
         NvseVersion = nvseVersion; RuntimeVersion = runtimeVersion;
+        SourceAddressSpace = sourceAddressSpace;
     }
     internal static NativeNvseHostSource Open(string runtimePath, string runtimeSha256,
         string nvsePath, string nvseSha256, string stackIdentity, bool? sourceNoGore, string editionDeclarationOwner)
@@ -59,7 +61,8 @@ internal sealed class NativeNvseHostSource : IDisposable
             var packedRuntime = Pack(gameVersion.FileMinorPart, gameVersion.FileBuildPart, gameVersion.FilePrivatePart, sourceNoGore.Value ? 1 : 0);
             var result = new NativeNvseHostSource(runtime, runtimeSha256.ToUpperInvariant(), game, nvse,
                 nvseSha256.ToUpperInvariant(), dependency, stackIdentity.ToUpperInvariant(), sourceNoGore.Value,
-                editionDeclarationOwner, packedNvse, packedRuntime);
+                editionDeclarationOwner, packedNvse, packedRuntime,
+                NativePluginSourceAddressSpace.Read(game, runtime, runtimeSha256.ToUpperInvariant()));
             game = null; dependency = null; return result;
         }
         finally { game?.Dispose(); dependency?.Dispose(); }

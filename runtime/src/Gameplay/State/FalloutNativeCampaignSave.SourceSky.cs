@@ -19,6 +19,10 @@ internal static partial class FalloutNativeCampaignSave
         if (snapshot.SourceTransfer is not { } saved || snapshot.TransferUnowned is not null)
             throw new InvalidDataException("Current save omitted actual source Sky fields/children/instances.");
         FalloutSkyTransferState.Validate(saved, declaration, source.StackId, records);
+        var moons = snapshot.Moons ?? throw new InvalidDataException("Current save omitted its actual Moon field owner.");
+        if (moons.CapturedSky != saved.CapturedSky || moons.CapturedProcess != saved.CapturedProcess)
+            throw new InvalidDataException("Saved Moons belong to another actual Sky/process epoch.");
+        FalloutSkyMoonState.Validate(moons, FalloutMoonSource.Read(declaration), source.StackId, records);
         if (state.ActorProcessRuntime?.CapturedProcess != saved.CapturedProcess)
             throw new InvalidDataException("Saved Sky belongs to another actual Main/Player process epoch.");
     }

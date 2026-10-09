@@ -84,6 +84,10 @@ public partial class RuntimeCoordinator
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); Check();
             }
             RequireMainPlayerPublishedTarget(world, _nativeActiveCell!.Cell.FormKey);
+            if (world.SourceLinkedPlayerConstructed)
+                world.CommitSourcePlayerLinkedCell(invocation, _nativeActiveCell.Cell.FormKey, () =>
+                    (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Player ParentCELL has no actual source driver."))
+                        .EnterWorldCell(_nativeActiveCell.Cell.FormKey));
             Check(); _nativeMainPlayerTransfer = _nativeMainPlayerTransfer! with { Phase = "returned" };
         }
         catch (Exception original) { failure = original; }
@@ -145,8 +149,13 @@ public partial class RuntimeCoordinator
         var definition = FalloutCellSceneReader.Read(_nativePluginStack!, target.Source.Cell).Cell;
         var scene = previous with { Cell = definition };
         world.CellProcesses.RequireCurrentAttachmentSelection(owner.Identity, scene);
-        (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Player target has no source gameplay driver.")).EnterWorldCell(target.Source.Cell);
-        SetNativeActiveCell(root, scene);
+        void PublishActualCell()
+        {
+            (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Player target has no source gameplay driver.")).EnterWorldCell(target.Source.Cell);
+            SetNativeActiveCell(root, scene);
+        }
+        if (world.SourceLinkedPlayerConstructed) world.CommitSourcePlayerLinkedCell(invocation, target.Source.Cell, PublishActualCell);
+        else PublishActualCell();
         RequireMainPlayerPublishedTarget(world, target.Source.Cell);
     }
 }

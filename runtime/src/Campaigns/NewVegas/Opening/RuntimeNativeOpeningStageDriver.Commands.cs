@@ -211,7 +211,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             CaptureCurrentRestInterfaceSounds(), CaptureSourceInterfaceFade(), CaptureCurrentHardcoreNeeds(),
             CaptureSourceActorUpdates(), CaptureSourceCellProcesses(), CaptureCurrentProcessRuntime(), CaptureCurrentProcessCommon(),
             _playerSkills.CaptureValues(), _playerAbilities.Capture(), CaptureCurrentPlayerStatistics(), CaptureCurrentProcessQueues(),
-            CaptureSourceIndexedInterfaceSounds(), _scripts.References.CaptureCampaignSharedScripts());
+            CaptureSourceIndexedInterfaceSounds(), _scripts.References.CaptureCampaignSharedScripts(),
+            _imageSpaceState.CaptureDoubleVisionClock());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

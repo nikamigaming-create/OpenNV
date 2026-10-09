@@ -8,6 +8,12 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutAdvancementRuntimeSource? _advancementRuntimeSource;
     internal object? PlayerAdvancementRuntimeState => _advancementRuntimeSource?.State;
 
+    // Physical, rest and advancement consumers share this living campaign
+    // source. Attaching one consumer does not construct or admit another.
+    private FalloutAdvancementRuntimeSource RequireCurrentPlayerRuntimeSource() =>
+        (_scripts.References ?? throw new NotSupportedException("Player has no campaign world."))
+            .CampaignPlayerRuntimeSource;
+
     // Root joins this after the actual player pools/ranks/vitals exist. The
     // observer must publish living activity facts; no facts have a default.
     internal void ConfigureSourcePlayerAdvancement(
@@ -15,7 +21,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         Func<int, int> admitSkillBudget, Action<FalloutFormKey, int> acquirePerkRank)
     {
         if (_advancementRuntimeSource is not null) throw new InvalidOperationException("Selected advancement source is already configured.");
-        var source = (_scripts.References ?? throw new NotSupportedException("Player advancement has no campaign world.")).CampaignPlayerRuntimeSource;
+        var source = RequireCurrentPlayerRuntimeSource();
         var activity = source.Activity(observeActivity);
         ConfigureNativePlayerAdvancement(source.Player(_playerActorValues.Source), activity.Read,
             admitSkillBudget, acquirePerkRank);

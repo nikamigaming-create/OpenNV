@@ -197,6 +197,7 @@ public partial class RuntimeCoordinator
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
             _nativeScriptStorage?.Controls?.Flush();
             RetireNativeExperienceHud();
+            RetireCurrentImagePhase();
             RetireNativeSourceCellAttachments();
             GetTree().Paused = false;
             var error = GetTree().ReloadCurrentScene();
@@ -256,6 +257,7 @@ public partial class RuntimeCoordinator
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
             RetireNativeExperienceHud();
+            RetireCurrentImagePhase();
             RetireNativeSourceCellAttachments();
             StopNativeOpenXr();
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");

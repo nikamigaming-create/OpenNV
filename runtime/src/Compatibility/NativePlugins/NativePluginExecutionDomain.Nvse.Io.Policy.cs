@@ -110,7 +110,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
         _moduleLease = new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         try
         {
-            InitializeCrtProviders(); InitializeCryptoProvider();
+            InitializeCrtProviders(); InitializeCppProvider(); InitializeCryptoProvider();
             if (File.Exists(_deletionFile))
             {
                 NoReparse(_deletionFile);
@@ -126,6 +126,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
         {
             var failures = new List<Exception> { error };
             try { DisposeCryptoSource(); } catch (Exception cleanup) { failures.Add(cleanup); }
+            try { DisposeCppSources(); } catch (Exception cleanup) { failures.Add(cleanup); }
             try { DisposeCrtProviderLeases(); } catch (Exception cleanup) { failures.Add(cleanup); }
             try { _moduleLease.Dispose(); } catch (Exception cleanup) { failures.Add(cleanup); }
             if (failures.Count != 1) throw new AggregateException("Native I/O construction and retained source cleanup failed.", failures);
@@ -326,6 +327,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
         RetireFailedChildConstructions();
         var failures = new List<Exception>();
         try { DisposeCryptoSource(); } catch (Exception error) { failures.Add(error); }
+        try { DisposeCppSources(); } catch (Exception error) { failures.Add(error); }
         try { DisposeCrtProviderLeases(); } catch (Exception error) { failures.Add(error); }
         foreach (var lease in _reads.Values) try { lease.Dispose(); } catch (Exception error) { failures.Add(error); }
         _reads.Clear(); _winners.Clear();

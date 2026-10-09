@@ -85,7 +85,7 @@ internal sealed partial class NativePluginExecutionDomain
         if (retired == 1)
         {
             if (!_crtSupportClosing.TryAdd(stream, current)) throw new InvalidDataException("Actual CRT close repeats a pending alias retirement.");
-            _crtStreams.Remove(routeId);
+            _crtStreams.Remove(routeId); RetireCrtDescriptorViews(routeId, stream);
         }
         owner.RecordCrt(receipt); return Payload(writer => writer.Write(1U));
     }
@@ -111,17 +111,17 @@ internal sealed partial class NativePluginExecutionDomain
     private void RequirePrivateCrtRetired()
     {
         if (_crtStreams.Count != 0 || _crtRoutes.Count != 0) throw new InvalidDataException("Original module retains genuine CRT stream/path lifetimes.");
-        RequirePrivateCrtSupportRetired(); _privateIo?.RequireCrtRetired();
+        RequireCrtDescriptorsRetired(); RequireCppRuntimeRetired(); RequirePrivateCrtSupportRetired(); _privateIo?.RequireCrtRetired();
     }
     internal void RequirePrivateCrtSaveOwned()
     {
         VerifyOwner(); RequireNativeEnvironmentSaveOwned(); RequireNativeFileMetadataSaveOwned();
-        if (_crtStreams.Count != 0 || _crtRoutes.Count != 0 || NvseCrtReceipts.Count != 0)
+        if (_crtStreams.Count != 0 || _crtRoutes.Count != 0 || NvseCrtReceipts.Count != 0 || _crtDescriptorReceipts.Count != 0 || _cppRuntimePublished)
             throw new NotSupportedException("Original CRT current/cold stream/caller/error-state construction has no unified source save owner.");
     }
     private void ClearPrivateCrt()
     {
-        ClearPrivateCrtSupportAfterChildExit();
+        ClearCrtDescriptorsAfterChildExit(); ClearCppRuntimeAfterChildExit(); ClearPrivateCrtSupportAfterChildExit();
         _crtStreams.Clear(); _crtRoutes.Clear(); _crtProviders.Clear();
     }
 }

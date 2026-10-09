@@ -17,7 +17,7 @@ internal static class NativePluginCrtImports
         "fopen", "_wfopen", "fopen_s", "_wfopen_s", "_fsopen", "_wfsopen", "fclose",
         "fread", "fwrite", "fseek", "_fseeki64", "ftell", "_ftelli64", "rewind", "fflush",
         "fputc", "fputs", "__stdio_common_vfprintf", "feof", "ferror", "clearerr", "_mkdir", "_wmkdir",
-    }.Union(NativePluginCrtExtendedImports.Stream).Union(NativePluginCrtExtendedImports.Environment).ToHashSet(StringComparer.Ordinal);
+    }.Union(NativePluginCrtExtendedImports.Stream).Union(NativePluginCrtExtendedImports.Environment).Union(NativePluginCrtStandardImports.Names).ToHashSet(StringComparer.Ordinal);
     internal static readonly IReadOnlySet<string> Unowned = new HashSet<string>(StringComparer.Ordinal)
     {
         "freopen", "_wfreopen", "freopen_s", "_wfreopen_s", "_fdopen", "_wfdopen", "_fcloseall", "_flushall",
@@ -36,7 +36,7 @@ internal static class NativePluginCrtImports
         "sscanf", "sscanf_s", "swprintf", "swprintf_s", "vswprintf", "vswprintf_s", "swscanf", "swscanf_s", "__local_stdio_printf_options", "__local_stdio_scanf_options",
     };
     internal static bool IsFileImport(string library, string name)
-        => NativePluginCrtExtendedImports.Owns(library, name) || library.Equals("api-ms-win-crt-stdio-l1-1-0.dll", StringComparison.OrdinalIgnoreCase) && !PureFormatting.Contains(name) ||
+        => NativePluginCppRuntimeImports.IsFileImport(library, name) || NativePluginCrtExtendedImports.Owns(library, name) || library.Equals("api-ms-win-crt-stdio-l1-1-0.dll", StringComparison.OrdinalIgnoreCase) && !PureFormatting.Contains(name) ||
             library.Equals("api-ms-win-crt-filesystem-l1-1-0.dll", StringComparison.OrdinalIgnoreCase) ||
             (StreamLibraries.Contains(library) || DirectoryLibraries.Contains(library)) && (Owned.Contains(name) || Unowned.Contains(name));
     internal static bool IsFileDeclaration(string declaration)
@@ -46,6 +46,12 @@ internal static class NativePluginCrtImports
     }
     internal static void Require(NativePluginPrivateIo io, string library, string name)
     {
+        if (NativePluginCppRuntimeImports.IsFileImport(library, name))
+        {
+            if (io.CppProvider is not { } cpp || !cpp.Exports.Any(row => row.Name == name))
+                throw new NotSupportedException("C++ FILE import lacks its exact selected object/export provider.");
+            return;
+        }
         if (!Owned.Contains(name) || !io.CrtProviders.Any(provider => provider.Imports.TryGetValue(library, out var names) && names.Contains(name)))
             throw new NotSupportedException("Original CRT file import has no actual selected provider/callable owner: " + library + "!" + name);
     }
@@ -94,13 +100,14 @@ internal static class NativePluginCrtImports
             }
         }
         if (!ended) throw new InvalidDataException("CRT source import directory has no original terminator.");
-        if (byLibrary.Count == 0) return [];
+        if (byLibrary.Count == 0) return NativePluginCrtStandardImports.AddCppDependency(selectedModule, expectedSha256, []);
         var providerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SystemX86), "ucrtbase.dll");
         using var provider = new FileStream(providerPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var providerPe = new PEReader(provider, PEStreamOptions.LeaveOpen);
         if (providerPe.PEHeaders.CoffHeader.Machine != Machine.I386) throw new InvalidDataException("CRT selected export provider is not x86.");
         provider.Position = 0; var sha = Convert.ToHexString(SHA256.HashData(provider));
-        return [new(Path.GetFullPath(providerPath), sha, "actual-selected-UCRT-import-provider:" + sha, byLibrary)];
+        return NativePluginCrtStandardImports.AddCppDependency(selectedModule, expectedSha256,
+            [new(Path.GetFullPath(providerPath), sha, "actual-selected-UCRT-import-provider:" + sha, byLibrary)]);
     }
     private static string Text(PEReader pe, uint rva)
     {

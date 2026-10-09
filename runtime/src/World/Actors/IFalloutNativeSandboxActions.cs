@@ -1,5 +1,6 @@
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -11,7 +12,8 @@ internal interface IFalloutNativeSandboxActions
 {
     FalloutSandboxTimerSample Timer();
     FalloutSandboxActionContext Context();
-    float ElapsedActionSeconds();
+    float GameHour();
+    FalloutSandboxActionTime SelectionTime(float duration);
     (uint Minimum, uint Maximum) RescanInterval();
     uint RepeatMilliseconds();
     FalloutSandboxDiscovery Discovery(FalloutSandboxPackage source, FalloutSandboxArea area);
@@ -21,4 +23,6 @@ internal interface IFalloutNativeSandboxActions
     void Advance(double seconds);
     bool ObserveReturned(FalloutSandboxCandidate chosen);
     void Retire(FalloutSandboxCandidate chosen);
+    FalloutSandboxNativeIdleContinuation Capture(FalloutSandboxCandidate chosen);
+    void Restore(FalloutSandboxNativeIdleContinuation saved);
 }

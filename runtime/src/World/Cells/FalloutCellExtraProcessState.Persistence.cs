@@ -54,7 +54,7 @@ internal sealed partial class FalloutCellExtraProcessState
             {
                 ValidateList(references, cell.Source);
                 if (item.NextReference > references.References.Count || item.InFlight is { } current &&
-                    (item.NextReference >= references.References.Count || references.References[item.NextReference].Source.Reference != current ||
+                    (item.NextReference >= references.References.Count || references.References[item.NextReference].Reference != current ||
                         references.References[item.NextReference].Actor is null ||
                         (references.References[item.NextReference].CurrentReferenceFlags & FalloutActorProcessQueueDeclaration.DisabledReferenceFlag) != 0 ||
                         references.References[item.NextReference].Level != FalloutDetectionProcessLevel.Low ||

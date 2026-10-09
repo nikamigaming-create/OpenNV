@@ -43,7 +43,7 @@ CrtRoute crt_route(CrtProvider& provider, std::uint32_t api, const std::wstring&
 }
 template<class Open> void* crt_open_actual(const std::wstring& path, const std::wstring& mode, Open open) {
     auto& provider = crt_active_provider(); const auto writable = crt_writable_mode(mode);
-    const auto route = crt_route(provider, 1, mode, path, writable); auto* stream = open(provider, route.path);
+    const auto route = crt_route(provider, 1, mode, path, writable); auto* stream = open(provider, route.path); const auto last = GetLastError();
     const auto status = crt_status(provider, stream);
     if (stream) {
         // Retain the genuine returned pointer before requesting a C# receipt.
@@ -61,7 +61,7 @@ template<class Open> void* crt_open_actual(const std::wstring& path, const std::
     }
     crt_emit(CrtEvent{provider.id, route.id, address(stream), CrtOperation::open, 0, 0,
         static_cast<std::int64_t>(address(stream)), false, status}, crt_opened_event);
-    crt_restore_error(provider, status); return stream;
+    crt_restore_error(provider, status); SetLastError(last); return stream;
 }
 void* __cdecl crt_fopen_a(const char* path, const char* mode) {
     return nvse_adapter([&] {

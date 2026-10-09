@@ -34,6 +34,7 @@ internal partial class RuntimeNativeNpc
         }
         else
         {
+            _sandboxNativeCold = saved.NativeIdle?.Copy();
             if (_packageEvents!.Active?.Form != source.Form || _packageEvents.Done)
                 throw new InvalidDataException("Cold Sandbox lost its actual continuous lifecycle.");
             var area = source.LocationType == 2 ? saved.Area : source.Resolve(_aiStack!, _aiWorld!, Appearance.Reference!.Value);
@@ -64,6 +65,7 @@ internal partial class RuntimeNativeNpc
         if (Combat is null || Combat.OwnsPose || !Combat.PackageMovementReady || _conversationTarget is not null || _aiError is not null) return;
         try
         {
+            EnsureRestoredSandboxNativeIdle();
             var source = _sandboxSource!;
             if (_sandbox is null)
             {
@@ -113,8 +115,8 @@ internal partial class RuntimeNativeNpc
 
     private FalloutActorPackageCollectionContinuation? CaptureSandboxCollection()
     {
-        if (_sandboxNativeAction is not null && !_sandboxNativeRetired)
-            throw new NotSupportedException("Sandbox action IDLM/furniture clock cannot be captured as the parent PACK collection.");
+        var nativeChild = _sandboxNativeAction is not null && !_sandboxNativeRetired;
+        if (nativeChild) _ = CaptureSandboxNativeIdle(_sandboxNativeAction!);
         if (_sandboxSource is null)
         {
             if (_sandboxReplayObserved && _idleReplays.Remaining.Count != 0)
@@ -125,7 +127,7 @@ internal partial class RuntimeNativeNpc
             _packageIdleError is not null || AnimationError is not null || _responseIdleActive)
             throw new NotSupportedException("Sandbox collection has an unowned selection, response or failed animation suffix.");
         FalloutActorPackageIdleAnimation? active = null;
-        if (_animation is not null)
+        if (_animation is not null && !nativeChild)
         {
             if (_idleOwner != "package-idle" || _idleForm is null || _idlePlayback is not { Complete: false } ||
                 _idleAnimationResource is null || _idleAnimationSha256 is null || _baseAnimation is null ||
@@ -162,6 +164,7 @@ internal partial class RuntimeNativeNpc
         if (_sandboxSource is null) return true;
         if (!Combat!.RetireSandbox(_sandbox)) return false;
         _sandbox = null; _sandboxSource = null;
+        _sandboxNativeCold = null; _sandboxNativeColdEntered = false;
         _aiReferenceState!.PackageCollection = null;
         return true;
     }

@@ -12,6 +12,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         catch (Exception error) { RetainDriverFailure(error); }
         try { RetireCurrentCampaignRest(); }
         catch (Exception error) { RetainDriverFailure(error); }
+        try { RetireSourceMainNativeInterface(); }
+        catch (Exception error) { RetainDriverFailure(error); }
         try { RetireSourceIndexedInterfaceState(); }
         catch (Exception error) { RetainDriverFailure(error); }
         try { DisposeSourcePlayerAdvancement(); }

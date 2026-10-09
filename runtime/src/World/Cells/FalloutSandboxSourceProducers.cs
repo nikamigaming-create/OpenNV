@@ -24,7 +24,6 @@ internal interface IFalloutSandboxSourceProducers
     FalloutSandboxTimerSample Timer();
     IReadOnlyList<FalloutFormKey> References(FalloutFormKey actor, FalloutSandboxArea area, float radius);
     FalloutSandboxActionContext Context(FalloutFormKey actor);
-    float ActionElapsedSeconds(FalloutFormKey actor);
     bool IgnoredBySandbox(FalloutFormKey reference);
     bool GeneralActorAdmission(FalloutFormKey actor, FalloutFormKey reference);
     bool OwnershipAdmission(FalloutFormKey actor, FalloutFormKey reference);

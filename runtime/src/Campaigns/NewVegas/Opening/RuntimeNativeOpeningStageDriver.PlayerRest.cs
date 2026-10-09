@@ -29,8 +29,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (_playerRest is not null || _playerRestRetired)
             throw new InvalidOperationException("Player sleep/wait cannot be configured twice.");
         ArgumentNullException.ThrowIfNull(host); ArgumentNullException.ThrowIfNull(sourceCloseGate);
-        var runtime = _advancementRuntimeSource ??
-            throw new NotSupportedException("Rest has no living selected executable/dependency owner.");
+        var runtime = RequireCurrentPlayerRuntimeSource();
         var clock = _gameTime ?? throw new NotSupportedException("Rest has no actual shared calendar/global owner.");
         var source = FalloutSleepWaitSource.Read(_pluginStack, runtime.Receipt);
         var caption = new FalloutSleepWaitCaption(_pluginStack, source,

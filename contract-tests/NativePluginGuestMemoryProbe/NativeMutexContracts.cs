@@ -24,6 +24,7 @@ internal static class NativeMutexContracts
             using var host = NativeNvseHostSource.Open(runtime, originals[runtime], nvse, originals[nvse], stack,
                 false, "authored-mutex-caller-selected-owned-standard-edition");
             using var io = new NativePluginPrivateIo(selection);
+            io.BindSourceAddressSpace(host);
             using var domain = new NativePluginExecutionDomain(companion, TimeSpan.FromSeconds(30), privateIo: io);
             var plugin = domain.LoadNvseImage(host, fixture, originals[fixture]);
             Require(domain.QueryNvse(plugin).Returned, "actual public Query");

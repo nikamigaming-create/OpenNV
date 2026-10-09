@@ -117,11 +117,11 @@ int __cdecl crt_fclose(void* pointer) {
         // fclose invalidates its actual FILE even if a pending flush fails.
         // Remove it before a receipt can reenter; never call fclose twice.
         const auto close_entry = crt_export<int (__cdecl*)(void*)>(provider, "fclose");
-        SetLastError(incoming); const auto result = close_entry(pointer); const auto last = GetLastError();
-        crt_owner().streams.erase(address(pointer)); const auto status = crt_status(provider);
+        crt_standard_before_close(pointer); SetLastError(incoming); const auto result = close_entry(pointer); const auto last = GetLastError();
+        crt_owner().streams.erase(address(pointer)); const auto status = crt_status(provider); crt_standard_after_close(pointer, result, last, status);
         const CrtEvent event{stream.provider, stream.route, address(pointer), CrtOperation::close, 0, 0, result, true, status};
         if (result) crt_owner().failed_closes.push_back(event);
-        crt_emit(event); crt_support_closed(pointer, result, last); crt_restore_error(provider, status); SetLastError(last); return result;
+        crt_emit(event); crt_support_closed(pointer, result, last); crt_descriptor_views_closed(pointer); crt_restore_error(provider, status); SetLastError(last); return result;
     });
 }
 void* crt_entry(const std::string& name) {
@@ -138,5 +138,5 @@ void* crt_entry(const std::string& name) {
         {"ferror", reinterpret_cast<void*>(crt_ferror)}, {"clearerr", reinterpret_cast<void*>(crt_clearerr)},
         {"_mkdir", reinterpret_cast<void*>(crt_mkdir_a)}, {"_wmkdir", reinterpret_cast<void*>(crt_mkdir_w)},
     };
-    for (const auto& entry : entries) if (name == entry.name) return entry.function; return crt_extended_entry(name);
+    for (const auto& entry : entries) if (name == entry.name) return entry.function; if (auto* entry = crt_standard_entry(name)) return entry; return crt_extended_entry(name);
 }

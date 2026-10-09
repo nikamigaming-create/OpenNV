@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.World.Cells;
 // CELL attachment, pause, combat flag or physical query never writes them.
 internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-runtime/v1";
+    internal const string Schema = "opennv-actor-process-runtime/v2";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly FalloutFormKey _player;
@@ -33,6 +33,9 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     internal bool HasActor(FalloutFormKey actor) => _actors.ContainsKey(actor);
     internal string? SaveBlocker => _busy ? "actual-source-process-runtime-consumer-in-flight" :
         _standaloneInterface?.SaveBlocker is { } ui ? ui :
+        SourceMainInterfaceSaveBlocker is { } sourceInterface ? sourceInterface :
+        SourceMainCachedTailSaveBlocker is { } tail ? tail :
+        SourceCachedTimerSaveBlocker is { } timer ? timer :
         MainScriptCallerSaveBlocker is { } scripts ? scripts :
         MainPlayerCellSaveBlocker is { } playerCell ? playerCell :
         MainUtilityCommandSaveBlocker is { } commands ? commands :
@@ -57,6 +60,10 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         callingThreadFistp = _sourceFistp.State,
         scriptCaller = MainScriptCallerState,
         standaloneInterface = _standaloneInterface?.State,
+        mainInterface = _sourceMainInterface?.State,
+        mainCachedTail = SourceMainCachedTailState,
+        cachedTimer = SourceCachedTimerState,
+        cachedTimerBoundary = SourceCachedTimerRuntimeBoundary,
         playerCell = MainPlayerCellState,
         utilityCommands = MainUtilityCommandState,
         platformStartup = PlatformStartupState,
@@ -174,7 +181,15 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         RetireMainUtilityCommands(); RequireMainUtilityBoundary(retiring: true);
         if (MainFrameSaveBlocker is not null || _main.Any(item => item.Phase != FalloutMainProcessPhase.Complete) || _travel is { Phase: not FalloutPlayerTravelPhase.Complete })
             throw new NotSupportedException("Source process runtime retains a live or failed Main/Player invocation.");
-        RetireMainPlayerCell(); RetireStandaloneMain(); _sourceFistp.Dispose();
+        var failures = new List<Exception>();
+        void Retire(Action action)
+        {
+            try { action(); } catch (Exception failure) { failures.Add(failure); }
+        }
+        Retire(RetireMainPlayerCell); Retire(RetireStandaloneMain);
+        Retire(RetireSourceMainCachedTail); Retire(RetireSourceMainInterface);
+        Retire(RetireSourceCachedTimer); Retire(_sourceFistp.Dispose);
+        if (failures.Count != 0) throw new AggregateException("Source process child retirement retained independent failures.", failures);
         _disposed = true; _actors.Clear();
     }
 }

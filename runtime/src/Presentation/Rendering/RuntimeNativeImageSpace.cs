@@ -17,7 +17,7 @@ internal partial class RuntimeNativeImageSpace : Node
     internal RetailHdrCompositorEffect Effect => _effect;
 
     internal void Configure(FalloutImageSpace source, FalloutImageSpaceState state, RetailHdrCompositorEffect effect,
-        FalloutGameTime? gameTime = null)
+        FalloutGameTime? gameTime = null, Guid? process = null)
     {
         Name = "NativeImageSpace";
         ProcessMode = ProcessModeEnum.Always;
@@ -30,6 +30,9 @@ internal partial class RuntimeNativeImageSpace : Node
             SetMeta("opennv_image_space_phase_unbound", error);
             GD.PushError($"OPENNV_IMAGE_SPACE_PHASE_UNBOUND {error}");
         }
+        if (effect.DoubleVisionPhase is not null)
+            BindCurrentPhaseClock(gameTime ?? throw new NotSupportedException("Image phase presentation has no actual calendar."),
+                process ?? throw new NotSupportedException("Image phase presentation has no actual process association."));
         Publish(0);
     }
 

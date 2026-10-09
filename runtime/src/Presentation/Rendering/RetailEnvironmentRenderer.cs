@@ -50,6 +50,11 @@ internal static class RetailEnvironmentRenderer
         render_mode unshaded, blend_mix, cull_back, depth_draw_never, fog_disabled;
 
         uniform sampler2D cloud_map : filter_linear_mipmap_anisotropic, repeat_enable;
+        // Separate source-owned secondary sampler/reset scalar. The reached
+        // zero-blend arm reads the primary sampler; other writer arms remain
+        // unowned rather than being inferred from a sampler registration.
+        uniform sampler2D cloud_map_blend : filter_linear_mipmap_anisotropic, repeat_enable;
+        uniform float source_cloud_blend;
         uniform vec3 cloud_color_encoded;
         uniform vec3 sky_lower_encoded;
         uniform vec3 sky_upper_encoded;

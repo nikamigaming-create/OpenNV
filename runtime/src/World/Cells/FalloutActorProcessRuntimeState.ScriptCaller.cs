@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutActorProcessRuntimeState
 {
-    internal const string ScriptCallerSchema = "opennv-source-Main-script-caller/v1";
+    internal const string ScriptCallerSchema = "opennv-source-Main-script-caller/v2";
     private FalloutMainScriptCallerSource? _scriptCallerSource;
     private FalloutMainScriptCall? _scriptCallerLast;
     private FalloutMainScriptInvocation? _scriptCallerInvocation;
@@ -38,7 +38,9 @@ internal sealed partial class FalloutActorProcessRuntimeState
         lastDeliveredFrame = _scriptCallerLastDeliveredFrame,
         cold = _scriptCallerCold,
         blocker = MainScriptCallerSaveBlocker,
-        wholeMain = "unowned-original-tail-after-this-sampling-segment"
+        sourceInterface = _sourceMainInterface?.State,
+        cachedTail = SourceMainCachedTailState,
+        wholeMain = "unowned-original-world-children-after-this-local-clock-tail"
     };
     internal void ConstructMainScriptCaller(FalloutMainScriptCallerSource source, FalloutMainScriptCallerSnapshot? saved)
     {
@@ -51,7 +53,9 @@ internal sealed partial class FalloutActorProcessRuntimeState
             if (_scriptFrame is not { Frame: 0, LastSite: null })
                 throw new InvalidDataException("A sampled Main field cannot invent a fresh caller constructor.");
             _scriptCallerSource = source; _contextTimeBits = source.InitialContextTimeBits;
-            _mainInterfaceCachedFields = new(false, false, false, Next()); return;
+            _mainInterfaceCachedFields = new(false, false, false, Next());
+            if (source.HasNewVegasChildren) ConstructSourceMainInterface(source, null);
+            return;
         }
         ValidateMainScriptCaller(saved);
         if (saved.Source != source || saved.Stack != _stack || saved.Changed > _sequence || saved.CapturedProcess == _process)
@@ -61,6 +65,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
         _mainInterfaceCachedFields = saved.CachedInterfaceFields;
         _contextTimeBits = saved.ContextTimeBits; _contextTimeWrites = saved.ContextTimeWrites; _contextTimeLast = saved.LastContextTimeWrite;
         _scriptCallerCold = new(saved.CapturedProcess, _process, Next());
+        if (source.HasNewVegasChildren) ConstructSourceMainInterface(source, saved.Interface ??
+            throw new InvalidDataException("Cold source Main omitted its actual interface owner."));
         // No OS query, child, sampler, Steam pump or timer store is replayed.
         // Native delivery numbering resets under a fresh binding; source call
         // numbering and the failed actual prefix remain unchanged.
@@ -135,6 +141,12 @@ internal sealed partial class FalloutActorProcessRuntimeState
             Store(FalloutMainScriptCallerStep.FirstAfterStore, Read(FalloutMainScriptCallerStep.FirstPredicateAfter, () => consumers.FirstInterfacePredicate(invocation)));
             Enter(FalloutMainScriptCallerStep.SecondSample, () => SampleScriptFrame(ordinal, FalloutMainScriptSampleSite.AfterMainChildren));
             Store(FalloutMainScriptCallerStep.FinalAfterStore, Read(FalloutMainScriptCallerStep.FinalPredicateAfter, () => consumers.FinalInterfacePredicate(invocation)));
+            if (_mainCachedTail is not null)
+            {
+                Enter(FalloutMainScriptCallerStep.CachedTailBefore, () => ExecuteSourceMainCachedTailBefore(invocation));
+                Enter(FalloutMainScriptCallerStep.CachedTimer, () => ExecuteSourceMainCachedTimer(invocation));
+                Enter(FalloutMainScriptCallerStep.CachedTailAfter, () => ExecuteSourceMainCachedTailAfter(invocation));
+            }
             Finish(FalloutMainScriptCallerDisposition.ScopeReturned);
         }
         catch (Exception failure)
@@ -259,7 +271,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
         if (_scriptCallerInvocation is not null) { FaultMainScriptReentry(); throw new NotSupportedException("Saving entered Main script children requires their actual completion boundary."); }
         var snapshot = new FalloutMainScriptCallerSnapshot(ScriptCallerSchema, source, _stack, _process, _sequence,
             _scriptCallerCalls, _contextTimeBits, _contextTimeWrites, _contextTimeLast, _scriptCallerLast, _scriptCallerCold,
-            _mainInterfaceCachedFields ?? throw new InvalidOperationException("Source Main cached fields are absent."));
+            _mainInterfaceCachedFields ?? throw new InvalidOperationException("Source Main cached fields are absent."),
+            _sourceMainInterface?.Capture(), _mainCachedTail?.Capture());
         ValidateMainScriptCaller(snapshot); RequireMainScriptSamples(snapshot, _scriptFrame!); return snapshot;
     }
 }

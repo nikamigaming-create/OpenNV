@@ -31,7 +31,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (_sourceInterfaceFade is not null || _sourceRestInterfaceRetired)
             throw new InvalidOperationException("Rest interface source lifetime cannot be replaced.");
-        var runtime = _advancementRuntimeSource ?? throw new NotSupportedException("Rest interface has no selected runtime source.");
+        var runtime = RequireCurrentPlayerRuntimeSource();
         var source = FalloutInterfaceFadeSource.Read(runtime);
         var fade = new FalloutInterfaceFade(source, restore);
         var console = new FalloutConsoleActivity(FalloutConsoleActivitySource.Read(runtime.Receipt));
@@ -50,7 +50,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             throw new InvalidOperationException("Rest interface has no new actual native publication lifetime.");
         _sourceInterfaceFadeNative = RuntimeNativeInterfaceFade.Attach(this,
             _sourceInterfaceFade ?? throw new NotSupportedException("Rest fade source is absent."),
-            _advancementRuntimeSource ?? throw new NotSupportedException("Rest selected source lease is absent."),
+            RequireCurrentPlayerRuntimeSource(),
             actualSourceUiClock, actualSourceRoots, RetainSourceRestInterfaceFailure);
     }
     internal FalloutRestObservation ObserveSourceRestCloseGate() => _sourceRestConsole?.ObserveRestClose() ??

@@ -16,6 +16,12 @@ if (args is ["--test-source-fistp"])
     return;
 }
 
+if (args is ["--source-cell-live-producers-contracts"])
+{
+    CompiledScriptContracts.RunSourceCellIngestion();
+    return;
+}
+
 if (args is ["--audit-calling-thread-fistp", var firstPartyFloatAdapter])
 {
     SourceFistpContracts.Run();
@@ -261,6 +267,11 @@ if (args is ["--compiled-nested-result-contracts"])
 if (args is ["--companion-sandbox-action-contracts"])
 {
     CompiledScriptContracts.RunSandboxActions();
+    return;
+}
+if (args is ["--companion-sandbox-runtime-contracts"])
+{
+    CompiledScriptContracts.RunSandboxRuntimeProducers();
     return;
 }
 if (args is ["--companion-sandbox-contracts"])
@@ -1174,6 +1185,8 @@ CompiledScriptContracts.Run();
 CompiledScriptContracts.RunCompanionCallbacks();
 CompiledScriptContracts.RunSandboxIdles();
 CompiledScriptContracts.RunSandboxActions();
+CompiledScriptContracts.RunSandboxRuntimeProducers();
+CompiledScriptContracts.RunSourceCellIngestion();
 ActorScriptPackageContracts.Run();
 NativeSourceConstructionContracts.Run();
 NativeSourceFileContracts.Run();

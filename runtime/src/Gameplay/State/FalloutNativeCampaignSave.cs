@@ -70,7 +70,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutPlayerSkillValuesSnapshot? PlayerSkillValues = null, FalloutPlayerAbilityScriptsSnapshot? PlayerAbilityScripts = null,
     FalloutPlayerStatisticsSnapshot? PlayerStatistics = null, FalloutProcessQueueSnapshots? ProcessQueues = null,
     FalloutIndexedInterfaceSoundSnapshot? IndexedInterfaceSounds = null,
-    FalloutSharedScriptRuntimeSnapshot? SharedScriptState = null);
+    FalloutSharedScriptRuntimeSnapshot? SharedScriptState = null,
+    FalloutImageSpacePhaseClockSnapshot? ImagePhaseClock = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -140,7 +141,8 @@ internal static partial class FalloutNativeCampaignSave
         FalloutPlayerSkillValuesSnapshot? playerSkillValues = null, FalloutPlayerAbilityScriptsSnapshot? playerAbilityScripts = null,
         FalloutPlayerStatisticsSnapshot? playerStatistics = null, FalloutProcessQueueSnapshots? processQueues = null,
         FalloutIndexedInterfaceSoundSnapshot? indexedInterfaceSounds = null,
-        FalloutSharedScriptRuntimeSnapshot? sharedScriptState = null)
+        FalloutSharedScriptRuntimeSnapshot? sharedScriptState = null,
+        FalloutImageSpacePhaseClockSnapshot? imagePhaseClock = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         ArgumentException.ThrowIfNullOrWhiteSpace(questEditorId);
@@ -193,7 +195,7 @@ internal static partial class FalloutNativeCampaignSave
             RestInterfaceSounds: restInterfaceSounds, InterfaceFades: interfaceFades, HardcoreNeeds: hardcoreNeeds,
             ActorUpdates: actorUpdates, CellProcesses: cellProcesses, ActorProcessRuntime: actorProcessRuntime, ActorProcessCommon: actorProcessCommon,
             PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts, PlayerStatistics: playerStatistics, ProcessQueues: processQueues,
-            IndexedInterfaceSounds: indexedInterfaceSounds, SharedScriptState: sharedScriptState);
+            IndexedInterfaceSounds: indexedInterfaceSounds, SharedScriptState: sharedScriptState, ImagePhaseClock: imagePhaseClock);
         Validate(state, saveCompatibilityId);
         ValidateSaveOrderSource(records, state);
         ValidateExperienceNotificationSource(records, state);
@@ -201,6 +203,7 @@ internal static partial class FalloutNativeCampaignSave
         ValidateCurrentRestSource(records, state);
         ValidateCurrentPlayerAbilitySource(records, state);
         ValidateCurrentPlayerStatisticSource(records, state);
+        ValidateCurrentImagePhase(records, state);
         return state;
     }
 
@@ -233,6 +236,7 @@ internal static partial class FalloutNativeCampaignSave
         ValidateCurrentPlayerAbilitySource(stack, state);
         ValidateCurrentPlayerStatisticSource(stack, state);
         ValidateCurrentSourceSky(stack, state);
+        ValidateCurrentImagePhase(stack, state);
         if (state.PlayerPackageAudio is { } playerAudio)
             FalloutAnimationSoundEvents.ValidateSource(playerAudio.Events, stack, stack.RuntimeFormKey(0x14));
         var activeCell = stack.GetEffective(state.ActiveCell);

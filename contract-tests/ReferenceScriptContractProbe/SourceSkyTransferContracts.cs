@@ -4,26 +4,28 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
-internal static class SourceSkyTransferContracts
+internal static partial class SourceSkyTransferContracts
 {
     private const string Engine = "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57";
     private const string Stack = "authored-source-Sky-selection";
     private static FalloutSkyTransferDeclaration Declaration => new(Engine, FalloutSkyTransferDeclaration.CurrentContractSha256);
     internal static void Run()
     {
+        NativeChildSourceContracts();
+        MoonContracts();
         using var fixture = new SourceFixture();
         var images = new FalloutImageSpaceState(); var process = Guid.NewGuid();
         var sky = new FalloutSkyTransferState(Declaration, fixture.Records, images, Stack, .5f);
         sky.BindProcess(process); sky.BindPresentationThread();
         var constructor = sky.Capture();
         Require(constructor.Flags == 32 && constructor.Mode == 4 && constructor.HourBits == BitConverter.SingleToUInt32Bits(10) &&
-            constructor.Clouds.Disposition == FalloutSkyChildDisposition.ConstructorNull && constructor.Moon.Disposition == FalloutSkyChildDisposition.ConstructorNull &&
+            constructor.Clouds.Disposition == FalloutSkyChildDisposition.ConstructorNull && constructor.Precipitation.Disposition == FalloutSkyChildDisposition.ConstructorNull &&
             constructor.Images.Count == 0 && constructor.TargetWeather is null, "Source Sky constructor acquired fabricated resources, time or weather.");
         var writes = new List<FalloutSkyResetStep>();
         sky.ResetClimate(fixture.Climate, writes.Add);
         var reset = sky.Capture();
         Require(writes.SequenceEqual(new[] { FalloutSkyResetStep.OverrideNull, FalloutSkyResetStep.PreviousNull, FalloutSkyResetStep.CurrentNull }) &&
-            reset.LastCall is { Returned: true, EnteredChild: null, FailureType: null } && reset.LastCall.Completed.SequenceEqual(Enum.GetValues<FalloutSkyResetStep>()) &&
+            reset.LastCall is { Returned: true, EnteredChild: null, FailureType: null } && reset.LastCall.Completed.SequenceEqual(FalloutSkyTransferState.ResetSteps(Declaration)) &&
             reset.TransitionBits == 0 && (reset.Flags & 0x40) != 0 && (reset.Flags & 8) == 0,
             "Reset did not return its own ordered original stores/children before the climate caller's final bit.");
         var order = new[] { FalloutSourceSkyImageSlot.PreviousPrimary, FalloutSourceSkyImageSlot.CurrentPrimary,
@@ -62,13 +64,14 @@ internal static class SourceSkyTransferContracts
             "A child swallowed forbidden reentry and certified a source reset return."); reentrant.Retire();
         var external = new FalloutSkyTransferState(Declaration, fixture.Records, new(), Stack, .5f); external.BindProcess(Guid.NewGuid());
         external.MarkExteriorFactoryEntered(); Reject(() => external.ResetClimate(fixture.Climate, _ => { }));
-        Require(external.LastCall?.EnteredChild == FalloutSkyResetStep.Moon && external.LastCall.Completed.Contains(FalloutSkyResetStep.Clouds) &&
-            !external.LastCall.Completed.Contains(FalloutSkyResetStep.ImageInstances), "Absent Moon publication was substituted for original constructor null."); external.Retire();
-        var slots = FalloutSkyWeatherModifierSlots.Read(fixture.Records, fixture.Weather);
+        Require(external.LastCall?.EnteredChild == FalloutSkyResetStep.Precipitation && external.LastCall.Completed.Contains(FalloutSkyResetStep.Clouds) &&
+            !external.LastCall.Completed.Contains(FalloutSkyResetStep.ImageInstances), "Absent Precipitation publication was substituted for original constructor null."); external.Retire();
+        var slots = FalloutSkyWeatherModifierSlots.Read(fixture.Records, fixture.Weather, Declaration);
         Require(slots.Slots.Count == 6 && slots.Slots[0] == fixture.Modifier && slots.Slots.Skip(1).All(slot => slot is null),
             "Raw binary IAD channel or exact master-owned WTHR modifier link was coerced to another signature/default.");
-        using (var deleted = fixture.WithDeletedModifier()) Reject(() => FalloutSkyWeatherModifierSlots.Read(deleted, fixture.Weather));
+        using (var deleted = fixture.WithDeletedModifier()) Reject(() => FalloutSkyWeatherModifierSlots.Read(deleted, fixture.Weather, Declaration));
         cold.Retire(); sky.Retire();
+        RunStandaloneSkyContracts();
         Console.WriteLine("OPENNV_SOURCE_SKY_TRANSFER_PASS sourceCtorClock10=true orderedReset=true fourDistinctInstances=true " +
             "managerOrder=true anonymousNotForm=true float32Weights=true coldNewEpoch=true failedPrefixRetained=true " +
             "swallowedReentryRefused=true actualBinaryIadWinner=true deletedImadRefused=true nativeCloudsAndPixels=UNEXECUTED " +
@@ -88,8 +91,16 @@ internal static class SourceSkyTransferContracts
             Directory.CreateDirectory(_directory); _base = Path.Combine(_directory, "Authored.esm"); _deleted = Path.Combine(_directory, "Delete.esp");
             File.WriteAllBytes(_base, Join(Record("TES4", 0, Field("HEDR", new byte[12])),
                 Record("CLMT", 40, Field("TNAM", [36, 48, 108, 120, 0, 0])),
-                Record("WTHR", 41, Field("\0IAD", BitConverter.GetBytes(42u))), Record("IMAD", 42)));
+                Record("WTHR", 41, Field("\0IAD", BitConverter.GetBytes(42u))), Record("IMAD", 42),
+                Record("GMST", 43, Field("EDID", Encoding.ASCII.GetBytes("fDaytimeColorExtension\0")), Field("DATA", BitConverter.GetBytes(.5f)))));
             Records = FalloutPluginStack.Load(_directory, ["Authored.esm"]);
+        }
+        internal FalloutPluginStack WithExtraWeatherImage()
+        {
+            File.WriteAllBytes(_deleted, Join(Record("TES4", 0, Field("HEDR", new byte[12]),
+                Field("MAST", Encoding.ASCII.GetBytes("Authored.esm\0")), Field("DATA", new byte[8])),
+                Record("WTHR", 41, Field("\u0004IAD", BitConverter.GetBytes(42u)))));
+            return FalloutPluginStack.Load(_directory, ["Authored.esm", "Delete.esp"]);
         }
         internal FalloutPluginStack WithDeletedModifier()
         {

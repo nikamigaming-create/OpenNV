@@ -86,7 +86,7 @@ internal sealed partial class FalloutCellExtraProcessState : IDisposable
                     if (reference.Actor is not null && (reference.CurrentReferenceFlags & FalloutActorProcessQueueDeclaration.DisabledReferenceFlag) == 0 &&
                         reference.HasProcess!.Require() && reference.Level == FalloutDetectionProcessLevel.Low)
                     {
-                        Set(identity, FalloutCellExtraProcessPhase.WalkingReferences, inFlight: reference.Source.Reference);
+                        Set(identity, FalloutCellExtraProcessPhase.WalkingReferences, inFlight: reference.Reference);
                         Callback(() => { _reevaluate(reference, identity, owner); return true; });
                     }
                     Set(identity, FalloutCellExtraProcessPhase.WalkingReferences, next: checked(index + 1));
@@ -175,13 +175,22 @@ internal sealed partial class FalloutCellExtraProcessState : IDisposable
     internal static void ValidateList(FalloutCellProcessReferenceList list, FalloutCellProcessIdentity source)
     {
         if (list is null || list.Cell != source || list.Revision < 1 || string.IsNullOrWhiteSpace(list.Owner) || list.References is null ||
-            list.References.Any(item => item is null || item.Source is null) ||
-            list.References.Select(item => item.Source.Reference).Distinct(FalloutFormKeyComparer.Instance).Count() != list.References.Count ||
+            list.References.Any(item => item is null || item.Source is null && item.Actor is not { EnginePlayer: true }) ||
+            list.References.Select(item => item.Reference).Distinct(FalloutFormKeyComparer.Instance).Count() != list.References.Count ||
             list.References.Select(item => item.Membership).Distinct().Count() != list.References.Count)
             throw new InvalidDataException("Counted CELL iteration lost its genuine complete current reference-list identity/order.");
         foreach (var item in list.References)
         {
-            if (item is null || item.Source is null || item.Source.Reference.ObjectId == 0 || item.CurrentCell != source.Cell || item.Membership < 1 ||
+            if (item.Source is null)
+            {
+                if (item.Actor is not { EnginePlayer: true } player || item.CurrentCell != source.Cell || item.Membership < 1 ||
+                    item.ProcessEpoch is null or < 1 || item.HasProcess is null || string.IsNullOrWhiteSpace(item.HasProcess.Owner) ||
+                    item.HasProcess.Value == true && item.HasProcess.Failure is null && item.Level is null ||
+                    item.HasProcess.Value != true && item.Level is not null || item.Level is { } level && !Enum.IsDefined(level))
+                    throw new InvalidDataException("Counted CELL canonical Player lost its real source/current process owner.");
+                player.Validate(); continue;
+            }
+            if (item.Source.Reference.ObjectId == 0 || item.CurrentCell != source.Cell || item.Membership < 1 ||
                 item.Source.SourceCell != source.Cell ||
                 (item.Source.Signature is "ACHR" or "ACRE") != (item.Actor is not null) ||
                 item.Source.Sha256 is not { Length: 64 } || !item.Source.Sha256.All(Uri.IsHexDigit) ||

@@ -71,6 +71,22 @@ internal sealed partial class FalloutActorProcessRuntimeState
             value.Calls == 0 && (value.CachedInterfaceFields.MenuGate || value.CachedInterfaceFields.FirstPredicate || value.CachedInterfaceFields.FinalPredicate))
             throw new InvalidDataException("Main script caller omitted its source constructor, call prefix or independent timer state.");
         value.Source.Validate();
+        if (value.Source.HasNewVegasChildren)
+        {
+            var ui = value.Interface ?? throw new InvalidDataException("Source Main caller omitted its independent actual interface.");
+            OpenNV.Runtime.Gameplay.State.FalloutMainInterfaceState.Validate(ui);
+            if (ui.Source.Main != value.Source || ui.Stack != value.Stack || ui.CapturedProcess != value.CapturedProcess)
+                throw new InvalidDataException("Main interface belongs to another actual caller/source/process.");
+        }
+        else if (value.Interface is not null || value.CachedTail is not null)
+            throw new InvalidDataException("Standalone Main cannot adopt the independent FNV interface/timer tail.");
+        if (value.CachedTail is { } tail)
+        {
+            FalloutMainCachedTailState.Validate(tail);
+            if (tail.Source.Main != value.Source || tail.Stack != value.Stack || tail.CapturedProcess != value.CapturedProcess ||
+                tail.LastAttempt is { } attempt && attempt.Ordinal > value.Calls)
+                throw new InvalidDataException("Main cached tail lost the actual caller/source/process order.");
+        }
         if (value.ColdHandoff is { } cold && (cold.PreviousProcess == Guid.Empty || cold.PreviousProcess == cold.CurrentProcess ||
             cold.CurrentProcess != value.CapturedProcess || cold.Sequence < 1 || cold.Sequence > value.Changed))
             throw new InvalidDataException("Main caller cold state lost its actual same-runtime process handoff.");
@@ -132,12 +148,25 @@ internal sealed partial class FalloutActorProcessRuntimeState
             Add(FalloutMainScriptCallerStep.MenuAfterStore); Add(FalloutMainScriptCallerStep.FirstPredicateAfter);
             Add(FalloutMainScriptCallerStep.FirstAfterStore); Add(FalloutMainScriptCallerStep.SecondSample);
             Add(FalloutMainScriptCallerStep.FinalPredicateAfter); Add(FalloutMainScriptCallerStep.FinalAfterStore);
+            if (value.CachedTail is not null)
+            {
+                Add(FalloutMainScriptCallerStep.CachedTailBefore); Add(FalloutMainScriptCallerStep.CachedTimer);
+                Add(FalloutMainScriptCallerStep.CachedTailAfter);
+            }
         }
         if (!call.Children.Select(child => child.Step).SequenceEqual(expected) ||
             call.Disposition == FalloutMainScriptCallerDisposition.InputSuppressed && !suppressed ||
             call.Disposition == FalloutMainScriptCallerDisposition.ScopeReturned && suppressed ||
             call.Disposition != FalloutMainScriptCallerDisposition.Failed && stopped)
             throw new InvalidDataException("Main call skipped a genuine source child or invented a short-circuit return.");
+        if (values.TryGetValue(FalloutMainScriptCallerStep.CachedTailBefore, out var enteredTail))
+        {
+            var sourceTail = value.CachedTail?.LastAttempt ?? throw new InvalidDataException("Entered Main cached tail lost its actual source prefix.");
+            if (sourceTail.Main != call.Invocation || sourceTail.Ordinal != call.Ordinal ||
+                call.Disposition == FalloutMainScriptCallerDisposition.ScopeReturned && sourceTail.Phase != FalloutMainCachedTailPhase.LocalReturned ||
+                enteredTail.Returned is null && sourceTail.Failure is null)
+                throw new InvalidDataException("Main cached tail receipt changed the actual attempted/returned child.");
+        }
         foreach (var child in call.Children.Where(child => child.Returned is not null))
         {
             var isBool = child.Step is FalloutMainScriptCallerStep.TabKey or FalloutMainScriptCallerStep.AltKey or

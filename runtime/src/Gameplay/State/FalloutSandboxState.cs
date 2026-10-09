@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
@@ -26,25 +27,36 @@ internal sealed record FalloutSandboxSnapshot(FalloutFormKey Package, string Pac
     FalloutSandboxArea Area, bool AtLocation, byte[] ActionWeights,
     IReadOnlyList<FalloutSandboxCandidate> Candidates, int? SelectedIndex, float Remaining,
     bool ActionEntered, string? Failure, FalloutFollowElection? Election = null, FalloutSandboxNativeRoute? Route = null,
-    FalloutSandboxRegistrySnapshot? Registry = null, bool RetirementEntered = false)
+    FalloutSandboxRegistrySnapshot? Registry = null, bool RetirementEntered = false,
+    FalloutSandboxActionTime? ActionTime = null, FalloutSandboxNativeIdleContinuation? NativeIdle = null)
 {
     internal void Validate()
     {
-        Area.Validate(); Election?.Validate(); Route?.Validate(); Registry?.Validate();
+        if (Area is null) throw new InvalidDataException("Sandbox continuation omitted its actual source area.");
+        Area.Validate(); Election?.Validate(); Route?.Validate(); Registry?.Validate(); ActionTime?.Validate(); NativeIdle?.Validate();
         if (string.IsNullOrWhiteSpace(Package.OwnerPlugin) || Package.ObjectId == 0 ||
             PackageSha256 is not { Length: 64 } || !PackageSha256.All(Uri.IsHexDigit) ||
             ActionWeights is not { Length: 6 } || Candidates is null ||
             SelectedIndex is { } index && (index < 0 || index >= Candidates.Count) ||
             !float.IsFinite(Remaining) || Remaining < 0 ||
-            SelectedIndex is null && (Remaining != 0 || ActionEntered || RetirementEntered) ||
+            SelectedIndex is null && (Remaining != 0 || ActionEntered || RetirementEntered || ActionTime is not null || NativeIdle is not null) ||
             RetirementEntered && (!ActionEntered || Remaining != 0) ||
+            NativeIdle is not null && (!ActionEntered || RetirementEntered || ActionTime is null ||
+                SelectedIndex is not { } nativeIndex || NativeIdle.Selection != Candidates[nativeIndex]) ||
             !AtLocation && (SelectedIndex is not null || Candidates.Count != 0) ||
             Failure is not null && string.IsNullOrWhiteSpace(Failure))
             throw new InvalidDataException("Sandbox continuation has an invalid consumed selection or clock.");
-        foreach (var candidate in Candidates) candidate.Validate();
+        foreach (var candidate in Candidates)
+        {
+            if (candidate is null) throw new InvalidDataException("Sandbox continuation has a missing original candidate.");
+            candidate.Validate();
+        }
+        if (ActionTime is { } time && !RetirementEntered &&
+            Remaining != MathF.Max(0, (float)((double)time.Duration - time.LastElapsed)))
+            throw new InvalidDataException("Sandbox remaining duration differs from its retained total source deadline.");
     }
     internal FalloutSandboxSnapshot Copy() => this with
-    { Area = Area.Copy(), ActionWeights = (byte[])ActionWeights.Clone(), Candidates = Candidates.ToArray(), Route = Route?.Copy(), Registry = Registry?.Copy() };
+    { Area = Area.Copy(), ActionWeights = (byte[])ActionWeights.Clone(), Candidates = Candidates.ToArray(), Route = Route?.Copy(), Registry = Registry?.Copy(), NativeIdle = NativeIdle?.Copy() };
 }
 
 // Selection consumes the actual registered candidate order. World discovery,
@@ -60,6 +72,7 @@ internal sealed class FalloutSandboxState
     internal string? Failure => _state.Failure;
     internal FalloutSandboxActionRegistry Registry { get; }
     internal bool RetirementEntered => _state.RetirementEntered;
+    internal FalloutSandboxActionTime? ActionTime => _state.ActionTime;
     internal int[] ActionWeights(FalloutSandboxActionContext context, FalloutSandboxAvailability availability)
         => context.Weights(_state.ActionWeights, availability);
 
@@ -160,6 +173,59 @@ internal sealed class FalloutSandboxState
         catch (Exception error) { RetainFailure(error); throw; }
     }
 
+    internal void SelectNative(IReadOnlyList<FalloutSandboxCandidate> originalOrder,
+        Func<FalloutSandboxCandidate, float> duration, Func<float, FalloutSandboxActionTime> clock,
+        int[] contextWeights, FalloutFormKey? repeated)
+    {
+        ArgumentNullException.ThrowIfNull(clock);
+        Select(originalOrder, duration, contextWeights, repeated);
+        if (Selected is null) return;
+        try
+        {
+            var selectedTime = clock(_state.Remaining); selectedTime.Validate();
+            if (selectedTime.Duration != _state.Remaining || selectedTime.LastElapsed != 0)
+                throw new InvalidDataException("Sandbox native clock changed the genuinely drawn duration.");
+            _state = _state with { ActionTime = selectedTime };
+        }
+        catch (Exception error) { RetainFailure(error); throw; }
+    }
+
+    internal bool AdvanceNativeAtHour(float currentHour, Action<FalloutSandboxCandidate> requestRetirement,
+        Func<FalloutSandboxCandidate, bool> observeRetired, Action<FalloutSandboxCandidate> retainedReturn)
+    {
+        RequireHealthy();
+        if (Selected is not { } selected || !_state.ActionEntered) return false;
+        try
+        {
+            var clock = _state.ActionTime ?? throw new NotSupportedException("Sandbox native action has no selected original GameHour clock.");
+            var elapsed = clock.Elapsed(currentHour);
+            _state = _state with
+            {
+                ActionTime = clock with { LastElapsed = elapsed },
+                Remaining = _state.RetirementEntered ? 0 : MathF.Max(0, (float)((double)clock.Duration - elapsed)),
+            };
+            if (!_state.RetirementEntered && clock.Duration > elapsed) return false;
+            if (!_state.RetirementEntered)
+            {
+                _state = _state with { RetirementEntered = true, Remaining = 0 };
+                requestRetirement(selected);
+            }
+            if (!observeRetired(selected)) return false;
+            retainedReturn(selected);
+            _state = _state with
+            {
+                SelectedIndex = null,
+                ActionEntered = false,
+                Remaining = 0,
+                RetirementEntered = false,
+                ActionTime = null,
+                NativeIdle = null
+            };
+            return true;
+        }
+        catch (Exception error) { RetainFailure(error); throw; }
+    }
+
     internal bool Advance(float seconds, bool actualActionReturned, Action<FalloutSandboxCandidate> retire)
     {
         RequireHealthy();
@@ -169,7 +235,7 @@ internal sealed class FalloutSandboxState
         if (!actualActionReturned || _state.Remaining != 0) return false;
         try { retire(selected); }
         catch (Exception error) { RetainFailure(error); throw; }
-        _state = _state with { SelectedIndex = null, ActionEntered = false, Remaining = 0 };
+        _state = _state with { SelectedIndex = null, ActionEntered = false, Remaining = 0, ActionTime = null, NativeIdle = null };
         return true; // Only the action retires; the Sandbox PACK remains active.
     }
 
@@ -190,7 +256,7 @@ internal sealed class FalloutSandboxState
             }
             if (!observeRetired(selected)) return false;
             retainedReturn(selected);
-            _state = _state with { SelectedIndex = null, ActionEntered = false, Remaining = 0, RetirementEntered = false };
+            _state = _state with { SelectedIndex = null, ActionEntered = false, Remaining = 0, RetirementEntered = false, ActionTime = null, NativeIdle = null };
             return true;
         }
         catch (Exception error) { RetainFailure(error); throw; }
@@ -211,7 +277,7 @@ internal sealed class FalloutSandboxState
                 requestRetirement(selected);
             }
             if (!observeRetired(selected)) return false;
-            _state = _state with { SelectedIndex = null, ActionEntered = false, Remaining = 0, RetirementEntered = false };
+            _state = _state with { SelectedIndex = null, ActionEntered = false, Remaining = 0, RetirementEntered = false, ActionTime = null, NativeIdle = null };
             return true;
         }
         catch (Exception error) { RetainFailure(error); throw; }

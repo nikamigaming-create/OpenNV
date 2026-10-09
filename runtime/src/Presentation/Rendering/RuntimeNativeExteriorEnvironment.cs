@@ -50,7 +50,10 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         _layers = new RuntimeNativeSkyLayers { Name = "OwnedSkyLayers" };
         _layers.Build(_records, _sky, _units);
         AddChild(_layers);
-        if (_sky.SourceTransfer is { } sourceSky) _layers.BindSourceReset(sourceSky);
+        if (_sky.SourceTransfer is { } sourceSky)
+            _layers.BindSourceReset(sourceSky, _scene, FalloutInstallationSettings.Read(
+                _records.OwnedSource ?? throw new InvalidOperationException("Sky factory has no selected source settings.")).NumericIni);
+        BindSourceMoonChildren();
         _environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,

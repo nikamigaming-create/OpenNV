@@ -1,58 +1,68 @@
 # Product status
 
-Checked PR187 is merged at origin/main 94f26be9, all CI checks passed, and clean
-local main is synchronized. FNV Test still selects fnv-windows-03c3d23a. The
-published gameplay includes source Pip-Boy pages/notes/maps, separate teammate
-perks, discovery/destination transfer, settled save/cold Continue, attached-loop
-retirement and validated source collision construction. These selected observations
-do not establish the fresh campaign/companion smoke route.
+Checked PR188 is merged at origin/main d02b5c55, all CI checks passed, and clean
+local main is synchronized. FNV Test still selects fnv-windows-03c3d23a. The new
+codex/player-source-startup batch remains local. No hot/public promotion is claimed.
 
-Current protocol29 source joins expression locals, real internal array buffers
-and source current/cold metadata, standalone FO3 interface/Main/scene/Dialog,
-companion Follow/idle/Sandbox actions, FILE/environment/metadata lifetimes and
-general selected command name/alias resolution. Initial interior CELL preparation
-now retains its immutable source payload for actual Main transfer completion.
-Current C# Debug/Release, native Debug/Release and protocol29 export compile; the
-complete required runtime gate and selected owned-data audit pass. Authored
-source contracts pass where executed; original/native gameplay is not inferred.
-Actual owned FNV and FO3 advancement reads pass against separate executable-bound
-perk-award policies. Original JIP/ShowOff expression declarations both admit on
-read-only matched inspection; original bytes are unchanged.
+Current protocol34 joins retained native exception/control context, genuine UCRT
+standard FILE/descriptors and selected MSVCP providers, actual product-window,
+keyboard/process SDK consumers, suspended-child source-address reservation and
+source-declared native CALL publication/retirement with bound object dispatch.
+No original executable bytes are mapped. Admitted first-party callable pages share
+the actual reserved source interval; unknown code and objects remain inaccessible.
+An authored C++ stream caller passes with real SDK FILE/descriptors and actual
+parent/native reservation receipts. This does not establish original mod gameplay.
 
-Fresh FO3 Play/New/Yes passes the repaired canonical MoveToMarker/alias MoveTo
-lookup and reaches initial world preparation. Preparation wrongly requires an
-entered Main destination consumer before the first world exists. The current
-source separates immutable interior preload from execution and requires the actual
-Main transfer/null-store return before startup dismissal. The new ordinary export
-passes preparation and loads its first CELL, then player setup fails at duplicate
-XP perk-condition binding. Partial setup also reaches ability-clock/presentation
-errors; double-vision phase is independently unbound. Sky/TLS/scene boundaries stay
-explicit. No playable opening or Vault exit is accepted. Current FO3 empty mod
-lists, failure captions and
-launcher session-option retention are repaired. Ordinary source Quit exits0.
+Fresh exported FNV now returns actual JIP Query=True and Load=True without the
+reached callable-address collision. PostLoad now reaches the engine CALL owner and
+refuses a target requiring another memory, branch, argument or effect producer.
+The earlier raw hook-write fault remains earlier private evidence. FNVXR separately
+has unowned interfaces and ShowOff separately faults during Load. Immutable timer/
+CELL preparation now joins actual product-thread publication. Current failed fresh
+FNV and FO3 exports return normally through source Quit with no native/world
+retirement failure in their last actual state; FNV world gameplay is not reached.
+No module exclusion, default or empty callback hides the remaining failures.
 
-Current exported FNV New/Yes returns actual JIP Query=True and Load=True, then a
-NVSE message0 raises a structured exception. FNVXR/ShowOff retain separate
-process/window/input and MSVCP/keyboard/standard-FILE imports. Implemented FILE/
-environment entries no longer appear in those residual lists. Stage/fault detail
-now retains the original failure prefix; no module exclusion or success default
-hides it. The actual authored mutex caller still returns c0000022/result0/error5.
-Original Load return does not establish hooks, native mod gameplay or co-save.
+The current player setup is transactional. Actual callbacks wait for complete
+player initialization, Main transfer and quest activation. Fresh FO3 loads its
+first CELL and no longer reaches duplicate XP binding, HUD source declaration or
+premature advancement/physical source borrowing. Real physical/rest construction
+and effect-clock binding return, then CELL auxiliary publication fails because
+native children retain missing owners. Advancement's ordinary update has not been
+reached. Enabled scene children, shaped-phantom consumers and source emergency-light
+model/controller publication remain independent FO3 failures.
 
-Fresh Vault exit, Doc/questionnaire/post-trait chair/Goodsprings, first-person beard,
-ED-E/companions, complete FO3 text, full Pip-Boy/fast travel and cold Continue remain
-ordinary exported acceptance. Full campaigns and selected DLC/mod stacks, complete
-render/audio/UI and physical OpenXR are unfinished. All 36 requirements remain
-open; there is no completion percentage. Current owners and the next executable
-outcome are in current-work.md; full scope is in implementation-plan.md.
+The integrated source also adds source Sandbox cached/action clocks and native
+FURN/IDLM/KF continuations, actual Main interface/cached-tail state, physical CELL
+ingestion and canonical Player transfers. Standalone FO3/FNV Sky reset/resource
+owners, both Moon factories and distinct Float32/SSE versus stored-x87 double-vision
+phase writers retain independent current/cold state. Native Moon shader and active
+frame/weather consumers remain refused. Frozen shaped-primitive and modeled LIGH
+owners are queued for the next integration. Current workers implement genuine
+portal/culling, celestial frame and native globals/static-TLS consumers.
 
-The current combined batch's selected owned LAND/advancement audits and full required
-runtime gate pass. Before the next push, complete its diff check and checked PR.
-No new hot/public promotion is claimed.
-One hot package plus one candidate/current work area is the retention target.
-Automatic approval review rejected obsolete directory deletion with "blocked by
-policy"; cleanup and reclaimed space remain unclaimed. Owned inputs and private
-observations are never public package or repository assets.
+The complete protocol34 Test-GodotRuntime gate passes: Debug/Release C#, formatting/
+analyzers, authored contracts, native plugin/CNG execution, launcher tests and native
+Godot project/presentation/input fixtures. Selected owned FNV/FO3 advancement audits
+pass and the current Release candidate exports with its actual source snapshot,
+assembly and PCK identities. Fresh ordinary New Game still fails: FO3 at CELL native
+publication after physical/rest/effect-clock construction, FNV at native PostLoad
+before player creation. Checked publication is the next action. Full gameplay,
+original mod behavior and matched retail parity are not inferred from these checks.
+
+Earlier selected gameplay supplied source Pip-Boy pages/notes/maps, teammate perks,
+discovery/destination transfer and settled save/cold Continue. Those observations
+do not establish the required fresh campaign/companion route. Vault exit,
+Doc/questionnaire/post-trait chair/Goodsprings, first-person beard, ED-E/companions,
+complete FO3 text, full Pip-Boy/fast travel and fresh cold Continue remain ordinary
+exported acceptance. Full campaigns, selected DLC/mod stacks, rendering/audio/UI
+and physical OpenXR are unfinished. All 36 requirements remain open; there is no
+completion percentage. Full scope is in implementation-plan.md.
+
+Keep one hot package plus the active candidate/current work area. Automatic approval
+review rejected obsolete directory deletion with "blocked by policy"; cleanup and
+reclaimed space remain unclaimed. Owned inputs and private observations are never
+public package or repository assets.
 
 Exterior window models now accept their authored refraction/material controller
 chains and animate source opacity. The reached source scripts select the daytime
@@ -70,19 +80,6 @@ assembly identity and clean exit. The full required publication gate and selecte
 FNV/FO3 winning SPECIAL XML/model/executable declaration audits pass. Checked
 publication is merged in PR186. Ordinary native key dispatch, source pose/framing, pixel coverage,
 complete campaign and matched retail/XR acceptance remain unverified.
-
-Actual JIP Query passed; original Load has not. Standalone FO3's distinct source
-Main/Player and mandatory current/cold state are integrated; authored checks pass,
-while ordinary vault exit and its UI/scene/task/TLS producers remain unaccepted.
-Unknown native/script/model/AI/render/audio
-behavior remains visible. Full campaigns, selected mod stacks, matched retail
-and physical XR are unfinished. All 36 broad requirements remain open; no counts
-or component receipts establish a completion percentage. Current owners, today's
-release priority and the next executable outcome are in current-work.md.
-
-One hot package and the active work area/candidate are the retention target.
-Obsolete build/run/proof cleanup is pending because automatic review rejected
-directory deletion with "blocked by policy". No completed cleanup is claimed.
 
 The expanded corpus/quest audits finish independently for FNV, FO3, TTW and
 the exact combined selection. All winning/deleted payload layouts and discovered

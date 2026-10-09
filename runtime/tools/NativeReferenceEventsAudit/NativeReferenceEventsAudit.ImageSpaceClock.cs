@@ -4,6 +4,7 @@ using System.Globalization;
 using Godot;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World;
 
 public partial class NativeReferenceEventsAudit
@@ -19,7 +20,18 @@ public partial class NativeReferenceEventsAudit
             0, default, false, null, null);
         Require(modifier.Animated && modifier.Duration > 0, "Selected image effect has no finite authored duration.");
         var state = new FalloutImageSpaceState(); state.Apply(modifier);
-        var clock = new RuntimeNativeImageSpaceClock(state);
+        var clockForms = Enumerable.Range(0, 6).Select(index => new FalloutFormKey("Clock.esm", (uint)(0x300 + index))).ToArray();
+        float[] clockValues = [2250, 0, 1, 3.125f, 0, 1];
+        var clockGlobals = new FalloutGlobalState(clockForms.Select((form, index) =>
+            new FalloutGlobal(form, $"AuthoredClock{index}", (byte)'f', clockValues[index], "authored-clock-global-" + index)));
+        var time = new FalloutGameTime(clockGlobals, new(clockForms[0], clockForms[1], clockForms[2],
+            clockForms[3], clockForms[4], clockForms[5]),
+            new FalloutCalendar([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31], "authored-clock-calendar"));
+        var process = Guid.NewGuid();
+        var phase = new FalloutDoubleVisionPhase(25, 5.875, new string('b', 64))
+        { SinglePrecisionArithmetic = true, SourceHourFactor = 5, LoadedClockBits = 0 };
+        state.ConstructDoubleVisionClock(phase, time, process);
+        var clock = new RuntimeNativeImageSpaceClock(state, time, process);
         var failedDriver = new RuntimeNativeOpeningStageDriver();
         const string fault = "synthetic independent appearance failure";
         var paused = GetTree().Paused;
@@ -48,7 +60,7 @@ public partial class NativeReferenceEventsAudit
             GD.Print($"OPENNV_NATIVE_IMAGE_SPACE_CLOCK_PASS source={modifier.Form} duration={modifier.Duration:R} " +
                 "independentDriverFault=true exactDuration=true pauseRetained=true staticRetained=true retailPixels=unverified");
         }
-        finally { GetTree().Paused = paused; clock.Free(); failedDriver.Free(); }
+        finally { GetTree().Paused = paused; state.RetireDoubleVisionClock(); clock.Free(); failedDriver.Free(); }
     }
 
     private void ExerciseOwnedImageSpaceClock(string game, string mod, string root, string form, string[] dependencies)
