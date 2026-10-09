@@ -68,11 +68,13 @@ struct MutexSignature {
     BOOL all = FALSE, alertable = FALSE;
     MutexName name;
     std::vector<PluginMutexHandle> handles;
+    std::uint32_t windows_image = 0, windows_create = 0, windows_open = 0, windows_error = 0;
+    PluginMutexNamespaceCall directory;
 };
 void mutex_bytes(Bytes& data, const std::vector<std::uint8_t>& bytes) {
     data.put(static_cast<std::uint32_t>(bytes.size())); data.data.insert(data.data.end(), bytes.begin(), bytes.end());
 }
-std::uint64_t mutex_begin(const MutexSignature& signature) {
+std::uint64_t mutex_begin(MutexSignature& signature) {
     auto& owner = mutex_owner(); auto& io = io_owner();
     if (owner.pending || owner.detach_entered || io.loader_retiring)
         throw Fatal(ERROR_INVALID_STATE, "Mutex construction/wait cannot enter after an unfinished SDK/loader prefix.");
@@ -80,6 +82,7 @@ std::uint64_t mutex_begin(const MutexSignature& signature) {
     if (signature.security) attributes = nvse_copy(signature.security);
     if (signature.security && (attributes.nLength != sizeof(attributes) || attributes.lpSecurityDescriptor || attributes.bInheritHandle) || signature.inherit || signature.alertable)
         throw Fatal(ERROR_NOT_SUPPORTED, "Custom security, inheritance or alertable mutex callbacks have no genuine owner.");
+    mutex_namespace_prepare(signature);
     Bytes data; data.put(1U); data.put(static_cast<std::uint32_t>(signature.api)); data.put(signature.incoming);
     data.put(address(signature.security)); data.put(attributes.nLength); data.put(address(attributes.lpSecurityDescriptor));
     data.put(signature.inherit || attributes.bInheritHandle ? 1U : 0U); data.put(signature.flags); data.put(signature.access);
@@ -88,14 +91,19 @@ std::uint64_t mutex_begin(const MutexSignature& signature) {
     mutex_bytes(data, signature.name.raw); mutex_bytes(data, signature.name.wide);
     data.put(static_cast<std::uint32_t>(signature.handles.size()));
     for (const auto& handle : signature.handles) { data.put(handle.capability); data.put(address(handle.handle)); }
-    auto response = mutex_host(data); Reader reader{response.data}; const auto id = reader.get<std::uint64_t>(); reader.finish();
+    data.put(signature.windows_image); data.put(signature.windows_create); data.put(signature.windows_open); data.put(signature.windows_error);
+    auto response = mutex_host(data); Reader reader{response.data}; const auto id = reader.get<std::uint64_t>();
+    mutex_namespace_accept(signature, reader); reader.finish();
     if (!id) throw Fatal(ERROR_INVALID_DATA, "Mutex SDK call has no C# generation/caller identity.");
     owner.pending = true; owner.sdk_call = id; return id;
 }
-void mutex_complete(std::uint64_t id, std::uint32_t result, DWORD error, bool construction) {
+void mutex_complete(std::uint64_t id, std::uint32_t result, DWORD error, bool construction, const PluginMutexNamespaceCall* directory = nullptr) {
     auto& owner = mutex_owner();
     if (!owner.pending || owner.sdk_call != id) throw Fatal(ERROR_INVALID_STATE, "Mutex SDK result lacks its entered native prefix.");
     Bytes data; data.put(2U); data.put(id); data.put(result); data.put(error); data.put(construction ? 1U : 0U);
+    data.put(directory && directory->used ? 1U : 0U);
+    data.put(directory && directory->used ? directory->capability : std::uint64_t{0});
+    data.put(directory && directory->used ? static_cast<std::uint32_t>(directory->status) : 0U);
     auto response = mutex_host(data); Reader reader{response.data};
     if (reader.get<std::uint32_t>() != 1) throw Fatal(ERROR_INVALID_DATA, "Mutex result lacks exact C# Windows/state publication."); reader.finish();
     owner.pending = false; owner.sdk_call = 0; SetLastError(error);
@@ -106,9 +114,10 @@ template<class Call> HANDLE mutex_construct(MutexSignature& signature, Call call
     // publication fails, the child still retains the actual returned handle.
     auto found = owner.handles.emplace(id, PluginMutexHandle{id, nullptr, false});
     if (!found.second) throw Fatal(ERROR_INVALID_STATE, "Mutex construction repeats a generation capability.");
-    SetLastError(signature.incoming); const auto handle = call(); const auto error = GetLastError();
+    SetLastError(signature.incoming); const auto handle = signature.directory.capability ? mutex_namespace_construct(signature) : call();
+    const auto error = GetLastError();
     found.first->second.handle = handle; found.first->second.live = handle != nullptr;
-    mutex_complete(id, address(handle), error, true);
+    mutex_complete(id, address(handle), error, true, &signature.directory);
     if (!handle) owner.handles.erase(found.first);
     SetLastError(error); return handle;
 }

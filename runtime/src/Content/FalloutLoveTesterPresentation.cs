@@ -23,7 +23,7 @@ internal static partial class FalloutExecutableStringTable
     // Read compiler-emitted resource arguments, numeric declarations and the
     // ordered animation table. No owned code is executed and no addresses or
     // extracted resources become a persistent launch input.
-    private static FalloutLoveTesterPresentation ReadLoveTesterDeclarations(byte[] code,
+    internal static FalloutLoveTesterPresentation ReadLoveTesterDeclarations(byte[] code,
         Func<uint, string?> literal, Func<uint, int, byte[]> read, IReadOnlyCollection<string> sequences, LoveTesterBootstrap bootstrap)
     {
         var pushes = new List<(int Offset, string Value)>();

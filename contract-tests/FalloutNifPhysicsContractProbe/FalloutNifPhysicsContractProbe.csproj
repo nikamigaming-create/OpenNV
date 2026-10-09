@@ -18,6 +18,8 @@
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifMorphAnimation.cs" Link="FalloutNifMorphAnimation.cs" />
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifSkinContract.cs" Link="FalloutNifSkinContract.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutBsaArchive.SourceDirectory.cs" Link="FalloutBsaArchive.SourceDirectory.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutArchiveNameHash.cs" Link="FalloutArchiveNameHash.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
   </ItemGroup>
 </Project>

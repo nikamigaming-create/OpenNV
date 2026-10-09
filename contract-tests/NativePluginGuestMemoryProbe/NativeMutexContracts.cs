@@ -54,6 +54,11 @@ internal static class NativeMutexContracts
                     $"pending={domain.NvseMutexPending is not null}");
                 foreach (var row in domain.NvseMutexReceipts)
                     Console.Error.WriteLine($"OPENNV_NATIVE_MUTEX_RESULT api={row.Api} result={row.Result} error={row.LastError}");
+                foreach (var row in domain.NvseMutexDirectoryReceipts)
+                    Console.Error.WriteLine($"OPENNV_NATIVE_MUTEX_DIRECTORY scope={row.Scope} published={row.Published} " +
+                        $"restrictedStatus={row.RestrictedOpenStatus:x8} restrictedError={row.RestrictedOpenError} nativeClosed={row.NativeClosed}");
+                foreach (var row in domain.NvseMutexNativeStatuses)
+                    Console.Error.WriteLine($"OPENNV_NATIVE_MUTEX_NT_RESULT status={row.Status:x8} result={row.Result} error={row.LastError}");
                 throw;
             }
         }

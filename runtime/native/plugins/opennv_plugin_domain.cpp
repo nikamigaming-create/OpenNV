@@ -483,6 +483,7 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_value_heap.inc"
 #include "opennv_plugin_io.inc"
 #include "opennv_plugin_mutexes.inc"
+#include "opennv_plugin_mutex_namespace.inc"
 #include "opennv_plugin_profiles.inc"
 #include "opennv_plugin_find.inc"
 #include "opennv_plugin_crt.inc"

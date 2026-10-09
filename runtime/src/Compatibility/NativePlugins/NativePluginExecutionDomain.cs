@@ -35,7 +35,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     internal int ProcessId { get; }
     internal uint NativeThread { get; private set; }
     internal bool NaturallyRetired => _retired;
-    internal bool ResourcesRetired => _disposed && ChildExited && _process.ResourcesRetired && _privateIo is null && ImportProviderSourcesRetired;
+    internal bool ResourcesRetired => _disposed && ChildExited && _process.ResourcesRetired && _privateIo is null && ImportProviderSourcesRetired && MutexNamespaceOwnersRetired;
     internal bool ChildExited { get => Volatile.Read(ref _childExited); private set => Volatile.Write(ref _childExited, value); }
     internal int? ChildExitCode { get; private set; }
     internal NativePluginTokenObjectReceipt? ObjectSecurity => _process.ObjectSecurity;
@@ -195,6 +195,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             try { if (!CngSystemOwnersRetired) ReleaseCngSystemServiceAfterChildExit(); } catch (Exception error) { failures.Add(error); }
             try { if (!SharedPlacementOwnersRetired) ClearSharedPlacementsAfterChildExit(); } catch (Exception error) { failures.Add(error); }
             try { if (!ImportProviderSourcesRetired) ClearNativeImportProvidersAfterChildExit(); } catch (Exception error) { failures.Add(error); }
+            try { if (!MutexNamespaceOwnersRetired) ClearMutexNamespacesAfterChildExit(); } catch (Exception error) { failures.Add(error); }
+            try { if (_privateIo is not null) ClearPrivateIo(); } catch (Exception error) { failures.Add(error); }
             if (failures.Count != 0) throw FaultException(new AggregateException("Independent native source/section retries failed.", failures));
             return;
         }

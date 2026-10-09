@@ -31,9 +31,9 @@ Workers supply compact ignored first-party additions and narrow hooks.
 | Owner | Current implementation |
 | --- | --- |
 | Primary | Finish combined source publication, export one candidate and run the fresh ordinary smoke route |
-| active_radio_save | Repair the reached companion callback check, then creature idle and source Sandbox dismissal |
+| active_radio_save | Creature idle and source Sandbox dismissal after joined companion callbacks |
 | fo3_special_book | Actual standalone FO3 interface predicates and menu/HUD publication lifetimes |
-| scope_plugin_audit | Actual restricted named-object directory capabilities and caller-thread mutex creation/open |
+| scope_plugin_audit | Repair actual restricted Local directory/NtCreateMutant denial, then native script-local tokens |
 
 Compile joined batches; combine broad checks about every four hours and before
 publication. Recording stays off except a specific private comparison; temporary
@@ -43,9 +43,9 @@ frames are removed after inspection. Component checks do not certify games.
 
 Origin/main 41b0ca13 includes checked PR185 and PR186's launcher, Pip-Boy, travel, collision
 and save work. The actual FNV Test command/desktop shortcut select packaged
-Release fnv-gameplay-5a156b84. That pinned process is retired. Root's separate branch is
-codex/full-runtime-owner-integration; source checkpoint 33a67180 retains the
-joined batch, and merge 081d94b9 integrates origin/main. No root push/PR/new
+Release fnv-windows-03c3d23a. Its process belongs to the separate gameplay owner.
+Root's separate branch is codex/full-runtime-owner-integration; source checkpoint
+a946a9d9 retains the joined batch and integrates origin/main. No root push/PR/new
 package for that batch is claimed yet.
 
 Published work supplies source Stats/note/quest bodies, resident Local Map,
@@ -73,11 +73,13 @@ final pixels and complete scene parity remain unverified.
 
 Source companion callbacks and typed NPC/CREA Follow, route continuation and
 shared follower door transfer are integrated. Combined Debug compilation passes.
-The new callback execution check reaches an event-order/topic-filter mismatch;
-its owner is repairing that failure. Sandbox dismissal remains unowned. Ordinary
+The callback execution check now passes source order/topic filters, failed prefixes
+and current/cold typed Follow. Its authored records now contain required ACBS and
+PACK declarations; cold uses the current fresh-world restore order. Sandbox dismissal
+remains unowned. Ordinary
 ED-E recruitment, transfer and cold Follow are still unexecuted.
 
-Protocol 25 joins shared script/effect/actor current/cold state, actual Main Player
+Protocol 26 joins shared script/effect/actor current/cold state, actual Main Player
 pending transfers, Steam source/platform callbacks, complete DirectInput, native
 command/value/object owners, private CNG/mappings and same-root CELL/reference/LAND.
 Source background readers prepare the full C# graph and native declarations;
@@ -132,6 +134,10 @@ source/import/thread checks, real restricted Windows calls, aliases and ordered
 detach cleanup. Actual compilation passes. The authored caller enters original
 Load, then real named CreateMutexA returns ERROR_ACCESS_DENIED (5). Its completed
 failure receipt remains visible; named-object namespace access is still unowned.
+Actual retained Local-directory capabilities and caller-thread NtCreateMutant are
+now integrated. Debug C#/x86 compilation passes. The same authored caller still
+returns real NTSTATUS c0000022/result 0/error 5, including the independent restricted
+directory access observation. Its source owner is repairing that actual denial.
 No mutex success is claimed. Native mutex cold reconstruction refuses. No handle
 count certifies global object destruction.
 
@@ -145,8 +151,12 @@ archive/FISTP/common-placement CNG checks pass with the named mutex failure abov
 retained. Current script and complete plugin-runtime contracts pass after updating
 obsolete fixture expectations for current source owners and retained first-person
 resource failures. These component results do not establish ordinary play.
-Selected owned audit and required
-Test-GodotRuntime/diff checks before push.
+The selected owned LAND construction/borrower/retirement audit and complete
+Test-GodotRuntime gate now pass for the combined batch, with recording off.
+This includes Release/Debug C#, native execution and real Godot scene checks.
+Outdated declaration-only movement/autosave fixtures now verify missing source
+authority refusal; they do not establish native transfer or source autosave.
+Publication and the fresh exported smoke route are next.
 
 Latest root New/Yes candidate settled while the complete graph prepared in 34.2s,
 then waited for actual foreground DirectInput. Activation produced no real sample;

@@ -4,6 +4,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include "opennv_plugin_mutex_namespace.h"
 
 namespace opennv_domain {
 enum class MutexApi : std::uint32_t {
@@ -27,6 +28,7 @@ struct PluginMutexDetachEvent {
 };
 struct PluginMutexRuntime {
     std::map<std::uint64_t, PluginMutexHandle> handles;
+    std::unique_ptr<PluginMutexNamespaceRuntime> namespaces;
     std::vector<PluginMutexDetachEvent> detached;
     std::size_t flushed = 0;
     std::uint64_t call = 0, sdk_call = 0;

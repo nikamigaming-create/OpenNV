@@ -27,7 +27,8 @@ internal static partial class CompiledScriptContracts
             var result = scripts.DispatchFrame(Key(0xa00), [new("OnDeath"), new("OnCombatEnd"),
                 new("SayToDone", Topics: new HashSet<FalloutFormKey> { Key(0x70) })], .125);
             Require(result.All(item => item is { Error: null, Blocks: 1 }) && world.Get(Key(0xa00)).Read(1) == 73 &&
-                world.Get(Key(0xa00)).Read(2) == 0, "Compiled original callback order/topic filter differs from admitted source.");
+                world.Get(Key(0xa00)).Read(2) == 0, "Compiled original callback order/topic filter differs from admitted source: " +
+                JsonSerializer.Serialize(result) + $"; value={world.Get(Key(0xa00)).Read(1)}; suffix={world.Get(Key(0xa00)).Read(2)}.");
             var mismatch = scripts.DispatchFrame(Key(0xa00), [new("SayToDone", Topic: Key(0x72))], 0);
             Require(mismatch.Single() is { Error: null, Blocks: 0 } && world.Get(Key(0xa00)).Read(1) == 73,
                 "Unmatched original speech topic executed or manufactured a callback block.");
@@ -47,7 +48,7 @@ internal static partial class CompiledScriptContracts
                     world.Get(Key(id)).Read(2) == 0, "Malformed/variable/non-topic binary filter lost its committed prefix or ran its suffix.");
             }
             var saved = Copy(world.Capture().ToArray());
-            using var cold = new FalloutReferenceWorld(records); cold.LoadCell(cell); cold.Restore(saved);
+            using var cold = new FalloutReferenceWorld(records); cold.Restore(saved); cold.LoadCell(cell);
             var coldScripts = Scripts(cold);
             var before = JsonSerializer.Serialize(cold.Capture());
             foreach (var id in new uint[] { 0xa03, 0xa04, 0xa05 })
@@ -102,7 +103,7 @@ internal static partial class CompiledScriptContracts
         var followData = new byte[12]; followData[4] = 1;
         byte[] Target(uint form) { var data = new byte[16]; UInt(data, 4, form); UInt(data, 8, 250); return data; }
         return Join(Tes4(), Enumerable.Range(0, 6).Select(index => Record("CREA", (uint)(0x100 + index),
-                Field("SCRI", U32((uint)(0x60 + index))))).SelectMany(value => value).ToArray(),
+                Field("ACBS", new byte[24]), Field("SCRI", U32((uint)(0x60 + index))))).SelectMany(value => value).ToArray(),
             Script(0x60, code, [Field("SCRO", U32(0x70)), Field("SCRO", U32(0x71))]),
             Script(0x61, Join(Instruction(0x1d), Filtered(10, U16(0), Set('f', 1, " 61"))), []),
             Script(0x62, Join(Instruction(0x1d), Filtered(2, Join(U16(1), Form(1)), Set('f', 1, " 67"))), [Field("SCRO", U32(0x71))]),
@@ -110,8 +111,8 @@ internal static partial class CompiledScriptContracts
             Script(0x64, Join(Instruction(0x1d), Block(12, Set('f', 1, " 71")), Filtered(7, Join(U16(1), Form(1)), Set('f', 2, " 999"))), [Field("SCRV", U32(3))]),
             Script(0x65, Join(Instruction(0x1d), Block(12, Set('f', 1, " 71")), Filtered(7, Join(U16(1), Form(1)), Set('f', 2, " 999"))), [Field("SCRO", U32(0x100))]),
             Record("DIAL", 0x70), Record("DIAL", 0x71), Record("DIAL", 0x72),
-            Record("PACK", 0x80, Field("PKDT", followData), Field("PTDT", Target(0x14))),
-            Record("PACK", 0x81, Field("PKDT", followData), Field("PTDT", Target(0x100))),
+            Record("PACK", 0x80, Field("EDID", Text("AuthoredFollow")), Field("PKDT", followData), Field("PTDT", Target(0x14))),
+            Record("PACK", 0x81, Field("EDID", Text("AuthoredInvalidFollow")), Field("PKDT", followData), Field("PTDT", Target(0x100))),
             Record("CELL", 0x800, Field("DATA", [1])), group);
     }
 }

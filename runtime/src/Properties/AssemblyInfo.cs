@@ -3,6 +3,12 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("OpenNV.DevelopmentLab")]
 [assembly: InternalsVisibleTo("OpenNV.ReferenceScriptContractProbe")]
 [assembly: InternalsVisibleTo("OpenNV.FalloutPluginRuntimeProbe")]
+[assembly: InternalsVisibleTo("OpenNV.FalloutImageSpaceProbe")]
+[assembly: InternalsVisibleTo("OpenNV.FalloutNpcAppearanceProbe")]
+[assembly: InternalsVisibleTo("OpenNV.FalloutDialogueProbe")]
+[assembly: InternalsVisibleTo("OpenNV.FalloutLoveTesterProbe")]
+[assembly: InternalsVisibleTo("OpenNV.FalloutSoundRuntimeProbe")]
+[assembly: InternalsVisibleTo("OpenNV.FalloutAnimationSoundProbe")]
 [assembly: InternalsVisibleTo("OpenNV.NativePluginGuestMemoryProbe")]
 
 [assembly: InternalsVisibleTo("OpenNV.Fo3Cg00Stage10ContractProbe")]

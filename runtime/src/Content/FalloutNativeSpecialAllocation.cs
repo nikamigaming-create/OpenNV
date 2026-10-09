@@ -25,7 +25,7 @@ internal sealed record FalloutLoveTesterSource(uint MenuId, string MenuPath, str
 
 internal static partial class FalloutExecutableStringTable
 {
-    private sealed record LoveTesterBootstrap(uint MenuId, string MenuPath, uint MenuSingleton,
+    internal sealed record LoveTesterBootstrap(uint MenuId, string MenuPath, uint MenuSingleton,
         int InitializerStart, int InitializerEnd, int CameraStart, int CameraEnd,
         (int Offset, string Value) Animated, (int Offset, string Value) Cabinet);
 

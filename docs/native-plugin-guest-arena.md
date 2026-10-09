@@ -1,10 +1,10 @@
 # Native guest allocation and first-party state bridge
 
-This proposed next slice uses the existing C# process-generation owner and x86
-companion. It adds actual native data allocation, byte transfer and typed state
+This implemented slice uses the existing C# process-generation owner and x86
+companion. It owns actual native data allocation, byte transfer and typed state
 queries. Its authored fixture mutates the shared GameplayVitals owner through
-native thunks. The proposal is uncompiled and unexecuted until the required
-native gate confirms the source contract in both configurations.
+native thunks. Actual authored native execution passes the required Debug and
+Release gate. Those results establish this arena contract, not game or mod support.
 
 An allocation capability carries process generation, lifetime ID, native base,
 byte extent, committed extent, reserved extent and access. C# retains the exact
@@ -27,10 +27,13 @@ The C# handler supplies the authoritative operation and may reenter an existing
 memory or native call. Creating/releasing lifetimes during an active call refuses.
 An unknown operation or missing state owner faults the generation.
 
-The view is not TESForm, Actor, NVSEInterface or an original vtable. No original
+The view is not TESForm, Actor, NVSEInterface or an original vtable. This arena
+view alone supplies no original
 DLL admission, eight-pointer command frame, fastcall/variadic/float-result call,
 game heap, script/lambda execution, camera publication, engine hook, plugin save,
-campaign integration or launcher path is supplied. Such work must remain refused.
+campaign integration or launcher path. Separate campaign owners now start the
+companion and bind source interfaces; completed original Load, game objects,
+hooks and serialization remain unaccepted.
 Raw native code is not sandboxed by a capability record; unauthorized page or
 object mutation becomes a terminal failure at the next owned access. Concurrent
 native workers remain outside the admitted callback contract.

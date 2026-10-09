@@ -196,7 +196,7 @@ public partial class NativeReferenceEventsAudit : Node
             await Frames();
             var triggerState = world.Get(Key(0x900));
             Require(triggerState.ScriptError is null && triggerState.Read(1) == 1 && triggerState.Read(3) > 0,
-                "Native physical overlap did not execute the model-less trigger.");
+                $"Native physical overlap did not execute the model-less trigger: entered={triggerState.Read(1)} contact={triggerState.Read(3)} error={triggerState.ScriptError}; {string.Join("; ", reported)}");
             events.SetResidency(cell, root);
             await Frames();
             Require(root.GetChildren().OfType<Area3D>().Single() == area && triggerState.Read(1) == 1 &&
@@ -353,7 +353,10 @@ public partial class NativeReferenceEventsAudit : Node
         var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
         var source = "array_var shared\narray_var alias\nbegin OnTriggerEnter player\nset entered to entered + 1\nend\n" +
             "begin OnTriggerLeave player\nset departed to departed + 1\nend\n" +
-            "begin OnTrigger player\nif player.GetSitting == 0\nset contacts to contacts + 1\nendif\nend\n" +
+            // Contact dispatch uses the actual reference's enable state. Player
+            // sitting now requires its complete physical/body source owner,
+            // which this model-less contact fixture does not construct.
+            "begin OnTrigger player\nif GetDisabled == 0\nset contacts to contacts + 1\nendif\nend\n" +
             "begin OnActivate\nset activations to activations + 1\nSetNthPerkEntryValue1 NativePerk 0 activations\nif activations == 1\n" +
             "shared = Ar_List 10 \"native\"\nalias = shared\nendif\nalias[0] += 1\nend\nbegin OnLoad\nset loads to loads + 1\nend";
         var script = Record("SCPT", 0x500, Local(1, "entered"), Local(2, "departed"), Local(3, "contacts"), Local(4, "activations"), Local(5, "loads"),
@@ -397,6 +400,7 @@ public partial class NativeReferenceEventsAudit : Node
             .Concat(AnimatedActivatorRecords())
             .Concat(Record("DIAL", 0x740, Field("DATA", [0])))
             .Concat(Record("PERK", 0x705, Field("EDID", Encoding.ASCII.GetBytes("NativePerk\0")),
+                Field("DATA", [0, 1, 1, 1, 0]),
                 Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 1]), Field("EPFT", [1]),
                 Field("EPFD", BitConverter.GetBytes(3f)), Field("PRKF", [])))
             .Concat(Record("ACTI", 0x700, Field("SCRI", BitConverter.GetBytes(0x500u))))

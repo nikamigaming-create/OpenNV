@@ -3,11 +3,11 @@
 The published October 9 gameplay slice includes source Pip-Boy pages/notes/maps,
 separate teammate perks, discovered-destination transfer, attached loop retirement
 and validated source collision construction. Ordinary packaged discovery, travel,
-settled save and cold Continue ran. FNV Test selects fnv-gameplay-5a156b84.
+settled save and cold Continue ran. FNV Test selects fnv-windows-03c3d23a.
 Fresh FO3 vault exit, FNV opening/Goodsprings/ED-E/companions, full Pip-Boy actions
 and the requested exported smoke route still need their actual acceptance.
 
-The separate protocol 25 source candidate joins compiled scripts/effects, actual
+The separate protocol 26 source candidate joins compiled scripts/effects, actual
 Main Player transfers, source Sky resets, calling-thread FISTP, Steam/native plugin
 owners, shared CNG buffers, mutexes, source menu/archive lifetimes and CELL/LAND.
 The preceding C#/x86 builds, combined script suite, negative corpus cleanup and
@@ -18,8 +18,13 @@ offset views and the complete digest. Original native compatibility remains open
 Merged gameplay, protocol 25, FISTP, FO3 Main/Player, mutex and archive registry compile with zero
 warnings/errors. Actual archive, current-thread FISTP and CNG checks pass. The
 mutex caller's real named CreateMutexA returns ERROR_ACCESS_DENIED (5), retained
-as a failure. Required combined audit/publication checks remain pending. No new
-root PR/package is claimed.
+as a failure. Retained Local-directory capability/caller-thread NtCreateMutant
+integration compiles but still returns actual NTSTATUS c0000022/error 5. Companion
+event order/topic filters and current/cold Follow contracts pass; ordinary Follow
+and Sandbox dismissal remain unaccepted. The complete combined Test-GodotRuntime
+gate and selected owned LAND construction audit pass with recording off.
+Checked publication and fresh exported acceptance are next; no new root package
+is claimed.
 
 Exterior window models now accept their authored refraction/material controller
 chains and animate source opacity. The reached source scripts select the daytime
