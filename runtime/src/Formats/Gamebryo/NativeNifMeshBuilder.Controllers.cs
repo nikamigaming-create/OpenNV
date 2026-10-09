@@ -126,7 +126,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         link.Controller == -1 || link.Priority != 0 ||
                         link.ControllerType is not ("NiTransformController" or "NiVisController" or
                             "NiTextureTransformController" or "NiMaterialColorController" or "NiAlphaController" or
-                            "BSMaterialEmittanceMultController" or "BSRefractionStrengthController" or
+                            "BSMaterialEmittanceMultController" or "BSRefractionStrengthController" or "BSRefractionFirePeriodController" or
                             "NiGeomMorpherController" or "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or
                             "NiPSysEmitterLifeSpanCtlr" or "NiPSysModifierActiveCtlr")))
                     throw new NotSupportedException(

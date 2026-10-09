@@ -48,29 +48,54 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 throw new NotSupportedException($"Managed material {sequence.Name}/{link.NodeName}/{link.ControllerType} is unsupported."));
         }
 
-        private bool IsManagedRefractionController(FalloutNifShaderProperty property) =>
-            _source.ReadObject(property.Controller) is FalloutNifRefractionController controller &&
-            controller.Time.Target == property.Block.Index && controller.Time.NextController == -1 &&
-            (controller.Time.Flags & 0x60) == 0x60 &&
-            _source.ReadObject(controller.Interpolator) is FalloutNifBlendFloatInterpolator;
+        private IReadOnlyList<FalloutNifObject>? ManagedRefractionControllers(FalloutNifShaderProperty property)
+        {
+            var result = new List<FalloutNifObject>();
+            var visited = new HashSet<int>();
+            var cursor = property.Controller;
+            while (cursor >= 0)
+            {
+                if (!visited.Add(cursor)) throw new InvalidDataException("Shader controller chain has a cycle.");
+                var controller = _source.ReadObject(cursor);
+                var interpolator = controller switch
+                {
+                    FalloutNifRefractionController strength => strength.Interpolator,
+                    FalloutNifRefractionFirePeriodController period => period.Interpolator,
+                    _ => -1,
+                };
+                if (interpolator < 0) return null;
+                var clock = FalloutNifNodeControllerChain.Time(controller);
+                if (clock.Target != property.Block.Index || clock.UnknownInteger != 0 ||
+                    (clock.Flags & 0x60) != 0x60 || _source.ReadObject(interpolator) is not FalloutNifBlendFloatInterpolator)
+                    return null;
+                result.Add(controller);
+                cursor = clock.NextController;
+            }
+            return result.Count == 0 ? null : result;
+        }
+
+        private bool IsManagedRefractionController(FalloutNifShaderProperty property) => ManagedRefractionControllers(property) is not null;
 
         private RuntimeNifControllerChannel BuildRefractionChannel(FalloutNifControllerSequence sequence,
             FalloutNifControllerLink link, int target)
         {
+            var controller = _source.ReadObject(link.Controller);
+            var clock = FalloutNifNodeControllerChain.Time(controller);
             if (link.PropertyType != "BSShaderPPLightingProperty" || link.Variable1.Length != 0 || link.Variable2.Length != 0 ||
-                _source.ReadObject(link.Controller) is not FalloutNifRefractionController controller ||
-                !ManagedGeometry(target).Properties.Contains(controller.Time.Target) ||
-                _source.ReadObject(controller.Time.Target) is not FalloutNifShaderProperty property ||
-                property.Controller != controller.Block.Index || !IsManagedRefractionController(property) ||
+                controller.Block.TypeName != link.ControllerType ||
+                !ManagedGeometry(target).Properties.Contains(clock.Target) ||
+                _source.ReadObject(clock.Target) is not FalloutNifShaderProperty property ||
+                ManagedRefractionControllers(property) is not { } chain || !chain.Contains(controller) ||
                 !_materials.TryGetValue(property.Block.Index, out var materials))
                 throw new NotSupportedException($"Managed refraction {sequence.Name}/{link.NodeName} has no source shader.");
             var sampler = new FalloutNifFloatAnimation(_source, link.Interpolator);
             return new(time =>
             {
-                var strength = sampler.Sample(time);
-                if (!float.IsFinite(strength)) throw new InvalidDataException("Refraction strength is nonfinite.");
+                var value = sampler.Sample(time);
                 foreach (var material in materials)
-                    NativeNifRefractionMaterial.Apply(material, property, strength, time);
+                    if (controller is FalloutNifRefractionFirePeriodController)
+                        NativeNifRefractionMaterial.ApplyPeriod(material, property, value, time);
+                    else NativeNifRefractionMaterial.Apply(material, property, value, time);
             });
         }
     }

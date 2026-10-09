@@ -180,6 +180,7 @@ internal static class FalloutNifNodeControllerChain
         FalloutNifAlphaController value => value.Time,
         FalloutNifEmittanceController value => value.Time,
         FalloutNifRefractionController value => value.Time,
+        FalloutNifRefractionFirePeriodController value => value.Time,
         FalloutNifParticleController value => value.Time,
         FalloutNifMorphController value => value.Time,
         _ => throw new NotSupportedException($"NIF block {declaration.Block.Index} {declaration.Block.TypeName} has no time-controller chain owner."),

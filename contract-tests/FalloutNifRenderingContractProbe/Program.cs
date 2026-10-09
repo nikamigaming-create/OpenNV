@@ -67,6 +67,16 @@ var mixed = FalloutNifAlphaState.Read(0x12ed, 73);
 Require(mixed.Blend == FalloutNifBlendMode.SourceAlpha && mixed.TestEnabled && mixed.TestFunction == 4 && mixed.Threshold == 73,
     "Independent alpha blend/test fields were lost.");
 ExpectException<NotSupportedException>(() => FalloutNifAlphaState.Read(0x0005, 0));
+var dynamicAlpha = new FalloutNifShaderProperty(new(0, "BSShaderPPLightingProperty", 0, 0),
+    "", [], -1, 1, 1, 1U << 19, 1, 1, 3, -1, 0, 0, 0, 0);
+Require(FalloutNifAlphaState.ForLighting(dynamicAlpha, null).Blend == FalloutNifBlendMode.SourceAlpha &&
+    FalloutNifAlphaState.ForLighting(dynamicAlpha with { ShaderFlags = 0 }, null).Blend == FalloutNifBlendMode.Opaque,
+    "Lighting dynamic alpha did not select its material-opacity pass independently of NiAlphaProperty.");
+var dynamicCutout = new FalloutNifAlphaProperty(new(1, "NiAlphaProperty", 0, 0), "", [], -1, 0x12ec, 73);
+Require(FalloutNifAlphaState.ForLighting(dynamicAlpha, dynamicCutout) == mixed,
+    "Dynamic material opacity discarded the independent source alpha test.");
+Require(FalloutNifAlphaState.ForLighting(dynamicAlpha, dynamicCutout with { Flags = 0x100d }).Blend == FalloutNifBlendMode.Add,
+    "Dynamic material opacity replaced explicit source blend factors.");
 var angle = new FalloutNifAngleFalloff(0.8f, 0.2f, 0.75f, 0.15f);
 Require(Math.Abs(angle.Sample(0.5f) - 0.45f) < 0.00001f && angle.Sample(1) == 0.75f && angle.Sample(0) == 0.15f,
     "Source cosine falloff does not preserve authored endpoints and interpolation.");

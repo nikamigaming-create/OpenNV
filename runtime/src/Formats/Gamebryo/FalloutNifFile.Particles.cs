@@ -235,3 +235,5 @@ internal sealed record FalloutNifEmittanceController(FalloutNifBlock Block, Fall
 
 internal sealed record FalloutNifRefractionController(FalloutNifBlock Block, FalloutNifTimeController Time,
     int Interpolator) : FalloutNifObject(Block);
+internal sealed record FalloutNifRefractionFirePeriodController(FalloutNifBlock Block, FalloutNifTimeController Time,
+    int Interpolator) : FalloutNifObject(Block);
