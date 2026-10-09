@@ -5,8 +5,11 @@ candidate with merged NIF, launcher, couch/head visibility, ability and source-m
 work. Runtime Debug compilation passes. Current saves require actual skill/effect
 owners with exact advancement agreement; cold formulas evaluate after ability
 binding. Historical save promotion and empty-effect admission are removed.
-Compiled magic-effect execution with original raw kind0x0100 is being implemented; the text-executed
-ability path is not binary gameplay acceptance. Whole current campaign cold
+Compiled magic-effect Start now uses original raw kind0x0100 SCDA with mandatory
+v2 source/event/cursor and actual retirement ownership. Construction prepares
+stored player owners before entering scripts or evaluating cold formulas.
+Runtime/script Debug compile; actual execution and the owned audit remain pending.
+Update/Finish/clock and original native event-list projection remain unowned. Whole current campaign cold
 acceptance and the joined publication gate remain pending.
 
 The separate FNV development Release `fnv-dev-6c79290edde5` repairs the reported

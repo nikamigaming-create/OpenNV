@@ -112,9 +112,15 @@ ability owners before validation; skill/progress captures must agree exactly.
 Cold formula validation follows actual ability binding. Historical save promotion
 and initial-effect admission receipts are removed. Earlier schema-success fixtures
 are replaced by current refusal and source-clock contracts; complete current
-campaign cold acceptance still requires ordinary gameplay. Active ability scripts
-still need their compiled magic-effect event owner; the original SCHR kind is
-0x0100, distinct from runtime API type2. A parallel owner is implementing it.
+campaign cold acceptance still requires ordinary gameplay. Compiled magic-effect
+Start now uses original SCDA, raw SCHR kind0x0100 and the actual instance/local
+owner. The mandatory v2 effect ledger retains binary program/event/cursor
+identity and actual shared execution retirement. Text execution and v1 promotion
+are removed. Stored player vitals/progress/skills prepare without entering
+scripts, then final synchronization/formula admission uses their completed
+bindings. Runtime and script-probe Debug compile with zero warnings/errors;
+execution and the owned ability audit remain pending. Update/Finish/effect clocks
+and original native event-list projection remain required.
 The 22-file protocol13 source-delivery packet is integrated; native x86 and managed
 Debug compilation pass. Real native readback and original DLL cold acceptance
 remain unexecuted.

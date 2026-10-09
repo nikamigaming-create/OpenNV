@@ -6,7 +6,7 @@ using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
 
-internal static class PlayerAbilityScriptContracts
+internal static partial class PlayerAbilityScriptContracts
 {
     private const string Plugin = "Effects.esm";
     private static readonly string[] SkillIds = ["Barter", "EnergyWeapons", "Explosives", "Lockpick", "Medicine",
@@ -23,7 +23,8 @@ internal static class PlayerAbilityScriptContracts
             CheckCompiledExtentMismatch(directory);
             CheckPrefixFailure(directory);
             CheckUnsupportedEvent(directory);
-            Console.WriteLine("OPENNV_PLAYER_ABILITY_SCRIPT_START_PASS sourceReader=true unequalHeaderCounts=true compiledExtentRefused=true effectLocals=true genuinePlayer=true independentEffects=true prefixFailure=true cold=true nonStartRefused=true compiledExecution=unverified parity=unverified");
+            CheckCompiledAbilityAuthority(directory);
+            Console.WriteLine("OPENNV_PLAYER_ABILITY_SCRIPT_START_PASS sourceReader=true unequalHeaderCounts=true compiledExtentRefused=true effectLocals=true genuinePlayer=true independentEffects=true prefixFailure=true cold=true nonStartRefused=true compiledExecution=authoritative_SCDA parity=unverified");
         }
         finally
         {
@@ -112,14 +113,15 @@ internal static class PlayerAbilityScriptContracts
         Reject(effects.Synchronize);
         var state = effects.Capture().Effects.Single();
         Require(!state.Started && state.Error is not null && BitConverter.UInt64BitsToDouble(state.Locals.Single().Payload) == 1 &&
-            skills.CaptureValues().Pools[32].Permanent == 3 && world.InstanceCount == 0,
-            "Failed Start lost its actual local/skill prefix or marked the script complete.");
+            skills.CaptureValues().Pools[32].Permanent == 3 && world.InstanceCount == 0 && state.Compiled!.Events is
+                [{ Cursor.CommittedInstructions: 3, Receipt.Disposition: "closed-failure", LastReachedOffset: not null }],
+            "Failed Start lost its actual local/skill/compiled prefix or marked the script complete.");
         var prefix = JsonSerializer.Serialize(skills.CaptureValues());
         Reject(effects.Synchronize);
         Require(JsonSerializer.Serialize(skills.CaptureValues()) == prefix, "A retained failed Start replayed its committed prefix.");
         var saved = JsonSerializer.Deserialize<FalloutPlayerAbilityScriptsSnapshot>(JsonSerializer.Serialize(effects.Capture()))!;
         var restored = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, saved);
-        restored.BindExecutor((_, _, _, _) => throw new InvalidOperationException("Failed cold Start must not execute."));
+        restored.BindExecutor(_ => throw new InvalidOperationException("Failed cold Start must not execute."));
         Reject(restored.Synchronize);
     }
 
@@ -139,10 +141,10 @@ internal static class PlayerAbilityScriptContracts
         () => actor.BaseSpecial, _ => false, () => [], null, new FalloutPlayerInventory(), Key(7), () => Key(10), () => false,
         actorValues: actor);
     private static FalloutPlayerAbilityScripts Bind(FalloutPluginStack records, FalloutReferenceWorld world,
-        FalloutPlayerActorValues actor, FalloutPlayerSkills skills, FalloutPlayerAbilityScriptsSnapshot? restore = null)
+        FalloutPlayerActorValues actor, FalloutPlayerSkills skills, FalloutPlayerAbilityScriptsSnapshot? restore = null, FalloutQuestState? quests = null)
     {
         var effects = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, restore);
-        var executor = new FalloutReferenceScripts(records, world, new FalloutQuestState(records),
+        var executor = new FalloutReferenceScripts(records, world, quests ?? new FalloutQuestState(records),
             new((_, _) => throw new NotSupportedException("Unexpected fixture furniture query."),
                 _ => throw new NotSupportedException("Unexpected fixture presentation command."),
                 ReadActorValue: (reference, name, kind) =>
@@ -159,16 +161,16 @@ internal static class PlayerAbilityScriptContracts
         return effects;
     }
 
-    private static byte[] Fixture(bool duplicate, bool failure = false, bool update = false, uint? declaredCompiledBytes = null, int compiledBytes = 7)
+    private static byte[] Fixture(bool duplicate, bool failure = false, bool update = false, uint? declaredCompiledBytes = null, int? compiledBytes = null)
     {
         var acbs = new byte[24]; acbs[8] = 1;
         var spit = new byte[16]; UInt(spit, 0, 4);
         var mgef = new byte[72]; UInt(mgef, 0, 0x70); UInt(mgef, 8, 0x30); UInt(mgef, 64, 1);
         var efit = new byte[20]; BinaryPrimitives.WriteInt32LittleEndian(efit.AsSpan(16), -1);
         var local = new byte[24]; UInt(local, 0, 1); local[16] = 1;
-        // Authored source and its separately retained compiled extent. This
-        // source-owner probe makes no bytecode execution acceptance assertion.
-        var compiled = new byte[compiledBytes];
+        // Independent canonical SCDA drives actual execution. SCTX is retained
+        // only as contradictory/invalid diagnostic evidence in additional cases.
+        var compiled = compiledBytes is { } extent ? new byte[extent] : CompiledAbilityBody(failure, update);
         var schr = new byte[20]; UInt(schr, 0, 13); UInt(schr, 4, 2);
         UInt(schr, 8, declaredCompiledBytes ?? (uint)compiled.Length); UInt(schr, 12, 1);
         BinaryPrimitives.WriteUInt16LittleEndian(schr.AsSpan(16), 0x100); schr[18] = 1;

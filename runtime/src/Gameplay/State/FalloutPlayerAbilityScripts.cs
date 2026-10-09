@@ -6,24 +6,24 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed record FalloutPlayerAbilityScriptState(FalloutFormKey Spell, int EffectOrdinal,
     FalloutFormKey Effect, FalloutFormKey Script, string SpellWinner, string SpellSha256,
     string EffectWinner, string EffectSha256, string ScriptWinner, string ScriptSha256,
-    long Generation, bool Active, bool Started, string? Error, IReadOnlyList<FalloutScriptEffectLocalCell> Locals);
+    long Generation, bool Active, bool Started, string? Error, IReadOnlyList<FalloutScriptEffectLocalCell> Locals, FalloutCompiledActiveEffectSnapshot? Compiled = null);
 internal sealed record FalloutPlayerAbilityScriptsSnapshot(string Schema, uint Reference,
     FalloutFormKey Player, string PlayerWinner, string PlayerSha256, long LastGeneration,
     IReadOnlyList<FalloutPlayerAbilityScriptState> Effects);
 
 // The bounded constant-ability Start lifecycle. Update/timing and Finish event
 // sources remain refused, rather than being silently treated as Start-only.
-internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetime
+internal sealed partial class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetime
 {
-    internal const string Schema = "opennv-player-ability-scripts/v1";
+    internal const string Schema = "opennv-player-ability-scripts/v2";
     private sealed class Entry(FalloutAbilityScript definition, FalloutPlayerAbilityScriptState state,
-        FalloutPluginRecord script, FalloutScriptEffectLocals locals, IReadOnlyList<FalloutScriptEventProgram> blocks)
+        FalloutPluginRecord script, FalloutScriptEffectLocals locals, FalloutCompiledActiveEffectExecution compiled)
     {
         internal FalloutAbilityScript Definition { get; } = definition;
         internal FalloutPlayerAbilityScriptState State { get; set; } = state;
         internal FalloutPluginRecord Script { get; } = script;
         internal FalloutScriptEffectLocals Locals { get; } = locals;
-        internal IReadOnlyList<FalloutScriptEventProgram> Blocks { get; } = blocks;
+        internal FalloutCompiledActiveEffectExecution Compiled { get; } = compiled;
     }
     private readonly FalloutPluginStack _records;
     private readonly Func<IReadOnlyList<FalloutFormKey>> _selection;
@@ -31,7 +31,7 @@ internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetim
     private readonly FalloutAbilityModifiers _declarations;
     private readonly FalloutPlayerActorValueSource _player;
     private readonly Dictionary<(FalloutFormKey Spell, int Ordinal), Entry> _entries = [];
-    private Action<FalloutFormKey, FalloutPluginRecord, FalloutGameModeProgram, FalloutScriptEffectLocals>? _execute;
+    private Func<FalloutCompiledActiveEffectInvocation, FalloutCompiledActiveEffectReceipt>? _execute;
     private IReadOnlyList<FalloutFormKey> _synchronizingSelection = [];
     private bool _synchronizing;
     private long _generation;
@@ -60,7 +60,7 @@ internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetim
         }
     }
 
-    internal void BindExecutor(Action<FalloutFormKey, FalloutPluginRecord, FalloutGameModeProgram, FalloutScriptEffectLocals> execute)
+    internal void BindExecutor(Func<FalloutCompiledActiveEffectInvocation, FalloutCompiledActiveEffectReceipt> execute)
     {
         ArgumentNullException.ThrowIfNull(execute);
         if (_execute is not null) throw new InvalidOperationException("Player active-effect executor is already bound.");
@@ -110,16 +110,15 @@ internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetim
                 if (entry.State.Started) continue;
                 try
                 {
-                    foreach (var block in entry.Blocks)
-                        execute(_records.RuntimeFormKey(FalloutPlayerActorValues.PlayerReference), entry.Script, block.Program, entry.Locals);
-                    entry.State = entry.State with { Started = true, Locals = entry.Locals.Capture() };
+                    entry.Compiled.ExecuteStart(execute);
+                    entry.State = entry.State with { Started = true, Locals = entry.Locals.Capture(), Compiled = entry.Compiled.Capture() };
                 }
                 catch (Exception error)
                 {
                     entry.State = entry.State with
                     {
                         Error = $"Active effect {definition.Spell}/{definition.EffectOrdinal} Start failed: {error.Message}",
-                        Locals = entry.Locals.Capture()
+                        Locals = entry.Locals.Capture(), Compiled = entry.Compiled.Capture()
                     };
                     throw;
                 }
@@ -143,42 +142,15 @@ internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetim
         }
     }
 
-    private Entry Build(FalloutAbilityScript definition, long generation, FalloutPlayerAbilityScriptState? saved)
-    {
-        var spell = _records.GetEffective(definition.Spell);
-        var effect = _records.GetEffective(definition.Effect);
-        var script = _records.GetEffective(definition.Script);
-        if (spell.Signature != "SPEL")
-            throw new NotSupportedException("Scripted constant enchantments require their equipped-item instance lifecycle.");
-        if (effect.Signature != "MGEF" || script.Signature != "SCPT")
-            throw new InvalidDataException("Active-effect source links are not MGEF/SCPT.");
-        var fields = script.ReadSubrecords().ToArray();
-        var headers = fields.Where(field => field.Signature == "SCHR").ToArray();
-        var compiled = fields.Where(field => field.Signature == "SCDA").ToArray();
-        var sources = fields.Where(field => field.Signature == "SCTX").ToArray();
-        if (headers.Length != 1 || headers[0].Data.Length != 20 || compiled.Length != 1 ||
-            FalloutScriptHeader.Read(headers[0].Data.Span).CompiledBytes != compiled[0].Data.Length || sources.Length != 1)
-            throw new NotSupportedException("Active-effect execution requires complete compiled identity and the shipped source-program owner.");
-        var blocks = FalloutGameModeProgram.ReadEvents(FalloutDialogueTopic.ScriptText(sources[0].Data.Span));
-        if (blocks.Any(block => !block.Event.Equals("ScriptEffectStart", StringComparison.OrdinalIgnoreCase) ||
-                block.Filter is not null || block.Parameters is not null))
-            throw new NotSupportedException($"Active effect {definition.Spell}/{definition.EffectOrdinal} requires its non-Start event/timeline owner.");
-        var state = new FalloutPlayerAbilityScriptState(definition.Spell, definition.EffectOrdinal, definition.Effect, definition.Script,
-            spell.Plugin.Name, Hash(spell), effect.Plugin.Name, Hash(effect), script.Plugin.Name, Hash(script),
-            generation, false, false, null, []);
-        var savedSource = saved is null ? null : saved with { Active = false, Started = false, Error = null, Locals = state.Locals };
-        if (savedSource is not null && savedSource != state)
-            throw new InvalidDataException("Saved active-effect sources/order differ from winning owned bytes.");
-        var locals = new FalloutScriptEffectLocals(script, saved?.Locals);
-        return new(definition, saved ?? state, script, locals, blocks);
-    }
+    private Entry Build(FalloutAbilityScript definition, long generation, FalloutPlayerAbilityScriptState? saved) =>
+        BuildCompiled(definition, generation, saved);
 
     internal FalloutPlayerAbilityScriptsSnapshot Capture()
     {
         if (_synchronizing) throw new NotSupportedException("Saving an active-effect invocation requires its continuation owner.");
         return new(Schema, FalloutPlayerActorValues.PlayerReference, _player.Player, _player.PlayerWinner, _player.PlayerSha256,
             _generation, _entries.Values.OrderBy(entry => entry.State.Generation)
-                .Select(entry => entry.State with { Locals = entry.Locals.Capture() }).ToArray());
+                .Select(entry => entry.State with { Locals = entry.Locals.Capture(), Compiled = entry.Compiled.Capture() }).ToArray());
     }
     internal static void ValidateSource(FalloutPluginStack records, FalloutPlayerAbilityScriptsSnapshot state)
     {
@@ -204,6 +176,7 @@ internal sealed class FalloutPlayerAbilityScripts : IFalloutAbilityScriptLifetim
             state.Effects.Select(effect => (effect.Spell, effect.EffectOrdinal)).Distinct().Count() != state.Effects.Count ||
             state.Effects.Select(effect => effect.Generation).Distinct().Count() != state.Effects.Count)
             throw new InvalidDataException("Saved player active-effect identity/lifecycle is invalid.");
+        foreach (var effect in state.Effects) RequireCompiledState(effect);
     }
     private static string Hash(FalloutPluginRecord source) => Convert.ToHexString(SHA256.HashData(source.ReadData())).ToLowerInvariant();
     private static bool ValidHash(string value) => value is { Length: 64 } && value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');

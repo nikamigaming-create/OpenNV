@@ -57,7 +57,7 @@ public partial class NativeReferenceEventsAudit
             Bind("_player", player); Bind("_scripts", scripts);
             var abilities = new FalloutPlayerAbilityScripts(records, () => [],
                 _ => throw new InvalidOperationException("Unexpected ability condition in save-deferral fixture."));
-            abilities.BindExecutor((_, _, _, _) => throw new InvalidOperationException("Unexpected active effect in save-deferral fixture."));
+            abilities.BindExecutor(_ => throw new InvalidOperationException("Unexpected active effect in save-deferral fixture."));
             Bind("_playerAbilities", abilities);
             Bind("_activeCell", Key(0x800));
             Bind("_stageResults", new FalloutQuestStages(records, new(records),

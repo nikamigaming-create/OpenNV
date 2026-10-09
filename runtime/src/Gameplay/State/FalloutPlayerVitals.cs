@@ -66,8 +66,11 @@ internal sealed partial class FalloutPlayerVitals
     internal static FalloutPlayerVitals FromActorValues(FalloutPluginStack records, FalloutPlayerActorValues actorValues,
         GameplayVitals? restore = null) => new(records, actorValues, restore);
 
+    internal static FalloutPlayerVitals PrepareFromActorValues(FalloutPluginStack records, FalloutPlayerActorValues actorValues,
+        GameplayVitals? restore = null) => new(records, actorValues, restore, preparing: true);
+
     private FalloutPlayerVitals(FalloutPluginStack records, FalloutPlayerActorValues actorValues,
-        GameplayVitals? restore) : this(records, actorValues.Source.Player)
+        GameplayVitals? restore, bool preparing = false) : this(records, actorValues.Source.Player)
     {
         var source = FalloutPlayerActorValueSource.Read(records);
         if (source.PlayerSha256 != actorValues.Source.PlayerSha256 || source.StatsSha256 != actorValues.Source.StatsSha256)
@@ -77,10 +80,14 @@ internal sealed partial class FalloutPlayerVitals
         // offset/multiplier; AP uses bounded current Agility. NPC DATA health
         // does not replace this engine-created player formula.
         _baseHealth = FalloutGameSettingFloats.ReadRetained(records, "fAVDHealthEnduranceOffset", nameof(FalloutPlayerVitals)) * _healthEndurance;
-        _state = restore ?? GameplayVitals.Derive(_baseHealth, actorValues.Source.Level, actorValues.ReadPermanent(7),
-                actorValues.ReadBoundedCurrent(10), _healthEndurance, _healthLevel, _apBase, _apAgility, 0, _xpBase, _xpBump);
+        // Construction seeds actual BASE fields without entering a script. The
+        // complete bound owner computes its derived fields before publication.
+        _state = restore ?? GameplayVitals.Derive(_baseHealth, actorValues.Source.Level,
+                preparing ? Math.Clamp(actorValues.ReadBase(7), 1, 10) : actorValues.ReadPermanent(7),
+                preparing ? Math.Clamp(actorValues.ReadBase(10), 1, 10) : actorValues.ReadBoundedCurrent(10),
+                _healthEndurance, _healthLevel, _apBase, _apAgility, 0, _xpBase, _xpBump);
         _state.Validate();
-        _ = State;
+        if (!preparing) _ = State;
     }
 
     private GameplayVitals Derive(FalloutNativeSpecialState special, int level, int experience) => GameplayVitals.Derive(

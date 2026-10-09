@@ -29,7 +29,7 @@ internal sealed partial class FalloutPlayerProgress
     private FalloutPlayerAdvancementSnapshot? _savedAdvancement;
     private FalloutPlayerAdvancement? _advancement;
 
-    internal int Level => _vitals.State.Level;
+    internal int Level => _vitals.StoredProgress.Level;
     internal bool Pending => _advancement?.Pending ?? _pendingXpOrigin;
     internal FalloutLevelUpMenuSession? Menu => _advancement?.Menu;
     internal string? Error => _error ?? _advancement?.Error ?? _savedAdvancement?.Error ?? _savedAdvancement?.Menu?.Error;
@@ -54,11 +54,22 @@ internal sealed partial class FalloutPlayerProgress
 
     internal FalloutPlayerProgress(FalloutPluginStack records, FalloutPlayerVitals vitals,
         FalloutPlayerActorValues values, FalloutPlayerSkills skills, FalloutPlayerExperience experience,
-        FalloutPlayerProgressSnapshot? restore = null)
+        FalloutPlayerProgressSnapshot? restore = null) : this(records, vitals, values, skills, experience, restore, preparing: false)
+    {
+    }
+
+    internal static FalloutPlayerProgress Prepare(FalloutPluginStack records, FalloutPlayerVitals vitals,
+        FalloutPlayerActorValues values, FalloutPlayerSkills skills, FalloutPlayerExperience experience,
+        FalloutPlayerProgressSnapshot? restore = null) => new(records, vitals, values, skills, experience, restore, preparing: true);
+
+    private FalloutPlayerProgress(FalloutPluginStack records, FalloutPlayerVitals vitals,
+        FalloutPlayerActorValues values, FalloutPlayerSkills skills, FalloutPlayerExperience experience,
+        FalloutPlayerProgressSnapshot? restore, bool preparing)
     {
         _records = records; _vitals = vitals; _source = values.Source; _values = values; _skills = skills; _experience = experience;
-        _vitals.RequireProgressJoin(Level, _vitals.State.ExperiencePoints, _vitals.State.NextLevelExperiencePoints);
-        if (restore is not null) Restore(restore);
+        var stored = _vitals.StoredProgress;
+        _vitals.RequireProgressJoin(stored.Level, stored.Experience, stored.NextThreshold);
+        if (restore is not null) Restore(restore, preparing);
         _experience.ExperienceChanged += ObserveExperience;
     }
 
@@ -183,7 +194,7 @@ internal sealed partial class FalloutPlayerProgress
         return snapshot;
     }
 
-    private void Restore(FalloutPlayerProgressSnapshot state)
+    private void Restore(FalloutPlayerProgressSnapshot state, bool preparing)
     {
         Validate(state);
         if (state.Player != _source.Player || state.PlayerSha256 != _source.PlayerSha256 ||
@@ -193,7 +204,8 @@ internal sealed partial class FalloutPlayerProgress
         if (state.Advancement is null && state.Level != _source.Level ||
             state.Advancement is { Error: null } advanced && (ulong)(state.Level - _source.Level) != advanced.Generation)
             throw new InvalidDataException("Saved current level has no matching consumed advancement owner.");
-        _skills.RestoreValues(state.Skills);
+        if (preparing) _skills.PrepareRestoredValues(state.Skills);
+        else _skills.RestoreValues(state.Skills);
         _xpGeneration = state.XpGeneration; _lastPrevious = state.LastPreviousExperience;
         _lastPublished = state.LastPublishedExperience; _pendingXpOrigin = state.PendingXpOrigin;
         _savedAdvancement = state.Advancement; _error = state.Error; _xpOrigin = state.XpOrigin;

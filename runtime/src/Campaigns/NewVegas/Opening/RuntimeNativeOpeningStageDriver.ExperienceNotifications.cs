@@ -29,7 +29,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         var source = new FalloutExperienceHudSource(_pluginStack, live);
         var owner = new FalloutExperienceNotifications(source.Declaration,
             FalloutAdvancementFrameDeclaration.Read(source.Declaration), ReadExperienceLevelIntroInput, source.Contract, _experience,
-            () => _vitals.State.Level, () => _vitals.State.ExperiencePoints, _vitals.ExperienceThreshold,
+            () => _vitals.StoredProgress.Level, () => _vitals.StoredProgress.Experience, _vitals.ExperienceThreshold,
             () =>
             {
                 var maximum = unchecked((int)FalloutGameSettingIntegers.Read(_pluginStack, "iMaxCharacterLevel"));

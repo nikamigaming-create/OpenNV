@@ -19,6 +19,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveContinuationBlocker =>
         PlayerStatisticSaveBlocker is { } statistic ? statistic :
+        _playerSkills.ValueConstructionSaveBlocker is { } skillConstruction ? skillConstruction :
         PlayerProgressSaveBlocker is { } progress ? progress :
         ExperienceNotificationSaveBlocker is { } experience ? experience :
         InterfaceActivationFrameSaveBlocker is { } activation ? activation :

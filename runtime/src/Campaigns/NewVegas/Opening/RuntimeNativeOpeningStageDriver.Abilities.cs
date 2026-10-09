@@ -35,7 +35,6 @@ internal partial class RuntimeNativeOpeningStageDriver
         _playerAbilities.BindExecutor(executor.ExecuteActiveEffect);
         _playerSkills.BindAbilityScripts(_playerAbilities);
         _playerActorValues.BindAbilityLifecycle(_playerAbilities.Synchronize);
-        if (restore?.State.PlayerSkillValues is { } skills) _playerSkills.RestoreValues(skills);
     }
 
     private bool AbilityCurrentFurniture(FalloutFormKey actor, FalloutFormKey furniture)

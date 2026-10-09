@@ -87,14 +87,26 @@ internal sealed partial class FalloutReferenceScripts
         FalloutCompiledEvent? block = null, double seconds = 0, FalloutFormKey? action = null,
         Action<FalloutScriptManualSaveRequests.Entered>? observeInvocation = null,
         FalloutCompiledExecutionCursor? cursor = null, Func<bool>? canContinue = null,
-        string? executionScope = null)
+        string? executionScope = null, IFalloutCompiledEventLocalAuthority? localAuthority = null)
     {
         var winning = records.GetEffective(program.Source.FormKey);
         if (winning.Plugin != program.Source.Plugin || winning.HeaderOffset != program.Source.HeaderOffset)
             throw new InvalidDataException("Compiled invocation differs from its winning source owner.");
-        if (!double.IsFinite(seconds) || seconds < 0 || program.CompiledFlag != 1 || program.ScriptType is not (0 or 1))
-            throw new NotSupportedException("Compiled invocation time/flag/type is outside its owned domain.");
-        if (program.Standalone)
+        if (!double.IsFinite(seconds) || seconds < 0 || program.CompiledFlag != 1)
+            throw new NotSupportedException("Compiled invocation time/flag is outside its owned domain.");
+        var sourceKind = FalloutScriptSourceKinds.Classify(program.ScriptType);
+        if (localAuthority is not null)
+        {
+            if (!program.Standalone || block is null || cursor is null || localAuthority.Locals.Script != program.Source.FormKey)
+                throw new InvalidDataException("Compiled independent event has no genuine Script/event-list/cursor owner.");
+            localAuthority.Require(records, caller, program, block, cursor, seconds, action);
+            var ordinal = program.Events.Select((row, index) => (row, index)).Single(pair => ReferenceEquals(pair.row, block)).index;
+            if (executionScope is not null && executionScope != FalloutCompiledSliceReceipt.EventScope(program, ordinal))
+                throw new InvalidDataException("Compiled independent event scope differs from its actual SCDA ordinal.");
+        }
+        else if (sourceKind == FalloutScriptSourceKind.MagicEffect)
+            throw new NotSupportedException("Compiled magic effect requires its actual instance/event-list local owner.");
+        if (program.Standalone && localAuthority is null)
         {
             var owner = records.GetEffective(caller);
             var matchingOwner = program.ScriptType == 0 && owner.Signature is "REFR" or "ACHR" or "ACRE" ||
@@ -102,18 +114,18 @@ internal sealed partial class FalloutReferenceScripts
             if (!matchingOwner || LocalScript(caller).FormKey != program.Source.FormKey)
                 throw new NotSupportedException("Compiled event differs from its attached calling script.");
         }
-        else if (program.LocalCount != 0)
+        else if (!program.Standalone && program.LocalCount != 0)
             throw new NotSupportedException("Embedded compiled local/event-list continuation has no owner.");
         var flow = FalloutCompiledControlFlow.Read(block is null ? program.ResultInstructions() : program.EventInstructions(block), block?.End ?? 0);
         var budget = new FalloutScriptExecutionBudget(100_000 - (cursor?.State.BudgetSpent ?? 0));
         var current = -1;
-        var bindings = FalloutScriptBindings.ForCompiled(records, CompiledBindingOwner(caller, program), program.Source,
+        var bindings = FalloutScriptBindings.ForCompiled(records, localAuthority is null ? CompiledBindingOwner(caller, program) : program.Source, program.Source,
             target => LocalScript(target.FormKey));
         Func<string, FalloutScriptFunction?>? sharedFunction = null;
         Action<string, IReadOnlyList<string>>? sharedCommand = null;
         _ = Steps(caller, bindings, null, action, seconds, budget: budget,
             bindCompiledOwners: (function, command) => { sharedFunction = function; sharedCommand = command; },
-            compiledStatement: () => current);
+            compiledStatement: () => current, effectLocals: localAuthority?.Locals);
         FalloutCompiledOperandContext operands = null!;
         operands = new FalloutCompiledOperandContext(ReferenceValue, ReadVariable, ReadGlobal, Query, budget,
             opcode => world.NativePlugins?.Declaration(opcode) ?? FalloutCompiledCommandDeclarations.Get(opcode, records),
@@ -181,6 +193,7 @@ internal sealed partial class FalloutReferenceScripts
         }
         FalloutScriptValue ReadVariable(FalloutCompiledVariable variable)
         {
+            if (localAuthority is not null && variable.OwnerReference is null) return localAuthority.Read(variable);
             var target = VariableOwner(variable); var script = LocalScript(target);
             var reference = ReferenceSlot(script, variable.Slot) &&
                 (!FalloutScriptLocals.HasMixedStorage(script, variable.Slot) || variable.Storage == (byte)'f');
@@ -192,6 +205,7 @@ internal sealed partial class FalloutReferenceScripts
         }
         void AssignVariable(FalloutCompiledVariable variable, FalloutScriptValue value)
         {
+            if (localAuthority is not null && variable.OwnerReference is null) { localAuthority.Write(variable, value); return; }
             var target = VariableOwner(variable); var script = LocalScript(target);
             var reference = ReferenceSlot(script, variable.Slot) &&
                 (!FalloutScriptLocals.HasMixedStorage(script, variable.Slot) || variable.Storage == (byte)'f');
@@ -285,6 +299,8 @@ internal sealed partial class FalloutReferenceScripts
         FalloutScriptValue? NativeQuery(ushort opcode, ushort? receiver, ReadOnlyMemory<byte> payload)
         {
             if (world.NativePlugins?.Declaration(opcode) is null) return null;
+            if (localAuthority is not null)
+                throw new NotSupportedException("Original native independent-event call requires its genuine event-list/object projection.");
             var call = FalloutNativePluginCompiledCalls.Bind(caller, program, opcode, receiver, payload,
                 () => FalloutCompiledOperands.Command(opcode, receiver, payload, operands).Arguments
                     .Select(argument => argument.Value).ToArray());

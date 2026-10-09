@@ -216,8 +216,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         BindCurrentPlayerStatistics(_scripts.References!.CampaignPlayerRuntimeSource.Receipt);
         BindPlayerAbilityState(restore, gameTime);
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
-        _playerAbilities.Synchronize();
-        _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
+        _vitals = FalloutPlayerVitals.PrepareFromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
         _playerSkills.BindAbilityConditions(PlayerProgressCondition);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
         InitializePlayerProgress(restore is null ? null : restore.State.PlayerProgress ??
@@ -260,6 +259,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (restore is null && bootstrapStageResults is null)
             _initialStageResultRequest = (FalloutDialogueTopic.Find(_pluginStack, "QUST", initialQuestEditorId).FormKey, initialStage);
         Name = "NativeOpeningStageDriver";
+        _playerAbilities.Synchronize();
+        _playerSkills.CompleteValueConstruction();
+        _ = Vitals;
         Synchronize();
     }
 

@@ -19,7 +19,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (_playerProgress is not null) throw new InvalidOperationException("Player progression is already initialized.");
         _experience.BindPerkConditions(PlayerProgressCondition);
-        _playerProgress = new(_pluginStack, _vitals, _playerActorValues, _playerSkills, _experience, restore);
+        _playerProgress = FalloutPlayerProgress.Prepare(_pluginStack, _vitals, _playerActorValues, _playerSkills, _experience, restore);
     }
 
     private float PlayerProgressCondition(FalloutCondition condition)

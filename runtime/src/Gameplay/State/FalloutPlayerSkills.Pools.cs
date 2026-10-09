@@ -22,6 +22,8 @@ internal sealed partial class FalloutPlayerSkills
     internal const string ValuesSchema = "opennv-player-skill-values/v1";
     private Dictionary<int, FalloutPlayerSkillPools> _skillPools = [];
     private FalloutPlayerActorValueSource? _skillPlayerSource;
+    private bool _valueConstructionPending;
+    internal string? ValueConstructionSaveBlocker => _valueConstructionPending ? "player-skill-formulas-await-complete-binding" : null;
     internal event Action? Changed;
     internal IReadOnlyList<int> SkillOrder => _skills.Select(skill => skill.Value).ToArray();
 
@@ -134,6 +136,28 @@ internal sealed partial class FalloutPlayerSkills
 
     internal void RestoreValues(FalloutPlayerSkillValuesSnapshot snapshot)
     {
+        var replacement = ReadValueReplacement(snapshot);
+        ValidateValueFormulas(replacement);
+        _skillPools = replacement;
+        _valueConstructionPending = false;
+        Changed?.Invoke();
+    }
+
+    internal void PrepareRestoredValues(FalloutPlayerSkillValuesSnapshot snapshot)
+    {
+        _skillPools = ReadValueReplacement(snapshot);
+        _valueConstructionPending = true;
+    }
+
+    internal void CompleteValueConstruction()
+    {
+        ValidateValueFormulas(_skillPools);
+        _valueConstructionPending = false;
+        Changed?.Invoke();
+    }
+
+    private Dictionary<int, FalloutPlayerSkillPools> ReadValueReplacement(FalloutPlayerSkillValuesSnapshot snapshot)
+    {
         ValidateValues(snapshot);
         var source = _skillPlayerSource ??= FalloutPlayerActorValueSource.Read(_records);
         if (snapshot.Player != source.Player || snapshot.PlayerWinner != source.PlayerWinner || snapshot.PlayerSha256 != source.PlayerSha256 ||
@@ -141,12 +165,14 @@ internal sealed partial class FalloutPlayerSkills
             !Sources(snapshot.Pools.Keys).SequenceEqual(snapshot.Sources))
             throw new InvalidDataException("Saved player skills differ from their winning player/stats/AVIF sources.");
         foreach (var value in snapshot.Pools.Keys) RequireSkill(value);
-        var replacement = snapshot.Pools.ToDictionary(pair => pair.Key, pair => pair.Value);
+        return snapshot.Pools.ToDictionary(pair => pair.Key, pair => pair.Value);
+    }
+
+    private void ValidateValueFormulas(IReadOnlyDictionary<int, FalloutPlayerSkillPools> replacement)
+    {
         foreach (var (value, pools) in replacement)
             if (!float.IsFinite((float)((double)SkillFormula(value) + pools.BaseOffset + pools.Permanent)))
                 throw new InvalidDataException("Saved player skill formula/pools exceed finite storage.");
-        _skillPools = replacement;
-        Changed?.Invoke();
     }
 
     private FalloutPlayerSkillSource[] Sources(IEnumerable<int> values)
