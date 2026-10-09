@@ -309,7 +309,7 @@ internal static partial class FalloutNativeCampaignSave
             }
             using var radioWorld = new FalloutReferenceWorld(stack);
             new FalloutRadioStations(stack, radioWorld, new()).Restore(savedScripts.Radio);
-            validatedValues = new FalloutScriptValueStore();
+            validatedValues = new FalloutScriptValueStore().BindArraySource(stack);
             validatedValues.Restore(savedScripts.Values);
             if (state.Quests is not null)
                 ValidateQuestValueHandles(stack, state.Quests, validatedValues);

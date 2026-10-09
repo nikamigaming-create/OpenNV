@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Content;
 
 // Joins the public plugin value ABI to the campaign's existing authoritative
 // locals/array graph. No native Script/TESForm or retail heap is fabricated.
-internal sealed class FalloutNativePluginValues : NativeNvseValueAuthority
+internal sealed partial class FalloutNativePluginValues : NativeNvseValueAuthority
 {
     private readonly FalloutScriptValueStore _store;
     internal override object StoreIdentity => _store;

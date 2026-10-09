@@ -51,7 +51,7 @@ internal sealed partial class RuntimeNativeCreature
             CompleteScriptPackageEvent(package, kind, startedRevision);
             GD.Print($"OPENNV_CREATURE_PACKAGE_EVENT reference={actor} package={package.Form} event={kind} owner=shared-reference-results");
         }
-        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
+        catch (Exception error)
         {
             _aiState!.ScriptError ??= $"Package {kind} {package.Form}: {error.Message}";
             throw;
@@ -121,7 +121,7 @@ internal sealed partial class RuntimeNativeCreature
                     }
             });
         }
-        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
+        catch (Exception error)
         {
             _aiState.ScriptError ??= $"Package idle {saved.Idle}: {error.Message}";
             throw;

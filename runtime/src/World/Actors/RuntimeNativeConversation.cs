@@ -126,7 +126,8 @@ internal partial class RuntimeNativeConversation : Node
             _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
             _speech.BeginPlayerDialogue(_speaker);
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
-            _menu = new(() => _speech.SkipResponse(), Fail); _layer.AddChild(_menu);
+            _menu = new(() => _speech.SkipResponse(), Fail, _standaloneNativeInterface); _layer.AddChild(_menu);
+            PublishStandaloneDialog();
             _player.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
             _conversation.Start(identity.Actor, request.Topic ?? FalloutDialogueTopic.Find(_records, "DIAL", "GREETING").FormKey);
             _recordTalkedToPlayer?.Invoke(_dialogueSubject);
@@ -145,6 +146,7 @@ internal partial class RuntimeNativeConversation : Node
     {
         if (_conversation.Phase == "closed")
         {
+            CloseStandaloneDialog();
             ReleaseFacing();
             _layer?.QueueFree(); _layer = null; _menu = null;
             _player.SetModalInput(false);
@@ -152,7 +154,7 @@ internal partial class RuntimeNativeConversation : Node
             var completed = _completed; _completed = null; completed?.Invoke();
             return;
         }
-        _menu!.Show(_speakerName, _conversation, topic => Guard(() => { _conversation.Choose(topic); Present(); }));
+        _menu!.Show(_speakerName, _conversation, topic => Guard(() => { _conversation.Choose(topic); Present(); }), _speaker);
         if (_conversation.Phase == "speaking")
             _speech.StartResponse(_speaker, _conversation.Info!, _conversation.ResponseIndex,
                 () => Guard(() => { _conversation.CompleteResponse(); Present(); }), _dialogueSubject, _identity);

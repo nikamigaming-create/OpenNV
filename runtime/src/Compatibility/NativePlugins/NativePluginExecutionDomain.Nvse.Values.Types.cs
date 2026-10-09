@@ -37,6 +37,8 @@ internal abstract class NativeNvseValueAuthority
     internal abstract IDisposable BeginExecution();
     internal abstract bool ContainsArray(uint id);
     internal abstract uint CreateArray(int kind, IReadOnlyList<NativeNvseArrayEntry> entries);
+    internal virtual uint CreateArrayForScript(int kind, IReadOnlyList<NativeNvseArrayEntry> entries, uint script) => CreateArray(kind, entries);
+    internal virtual NativeNvseArrayObjectSnapshot? ArrayObject(uint id) => throw new NotSupportedException("Internal ArrayVar lacks its actual source creation/reference/object authority.");
     internal abstract void RetainArray(uint id);
     internal abstract void ReleaseArray(uint id);
     internal abstract int ArraySize(uint id);

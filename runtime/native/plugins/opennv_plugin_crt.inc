@@ -5,6 +5,7 @@ constexpr std::uint32_t crt_provider_event = 5, crt_route_event = 6, crt_opened_
     crt_stream_event = 8, crt_path_event = 9;
 void* crt_entry(const std::string&);
 bool crt_io_import_name(const std::string& library, const std::string& name) {
+    if (library == "api-ms-win-crt-environment-l1-1-0.dll") return name == "getenv_s" || name == "_putenv_s";
     if (library == "api-ms-win-crt-stdio-l1-1-0.dll") {
         static const std::set<std::string> pure {
             "__stdio_common_vsprintf", "__stdio_common_vsprintf_s", "__stdio_common_vsnprintf_s", "__stdio_common_vsscanf",
@@ -88,14 +89,12 @@ void crt_emit(const CrtEvent& event, std::uint32_t callback = crt_stream_event) 
     auto& provider = crt_provider(event.provider);
     if (io_owner().loader_retiring) {
         if (callback != crt_stream_event) throw Fatal(ERROR_NOT_SUPPORTED, "CRT path/open cannot invoke C# while original loader retirement holds its lock.");
-        crt_owner().pending.push_back(event); return;
+        if (!provider.registered) throw Fatal(ERROR_NOT_SUPPORTED, "First CRT detach operation has no registered original export provider.");
     }
-    crt_register(provider); Bytes request; request.put(event.provider); request.put(event.route); request.put(event.stream);
+    else crt_register(provider); Bytes request; request.put(event.provider); request.put(event.route); request.put(event.stream);
     request.put(static_cast<std::uint32_t>(event.operation)); request.put(event.argument); request.put(event.requested);
     request.put(event.result); request.put(event.retired ? 1U : 0U); crt_put_status(request, event.status);
-    auto response = io_host(callback, request); Reader result{response.data};
-    if (result.get<std::uint32_t>() != 1) throw Fatal(ERROR_INVALID_DATA, "CRT actual result lacks a complete correlated source/stream receipt.");
-    result.finish();
+    crt_owned_callback(callback, request);
 }
 CrtStream crt_stream(void* pointer, bool write = false) {
     auto& owner = crt_owner(); const auto found = owner.streams.find(address(pointer));
@@ -113,10 +112,10 @@ void crt_prepare(PluginIoRuntime& io, Reader& reader) {
     if (provider->path.empty() || provider->sha.size() != 64 || provider->declaration.empty())
         throw Fatal(ERROR_INVALID_DATA, "CRT source provider lacks its exact path/hash/declaration.");
     const auto libraries = reader.get<std::uint32_t>();
-    if (!libraries || libraries > 3) throw Fatal(ERROR_INVALID_DATA, "CRT source provider has no exact declared import-library set.");
+    if (!libraries || libraries > 4) throw Fatal(ERROR_INVALID_DATA, "CRT source provider has no exact declared import-library set.");
     for (std::uint32_t at = 0; at < libraries; ++at) {
         const auto library = reader.text(); const auto names = reader.get<std::uint32_t>();
-        if ((library != "ucrtbase.dll" && library != "api-ms-win-crt-stdio-l1-1-0.dll" && library != "api-ms-win-crt-filesystem-l1-1-0.dll") ||
+        if ((library != "ucrtbase.dll" && library != "api-ms-win-crt-stdio-l1-1-0.dll" && library != "api-ms-win-crt-filesystem-l1-1-0.dll" && library != "api-ms-win-crt-environment-l1-1-0.dll") ||
             !names || names > 128 || provider->imports.count(library))
             throw Fatal(ERROR_INVALID_DATA, "CRT source library has an unknown/duplicate declaration.");
         auto& declared = provider->imports[library];

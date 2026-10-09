@@ -84,12 +84,17 @@ internal sealed partial class NativePluginDomainChild
     internal void CloseMutexVerificationAfterChildExit()
     {
         if (!HasExited) throw new InvalidOperationException("Failed mutex verification cleanup requires confirmed original child closure.");
+        var failures = new List<Exception>();
         for (var at = _failedMutexVerificationRefs.Count - 1; at >= 0; --at)
         {
             var reference = _failedMutexVerificationRefs[at];
             if (!NativePluginIoSecurity.CloseHandle(reference.DangerousGetHandle()))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed mutex verification reference still has not closed.");
+            {
+                failures.Add(new Win32Exception(Marshal.GetLastWin32Error(), "Failed mutex verification reference still has not closed."));
+                continue;
+            }
             reference.SetHandleAsInvalid(); reference.Dispose(); _failedMutexVerificationRefs.RemoveAt(at);
         }
+        if (failures.Count != 0) throw new AggregateException("Independent mutex observation reference retirement failed.", failures);
     }
 }

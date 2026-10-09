@@ -295,7 +295,8 @@ internal sealed partial class FalloutReferenceScripts
             if (receiver is null && declaration.RequiresReference && records.RuntimeFormId(caller) != 0x14 &&
                 records.GetEffective(caller).Signature is not ("REFR" or "ACHR" or "ACRE"))
                 throw new InvalidDataException("Compiled reference command has no actual calling reference.");
-            return receiver is { } key ? bindings.BindCompiledForm(key) + "." + declaration.Name : declaration.Name;
+            var executionName = FalloutCompiledSemanticBinding.Read(declaration).ExecutionName;
+            return receiver is { } key ? bindings.BindCompiledForm(key) + "." + executionName : executionName;
         }
         FalloutScriptValue Invoke(FalloutCompiledCommand command, FalloutScriptFunction function)
         {
@@ -317,7 +318,8 @@ internal sealed partial class FalloutReferenceScripts
         FalloutScriptValue Query(FalloutCompiledCommand command)
         {
             var name = Name(command);
-            if (!FalloutCompiledSemanticOwners.IsQuery(FalloutCompiledCommandDeclarations.Get(command.Opcode, records).Name))
+            if (FalloutCompiledSemanticBinding.Read(FalloutCompiledCommandDeclarations.Get(command.Opcode, records)).Kind !=
+                FalloutCompiledSemanticKind.Query)
                 throw new NotSupportedException($"Compiled query {command.Opcode:x4}/{name} has no admitted authoritative execution owner.");
             var function = sharedFunction!(name) ?? throw new NotSupportedException(
                 $"Compiled query {command.Opcode:x4}/{name} has no authoritative shared gameplay owner.");
@@ -325,7 +327,7 @@ internal sealed partial class FalloutReferenceScripts
         }
         FalloutScriptValue? NativeQuery(ushort opcode, ushort? receiver, ReadOnlyMemory<byte> payload)
         {
-            if (world.NativePlugins?.Declaration(opcode) is null) return null;
+            if (world.NativePlugins?.ContainsOpcode(opcode) != true) return null;
             if (localAuthority is not null)
                 throw new NotSupportedException("Original native independent-event call requires its genuine event-list/object projection.");
             var call = FalloutNativePluginCompiledCalls.Bind(caller, program, opcode, receiver, payload,
@@ -359,12 +361,13 @@ internal sealed partial class FalloutReferenceScripts
                 }
                 if (NativeQuery(instruction.Opcode, instruction.Receiver, instruction.Payload) is not null) return;
                 var declaration = FalloutCompiledCommandDeclarations.Get(instruction.Opcode, records);
-                var query = FalloutCompiledSemanticOwners.IsQuery(declaration.Name);
-                if (!query && !FalloutCompiledSemanticOwners.IsEffect(declaration.Name))
-                    throw new NotSupportedException($"Compiled command {instruction.Opcode:x4} has no admitted authoritative execution owner.");
+                var binding = FalloutCompiledSemanticBinding.Read(declaration);
+                var query = binding.Kind == FalloutCompiledSemanticKind.Query;
+                if (binding.Kind == FalloutCompiledSemanticKind.Unowned)
+                    throw new NotSupportedException($"Compiled command {instruction.Opcode:x4}/{declaration.Name}/{declaration.Alias} has no admitted authoritative execution owner.");
                 var command = FalloutCompiledOperands.Command(instruction.Opcode, instruction.Receiver, instruction.Payload, operands);
                 var name = Name(command);
-                if (FalloutCompiledSemanticOwners.IsMessage(declaration.Name))
+                if (binding.Kind == FalloutCompiledSemanticKind.Message)
                 {
                     var message = command.Message ?? throw new InvalidDataException("Compiled message has no decoded special arguments.");
                     var form = command.Arguments.Single().Value;
@@ -380,7 +383,7 @@ internal sealed partial class FalloutReferenceScripts
                 else if (query) _ = Query(command);
                 else
                 {
-                    RequireCompiledEffectArguments(command, declaration.Name);
+                    RequireCompiledEffectArguments(command, binding.ExecutionName);
                     sharedCommand!(name, command.Arguments.Select(Token).ToArray());
                 }
             }

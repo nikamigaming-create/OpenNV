@@ -56,6 +56,7 @@ internal partial class RuntimeNativeReferencePresentation
 
     public override void _ExitTree()
     {
+        RetireSandboxPublication();
         foreach (var key in _objectControllers.Keys.ToArray()) UnbindObjectAnimation(key);
     }
 

@@ -87,12 +87,12 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         {
             foreach (var admission in selection.Modules) AdmitQuery(admission, companion, privateStateRoot);
             foreach (var module in _modules.Where(module => module.Plugin.Phase == NativeNvsePhase.QueriedTrue))
-                InitializeStage(module, () => module.Domain.DeliverNvseMessage(module.Plugin, 23, []));
+                InitializeStage(module, "NVSE message 23", () => module.Domain.DeliverNvseMessage(module.Plugin, 23, []));
             uint loadHandle = 0;
             foreach (var module in _modules.Where(module => module.Plugin.Phase == NativeNvsePhase.QueriedTrue && module.ObjectFailure is null))
             {
                 var actualHandle = checked(++loadHandle);
-                InitializeStage(module, () =>
+                InitializeStage(module, "NVSEPlugin_Load", () =>
                 {
                     if (module.Admission.ExpressionAbi is { } expression)
                         module.Domain.ConfigureNvseExpressionAbi(module.Plugin, expression);
@@ -103,7 +103,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             }
             foreach (var message in new uint[] { 0, 9 })
                 foreach (var module in _modules.Where(module => module.Plugin.Phase == NativeNvsePhase.LoadedTrue && module.ObjectFailure is null))
-                    InitializeStage(module, () => module.Domain.DeliverNvseMessage(module.Plugin, message, []));
+                    InitializeStage(module, $"NVSE message {message}", () => module.Domain.DeliverNvseMessage(module.Plugin, message, []));
             foreach (var module in _modules)
             {
                 if (module.Plugin.Phase != NativeNvsePhase.LoadedTrue || module.ObjectFailure is not null || module.Domain.Fault is not null || module.Plugin.Registry.UnownedRequests.Count != 0) continue;
@@ -127,7 +127,9 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     public IReadOnlyList<FalloutNativePluginCampaignModule> Modules => _failures.Concat(_modules.Select(module =>
         new FalloutNativePluginCampaignModule(module.Admission.LogicalPath, module.Admission.PhysicalPath, module.Admission.Sha256,
             module.Domain.Generation, module.Domain.ProcessId, module.Plugin.QueryReceipt?.Returned, module.Plugin.LoadReceipt?.Returned,
-            module.Domain.Fault?.Reason ?? module.ObjectFailure ?? module.Domain.NvseSourceFileDiagnostics, module.Plugin.Registry.UnownedRequests.Select(row => row.Operation).ToArray(), module.Retired))).ToArray();
+            module.ObjectFailure ?? (module.Domain.Fault is { } fault ?
+                $"Native {fault.Operation}, code {fault.NativeCode?.ToString("x8", System.Globalization.CultureInfo.InvariantCulture) ?? "unreported"}: {fault.Reason}" :
+                module.Domain.NvseSourceFileDiagnostics), module.Plugin.Registry.UnownedRequests.Select(row => row.Operation).ToArray(), module.Retired))).ToArray();
 
     private void AdmitQuery(FalloutNativePluginModuleAdmission admission, string companion, string privateStateRoot)
     {
@@ -153,7 +155,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             domain.BindCngSystemServiceBuild(companion);
             domain.BindNativeImportProviderBuild(companion);
             plugin = domain.LoadNvseImage(host, physical, admission.Sha256, sourcePluginHandle: admission.QueryHandle); host = null;
-            domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues));
+            domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues, _records, domain, plugin));
             domain.AttachNvseScriptInterface(plugin);
             domain.AttachNvseCommandTable(plugin, new CampaignCommandTable(this));
             if (_dataBindings is { } data) domain.AttachNvseData(plugin, new CampaignData(this, domain, plugin, data));
@@ -177,12 +179,12 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         }
     }
 
-    private void InitializeStage(Module module, Func<uint> action)
+    private void InitializeStage(Module module, string stage, Func<uint> action)
     {
         try { _ = action(); }
         catch (Exception error)
         {
-            module.ObjectFailure = error.ToString();
+            module.ObjectFailure = stage + ": " + error;
             // Preserve the original reached prefix and every callback. Never
             // release guest-callable owners until the exact child has exited.
             try { module.Domain.Dispose(); module.Retired = module.Domain.NaturallyRetired; }
@@ -190,6 +192,11 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         }
     }
     internal IReadOnlyList<FalloutNativeModuleSource> SourceInventory => _selection?.Inventory ?? [];
+
+    public bool ContainsOpcode(ushort opcode)
+    {
+        RequireCurrent(); return _commands.ContainsKey(opcode);
+    }
 
     public FalloutCompiledCommandDeclaration? Declaration(ushort opcode)
     {
@@ -227,8 +234,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             module.Locals.Add(call.Owner, locals);
         }
         RefreshCampaignGraphs(module);
-        var arguments = FalloutNativePluginExpressionArguments.Deferred(call.Program.Scope.ScopeSha256 + ":" + call.Start + ":" + call.End,
-            call.Start, call.End, call.Evaluate);
+        var arguments = FalloutNativePluginExpressionStream.Bind(call, locals);
         // Form tokens can publish only the exact objects retained before this
         // call. No callback may instantiate a proxy or allocate a replacement.
         var reachable = new HashSet<NativeNvseSourceObject>(); var pending = new Stack<NativeNvseSourceObject>(module.Objects.Values);

@@ -454,7 +454,7 @@ internal sealed partial class FalloutQuestScripts
         _inventory = inventory;
         _globals = globals;
         References = references;
-        ScriptValues = references?.ScriptValues ?? new();
+        ScriptValues = (references?.ScriptValues ?? new()).BindArraySource(records);
         Auxiliary = references?.Auxiliary ?? storage?.Auxiliary ?? auxiliary ?? new();
         Ini = references?.Ini ?? storage?.Ini;
         Controls = references?.Controls ?? storage?.Controls;

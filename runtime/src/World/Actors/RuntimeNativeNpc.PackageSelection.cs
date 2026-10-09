@@ -20,6 +20,12 @@ internal partial class RuntimeNativeNpc
             _restoredFollowSelection = null;
             return retained;
         }
+        if (_restoredSandboxSelection is { } sandbox)
+        {
+            if (reevaluateScript is not null) throw new NotSupportedException("Cold Sandbox must bind before a new explicit election.");
+            _restoredSandboxSelection = null;
+            return sandbox;
+        }
         _failedSelectionCondition = null;
         var world = _aiWorld ?? throw new NotSupportedException("NPC package selection has no reference state owner.");
         var selected = _aiReferenceState?.PendingPackageChoice is { } choice ? choice.Bind(_aiStack!, _aiReferenceState) :

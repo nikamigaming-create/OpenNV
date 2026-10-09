@@ -1,5 +1,17 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args is ["--test-native-array-source"])
+{
+    NativeArrayObjectContracts.Run();
+    return;
+}
+
+if (args is ["--test-native-expression-local-source"])
+{
+    NativeExpressionLocalContracts.Run();
+    return;
+}
+
 if (args.Length == 5 && args[0] == "--test-native-mutex")
 {
     NativeMutexContracts.Run(args[1], args[2], args[3], args[4]);
@@ -45,7 +57,9 @@ if (args.Length != 0)
 }
 
 NativeEngineCommandLeafContracts.Run();
+NativeExpressionLocalContracts.Run();
 OwnershipAndEndian();
+NativeArrayObjectContracts.Run();
 AdjacentExtents();
 AtomicRefusal();
 MappingRefusal();

@@ -15,7 +15,7 @@ void values_heap_receipt(const NvseHeapEvent& event) {
 void values_heap_note(const GuestRegion& region, std::uint32_t operation, std::uint32_t abi, std::uint32_t receiver) {
     auto& owner = values_heap_owner();
     const NvseHeapEvent event{region.id, values_caller_id(), address(region.base), region.length, operation, abi, receiver};
-    if (owner.loader_retiring) owner.pending.push_back(event); else values_heap_receipt(event);
+    if (owner.loader_retiring) crt_defer_heap_receipt(event); else values_heap_receipt(event);
 }
 void values_heap_contract(NvseHeapOperation operation, Abi abi, std::uint32_t receiver) {
     const auto& owner = values_heap_owner();
@@ -49,7 +49,7 @@ void values_heap_release(void* pointer, std::uint32_t abi = 0, std::uint32_t rec
     if (!pointer) return;
     const auto found = owner.allocations.find(address(pointer));
     if (found == owner.allocations.end()) throw Fatal(ERROR_INVALID_HANDLE, "Native heap free targets a foreign, interior or retired allocation.");
-    const auto region = found->second.region; cng_shared_require_releasable(1U, region.id);
+    const auto region = found->second.region; cng_shared_require_releasable(1U, region.id); crt_support_require_releasable(region.id);
     owner.shared_heap.release(region.id); cng_shared_forget(1U, region.id);
     shared_placement_source_released(1U, region.id, region.base); owner.allocations.erase(found);
     ++owner.destroyed; values_heap_note(region, 2, abi, receiver);

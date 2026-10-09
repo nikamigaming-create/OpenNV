@@ -466,7 +466,7 @@ void unload_nvse(const Frame& frame) {
         throw Fatal(ERROR_INVALID_DATA, "NVSE interface mapping remains after retirement.");
     state->data.reset();
     engine_commands_retire(frame);
-    command_table_retire(); expression_retire(); values_heap_retire(); values_retire(); source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
+    command_table_retire(); expression_retire(); array_objects_retire(frame); values_heap_retire(); values_retire(); source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
     Bytes data; nvse_counters(data); data.put(0U); data.put(0U);
     state->nvse.reset(); state->module = nullptr; state->module_id = 0;
     reply(frame, ERROR_SUCCESS, "", data);

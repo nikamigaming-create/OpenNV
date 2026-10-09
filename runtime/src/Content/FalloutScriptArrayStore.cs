@@ -25,7 +25,7 @@ internal sealed record FalloutScriptArrayValueSnapshot(FalloutScriptValueKind Ki
 internal sealed record FalloutScriptArrayElementSnapshot(
     FalloutScriptArrayValueSnapshot Key, FalloutScriptArrayValueSnapshot Value);
 internal sealed record FalloutScriptArraySnapshot(uint Id, FalloutScriptArrayKind Kind,
-    IReadOnlyList<FalloutScriptArrayElementSnapshot> Elements);
+    IReadOnlyList<FalloutScriptArrayElementSnapshot> Elements, FalloutScriptArrayNativeOwnership? NativeOwnership = null);
 
 // Array identity belongs to the shared script store. Locals alias identities;
 // elements retain nested identities. Execution scopes protect intermediate
@@ -71,13 +71,14 @@ internal sealed partial class FalloutScriptArrayStore
         return Reference(value.Number);
     }
 
-    internal FalloutScriptValue SetRoot(string owner, FalloutScriptValue value)
+    internal FalloutScriptValue SetRoot(string owner, FalloutScriptValue value, string? ownerPlugin = null)
     {
         if (string.IsNullOrWhiteSpace(owner)) throw new InvalidDataException("Script array local owner is absent.");
         var array = RequireReference(value);
         if (_roots.GetValueOrDefault(owner) != (uint)array.Number) _collectNeeded = true;
         if (array.Number == 0) _roots.Remove(owner);
         else _roots[owner] = (uint)array.Number;
+        NativeRootChanged(owner, checked((uint)array.Number), ownerPlugin);
         return array;
     }
 
@@ -118,6 +119,7 @@ internal sealed partial class FalloutScriptArrayStore
                     store._elementCount -= store._arrays[id].Count;
                     store._arrays.Remove(id);
                 }
+                store.NativePruneReferences();
                 store._collectNeeded = false;
             }
         }
@@ -216,6 +218,7 @@ internal sealed partial class FalloutScriptArrayStore
         if (data.Kind == FalloutScriptArrayKind.StringMap) data.Strings[key.Text] = value;
         else data.Numbers[key.Number] = value;
         if (newKey) ++_elementCount;
+        NativeElementChanged(checked((uint)array.Number), key, value);
     }
 
     internal FalloutScriptValue Map(IReadOnlyList<FalloutScriptPair> pairs)
@@ -252,6 +255,7 @@ internal sealed partial class FalloutScriptArrayStore
             _elementCount -= count;
             data.Numbers.Clear();
             data.Strings.Clear();
+            NativePruneReferences();
             return count;
         }
         ValidateKey(data, key.Value);
@@ -259,6 +263,7 @@ internal sealed partial class FalloutScriptArrayStore
         {
             if (!data.Strings.Remove(key.Value.Text)) return 0;
             --_elementCount;
+            NativePruneReferences();
             return 1;
         }
         if (!data.Numbers.Remove(key.Value.Number)) return 0;
@@ -268,7 +273,9 @@ internal sealed partial class FalloutScriptArrayStore
             var remaining = data.Numbers.Values.ToArray();
             data.Numbers.Clear();
             for (var index = 0; index < remaining.Length; ++index) data.Numbers.Add(index, remaining[index]);
+            NativeErasePackedEntry(checked((uint)array.Number), checked((int)key.Value.Number));
         }
+        NativePruneReferences();
         return 1;
     }
 
@@ -283,7 +290,12 @@ internal sealed partial class FalloutScriptArrayStore
         _collectNeeded = true;
         _elementCount += (int)size - data.Count;
         for (var index = data.Count - 1; index >= size; --index) data.Numbers.Remove(index);
-        for (var index = data.Count; index < size; ++index) data.Numbers.Add(index, padding);
+        NativePruneReferences();
+        for (var index = data.Count; index < size; ++index)
+        {
+            data.Numbers.Add(index, padding);
+            NativeElementChanged(checked((uint)array.Number), index, padding);
+        }
     }
 
     internal FalloutScriptValue Copy(FalloutScriptValue array, bool deep = false)
@@ -325,12 +337,13 @@ internal sealed partial class FalloutScriptArrayStore
     internal IReadOnlyList<FalloutScriptArraySnapshot> Capture() => Reachable(_roots.Values).Order()
         .Select(id => new FalloutScriptArraySnapshot(id, _arrays[id].Kind, _arrays[id].Entries.Select(pair =>
             new FalloutScriptArrayElementSnapshot(FalloutScriptArrayValueSnapshot.Capture(pair.Key),
-                FalloutScriptArrayValueSnapshot.Capture(pair.Value))).ToArray())).ToArray();
+                FalloutScriptArrayValueSnapshot.Capture(pair.Value))).ToArray(), NativeCaptureOwnership(id))).ToArray();
 
     internal void ValidateRestoredRoots()
     {
         if (!Reachable(_roots.Values).SetEquals(_arrays.Keys))
             throw new InvalidDataException("Saved script arrays include a graph without a declared local owner.");
+        NativeValidateRestoredReferences();
     }
 
     internal IEnumerable<uint> Forms => _arrays.Values.SelectMany(data => data.Entries)
@@ -342,7 +355,7 @@ internal sealed partial class FalloutScriptArrayStore
         if ((lastId is null) != (snapshots is null) || lastId == uint.MaxValue)
             throw new InvalidDataException("Saved script array extent is invalid.");
         if (snapshots?.Count > MaximumArrays) throw new NotSupportedException("Saved arrays exceed the runtime allocation budget.");
-        var candidate = new FalloutScriptArrayStore { LastId = lastId ?? 0 };
+        var candidate = new FalloutScriptArrayStore { LastId = lastId ?? 0, _nativeArrayRecords = _nativeArrayRecords };
         foreach (var snapshot in snapshots ?? [])
         {
             if (snapshot is null || snapshot.Id == 0 || snapshot.Id > candidate.LastId || snapshot.Elements is null ||
@@ -360,8 +373,13 @@ internal sealed partial class FalloutScriptArrayStore
                 candidate.Set(array, key, element.Value.Restore());
             }
         }
+        candidate.NativeRestoreOwnership(snapshots ?? []);
+        foreach (var creation in candidate._nativeArrayCreation.Values) candidate.RequireNativeCreation(creation);
         _arrays.Clear();
         foreach (var (id, data) in candidate._arrays) _arrays.Add(id, data);
+        _nativeArrayCreation.Clear(); foreach (var pair in candidate._nativeArrayCreation) _nativeArrayCreation.Add(pair.Key, pair.Value);
+        _nativeArrayReferences.Clear(); foreach (var pair in candidate._nativeArrayReferences) _nativeArrayReferences.Add(pair.Key, pair.Value);
+        _nativeReferenceOrder = candidate._nativeReferenceOrder;
         _roots.Clear();
         _elementCount = candidate._elementCount;
         _collectNeeded = false;

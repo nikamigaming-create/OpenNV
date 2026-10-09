@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--audit-owned-advancement", var advancementData, var advancementCampaign])
+{
+    OwnedAdvancementRuntimeProbe.Run(advancementData, advancementCampaign);
+    return;
+}
+
 if (args is ["--test-source-fistp"])
 {
     SourceFistpContracts.Run();
@@ -252,6 +258,17 @@ if (args is ["--compiled-nested-result-contracts"])
     CompiledScriptContracts.NestedResults();
     return;
 }
+if (args is ["--companion-sandbox-action-contracts"])
+{
+    CompiledScriptContracts.RunSandboxActions();
+    return;
+}
+if (args is ["--companion-sandbox-contracts"])
+{
+    CompiledScriptContracts.RunSandboxIdles();
+    return;
+}
+
 if (args is ["--companion-callback-contracts"])
 {
     CompiledScriptContracts.RunCompanionCallbacks();
@@ -1155,6 +1172,8 @@ finally
 
 CompiledScriptContracts.Run();
 CompiledScriptContracts.RunCompanionCallbacks();
+CompiledScriptContracts.RunSandboxIdles();
+CompiledScriptContracts.RunSandboxActions();
 ActorScriptPackageContracts.Run();
 NativeSourceConstructionContracts.Run();
 NativeSourceFileContracts.Run();

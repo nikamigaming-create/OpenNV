@@ -55,6 +55,7 @@ internal partial class RuntimeNativeNpc : IRuntimeNativeFollower
 
     private FalloutActorPackageMotion? CaptureFollowMotion()
     {
+        if (_sandboxSource is not null) return CaptureSandboxMotion();
         if (_followPackage is null) return _aiReferenceState!.PackageMotion;
         if (_requestedSelection is not null || _aiReferenceState!.PendingPackageChoice is not null ||
             _aiReferenceState.ScriptPackage?.Pending == true || _packageEvents is not { Error: null, Done: false } lifecycle)

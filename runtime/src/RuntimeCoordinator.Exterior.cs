@@ -220,6 +220,7 @@ public partial class RuntimeCoordinator
         Retire(DetachNativeCloseRequest);
         Retire(CancelNativeLauncherEntry);
         Retire(CancelNativeGridRead);
+        Retire(() => _nativeBootstrap?.RetirePreparation());
         Retire(RequireNativeSourceCellRetirementBeforeWorldRelease);
         Retire(() => _nativeSkyLighting?.RetireSourceTransfer());
         if (!_retiringNativeSession)

@@ -8,7 +8,7 @@ internal enum NativePluginDomainOperation : uint
 {
     Hello = 1, LoadAuthored = 2, Resolve = 3, Call = 4, Unload = 5, Retire = 6,
     GuestCapabilities = 7, GuestAllocate = 8, GuestRead = 9, GuestWrite = 10, GuestRelease = 11, GuestBindState = 12, GuestStatistics = 13,
-    LoadNvse = 14, NvseQuery = 15, NvseLoad = 16, NvseMessage = 17, NvseSerialization = 18, UnloadNvse = 19, NvseExpressionAbi = 20, NvseCommand = 21, NvseExpressionStatistics = 22, NvseValuesAttach = 23, NvseValuesStatistics = 24, NvseValueHeap = 25, PrivateIoPrepare = 26, NvseLocalCreate = 27, NvseLocalFill = 28, NvseLocalSeal = 29, NvseLocalRetire = 30, NvseLocalStatistics = 31, NvseObjectBind = 32, GuestSeal = 33, NvseScriptInterface = 34, NvseObjectRetire = 35, NvseObjectRefresh = 36, NvseLocalAttachScript = 37, NvseFileMethods = 38, NvseBinaryMethods = 39, NvseBinaryBind = 40, NvseBinaryRetire = 41, SteamProvider = 48, CngSystemService = 49, ImportProviders = 50
+    LoadNvse = 14, NvseQuery = 15, NvseLoad = 16, NvseMessage = 17, NvseSerialization = 18, UnloadNvse = 19, NvseExpressionAbi = 20, NvseCommand = 21, NvseExpressionStatistics = 22, NvseValuesAttach = 23, NvseValuesStatistics = 24, NvseValueHeap = 25, PrivateIoPrepare = 26, NvseLocalCreate = 27, NvseLocalFill = 28, NvseLocalSeal = 29, NvseLocalRetire = 30, NvseLocalStatistics = 31, NvseObjectBind = 32, GuestSeal = 33, NvseScriptInterface = 34, NvseObjectRetire = 35, NvseObjectRefresh = 36, NvseLocalAttachScript = 37, NvseFileMethods = 38, NvseBinaryMethods = 39, NvseBinaryBind = 40, NvseBinaryRetire = 41, SteamProvider = 48, CngSystemService = 49, ImportProviders = 50, NvseArrayObjects = 51
 }
 internal enum NativePluginDomainMessage : uint { Request = 1, Reply = 2, Callback = 3, CallbackReply = 4, Fault = 5, StateQuery = 6, StateReply = 7, NvseCallback = 8, NvseReply = 9, IoCallback = 10, IoReply = 11 }
 
@@ -43,7 +43,7 @@ internal sealed class NativePluginDomainRefusal(uint code, uint liveModules, str
 internal sealed partial class NativePluginExecutionDomain
 {
     internal const uint ProtocolMagic = 0x444e564f;
-    internal const uint ProtocolVersion = 26;
+    internal const uint ProtocolVersion = 29;
     internal const int MaximumPayload = 65536;
     internal const int NativeMaximumDepth = 8;
     private const int HeaderLength = 48;

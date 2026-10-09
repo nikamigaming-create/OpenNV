@@ -7,7 +7,7 @@ internal sealed class FalloutIdleCollectionPlayback(FalloutIdleCollection source
     Func<FalloutFormKey, bool> eligible, Func<uint, uint>? random = null)
 {
     internal FalloutIdleCollectionPlayback(FalloutScriptPackage source, FalloutIdleReplayState replay,
-        Func<FalloutFormKey, bool> eligible) : this(new FalloutIdleCollection(source.Form, source.IdleFlags, source.IdleTimer, source.Idles), replay, eligible) { }
+        Func<FalloutFormKey, bool> eligible, Func<uint, uint>? random = null) : this(new FalloutIdleCollection(source.Form, source.IdleFlags, source.IdleTimer, source.Idles), replay, eligible, random) { }
     private int _cursor;
     private int _selectionCount;
     internal FalloutIdleCollection Source { get; } = source;
@@ -42,6 +42,7 @@ internal sealed class FalloutIdleCollectionPlayback(FalloutIdleCollection source
         var candidates = Source.Idles.Where(idle => replay.CanSelect(idle) && eligible(idle)).ToArray();
         if (candidates.Length == 0) return null;
         var next = !Source.RunInSequence && random is not null ? checked((int)random((uint)candidates.Length)) : _cursor >= candidates.Length ? 0 : _cursor;
+        if (next < 0 || next >= candidates.Length) throw new InvalidDataException("Idle random owner returned an out-of-bound source selection.");
         var idle = candidates[next];
         _selectionCount = candidates.Length;
         _cursor = next + 1;

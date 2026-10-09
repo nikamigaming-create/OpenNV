@@ -4,18 +4,29 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 // Values are produced by an authoritative C# caller. These are not native
 // TESForm/Script/ArrayVar layouts and cannot be dereferenced as those objects.
-internal enum NativeNvseTokenType : uint { Number = 0, Boolean = 1, String = 2, Form = 3, Array = 6, Pair = 21 }
+internal enum NativeNvseTokenType : uint
+{
+    Number = 0, Boolean = 1, String = 2, Form = 3, Array = 6,
+    NumericVariable = 11, ReferenceVariable = 12, StringVariable = 13, ArrayVariable = 14, Pair = 21
+}
 internal sealed record NativeNvseExpressionValue
 {
     internal NativeNvseTokenType Type { get; }
     internal double Number { get; }
     internal ImmutableArray<byte> Text { get; }
+    internal NativeNvseExpressionLocal? Local { get; }
     internal NativeNvseExpressionValue? Left { get; }
     internal NativeNvseExpressionValue? Right { get; }
 
     private NativeNvseExpressionValue(NativeNvseTokenType type, double number, ImmutableArray<byte> text,
-        NativeNvseExpressionValue? left = null, NativeNvseExpressionValue? right = null)
-    { Type = type; Number = number; Text = text; Left = left; Right = right; }
+        NativeNvseExpressionValue? left = null, NativeNvseExpressionValue? right = null, NativeNvseExpressionLocal? local = null)
+    { Type = type; Number = number; Text = text; Left = left; Right = right; Local = local; }
+
+    internal static NativeNvseExpressionValue Variable(NativeNvseExpressionLocal local)
+    {
+        ArgumentNullException.ThrowIfNull(local); local.RequireCurrent();
+        return new(local.Type, 0, [], local: local);
+    }
 
     internal static NativeNvseExpressionValue Numeric(double value)
     {
@@ -49,7 +60,7 @@ internal sealed record NativeNvseExpressionAbi(string PluginSha256, string Decla
     uint DeclaredBytes, uint CallableBytes, bool ArrayAccessorReturnsNativePointer);
 internal sealed record NativeNvseEvaluatedArguments(uint EndOffset, IReadOnlyList<NativeNvseExpressionValue> Values);
 internal sealed record NativeNvseExpressionArgumentOwner(string SourceOwner, uint StartOffset, uint MaximumEndOffset,
-    Func<NativeNvseEvaluatedArguments> Evaluate);
+    Func<NativeNvseEvaluatedArguments> Evaluate, Func<NativeNvseEvaluatedArguments>? EvaluateNative = null);
 internal sealed record NativeNvseExpressionCallerReceipt(ulong Caller, uint Opcode, bool Returned, uint RawEax,
     double NumericResult, uint EndOffset, uint EvaluatorsCreated, uint EvaluatorsDestroyed, uint Tokens,
     int StackDelta, uint PreservedRegisters, uint ExceptionCode)
@@ -68,6 +79,7 @@ internal sealed class NativeNvseExpressionCaller(ulong id, NativeNvseCommand com
     internal NativePluginGuestAllocation ScriptData { get; } = scriptData;
     internal NativeNvseExpressionArgumentOwner Arguments { get; } = arguments;
     internal Dictionary<ulong, (uint Pointer, bool Extracted)> Evaluators { get; } = [];
+    internal Dictionary<ulong, NativeNvseExpressionValue[]> TokenValues { get; } = [];
     internal uint Created { get; set; }
     internal uint Destroyed { get; set; }
     internal uint Tokens { get; set; }

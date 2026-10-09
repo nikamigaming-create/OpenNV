@@ -44,7 +44,7 @@ internal sealed partial class FalloutLevelUpMenuSession
     internal int Assigned => _assigned;
     internal FalloutLevelUpPage Page { get; private set; }
     internal bool Completed => Page == FalloutLevelUpPage.Complete;
-    internal bool HasPerkPage => Level % _rules.LevelsPerPerk == 0 && _binding.Perks.Count != 0;
+    internal bool HasPerkPage => (_rules.LevelsPerPerk is not { } interval || Level % interval == 0) && _binding.Perks.Count != 0;
     internal IReadOnlyDictionary<int, int> Allocated => _allocated;
     internal IReadOnlyDictionary<int, int> AllocatedDeltas => _deltas;
     internal IReadOnlyList<int> Skills => _binding.SkillOrder;

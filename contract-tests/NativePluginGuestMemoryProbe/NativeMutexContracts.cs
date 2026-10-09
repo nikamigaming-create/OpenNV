@@ -59,6 +59,8 @@ internal static class NativeMutexContracts
                         $"restrictedStatus={row.RestrictedOpenStatus:x8} restrictedError={row.RestrictedOpenError} nativeClosed={row.NativeClosed}");
                 foreach (var row in domain.NvseMutexNativeStatuses)
                     Console.Error.WriteLine($"OPENNV_NATIVE_MUTEX_NT_RESULT status={row.Status:x8} result={row.Result} error={row.LastError}");
+                foreach (var row in domain.NvseMutexFallbackObservations)
+                    Console.Error.WriteLine("OPENNV_NATIVE_MUTEX_FALLBACK " + System.Text.Json.JsonSerializer.Serialize(row));
                 throw;
             }
         }

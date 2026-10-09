@@ -70,7 +70,7 @@ internal partial class RuntimeNativePlayer
         if (WeaponInput(input)) return true;
         if ((_inputControls is not null ? input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(13), allowEcho: false)
             : input is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F }) && GetMeta("opennv_source_pointofview_enabled", true).AsBool())
-        { _thirdPersonMode = !_thirdPersonMode; PublishThirdPersonCamera(); return true; }
+        { _thirdPersonMode = !_thirdPersonMode; ObserveStandaloneViewTransition(); PublishThirdPersonCamera(); return true; }
         if (_inputControls is not null && (input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(6), allowEcho: false) ||
             input.IsActionReleased(InputSystem.RuntimeNativeInputControls.Action(6))))
         { _aiming = input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(6), allowEcho: false); return true; }
@@ -83,7 +83,7 @@ internal partial class RuntimeNativePlayer
                 { _thirdPersonDistance = _thirdPersonMode ? Math.Min(5, _thirdPersonDistance + .25f) : .5f; _thirdPersonMode = true; }
                 else if (_thirdPersonMode)
                 { _thirdPersonDistance -= .25f; if (_thirdPersonDistance < .5f) _thirdPersonMode = false; }
-                PublishThirdPersonCamera(); return true;
+                ObserveStandaloneViewTransition(); PublishThirdPersonCamera(); return true;
             }
         }
         return false;
@@ -263,6 +263,7 @@ internal partial class RuntimeNativePlayer
                 };
                 layer.AddChild(_firstPersonPixels); _firstPersonPixels.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
             }
+            ReleaseStandaloneFirstPersonScene();
             if (_firstPerson is not null) _firstPerson.Visible = false;
             if (_thirdPerson is not null)
             {
@@ -296,6 +297,7 @@ internal partial class RuntimeNativePlayer
                 BindXrContacts();
             }
             PublishPhysicalPlayerBody();
+            PublishStandaloneFirstPersonScene();
             PresentationChanged?.Invoke();
             Activity.SetWeaponDrawn(weapon is not null && _weaponHandling.Drawn);
         }

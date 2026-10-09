@@ -101,7 +101,7 @@ internal static partial class FalloutCompiledOperands
         ReadOnlyMemory<byte> payload, FalloutCompiledOperandContext context)
     {
         var declaration = context.Declaration?.Invoke(opcode) ?? FalloutCompiledCommandDeclarations.Get(opcode);
-        if (FalloutCompiledSemanticOwners.IsMessage(declaration.Name))
+        if (FalloutCompiledSemanticBinding.Read(declaration).Kind == FalloutCompiledSemanticKind.Message)
         {
             if (declaration.VanillaArguments)
                 throw new NotSupportedException("Compiled ShowMessage declares a different selected argument parser.");

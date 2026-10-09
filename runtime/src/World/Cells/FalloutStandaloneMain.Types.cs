@@ -7,4 +7,6 @@ internal sealed record FalloutStandaloneMainPreludeCall(Guid Main, long MainOrdi
 internal sealed record FalloutStandaloneMainSnapshot(FalloutMainScriptCallerSource Source,
     FalloutMainScriptFrameSnapshot MainField, FalloutMainScriptCallerSnapshot MainCaller,
     FalloutMainPlayerCellSnapshot PlayerCell, FalloutStandaloneMainConstructor? Constructor,
-    FalloutStandaloneMainConstructor? PreviousConstructor, FalloutStandaloneMainPreludeCall? LastPrelude);
+    FalloutStandaloneMainConstructor? PreviousConstructor, FalloutStandaloneMainPreludeCall? LastPrelude,
+    OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceSnapshot Interface,
+    OpenNV.Runtime.Gameplay.State.FalloutStandalonePlayerSceneSnapshot Scene);

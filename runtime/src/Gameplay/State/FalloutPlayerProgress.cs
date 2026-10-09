@@ -112,11 +112,11 @@ internal sealed partial class FalloutPlayerProgress
             throw new NotSupportedException("Reduced XP cannot reconstruct a retained queue without the original consumed request owner.");
         // Presentation can provide source admission and menu semantics, but
         // cannot substitute another level/XP/skill owner for this player.
-        if (binding.Rules() != FalloutLevelUpRules.Read(_records, source.SkillRate))
+        if (binding.Rules() != FalloutLevelUpRules.Read(_records, source.Runtime))
             throw new InvalidDataException("Advancement rules differ from the winning source settings and admitted rate.");
         var actual = binding with
         {
-            Rules = () => FalloutLevelUpRules.Read(_records, source.SkillRate),
+            Rules = () => FalloutLevelUpRules.Read(_records, source.Runtime),
             Level = () => _vitals.State.Level,
             Experience = () => _vitals.State.ExperiencePoints,
             Threshold = _vitals.ExperienceThreshold,

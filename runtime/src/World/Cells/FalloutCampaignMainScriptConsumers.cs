@@ -28,19 +28,36 @@ internal sealed class FalloutCampaignMainScriptConsumers(FalloutMainScriptCaller
         using var scope = invocation.Owner.EnterBoundMainUtilityScope(invocation);
         invocation.Owner.ExecuteMainUtilities(invocation);
     }
-    public bool MenuGate(FalloutMainScriptInvocation invocation) => throw Unowned("independent-interface-menu-gate");
-    public bool GuiModeTwo(FalloutMainScriptInvocation invocation) => throw Unowned("original-GUI-mode-two-query");
-    public bool FirstInterfacePredicate(FalloutMainScriptInvocation invocation) => throw Unowned("first-interface-predicate");
-    public bool FinalInterfacePredicate(FalloutMainScriptInvocation invocation) => throw Unowned("final-interface-predicate");
-    public bool ForeignActiveMenu(FalloutMainScriptInvocation invocation) => throw Unowned("foreign-active-menu-identity-query");
-    public int InterfaceContextKind(FalloutMainScriptInvocation invocation) => throw Unowned("interface-context-signed-kind-query");
+    public bool MenuGate(FalloutMainScriptInvocation invocation) => Source.HasNewVegasChildren
+        ? throw Unowned("independent-interface-menu-gate") : invocation.Owner.ReadStandaloneInterface(invocation,
+            OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceQuery.MenuGate) != 0;
+    public bool GuiModeTwo(FalloutMainScriptInvocation invocation) => Source.HasNewVegasChildren
+        ? throw Unowned("original-GUI-mode-two-query") : invocation.Owner.ReadStandaloneInterface(invocation,
+            OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceQuery.GuiModeTwo) != 0;
+    public bool FirstInterfacePredicate(FalloutMainScriptInvocation invocation) => Source.HasNewVegasChildren
+        ? throw Unowned("first-interface-predicate") : invocation.Owner.ReadStandaloneInterface(invocation,
+            OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceQuery.FirstPredicate) != 0;
+    public bool FinalInterfacePredicate(FalloutMainScriptInvocation invocation) => Source.HasNewVegasChildren
+        ? throw Unowned("final-interface-predicate") : invocation.Owner.ReadStandaloneInterface(invocation,
+            OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceQuery.FinalPredicate) != 0;
+    public bool ForeignActiveMenu(FalloutMainScriptInvocation invocation) => Source.HasNewVegasChildren
+        ? throw Unowned("foreign-active-menu-identity-query") : invocation.Owner.ReadStandaloneInterface(invocation,
+            OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceQuery.ForeignMenu) != 0;
+    public int InterfaceContextKind(FalloutMainScriptInvocation invocation) => Source.HasNewVegasChildren
+        ? throw Unowned("interface-context-signed-kind-query") : invocation.Owner.ReadStandaloneInterface(invocation,
+            OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceQuery.ContextKind);
     public void KindThreePrelude(FalloutMainScriptInvocation invocation)
     { invocation.Require(FalloutMainScriptCallerStep.KindThreePrelude); throw Unowned("kind-three-before-Player-child"); }
     public Task Player(FalloutMainScriptInvocation invocation)
     { invocation.Require(FalloutMainScriptCallerStep.Player); return invocation.Owner.ExecuteMainPlayerCell(invocation); }
     public void SteamCallbacks(FalloutMainScriptInvocation invocation)
     { invocation.Require(FalloutMainScriptCallerStep.SteamCallbacks); invocation.Owner.ExecuteMainSteamCallbacks(invocation); }
-    public bool MainHold(FalloutMainScriptInvocation invocation) => throw Unowned("independent-held-byte-query");
+    public bool MainHold(FalloutMainScriptInvocation invocation)
+    {
+        invocation.Require(FalloutMainScriptCallerStep.MainHold);
+        if (!Source.HasNewVegasChildren) return invocation.Owner.ReadStandaloneMainHold(invocation);
+        throw Unowned("independent-held-byte-query");
+    }
     public void TimedContexts(FalloutMainScriptInvocation invocation, bool advanceTimer)
     { invocation.Require(FalloutMainScriptCallerStep.TimedContexts); throw Unowned("timed-context-prelude-list-update-retirement-and-final-children"); }
 }

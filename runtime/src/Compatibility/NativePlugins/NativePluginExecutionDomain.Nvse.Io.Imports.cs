@@ -17,7 +17,7 @@ internal static class NativePluginIoImports
         "NtCreateFile", "NtOpenFile", "NtWriteFile", "NtDeleteFile", "NtSetInformationFile" };
     internal static readonly IReadOnlySet<string> Owned = new HashSet<string>(StringComparer.Ordinal) {
         "CreateFileW", "CreateFileA", "CloseHandle", "ReadFile", "WriteFile", "SetFilePointer", "SetFilePointerEx",
-        "GetFileSize", "GetFileSizeEx", "FlushFileBuffers", "CreateDirectoryW", "CreateDirectoryA", "DeleteFileW", "DeleteFileA",
+        "GetFileSize", "GetFileSizeEx", "GetFileInformationByHandleEx", "GetFileAttributesExA", "GetFileAttributesExW", "GetEnvironmentVariableA", "FlushFileBuffers", "CreateDirectoryW", "CreateDirectoryA", "DeleteFileW", "DeleteFileA",
         "RemoveDirectoryW", "RemoveDirectoryA", "GetFileAttributesW", "GetFileAttributesA", "GetPrivateProfileStringW", "GetPrivateProfileStringA",
         "GetPrivateProfileIntW", "GetPrivateProfileIntA", "WritePrivateProfileStringW", "WritePrivateProfileStringA", "GetProcAddress",
         "LoadLibraryA", "LoadLibraryW", "LoadLibraryExA", "LoadLibraryExW", "GetCurrentDirectoryW", "GetCurrentDirectoryA",

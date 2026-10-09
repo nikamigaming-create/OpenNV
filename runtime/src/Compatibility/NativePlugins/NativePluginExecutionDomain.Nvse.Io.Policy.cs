@@ -184,6 +184,8 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
                 if (action == NativePluginIoAction.ProfileRead && !winner.Configuration)
                     throw new NotSupportedException("Profile read winner lacks a declared configuration role.");
             }
+            else if (action == NativePluginIoAction.Attributes && Directory.Exists(path))
+                throw new NotSupportedException("Original directory metadata lacks its complete selected winning-directory attribute owner.");
             else error = 2; // Genuine selected-source absence is retained as a failed Windows open.
         }
         else

@@ -120,7 +120,8 @@ internal static class PlayerMoveContracts
             _ => throw new NotSupportedException("Unexpected startup effect."), () => true);
         Require(!quests.IsRunning(Key(0x610)), "Synthetic startup was already running.");
         Reject(bootstrap.Start);
-        Require(!quests.IsRunning(Key(0x610)) && bootstrap.Placement() is null && !world.PlayerMoves.Pending &&
+        Reject(() => bootstrap.PreparePlacement());
+        Require(!quests.IsRunning(Key(0x610)) && !bootstrap.PlacementPreparing && !world.PlayerMoves.Pending &&
             quests.Variable(Key(0x610), 1) == 0 && bootstrap.Controls == FalloutPlayerControlState.AllEnabled,
             "Missing original compiled startup changed controls, quest state or movement before admission.");
         Reject(bootstrap.Start);

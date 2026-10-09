@@ -10,6 +10,7 @@
 #include "opennv_plugin_data.h"
 #include "opennv_plugin_expression.h"
 #include "opennv_plugin_values.h"
+#include "opennv_plugin_array_objects.h"
 #include "opennv_plugin_value_heap.h"
 #include "opennv_plugin_io.h"
 #include "opennv_plugin_import_providers.h"
@@ -216,6 +217,7 @@ struct State {
     std::unique_ptr<NvseDataRuntime> data;
     std::unique_ptr<NvseExpressionRuntime> expressions;
     std::unique_ptr<NvseValueRuntime> values;
+    std::unique_ptr<NvseArrayObjectRuntime> array_objects;
     std::unique_ptr<NvseValueHeap> value_heap;
     std::unique_ptr<PluginIoRuntime> io;
     std::unique_ptr<CngSystemService> cng_service;
@@ -256,6 +258,10 @@ void source_local_sync(bool);
 bool source_local_callback_needs_sync(Kind, std::uint32_t);
 bool cng_detach_active();
 bool mutex_detach_callback_allowed();
+std::uint32_t array_objects_pointer(std::uint32_t);
+void array_objects_refresh_all();
+void array_objects_retire(const Frame&);
+void array_objects_dispatch(const Frame&);
 Bytes perform_callback_bytes(Kind kind, std::uint32_t event, const Bytes& payload) noexcept {
     if (!state || GetCurrentThreadId() != state->thread || state->calls.empty()) {
         callback_fault.store(ERROR_INVALID_THREAD_ID); return {};
@@ -303,6 +309,10 @@ Bytes perform_callback_bytes(Kind kind, std::uint32_t event, const Bytes& payloa
                     throw Fatal(ERROR_INVALID_DATA, "Callback reply identity drift.");
                 Bytes result; result.data = std::move(incoming.payload);
                 if (synchronize_locals) source_local_sync(false);
+                if (kind == Kind::nvse_callback && (event < 0x240 || event > 0x243) &&
+                    state->array_objects && !state->array_objects->refreshing &&
+                    (!state->source_locals || !state->source_locals->synchronizing) && !cng_detach_active())
+                    array_objects_refresh_all();
                 return result;
             }
             if (cng_detach_active()) throw Fatal(ERROR_BUSY, "Original CNG unload callback cannot enter another original command or allocation.");
@@ -440,6 +450,16 @@ void find_flush_detach();
 void find_retire();
 void* io_find_entry(const std::string&);
 void* io_profile_extended_entry(const std::string&);
+void crt_owned_callback(std::uint32_t, const Bytes&);
+void crt_defer_heap_receipt(const NvseHeapEvent&);
+void* crt_extended_entry(const std::string&);
+void crt_support_require_releasable(std::uint64_t);
+void crt_support_flush_detach();
+void crt_support_require_retired();
+DWORD WINAPI io_get_environment_a(LPCSTR, LPSTR, DWORD);
+BOOL WINAPI io_attributes_ex_w(LPCWSTR, GET_FILEEX_INFO_LEVELS, LPVOID);
+BOOL WINAPI io_attributes_ex_a(LPCSTR, GET_FILEEX_INFO_LEVELS, LPVOID);
+BOOL WINAPI io_information_by_handle_ex(HANDLE, FILE_INFO_BY_HANDLE_CLASS, LPVOID, DWORD);
 void source_locals_retire_all();
 SourceObject& source_object(std::uint64_t);
 void source_objects_retire_all();
@@ -447,6 +467,15 @@ void source_files_retire();
 void binary_files_retire_all();
 void* source_script_interface_address();
 void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
+const char* __cdecl values_get_string(std::uint32_t);
+bool expression_local_type(std::uint32_t);
+SourceLocalCell expression_local_read(NvseExpressionEvaluator&, const NvseExpressionToken&);
+void* expression_local_pointer(NvseExpressionEvaluator&, const NvseExpressionToken&);
+double expression_local_number(NvseExpressionEvaluator&, const NvseExpressionToken&);
+bool expression_local_boolean(NvseExpressionEvaluator&, const NvseExpressionToken&);
+std::uint32_t expression_local_form_id(NvseExpressionEvaluator&, const NvseExpressionToken&);
+std::uint32_t expression_local_handle(NvseExpressionEvaluator&, const NvseExpressionToken&);
+const char* expression_local_string(NvseExpressionEvaluator&, const NvseExpressionToken&);
 void data_sync_if_bound();
 void* data_interface_address(std::uint32_t);
 void import_providers_begin_original(const Frame&, const std::wstring&);
@@ -479,7 +508,9 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_command_table.inc"
 #include "opennv_plugin_source_locals.inc"
 #include "opennv_plugin_expression.inc"
+#include "opennv_plugin_expression_locals.inc"
 #include "opennv_plugin_values.inc"
+#include "opennv_plugin_array_objects.inc"
 #include "opennv_plugin_value_heap.inc"
 #include "opennv_plugin_io.inc"
 #include "opennv_plugin_mutexes.inc"
@@ -488,7 +519,11 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_find.inc"
 #include "opennv_plugin_crt.inc"
 #include "opennv_plugin_crt_open.inc"
+#include "opennv_plugin_crt_support.inc"
 #include "opennv_plugin_crt_members.inc"
+#include "opennv_plugin_environment.inc"
+#include "opennv_plugin_crt_support_members.inc"
+#include "opennv_plugin_file_metadata.inc"
 #include "opennv_plugin_crypto.inc"
 #include "opennv_plugin_cng_client.inc"
 #include "opennv_plugin_import_providers.inc"
@@ -633,6 +668,7 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     case Operation::steam_provider: steam_provider(frame); break;
     case Operation::cng_system_service: cng_system_service(frame); break;
     case Operation::import_providers: import_providers_operation(frame); break;
+    case Operation::nvse_array_objects: array_objects_dispatch(frame); break;
     case Operation::nvse_local_create: source_local_create(frame); break;
     case Operation::nvse_local_fill: source_local_fill(frame); break;
     case Operation::nvse_local_seal: source_local_seal(frame); break;

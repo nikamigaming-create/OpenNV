@@ -91,11 +91,9 @@ PluginIoFile& io_file(HANDLE file) {
     return found->second;
 }
 void io_event(const PluginIoFile& file, std::uint32_t api, DWORD count, DWORD error) {
-    auto& owner = io_owner(); const PluginIoEvent event{file.capability, api, address(file.handle), count, error};
-    if (owner.loader_retiring) { owner.pending.push_back(event); return; }
+    const PluginIoEvent event{file.capability, api, address(file.handle), count, error};
     Bytes request; request.put(event.capability); request.put(api); request.put(event.handle); request.put(count); request.put(error);
-    auto result = io_host(io_handle_event, request); Reader reader{result.data};
-    if (reader.get<std::uint32_t>() != 1) throw Fatal(ERROR_INVALID_DATA, "Native file operation lacks its correlated lifetime receipt."); reader.finish();
+    crt_owned_callback(io_handle_event, request);
 }
 HANDLE io_open(const std::wstring& path, DWORD access, DWORD share, LPSECURITY_ATTRIBUTES security, DWORD disposition, DWORD flags, HANDLE template_file) {
     if (security || template_file || access & MAXIMUM_ALLOWED || flags & (FILE_FLAG_OVERLAPPED | FILE_FLAG_DELETE_ON_CLOSE) ||
@@ -299,6 +297,9 @@ void* io_entry(const std::string& name) {
         {"DeleteFileW", reinterpret_cast<void*>(io_delete_w)}, {"DeleteFileA", reinterpret_cast<void*>(io_delete_a)},
         {"RemoveDirectoryW", reinterpret_cast<void*>(io_remove_w)}, {"RemoveDirectoryA", reinterpret_cast<void*>(io_remove_a)},
         {"GetFileAttributesW", reinterpret_cast<void*>(io_attributes_w)}, {"GetFileAttributesA", reinterpret_cast<void*>(io_attributes_a)},
+        {"GetFileAttributesExW", reinterpret_cast<void*>(io_attributes_ex_w)}, {"GetFileAttributesExA", reinterpret_cast<void*>(io_attributes_ex_a)},
+        {"GetFileInformationByHandleEx", reinterpret_cast<void*>(io_information_by_handle_ex)},
+        {"GetEnvironmentVariableA", reinterpret_cast<void*>(io_get_environment_a)},
         {"GetPrivateProfileStringW", reinterpret_cast<void*>(io_profile_string_w)}, {"GetPrivateProfileStringA", reinterpret_cast<void*>(io_profile_string_a)},
         {"GetPrivateProfileIntW", reinterpret_cast<void*>(io_profile_int_w)}, {"GetPrivateProfileIntA", reinterpret_cast<void*>(io_profile_int_a)},
         {"WritePrivateProfileStringW", reinterpret_cast<void*>(io_profile_write_w)}, {"WritePrivateProfileStringA", reinterpret_cast<void*>(io_profile_write_a)},
@@ -400,12 +401,12 @@ void io_flush_detach(const Frame& frame) {
     if (!state->io) return; auto& owner = *state->io; owner.loader_retiring = false;
     state->calls.push_back(frame.header.id);
     for (const auto& event : owner.pending) io_event(PluginIoFile{event.capability, reinterpret_cast<HANDLE>(event.handle), false}, event.api, event.count, event.error);
-    owner.pending.clear(); mutex_flush_detach(); mutex_namespace_retire(); crt_flush_detach(); find_flush_detach(); mapping_flush_detach(); shared_placement_flush_detach(); cng_client_flush_detach(); crypto_flush_detach(); state->calls.pop_back();
+    owner.pending.clear(); mutex_flush_detach(); mutex_namespace_retire(); crt_flush_detach(); crt_support_flush_detach(); find_flush_detach(); mapping_flush_detach(); shared_placement_flush_detach(); cng_client_flush_detach(); crypto_flush_detach(); state->calls.pop_back();
 }
 void io_retire() {
     if (!state->io) return; auto& owner = *state->io;
     if (!owner.files.empty() || !owner.pending.empty()) throw Fatal(ERROR_BUSY, "Selected native file capabilities remain after module retirement.");
-    shared_placement_require_retired(); mutex_retire(); mutex_namespace_require_retired(); mapping_retire(); cng_client_require_retired(); crypto_retire(); crt_retire(); find_retire(); owner.imports.clear();
+    shared_placement_require_retired(); mutex_retire(); mutex_namespace_require_retired(); mapping_retire(); cng_client_require_retired(); crypto_retire(); crt_support_require_retired(); crt_retire(); find_retire(); owner.imports.clear();
     if (owner.stdin_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdin_file)) throw Fatal(GetLastError(), "Native standard input boundary did not retire."); owner.stdin_file = INVALID_HANDLE_VALUE; }
     if (owner.stdout_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdout_file)) throw Fatal(GetLastError(), "Native stdout diagnostic file did not retire."); owner.stdout_file = INVALID_HANDLE_VALUE; }
     if (owner.stderr_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stderr_file)) throw Fatal(GetLastError(), "Native stderr diagnostic file did not retire."); owner.stderr_file = INVALID_HANDLE_VALUE; }

@@ -21,5 +21,6 @@ internal sealed partial class FalloutReferenceWorld
     private string? StandaloneMainSaveBlocker => _campaignSharedScriptConstructionFailure is not null ?
         "source-FO3-Main-construction-failed:" + _campaignSharedScriptConstructionFailure.Message :
         _processRuntime?.StandaloneMainConstructed != true ? "source-FO3-Main-Player-construction-unbound" :
-        ProcessRuntime.MainScriptCallerSaveBlocker ?? ProcessRuntime.MainPlayerCellSaveBlocker ?? ProcessRuntime.SourceScriptFrameSaveBlocker;
+        ProcessRuntime.StandaloneInterface.SaveBlocker ?? ProcessRuntime.MainScriptCallerSaveBlocker ??
+            ProcessRuntime.MainPlayerCellSaveBlocker ?? ProcessRuntime.SourceScriptFrameSaveBlocker ?? ProcessRuntime.StandalonePlayerScene.SaveBlocker;
 }

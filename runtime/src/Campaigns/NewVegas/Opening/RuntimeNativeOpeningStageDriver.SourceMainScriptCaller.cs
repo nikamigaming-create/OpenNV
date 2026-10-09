@@ -38,4 +38,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         catch (Exception failure) { failures.Add(failure); }
         if (failures.Count != 0) throw new AggregateException("Source Main native retirement retained its actual failure.", failures);
     }
+    internal Task WaitForSourcePlayerCellPreparation(FalloutPlayerCellPreparation prepared) =>
+        (_sourceMainScriptCaller ?? throw new NotSupportedException("Initial CELL placement has no actual native Main caller."))
+            .WaitForPlayerCellPreparation(prepared);
 }

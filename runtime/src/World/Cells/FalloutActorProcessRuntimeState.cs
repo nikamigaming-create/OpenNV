@@ -32,6 +32,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     }
     internal bool HasActor(FalloutFormKey actor) => _actors.ContainsKey(actor);
     internal string? SaveBlocker => _busy ? "actual-source-process-runtime-consumer-in-flight" :
+        _standaloneInterface?.SaveBlocker is { } ui ? ui :
         MainScriptCallerSaveBlocker is { } scripts ? scripts :
         MainPlayerCellSaveBlocker is { } playerCell ? playerCell :
         MainUtilityCommandSaveBlocker is { } commands ? commands :
@@ -55,6 +56,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         mainFrameBoundary = _mainFrameBoundary,
         callingThreadFistp = _sourceFistp.State,
         scriptCaller = MainScriptCallerState,
+        standaloneInterface = _standaloneInterface?.State,
         playerCell = MainPlayerCellState,
         utilityCommands = MainUtilityCommandState,
         platformStartup = PlatformStartupState,

@@ -63,6 +63,7 @@ internal sealed partial class NativePluginExecutionDomain
         {
             _retiredMutexDirectoryReceipts.Clear(); _retiredMutexDirectoryReceipts.AddRange(_mutexNamespaces.Receipts);
             _retiredMutexNativeStatuses.Clear(); _retiredMutexNativeStatuses.AddRange(_mutexNamespaces.Statuses);
+            _retiredMutexFallbackObservations.Clear(); _retiredMutexFallbackObservations.AddRange(_mutexNamespaces.FallbackObservations);
         }
         _mutexNamespaces = null;
     }

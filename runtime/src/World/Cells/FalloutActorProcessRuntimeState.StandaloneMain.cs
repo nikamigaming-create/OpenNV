@@ -14,7 +14,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
     private ushort _standaloneMainWord;
     private byte _standaloneMainByte;
     private bool _standaloneMainRetired;
-    internal bool StandaloneMainConstructed => _standaloneMainSource is not null && MainScriptCallerConstructed && MainPlayerCellConstructed;
+    internal bool StandaloneMainConstructed => _standaloneMainSource is not null && MainScriptCallerConstructed && MainPlayerCellConstructed && _standaloneInterface is not null && _standalonePlayerScene is not null;
     internal void ConstructStandaloneMain(FalloutMainScriptCallerSource source, FalloutPlayerPendingSlot pending,
         FalloutStandaloneMainSnapshot? saved, FalloutActorProcessRuntimeSnapshot? runtime)
     {
@@ -35,6 +35,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
         ConstructScriptFrame(field, saved?.MainField, saved?.MainCaller.LastCall is { Disposition: FalloutMainScriptCallerDisposition.Failed });
         ConstructMainScriptCaller(source, saved?.MainCaller);
         ConstructMainPlayerCell(FalloutMainPlayerCellSource.Read(source), pending, saved?.PlayerCell);
+        ConstructStandaloneInterface(source, saved?.Interface);
+        ConstructStandalonePlayerScene(source, saved?.Scene);
     }
     internal void ExecuteStandaloneMainPrologue(FalloutMainScriptInvocation invocation)
     {
@@ -67,11 +69,16 @@ internal sealed partial class FalloutActorProcessRuntimeState
         if (_standaloneMainSource is null) return null;
         if (!StandaloneMainConstructed) throw new NotSupportedException("Standalone Main retains its actual incomplete constructor prefix.");
         return new(_standaloneMainSource, CaptureMainScriptFrameEvidence(), CaptureMainScriptCaller(), CaptureMainPlayerCell(),
-            _standaloneMainConstructor, _standaloneMainPreviousConstructor, _standaloneMainLastPrelude);
+            _standaloneMainConstructor, _standaloneMainPreviousConstructor, _standaloneMainLastPrelude, StandaloneInterface.Capture(),
+            StandalonePlayerScene.Capture());
     }
     private void RetireStandaloneMain()
     {
         RequireMainScriptClosureBoundary(retiring: true);
+        var failures = new List<Exception>();
+        try { RetireStandaloneInterface(); } catch (Exception error) { failures.Add(error); }
+        try { RetireStandalonePlayerScene(); } catch (Exception error) { failures.Add(error); }
+        if (failures.Count != 0) throw new AggregateException("Standalone Main retirement retains independent interface/Player scene failures.", failures);
         _standaloneMainRetired = true; _standaloneMainBuffer = null; _standaloneMainWords = null;
         // Captured invocation/constructor identities and original failures stay
         // visible. Clearing a C# buffer is not a returned source child.

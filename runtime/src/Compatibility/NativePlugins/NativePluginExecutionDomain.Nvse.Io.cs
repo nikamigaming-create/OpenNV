@@ -25,6 +25,18 @@ internal sealed partial class NativePluginExecutionDomain
         var enteredLoader = IsEnteredOriginalLoaderIo(frame.Operation, module, parent);
         if (thread != NativeThread || !enteredLoader && (_nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation))
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
+        if (frame.Operation is CrtSupportCallback or EnvironmentCallback or FileMetadataCallback)
+        {
+            if (enteredLoader)
+                throw new NotSupportedException("Original loader entry has no intercepted FILE/environment/metadata caller owner.");
+            return frame.Operation switch
+            {
+                CrtSupportCallback => DispatchPrivateCrtSupport(parent, reader),
+                EnvironmentCallback => DispatchPrivateEnvironment(parent, reader),
+                FileMetadataCallback => DispatchPrivateFileMetadata(parent, owner, reader),
+                _ => throw new InvalidDataException("Private IO extension dispatch lost its exact operation."),
+            };
+        }
         if (frame.Operation == SharedPlacementCallback)
         {
             if (enteredLoader) throw new NotSupportedException("Original pre-entry shared heap publication has no intercepted source caller.");

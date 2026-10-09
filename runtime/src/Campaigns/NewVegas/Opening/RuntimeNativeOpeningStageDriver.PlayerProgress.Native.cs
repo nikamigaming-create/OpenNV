@@ -41,7 +41,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         BindPlayerAdvancement(source, new(
             () => SourcePlayerLevel, () => _vitals.State.ExperiencePoints, _vitals.ExperienceThreshold, ConsumePlayerLevel,
             () => throw new InvalidOperationException("Permanent Intelligence is supplied by the persistent player owner."),
-            () => FalloutLevelUpRules.Read(_pluginStack, source.SkillRate), Admission,
+            () => FalloutLevelUpRules.Read(_pluginStack, source.Runtime), Admission,
             level => new(catalogue.Skills.Select(skill => skill.ActorValue).ToArray(),
                 _playerSkills.ReadUnmodifiedSkill, _playerSkills.WriteUnmodifiedSkill,
                 skill => checked((int)_playerSkills.Value(skill)), _playerSkills.IsTaggedSkill, admitSkillBudget,

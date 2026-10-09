@@ -12,6 +12,7 @@ internal sealed partial class RuntimeNativeCreature
     private bool PackageLocationReached(FalloutFormKey? package) => package is not null &&
         (_travelPackage?.Form == package && _travelProgress?.Complete == true ||
          _guardPackage?.Form == package && _guardProgress?.Complete == true ||
+         _sandboxSource?.Form == package && _sandbox?.AtLocation == true ||
          _dialoguePackage?.Form == package && _dialogueRequested ||
          _aiWorld?.RetainedPackageLocationReached(Appearance.Reference!.Value, package) == true);
 

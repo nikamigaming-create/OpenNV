@@ -1,6 +1,7 @@
 #pragma once
 #include "opennv_plugin_domain.h"
 #include "opennv_plugin_crt.h"
+#include "opennv_plugin_crt_support.h"
 #include "opennv_plugin_find.h"
 #include "opennv_plugin_crypto.h"
 #include "opennv_plugin_cng_service.h"
@@ -23,6 +24,7 @@ struct PluginIoRuntime {
     std::set<std::string> non_io_imports;
     std::map<std::uint32_t, PluginIoFile> files;
     std::unique_ptr<PluginCrtRuntime> crt;
+    std::unique_ptr<PluginCrtSupportRuntime> crt_support;
     std::unique_ptr<PluginFindRuntime> find;
     std::unique_ptr<PluginCryptoRuntime> crypto;
     std::unique_ptr<CngSystemClient> cng_client;

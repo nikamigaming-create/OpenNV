@@ -110,15 +110,16 @@ void guest_seal(const Frame& frame) {
 }
 
 void* expression_source_form(NvseExpressionEvaluator& evaluator, NvseExpressionToken& token) {
-    if (token.type != 3) nvse_unowned("TESForm extraction requires an actual typed Form token");
-    Bytes request; request.put(evaluator.caller); request.put(static_cast<std::uint32_t>(token.number));
+    if (token.type != 3 && token.type != 12) nvse_unowned("TESForm extraction requires an actual typed Form/reference-local token");
+    const auto id = token.type == 12 ? expression_local_form_id(evaluator, token) : static_cast<std::uint32_t>(token.number);
+    Bytes request; request.put(evaluator.caller); request.put(id);
     const auto pointer = expression_scalar(0x403, request);
     if (!pointer) {
-        if (token.number != 0) throw Fatal(ERROR_INVALID_DATA, "Nonnull source FormID was replaced with an absent projection.");
+        if (id != 0) throw Fatal(ERROR_INVALID_DATA, "Nonnull source FormID was replaced with an absent projection.");
         return nullptr;
     }
     auto& object = source_object_pointer(reinterpret_cast<void*>(pointer));
-    if (object.form != static_cast<std::uint32_t>(token.number)) throw Fatal(ERROR_INVALID_DATA, "Actual native TESForm identity differs from its C# token.");
+    if (object.form != id) throw Fatal(ERROR_INVALID_DATA, "Actual native TESForm identity differs from its C# token.");
     return reinterpret_cast<void*>(pointer);
 }
 bool __cdecl script_extract_arguments(const void* parameters, void* data, std::uint32_t* offset, void* script, void* events, ...) {
@@ -133,7 +134,7 @@ bool __cdecl script_extract_arguments(const void* parameters, void* data, std::u
         auto* opaque = expression_create(static_cast<const NvseParamInfo*>(parameters), data, reinterpret_cast<void*>(caller.frame[2]),
             reinterpret_cast<void*>(caller.frame[3]), script, events, reinterpret_cast<double*>(caller.frame[6]), offset);
         struct RetireEvaluator { void* pointer; ~RetireEvaluator() { expression_destroy(pointer); } } lifetime{opaque};
-        auto& evaluator = expression_evaluator(opaque); if (!expression_extract_impl(evaluator)) return false;
+        auto& evaluator = expression_evaluator(opaque); if (!expression_extract_impl(evaluator, true)) return false;
         const auto* command = static_cast<const NvseRegisteredCommand*>(nullptr);
         for (const auto& declaration : state->nvse->commands) if (declaration.opcode == caller.opcode) { command = &declaration; break; }
         if (!command || evaluator.roots.size() > command->parameter_count)

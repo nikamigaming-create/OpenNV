@@ -117,7 +117,7 @@ internal static partial class ChallengeContracts
         var source = new FalloutImmediateScriptSource(Engine, new('1', 64),
             FalloutImmediateScriptSource.Read(new FalloutAdvancementRuntimeReceipt(Engine, new('a', 64), new('b', 64), new('c', 64),
                 new(FalloutSkillPointOperand.Literal(10), FalloutSkillPointOperand.Literal(1), 0, 2, 1, 10, FalloutSkillPointRounding.Floor),
-                new(1, 10, FalloutPermanentIntelligenceInteger.Floor))).ContractSha256);
+                new(1, 10, FalloutPermanentIntelligenceInteger.Floor), new("iLevelsPerPerk"))).ContractSha256);
         var declaration = FalloutActorProcessRuntimeDeclaration.ForExecutable(Engine);
         FalloutCombatActorIdentity Identity(FalloutFormKey key) => new(key, Key(7), "ENGINE_PLAYER", 0,
             Engine, "NPC_", 0, new('4', 64), true);

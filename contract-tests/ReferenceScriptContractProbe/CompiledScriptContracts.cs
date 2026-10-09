@@ -9,6 +9,7 @@ internal static partial class CompiledScriptContracts
 {
     internal static void Run()
     {
+        CommandAliasContracts();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-compiled-contract-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try

@@ -1,10 +1,11 @@
 template<class Call> auto crt_member(void* pointer, CrtOperation operation, bool writable,
     std::uint64_t argument, std::uint64_t requested, Call call) {
+    const auto incoming = GetLastError(); CrtSupportCall entered(pointer); crt_support_validate(pointer);
     const auto stream = crt_stream(pointer, writable); auto& provider = crt_provider(stream.provider);
-    const auto result = call(provider); const auto status = crt_status(provider, pointer);
+    SetLastError(incoming); const auto result = call(provider); const auto last = GetLastError(); const auto status = crt_status(provider, pointer);
     crt_emit(CrtEvent{stream.provider, stream.route, address(pointer), operation, argument, requested,
         static_cast<std::int64_t>(result), false, status});
-    crt_restore_error(provider, status); return result;
+    crt_restore_error(provider, status); SetLastError(last); return result;
 }
 std::uint64_t crt_transfer_extent(std::size_t size, std::size_t count) {
     const auto extent = static_cast<std::uint64_t>(size) * count;
@@ -111,14 +112,16 @@ void __cdecl crt_clearerr(void* pointer) {
 }
 int __cdecl crt_fclose(void* pointer) {
     return nvse_adapter([&] {
+        const auto incoming = GetLastError(); CrtSupportCall entered(pointer, true); crt_support_validate(pointer, true);
         const auto stream = crt_stream(pointer); auto& provider = crt_provider(stream.provider);
         // fclose invalidates its actual FILE even if a pending flush fails.
         // Remove it before a receipt can reenter; never call fclose twice.
-        const auto result = crt_export<int (__cdecl*)(void*)>(provider, "fclose")(pointer);
+        const auto close_entry = crt_export<int (__cdecl*)(void*)>(provider, "fclose");
+        SetLastError(incoming); const auto result = close_entry(pointer); const auto last = GetLastError();
         crt_owner().streams.erase(address(pointer)); const auto status = crt_status(provider);
         const CrtEvent event{stream.provider, stream.route, address(pointer), CrtOperation::close, 0, 0, result, true, status};
         if (result) crt_owner().failed_closes.push_back(event);
-        crt_emit(event); crt_restore_error(provider, status); return result;
+        crt_emit(event); crt_support_closed(pointer, result, last); crt_restore_error(provider, status); SetLastError(last); return result;
     });
 }
 void* crt_entry(const std::string& name) {
@@ -135,5 +138,5 @@ void* crt_entry(const std::string& name) {
         {"ferror", reinterpret_cast<void*>(crt_ferror)}, {"clearerr", reinterpret_cast<void*>(crt_clearerr)},
         {"_mkdir", reinterpret_cast<void*>(crt_mkdir_a)}, {"_wmkdir", reinterpret_cast<void*>(crt_mkdir_w)},
     };
-    for (const auto& entry : entries) if (name == entry.name) return entry.function; return nullptr;
+    for (const auto& entry : entries) if (name == entry.name) return entry.function; return crt_extended_entry(name);
 }

@@ -8,15 +8,18 @@ internal sealed class FalloutNewGamePlacement
 {
     private readonly FalloutFormKey _cell;
     private readonly float[] _position, _rotation;
+    internal FalloutPlayerCellPreparation Preparation { get; }
     internal FalloutPlayerMove Move { get; }
     internal FalloutReferencePlacement Placement => new(_cell,
         (float[])_position.Clone(), (float[])_rotation.Clone());
 
-    internal FalloutNewGamePlacement(FalloutPlayerMove move, FalloutReferencePlacement placement)
+    internal FalloutNewGamePlacement(FalloutPlayerCellPreparation preparation)
     {
-        ArgumentNullException.ThrowIfNull(move);
+        ArgumentNullException.ThrowIfNull(preparation);
+        var placement = preparation.Placement;
         placement.Validate();
-        Move = move;
+        Preparation = preparation;
+        Move = preparation.Request.Move ?? throw new InvalidDataException("Initial CELL preparation has no captured MoveTo owner.");
         _cell = placement.Cell;
         _position = (float[])placement.Position.Clone();
         _rotation = (float[])placement.RotationRadians.Clone();

@@ -20,17 +20,19 @@ internal partial class NativeOwnedDialogueMenu : Control
     private string _sourceMenuIdentity = "";
     private Func<FalloutFormKey, bool>? _isGoodbye;
 
-    internal NativeOwnedDialogueMenu(Action skip, Action<Exception> failed)
+    internal NativeOwnedDialogueMenu(Action skip, Action<Exception> failed,
+        OpenNV.Runtime.World.Cells.RuntimeNativeStandaloneInterface? sourceManager = null)
     {
         Name = "OwnedDialogue"; _failed = failed;
-        var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/dialog/dialog_menu.xml")).Elements("menu").Single();
+        CaptureStandaloneDialogInput();
+        var menu = ReadActualDialogMenu(sourceManager);
         _tiles = new(menu);
         XElement Named(string name) => menu.DescendantsAndSelf().Single(element => (string?)element.Attribute("name") == name);
         _speaker = Named("DM_SpeakerNameLabel"); _response = Named("DM_SpeakerText"); _list = Named("DM_TopicList");
         _scrollbar = _list.Elements().Single(element => (string?)element.Attribute("name") == "lb_scrollbar");
         _template = new(Named("DM_TopicTemplate").Elements().Single());
         menu.Elements("template").Remove();
-        _tiles.Bind(menu, "_DialogVisible", 1); _tiles.Bind(menu, "_ShowSubtitles", 1);
+        InitializeActualDialogTraits(menu);
         _tiles.Bind(_scrollbar, "_current_value", 0);
         _tiles.Bind(_list, "_scrollbar_vis", 0);
         _skip = new Button { Flat = true, MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.All };
@@ -40,8 +42,9 @@ internal partial class NativeOwnedDialogueMenu : Control
         SetMeta("opennv_ui_source", "menus/dialog/dialog_menu.xml");
     }
 
-    internal void Show(string speaker, FalloutConversation conversation, Action<FalloutFormKey> choose)
+    internal void Show(string speaker, FalloutConversation conversation, Action<FalloutFormKey> choose, FalloutFormKey? actualSpeaker = null)
     {
+        RequireStandaloneDialogShow(actualSpeaker);
         ClearChoices();
         _conversationChoices = conversation.Choices;
         _sourceMenuIdentity = conversation.Info?.Record.FormKey.ToString() ?? conversation.Phase;
@@ -68,7 +71,7 @@ internal partial class NativeOwnedDialogueMenu : Control
     public override void _Ready() { Layout(); }
     private NativeViewportLayout? _viewportLayout;
     public override void _EnterTree() => _viewportLayout = new(this, Layout);
-    public override void _ExitTree() => _viewportLayout?.Dispose();
+    public override void _ExitTree() => ReleaseStandaloneDialogViewport();
     private void Select(XElement tile)
     {
         _tiles.Bind(_list, "_highlight_y", _tiles.Number(tile, "_y"));
