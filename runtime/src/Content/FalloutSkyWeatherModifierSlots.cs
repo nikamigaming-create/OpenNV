@@ -6,12 +6,15 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutSkyWeatherModifierSlots(FalloutFormKey Weather, string SourceSha256,
     IReadOnlyList<FalloutFormKey?> Slots)
 {
-    internal static FalloutSkyWeatherModifierSlots Read(FalloutPluginStack records, FalloutFormKey weather)
+    internal static FalloutSkyWeatherModifierSlots Read(FalloutPluginStack records, FalloutFormKey weather, FalloutSkyTransferDeclaration source)
     {
+        source.Validate();
         var record = records.GetEffective(weather);
         if (record.Signature != "WTHR" || record.IsDeleted) throw new InvalidDataException("Sky image modifier source is not a winning WTHR.");
         var fields = record.ReadSubrecords().ToArray();
-        var result = new FalloutFormKey?[6];
+        if (source.IsStandalone && fields.Any(field => field.Signature is "4IAD" or "5IAD"))
+            throw new NotSupportedException("Selected Sky does not declare the extra weather image-modifier channels.");
+        var result = new FalloutFormKey?[source.WeatherImageSlots];
         for (var index = 0; index < result.Length; index++)
         {
             // The common ESM reader validates the raw first-byte channel and

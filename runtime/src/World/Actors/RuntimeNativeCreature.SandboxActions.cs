@@ -81,7 +81,9 @@ internal sealed partial class RuntimeNativeCreature : IFalloutSandboxNativeActio
     private void RetireSandboxNativeActionOnExit()
     {
         if (_sandboxNativeAction is null || _sandboxNativeRetired) return;
-        _aiState!.ProcedureCaptureBlocker ??= "Sandbox creature action eviction has no cold child continuation.";
+        var retained = _aiState!.PackageMotion?.Sandbox?.NativeIdle;
+        if (retained is null || retained.Selection != _sandboxNativeAction)
+            _aiState.ProcedureCaptureBlocker ??= "Sandbox creature action eviction has no cold child continuation.";
         try
         {
             if (_sandboxMarkerReserved && _sandboxMarkerReference is { } marker)

@@ -30,6 +30,7 @@ internal sealed partial class NativePluginExecutionDomain
                 throw new InvalidDataException("Native I/O and NVSE disagree about the exact owned runtime directory.");
             NativePluginIoImports.Admit(source, io);
             NativeNvseHostSource.RequirePluginExports(source);
+            RequireSourceAddressSpace(host);
             PrepareOriginalImportProviders(path, expectedSha256);
             host.Claim(Generation); _nvseHostSource = host; _nvseCallbackBudget = maximumInterfaceCallbacks;
             started = true; _nvseImageAttempted = true;
@@ -63,6 +64,7 @@ internal sealed partial class NativePluginExecutionDomain
     {
         VerifyNvse(plugin);
         if (plugin.Phase != NativeNvsePhase.Mapped) throw new InvalidOperationException("Original NVSE Query has already been invoked.");
+        PublishNativeCrtRuntime(plugin);
         return InvokeNvseInitialization(plugin, load: false);
     }
     internal NativeNvseInitializationReceipt InitializeNvse(NativeNvsePlugin plugin, uint? sourceLoadHandle = null)
@@ -148,6 +150,7 @@ internal sealed partial class NativePluginExecutionDomain
             CheckNvseCounts(plugin, counts);
             if (image != 0 || interfaces != 0) throw new InvalidDataException("Original NVSE image/interface mapping remains after retirement.");
             RequireEngineCommandRetirement();
+            RequireSourceCallSiteRetirement();
             RequirePrivateIoRetired();
             RetireNativeImportProviders();
             RequireNvseHeapRetired();
@@ -212,6 +215,12 @@ internal sealed partial class NativePluginExecutionDomain
             case NativeNvseHostCall.EngineCommandExecute:
             case NativeNvseHostCall.EngineCommandRetire:
                 value = DispatchNvseEngineCommand((NativeNvseHostCall)frame.Operation, frame, parent, reader); break;
+            case NativeNvseHostCall.SourceCallSiteDeclare:
+            case NativeNvseHostCall.SourceCallSitePublish:
+            case NativeNvseHostCall.SourceCallSiteTransition:
+            case NativeNvseHostCall.SourceCallSiteExecute:
+            case NativeNvseHostCall.SourceCallSiteRetire:
+                value = DispatchNvseCallSite((NativeNvseHostCall)frame.Operation, frame, parent, reader); break;
             default: throw new InvalidDataException("Unknown NVSE interface callback operation.");
         }
         Finish(reader); return value;
@@ -220,6 +229,7 @@ internal sealed partial class NativePluginExecutionDomain
     {
         if (!ChildExited) throw new InvalidOperationException("Native source/capability owners require verified exact child closure.");
         ClearEngineCommandsAfterChildExit();
+        ClearSourceCallSitesAfterChildExit();
         ClearNvseBinaryAfterChildClosure();
         ClearNvseData();
         ClearNvseCommandTable();

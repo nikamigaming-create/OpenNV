@@ -16,7 +16,7 @@ internal sealed partial class FalloutSkyLightingState
     private string? _transferUnowned = "source-Sky-selected-reset-factory-not-configured";
     private bool _projectionRestore;
     internal FalloutSkyTransferState? SourceTransfer => _sourceTransfer;
-    internal string? SourceTransferSaveBlocker => _sourceTransfer?.SaveBlocker;
+    internal string? SourceTransferSaveBlocker => _sourceTransfer?.SaveBlocker ?? SourceMoonSaveBlocker;
     internal object SourceTransferState => _sourceTransfer?.State ?? new { unowned = _transferUnowned ?? "source-Sky-transfer-not-constructed" };
     internal void ConfigureSourceTransfer(string executable, string stack, Guid process, FalloutImageSpaceState images)
     {
@@ -27,6 +27,7 @@ internal sealed partial class FalloutSkyLightingState
             _transferDeclaration = FalloutSkyTransferDeclaration.Read(executable);
             _sourceTransfer = new(_transferDeclaration, _records, images, stack, _daytimeExtension);
             _sourceTransfer.BindProcess(process);
+            ConstructSourceMoons();
             _transferUnowned = null;
         }
         catch (NotSupportedException error) { _transferUnowned = error.Message; }
@@ -92,6 +93,7 @@ internal sealed partial class FalloutSkyLightingState
         }
         if (snapshot.SourceTransfer is not { } saved || snapshot.TransferUnowned is not null)
             throw new InvalidDataException("Current Sky save omitted its actual source reset/child/manager continuation.");
+        RetireForSourceMoonReplacement();
         _sourceTransfer?.Retire();
         var next = new FalloutSkyTransferState(_transferDeclaration, _records,
             _transferImages ?? throw new InvalidOperationException("Sky image manager is absent."),
@@ -106,7 +108,7 @@ internal sealed partial class FalloutSkyLightingState
         if (process == Guid.Empty) throw new InvalidDataException("Sky current process is absent.");
         _transferProcess = process;
     }
-    internal void RetireSourceTransfer() => _sourceTransfer?.Retire();
+    internal void RetireSourceTransfer() => RetireCombinedSourceSky();
     private string? CaptureSourceTransferUnowned() => _sourceTransfer is not null ? null :
         _transferUnowned ?? "source-Sky-selected-reset-factory-not-configured";
 }

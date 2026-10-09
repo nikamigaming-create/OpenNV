@@ -38,6 +38,7 @@ internal static class NativeExecutionContracts
             NativeCallbackBudgetClassification(companion, fixture);
             DeadlineRefusal(companion, fixture);
             ManagedCallbackDeadline(companion, fixture);
+            NativeExceptionContracts.Run(companion, fixture);
             NativeExecutionProtocolContracts.Run(companion);
             NativeFaultEnvelopeContracts.Run(companion);
             NativeGuestArenaContracts.Run(companion, fixtureDirectory);

@@ -17,7 +17,7 @@ internal sealed partial class FalloutReferenceWorld
     internal bool ActualProcessRuntimeConfigured => _processRuntime is not null && _processCommon is not null;
     internal object? ActualProcessRuntimeState => _processRuntime?.State;
     internal object? ActualProcessCommonState => _processCommon?.State;
-    internal string? ActualProcessRuntimeSaveBlocker => _processRuntime?.SaveBlocker ??
+    internal string? ActualProcessRuntimeSaveBlocker => _processRuntime?.SaveBlocker ?? _processRuntime?.SourceCachedTimerRuntimeBoundary ??
         (_processRuntime is null ? "actual-Main-Player-Actor-process-runtime-owner-absent" : null);
     internal string? ActualProcessCommonSaveBlocker => _processCommon?.SaveBlocker ??
         (_processCommon is null ? "actual-actor-common-process-owner-absent" : null);
@@ -42,6 +42,15 @@ internal sealed partial class FalloutReferenceWorld
         FalloutActorProcessCommonState? fields = null;
         try
         {
+            if (_campaignPlayerRuntimeSource is { } campaign && FalloutSourceFrameTimer.Supports(campaign.Receipt))
+            {
+                if (runtime is not null && runtime.CachedTimer is null)
+                    throw new InvalidDataException("Cold Main omitted its constructed source cached timer.");
+                inputs.PrepareSourceCachedTimer(FalloutSourceFrameTimerConfiguration.Read(campaign.Receipt, records.IniSettings),
+                    runtime?.CachedTimer);
+            }
+            else if (runtime?.CachedTimer is not null)
+                throw new NotSupportedException("Cold cached timer has no matching selected source constructor.");
             fields = new(declaration, stack, ReadCombatActorIdentity, ReadActualProcessGameplay, ReadActualProcessBody, common);
             fields.BindSource3DInitializer(ReadActualSourceProcess3D);
             var actors = ActorPerception.ConstructedSourceActors;
@@ -58,6 +67,7 @@ internal sealed partial class FalloutReferenceWorld
         {
             var failures = new List<Exception> { original };
             try { fields?.Dispose(); } catch (Exception error) { failures.Add(error); }
+            try { inputs.RetireSourceCachedTimer(); } catch (Exception error) { failures.Add(error); }
             try { inputs.Dispose(); } catch (Exception error) { failures.Add(error); }
             if (failures.Count > 1)
             {
@@ -201,4 +211,6 @@ internal sealed partial class FalloutReferenceWorld
         _processRuntimeDeclaration = null; _processRuntimeStack = null;
         _processRuntimeRestore = null; _processCommonRestore = null;
     }
+
+    private void RetireCampaignCachedSourceTimer() => _processRuntime?.RetireSourceCachedTimer();
 }

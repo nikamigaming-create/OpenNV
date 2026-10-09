@@ -128,6 +128,7 @@ internal partial class RuntimeNativeConversation : Node
             _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
             _menu = new(() => _speech.SkipResponse(), Fail, _standaloneNativeInterface); _layer.AddChild(_menu);
             PublishStandaloneDialog();
+            PublishSourceMainDialog();
             _player.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
             _conversation.Start(identity.Actor, request.Topic ?? FalloutDialogueTopic.Find(_records, "DIAL", "GREETING").FormKey);
             _recordTalkedToPlayer?.Invoke(_dialogueSubject);
@@ -147,6 +148,7 @@ internal partial class RuntimeNativeConversation : Node
         if (_conversation.Phase == "closed")
         {
             CloseStandaloneDialog();
+            CloseSourceMainDialog();
             ReleaseFacing();
             _layer?.QueueFree(); _layer = null; _menu = null;
             _player.SetModalInput(false);

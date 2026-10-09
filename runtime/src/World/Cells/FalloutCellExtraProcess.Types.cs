@@ -3,10 +3,14 @@ using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
-internal sealed record FalloutCellProcessListReference(FalloutCellProcessReference Source,
+internal sealed record FalloutCellProcessListReference(FalloutCellProcessReference? Source,
     FalloutFormKey CurrentCell, long Membership, uint CurrentReferenceFlags,
     FalloutCombatActorIdentity? Actor, long? ProcessEpoch, FalloutDetectionProcessLevel? Level,
-    FalloutActorProcessFact<bool>? HasProcess);
+    FalloutActorProcessFact<bool>? HasProcess)
+{
+    internal FalloutFormKey Reference => Source?.Reference ?? (Actor is { EnginePlayer: true } player ? player.Reference :
+        throw new InvalidDataException("Current CELL child omitted both its placed and genuine canonical runtime source."));
+}
 internal sealed record FalloutCellProcessReferenceList(FalloutCellProcessIdentity Cell, long Revision,
     IReadOnlyList<FalloutCellProcessListReference> References, string Owner);
 internal sealed record FalloutCellExtraProcessEntry(FalloutCellProcessIdentity Source, bool Present,

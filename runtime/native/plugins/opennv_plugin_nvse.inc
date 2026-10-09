@@ -104,13 +104,23 @@ template<class F> auto nvse_adapter(F action) -> decltype(action()) {
         RaiseException(nvse_missing_owner_exception, EXCEPTION_NONCONTINUABLE, 0, nullptr);
         std::abort();
     }
+    DWORD diagnostic_parameter_count = 0;
+    const ULONG_PTR* diagnostic_parameters = nullptr;
     try { return action(); }
-    catch (const Fatal& error) { retain_callback_fault(error.code, error.what()); }
+    catch (const Fatal& error) {
+        remember_native_exception(state->first_guarded_exception, error);
+        retain_callback_fault(error.code, error.what());
+        if (error.code == ERROR_INVALID_ADDRESS && first_callable_page_collision_count) {
+            diagnostic_parameter_count = first_callable_page_collision_count;
+            diagnostic_parameters = first_callable_page_collision.data();
+        }
+    }
     catch (const std::exception& error) { retain_callback_fault(ERROR_INVALID_DATA, error.what()); }
     catch (...) { retain_callback_fault(ERROR_INVALID_DATA, "NVSE public callback failed without a typed receipt."); }
     // Never unwind a first-party C++ exception across an original DLL's ABI.
     // The guarded original invocation reports the retained native fault.
-    RaiseException(nvse_missing_owner_exception, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+    RaiseException(nvse_missing_owner_exception, EXCEPTION_NONCONTINUABLE,
+        diagnostic_parameter_count, diagnostic_parameters);
     std::abort();
 }
 void nvse_load_only() {
@@ -187,11 +197,17 @@ std::uint32_t __cdecl nvse_plugin_handle() {
 const char* __cdecl nvse_runtime_directory() { return nvse_adapter([] { return nvse_owner().directory; }); }
 void __cdecl nvse_expression_utils(void* destination) { nvse_adapter([&] { expression_initialize(destination); }); }
 
-void nvse_check_call(const CallReceipt& receipt) {
+void nvse_check_exception(const CallReceipt& receipt, const std::string& stage, std::uint32_t entry) {
+    if (state->first_guarded_exception) std::rethrow_exception(state->first_guarded_exception);
+    native_exception_raise(receipt, stage, entry, callback_fault.load(), state->callback_reason, state->callback_reason_truncated);
+}
+void nvse_check_call(const CallReceipt& receipt, const std::string& stage, std::uint32_t entry) {
+    // Do not let a post-call declaration/state validation replace the actual
+    // caught native context or its earlier typed callback failure prefix.
+    nvse_check_exception(receipt, stage, entry);
     engine_commands_validate_all();
     command_table_validate_all();
     if (callback_fault.load()) throw Fatal(callback_fault.load(), state->callback_reason[0] ? state->callback_reason : "NVSE callback ownership failed.");
-    if (receipt.exception_code) throw Fatal(receipt.exception_code, "Original NVSE module raised a structured exception.");
     if (receipt.stack_delta != 0 || receipt.preserved_registers != 7)
         throw Fatal(ERROR_INVALID_DATA, "Original NVSE ABI violated stack or EBX/ESI/EDI preservation.");
     data_sync_if_bound();
@@ -248,7 +264,7 @@ std::uint32_t nvse_deliver(std::uint32_t sender, std::uint32_t type, void* data,
         NvseMessage message{sender_name.c_str(), type, length, data}; CallReceipt receipt{};
         { NvseInvocation invocation(owner);
           InvokeNvseOneGuarded(reinterpret_cast<void*>(listener.function), address(&message), &receipt); }
-        nvse_check_call(receipt);
+        nvse_check_call(receipt, "NVSE message " + std::to_string(type) + ", listener " + std::to_string(delivered + 1U), listener.function);
         Bytes completion; completion.put(dispatch); completion.put(listener.function); completion.put(sender); completion.put(type);
         completion.put(address(data)); completion.put(length);
         if (nvse_host(NvseHostCall::delivered_message, completion) != 1)
@@ -391,7 +407,7 @@ void nvse_stage(const Frame& frame, bool load_stage) {
     { NvseInvocation invocation(owner);
       if (load_stage) InvokeNvseOneGuarded(reinterpret_cast<void*>(owner.load), address(&owner.tables->core), &receipt);
       else InvokeGuarded(reinterpret_cast<void*>(owner.query), Abi::cdecl_call, nullptr, address(&owner.tables->core), address(&owner.info), &receipt); }
-    nvse_check_call(receipt); state->calls.pop_back();
+    nvse_check_call(receipt, load_stage ? "NVSEPlugin_Load" : "NVSEPlugin_Query", load_stage ? owner.load : owner.query); state->calls.pop_back();
     // MSVC's bool return lives in AL; the upper bits of EAX are not specified.
     const auto returned = receipt.result & 0xffU;
     if (returned > 1) throw Fatal(ERROR_INVALID_DATA, "Original NVSE bool return is invalid.");
@@ -436,7 +452,7 @@ void nvse_serialization_event(const Frame& frame) {
     CallReceipt receipt{};
     { NvseInvocation invocation(*state->nvse);
       InvokeNvseOneGuarded(reinterpret_cast<void*>(callback_pointer), 0, &receipt); }
-    nvse_check_call(receipt);
+    nvse_check_call(receipt, "NVSE serialization " + std::to_string(event), callback_pointer);
     Bytes completion; completion.put(event); completion.put(callback_pointer);
     if (nvse_host(NvseHostCall::delivered_serialization, completion) != 1)
         throw Fatal(ERROR_INVALID_DATA, "Original NewGame callback lacks its C# completion owner.");
@@ -454,6 +470,7 @@ void unload_nvse(const Frame& frame) {
     if (!cng_original_free_library(frame, image)) throw Fatal(GetLastError(), "Original NVSE module FreeLibrary failed.");
     values_heap_flush_detach(frame);
     io_flush_detach(frame);
+    window_process_flush_detach(frame);
     if (callback_fault.load()) throw Fatal(callback_fault.load(), "Original NVSE detach attempted an unowned callback.");
     MEMORY_BASIC_INFORMATION memory{};
     if (!VirtualQuery(image, &memory, sizeof(memory)) || memory.State != MEM_FREE)
@@ -466,6 +483,7 @@ void unload_nvse(const Frame& frame) {
         throw Fatal(ERROR_INVALID_DATA, "NVSE interface mapping remains after retirement.");
     state->data.reset();
     engine_commands_retire(frame);
+    source_call_sites_retire(frame);
     command_table_retire(); expression_retire(); array_objects_retire(frame); values_heap_retire(); values_retire(); source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
     Bytes data; nvse_counters(data); data.put(0U); data.put(0U);
     state->nvse.reset(); state->module = nullptr; state->module_id = 0;

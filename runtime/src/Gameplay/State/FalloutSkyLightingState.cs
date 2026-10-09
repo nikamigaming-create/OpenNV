@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed record FalloutRegionWeatherSnapshot(FalloutFormKey Region, FalloutFormKey Weather);
 internal sealed record FalloutSkyLightingSnapshot(FalloutFormKey Climate, IReadOnlyList<FalloutRegionWeatherSnapshot> Regions,
     FalloutFormKey? ForcedWeather = null, FalloutFormKey? ExteriorWeather = null, ulong? RandomState = null,
-    FalloutFormKey? ClimateWeather = null, FalloutSkyTransferSnapshot? SourceTransfer = null, string? TransferUnowned = null);
+    FalloutFormKey? ClimateWeather = null, FalloutSkyTransferSnapshot? SourceTransfer = null, string? TransferUnowned = null, FalloutSkyMoonSnapshot? Moons = null);
 
 /// <summary>Shared sky/climate identity and region weather caches; renderers only sample this state.</summary>
 internal sealed partial class FalloutSkyLightingState
@@ -50,7 +50,7 @@ internal sealed partial class FalloutSkyLightingState
     {
         RequireBound();
         return new(_climate.Form, _regions.OrderBy(pair => pair.Key.ToString(), StringComparer.Ordinal)
-            .Select(pair => new FalloutRegionWeatherSnapshot(pair.Key, pair.Value)).ToArray(), ForcedWeather, ExteriorWeather, _random.State, _climateWeather, CaptureSourceTransfer(), CaptureSourceTransferUnowned());
+            .Select(pair => new FalloutRegionWeatherSnapshot(pair.Key, pair.Value)).ToArray(), ForcedWeather, ExteriorWeather, _random.State, _climateWeather, CaptureSourceTransfer(), CaptureSourceTransferUnowned(), CaptureSourceMoons());
     }
 
     internal void Restore(FalloutSkyLightingSnapshot snapshot)
@@ -72,12 +72,14 @@ internal sealed partial class FalloutSkyLightingState
         _regions.Clear();
         foreach (var row in regions) _regions.Add(row.Key, row.Value);
         RestoreSourceTransfer(snapshot);
+        RestoreSourceMoons(snapshot);
         _unbound = null;
     }
 
     internal static void ValidateSnapshot(FalloutPluginStack records, FalloutSkyLightingSnapshot snapshot)
     {
         _ = FalloutClimateLighting.Read(records.GetEffective(snapshot.Climate));
+        ValidateSourceMoons(records, snapshot);
         if (snapshot.SourceTransfer is { } sourceSky)
         {
             if (snapshot.TransferUnowned is not null) throw new InvalidDataException("Saved Sky has both an admitted owner and an unowned declaration.");

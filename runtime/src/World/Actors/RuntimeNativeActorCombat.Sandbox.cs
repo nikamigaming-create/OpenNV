@@ -29,11 +29,8 @@ internal sealed partial class RuntimeNativeActorCombat
         if (state.Selected is not null)
         {
             var action = SandboxActions ?? throw new NotSupportedException("Sandbox active action lost its actual native consumer.");
-            var elapsed = action.ElapsedActionSeconds();
-            if (!float.IsFinite(elapsed) || elapsed < 0)
-                throw new InvalidDataException("Sandbox action clock producer returned an invalid source delta.");
             action.Advance(seconds);
-            state.AdvanceNative(elapsed, action.Retire, action.ObserveReturned, state.Registry.RememberReturned);
+            state.AdvanceNativeAtHour(action.GameHour(), action.Retire, action.ObserveReturned, state.Registry.RememberReturned);
             return;
         }
         if (source.LocationType == 0) state.ObserveSourceArea(source.Resolve(_records, _world, _state.Reference));
@@ -61,7 +58,7 @@ internal sealed partial class RuntimeNativeActorCombat
             "Sandbox reached enabled source world actions without its candidate registry/filter/order and native action producer.");
         var registry = state.Registry.Observe(actions.Timer(), actions.RescanInterval(), PackageRandom,
             () => actions.Discovery(source, area), actions.RepeatMilliseconds());
-        state.Select(registry.Candidates, actions.Duration,
+        state.SelectNative(registry.Candidates, actions.Duration, actions.SelectionTime,
             state.ActionWeights(actions.Context(), registry.Availability), state.Registry.RepeatedReference);
         if (state.Selected is not null) state.EnterAction(actions.Enter);
         else throw new NotSupportedException("Sandbox empty eligible election requires its original fallback wait child; no completion or substitute retry clock is admitted.");
@@ -76,9 +73,9 @@ internal sealed partial class RuntimeNativeActorCombat
             [_routeTarget.X, _routeTarget.Y, _routeTarget.Z], _pursuitPath.Select(p => new[] { p.X, p.Y, p.Z }).ToArray(),
             _pursuitCursor, _routeClock, _routeStall, float.IsPositiveInfinity(_waypointDistance) ? null : _waypointDistance,
             _routeError, _routeFailures);
-        if (state.Selected is not null)
-            throw new NotSupportedException("Sandbox entered native world action requires its specific cold continuation owner.");
-        var snapshot = state.Capture(election) with { Route = route };
+        var native = state.Selected is { } selected ?
+            (SandboxActions ?? throw new NotSupportedException("Sandbox capture lost its actual native action owner.")).Capture(selected) : null;
+        var snapshot = state.Capture(election) with { Route = route, NativeIdle = native };
         snapshot.Validate();
         return motion with { Sandbox = snapshot };
     }

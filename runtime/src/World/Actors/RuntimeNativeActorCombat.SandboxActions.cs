@@ -1,6 +1,7 @@
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
@@ -21,7 +22,9 @@ internal sealed partial class RuntimeNativeActorCombat
         internal bool Owns(IFalloutSandboxNativeActionConsumer value) => ReferenceEquals(consumer, value);
         public FalloutSandboxTimerSample Timer() => actor._world.SandboxTimer();
         public FalloutSandboxActionContext Context() => actor._world.SandboxContext(actor._state.Reference);
-        public float ElapsedActionSeconds() => actor._world.SandboxActionElapsedSeconds(actor._state.Reference);
+        public float GameHour() => consumer.GameHour;
+        public FalloutSandboxActionTime SelectionTime(float duration) => new(
+            FalloutSandboxActionDeadline.Read(actor._world.CampaignPlayerRuntimeSource.Receipt), consumer.GameHour, duration);
         public (uint Minimum, uint Maximum) RescanInterval() => FalloutSandboxActionSource.RescanInterval(actor._records);
         public uint RepeatMilliseconds() => FalloutSandboxActionSource.RepeatMilliseconds(actor._records);
         public IReadOnlyList<FalloutSandboxCandidate> Discover(FalloutSandboxPackage source, FalloutSandboxArea area)
@@ -46,6 +49,8 @@ internal sealed partial class RuntimeNativeActorCombat
         public void Advance(double seconds) => consumer.Advance(seconds);
         public bool ObserveReturned(FalloutSandboxCandidate chosen) => consumer.ObserveRetired(chosen);
         public void Retire(FalloutSandboxCandidate chosen) => consumer.RequestRetirement(chosen);
+        public FalloutSandboxNativeIdleContinuation Capture(FalloutSandboxCandidate chosen) => consumer.Capture(chosen);
+        public void Restore(FalloutSandboxNativeIdleContinuation saved) => consumer.Restore(saved);
     }
 
     internal bool AdvanceSandboxMarkerApproach(FalloutPluginRecord package, FalloutFormKey marker, double seconds)
@@ -60,5 +65,19 @@ internal sealed partial class RuntimeNativeActorCombat
         AdvancePackageMotion(package, destination, tolerance, FalloutSandboxPackage.Read(package).Running,
             seconds, requireArrivalHeight: true);
         return _mover.IsOnFloor() && _actor.GlobalPosition.DistanceTo(destination) <= tolerance;
+    }
+
+    internal void RequireSandboxNativePublication()
+    {
+        if (!_actor.IsInsideTree() || !_world.IsEnabled(_state.Reference))
+            throw new NotSupportedException("Sandbox native child has no actually attached/enabled actor publication.");
+    }
+
+    internal void RequireSandboxNativeRestoredPose()
+    {
+        RequireSandboxNativePublication();
+        if (_state.PackageMotion is not { } motion ||
+            _actor.GlobalPosition != new Vector3(motion.Position[0], motion.Position[1], motion.Position[2]))
+            throw new NotSupportedException("Sandbox native child has no actually published/restored package position.");
     }
 }

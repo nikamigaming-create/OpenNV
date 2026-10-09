@@ -95,7 +95,7 @@ internal static partial class ProcessQueueContracts
         {
             var state = JsonSerializer.SerializeToElement(extra!.State).GetProperty("cells")[0];
             Require(state.GetProperty("Present").GetBoolean() && state.GetProperty("Count").GetUInt32() == 0,
-                "First source CELL count was stored before its actual reference consumer."); callbacks.Add(child.Source.Reference);
+                "First source CELL count was stored before its actual reference consumer."); callbacks.Add(child.Reference);
         });
         _ = extra.Change(Cell, false, "absent-decrease");
         Require(callbacks.Count == 0 && !extra.ReadPresence(Cell).Require(), "Absent decrement created an extra or walked references.");

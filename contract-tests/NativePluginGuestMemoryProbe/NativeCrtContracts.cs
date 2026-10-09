@@ -47,6 +47,7 @@ internal static class NativeCrtContracts
             using var host = NativeNvseHostSource.Open(runtime, originals[runtime], nvse, originals[nvse],
                 selection.StackSha256, false, "authored-host-selected-owned-standard-edition");
             using var io = new NativePluginPrivateIo(selection);
+            io.BindSourceAddressSpace(host);
             Require(io.CrtProviders.Count == 1 && io.CrtProviders[0].Sha256 == providers[0].Sha256,
                 "Actual provider was replaced before native admission.");
             using var domain = new NativePluginExecutionDomain(companion, TimeSpan.FromSeconds(30), privateIo: io);
@@ -139,7 +140,7 @@ internal static class NativeCrtContracts
         return Convert.ToHexString(SHA256.HashData(input));
     }
     private static string HashText(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
-    private static void ProtectAuthoredSource(string directory, string input)
+    internal static void ProtectAuthoredSource(string directory, string input)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         using var identity = WindowsIdentity.GetCurrent();

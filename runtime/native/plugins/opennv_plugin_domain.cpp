@@ -7,12 +7,14 @@
 #include "opennv_plugin_nvse.h"
 #include "opennv_plugin_command_table.h"
 #include "opennv_plugin_engine_commands.h"
+#include "opennv_plugin_source_call_sites.h"
 #include "opennv_plugin_data.h"
 #include "opennv_plugin_expression.h"
 #include "opennv_plugin_values.h"
 #include "opennv_plugin_array_objects.h"
 #include "opennv_plugin_value_heap.h"
 #include "opennv_plugin_io.h"
+#include "opennv_plugin_window_process.h"
 #include "opennv_plugin_import_providers.h"
 #include "opennv_plugin_source_locals.h"
 #include "opennv_plugin_source_objects.h"
@@ -23,6 +25,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -91,10 +94,12 @@ extern "C" __declspec(naked) std::uint32_t __cdecl InvokeX86(
 static std::uint32_t InvokeGuarded(void* function, Abi abi, void* receiver,
     std::uint32_t first, std::uint32_t second, CallReceipt* receipt) {
     __try { return InvokeX86(function, static_cast<std::uint32_t>(abi), receiver, first, second, receipt); }
-    __except (EXCEPTION_EXECUTE_HANDLER) { receipt->exception_code = GetExceptionCode(); return 0; }
+    __except (CaptureNativeException(GetExceptionInformation(), GetExceptionCode(),
+        &receipt->exception_code, &receipt->exception)) { return 0; }
 }
 
 #include "opennv_plugin_nvse_call.h"
+#include "opennv_plugin_source_call_sites_call.h"
 #include "opennv_plugin_expression_call.h"
 #include "opennv_plugin_steam_call.h"
 #include "opennv_plugin_steam_callbacks_call.h"
@@ -102,6 +107,10 @@ static std::uint32_t InvokeGuarded(void* function, Abi abi, void* receiver,
 namespace {
 struct Fatal final : std::runtime_error {
     std::uint32_t code;
+    NativeExceptionObservation exception{};
+    std::string exception_stage, prior_callback_reason;
+    std::uint32_t invocation_entry = 0, prior_callback_code = 0;
+    bool prior_callback_truncated = false;
     Fatal(std::uint32_t value, const std::string& message) : std::runtime_error(message), code(value) { }
 };
 struct Bytes {
@@ -115,6 +124,7 @@ struct Bytes {
         put(static_cast<std::uint32_t>(value.size())); data.insert(data.end(), value.begin(), value.end());
     }
 };
+#include "opennv_plugin_exception.inc"
 struct Reader {
     const std::vector<std::uint8_t>& data;
     std::size_t at = 0;
@@ -210,6 +220,7 @@ struct State {
     bool callback_reason_truncated = false;
     FrameHeader fault_request{};
     bool fault_request_owned = false;
+    std::exception_ptr first_guarded_exception;
     bool retired = false;
     GuestArena arena;
     std::unique_ptr<NvseRuntime> nvse;
@@ -220,6 +231,7 @@ struct State {
     std::unique_ptr<NvseArrayObjectRuntime> array_objects;
     std::unique_ptr<NvseValueHeap> value_heap;
     std::unique_ptr<PluginIoRuntime> io;
+    std::unique_ptr<WindowProcessRuntime> window_process;
     std::unique_ptr<CngSystemService> cng_service;
     std::unique_ptr<ImportProvidersRuntime> import_providers;
     std::unique_ptr<SteamRuntime> steam;
@@ -319,7 +331,7 @@ Bytes perform_callback_bytes(Kind kind, std::uint32_t event, const Bytes& payloa
             const auto operation = static_cast<Operation>(incoming.header.operation);
             if (operation != Operation::call && operation != Operation::guest_read &&
                 operation != Operation::guest_write && operation != Operation::guest_stats &&
-                operation != Operation::nvse_command && operation != Operation::nvse_expression_statistics && operation != Operation::nvse_values_statistics && operation != Operation::nvse_local_statistics)
+                operation != Operation::nvse_command && operation != Operation::nvse_expression_statistics && operation != Operation::nvse_values_statistics && operation != Operation::nvse_local_statistics && operation != Operation::window_process)
                 throw Fatal(ERROR_BUSY, "Only a nested call or existing guest access is admitted while a callback owns the stack.");
             dispatch(incoming, id);
         }
@@ -327,6 +339,7 @@ Bytes perform_callback_bytes(Kind kind, std::uint32_t event, const Bytes& payloa
     catch (const Fatal& failure) {
         // This catch runs only on the owning native call thread. Retain the
         // actual refusal; a quota/retirement fault is not a parent-ID fault.
+        remember_native_exception(state->first_guarded_exception, failure);
         retain_callback_fault(failure.code, failure.what()); return {};
     }
     catch (...) { callback_fault.store(ERROR_INVALID_DATA); return {}; }
@@ -407,6 +420,8 @@ void engine_command_executable(void*);
 bool engine_command_zero_parameter_caller(std::uint32_t, std::uint32_t, std::uint32_t);
 void engine_commands_validate_all();
 void engine_commands_retire(const Frame&);
+void* source_call_site_api(const std::string&);
+void source_call_sites_retire(const Frame&);
 void command_table_retire();
 void expression_initialize(void*);
 void expression_retire();
@@ -453,6 +468,18 @@ void* io_profile_extended_entry(const std::string&);
 void crt_owned_callback(std::uint32_t, const Bytes&);
 void crt_defer_heap_receipt(const NvseHeapEvent&);
 void* crt_extended_entry(const std::string&);
+void* crt_standard_entry(const std::string&);
+void cpp_prepare(PluginIoRuntime&, Reader&);
+void* cpp_import_entry(const std::string&, const std::string&, void*);
+void* cpp_dynamic_entry(HMODULE, const std::string&);
+void cpp_retire();
+void cpp_require_retired();
+void crt_standard_retire();
+void crt_prepare_preentry_standard();
+void crt_standard_before_close(void*);
+void crt_standard_after_close(void*, int, DWORD, const CrtStatus&);
+void crt_descriptor_views_closed(void*);
+bool crt_standard_borrowed_handle(HANDLE);
 void crt_support_require_releasable(std::uint64_t);
 void crt_support_flush_detach();
 void crt_support_require_retired();
@@ -503,6 +530,7 @@ void cng_shared_service_hash_abandoned(CngSystemService&, std::uint64_t);
 void cng_shared_service_abandon(CngSystemService&);
 void cng_shared_service_require_retired(CngSystemService&);
 void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
+#include "opennv_plugin_window_process_forward.inc"
 #include "opennv_plugin_nvse.inc"
 #include "opennv_plugin_data.inc"
 #include "opennv_plugin_command_table.inc"
@@ -523,7 +551,13 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_crt_members.inc"
 #include "opennv_plugin_environment.inc"
 #include "opennv_plugin_crt_support_members.inc"
+#include "opennv_plugin_cpp_runtime.inc"
+#include "opennv_plugin_crt_standard.inc"
+#include "opennv_plugin_crt_descriptors.inc"
 #include "opennv_plugin_file_metadata.inc"
+#include "opennv_plugin_window_process.inc"
+#include "opennv_plugin_window_process_sdk.inc"
+#include "opennv_plugin_window_process_imports.inc"
 #include "opennv_plugin_crypto.inc"
 #include "opennv_plugin_cng_client.inc"
 #include "opennv_plugin_import_providers.inc"
@@ -535,6 +569,7 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_source_local_attach.inc"
 #include "opennv_plugin_callable_pages.inc"
 #include "opennv_plugin_engine_commands.inc"
+#include "opennv_plugin_source_call_sites.inc"
 #include "opennv_plugin_source_publication.inc"
 #include "opennv_plugin_source_files.inc"
 #include "opennv_plugin_binary_files.inc"
@@ -622,7 +657,9 @@ void call(const Frame& frame) {
     CallReceipt receipt{};
     InvokeGuarded(owned_symbol.function, owned_symbol.abi, state->contract->receiver, first, second, &receipt);
     state->calls.pop_back();
-    if (receipt.exception_code != 0) throw Fatal(receipt.exception_code, "Native module raised a structured exception.");
+    if (state->first_guarded_exception) std::rethrow_exception(state->first_guarded_exception);
+    native_exception_raise(receipt, "authored scalar call", address(owned_symbol.function),
+        callback_fault.load(), state->callback_reason, state->callback_reason_truncated);
     if (callback_fault.load() != 0) throw Fatal(callback_fault.load(),
         std::string(state->callback_reason[0] ? state->callback_reason : "Native callback lacks a valid thread, frame or parent owner.") +
         (state->callback_reason_truncated ? " [Native callback diagnostics truncated.]" : ""));
@@ -653,6 +690,8 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     }
     case Operation::load_authored: load(frame); break;
     case Operation::load_nvse: load_nvse(frame); break;
+    case Operation::source_address_space: source_image_address_space(frame); break;
+    case Operation::source_call_sites: source_call_sites_operation(frame); break;
     case Operation::nvse_query: nvse_stage(frame, false); break;
     case Operation::nvse_load: nvse_stage(frame, true); break;
     case Operation::nvse_message: nvse_message(frame); break;
@@ -669,6 +708,8 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     case Operation::cng_system_service: cng_system_service(frame); break;
     case Operation::import_providers: import_providers_operation(frame); break;
     case Operation::nvse_array_objects: array_objects_dispatch(frame); break;
+    case Operation::crt_runtime: crt_standard_runtime(frame); break;
+    case Operation::window_process: window_process_dispatch(frame); break;
     case Operation::nvse_local_create: source_local_create(frame); break;
     case Operation::nvse_local_fill: source_local_fill(frame); break;
     case Operation::nvse_local_seal: source_local_seal(frame); break;
@@ -767,13 +808,28 @@ void dispatch(const Frame& frame, std::uint64_t expected_parent) {
 
 int wmain(int argc, wchar_t** argv) {
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
-    if (argc != 3 || std::wstring(argv[1]) != L"--generation") { std::fputs("Use --generation <nonzero-uint64>.\n", stderr); return 2; }
+    if ((argc != 3 && argc != 6) || std::wstring(argv[1]) != L"--generation" ||
+        (argc == 6 && std::wstring(argv[3]) != L"--source-image")) {
+        std::fputs("Use --generation <nonzero-uint64> [--source-image <base> <bytes>].\n", stderr); return 2;
+    }
     wchar_t* end = nullptr; const auto generation = _wcstoui64(argv[2], &end, 10);
     if (!generation || !end || *end != L'\0') { std::fputs("Invalid native-domain generation.\n", stderr); return 2; }
+    std::uint32_t source_image_base = 0, source_image_bytes = 0;
+    if (argc == 6) {
+        const auto base = _wcstoui64(argv[4], &end, 10);
+        if (!base || !end || *end != L'\0' || base > std::numeric_limits<std::uint32_t>::max()) return 2;
+        const auto bytes = _wcstoui64(argv[5], &end, 10);
+        if (!bytes || !end || *end != L'\0' || bytes > std::numeric_limits<std::uint32_t>::max()) return 2;
+        source_image_base = static_cast<std::uint32_t>(base); source_image_bytes = static_cast<std::uint32_t>(bytes);
+    }
     input = GetStdHandle(STD_INPUT_HANDLE); output = GetStdHandle(STD_OUTPUT_HANDLE);
     if (!input || input == INVALID_HANDLE_VALUE || !output || output == INVALID_HANDLE_VALUE) return 2;
     State owned; owned.generation = generation; state = &owned;
     try {
+        if (source_image_base) {
+            original_callable_pages = std::make_unique<OriginalCallablePages>();
+            original_callable_pages->adopt_source_image(source_image_base, source_image_bytes);
+        }
         while (!owned.retired) {
             Frame frame;
             if (!receive(frame, true)) throw Fatal(ERROR_BROKEN_PIPE, "Parent retired without a native retirement receipt.");
@@ -785,6 +841,7 @@ int wmain(int argc, wchar_t** argv) {
         try { Bytes bytes; bytes.put(failure.code); bytes.text(failure.what());
             const auto& request = owned.fault_request;
             if (request.operation == static_cast<std::uint32_t>(Operation::steam_provider)) steam_fault_bytes(bytes, owned.steam.get());
+            native_exception_bytes(bytes, failure);
             send(Kind::fault, request.operation, owned.generation, request.id, request.parent, bytes); } catch (...) { }
         std::fprintf(stderr, "OPENNV_NATIVE_DOMAIN_FAULT code=%lu owner=%s\n", static_cast<unsigned long>(failure.code), failure.what());
     }

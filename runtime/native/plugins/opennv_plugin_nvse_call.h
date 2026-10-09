@@ -50,7 +50,8 @@ extern "C" __declspec(naked) std::uint32_t __cdecl InvokeNvseOne(void*, std::uin
 }
 static void InvokeNvseOneGuarded(void* function, std::uint32_t argument, opennv_domain::CallReceipt* receipt) {
     __try { InvokeNvseOne(function, argument, receipt); }
-    __except (EXCEPTION_EXECUTE_HANDLER) { receipt->exception_code = GetExceptionCode(); }
+    __except (opennv_domain::CaptureNativeException(GetExceptionInformation(), GetExceptionCode(),
+        &receipt->exception_code, &receipt->exception)) { }
 }
 
 inline opennv_domain::NvseRuntime::~NvseRuntime() {

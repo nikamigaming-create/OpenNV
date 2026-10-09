@@ -72,7 +72,10 @@ internal sealed partial class FalloutProcessReevaluationState : IDisposable
         // Only the source request writer below publishes these fields here.
         // Uninspected loader/constructor writes stay nullable, rather than
         // being inferred from a currently empty manager request list.
-        _actors.Add(actor, new(source, epoch, null, null, Next(), false, null));
+        // The genuine canonical Player constructor clears its complete
+        // inherited reference flags. Placed actor constructors and loader
+        // updates keep their independent, nullable source admission.
+        _actors.Add(actor, new(source, epoch, source.EnginePlayer ? false : null, null, Next(), false, null));
     }
     internal FalloutProcessReevaluationInvocation Request(FalloutFormKey actor, long epoch, string owner)
     {
@@ -137,7 +140,9 @@ internal sealed partial class FalloutProcessReevaluationState : IDisposable
     }
     internal FalloutActorProcessFact<bool> ReadPendingReferenceFlag(FalloutFormKey actor, long epoch)
     {
-        RequireNotBusy(); var state = Require(actor, epoch);
+        // A current observation may read the same immutable request field
+        // inside Request's actual callback. It cannot construct or mutate it.
+        ObjectDisposedException.ThrowIf(_disposed, this); var state = Require(actor, epoch);
         return new(state.PendingReferenceFlag, "actual-original-reference-request-flag:" + actor + "/" + state.Changed, state.Failure);
     }
     // A process replacement changes the actor's process epoch while the

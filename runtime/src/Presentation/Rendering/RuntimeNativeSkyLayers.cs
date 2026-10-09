@@ -79,6 +79,7 @@ internal partial class RuntimeNativeSkyLayers : Node3D
 
     public override void _Process(double delta)
     {
+        ProcessSourceMoonCalendar();
         if (GetViewport().GetCamera3D() is { } camera) GlobalPosition = camera.GlobalPosition;
         for (var layer = 0; layer < _cloudOffsets.Length; layer++)
             _cloudOffsets[layer] = (_cloudOffsets[layer] + delta * _cloudRates[layer]) % 1.0;
@@ -110,7 +111,9 @@ internal partial class RuntimeNativeSkyLayers : Node3D
         var night = (weights.First == 3 ? weights.FirstWeight : 0) + (weights.Second == 3 ? weights.SecondWeight : 0);
         foreach (var material in _stars) material.SetShaderParameter("stars_encoded", new Vector4(stars.X, stars.Y, stars.Z, night));
         var colors = _weatherFields.Single(field => field.Signature == "PNAM").Data;
-        if (colors.Length != 96) throw new InvalidDataException("Weather clouds require four six-sample color arrays.");
+        if (colors.Length != 4 * weather.TimeSamples * 4 || weights.First < 0 || weights.First >= weather.TimeSamples ||
+            weights.Second < 0 || weights.Second >= weather.TimeSamples)
+            throw new InvalidDataException("Weather cloud colors changed their actual source time-sample extent.");
         string[] slots = ["DNAM", "CNAM", "ANAM", "BNAM"];
         foreach (var (mesh, material, layer) in _clouds)
         {
@@ -120,11 +123,11 @@ internal partial class RuntimeNativeSkyLayers : Node3D
             if (!mesh.Visible) continue;
             if (!path.StartsWith("textures\\", StringComparison.OrdinalIgnoreCase)) path = "textures\\" + path;
             if (!_textures.TryGetValue(path, out var texture)) _textures.Add(path, texture = NativeOwnedMediaLoader.LoadTexture(path));
-            var at = layer * 24;
+            var at = layer * weather.TimeSamples * 4;
             float Channel(int channel) => (colors.Span[at + weights.First * 4 + channel] * weights.FirstWeight +
                 colors.Span[at + weights.Second * 4 + channel] * weights.SecondWeight) / 255f;
             material.SetShaderParameter("cloud_map", texture);
-            RecordSourceCloudTexture(layer, path);
+            RecordSourceCloudPrimary(layer, path);
             material.SetShaderParameter("cloud_color_encoded", new Vector3(Channel(0), Channel(1), Channel(2)));
             material.SetShaderParameter("sky_upper_encoded", upper);
             material.SetShaderParameter("sky_lower_encoded", lower);

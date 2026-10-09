@@ -55,7 +55,7 @@ internal static class FalloutNativePluginStartupDeclarations
                     if (platform && NativePluginIoImports.Owned.Contains(name)) continue;
                     if (NativePluginCryptoImports.IsOwned(import.Library, name)) continue;
                     if (NativePluginCrtImports.IsFileImport(import.Library, name))
-                    { if (!NativePluginCrtImports.Owned.Contains(name)) unowned.Add(import.Library + "!" + name); continue; }
+                    { if (!NativePluginCrtImports.Owned.Contains(name) && !NativePluginCppRuntimeImports.IsFileImport(import.Library, name)) unowned.Add(import.Library + "!" + name); continue; }
                     if (NativePluginPlatformImports.Owner(import.Library, name) is not null) nonIo.Add(import.Library + "!" + name);
                     else unowned.Add(import.Library + "!" + name);
                 }

@@ -31,6 +31,7 @@ public partial class RuntimeCoordinator
         layer.AddChild(_nativeHudMessages);
         layer.AddChild(_nativeSubtitles ?? throw new InvalidOperationException("Source subtitles were not prepared with the player.")); AddChild(layer);
         _nativeOpeningStageDriver!.PublishStandaloneInterface(_nativeGameplayHud, NativeActiveMenus);
+        _nativeOpeningStageDriver.PublishSourceMainInterface(_nativeGameplayHud, NativeActiveMenus);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;
         _nativePlayer.OpenPipBoyPage += page =>
         {

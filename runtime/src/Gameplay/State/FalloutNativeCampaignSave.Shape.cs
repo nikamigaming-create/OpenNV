@@ -25,7 +25,7 @@ internal static partial class FalloutNativeCampaignSave
             state.RestInterfaceSounds is null || state.InterfaceFades is null ||
             state.ActorUpdates is null || state.CellProcesses is null || state.ActorProcessRuntime is null || state.ActorProcessCommon is null ||
             state.PlayerSkillValues is null || state.PlayerAbilityScripts is null || state.PlayerStatistics is null || state.ProcessQueues is null ||
-            state.Scripts.Challenges is null || state.IndexedInterfaceSounds is null)
+            state.Scripts.Challenges is null || state.IndexedInterfaceSounds is null || state.ImagePhaseClock is null)
             throw new InvalidDataException("Campaign state is missing an authoritative runtime owner.");
         if (state.IndexedInterfaceSounds.Schema != FalloutIndexedInterfaceSounds.Schema ||
             state.IndexedInterfaceSounds.Selection is null ||

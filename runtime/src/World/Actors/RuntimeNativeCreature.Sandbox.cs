@@ -16,6 +16,7 @@ internal sealed partial class RuntimeNativeCreature
         _sandboxSource = source; _sandbox = null;
         if (saved is not null)
         {
+            _sandboxNativeCold = saved.NativeIdle?.Copy();
             saved.Validate();
             var area = source.LocationType == 2 ? saved.Area : source.Resolve(_aiRecords!, _aiWorld!, Appearance.Reference!.Value);
             _sandbox = new(source, Hash(record.ReadData()), area, _aiState!.SoundRandom.NextBounded, saved);
@@ -36,7 +37,11 @@ internal sealed partial class RuntimeNativeCreature
             }
             _sandbox = new(source, Hash(_aiRecords!.GetEffective(source.Form).ReadData()), area, _aiState!.SoundRandom.NextBounded);
         }
-        try { Combat!.AdvanceSandbox(_aiPackage!, source, _sandbox, seconds); }
+        try
+        {
+            EnsureRestoredSandboxNativeIdle();
+            Combat!.AdvanceSandbox(_aiPackage!, source, _sandbox, seconds);
+        }
         catch (Exception error)
         {
             _sandbox.RetainFailure(error);
@@ -81,6 +86,7 @@ internal sealed partial class RuntimeNativeCreature
         if (_sandboxSource is null) return true;
         if (!Combat!.RetireSandbox(_sandbox)) return false;
         _sandboxSource = null; _sandbox = null;
+        _sandboxNativeCold = null; _sandboxNativeColdEntered = false;
         return true;
     }
 }

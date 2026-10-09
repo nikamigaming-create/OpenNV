@@ -55,7 +55,8 @@ public partial class RuntimeCoordinator
         {
             if (!GodotObject.IsInstanceValid(player) || !player.IsInsideTree() || player.IsQueuedForDeletion())
                 throw new NotSupportedException("Actual Player current-CELL lifetime is not published or has retired.");
-            return _nativeActiveCell?.Cell.FormKey;
+            return world.SourceLinkedPlayerConstructed ? world.CurrentSourcePlayerLinkedCell :
+                _nativeActiveCell?.Cell.FormKey;
         });
         (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Current native CELL capture has no driver."))
             .BindCurrentNativeCellCapture(ObserveNativeCellProcessesForCapture);

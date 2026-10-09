@@ -16,19 +16,25 @@ internal sealed partial class FalloutSkyTransferState
     {
         // Source creation is lazy. Each completed allocation/registration is
         // retained individually if a later child fails; it is not a Boolean.
-        foreach (var slot in AllocationOrder)
+        for (var pair = 0; pair < 2; pair++)
         {
-            if (_instances.ContainsKey(slot)) continue;
-            var instance = new FalloutSourceSkyImageModifier(Guid.NewGuid(), Identity, slot, null, 0, 0,
-                0, FalloutSourceSkyImageProgramKind.Null, null, null, Next());
-            _instances.Add(slot, instance);
-        }
-        for (var ordinal = 0; ordinal < ManagerOrder.Length; ordinal++)
-        {
-            var slot = ManagerOrder[ordinal]; var instance = _instances[slot];
-            if (instance.ManagerOrdinal is not null) continue;
-            _images.RegisterSourceSkyInstance(this, instance.Identity, ordinal);
-            _instances[slot] = instance with { ManagerOrdinal = ordinal, Changed = Next() };
+            for (var index = pair * 2; index < pair * 2 + 2; index++)
+            {
+                var slot = AllocationOrder[index];
+                if (_instances.ContainsKey(slot)) continue;
+                var instance = new FalloutSourceSkyImageModifier(Guid.NewGuid(), Identity, slot, null, 0, 0,
+                    0, FalloutSourceSkyImageProgramKind.Null, null, null, Next());
+                _instances.Add(slot, instance);
+            }
+            // Both selected originals register this pair before allocating
+            // the next one. A failed registration retains only its real prefix.
+            for (var ordinal = pair * 2; ordinal < pair * 2 + 2; ordinal++)
+            {
+                var slot = ManagerOrder[ordinal]; var instance = _instances[slot];
+                if (instance.ManagerOrdinal is not null) continue;
+                _images.RegisterSourceSkyInstance(this, instance.Identity, ordinal);
+                _instances[slot] = instance with { ManagerOrdinal = ordinal, Changed = Next() };
+            }
         }
         foreach (var slot in AllocationOrder)
             _instances[slot] = _instances[slot] with { Flags = _instances[slot].Flags | 1, Changed = Next() };
@@ -51,9 +57,11 @@ internal sealed partial class FalloutSkyTransferState
         // Both WTHR pointers have already been nulled by THIS reset call.
         // Every lookup therefore reaches the selected anonymous default. A
         // later weather picker/transition is an independent original owner.
-        BindDefault(FalloutSourceSkyImageSlot.CurrentPrimary, (float)(blend * (double)weights.PrimaryWeight));
+        BindDefault(FalloutSourceSkyImageSlot.CurrentPrimary, Source.IsStandalone ?
+            FalloutSkyStandaloneInterpolation.Primary(weights.PrimaryWeight, blend) : (float)(blend * (double)weights.PrimaryWeight));
         if (weights.Interpolated)
-            BindDefault(FalloutSourceSkyImageSlot.CurrentSecondary, (float)((1.0 - weights.PrimaryWeight) * blend));
+            BindDefault(FalloutSourceSkyImageSlot.CurrentSecondary, Source.IsStandalone ?
+                FalloutSkyStandaloneInterpolation.Secondary(weights.PrimaryWeight, blend) : (float)((1.0 - weights.PrimaryWeight) * blend));
         else StoreWeight(FalloutSourceSkyImageSlot.CurrentSecondary, 0);
         StoreWeight(FalloutSourceSkyImageSlot.PreviousPrimary, 0);
         StoreWeight(FalloutSourceSkyImageSlot.PreviousSecondary, 0);
@@ -76,6 +84,7 @@ internal sealed partial class FalloutSkyTransferState
     }
     private FalloutSkyImageWeights ResetImageWeights()
     {
+        if (Source.IsStandalone) return ReadStandaloneImageWeights();
         // Getter order matters: each dirty getter commits its own cached
         // Float32 and clears only that source flag, even if a later one fails.
         var start = ReadTimeCache(0x1000, 0); var sunriseEnd = ReadTimeCache(0x200, 1);
@@ -158,8 +167,8 @@ internal sealed partial class FalloutSkyTransferState
         RequireWriter();
         _modeFailure = "source-Sky-exterior-mode-writer-and-root-Moon-factory-consumers-unowned";
         _clockFailure = "source-Sky-frame-calendar-getter-store-after-actual-Player-presence-unowned";
-        if (_moonBinding.Disposition == FalloutSkyChildDisposition.ConstructorNull)
-            _moonBinding = new(FalloutSkyChildDisposition.Unowned, "source-Sky-exterior-Moon-field-factory-unowned", null);
+        if (_precipitationBinding.Disposition == FalloutSkyChildDisposition.ConstructorNull)
+            _precipitationBinding = new(FalloutSkyChildDisposition.Unowned, "source-Sky-exterior-Precipitation-field-factory-unowned", null);
         Next();
     }
 }

@@ -219,7 +219,6 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _vitals = FalloutPlayerVitals.PrepareFromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
         _playerSkills.BindAbilityConditions(PlayerProgressCondition);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
-        _experience.BindPerkConditions(PlayerExperienceCondition);
         InitializePlayerProgress(restore is null ? null : restore.State.PlayerProgress ??
             throw new InvalidDataException("Current player progress is absent."));
         ConfigureExperienceNotifications(restore is null ? null : restore.State.ExperienceNotifications ??
@@ -368,6 +367,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         // conversation services. Construct those real owners before entering
         // effects and deriving player values, then enter source stage commands.
         CompleteCurrentPlayerValueConstruction();
+        // Advancement admission reads the live actor-value/effect lifecycle.
+        // Its shared clock and script consumers must already be attached.
+        ConfigureCurrentPlayerAdvancement();
         Synchronize();
     }
 

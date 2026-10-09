@@ -90,6 +90,15 @@ scope. Address collision remains a failure, never a copied or relocated alias.
 Borrowed engine command leaves use source-decoded semantics and first-party
 callable pages with actual creation-process readback, correlated raw caller
 identities and trap retirement. Effectful or unknown bodies remain refused.
+The actual suspended child creation handle reserves the selected owned PE32
+ImageBase/SizeOfImage before resume. The native domain independently adopts and
+verifies that reservation; original module loading requires its actual receipt.
+The first-party helper links outside that fixed source interval. This changes
+the helper's ASLR policy, not the original game or mod files. The reservation
+contains no original bytes and stays inaccessible outside admitted first-party
+callable pages. Nested committed pages share one root allocation/retirement;
+foreign mappings, unread source objects and unknown code never become readable
+through source identity alone.
 Diagnostic write routes require an exact source-declared diagnostic input role;
 original files remain read-only while genuine CRT calls use the private copy.
 Terrain resources release when their retained managed binding is the last actual

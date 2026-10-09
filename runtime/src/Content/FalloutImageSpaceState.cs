@@ -114,8 +114,8 @@ internal sealed partial class FalloutImageSpaceState
         var finalFade = fadeWeight > 0 ? new Vector4(fadeNumerator / fadeWeight, strongestFade) : Vector4.Zero;
         // The original effect's rotation is one turn per game hour. It reads
         // the shared game-time global, independently of the IMAD lifetime.
-        var angle = phase?.Angle(gameHour.GetValueOrDefault()) ?? 0;
-        var doubleVisionOffset = new Vector2((float)(Math.Cos(angle) * doubleVision), (float)(Math.Sin(angle) * doubleVision));
+        var angle = phase is null ? 0 : DoubleVisionAngle(phase, gameHour.GetValueOrDefault());
+        var doubleVisionOffset = phase?.Offset(angle, doubleVision) ?? Vector2.Zero;
         return new(traits[4], new Vector4(traits[25], traits[26], traits[27], traits[28]), finalTint, finalFade,
             activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset, sourceSky);
     }

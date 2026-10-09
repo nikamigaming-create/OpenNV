@@ -10,8 +10,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal void ConfigureCurrentPlayerPhysicalActivity(FalloutPlayerPhysicalSnapshot? restore,
         Func<FalloutFormKey, Transform3D> furniturePlacement)
     {
-        var source = _advancementRuntimeSource ??
-            throw new InvalidOperationException("Physical player initialization requires its living selected executable owner.");
+        var source = RequireCurrentPlayerRuntimeSource();
         _player.ConfigurePlayerPhysicalActivity(_pluginStack, _quests, _scripts.References!, source.Receipt,
             () => Vitals, name => ReadPlayerActorValue(name, FalloutActorValueRead.Current),
             PlayerProgressCondition, restore, furniturePlacement);

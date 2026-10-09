@@ -126,7 +126,9 @@ internal partial class RuntimeNativeNpc : IFalloutSandboxNativeActionConsumer
     private void RetireSandboxNativeActionOnExit()
     {
         if (_sandboxNativeAction is null || _sandboxNativeRetired) return;
-        _aiReferenceState!.ProcedureCaptureBlocker ??= "Sandbox native action eviction has no cold child continuation.";
+        var retained = _aiReferenceState!.PackageMotion?.Sandbox?.NativeIdle;
+        if (retained is null || retained.Selection != _sandboxNativeAction)
+            _aiReferenceState.ProcedureCaptureBlocker ??= "Sandbox native action eviction has no cold child continuation.";
         try
         {
             if (_sandboxMarkerReference is not null) RetireSandboxMarkerPose();

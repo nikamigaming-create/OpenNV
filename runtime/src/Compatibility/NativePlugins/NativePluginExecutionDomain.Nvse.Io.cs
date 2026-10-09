@@ -13,7 +13,7 @@ internal sealed partial class NativePluginExecutionDomain
             WriteText(writer, owner.ModuleRoot); WriteText(writer, owner.CurrentDirectory); WriteText(writer, owner.RestrictingSid);
             writer.Write(checked((uint)owner.Selection.DeclaredNonIoImports.Count));
             foreach (var import in owner.Selection.DeclaredNonIoImports.Order(StringComparer.Ordinal)) WriteText(writer, import);
-            WriteCrtProviders(writer, owner); WriteCryptoProvider(writer, owner);
+            WriteCrtProviders(writer, owner); WriteCppProvider(writer, owner); WriteCryptoProvider(writer, owner);
         }));
         if (reader.ReadUInt32() != 1) throw new InvalidDataException("Private native I/O has no restricted-token/diagnostic initialization receipt.");
         Finish(reader);
@@ -25,6 +25,16 @@ internal sealed partial class NativePluginExecutionDomain
         var enteredLoader = IsEnteredOriginalLoaderIo(frame.Operation, module, parent);
         if (thread != NativeThread || !enteredLoader && (_nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation))
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
+        if (frame.Operation == WindowProcessCallback)
+        {
+            if (enteredLoader) throw new NotSupportedException("Original pre-entry USER32/process callback interception remains unowned.");
+            return DispatchPrivateWindowProcess(parent, thread, module, reader);
+        }
+        if (frame.Operation is CrtStandardCallback or CppRuntimeCallback)
+        {
+            if (enteredLoader) throw new NotSupportedException("Pre-entry standard FILE/C++ route publication is unowned.");
+            return frame.Operation == CrtStandardCallback ? DispatchPrivateCrtStandard(parent, owner, reader) : DispatchPrivateCppRuntime(parent, owner, reader);
+        }
         if (frame.Operation is CrtSupportCallback or EnvironmentCallback or FileMetadataCallback)
         {
             if (enteredLoader)
@@ -110,8 +120,15 @@ internal sealed partial class NativePluginExecutionDomain
     private void ClearPrivateIo()
     {
         if (!ChildExited) throw new InvalidOperationException("Native I/O source/provider cleanup requires verified child closure.");
-        RetainPrivateProfileReceipts(); RetainPrivateFindReceipts();
-        ClearPrivateMutexesAfterChildExit(); ClearNativeImportProvidersAfterChildExit();
-        ClearPrivateMappings(); ClearPrivateCrypto(); ClearSharedPlacementsAfterChildExit(); ClearPrivateCrt(); _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
+        List<Exception> failures = [];
+        try { ClearWindowProcessAfterChildExit(); } catch (Exception error) { failures.Add(error); }
+        try
+        {
+            RetainPrivateProfileReceipts(); RetainPrivateFindReceipts();
+            ClearPrivateMutexesAfterChildExit(); ClearNativeImportProvidersAfterChildExit();
+            ClearPrivateMappings(); ClearPrivateCrypto(); ClearSharedPlacementsAfterChildExit(); ClearPrivateCrt(); _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
+        }
+        catch (Exception error) { failures.Add(error); }
+        if (failures.Count != 0) throw new AggregateException("Independent native window/private I/O source retirement failed.", failures);
     }
 }

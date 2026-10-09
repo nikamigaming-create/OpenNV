@@ -15,11 +15,29 @@ struct CallablePageFailure final : std::runtime_error {
 };
 struct CallableEntry { std::uint32_t address; void* target; };
 
+// These are parameters of our own deliberate SEH abort, retained only in the
+// private exception receipt. They never authorize changing a foreign mapping.
+inline thread_local std::array<ULONG_PTR, 15> first_callable_page_collision{};
+inline thread_local DWORD first_callable_page_collision_count = 0;
+inline void retain_callable_page_collision(const CallableEntry& call,
+    std::uint32_t base, std::uint32_t granularity, SIZE_T query_result,
+    DWORD query_error, const MEMORY_BASIC_INFORMATION& observed) noexcept {
+    if (first_callable_page_collision_count) return;
+    static_assert(EXCEPTION_MAXIMUM_PARAMETERS >= 15, "Private collision receipt requires SDK exception parameters.");
+    first_callable_page_collision = {0x43414c31U, query_result, query_error,
+        call.address, base, granularity, reinterpret_cast<ULONG_PTR>(call.target),
+        reinterpret_cast<ULONG_PTR>(GetModuleHandleW(nullptr)),
+        reinterpret_cast<ULONG_PTR>(observed.BaseAddress),
+        reinterpret_cast<ULONG_PTR>(observed.AllocationBase), observed.RegionSize,
+        observed.State, observed.Type, observed.Protect, observed.AllocationProtect};
+    first_callable_page_collision_count = static_cast<DWORD>(first_callable_page_collision.size());
+}
+
 // One generation owns fixed callable addresses across every source family.
 // Pages are shared by disjoint seven-byte entries. Removed entries become
 // traps; their address reservations and identities stay retired until closure.
 class OriginalCallablePages final {
-    struct Page { void* base; std::uint32_t extent; bool executable; };
+    struct Page { void* base; std::uint32_t extent; bool executable; bool source_image; };
     struct Entry { std::uint64_t owner; CallableEntry call; bool live; };
     std::vector<Page> pages_;
     std::vector<Entry> entries_;
@@ -27,6 +45,8 @@ class OriginalCallablePages final {
     std::uint64_t next_owner_ = 0;
     bool faulted_ = false;
     bool closed_ = false;
+    void* source_image_base_ = nullptr;
+    std::uint32_t source_image_bytes_ = 0, source_image_reserved_ = 0;
 
     void healthy() const {
         if (faulted_ || closed_) throw CallablePageFailure(ERROR_INVALID_STATE, "Callable generation is closed or retains a failed publication/retirement.");
@@ -73,7 +93,35 @@ public:
     }
     OriginalCallablePages(const OriginalCallablePages&) = delete;
     OriginalCallablePages& operator=(const OriginalCallablePages&) = delete;
-    ~OriginalCallablePages() { for (const auto& retained : pages_) VirtualFree(retained.base, 0, MEM_RELEASE); }
+    ~OriginalCallablePages() {
+        for (const auto& retained : pages_) if (!retained.source_image && retained.base) VirtualFree(retained.base, 0, MEM_RELEASE);
+        if (source_image_base_) VirtualFree(source_image_base_, 0, MEM_RELEASE);
+    }
+
+    void adopt_source_image(std::uint32_t base, std::uint32_t bytes) {
+        healthy();
+        if (source_image_base_ || !pages_.empty() || !entries_.empty() || !base || !bytes || base % granularity_)
+            throw CallablePageFailure(ERROR_INVALID_STATE, "Source image reservation lacks a unique pre-publication owner.");
+        const auto extent = (static_cast<std::uint64_t>(bytes) + granularity_ - 1) / granularity_ * granularity_;
+        if (extent > std::numeric_limits<std::uint32_t>::max() || static_cast<std::uint64_t>(base) + extent > (1ULL << 32))
+            throw CallablePageFailure(ERROR_INVALID_ADDRESS, "Source image reservation exceeds its actual x86 extent.");
+        MEMORY_BASIC_INFORMATION observed{};
+        if (!VirtualQuery(reinterpret_cast<void*>(base), &observed, sizeof(observed)) ||
+            observed.BaseAddress != reinterpret_cast<void*>(base) || observed.AllocationBase != observed.BaseAddress ||
+            observed.RegionSize != extent || observed.State != MEM_RESERVE || observed.Type != MEM_PRIVATE ||
+            observed.Protect != 0 || observed.AllocationProtect != PAGE_NOACCESS)
+            throw CallablePageFailure(ERROR_INVALID_DATA, "Source image has no actual parent-created no-access reservation.");
+        source_image_base_ = reinterpret_cast<void*>(base); source_image_bytes_ = bytes;
+        source_image_reserved_ = static_cast<std::uint32_t>(extent);
+    }
+
+    std::array<std::uint32_t, 3> source_image_identity() const {
+        healthy();
+        if (!source_image_base_)
+            throw CallablePageFailure(ERROR_NOT_FOUND, "This native generation has no selected source image reservation.");
+        return {static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(source_image_base_)),
+            source_image_bytes_, source_image_reserved_};
+    }
 
     std::uint64_t acquire(const std::vector<CallableEntry>& calls) {
         healthy();
@@ -85,11 +133,17 @@ public:
             if (!call.address || call.address > std::numeric_limits<std::uint32_t>::max() - 7 || !call.target ||
                 call.address - (call.address & ~(granularity_ - 1)) > granularity_ - 7)
                 throw CallablePageFailure(ERROR_INVALID_ADDRESS, "Callable entry lacks a complete contained seven-byte extent.");
+            const auto image_begin = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(source_image_base_));
+            if (source_image_base_ && call.address >= image_begin &&
+                static_cast<std::uint64_t>(call.address) < image_begin + source_image_reserved_ &&
+                static_cast<std::uint64_t>(call.address) + 7 > image_begin + source_image_bytes_)
+                throw CallablePageFailure(ERROR_INVALID_ADDRESS, "Callable entry leaves its selected source image extent.");
             const auto overlap = [&](std::uint32_t other) {
                 return static_cast<std::uint64_t>(call.address) < static_cast<std::uint64_t>(other) + 7 &&
                     static_cast<std::uint64_t>(other) < static_cast<std::uint64_t>(call.address) + 7;
             };
-            if (std::any_of(entries_.begin(), entries_.end(), [&](const auto& existing) { return overlap(existing.call.address); }) ||
+            if (site_overlap(call.address, 7) ||
+                std::any_of(entries_.begin(), entries_.end(), [&](const auto& existing) { return overlap(existing.call.address); }) ||
                 std::any_of(calls.begin(), calls.begin() + static_cast<std::ptrdiff_t>(index), [&](const auto& earlier) { return overlap(earlier.address); }))
                 throw CallablePageFailure(ERROR_INVALID_ADDRESS, "Callable entry aliases a live or retired source entry.");
         }
@@ -101,18 +155,29 @@ public:
             for (const auto& call : calls) {
                 const auto base = call.address & ~(granularity_ - 1);
                 if (!std::any_of(pages_.begin(), pages_.end(), [&](const auto& retained) { return reinterpret_cast<std::uintptr_t>(retained.base) == base; })) {
+                    const auto image_begin = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(source_image_base_));
+                    const auto source_image = source_image_base_ && base >= image_begin &&
+                        static_cast<std::uint64_t>(base) + granularity_ <= image_begin + source_image_reserved_;
                     MEMORY_BASIC_INFORMATION observed{};
-                    if (!VirtualQuery(reinterpret_cast<void*>(base), &observed, sizeof(observed)) || observed.State != MEM_FREE ||
+                    const auto queried = VirtualQuery(reinterpret_cast<void*>(base), &observed, sizeof(observed));
+                    const auto query_error = queried ? ERROR_SUCCESS : GetLastError();
+                    const auto owned_reservation = source_image && observed.AllocationBase == source_image_base_ &&
+                        observed.State == MEM_RESERVE && observed.Type == MEM_PRIVATE && observed.Protect == 0 &&
+                        observed.AllocationProtect == PAGE_NOACCESS;
+                    if (!queried || (source_image ? !owned_reservation : observed.State != MEM_FREE) ||
                         reinterpret_cast<std::uintptr_t>(observed.BaseAddress) > base ||
-                        static_cast<std::uint64_t>(base) + granularity_ > reinterpret_cast<std::uintptr_t>(observed.BaseAddress) + observed.RegionSize)
+                        static_cast<std::uint64_t>(base) + granularity_ > reinterpret_cast<std::uintptr_t>(observed.BaseAddress) + observed.RegionSize) {
+                        retain_callable_page_collision(call, base, granularity_, queried, query_error, observed);
                         throw CallablePageFailure(ERROR_INVALID_ADDRESS, "Source callable page overlaps a mapping outside the shared first-party owner.");
-                    auto* actual = VirtualAlloc(reinterpret_cast<void*>(base), granularity_, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+                    }
+                    auto* actual = VirtualAlloc(reinterpret_cast<void*>(base), granularity_,
+                        source_image ? MEM_COMMIT : MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
                     if (actual != reinterpret_cast<void*>(base)) {
                         if (actual && !VirtualFree(actual, 0, MEM_RELEASE))
                             throw CallablePageFailure(GetLastError(), "Unexpected callable reservation could not retire.");
                         throw CallablePageFailure(GetLastError(), "Source callable reservation failed at its exact declared address.");
                     }
-                    pages_.push_back({actual, granularity_, false}); std::memset(actual, 0xcc, granularity_);
+                    pages_.push_back({actual, granularity_, false, source_image}); std::memset(actual, 0xcc, granularity_);
                 }
                 entries_.push_back({owner, call, true}); install(entries_.back(), false);
             }
@@ -130,18 +195,29 @@ public:
         }
         catch (...) { faulted_ = true; throw; }
     }
+    #include "opennv_plugin_callable_sites.inc"
+
     void close() {
         // Terminal cleanup still attempts every retained reservation after a
         // publication fault. A failed page remains in this owner for retry.
         DWORD first = ERROR_SUCCESS;
-        for (auto& retained : pages_) if (retained.base) {
+        for (auto& retained : pages_) if (retained.base && !retained.source_image) {
             const auto previous = retained.base;
             if (!VirtualFree(retained.base, 0, MEM_RELEASE)) { if (!first) first = GetLastError(); continue; }
             retained.base = nullptr; MEMORY_BASIC_INFORMATION observed{};
             if ((!VirtualQuery(previous, &observed, sizeof(observed)) || observed.State != MEM_FREE) && !first) first = ERROR_INVALID_DATA;
         }
+        if (source_image_base_) {
+            const auto previous = source_image_base_;
+            if (!VirtualFree(previous, 0, MEM_RELEASE)) { if (!first) first = GetLastError(); }
+            else {
+                source_image_base_ = nullptr;
+                MEMORY_BASIC_INFORMATION observed{};
+                if ((!VirtualQuery(previous, &observed, sizeof(observed)) || observed.State != MEM_FREE) && !first) first = ERROR_INVALID_DATA;
+            }
+        }
         if (first) { faulted_ = true; throw CallablePageFailure(first, "Shared callable pages did not all retire."); }
-        pages_.clear(); entries_.clear(); closed_ = true;
+        pages_.clear(); entries_.clear(); site_entries_.clear(); closed_ = true;
     }
 };
 }

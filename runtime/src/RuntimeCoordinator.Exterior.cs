@@ -222,6 +222,7 @@ public partial class RuntimeCoordinator
         Retire(CancelNativeGridRead);
         Retire(() => _nativeBootstrap?.RetirePreparation());
         Retire(RequireNativeSourceCellRetirementBeforeWorldRelease);
+        Retire(RetireCurrentImagePhase);
         Retire(() => _nativeSkyLighting?.RetireSourceTransfer());
         if (!_retiringNativeSession)
         {
@@ -243,7 +244,7 @@ public partial class RuntimeCoordinator
         if (_nativePluginCampaign is null && _nativeDirectInput is null && _nativeInventoryReferences is null && _nativeQueuedActorCallers.Count == 0 &&
             _nativeGridNpcPreparations.Count == 0 && _nativeGridNpcPublications.Count == 0)
         {
-            Retire(() => _nativeReferences?.Dispose());
+            Retire(RetireNativeReferenceWorld);
             Retire(() => _nativePluginStack?.Dispose());
             GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
         }
@@ -461,6 +462,8 @@ public partial class RuntimeCoordinator
         sky.Compositor = AddNativeImageSpace(root, imageSpace);
         sky.ImageSpace = imageSpace;
         sky.Configure(_nativePluginStack!, _nativeSkyLighting!, () => _nativeGameTime!.Hour, _configuration.World.GameUnitsToMeters, this);
+        sky.BindSourceMoonInputs(_nativeReferences ?? throw new InvalidOperationException("Sky has no actual reference world."),
+            _nativeGameTime ?? throw new InvalidOperationException("Sky has no actual calendar owner."));
         root.AddChild(sky);
         var wind = new RuntimeNativeWind { Name = "ExteriorWindOwner" };
         FalloutFormKey? windWeather = null;

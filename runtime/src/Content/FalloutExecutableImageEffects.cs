@@ -3,14 +3,11 @@ using System.Text;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed record FalloutDoubleVisionPhase(double SecondsPerHour, double RadiansPerTurn, string SourceSha256)
+internal sealed partial record FalloutDoubleVisionPhase(double SecondsPerHour, double RadiansPerTurn, string SourceSha256)
 {
     internal float Angle(float gameHour)
     {
-        // The game-time callback publishes Float32 seconds. The effect then
-        // stores its converted angle as Float32 before evaluating sin/cos.
-        var seconds = (float)(gameHour * SecondsPerHour);
-        return (float)(seconds / SecondsPerHour * RadiansPerTurn);
+        return AngleSeconds(ClockSeconds(gameHour));
     }
 }
 
@@ -133,7 +130,13 @@ internal static partial class FalloutExecutableStringTable
     internal static FalloutDoubleVisionPhase ReadDoubleVisionPhase(string path)
     {
         var (code, image) = Load(path);
-        return ReadDoubleVisionPhase(code, address => BitConverter.ToDouble(image.Read(address, sizeof(double))));
+        var phase = ReadSingleDoubleVisionPhase(code, image.CodeBase,
+            address => BitConverter.ToSingle(image.Read(address, sizeof(float))),
+            address => image.IsWritableExtent(address, sizeof(float)));
+        if (phase is null)
+            phase = BindStoredDoubleVisionPhase(code, image,
+                ReadDoubleVisionPhase(code, address => BitConverter.ToDouble(image.Read(address, sizeof(double)))));
+        return BindLoadedPhaseClock(code, image, phase);
     }
 
     internal static FalloutDoubleVisionPhase ReadDoubleVisionPhase(ReadOnlySpan<byte> code, Func<uint, double> scalar)
