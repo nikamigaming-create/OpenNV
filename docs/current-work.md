@@ -77,7 +77,8 @@ Finite audio tails keep their independent native host; unexpected destruction
 still reports cancellation. The destination NPC controller also adopts a matching
 retained package failure only through its current registered binding; the old
 controller cannot leave the new one unable to save. Post-transfer save/Continue
-is the immediate smoke.
+both succeed in the packaged runtime: a fresh process restores the destination
+cell, discovered marker and 9 XP, with no pending actor procedure captures.
 
 Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
 statistics and all inventory actions remain incomplete. Outdoor play still
