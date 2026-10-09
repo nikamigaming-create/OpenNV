@@ -13,6 +13,7 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         if (_perceptionNativeLease is not null) throw new InvalidOperationException("Actor source perception is already published.");
         if (!_world.ActorPerceptionConfigured) throw new NotSupportedException("Actor has no original perception world owner.");
+        BindActualSourceProcessBody();
         _perceptionNativeLease = _world.BindNativePerception(_state.Reference, PerceptionOwner, ObserveSourcePerception);
     }
     private FalloutPerceptionNativeObservation ObserveSourcePerception(long lease)
@@ -29,6 +30,9 @@ internal sealed partial class RuntimeNativeActorCombat
     internal NativeDetectionSightPoints ReadSourceDetectionSight() => NativeDetectionSight.Read(_world.BodyParts(_state.Reference), _skeleton);
     private void RetireActorPerceptionBinding()
     {
-        var lease = _perceptionNativeLease; _perceptionNativeLease = null; lease?.Dispose();
+        var failures = new List<Exception>();
+        try { _perceptionNativeLease?.Dispose(); _perceptionNativeLease = null; } catch (Exception error) { failures.Add(error); }
+        try { RetireActualSourceProcessBody(); } catch (Exception error) { failures.Add(error); }
+        if (failures.Count != 0) throw new AggregateException("Actor perception/process-body retirement retains actual failures.", failures);
     }
 }

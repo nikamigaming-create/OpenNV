@@ -10,11 +10,11 @@ internal static class NativePluginIoImports
     internal static readonly IReadOnlySet<string> Unowned = new HashSet<string>(StringComparer.Ordinal) {
         "fopen", "_wfopen", "fopen_s", "_wfopen_s", "freopen", "_wfreopen", "freopen_s", "_wfreopen_s", "_fsopen", "_wfsopen",
         "_open", "_wopen", "_sopen", "_wsopen", "_sopen_s", "_wsopen_s", "open", "creat", "_creat", "_wcreat",
-        "FindFirstFileA", "FindFirstFileW", "FindFirstFileExA", "FindFirstFileExW", "FindNextFileA", "FindNextFileW", "FindClose",
+        "FindFirstFileExA", "FindFirstFileExW",
         "CopyFileA", "CopyFileW", "CopyFileExA", "CopyFileExW", "CopyFile2", "MoveFileA", "MoveFileW", "MoveFileExA", "MoveFileExW",
         "MoveFileWithProgressA", "MoveFileWithProgressW", "ReplaceFileA", "ReplaceFileW", "SetFileAttributesA", "SetFileAttributesW",
         "CreateFileMappingA", "CreateFileMappingW", "OpenFileMappingA", "OpenFileMappingW", "MapViewOfFile", "MapViewOfFileEx",
-        "WriteFileEx", "ReadFileEx", "GetPrivateProfileSectionA", "GetPrivateProfileSectionW", "WritePrivateProfileSectionA", "WritePrivateProfileSectionW",
+        "WriteFileEx", "ReadFileEx",
         "NtCreateFile", "NtOpenFile", "NtWriteFile", "NtDeleteFile", "NtSetInformationFile" };
     internal static readonly IReadOnlySet<string> Owned = new HashSet<string>(StringComparer.Ordinal) {
         "CreateFileW", "CreateFileA", "CloseHandle", "ReadFile", "WriteFile", "SetFilePointer", "SetFilePointerEx",
@@ -22,10 +22,24 @@ internal static class NativePluginIoImports
         "RemoveDirectoryW", "RemoveDirectoryA", "GetFileAttributesW", "GetFileAttributesA", "GetPrivateProfileStringW", "GetPrivateProfileStringA",
         "GetPrivateProfileIntW", "GetPrivateProfileIntA", "WritePrivateProfileStringW", "WritePrivateProfileStringA", "GetProcAddress",
         "LoadLibraryA", "LoadLibraryW", "LoadLibraryExA", "LoadLibraryExW", "GetCurrentDirectoryW", "GetCurrentDirectoryA",
-        "SetCurrentDirectoryW", "SetCurrentDirectoryA", "GetFileType", "SetEndOfFile" };
+        "SetCurrentDirectoryW", "SetCurrentDirectoryA", "GetFileType", "SetEndOfFile",
+        "FindFirstFileW", "FindFirstFileA", "FindNextFileW", "FindNextFileA", "FindClose",
+        "GetPrivateProfileSectionW", "GetPrivateProfileSectionA", "GetPrivateProfileSectionNamesW", "GetPrivateProfileSectionNamesA",
+        "GetPrivateProfileStructW", "GetPrivateProfileStructA", "WritePrivateProfileSectionW", "WritePrivateProfileSectionA",
+        "WritePrivateProfileStructW", "WritePrivateProfileStructA" };
     internal static void Admit(FileStream original, NativePluginPrivateIo io)
     {
-        using var pe = new PEReader(original, PEStreamOptions.LeaveOpen);
+        var position = original.Position;
+        try
+        {
+            original.Position = 0;
+            using var pe = new PEReader(original, PEStreamOptions.LeaveOpen);
+            Admit(pe, io);
+        }
+        finally { original.Position = position; }
+    }
+    private static void Admit(PEReader pe, NativePluginPrivateIo io)
+    {
         var header = pe.PEHeaders.PEHeader ?? throw new InvalidDataException("Native I/O source PE header is absent.");
         if (header.DelayImportTableDirectory.Size != 0 || header.DelayImportTableDirectory.RelativeVirtualAddress != 0)
             throw new NotSupportedException("Native delay import I/O/entry lifetime remains unowned.");

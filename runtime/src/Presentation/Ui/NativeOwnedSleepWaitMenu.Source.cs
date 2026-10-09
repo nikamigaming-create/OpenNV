@@ -6,7 +6,7 @@ using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Presentation.Ui;
 
-internal sealed class NativeSleepWaitMenuSource
+internal sealed partial class NativeSleepWaitMenuSource
 {
     internal NativeOwnedMenuTree Tiles { get; }
     internal FalloutSleepWaitSource Source { get; }
@@ -14,12 +14,13 @@ internal sealed class NativeSleepWaitMenuSource
     private readonly FalloutPluginStack _records;
     private readonly Func<FalloutGameTimeStamp, string> _calendarCaption;
     private readonly Func<FalloutGameTimeStamp> _time;
+    private readonly FalloutUiComponentStore? _scriptUi;
 
     internal NativeSleepWaitMenuSource(FalloutPluginStack records, FalloutSleepWaitSource source,
         Func<FalloutGameTimeStamp> time, Func<FalloutGameTimeStamp, string> sourceCalendarCaption,
         FalloutUiComponentStore? scriptUi = null)
     {
-        source.Validate(); Source = source; _records = records; _time = time;
+        source.Validate(); Source = source; _records = records; _time = time; _scriptUi = scriptUi;
         _calendarCaption = sourceCalendarCaption ?? throw new NotSupportedException("Rest view has no owned date/time formatting consumer.");
         var content = records.OwnedSource ?? throw new NotSupportedException("Rest view has no selected owned resource source.");
         if (!ReferenceEquals(content, RuntimeLiveContentSource.Current) ||

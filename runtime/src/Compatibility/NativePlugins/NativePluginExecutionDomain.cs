@@ -36,6 +36,9 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     internal uint NativeThread { get; private set; }
     internal bool NaturallyRetired => _retired;
     internal bool ChildExited { get => Volatile.Read(ref _childExited); private set => Volatile.Write(ref _childExited, value); }
+    internal int? ChildExitCode { get; private set; }
+    internal NativePluginTokenObjectReceipt? ObjectSecurity => _process.ObjectSecurity;
+    private bool _childExitDiagnosticPublished;
     internal NativePluginDomainFault? Fault { get { lock (_faultGate) return CurrentFault(); } }
     internal Func<NativePluginCallback, uint>? Callback
     {
@@ -413,7 +416,10 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         try
         {
             if (!_process.HasExited) _process.Kill(entireProcessTree: false);
-            if (_process.WaitForExit(1000)) ChildExited = true;
+            if (_process.WaitForExit(1000))
+            {
+                ObserveChildExit();
+            }
         }
         catch (InvalidOperationException) { }
         catch (Win32Exception error) { AppendDiagnostic($" Child retirement: {error.Message}"); }
@@ -443,13 +449,24 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         {
             if (_process.WaitForExit(1000))
             {
-                ChildExited = true;
+                ObserveChildExit();
                 if (!_diagnosticDrain.Wait(TimeSpan.FromSeconds(1)))
                     lock (_faultGate) { AppendDiagnostic(" Diagnostic drain did not complete."); _diagnosticsTruncated = true; }
             }
         }
         catch (InvalidOperationException) { }
         catch (AggregateException error) { AppendDiagnostic($" Diagnostic drain failure: {error.Message}"); }
+    }
+    private void ObserveChildExit()
+    {
+        ChildExited = true;
+        lock (_faultGate)
+        {
+            ChildExitCode ??= _process.ExitCode;
+            if (_fault is null || _childExitDiagnosticPublished) return;
+            AppendDiagnostic($" Child exit=0x{unchecked((uint)ChildExitCode.Value):x8}.");
+            _childExitDiagnosticPublished = true;
+        }
     }
     private void AppendDiagnostic(string text)
     {

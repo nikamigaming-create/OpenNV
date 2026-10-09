@@ -38,7 +38,7 @@ struct CrtRoute { std::uint64_t id; std::wstring path; };
 CrtRoute crt_route(CrtProvider& provider, std::uint32_t api, const std::wstring& mode, const std::wstring& path, bool writable) {
     crt_register(provider); Bytes request; request.put(provider.id); request.put(api); request.text(io_utf8(mode));
     request.put(writable ? 1U : 0U); request.text(io_utf8(path)); auto response = io_host(crt_route_event, request); Reader result{response.data};
-    CrtRoute route{result.get<std::uint64_t>(), io_from_utf8(result.text())}; result.finish();
+    CrtRoute route{result.get<std::uint64_t>(), io_native_path(io_from_utf8(result.text()))}; result.finish();
     if (!route.id || route.path.empty()) throw Fatal(ERROR_INVALID_DATA, "CRT path has no exact selected/private decision."); return route;
 }
 template<class Open> void* crt_open_actual(const std::wstring& path, const std::wstring& mode, Open open) {

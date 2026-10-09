@@ -6,7 +6,6 @@ namespace OpenNV.Runtime.Gameplay.State;
 // admit a rest fact; the observer must report the actual reached source branch.
 internal sealed record FalloutCampaignRestConsumers(
     Func<FalloutRestRequest, FalloutRestFact, FalloutRestObservation> Observe,
-    Action<FalloutRestRequest> BeginNativeCounting,
     Action<FalloutRestRequest> AfterPlayerHours,
     Action<FalloutRestRequest> BeforeCancelHours,
     Action<FalloutRestHour> HourPrelude,
@@ -19,7 +18,6 @@ internal sealed record FalloutCampaignRestConsumers(
     internal void Validate()
     {
         ArgumentNullException.ThrowIfNull(Observe);
-        ArgumentNullException.ThrowIfNull(BeginNativeCounting);
         ArgumentNullException.ThrowIfNull(AfterPlayerHours);
         ArgumentNullException.ThrowIfNull(BeforeCancelHours);
         ArgumentNullException.ThrowIfNull(HourPrelude);

@@ -15,6 +15,7 @@ internal static partial class FalloutNativeCampaignSave
         ValidateActorPerceptionSource(records, state);
         ValidateActorProcessSource(records, state);
         ValidateActorCellProcessSource(records, state);
+        ValidateActualProcessRuntimeSource(records, state);
     }
 
     // Current complete-schema shape/capture joins this mandatory snapshot.

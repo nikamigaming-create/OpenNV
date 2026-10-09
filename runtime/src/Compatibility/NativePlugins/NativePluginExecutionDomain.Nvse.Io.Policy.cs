@@ -16,6 +16,7 @@ internal sealed record NativePluginIoSelection(string StackSha256, string Module
     // Null derives the exact original import graph. Explicit empty means no
     // provider and never admits an imported file arm through a non-I/O list.
     internal IReadOnlyList<NativePluginCrtProviderSelection>? CrtProviders { get; init; }
+    internal Func<string, NativePluginDirectorySelection>? ResolveWinningDirectory { get; init; }
 }
 internal sealed record NativePluginIoReceipt(ulong Sequence, ulong Generation, ulong Parent, uint Api,
     string VirtualPath, string? PhysicalPath, string? WinnerSha256, NativePluginIoRole? Role, uint Error, uint Transferred = 0);
@@ -72,7 +73,12 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
             Within(NativePluginIoSecurity.PhysicalPath(root), physicalPrivateRoot) || Within(physicalPrivateRoot, NativePluginIoSecurity.PhysicalPath(root))))
             throw new InvalidDataException("Private native state overlaps an original source root.");
         var moduleInstance = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(selection.ModuleSha256.ToUpperInvariant() + "\0" + Canonical(selection.ModulePath).ToUpperInvariant())));
-        ModuleRoot = Path.Combine(privateRoot, selection.StackSha256.ToUpperInvariant(), selection.ModuleSha256.ToUpperInvariant(), moduleInstance);
+        // One full digest still owns the complete stack/module/path identity.
+        // Repeating three digests as nested directories exceeded the actual
+        // Windows process-current-directory limit before native admission.
+        var namespaceIdentity = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            selection.StackSha256.ToUpperInvariant() + "\0" + moduleInstance)));
+        ModuleRoot = Path.Combine(privateRoot, namespaceIdentity);
         RestrictingSid = NativePluginIoSecurity.ModuleSid(selection.StackSha256, moduleInstance);
         NoReparse(privateRoot); Directory.CreateDirectory(ModuleRoot); NoReparse(ModuleRoot);
         NativePluginIoSecurity.RequirePrivateTreeOwned(ModuleRoot);
@@ -160,6 +166,9 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
             .OrderByDescending(item => item.Virtual.Length).FirstOrDefault();
         var writable = scope.Source is not null;
         var target = writable ? Target(scope, path) : null;
+        if ((action is NativePluginIoAction.ProfileRead or NativePluginIoAction.ProfileWrite) &&
+            scope.Source is { } profileScope && profileScope.Role != NativePluginIoRole.Configuration)
+            throw new NotSupportedException("Profile route conflicts with its source-declared private configuration role.");
         if (action is NativePluginIoAction.Read or NativePluginIoAction.Attributes or NativePluginIoAction.ProfileRead)
         {
             if (_deleted.Contains(path)) error = 2;

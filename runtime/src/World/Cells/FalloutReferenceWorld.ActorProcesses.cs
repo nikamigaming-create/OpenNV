@@ -23,6 +23,7 @@ internal sealed partial class FalloutReferenceWorld
         if (_actorProcesses is not null) throw new InvalidOperationException("Actor process manager is already configured.");
         if (_perceptionDeclaration is null || _perceptionDeclaration.ExecutableSha256 != declaration.ExecutableSha256 || _perceptionStack != stack)
             throw new InvalidDataException("Actual process manager differs from the source perception lifetime.");
+        if (!ActualProcessRuntimeConfigured) throw new NotSupportedException("Actual source runtime/common process providers are absent.");
         // Constructor order belongs to the actual retained reference factory.
         // Do not instantiate every source row or invent a sorted actor cohort.
         var candidate = new FalloutActorProcessManager(declaration, stack, _enginePlayer, ActorPerception,
@@ -37,6 +38,7 @@ internal sealed partial class FalloutReferenceWorld
             if (restore is null)
                 foreach (var actor in ActorPerception.ConstructedSourceActors)
                     if (!candidate.HasActor(actor)) candidate.Construct(actor);
+            ProcessCommon.RequireActors(candidate.Capture().Actors);
         }
         catch (Exception error)
         {
@@ -74,19 +76,19 @@ internal sealed partial class FalloutReferenceWorld
     }
     private FalloutActorProcessScheduleObservation ReadProcessObservation(FalloutFormKey actor, long epoch)
     {
-        if (_actorProcessInputs is not null) return JoinCurrentActorUpdate(_actorProcessInputs.Observe(actor, epoch));
+        if (_actorProcessInputs is not null) return JoinActualNeutralActorLife(JoinCurrentActorUpdate(_actorProcessInputs.Observe(actor, epoch)));
         var actual = ReadPerceptionObservation(actor);
-        return JoinCurrentActorUpdate(new(actor, epoch, actual.HasSource3D, new(null, "original-current-actor-update-enabled-byte-producer-absent"),
+        return JoinActualNeutralActorLife(JoinCurrentActorUpdate(new(actor, epoch, actual.HasSource3D, new(null, "original-current-actor-update-enabled-byte-producer-absent"),
             new(null, "original-current-actor-life-state-producer-absent"), new(null, "original-high-process-eligibility-producer-absent"),
-            new(null, "original-actor-base-eligibility-producer-absent"), actual.SourcePosition.ToArray(), "actual-source-native-or-unloaded-actor-placement"));
+            new(null, "original-actor-base-eligibility-producer-absent"), actual.SourcePosition.ToArray(), "actual-source-native-or-unloaded-actor-placement")));
     }
     private FalloutActorProcessElection ReadProcessElection(FalloutFormKey actor, long epoch) =>
-        JoinCurrentCellProcess(_actorProcessInputs?.Election(actor, epoch) ?? new(actor, epoch,
+        JoinActualProcessRuntime(JoinCurrentCellProcess(_actorProcessInputs?.Election(actor, epoch) ?? new(actor, epoch,
             new(null, "original-current-player-transition-counter-producer-absent"),
             new(null, "original-main-forced-processing-bit-producer-absent"),
             new(null, "original-processing-tree-membership-producer-absent"),
             new(null, "original-current-cell-load-phase-producer-absent"),
-            new(null, "original-cell-extra-data-nine-producer-absent"), "original-current-tier-factory-inputs"));
+            new(null, "original-cell-extra-data-nine-producer-absent"), "original-current-tier-factory-inputs")));
     private FalloutActorProcessConstruction ReadProcessConstruction(FalloutFormKey actor) =>
         ReadActualSourceActorConstruction(actor);
     private FalloutActorProcessProducerGuards ReadProcessGuards(FalloutFormKey actor, long epoch) =>
@@ -118,11 +120,11 @@ internal sealed partial class FalloutReferenceWorld
     private void EndProcessFallout3Player() =>
         (_actorProcessInputs ?? throw new NotSupportedException("Original Fallout3 Player detection final consumer is unowned.")).EndFallout3Player();
     private void CopyProcessCommon(FalloutActorProcessFactorySnapshot factory) =>
-        (_actorProcessInputs ?? throw new NotSupportedException("Original package/actor-value/owned-pointer/common process transfer has no complete living owner.")).CopyCommon(factory);
+        ProcessCommon.Copy(factory);
     private void RetireProcessOld(FalloutActorProcessFactorySnapshot factory) =>
-        (_actorProcessInputs ?? throw new NotSupportedException("Old original process child-owner retirement is absent.")).RetireOld(factory);
+        ProcessCommon.RetireOld(factory);
     private void InitializeProcessNew(FalloutActorProcessFactorySnapshot factory) =>
-        (_actorProcessInputs ?? throw new NotSupportedException("Original new High process initialization has no complete living source owner.")).InitializeNew(factory);
+        ProcessCommon.InitializeNew(factory);
 
     internal void AdvanceActualActorProcessSchedule(float seconds)
     {
@@ -146,13 +148,6 @@ internal sealed partial class FalloutReferenceWorld
         if (_actorProcesses is null || actor == _enginePlayer) return;
         if (!ActorProcesses.HasActor(actor)) ActorProcesses.Construct(actor);
         var state = ActorProcesses.Read(actor);
-        if (_actorProcessInputs is null)
-        {
-            const string boundary = "source-reference-load-update3d-factory-and-current-tier-election-producers-absent";
-            ActorProcesses.RetainBoundary(actor, boundary);
-            ActorPerception.RequestProcess(actor, state.Epoch, null, boundary);
-            return;
-        }
         try
         {
             var election = ReadProcessElection(actor, state.Epoch);
@@ -190,6 +185,7 @@ internal sealed partial class FalloutReferenceWorld
         // The old/new factory transaction consumes perception as a provider.
         // A refused consumer retirement must retain that still-owned provider.
         RetireActorProcesses();
+        RetireActualProcessRuntime();
         RetireActorPerception();
     }
     private void RetireActorProcesses()

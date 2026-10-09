@@ -3,6 +3,7 @@ constexpr std::uint32_t io_open_api = 1, io_close_api = 2, io_read_api = 3, io_w
     io_directory_api = 5, io_delete_api = 6, io_attributes_api = 7, io_profile_api = 8, io_profile_write_api = 9,
     io_seek_api = 10, io_size_api = 11, io_flush_api = 12;
 struct PluginIoRoute { std::uint64_t id; std::uint32_t error; std::wstring path; };
+void io_profile_result(const PluginIoRoute&, std::uint32_t, std::uint32_t, std::uint32_t, DWORD, bool);
 PluginIoRuntime& io_owner() {
     if (!state || !state->io || GetCurrentThreadId() != state->thread)
         throw Fatal(ERROR_INVALID_THREAD_ID, "Native file API has no selected module/generation/thread owner.");
@@ -27,6 +28,13 @@ std::string io_native_ansi(const std::wstring& text) {
     if (WideCharToMultiByte(code_page, flags, text.c_str(), -1, bytes.data(), count, nullptr, default_pointer) != count || lost)
         throw Fatal(ERROR_NO_UNICODE_TRANSLATION, "Private native path changed its ANSI identity.");
     return bytes;
+}
+std::wstring io_native_path(const std::wstring& path) {
+    if (path.empty() || path.rfind(L"\\\\?\\", 0) == 0) return path;
+    if (path.rfind(L"\\\\", 0) == 0) return L"\\\\?\\UNC\\" + path.substr(2);
+    if (path.size() < 3 || path[1] != L':' || path[2] != L'\\')
+        throw Fatal(ERROR_INVALID_NAME, "Selected native filesystem path has no absolute identity.");
+    return L"\\\\?\\" + path;
 }
 std::wstring io_wide(const wchar_t* pointer, bool optional = false) {
     if (!pointer) { if (optional) return {}; throw Fatal(ERROR_INVALID_ADDRESS, "Required native file path is null."); }
@@ -64,7 +72,7 @@ Bytes io_host(std::uint32_t operation, const Bytes& payload) {
 PluginIoRoute io_resolve(std::uint32_t api, std::uint32_t action, const std::wstring& path) {
     Bytes request; request.put(api); request.put(action); request.text(io_utf8(path));
     auto result = io_host(io_route, request); Reader reader{result.data};
-    PluginIoRoute route{reader.get<std::uint64_t>(), reader.get<std::uint32_t>(), io_from_utf8(reader.text())}; reader.finish();
+    PluginIoRoute route{reader.get<std::uint64_t>(), reader.get<std::uint32_t>(), io_native_path(io_from_utf8(reader.text()))}; reader.finish();
     if (!route.id || (route.error && route.error != ERROR_FILE_NOT_FOUND && route.error != ERROR_PATH_NOT_FOUND)) throw Fatal(ERROR_INVALID_DATA, "Native file route lacks an exact C# decision.");
     return route;
 }
@@ -198,24 +206,25 @@ DWORD WINAPI io_profile_string_w(LPCWSTR section, LPCWSTR key, LPCWSTR fallback,
     return nvse_adapter([&] { const auto route = io_resolve(io_profile_api, 6, io_wide(path));
         if (size > std::numeric_limits<std::uint32_t>::max() / sizeof(wchar_t)) throw Fatal(ERROR_ARITHMETIC_OVERFLOW, "Native profile output has an overflowing UTF-16 extent.");
         if (size) expression_writable(buffer, size * sizeof(wchar_t));
-        const auto result = GetPrivateProfileStringW(section, key, fallback, buffer, size, io_profile_path(route).c_str()); const auto last = GetLastError(); io_completed(route, io_profile_api, route.error); SetLastError(last); return result; });
+        const auto result = GetPrivateProfileStringW(section, key, fallback, buffer, size, io_profile_path(route).c_str()); const auto last = GetLastError(); io_profile_result(route, 11, size, result, last, false); SetLastError(last); return result; });
 }
 DWORD WINAPI io_profile_string_a(LPCSTR section, LPCSTR key, LPCSTR fallback, LPSTR buffer, DWORD size, LPCSTR path) {
     return nvse_adapter([&] { const auto route = io_resolve(io_profile_api, 6, io_ansi(path)); if (size) expression_writable(buffer, size);
         const auto physical = io_native_ansi(io_profile_path(route));
-        const auto result = GetPrivateProfileStringA(section, key, fallback, buffer, size, physical.c_str()); const auto last = GetLastError(); io_completed(route, io_profile_api, route.error); SetLastError(last); return result; });
+        const auto result = GetPrivateProfileStringA(section, key, fallback, buffer, size, physical.c_str()); const auto last = GetLastError(); io_profile_result(route, 12, size, result, last, false); SetLastError(last); return result; });
 }
 UINT WINAPI io_profile_int_w(LPCWSTR section, LPCWSTR key, INT fallback, LPCWSTR path) {
-    return nvse_adapter([&] { const auto route = io_resolve(io_profile_api, 6, io_wide(path)); const auto result = GetPrivateProfileIntW(section, key, fallback, io_profile_path(route).c_str()); const auto last = GetLastError(); io_completed(route, io_profile_api, route.error); SetLastError(last); return result; });
+    return nvse_adapter([&] { const auto route = io_resolve(io_profile_api, 6, io_wide(path)); const auto result = GetPrivateProfileIntW(section, key, fallback, io_profile_path(route).c_str()); const auto last = GetLastError(); io_profile_result(route, 13, 0, result, last, false); SetLastError(last); return result; });
 }
 BOOL WINAPI io_profile_write_w(LPCWSTR section, LPCWSTR key, LPCWSTR value, LPCWSTR path) {
     return nvse_adapter([&] { const auto route = io_resolve(io_profile_write_api, 7, io_wide(path));
-        if (route.error) { io_completed(route, io_profile_write_api, route.error); SetLastError(route.error); return FALSE; }
-        const auto result = WritePrivateProfileStringW(section, key, value, route.path.c_str()); const auto last = GetLastError(); io_completed(route, io_profile_write_api, result ? 0U : last); SetLastError(last); return result; });
+        const auto result = WritePrivateProfileStringW(section, key, value, route.path.c_str()); const auto last = GetLastError(); io_profile_result(route, 15, 0, static_cast<std::uint32_t>(result), last, section || key || value); SetLastError(last); return result; });
 }
 BOOL WINAPI io_profile_write_a(LPCSTR section, LPCSTR key, LPCSTR value, LPCSTR path) {
-    return nvse_adapter([&] { const auto s = section ? io_ansi(section) : std::wstring{}, k = key ? io_ansi(key) : std::wstring{}, v = value ? io_ansi(value) : std::wstring{};
-        return io_profile_write_w(section ? s.c_str() : nullptr, key ? k.c_str() : nullptr, value ? v.c_str() : nullptr, io_ansi(path).c_str()); });
+    return nvse_adapter([&] { const auto route = io_resolve(io_profile_write_api, 7, io_ansi(path));
+        const auto physical = io_native_ansi(route.path);
+        const auto result = WritePrivateProfileStringA(section, key, value, physical.c_str()); const auto last = GetLastError();
+        io_profile_result(route, 16, 0, static_cast<std::uint32_t>(result), last, section || key || value); SetLastError(last); return result; });
 }
 DWORD WINAPI io_current_w(DWORD size, LPWSTR destination) {
     return nvse_adapter([&] { const auto& directory = io_owner().logical_directory; const auto required = static_cast<DWORD>(directory.size() + 1);
@@ -264,8 +273,9 @@ HMODULE WINAPI io_load_w(LPCWSTR) { return nvse_adapter([]() -> HMODULE { throw 
 HMODULE WINAPI io_load_ex_a(LPCSTR, HANDLE, DWORD) { return nvse_adapter([]() -> HMODULE { throw Fatal(ERROR_NOT_SUPPORTED, "Dynamic native dependency entry/I/O ownership is unbound."); }); }
 HMODULE WINAPI io_load_ex_w(LPCWSTR, HANDLE, DWORD) { return nvse_adapter([]() -> HMODULE { throw Fatal(ERROR_NOT_SUPPORTED, "Dynamic native dependency entry/I/O ownership is unbound."); }); }
 UINT WINAPI io_profile_int_a(LPCSTR section, LPCSTR key, INT fallback, LPCSTR path) {
-    return nvse_adapter([&] { const auto s = section ? io_ansi(section) : std::wstring{}, k = key ? io_ansi(key) : std::wstring{};
-        return io_profile_int_w(section ? s.c_str() : nullptr, key ? k.c_str() : nullptr, fallback, io_ansi(path).c_str()); });
+    return nvse_adapter([&] { const auto route = io_resolve(io_profile_api, 6, io_ansi(path)); const auto physical = io_native_ansi(io_profile_path(route));
+        const auto result = GetPrivateProfileIntA(section, key, fallback, physical.c_str()); const auto last = GetLastError();
+        io_profile_result(route, 14, 0, result, last, false); SetLastError(last); return result; });
 }
 void* io_entry(const std::string& name) {
     struct Entry { const char* name; void* function; };
@@ -287,10 +297,11 @@ void* io_entry(const std::string& name) {
         {"GetProcAddress", reinterpret_cast<void*>(io_proc)}, {"LoadLibraryA", reinterpret_cast<void*>(io_load_a)}, {"LoadLibraryW", reinterpret_cast<void*>(io_load_w)},
         {"LoadLibraryExA", reinterpret_cast<void*>(io_load_ex_a)}, {"LoadLibraryExW", reinterpret_cast<void*>(io_load_ex_w)} };
     for (const auto& entry : entries) if (name == entry.name) return entry.function;
-    return nullptr;
+    if (auto* entry = io_profile_extended_entry(name)) return entry;
+    return io_find_entry(name);
 }
 void io_prepare(const Frame& frame) {
-    Reader reader{frame.payload}; const auto root = io_from_utf8(reader.text()), directory = io_from_utf8(reader.text()), sid_text = io_from_utf8(reader.text()); const auto count = reader.get<std::uint32_t>();
+    Reader reader{frame.payload}; const auto root = io_native_path(io_from_utf8(reader.text())), directory = io_from_utf8(reader.text()), sid_text = io_from_utf8(reader.text()); const auto count = reader.get<std::uint32_t>();
     if (state->io || state->module || !state->calls.empty() || count > 4096) { reply(frame, ERROR_INVALID_STATE, "Private I/O must prepare once before native loader admission."); return; }
     auto owner = std::make_unique<PluginIoRuntime>(); owner->root = root; owner->logical_directory = directory;
     for (std::uint32_t at = 0; at < count; ++at) if (!owner->non_io_imports.insert(reader.text()).second) throw Fatal(ERROR_INVALID_DATA, "Private I/O import declarations repeat.");
@@ -377,12 +388,12 @@ void io_flush_detach(const Frame& frame) {
     if (!state->io) return; auto& owner = *state->io; owner.loader_retiring = false;
     state->calls.push_back(frame.header.id);
     for (const auto& event : owner.pending) io_event(PluginIoFile{event.capability, reinterpret_cast<HANDLE>(event.handle), false}, event.api, event.count, event.error);
-    owner.pending.clear(); crt_flush_detach(); state->calls.pop_back();
+    owner.pending.clear(); crt_flush_detach(); find_flush_detach(); state->calls.pop_back();
 }
 void io_retire() {
     if (!state->io) return; auto& owner = *state->io;
     if (!owner.files.empty() || !owner.pending.empty()) throw Fatal(ERROR_BUSY, "Selected native file capabilities remain after module retirement.");
-    crt_retire(); owner.imports.clear();
+    crt_retire(); find_retire(); owner.imports.clear();
     if (owner.stdin_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdin_file)) throw Fatal(GetLastError(), "Native standard input boundary did not retire."); owner.stdin_file = INVALID_HANDLE_VALUE; }
     if (owner.stdout_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdout_file)) throw Fatal(GetLastError(), "Native stdout diagnostic file did not retire."); owner.stdout_file = INVALID_HANDLE_VALUE; }
     if (owner.stderr_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stderr_file)) throw Fatal(GetLastError(), "Native stderr diagnostic file did not retire."); owner.stderr_file = INVALID_HANDLE_VALUE; }

@@ -25,6 +25,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         CampaignRestSaveBlocker is { } rest ? rest :
         ActorUpdateSaveBlocker is { } actorUpdate ? actorUpdate :
         CellProcessSaveBlocker is { } cellProcess ? cellProcess :
+        ActualProcessRuntimeSaveBlocker is { } processRuntime ? processRuntime :
+        ActualProcessCommonSaveBlocker is { } processCommon ? processCommon :
         ActorProcessSaveBlocker is { } process ? process :
         ActorPerceptionSaveBlocker is { } perception ? perception :
         CombatGroupSaveBlocker is { } combat ? combat :
@@ -51,6 +53,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         combatGroups = CombatGroupState,
         actorPerception = ActorPerceptionState,
         actorProcesses = ActorProcessState,
+        actualProcessRuntime = ActualProcessRuntimeState,
+        actualProcessCommon = ActualProcessCommonState,
         actorUpdates = ActorUpdateState,
         cellProcesses = CellProcessState,
         levelUp = PlayerLevelUpMenuState,
@@ -190,7 +194,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             _player.CapturePlayerPhysicalActivity(), CaptureSourceCombatGroups(), CaptureSourceActorPerception(), CaptureSourceActorProcesses(),
             CaptureCurrentPlayerRest(), CaptureCurrentRestAutoSave(), CaptureCurrentRestWorldTime(),
             CaptureCurrentRestInterfaceSounds(), CaptureSourceInterfaceFade(), CaptureCurrentHardcoreNeeds(),
-            CaptureSourceActorUpdates(), CaptureSourceCellProcesses());
+            CaptureSourceActorUpdates(), CaptureSourceCellProcesses(), CaptureCurrentProcessRuntime(), CaptureCurrentProcessCommon());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

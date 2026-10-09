@@ -76,6 +76,7 @@ internal sealed partial class FalloutReferenceWorld
     {
         if (_actorPerception is not null && SelectedPerceptionActor(instance.Reference) && !ActorPerception.HasActor(instance.Reference))
             ActorPerception.Construct(instance.Reference);
+        ConstructActualProcessRuntimeActor(instance);
         BindSourceActorProcessInstance(instance);
     }
     private void EnsurePerceptionActor(FalloutFormKey actor)
@@ -187,6 +188,7 @@ internal sealed partial class FalloutReferenceWorld
         {
             _nativePerception.Remove(instance.Reference);
             ActorProcesses.Retire(instance.Reference, "actual-reference-deletion-retirement");
+            RetireActualProcessRuntimeActor(instance.Reference, "actual-reference-deletion-retirement");
         }
         foreach (var (actor, native) in _nativePerception.ToArray()) ActorPerception.ObserveNative(ReadNativePerception(actor, native));
         // This actual scheduler owns only its reached component. It does

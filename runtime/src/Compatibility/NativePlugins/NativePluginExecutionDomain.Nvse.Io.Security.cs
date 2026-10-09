@@ -15,13 +15,22 @@ internal sealed class NativePluginKernelHandle : SafeHandleZeroOrMinusOneIsInval
 }
 internal static class NativePluginIoSecurity
 {
+    internal static string NativePath(string path)
+    {
+        if (!Path.IsPathFullyQualified(path)) throw new InvalidDataException("Native filesystem path has no absolute identity.");
+        var absolute = Path.GetFullPath(path);
+        if (absolute.StartsWith("\\\\?\\", StringComparison.Ordinal)) return absolute;
+        return absolute.StartsWith("\\\\", StringComparison.Ordinal)
+            ? "\\\\?\\UNC\\" + absolute[2..] : "\\\\?\\" + absolute;
+    }
+
     internal static string PhysicalPath(string path)
     {
         var ancestor = path;
         while (!File.Exists(ancestor) && !Directory.Exists(ancestor))
             ancestor = Path.GetDirectoryName(ancestor) ?? throw new InvalidDataException("Native path has no existing local filesystem ancestor.");
         NativePluginPrivateIo.NoReparse(ancestor);
-        using var file = CreateFileW(ancestor, 0x80, 7, 0, 3, 0x02000000, 0);
+        using var file = CreateFileW(NativePath(ancestor), 0x80, 7, 0, 3, 0x02000000, 0);
         if (file.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
         var buffer = new StringBuilder(32768); var count = GetFinalPathNameByHandleW(file, buffer, (uint)buffer.Capacity, 2);
         if (count == 0 || count >= buffer.Capacity) throw new Win32Exception(Marshal.GetLastWin32Error(), "Native source/private volume identity is incomplete.");
@@ -40,7 +49,7 @@ internal static class NativePluginIoSecurity
         })))
         {
             NativePluginPrivateIo.NoReparse(path);
-            using var file = CreateFileW(path, 0x80, 7, 0, 3, 0x02000000, 0);
+            using var file = CreateFileW(NativePath(path), 0x80, 7, 0, 3, 0x02000000, 0);
             if (file.IsInvalid || !GetFileInformationByHandle(file, out var information)) throw new Win32Exception(Marshal.GetLastWin32Error());
             if (information.Links != 1) throw new NotSupportedException("Private native state has an unowned shared hard-link identity.");
         }
@@ -68,7 +77,7 @@ internal static class NativePluginIoSecurity
             var userSid = Marshal.PtrToStringUni(userSidText) ?? throw new InvalidDataException("Current token has no user SID.");
             var sddl = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;" + userSid + ")(A;OICI;FA;;;" + sid + ")";
             if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, out descriptor, out _) ||
-                !SetFileSecurityW(path, 0x80000004, descriptor)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                !SetFileSecurityW(NativePath(path), 0x80000004, descriptor)) throw new Win32Exception(Marshal.GetLastWin32Error());
         }
         finally { if (descriptor != 0) LocalFree(descriptor); if (userSidText != 0) LocalFree(userSidText); Marshal.FreeHGlobal(buffer); }
     }
@@ -119,7 +128,7 @@ internal static class NativePluginIoSecurity
         {
             // Include the real owner/group: a DACL-only descriptor cannot prove
             // whether implicit owner WRITE_DAC access remains available.
-            var result = GetNamedSecurityInfoW(path, 1, 7, out _, out _, out _, out _, out var descriptor);
+            var result = GetNamedSecurityInfoW(NativePath(path), 1, 7, out _, out _, out _, out _, out var descriptor);
             if (result != 0) throw new Win32Exception((int)result, "Original native input security ownership is unreadable.");
             nint privileges = 0;
             try
@@ -129,7 +138,18 @@ internal static class NativePluginIoSecurity
                 if (!AccessCheck(descriptor, checkToken, 0x02000000, ref mapping, privileges, ref size, out var granted, out _))
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Original native input access check has no kernel result.");
                 if ((granted & 0x000d0156) != 0)
-                    throw new NotSupportedException("Selected native input remains writable under its restricted token: " + path);
+                {
+                    var writes = new List<string>();
+                    foreach (var access in new uint[] { 2, 4, 0x10, 0x40, 0x100, 0x10000, 0x40000, 0x80000 })
+                    {
+                        uint needed = 4096;
+                        if (!AccessCheck(descriptor, checkToken, access, ref mapping, privileges, ref needed, out var actual, out var allowed))
+                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Original input write access has no actual kernel result.");
+                        writes.Add($"{access:x}:{actual:x}:{allowed}");
+                    }
+                    throw new NotSupportedException("Selected native input remains writable under its restricted token: " + path +
+                        $" maximum={granted:x} writes=" + string.Join(',', writes));
+                }
             }
             finally { if (privileges != 0) Marshal.FreeHGlobal(privileges); LocalFree(descriptor); }
         }

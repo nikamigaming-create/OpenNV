@@ -101,8 +101,21 @@ internal sealed class NativeNvseHostSource : IDisposable
     }
     internal static void RequirePluginExports(FileStream source)
     {
-        using var pe = new PEReader(source, PEStreamOptions.LeaveOpen);
-        var directory = pe.PEHeaders.PEHeader!.ExportTableDirectory;
+        var position = source.Position;
+        try
+        {
+            source.Position = 0;
+            using var pe = new PEReader(source, PEStreamOptions.LeaveOpen);
+            RequirePluginExports(pe);
+        }
+        finally { source.Position = position; }
+    }
+    private static void RequirePluginExports(PEReader pe)
+    {
+        var header = pe.PEHeaders.PEHeader ?? throw new InvalidDataException("Native plugin export source PE header is absent.");
+        if (pe.PEHeaders.CoffHeader.Machine != Machine.I386 || header.Magic != PEMagic.PE32)
+            throw new InvalidDataException("Native plugin exports require their retained unmanaged PE32/I386 image.");
+        var directory = header.ExportTableDirectory;
         if (directory.RelativeVirtualAddress <= 0 || directory.Size < 40)
             throw new InvalidDataException("Original image does not declare an NVSE plugin export directory.");
         var table = pe.GetSectionData(directory.RelativeVirtualAddress).GetContent(0, 40).AsSpan();

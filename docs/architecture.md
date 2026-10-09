@@ -14,6 +14,39 @@ precedes source/provider cleanup, and failed leases remain retained. The game's
 static CRT, whole BSFile construction and unified current/cold CRT stream graph
 remain separate required owners.
 
+Native profile imports call the selected Windows A/W functions with genuine
+buffers and raw return/error results. Directory searches retain genuine OS
+handles for the winning source/private backends, complete WIN32_FIND_DATA,
+winner metadata and exact retirement. No generated INI parser or extracted BSA
+filesystem replaces those owners. The module namespace hashes stack, selected
+module and canonical path into one directory identity. Actual filesystem calls
+use Windows extended paths; virtual caller paths preserve source semantics.
+
+Each restricted child's token retains its previous default object ACL and adds
+the exact module restricting SID for new objects. Readback verifies that default
+and the unchanged restricting SID; original input ACLs never change and the full
+kernel AccessCheck remains mandatory. Native metadata readers preserve their
+own stream cursor. Actual mapped CRT provider paths are joined by kernel file
+identity against the retained selected source, so WOW64 path spelling cannot
+reject the same backing file or admit another provider. Export pointers must
+still belong to that exact retained image. The original-plugin USER/GDI desktop
+and complete cold/static-CRT graph remain independent required owners.
+
+Actor process transfer retains the actual source package/value provider across
+old-owner retirement and new-owner publication. Original High initialization
+consumes a living native NIF/BPTD body lease and original node/controller lookup
+declarations. Runtime/common captures share the actor reference, selected source,
+process epoch and deletion state. Cold restoration creates fresh native owners
+without replaying copy or source writers. General queued-reference membership,
+CELL ExtraData9 and whole-Main/travel transactions remain independent owners.
+
+Sleep/wait source counting state is independent of gameplay Phase. Start commits
+counting, clears the action target, then clears the slider target before signed
+player hours. The actual attached view projects that same request's current
+source targets; visibility remains owned by the winning expressions. Every
+native publication obtains fresh winning tiles. Cold publication creates fresh
+view/input leases without replaying Start, a target receipt or a world hour.
+
 Trait selection reads the winning PERK selection header independently of nested
 PRKE effects. Trait/playable/optional hidden flags, minimum level, rank count and
 top-level CTDA remain source-owned; live condition evaluation and the original

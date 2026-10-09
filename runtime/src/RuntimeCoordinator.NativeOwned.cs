@@ -151,6 +151,8 @@ public partial class RuntimeCoordinator
                 combatGroups = _nativeOpeningStageDriver.CombatGroupState,
                 actorPerception = _nativeOpeningStageDriver.ActorPerceptionState,
                 actorProcesses = _nativeOpeningStageDriver.ActorProcessState,
+                actualProcessRuntime = _nativeOpeningStageDriver.ActualProcessRuntimeState,
+                actualProcessCommon = _nativeOpeningStageDriver.ActualProcessCommonState,
                 actorUpdates = _nativeOpeningStageDriver.ActorUpdateState,
                 cellProcesses = _nativeOpeningStageDriver.CellProcessState,
                 advancementRuntime = _nativeOpeningStageDriver.PlayerAdvancementRuntimeState,
@@ -319,6 +321,8 @@ public partial class RuntimeCoordinator
         _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId);
         _nativeReferences.ConfigureActualActorCellProducers(content.StackId);
         _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId);
+        _nativeReferences.ConfigureActualProcessRuntime(FalloutActorProcessRuntimeDeclaration.ForExecutable(
+            FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId);
         _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId);
         _nativeStartingQuest = FalloutNewGameBootstrap.StartingQuest(_nativePluginStack, FalloutInstallationSettings.Read(content));
         _nativeGlobals = FalloutGlobalState.Read(_nativePluginStack);
@@ -520,6 +524,10 @@ public partial class RuntimeCoordinator
                 restore.State.CellProcesses ?? throw new InvalidDataException("Current CELL process continuation is absent."));
             _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId,
                 restore.State.ActorPerception ?? throw new InvalidDataException("Current campaign has no actor perception continuation."));
+            _nativeReferences.ConfigureActualProcessRuntime(FalloutActorProcessRuntimeDeclaration.ForExecutable(
+                FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId,
+                restore.State.ActorProcessRuntime ?? throw new InvalidDataException("Current process runtime continuation is absent."),
+                restore.State.ActorProcessCommon ?? throw new InvalidDataException("Current common process continuation is absent."));
             _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId,
                 restore.State.ActorProcesses ?? throw new InvalidDataException("Current campaign has no actor process continuation."));
         }

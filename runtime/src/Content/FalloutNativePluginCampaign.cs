@@ -197,7 +197,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         if (ModuleFailure is { } failure) throw new NotSupportedException("Selected native module state is incomplete: " + failure);
         if (_active != 0) throw new InvalidOperationException("An original native caller still owns campaign state.");
         foreach (var module in _modules)
-        { module.Domain.RequireNvseSourceFilesSaveOwned(); module.Domain.RequireNvseBinarySaveOwned(); module.Domain.RequirePrivateCrtSaveOwned(); }
+        { module.Domain.RequireNvseSourceFilesSaveOwned(); module.Domain.RequireNvseBinarySaveOwned(); module.Domain.RequirePrivateCrtSaveOwned(); module.Domain.RequirePrivateProfileDirectorySaveOwned(); }
         if (_modules.Any(module => module.Plugin.Registry.SerializationHistory.Count != 0))
             throw new NotSupportedException("Original plugin co-save callback state has no current unified campaign writer/reader owner.");
     }

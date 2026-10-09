@@ -16,15 +16,17 @@ internal sealed class NativePluginDomainChild : IDisposable
     internal StreamWriter StandardInput { get; }
     internal StreamReader StandardOutput { get; }
     internal StreamReader StandardError { get; }
+    internal NativePluginTokenObjectReceipt? ObjectSecurity { get; }
     private NativePluginDomainChild(Process process)
     { _regular = process; Id = process.Id; StandardInput = process.StandardInput; StandardOutput = process.StandardOutput; StandardError = process.StandardError; }
     private NativePluginDomainChild(int id, NativePluginKernelHandle process, NativePluginKernelHandle job,
-        StreamWriter input, StreamReader output, StreamReader error)
-    { Id = id; _process = process; _job = job; StandardInput = input; StandardOutput = output; StandardError = error; }
+        StreamWriter input, StreamReader output, StreamReader error, NativePluginTokenObjectReceipt objectSecurity)
+    { Id = id; _process = process; _job = job; StandardInput = input; StandardOutput = output; StandardError = error; ObjectSecurity = objectSecurity; }
     internal static NativePluginDomainChild Start(ProcessStartInfo start, NativePluginPrivateIo? io)
     {
         if (io is null) return new(Process.Start(start) ?? throw new InvalidOperationException("Native companion did not start."));
         using var token = NativePluginIoSecurity.WriteRestrictedToken(io.RestrictingSid);
+        var objectSecurity = NativePluginTokenObjects.AdmitDefaultObjects(token, io.RestrictingSid);
         NativePluginIoSecurity.RequireInputsReadOnly(token, io.Selection.OriginalRoots);
         var attributes = new SecurityAttributes { Length = Marshal.SizeOf<SecurityAttributes>(), Inherit = true };
         SafeFileHandle? inputRead = null, inputWrite = null, outputRead = null, outputWrite = null, errorRead = null, errorWrite = null;
@@ -78,7 +80,7 @@ internal sealed class NativePluginDomainChild : IDisposable
             stdinStream = new(inputWrite, FileAccess.Write, 4096, false); inputWrite = null;
             stdoutStream = new(outputRead, FileAccess.Read, 4096, false); outputRead = null;
             stderrStream = new(errorRead, FileAccess.Read, 4096, false); errorRead = null;
-            var child = new NativePluginDomainChild(checked((int)created.ProcessId), process, job, new(stdinStream, new UTF8Encoding(false)), new(stdoutStream, Encoding.UTF8), new(stderrStream, Encoding.UTF8));
+            var child = new NativePluginDomainChild(checked((int)created.ProcessId), process, job, new(stdinStream, new UTF8Encoding(false)), new(stdoutStream, Encoding.UTF8), new(stderrStream, Encoding.UTF8), objectSecurity);
             stdinStream = null; stdoutStream = null; stderrStream = null; process = null; job = null; return child;
         }
         catch
@@ -121,7 +123,11 @@ internal sealed class NativePluginDomainChild : IDisposable
     {
         if (entireProcessTree) throw new InvalidOperationException("Native owner cannot terminate a process tree.");
         if (_regular is not null) { _regular.Kill(false); return; }
-        if (!HasExited && !TerminateProcess(_process!, 3)) throw new Win32Exception(Marshal.GetLastWin32Error());
+        if (!HasExited && !TerminateProcess(_process!, 3))
+        {
+            var error = Marshal.GetLastWin32Error();
+            if (WaitForSingleObject(_process!, 0) != 0) throw new Win32Exception(error);
+        }
     }
     public void Dispose()
     {

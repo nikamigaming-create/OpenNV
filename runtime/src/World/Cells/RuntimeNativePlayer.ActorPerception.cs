@@ -26,8 +26,9 @@ internal partial class RuntimeNativePlayer
         private bool _disposed;
         public void Dispose()
         {
-            if (_disposed) return; _disposed = true;
+            if (_disposed) return;
             if (ReferenceEquals(player._playerPerceptionRun, run)) player.RetirePlayerPerception();
+            _disposed = true;
         }
     }
     private void PublishPlayerPerception()
@@ -36,6 +37,7 @@ internal partial class RuntimeNativePlayer
         var body = _thirdPerson?.Actor ?? throw new NotSupportedException("Player perception has no actual published player body.");
         var reference = _physicalRecords!.RuntimeFormKey(0x14);
         _playerPerceptionOwner = "actual-engine-player-source-body/" + reference + "/" + body.Skeleton.Source.Sha256;
+        BindActualPlayerSourceProcessBody();
         _playerPerceptionLease = _playerPerceptionWorld.BindNativePerception(reference, _playerPerceptionOwner, ObservePlayerPerception);
     }
     private FalloutPerceptionNativeObservation ObservePlayerPerception(long lease)
@@ -44,6 +46,7 @@ internal partial class RuntimeNativePlayer
         if (_playerPhysical is not { Published: true, Failure: null } || !IsInsideTree() || IsQueuedForDeletion() ||
             !GodotObject.IsInstanceValid(body) || !body.IsInsideTree() || !GodotObject.IsInstanceValid(body.Skeleton.Node))
             throw new NotSupportedException("Player perception source publication is absent, faulted or retired.");
+        ObserveActualPlayerNeutralLifeBoundary();
         var position = GlobalPosition / UnitsToMeters;
         var rotation = GamebryoCoordinate.ReferenceEuler(GlobalBasis);
         return new(_physicalRecords!.RuntimeFormKey(0x14), _playerPerceptionOwner!, lease, _playerPerceptionCell!(),
@@ -53,12 +56,15 @@ internal partial class RuntimeNativePlayer
     }
     private void RetirePlayerPerceptionBody()
     {
-        var lease = _playerPerceptionLease; _playerPerceptionLease = null; _playerPerceptionOwner = null;
-        lease?.Dispose();
+        var failures = new List<Exception>();
+        try { _playerPerceptionLease?.Dispose(); _playerPerceptionLease = null; } catch (Exception error) { failures.Add(error); }
+        try { RetireActualPlayerSourceProcessBody(); } catch (Exception error) { failures.Add(error); }
+        if (failures.Count != 0) throw new AggregateException("Player perception/process-body retirement retains actual failures.", failures);
+        _playerPerceptionOwner = null;
     }
     private void RetirePlayerPerception()
     {
-        try { RetirePlayerPerceptionBody(); }
-        finally { _playerPerceptionRun = null; _playerPerceptionWorld = null; _playerPerceptionCell = null; }
+        RetirePlayerPerceptionBody();
+        _playerPerceptionRun = null; _playerPerceptionWorld = null; _playerPerceptionCell = null;
     }
 }

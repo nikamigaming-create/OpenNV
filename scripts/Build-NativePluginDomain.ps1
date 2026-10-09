@@ -57,9 +57,18 @@ try {
         Invoke-Compile @((Join-Path $fixtureSource 'NativeFaultEnvelopeFixture.cpp'), "/DOPENNV_FAULT_ENVELOPE_MODE=$mode",
             "/Fo$output/fault-envelope-$mode.obj", '/link', '/MACHINE:X86', "/OUT:$protocolFixtures/opennv_fault_envelope_$mode.exe")
     }
+    # This public NVSE caller uses the genuine dynamically imported Windows CRT.
+    # Its entry has no initial I/O and does not depend on a copied game image.
+    $crtArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/GS-', '/LD',
+        (Join-Path $fixtureSource 'NativeCrtFixture.cpp'), "/Fo$output/crt-fixture.obj", '/link',
+        '/MACHINE:X86', '/ENTRY:DllMain@12', 'ucrt.lib', 'kernel32.lib', "/DEF:$fixtureSource/NativeCrtFixture.def",
+        "/OUT:$fixtures/opennv_crt_fixture.dll", "/IMPLIB:$output/crt-fixture.lib")
+    & $compiler @crtArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Authored public-ABI CRT fixture compilation failed.' }
     $files = @('opennv_plugin_domain.exe', 'fixtures/opennv_domain_fixture.dll',
         'fixtures/opennv_domain_fixture_dependency.dll', 'fixtures/opennv_domain_fixture_reject.dll', 'missing-import/opennv_domain_fixture.dll')
     $files += @(0..6 | ForEach-Object { "protocol-fixtures/opennv_fault_envelope_$_.exe" })
+    $files += 'fixtures/opennv_crt_fixture.dll'
     $manifest = [ordered]@{ authoredOnly = $true; configuration = $Configuration; machine = 'I386'; executionVerified = $false; files = @() }
     foreach ($file in $files) {
         $built = Join-Path $output $file

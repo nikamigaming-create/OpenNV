@@ -14,6 +14,7 @@ internal sealed record FalloutSleepWaitSource(string EngineSha256, string Runtim
     internal const uint NoRestRecordFlag = 0x0008_0000;
     internal const byte InteriorCellDataFlag = 0x01;
     private const string Contract = "source-slider-zero-based-plus1;menu-float32-frame-countdown-ge1-reset0;one-hour-no-catchup;" +
+        "independent-menu-counting-byte-before-action-and-slider-target-clears;source-visibility-not-phase;" +
         "independent-signed-player-hours-and-sleep-flag;script-hours-once-per-actual-player-update;" +
         "hardcore-prelude-before-world-and-calendar;source-healing-and-hardcore-sleep-debt;" +
         "completed-sleep-restores-nonhardcore-health-ap-limbs;menu-next-update-close-gate;cancel-no-completion;" +

@@ -9,7 +9,7 @@ internal sealed record FalloutNativePluginIoReadDeclaration(string VirtualPath, 
 // The active source resolves loose/archive and configuration winners. The
 // native file adapter cannot substitute an arbitrary existing installation
 // file for this selected winner or persist a decoded retail archive member.
-internal static class FalloutNativePluginPrivateIo
+internal static partial class FalloutNativePluginPrivateIo
 {
     internal static NativePluginPrivateIo Create(RuntimeLiveContentSource source, string modulePath,
         string moduleSha256, string privateStateRoot, IReadOnlyList<NativePluginIoWriteScope> writeScopes,
@@ -31,7 +31,8 @@ internal static class FalloutNativePluginPrivateIo
         var roots = source.ContentRoots.Concat(new[] { runtimeDirectory, module }).Concat(additionalInputRoots)
             .Select(NativePluginPrivateIo.Canonical).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         return new NativePluginPrivateIo(new(source.StackId, moduleSha256, module, runtimeDirectory, privateStateRoot,
-            roots, writeScopes, Resolve, importDeclarationOwner, declaredNonIoImports));
+            roots, writeScopes, Resolve, importDeclarationOwner, declaredNonIoImports)
+        { ResolveWinningDirectory = DirectoryResolver(source, runtimeDirectory, declared) });
 
         NativePluginIoReadWinner? Resolve(string virtualPath)
         {

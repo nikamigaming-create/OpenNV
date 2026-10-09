@@ -30,7 +30,10 @@ internal sealed partial class NativeOwnedSleepWaitMenu : Control
     {
         if (source.Source != session.Source || !session.NeedsMenuPublication || session.Failure is not null)
             throw new InvalidOperationException("Native rest view has no genuine current healthy source request.");
-        var result = new NativeOwnedSleepWaitMenu(source, session, failed);
+        // Every actual menu constructor owns fresh source tiles. Retained
+        // target values are projected from this request, not a previous view.
+        var currentSource = source.CreateCurrentPublication();
+        var result = new NativeOwnedSleepWaitMenu(currentSource, session, failed);
         try { result.Initialize(); return result; }
         catch { result.Free(); throw; }
     }
@@ -71,6 +74,7 @@ internal sealed partial class NativeOwnedSleepWaitMenu : Control
         {
             if (_session.RequestOrdinal != _request) throw new InvalidOperationException("Rest native input belongs to a retired source request.");
             var tiles = _source.Tiles;
+            RestoreCurrentSourceTargets();
             var kind = _session.Request!.Kind;
             tiles.Text[_source.Named("SWM_HowManyText")] = _source.Question(kind);
             tiles.Text[_source.Named("SWM_HoursChosen")] = _source.Hours(_session.Phase == FalloutRestPhase.Choosing ?
@@ -79,8 +83,8 @@ internal sealed partial class NativeOwnedSleepWaitMenu : Control
             tiles.BindText(_source.Named("SWM_WaitButton"), "string", _source.Action(kind));
             tiles.Bind(_slider, "_current_value", Math.Clamp((_session.Phase == FalloutRestPhase.Choosing ?
                 _session.SelectedHours : _session.RemainingHours) - 1, 0, _session.Source.MaximumMenuHours - 1));
-            tiles.Bind(_slider, "_enabled", _session.Phase == FalloutRestPhase.Choosing ? 1 : 0);
-            tiles.Bind(_source.Named("SWM_WaitButton"), "visible", _session.Phase == FalloutRestPhase.Choosing ? 1 : 0);
+            // The original consumer writes target, not visibility or the
+            // template's private _enabled input. Source XML owns appearance.
             var scale = GetViewportRect().Size.Y / 960;
             if (!float.IsFinite(scale) || scale <= 0) throw new InvalidDataException("Rest native viewport has no positive source layout.");
             tiles.ResolutionConverter = 1 / scale; Scale = Vector2.One * scale; Size = tiles.Screen = GetViewportRect().Size / scale;
@@ -88,11 +92,13 @@ internal sealed partial class NativeOwnedSleepWaitMenu : Control
             {
                 action.Button.Position = tiles.Position(action.Tile);
                 action.Button.Size = new(tiles.Number(action.Tile, "width"), tiles.Number(action.Tile, "height"));
-                action.Button.Visible = action.Id != 4 || _session.Phase == FalloutRestPhase.Choosing;
+                action.Button.Visible = SourceVisible(action.Tile);
+                action.Button.Disabled = !SourceTargetEnabled(action.Tile);
             }
             _sliderTarget.Position = tiles.Position(_slider);
             _sliderTarget.Size = new(tiles.Number(_slider, "width"), tiles.Number(_slider, "height"));
-            _sliderTarget.Disabled = _session.Phase != FalloutRestPhase.Choosing;
+            _sliderTarget.Visible = SourceVisible(_slider);
+            _sliderTarget.Disabled = !SourceTargetEnabled(_slider);
             tiles.ValidateDrawing(); QueueRedraw();
         });
     }
@@ -100,16 +106,17 @@ internal sealed partial class NativeOwnedSleepWaitMenu : Control
     {
         if (id == 4)
         {
-            if (_session.Phase != FalloutRestPhase.Choosing) return;
+            if (!SourceTargetEnabled(_source.Named("SWM_WaitButton"))) return;
             _session.Begin();
         }
-        else if (id == 5) _session.Cancel();
+        else if (id == 5)
+        { if (!SourceTargetEnabled(_source.Named("SWM_CancelButton"))) return; _session.Cancel(); }
         else throw new NotSupportedException("Rest native button has no source action consumer.");
         if (_session.NeedsMenuPublication) Refresh();
     }
     private void SliderInput(InputEvent input) => Try(() =>
     {
-        if (_session.Phase != FalloutRestPhase.Choosing) return;
+        if (!SourceTargetEnabled(_slider)) return;
         if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left } left)
         { _dragging = left.Pressed; if (_dragging) SetSlider(left.Position.X); }
         if (input is InputEventMouseMotion motion && _dragging) SetSlider(motion.Position.X);
@@ -130,7 +137,7 @@ internal sealed partial class NativeOwnedSleepWaitMenu : Control
             { DispatchAction(pad.ButtonIndex == JoyButton.A ? 4 : 5); GetViewport().SetInputAsHandled(); return; }
             if (input is InputEventKey { Pressed: true, Echo: false } key && _keys.TryGetValue(key.Keycode, out var action))
             { DispatchAction(action); GetViewport().SetInputAsHandled(); return; }
-            if (_session.Phase != FalloutRestPhase.Choosing) return;
+            if (!SourceTargetEnabled(_slider)) return;
             var direction = input switch
             {
                 InputEventKey { Pressed: true, Keycode: Key.Left } => -1,

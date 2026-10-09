@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-rest-menu-controls"])
+{
+    RestMenuControlContracts.Run();
+    return;
+}
+
 if (args is ["--sleep-wait-contracts"])
 {
     SleepWaitContracts.Run();
@@ -57,6 +63,12 @@ if (args is ["--actor-update-cell-process-contracts"])
 if (args is ["--actor-constructor-source-contracts"])
 {
     ActorConstructorSourceContracts.Run();
+    return;
+}
+
+if (args is ["--actor-process-runtime-contracts"])
+{
+    ActorProcessRuntimeContracts.Run();
     return;
 }
 
@@ -1054,10 +1066,12 @@ NativeLoadedFileContracts.Run();
 CombatGroupContracts.Run();
 ActorPerceptionContracts.Run();
 ActorProcessContracts.Run();
+ActorProcessRuntimeContracts.Run();
 ActorConstructorSourceContracts.Run();
 ActorUpdateCellProcessContracts.Run();
 SleepWaitContracts.Run();
 RestHostContracts.Run();
+RestMenuControlContracts.Run();
 RestWorldConsumerContracts.Run();
 SourceRestCueContracts.Run();
 PlayerAdvancementContracts.Run();

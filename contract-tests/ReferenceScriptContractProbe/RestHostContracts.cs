@@ -22,6 +22,7 @@ internal static class RestHostContracts
         internal readonly FalloutGameTime Clock;
         internal readonly FalloutSleepWait Owner;
         internal bool Sleeping, FailAfterHours;
+        internal bool ActionTarget = true, SliderTarget = true;
         internal Action<FalloutRestRequest>? BeforeHours;
         internal Action<float>? WorldSeconds;
         internal readonly List<string> Order = [];
@@ -39,7 +40,12 @@ internal static class RestHostContracts
             Sleeping = restore?.Sleeping ?? false;
             var host = new FalloutSleepWaitHost(
                 (_, _) => new(FalloutRestFactState.Satisfied, "authored-independent-rest-producer"),
-                request => { Order.Add("before-hours"); BeforeHours?.Invoke(request); },
+                request =>
+                {
+                    Order.Add("before-hours"); BeforeHours?.Invoke(request);
+                    Owner!.BeginSourceMenuCounting(target =>
+                    { if (target == FalloutRestMenuTarget.Action) ActionTarget = false; else SliderTarget = false; });
+                },
                 (flag, write) => { Order.Add("write-hours"); write(); Sleeping = flag; },
                 _ => { }, seconds => WorldSeconds?.Invoke(seconds), _ => { }, _ => { },
                 (_, _) => Order.Add("close"), () => Sleeping)

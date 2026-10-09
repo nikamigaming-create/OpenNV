@@ -65,7 +65,8 @@ internal sealed record FalloutNativeCampaignState(
     FalloutRestInterfaceSoundSnapshot? RestInterfaceSounds = null,
     FalloutInterfaceFadeSnapshot? InterfaceFades = null,
     FalloutHardcoreNeedSnapshot? HardcoreNeeds = null,
-    FalloutActorUpdateSnapshot? ActorUpdates = null, FalloutCellProcessesSnapshot? CellProcesses = null);
+    FalloutActorUpdateSnapshot? ActorUpdates = null, FalloutCellProcessesSnapshot? CellProcesses = null,
+    FalloutActorProcessRuntimeSnapshot? ActorProcessRuntime = null, FalloutProcessCommonSnapshot? ActorProcessCommon = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -130,7 +131,8 @@ internal static partial class FalloutNativeCampaignSave
         FalloutRestInterfaceSoundSnapshot? restInterfaceSounds = null,
         FalloutInterfaceFadeSnapshot? interfaceFades = null,
         FalloutHardcoreNeedSnapshot? hardcoreNeeds = null,
-        FalloutActorUpdateSnapshot? actorUpdates = null, FalloutCellProcessesSnapshot? cellProcesses = null)
+        FalloutActorUpdateSnapshot? actorUpdates = null, FalloutCellProcessesSnapshot? cellProcesses = null,
+        FalloutActorProcessRuntimeSnapshot? actorProcessRuntime = null, FalloutProcessCommonSnapshot? actorProcessCommon = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         ArgumentException.ThrowIfNullOrWhiteSpace(questEditorId);
@@ -181,7 +183,7 @@ internal static partial class FalloutNativeCampaignSave
             PlayerPhysical: playerPhysical, CombatGroups: combatGroups, ActorPerception: actorPerception, ActorProcesses: actorProcesses,
             SleepWait: sleepWait, RestAutoSave: restAutoSave, RestWorldTime: restWorldTime,
             RestInterfaceSounds: restInterfaceSounds, InterfaceFades: interfaceFades, HardcoreNeeds: hardcoreNeeds,
-            ActorUpdates: actorUpdates, CellProcesses: cellProcesses);
+            ActorUpdates: actorUpdates, CellProcesses: cellProcesses, ActorProcessRuntime: actorProcessRuntime, ActorProcessCommon: actorProcessCommon);
         Validate(state, saveCompatibilityId);
         ValidateSaveOrderSource(records, state);
         ValidateExperienceNotificationSource(records, state);

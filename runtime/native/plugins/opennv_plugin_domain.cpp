@@ -384,6 +384,10 @@ bool crt_io_import_name(const std::string&, const std::string&);
 void* crt_dynamic_entry(HMODULE, const std::string&);
 void crt_flush_detach();
 void crt_retire();
+void find_flush_detach();
+void find_retire();
+void* io_find_entry(const std::string&);
+void* io_profile_extended_entry(const std::string&);
 void source_locals_retire_all();
 SourceObject& source_object(std::uint64_t);
 void source_objects_retire_all();
@@ -397,6 +401,8 @@ void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
 #include "opennv_plugin_values.inc"
 #include "opennv_plugin_value_heap.inc"
 #include "opennv_plugin_io.inc"
+#include "opennv_plugin_profiles.inc"
+#include "opennv_plugin_find.inc"
 #include "opennv_plugin_crt.inc"
 #include "opennv_plugin_crt_open.inc"
 #include "opennv_plugin_crt_members.inc"

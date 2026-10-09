@@ -11,7 +11,8 @@ internal sealed record FalloutRestHourReceipt(long Ordinal, float SimulationSeco
 internal sealed record FalloutSleepWaitSnapshot(FalloutSleepWaitSource Source, long RequestOrdinal,
     long Attempt, FalloutRestRequest? Request, FalloutRestPhase Phase, int SelectedHours, int RemainingHours,
     long CommittedHours, bool Sleeping, float Countdown, bool MenuPending, bool CompletionEffectsCommitted,
-    FalloutRestHourReceipt? LastHour, FalloutRestFailure? Failure, IReadOnlyList<FalloutRestNativeFailure> NativeFailures)
+    FalloutRestHourReceipt? LastHour, FalloutRestFailure? Failure, IReadOnlyList<FalloutRestNativeFailure> NativeFailures,
+    FalloutRestMenuControlSnapshot? MenuControls)
 {
     internal void Validate()
     {
@@ -25,6 +26,13 @@ internal sealed record FalloutSleepWaitSnapshot(FalloutSleepWaitSource Source, l
             Phase == FalloutRestPhase.Choosing && RemainingHours != 0 && !Sleeping && Failure is null)
             throw new InvalidDataException("Saved sleep/wait current state is invalid.");
         Request?.Validate();
+        MenuControls?.Validate(Source);
+        if ((Request is not null && Request.Origin != FalloutRestOrigin.ScriptHours) != (MenuControls is not null) ||
+            MenuControls is { } controls && (controls.Request != RequestOrdinal ||
+                controls.Failure is not null && Failure is null || Failure is null &&
+                Phase is (FalloutRestPhase.Running or FalloutRestPhase.Completed) && !controls.Counting ||
+                Failure is null && Phase == FalloutRestPhase.Choosing && controls.Counting))
+            throw new InvalidDataException("Saved rest controls lost their genuine native request/start/failure identity.");
         if (Request?.Origin == FalloutRestOrigin.ScriptHours && MenuPending || CompletionEffectsCommitted && CommittedHours == 0 ||
             Failure is null && Phase == FalloutRestPhase.Cancelled && MenuPending ||
             Failure is null && Phase is (FalloutRestPhase.Choosing or FalloutRestPhase.Running) &&

@@ -22,6 +22,7 @@ internal static class SleepWaitContracts
         internal float WorldSeconds;
         internal int Preludes, Effects, Completions, Closes;
         internal bool FailEffects, FailCompletion, FailFlag;
+        internal bool ActionTarget = true, SliderTarget = true;
         internal Fixture(bool carry = true, float hour = 12, FalloutSleepWaitSnapshot? restore = null,
             FalloutGlobalStateSnapshot? globals = null, FalloutGameTimeSnapshot? clock = null)
         {
@@ -41,7 +42,8 @@ internal static class SleepWaitContracts
                 new('1', 64), new('2', 64), FalloutSleepWaitSource.CurrentContractSha256, carry, carry, 24);
             Owner = new(source, Clock, new(
                 (_, _) => new(FalloutRestFactState.Satisfied, "authored-restriction-producer"),
-                _ => { },
+                _ => Owner!.BeginSourceMenuCounting(target =>
+                { if (target == FalloutRestMenuTarget.Action) ActionTarget = false; else SliderTarget = false; }),
                 (flag, write) => { write(); Sleeping = flag; if (FailFlag) throw new IOException("authored-flag-prefix"); },
                 _ => Preludes++, seconds => WorldSeconds += seconds,
                 _ => { Effects++; if (FailEffects) throw new IOException("authored-hour-prefix"); },

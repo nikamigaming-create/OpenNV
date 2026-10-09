@@ -24,6 +24,8 @@ internal sealed partial class NativePluginExecutionDomain
         using var reader = Reader(frame.Payload); var thread = reader.ReadUInt32(); var module = reader.ReadUInt64();
         if (thread != NativeThread || _nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation)
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
+        if (frame.Operation == ProfileResultCallback) return DispatchPrivateProfile(frame, parent, owner, reader);
+        if (frame.Operation is >= FindBeginCallback and <= FindBackendCallback) return DispatchPrivateFind(frame, parent, owner, reader);
         if (frame.Operation is >= CrtProvider and <= CrtPathResult) return DispatchPrivateCrt(frame, parent, owner, reader);
         switch (frame.Operation)
         {
@@ -66,12 +68,13 @@ internal sealed partial class NativePluginExecutionDomain
     private void RequirePrivateIoRetired()
     {
         if (_ioFiles.Count != 0) throw new InvalidDataException("Original module retirement retains native file handles.");
-        RequirePrivateCrtRetired();
+        RequirePrivateCrtRetired(); _privateIo?.RequireFindRetired();
         _privateIo?.RequireRetired();
     }
     private void ClearPrivateIo()
     {
         if (!ChildExited) throw new InvalidOperationException("Native I/O source/provider cleanup requires verified child closure.");
+        RetainPrivateProfileReceipts(); RetainPrivateFindReceipts();
         ClearPrivateCrt(); _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
     }
 }

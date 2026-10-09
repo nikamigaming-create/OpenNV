@@ -235,6 +235,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new InvalidDataException("Current CELL process continuation is absent."));
         ConfigureSourceActorPerception(restore is null ? null : restore.State.ActorPerception ??
             throw new InvalidDataException("Current actor perception continuation is absent."));
+        ConfigureCurrentProcessRuntime(restore is null ? null : restore.State.ActorProcessRuntime ??
+            throw new InvalidDataException("Current process runtime continuation is absent."),
+            restore is null ? null : restore.State.ActorProcessCommon ??
+            throw new InvalidDataException("Current common process continuation is absent."));
         ConfigureSourceActorProcesses(restore is null ? null : restore.State.ActorProcesses ??
             throw new InvalidDataException("Current actor process continuation is absent."));
         _ingestibles = new(pluginStack, inventory, _vitals,

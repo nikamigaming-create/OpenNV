@@ -8,7 +8,8 @@ FNV Test shortcut is advanced and all older packages remain intact.
 
 The larger candidate now joins selected contributor parser, real binary buffer,
 OS metadata, shared loaded-file lifetime, callable binary members and selected
-UCRT streams at managed/native protocol 11. C#,
+UCRT streams, all sixteen real Windows profile entries and winning/private
+directory enumeration at managed/native protocol 12. C#,
 x86 Debug and the joined source contract project compile. Complete BSFile/CRT,
 original DLL execution and native source-state cold gameplay remain unverified
 or unowned; source save admission remains refused. This is not complete-game
@@ -17,7 +18,14 @@ variadic output, source/private route, errno/stream status and lifetime results.
 Runtime/script/native-probe and x86 Debug compilation pass with zero warnings/errors.
 Protocol-11 authored fault/domain/arena execution passes with unchanged inputs;
 that lane contains no selected CRT file import or original DLL compatibility.
-Actual CRT stream execution remains pending.
+The actual authored /MD public-NVSE lane now passes Query/Load, six genuine FILE
+lifetimes, native partial reads and formatted output, seek/append, private config,
+tombstone/missing errors, narrow/wide directories and orderly child/provider
+retirement in its restricted child. Every selected input hash is unchanged.
+Child-token default object ownership, independent PE reader cursors and mapped
+provider kernel identity repair reached startup/admission defects. Original ACLs
+and full input AccessCheck are unchanged. Profile/directory caller execution,
+private desktop, the full negative CRT matrix and original DLL behavior remain open.
 
 Actor detection/cache state, the actual four-tier process cohort/scheduler and
 selected constructor-registration inputs are integrated into the large candidate.
@@ -26,20 +34,29 @@ cold validation and retirement share those owners. The runtime and script-contra
 project compile in Debug with zero warnings/errors. Their source contracts and
 ordinary gameplay have not run. Actual AI state and native CELL lifecycle are now
 integrated with mandatory current capture and cold validation. Complete process
-election/transfer, light/pair and original frame consumers remain required; body presence cannot
+Main/Player/life inputs, Low-to-High common transfer and source NIF/BPTD body leases
+now join actual factory/capture/cold/retirement. Runtime Debug and runtime/probe
+Release compile cleanly, and focused process-runtime contracts pass in both.
+Whole Main, general processing tree/CELL Extra9, travel completion, middle-field
+transfer, light/pair and original frame consumers remain required; body presence cannot
 establish a High process or completed detection frame.
 
 Source sleep/wait, rest admission, furniture publication, save-queue ownership,
 cumulative world time, interface fades and rest sound lifetimes are integrated.
 Current capture and cold validation retain the same owners. The combined runtime,
-script-contract project and protocol-11 x86 Debug companion compile with zero
+script-contract project and protocol-12 x86 Debug companion compile with zero
 warnings/errors. Exact finite source WAV cues now use the actual shared native
 sound host and perform no selector/RNG draw. Raw directories, random playback,
 unsupported codecs and source drift refuse before native allocation. The current
 sound snapshot retains source/playback history. Focused cue and rest-host
 contracts pass in Debug/Release; callbacks in that lane are authored. Actual
 audio, random/folder selection, hourly world/effect, console and interface-clock
-producers and ordinary sleep/wait remain open.
+producers and ordinary sleep/wait remain open. Independent counting state and
+ordered action/slider target writes now enter before player hours. Native menu
+views read fresh source declarations; mandatory current snapshots retain actual
+publication prefixes and cold never replays Start. Focused counting contracts
+pass in Debug/Release; current sleep/wait and rest-host Release contracts pass.
+Actual native counting publication and world-hour gameplay remain unexecuted.
 
 The current greenfield integration candidate adds compiled startup/query/effect
 owners, player package result execution, typed NIF physics and particle families,

@@ -127,6 +127,35 @@ void crt_prepare(PluginIoRuntime& io, Reader& reader) {
     }
     owner->providers.push_back(std::move(provider)); io.crt = std::move(owner);
 }
+void crt_require_provider_file(const std::wstring& selected, const wchar_t* mapped) {
+    HANDLE selected_file = INVALID_HANDLE_VALUE, mapped_file = INVALID_HANDLE_VALUE;
+    try {
+        // WOW64/API-set loading can report another path spelling for the same
+        // backed provider. Its retained source is a file identity, not spelling.
+        selected_file = CreateFileW(io_native_path(selected).c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (selected_file == INVALID_HANDLE_VALUE) throw Fatal(GetLastError(), "Selected CRT provider file identity is unavailable.");
+        mapped_file = CreateFileW(io_native_path(mapped).c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (mapped_file == INVALID_HANDLE_VALUE) throw Fatal(GetLastError(), "Mapped CRT provider file identity is unavailable.");
+        BY_HANDLE_FILE_INFORMATION expected{}, actual{};
+        if (!GetFileInformationByHandle(selected_file, &expected) || !GetFileInformationByHandle(mapped_file, &actual))
+            throw Fatal(GetLastError(), "CRT provider has no actual kernel file identity.");
+        if (expected.dwVolumeSerialNumber != actual.dwVolumeSerialNumber || expected.nFileIndexHigh != actual.nFileIndexHigh ||
+            expected.nFileIndexLow != actual.nFileIndexLow || expected.nFileSizeHigh != actual.nFileSizeHigh ||
+            expected.nFileSizeLow != actual.nFileSizeLow || CompareFileTime(&expected.ftLastWriteTime, &actual.ftLastWriteTime) != 0)
+            throw Fatal(ERROR_INVALID_DATA, "Mapped CRT provider differs from its retained exact selected source file.");
+        const auto mapped_closed = CloseHandle(mapped_file); mapped_file = INVALID_HANDLE_VALUE;
+        const auto mapped_error = mapped_closed ? ERROR_SUCCESS : GetLastError();
+        const auto selected_closed = CloseHandle(selected_file); selected_file = INVALID_HANDLE_VALUE;
+        const auto selected_error = selected_closed ? ERROR_SUCCESS : GetLastError();
+        if (!mapped_closed || !selected_closed) throw Fatal(mapped_error ? mapped_error : selected_error, "CRT provider identity handles did not retire.");
+    } catch (...) {
+        if (mapped_file != INVALID_HANDLE_VALUE) CloseHandle(mapped_file);
+        if (selected_file != INVALID_HANDLE_VALUE) CloseHandle(selected_file);
+        throw;
+    }
+}
 void* crt_import_entry(const std::string& library, const std::string& name, void* actual_import) {
     if (!io_owner().crt) return nullptr;
     auto& provider = *crt_owner().providers.at(0); const auto declaration = provider.imports.find(library);
@@ -140,11 +169,11 @@ void* crt_import_entry(const std::string& library, const std::string& name, void
     // throw. Terminal cleanup must still know which module reference it owns.
     if (!provider.retained) provider.retained = actual_module;
     std::vector<wchar_t> path(32768); const auto count = GetModuleFileNameW(actual_module, path.data(), static_cast<DWORD>(path.size()));
-    if (!count || count >= path.size() || CompareStringOrdinal(path.data(), static_cast<int>(count), provider.path.c_str(), -1, TRUE) != CSTR_EQUAL ||
-        reinterpret_cast<void*>(GetProcAddress(actual_module, name.c_str())) != actual_import ||
-        provider.retained != actual_module) {
+    if (!count || count >= path.size()) throw Fatal(GetLastError(), "Mapped CRT provider path is unavailable or truncated.");
+    crt_require_provider_file(provider.path, path.data());
+    if (reinterpret_cast<void*>(GetProcAddress(actual_module, name.c_str())) != actual_import || provider.retained != actual_module) {
         const auto failure = GetLastError();
-        throw Fatal(failure ? failure : ERROR_INVALID_DATA, "CRT import provider/path/export identity differs from its exact selected source.");
+        throw Fatal(failure ? failure : ERROR_INVALID_DATA, "CRT import export/pointer differs from its exact retained provider image.");
     }
     // Resolve genuine status/lifetime exports before any original FILE is
     // returned. The caller-selected provider is never substituted with our CRT.

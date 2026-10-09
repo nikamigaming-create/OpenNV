@@ -154,7 +154,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         RequireRestCuePublication().PlayStart(request);
         (_restAutoSave ?? throw new NotSupportedException("Actual rest autosave owner is absent.")).RequestBeforeCountdown(request);
         SourceRestInterface.BeforeMenuPlayerHours(request);
-        RequireCampaignRestConsumers("native-counting-controls").BeginNativeCounting(request);
+        BeginCurrentSourceRestCounting(request);
     }
     private void ApplyCampaignRestPrelude(FalloutRestHour hour) =>
         RequireCampaignRestConsumers("hour-prelude-hardcore-and-source-world").HourPrelude(hour);

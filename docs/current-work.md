@@ -22,9 +22,9 @@ C# owns formats/gameplay/persistence and Godot adapts presentation/input/OpenXR.
 | Owner | Active implementation |
 | --- | --- |
 | Primary | Frozen packet integration, actual driver/coordinator/capture/lifecycle joins, retained source-data failures and combined compilation/publication |
-| active_radio_save | Menu projection packet frozen; actual rest RNG, restrictions and hourly world/effect producers |
-| fo3_special_book | Selected Player/Main tier inputs, genuine process-tree membership and common process transfer |
-| scope_plugin_audit | UCRT stream packet frozen; selected profile imports and winning directory enumeration |
+| active_radio_save | Source miscellaneous statistics, challenge events and Stats-menu consumers; remaining rest/hourly world producers |
+| fo3_special_book | Genuine queued-reference processing tree, CELL ExtraData9 and known-null native-body ownership |
+| scope_plugin_audit | Actual binary-range/cursor reconstruction, native delivery barriers and retained source cold admission |
 
 The three parallel owners submit immutable first-party source proposals. Primary
 alone controls tracked integration, builds, native/game processes, input, saves
@@ -41,8 +41,10 @@ with every CI check passing. Preserve this delivered package while
 integrating the larger current/compiled candidate; it is not campaign completion.
 SourceFiles18 and LoadedFiles13 now share the actual selected contributor parser,
 binary buffer, metadata and retained source lifetime. The integrated binary-member
-owner and selected UCRT streams now use managed/native protocol 11. C#, x86 Debug and the joined source
-contract project compile with zero warnings/errors. The separate
+owner, selected UCRT streams, all sixteen Windows profile entries and actual
+directory-search handles now use managed/native protocol 12. The profile and
+directory adapters use the actual winning source roots and private write owners.
+C#, x86 Debug and the joined source contract project compile with zero warnings/errors. The separate
 parser-only cache is removed. Native child closure precedes source collection
 retirement, and cleanup failures remain retained on repeated calls. Complete
 BSFile/CRT, original DLL behavior and current native source-topology persistence
@@ -60,12 +62,35 @@ random requests refused before native allocation; current cold cue state retains
 the source/playback identity without fabricating a random stream. Combined Debug
 runtime compilation and focused Debug/Release cue/rest-host contracts pass. Hourly
 world/effect, console and interface-clock producers remain unowned; ordinary rest
-and real cue audio have not run. Missing process election, common transfer, pair/light and original frame
-producers remain visible. Genuine selected-provider UCRT FILE streams, native
+and real cue audio have not run. Source Main/Player/life state, original Low-to-High
+common transfer, real NIF/BPTD node lookup and native-body leases are integrated
+with fresh/cold coordinator, driver, capture and retirement. Mandatory saves
+retain their actual current owners. Source sleep/wait counting and action/slider
+target writes now publish in original order before the player-hour writes;
+native views read fresh winning declarations and cold state never replays Start.
+Combined runtime Debug and runtime/probe Release compilation pass with zero
+warnings/errors. Focused process-runtime and counting contracts pass in both
+configurations; current sleep/wait and rest-host Release contracts also pass.
+Native process/body and counting publication remain unexecuted. Whole Main,
+general processing-tree/CELL Extra9, travel completion, shared middle fields,
+pair/light and original frame producers remain required.
+Genuine selected-provider UCRT FILE streams, native
 buffers/variadic output, source/private path decisions, actual error results and
 stream/provider retirement are integrated and compile. Protocol-11 authored
 fault/domain/arena execution passes; it exercises no selected CRT file import or
-original DLL compatibility. Actual CRT stream execution is next. The source-menu
+original DLL compatibility. The actual /MD authored public-NVSE fixture now
+passes Query/Load and six genuine FILE lifetimes in the restricted child. Partial
+reads, native buffers, seek/append, variadic output, configuration copy-on-write,
+tombstones, narrow/wide directories, missing errno/doserrno and orderly
+child/provider retirement execute successfully. Every selected input hash remains
+unchanged. Child-token-only default object security repairs startup; original
+input ACLs and their full AccessCheck remain unchanged. Metadata readers retain
+their own cursor and the mapped provider matches the retained kernel file identity
+across WOW64 path spellings. Long paths and private module CWD are repaired;
+real child exits are retained without inventing retirement failures for an already
+exited process. Profile/directory caller execution, private desktop, the full
+negative CRT matrix and original plugin behavior remain required.
+The source-menu
 shortcut/projection slice has passed its required gate and selected FNV/FO3 source
 audits and is merged as PR 183 on origin/main at
 `1b159f3b9e00333eb926f3d1a7b19cd52f055175` with every CI check passing.
@@ -221,7 +246,9 @@ verified component boundaries and original failures.
 
 ## Next integration and publication
 
-Continue original sleep/wait/time/effect ownership, plugin object/method ownership,
+Continue native profile/directory caller execution and missing original plugin
+object/desktop ownership. Integrate the next statistics and queued-reference/CELL9
+owners against the current gameplay checkpoint. Continue original sleep/wait/time/effect ownership, plugin object/method ownership,
 combat-group/XP arbitration and retained general source-data failures
 without named-content shortcuts or fabricated readiness. Replace obsolete authored
 save fixtures with the current unified queue

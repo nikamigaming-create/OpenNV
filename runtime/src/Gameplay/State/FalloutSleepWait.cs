@@ -21,7 +21,7 @@ internal sealed record FalloutSleepWaitHost(
 
 // One current campaign owner for player Rest, source menu requests and original
 // signed hour writes. Godot consumes this state; it does not invent time/effects.
-internal sealed class FalloutSleepWait
+internal sealed partial class FalloutSleepWait
 {
     internal FalloutSleepWaitSource Source { get; }
     private readonly FalloutGameTime _clock;
@@ -41,6 +41,7 @@ internal sealed class FalloutSleepWait
     internal bool MenuPending { get; private set; }
     internal bool CompletionEffectsCommitted { get; private set; }
     private bool _busy;
+    private FalloutRestMenuControls? _menuControls;
     private ulong? _lastPlayerFrame;
     private string? _prefixReadFailure;
     private readonly List<FalloutRestNativeFailure> _nativeFailures = [];
@@ -50,8 +51,10 @@ internal sealed class FalloutSleepWait
     internal bool OwnsPhysicalSleepContinuation => Sleeping && Request is not null && (Active || MenuPending);
     internal object State => new { Source, RequestOrdinal, Attempt, Request, Phase, SelectedHours, RemainingHours,
         CommittedHours, Sleeping, Countdown, MenuPending, CompletionEffectsCommitted, LastHour, Failure, Published,
-        nativeFailures = _nativeFailures.ToArray(), prefixReadFailure = _prefixReadFailure, saveBlocker = SaveBlocker };
+        nativeFailures = _nativeFailures.ToArray(), menuControls = _menuControls?.State,
+        prefixReadFailure = _prefixReadFailure, saveBlocker = SaveBlocker };
     internal string? SaveBlocker => _busy ? "sleep-wait-operation-prefix" :
+        _menuControls?.SaveBlocker is { } controls ? controls :
         _prefixReadFailure is not null ? "sleep-wait-physical-prefix-unread" : null;
 
     internal FalloutSleepWait(FalloutSleepWaitSource source, FalloutGameTime clock, FalloutSleepWaitHost host,
@@ -68,6 +71,7 @@ internal sealed class FalloutSleepWait
         Sleeping = restore.Sleeping; Countdown = restore.Countdown; LastHour = restore.LastHour; Failure = restore.Failure;
         MenuPending = restore.MenuPending; CompletionEffectsCommitted = restore.CompletionEffectsCommitted;
         _nativeFailures.AddRange(restore.NativeFailures);
+        if (restore.MenuControls is { } controls) _menuControls = new(source, RequestOrdinal, controls);
         if ((OwnsClock || NeedsMenuPublication) && LastHour is { CalendarCommitted: true, After: { } after } && !_clock.Stamp().HasSameBits(after))
             throw new InvalidDataException("Cold rest hour differs from the actual restored global/calendar prefix.");
         // No process-local input/view lease survives cold, and no failed prefix
@@ -76,11 +80,15 @@ internal sealed class FalloutSleepWait
     internal FalloutRestAdmission Inspect(FalloutRestRequest request) => FalloutSleepWaitAdmission.Inspect(request, _host.Observe);
     internal void Open(FalloutRestRequest request)
     {
-        RequireHealthy(); if (Active || MenuPending) throw new InvalidOperationException("Another source rest request is active.");
+        RequireHealthy();
+        if (request.Origin == FalloutRestOrigin.ScriptHours)
+            throw new InvalidOperationException("The original signed player write requires SetScriptHours, not a native menu constructor.");
+        if (Active || MenuPending) throw new InvalidOperationException("Another source rest request is active.");
         Inspect(request).Require();
         RequestOrdinal = checked(RequestOrdinal + 1); Request = request; Phase = FalloutRestPhase.Choosing;
         SelectedHours = 1; RemainingHours = 0; CommittedHours = 0; Countdown = 0; LastHour = null; Published = false;
         MenuPending = true; CompletionEffectsCommitted = false;
+        _menuControls = new(Source, RequestOrdinal);
     }
     internal void Publish(long requestOrdinal)
     {
@@ -101,7 +109,13 @@ internal sealed class FalloutSleepWait
     {
         RequirePublished(); if (Phase != FalloutRestPhase.Choosing) throw new InvalidOperationException("Rest countdown has already begun.");
         Inspect(Request!).Require();
-        Execute(FalloutRestStep.MenuBegin, () => _host.BeginMenuCountdown(Request!));
+        Execute(FalloutRestStep.MenuBegin, () =>
+        {
+            _host.BeginMenuCountdown(Request!);
+            var controls = RequireCurrentMenuControls(); controls.RequireHealthy();
+            if (!controls.Counting || controls.TargetWrites != 2 || controls.NativePublications != 2)
+                throw new NotSupportedException("Rest Start has no actual original counting/target publication receipt.");
+        });
         WriteHours(SelectedHours, Request!.Kind == FalloutRestKind.Sleep);
         Execute(FalloutRestStep.MenuAfterPlayerHours, () => _host.AfterMenuPlayerHours(Request!));
         Phase = FalloutRestPhase.Running;
@@ -113,7 +127,7 @@ internal sealed class FalloutSleepWait
         {
             var request = new FalloutRestRequest(FalloutRestKind.Sleep, FalloutRestOrigin.ScriptHours);
             Inspect(request).Require(); RequestOrdinal = checked(RequestOrdinal + 1); Request = request;
-            CommittedHours = 0; Countdown = 0; LastHour = null; Published = false;
+            CommittedHours = 0; Countdown = 0; LastHour = null; Published = false; _menuControls = null;
             CompletionEffectsCommitted = false; MenuPending = false; SelectedHours = 1;
             Phase = FalloutRestPhase.Running;
         }
@@ -137,7 +151,9 @@ internal sealed class FalloutSleepWait
         RequireHealthy();
         if (!float.IsFinite(frameSeconds) || frameSeconds < 0) throw new ArgumentOutOfRangeException(nameof(frameSeconds));
         if (Phase != FalloutRestPhase.Running || Request?.Origin == FalloutRestOrigin.ScriptHours) return false;
-        RequirePublished();
+        RequirePublished(); RequireCurrentMenuControls().RequireHealthy();
+        if (!RequireCurrentMenuControls().Counting)
+            throw new InvalidDataException("Rest countdown has no committed source menu counting byte.");
         if (RemainingHours <= 0) { Cancel(); return false; }
         var next = Countdown + frameSeconds;
         if (!float.IsFinite(next)) throw new InvalidDataException("Source rest frame clock overflowed.");
@@ -260,7 +276,8 @@ internal sealed class FalloutSleepWait
     {
         if (SaveBlocker is { } blocker) throw new NotSupportedException("Capture requires " + blocker);
         var result = new FalloutSleepWaitSnapshot(Source, RequestOrdinal, Attempt, Request, Phase, SelectedHours,
-            RemainingHours, CommittedHours, Sleeping, Countdown, MenuPending, CompletionEffectsCommitted, LastHour, Failure, _nativeFailures.ToArray());
+            RemainingHours, CommittedHours, Sleeping, Countdown, MenuPending, CompletionEffectsCommitted, LastHour, Failure,
+            _nativeFailures.ToArray(), _menuControls?.Capture());
         result.Validate(); return result;
     }
 }
