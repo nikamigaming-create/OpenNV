@@ -51,7 +51,7 @@ internal static class LoadingScreenContracts
             File.WriteAllBytes(Path.Combine(directory, "Type.esp"), Join(Header("Screens.esm"), Record("LSCT", 0x500, Field("DATA", TipData(1)))));
             using (var bad = FalloutPluginStack.Load(directory, ["Screens.esm", "Type.esp"]))
                 Reject(() => FalloutLoadingScreenType.Tip(bad.GetEffective(Key(0x500))));
-            Console.WriteLine("OPENNV_LOADING_SCREEN_CONTRACT_PASS winning=true deleted=true directCell=true directWorld=true grid=true policy=true sharedScripts=true bootstrap=true cold=true legacyDefault=true invalidAtomic=true unsupportedVisible=true parity=unverified");
+            Console.WriteLine("OPENNV_LOADING_SCREEN_CONTRACT_PASS winning=true deleted=true directCell=true directWorld=true grid=true policy=true sharedScripts=true missingCompiledBootstrapRefused=true cold=true legacyDefault=true invalidAtomic=true unsupportedVisible=true parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }
     }
@@ -87,8 +87,10 @@ internal static class LoadingScreenContracts
             FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "00000630")]), quests, scripts, world,
             (_, _, _, _) => throw new InvalidDataException("Unexpected startup command."),
             _ => throw new InvalidDataException("Unexpected startup effect."), () => true);
-        bootstrap.Start();
-        Require(scripts.Session.LocationSpecificLoadScreensOnly, "Pre-world source result did not retain loading policy.");
+        try { bootstrap.Start(); throw new InvalidDataException("Startup admitted diagnostic SCTX without its original compiled result."); }
+        catch (NotSupportedException error) when (error.Message.Contains("original compiled program", StringComparison.Ordinal)) { }
+        Require(!scripts.Session.LocationSpecificLoadScreensOnly && quests.Variable(Key(0x601), 1) == 0,
+            "Rejected source-only bootstrap mutated loading policy or its suffix.");
     }
 
     private static uint[] Ids(IReadOnlyList<FalloutLoadingScreen> screens) => screens.Select(screen => screen.Identity.ObjectId).Order().ToArray();

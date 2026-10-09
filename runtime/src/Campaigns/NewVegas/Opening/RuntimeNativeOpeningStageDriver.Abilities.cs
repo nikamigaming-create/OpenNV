@@ -8,14 +8,24 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private FalloutPlayerAbilityScripts _playerAbilities = null!;
+    private bool _playerValueConstructionComplete;
+
+    internal void CompleteCurrentPlayerValueConstruction()
+    {
+        if (_playerValueConstructionComplete)
+            throw new InvalidOperationException("Current player value construction already completed.");
+        _playerAbilities.Synchronize();
+        _playerSkills.CompleteValueConstruction();
+        _ = Vitals;
+        _playerValueConstructionComplete = true;
+    }
 
     private void BindPlayerAbilityState(FalloutNativeCampaignRestore? restore, FalloutGameTime? gameTime)
     {
         if (restore is not null && (restore.State.PlayerSkillValues is null || restore.State.PlayerAbilityScripts is null))
             throw new InvalidDataException("Current gameplay restore requires complete player skill/effect authority.");
-        if (restore?.State.PlayerSkillValues is { } skills) _playerSkills.RestoreValues(skills);
         _playerAbilities = new(_pluginStack, _playerSkills.SelectedConstantEffects, _playerSkills.AbilityCondition,
-            restore?.State.PlayerAbilityScripts, restore?.OriginalAbilityAdmission);
+            restore?.State.PlayerAbilityScripts);
         var executor = new FalloutReferenceScripts(_pluginStack, _scripts.References!, _quests,
             new(AbilityCurrentFurniture, ApplyReferenceEffect, _scripts.MessageResults.Take,
                 actor => (_speech ?? throw new NotSupportedException("Ability speech query requires initialized native speech.")).IsTalking(actor),
@@ -31,8 +41,8 @@ internal partial class RuntimeNativeOpeningStageDriver
                 ResetPlayerHealth: () => (_vitals ?? throw new NotSupportedException("Ability ResetHealth requires initialized player vitals.")).ResetHealth(),
                 CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills, IsInCell: IsInCell,
                 IsHardcore: () => _scripts.Session.Hardcore,
-                RewardXp: value => (_experience ?? throw new NotSupportedException("Ability XP command requires initialized experience.")).Reward(value),
-                GameTime: gameTime));
+                RewardXp: RewardPlayerExperience,
+                GameTime: gameTime, Statistics: PlayerStatistics));
         _playerAbilities.BindExecutor(executor.ExecuteActiveEffect);
         _playerSkills.BindAbilityScripts(_playerAbilities);
         _playerActorValues.BindAbilityLifecycle(_playerAbilities.Synchronize);
@@ -43,10 +53,5 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (_pluginStack.RuntimeFormId(actor) == 0x14) return _player.CurrentFurniture == furniture;
         return GetTree().Root.FindChildren("*", "", true, false).OfType<RuntimeNativeNpc>()
             .Single(npc => npc.Appearance.Reference == actor).CurrentFurniture == furniture;
-    }
-    private void ChangePlayerActorValue(string name, string operation, double value)
-    {
-        if (_playerSkills.IsSkill(name)) _playerSkills.ChangeSkill(name, operation, value);
-        else _playerActorValues.Change(name, operation, value);
     }
 }

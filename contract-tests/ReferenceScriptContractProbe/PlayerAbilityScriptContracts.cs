@@ -6,7 +6,7 @@ using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.World.Actors;
 
-internal static class PlayerAbilityScriptContracts
+internal static partial class PlayerAbilityScriptContracts
 {
     private const string Plugin = "Effects.esm";
     private static readonly string[] SkillIds = ["Barter", "EnergyWeapons", "Explosives", "Lockpick", "Medicine",
@@ -20,11 +20,11 @@ internal static class PlayerAbilityScriptContracts
         {
             CheckHeaderLayout();
             foreach (var duplicate in new[] { false, true }) CheckStartCold(directory, duplicate);
-            CheckOriginalAdmissionStart(directory);
             CheckCompiledExtentMismatch(directory);
             CheckPrefixFailure(directory);
-            CheckUnsupportedEvent(directory);
-            Console.WriteLine("OPENNV_PLAYER_ABILITY_SCRIPT_START_PASS sourceReader=true unequalHeaderCounts=true compiledExtentRefused=true effectLocals=true genuinePlayer=true independentEffects=true prefixFailure=true cold=true nonStartRefused=true compiledExecution=unverified parity=unverified");
+            CheckUpdateRequiresClockMutation(directory);
+            CheckCompiledAbilityAuthority(directory);
+            Console.WriteLine("OPENNV_PLAYER_ABILITY_SCRIPT_START_PASS sourceReader=true unequalHeaderCounts=true compiledExtentRefused=true effectLocals=true genuinePlayer=true independentEffects=true prefixFailure=true cold=true uncommittedFrameRefused=true compiledExecution=authoritative_SCDA parity=unverified");
         }
         finally
         {
@@ -84,8 +84,9 @@ internal static class PlayerAbilityScriptContracts
         var savedEffects = JsonSerializer.Deserialize<FalloutPlayerAbilityScriptsSnapshot>(JsonSerializer.Serialize(effects.Capture()))!;
         using var coldWorld = new FalloutReferenceWorld(records);
         var coldActor = new FalloutPlayerActorValues(records, actor.Capture());
-        var coldSkills = Skills(records, coldActor); coldSkills.RestoreValues(savedSkills);
+        var coldSkills = Skills(records, coldActor);
         var coldEffects = Bind(records, coldWorld, coldActor, coldSkills, savedEffects);
+        coldSkills.RestoreValues(savedSkills);
         Require(coldActor.ReadPermanent(7) == 5 && coldSkills.ReadSkill("Barter", FalloutActorValueRead.Current) == 15 + amount &&
             JsonSerializer.Serialize(coldEffects.Capture()) == JsonSerializer.Serialize(savedEffects) && coldWorld.InstanceCount == 0,
             "Cold effect locals/source identity were lost or the committed skill mutation was applied twice.");
@@ -113,63 +114,43 @@ internal static class PlayerAbilityScriptContracts
         Reject(effects.Synchronize);
         var state = effects.Capture().Effects.Single();
         Require(!state.Started && state.Error is not null && BitConverter.UInt64BitsToDouble(state.Locals.Single().Payload) == 1 &&
-            skills.CaptureValues().Pools[32].Permanent == 3 && world.InstanceCount == 0,
-            "Failed Start lost its actual local/skill prefix or marked the script complete.");
+            skills.CaptureValues().Pools[32].Permanent == 3 && world.InstanceCount == 0 && state.Compiled!.Events is
+                [{ Cursor.CommittedInstructions: 3, Receipt.Disposition: "closed-failure", LastReachedOffset: not null }],
+            "Failed Start lost its actual local/skill/compiled prefix or marked the script complete.");
         var prefix = JsonSerializer.Serialize(skills.CaptureValues());
         Reject(effects.Synchronize);
         Require(JsonSerializer.Serialize(skills.CaptureValues()) == prefix, "A retained failed Start replayed its committed prefix.");
         var saved = JsonSerializer.Deserialize<FalloutPlayerAbilityScriptsSnapshot>(JsonSerializer.Serialize(effects.Capture()))!;
         var restored = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, saved);
-        restored.BindExecutor((_, _, _, _) => throw new InvalidOperationException("Failed cold Start must not execute."));
+        restored.BindExecutor(_ => throw new InvalidOperationException("Failed cold Start must not execute."));
         Reject(restored.Synchronize);
     }
 
-    private static void CheckOriginalAdmissionStart(string directory)
-    {
-        File.WriteAllBytes(Path.Combine(directory, Plugin), Fixture(false));
-        using var records = FalloutPluginStack.Load(directory, [Plugin]);
-        using var world = new FalloutReferenceWorld(records);
-        var actor = new FalloutPlayerActorValues(records);
-        var original = new FalloutNativeCampaignState(FalloutNativeCampaignSave.BeforeAbilityScriptsSchema,
-            "authored-source", Key(0x800), "AuthoredQuest", 0, "Authored Player", null!, actor.BaseSpecial,
-            [], [], [], [], [], [], [], PlayerActorValues: actor.Capture());
-        var receipt = FalloutPlayerAbilitySaveAdmission.FromOriginalHeader(original)!;
-        var current = receipt.CompleteOriginalRead(original with { Schema = FalloutNativeCampaignSave.ExpectedSchema }, records);
-        var skills = Skills(records, actor);
-        skills.RestoreValues(current.PlayerSkillValues!);
-        Reject(() => new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition,
-            current.PlayerAbilityScripts));
-        var effects = Bind(records, world, actor, skills, current.PlayerAbilityScripts, receipt);
-        effects.Synchronize();
-        Require(effects.Capture().Effects is [{ Started: true, Generation: 1 }] &&
-            skills.ReadSkill("Barter", FalloutActorValueRead.Permanent) == 18,
-            "The exact source-proven original admission failed to run its first real ability instance.");
-        effects.Synchronize();
-        Require(skills.ReadSkill("Barter", FalloutActorValueRead.Permanent) == 18,
-            "Original admission reapplied its completed effect prefix.");
-    }
-
-    private static void CheckUnsupportedEvent(string directory)
+    private static void CheckUpdateRequiresClockMutation(string directory)
     {
         File.WriteAllBytes(Path.Combine(directory, Plugin), Fixture(false, update: true));
         using var records = FalloutPluginStack.Load(directory, [Plugin]);
         using var world = new FalloutReferenceWorld(records);
         var actor = new FalloutPlayerActorValues(records); var skills = Skills(records, actor);
         var effects = Bind(records, world, actor, skills);
-        Reject(effects.Synchronize);
-        Require(skills.CaptureValues().Pools.Count == 0 && world.InstanceCount == 0,
-            "Unowned Update was skipped after a successful-looking Start.");
+        effects.Synchronize();
+        effects.Synchronize();
+        Reject(effects.AdvanceFromCurrentSourceFrame);
+        var state = effects.Capture().Effects.Single();
+        Require(skills.CaptureValues().Pools[32].Permanent == 3 && world.InstanceCount == 0 &&
+            state.Started && state.Error is null && state.Compiled!.Events.Count(row => row.Attempted) == 1 && state.Timeline!.ElapsedBits == 0,
+            "Ordinary getters or an uncommitted frame produced Update or lost the genuine Start prefix.");
     }
 
     private static FalloutPlayerSkills Skills(FalloutPluginStack records, FalloutPlayerActorValues actor) => new(records,
         () => actor.BaseSpecial, _ => false, () => [], null, new FalloutPlayerInventory(), Key(7), () => Key(10), () => false,
         actorValues: actor);
     private static FalloutPlayerAbilityScripts Bind(FalloutPluginStack records, FalloutReferenceWorld world,
-        FalloutPlayerActorValues actor, FalloutPlayerSkills skills, FalloutPlayerAbilityScriptsSnapshot? restore = null,
-        FalloutPlayerAbilitySaveAdmission? originalAdmission = null)
+        FalloutPlayerActorValues actor, FalloutPlayerSkills skills, FalloutPlayerAbilityScriptsSnapshot? restore = null, FalloutQuestState? quests = null)
     {
-        var effects = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, restore, originalAdmission);
-        var executor = new FalloutReferenceScripts(records, world, new FalloutQuestState(records),
+        var effects = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, restore);
+        BindAbilityClock(records, effects, restore?.Clock);
+        var executor = new FalloutReferenceScripts(records, world, quests ?? new FalloutQuestState(records),
             new((_, _) => throw new NotSupportedException("Unexpected fixture furniture query."),
                 _ => throw new NotSupportedException("Unexpected fixture presentation command."),
                 ReadActorValue: (reference, name, kind) =>
@@ -186,16 +167,16 @@ internal static class PlayerAbilityScriptContracts
         return effects;
     }
 
-    private static byte[] Fixture(bool duplicate, bool failure = false, bool update = false, uint? declaredCompiledBytes = null, int compiledBytes = 7)
+    private static byte[] Fixture(bool duplicate, bool failure = false, bool update = false, uint? declaredCompiledBytes = null, int? compiledBytes = null)
     {
         var acbs = new byte[24]; acbs[8] = 1;
         var spit = new byte[16]; UInt(spit, 0, 4);
         var mgef = new byte[72]; UInt(mgef, 0, 0x70); UInt(mgef, 8, 0x30); UInt(mgef, 64, 1);
         var efit = new byte[20]; BinaryPrimitives.WriteInt32LittleEndian(efit.AsSpan(16), -1);
         var local = new byte[24]; UInt(local, 0, 1); local[16] = 1;
-        // Authored source and its separately retained compiled extent. This
-        // source-owner probe makes no bytecode execution acceptance assertion.
-        var compiled = new byte[compiledBytes];
+        // Independent canonical SCDA drives actual execution. SCTX is retained
+        // only as contradictory/invalid diagnostic evidence in additional cases.
+        var compiled = compiledBytes is { } extent ? new byte[extent] : CompiledAbilityBody(failure, update);
         var schr = new byte[20]; UInt(schr, 0, 13); UInt(schr, 4, 2);
         UInt(schr, 8, declaredCompiledBytes ?? (uint)compiled.Length); UInt(schr, 12, 1);
         BinaryPrimitives.WriteUInt16LittleEndian(schr.AsSpan(16), 0x100); schr[18] = 1;

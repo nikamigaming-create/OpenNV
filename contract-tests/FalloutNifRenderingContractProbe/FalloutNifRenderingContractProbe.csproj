@@ -22,6 +22,8 @@
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifTextureAddressing.cs" Link="FalloutNifTextureAddressing.cs" />
     <Compile Include="..\..\runtime\src\Formats\Gamebryo\FalloutNifAlpha.cs" Link="FalloutNifAlpha.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutBsaArchive.SourceDirectory.cs" Link="FalloutBsaArchive.SourceDirectory.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutArchiveNameHash.cs" Link="FalloutArchiveNameHash.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
   </ItemGroup>
 </Project>

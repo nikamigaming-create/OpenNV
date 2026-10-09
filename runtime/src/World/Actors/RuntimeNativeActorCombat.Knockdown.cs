@@ -12,6 +12,13 @@ internal sealed partial class RuntimeNativeActorCombat
     private FalloutHitReactionTree? _recoveryTree;
     private readonly Dictionary<CollisionObject3D, (uint Layer, uint Mask)> _knockdownFilters = [];
     internal bool KnockedDown => _state.KnockedDown;
+    internal int GetKnockedState()
+    {
+        if (!IsInsideTree() || Error is not null || _hitReactionError is not null ||
+            KnockedDown && _state.HitReaction is null && _ragdoll is not { Active: true })
+            throw new NotSupportedException("Actor knocked-state query has no healthy actual native continuation.");
+        return KnockedDown ? 1 : 0;
+    }
 
     internal void ApplyExplosionPhysics(FalloutExplosion explosion, FalloutActorHit hit, Vector3 center, bool push)
     {
@@ -39,7 +46,7 @@ internal sealed partial class RuntimeNativeActorCombat
         return _recoveryTree.Select(condition => condition.Function switch
         {
             106 => faceUp ? 1 : 0,
-            107 => 2,
+            107 => 1,
             _ => HitReactionCondition(condition, -1)
         }) ?? throw new NotSupportedException("Knocked-down actor has no source recovery IDLE.");
     }

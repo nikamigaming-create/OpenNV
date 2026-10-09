@@ -25,10 +25,7 @@ public partial class NativeActorPerformanceAudit
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
             var opening = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-            var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records,
-                FalloutNativeVigorResolver.Resolve(records, opening), FalloutNativeTagSkillResolver.Resolve(records, controls),
-                FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
-                FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening)).State;
+            var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records).State;
             var identity = actorId.Split(':');
             if (identity.Length != 2) throw new ArgumentException("Attack fixture requires plugin:hex-object-id.");
             var caller = new FalloutFormKey(identity[0], Convert.ToUInt32(identity[1], 16));

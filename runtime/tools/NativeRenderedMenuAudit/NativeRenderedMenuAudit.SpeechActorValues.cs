@@ -73,7 +73,7 @@ public partial class NativeRenderedMenuAudit
             speech.PrepareSubtitle = _ => { };
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
                 _ => throw new InvalidDataException("The isolated user-value response invented an unrelated stage effect.")));
-            speech.ExecuteResults = scripts.ExecuteResult;
+            speech.ExecuteOwnedResults = scripts.ExecuteResultOwned;
             var completions = 0;
             speech.SayToCompleted += receipt =>
             {

@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <cstdlib>
 #include "../../runtime/native/plugins/opennv_plugin_domain.h"
+#include "../../runtime/native/plugins/opennv_plugin_guest.h"
 
 using namespace opennv_domain;
 extern "C" __declspec(dllimport) std::uint32_t __cdecl OpenNvDependencyAdd(std::uint32_t, std::uint32_t);
@@ -13,6 +14,9 @@ std::uint32_t tls_attach = 0, dll_attach = 0, order = 0, tls_order = 0, dll_orde
 std::uint32_t receiver = 0x1234;
 HostCallbacks callbacks{};
 ModuleLifetime* receipt = nullptr;
+const GuestStateView* remembered_object = nullptr;
+GuestCdeclQuery remembered_query = nullptr;
+bool query_on_detach = false;
 void entered() { if (receipt) ++receipt->calls; }
 }
 
@@ -32,7 +36,10 @@ BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
         return FALSE;
 #endif
     }
-    else if (reason == DLL_PROCESS_DETACH && receipt) ++receipt->dll_detach;
+    else if (reason == DLL_PROCESS_DETACH && receipt) {
+        ++receipt->dll_detach;
+        if (query_on_detach && remembered_query) remembered_query(remembered_object, 1, 0);
+    }
     return TRUE;
 }
 
@@ -108,6 +115,77 @@ extern "C" std::uint32_t __cdecl OpenNvForeignCallback(std::uint32_t first, std:
 }
 
 namespace {
+GuestCdeclQuery guest_cdecl(const GuestStateView* view) {
+    if (view->magic != guest_state_magic || view->version != guest_state_version || view->size != sizeof(GuestStateView))
+        RaiseException(0xe04e5610U, 0, 0, nullptr);
+    return reinterpret_cast<GuestCdeclQuery>(static_cast<std::uintptr_t>(view->cdecl_query));
+}
+}
+extern "C" std::uint32_t __cdecl OpenNvGuestReadDword(std::uint32_t pointer, std::uint32_t offset) {
+    entered(); return *reinterpret_cast<const std::uint32_t*>(static_cast<std::uintptr_t>(pointer) + offset);
+}
+extern "C" std::uint32_t __cdecl OpenNvGuestWriteDword(std::uint32_t pointer, std::uint32_t value) {
+    entered(); auto* target = reinterpret_cast<std::uint32_t*>(static_cast<std::uintptr_t>(pointer));
+    const auto previous = *target; *target = value; return previous;
+}
+extern "C" std::uint32_t __cdecl OpenNvGuestQueryCdecl(std::uint32_t pointer, std::uint32_t argument) {
+    entered(); ++receipt->callbacks;
+    const auto* view = reinterpret_cast<const GuestStateView*>(static_cast<std::uintptr_t>(pointer));
+    return guest_cdecl(view)(view, 1, argument);
+}
+extern "C" std::uint32_t __stdcall OpenNvGuestDamageStdcall(std::uint32_t pointer, std::uint32_t argument) {
+    entered(); ++receipt->callbacks;
+    const auto* view = reinterpret_cast<const GuestStateView*>(static_cast<std::uintptr_t>(pointer));
+    const auto query = reinterpret_cast<GuestStdcallQuery>(static_cast<std::uintptr_t>(view->stdcall_query));
+    return query(view, 2, argument);
+}
+extern "C" __declspec(naked) std::uint32_t OpenNvGuestQueryThiscall() {
+    __asm {
+        mov edx, receipt
+        inc dword ptr [edx + 32]
+        inc dword ptr [edx + 36]
+        mov ecx, [esp + 4]
+        mov eax, [ecx + 24]
+        push [esp + 8]
+        push 1
+        call eax
+        ret
+    }
+}
+extern "C" std::uint32_t __cdecl OpenNvGuestReenter(std::uint32_t pointer, std::uint32_t argument) {
+    entered(); ++receipt->callbacks;
+    const auto* view = reinterpret_cast<const GuestStateView*>(static_cast<std::uintptr_t>(pointer));
+    const auto result = guest_cdecl(view)(view, 3, argument);
+    return result ^ *reinterpret_cast<const std::uint32_t*>(static_cast<std::uintptr_t>(argument));
+}
+extern "C" std::uint32_t __cdecl OpenNvGuestRemember(std::uint32_t pointer, std::uint32_t) {
+    entered(); remembered_object = reinterpret_cast<const GuestStateView*>(static_cast<std::uintptr_t>(pointer));
+    remembered_query = guest_cdecl(remembered_object); return 1;
+}
+extern "C" std::uint32_t __cdecl OpenNvGuestUseRemembered(std::uint32_t, std::uint32_t argument) {
+    entered(); ++receipt->callbacks;
+    return remembered_query(remembered_object, 1, argument);
+}
+extern "C" std::uint32_t __cdecl OpenNvGuestQueryOnDetach(std::uint32_t pointer, std::uint32_t) {
+    entered(); remembered_object = reinterpret_cast<const GuestStateView*>(static_cast<std::uintptr_t>(pointer));
+    remembered_query = guest_cdecl(remembered_object); query_on_detach = true; return 1;
+}
+// Deliberate native ownership violations stay in this authored negative fixture.
+extern "C" std::uint32_t __cdecl OpenNvGuestSetReadOnly(std::uint32_t pointer, std::uint32_t) {
+    entered(); DWORD previous = 0;
+    if (!VirtualProtect(reinterpret_cast<void*>(static_cast<std::uintptr_t>(pointer)), sizeof(std::uint32_t), PAGE_READONLY, &previous))
+        RaiseException(0xe04e5611U, 0, 0, nullptr);
+    return previous;
+}
+extern "C" std::uint32_t __cdecl OpenNvGuestTamperState(std::uint32_t pointer, std::uint32_t) {
+    entered(); auto* view = reinterpret_cast<GuestStateView*>(static_cast<std::uintptr_t>(pointer));
+    DWORD previous = 0, restored = 0;
+    if (!VirtualProtect(view, sizeof(*view), PAGE_READWRITE, &previous)) RaiseException(0xe04e5612U, 0, 0, nullptr);
+    view->capability ^= 1;
+    if (!VirtualProtect(view, sizeof(*view), previous, &restored)) RaiseException(0xe04e5613U, 0, 0, nullptr);
+    return 1;
+}
+namespace {
 const ExportContract exports[] = {
     {"OpenNvScalarCdecl", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvScalarCdecl)},
     {"OpenNvScalarStdcall", Abi::stdcall_call, reinterpret_cast<void*>(OpenNvScalarStdcall)},
@@ -122,6 +200,17 @@ const ExportContract exports[] = {
     {"OpenNvRaise", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvRaise)},
     {"OpenNvHang", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvHang)},
     {"OpenNvForeignCallback", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvForeignCallback)},
+    {"OpenNvGuestReadDword", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestReadDword)},
+    {"OpenNvGuestWriteDword", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestWriteDword)},
+    {"OpenNvGuestQueryCdecl", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestQueryCdecl)},
+    {"OpenNvGuestDamageStdcall", Abi::stdcall_call, reinterpret_cast<void*>(OpenNvGuestDamageStdcall)},
+    {"OpenNvGuestQueryThiscall", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestQueryThiscall)},
+    {"OpenNvGuestReenter", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestReenter)},
+    {"OpenNvGuestRemember", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestRemember)},
+    {"OpenNvGuestUseRemembered", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestUseRemembered)},
+    {"OpenNvGuestQueryOnDetach", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestQueryOnDetach)},
+    {"OpenNvGuestSetReadOnly", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestSetReadOnly)},
+    {"OpenNvGuestTamperState", Abi::cdecl_call, reinterpret_cast<void*>(OpenNvGuestTamperState)},
 };
 const AuthoredModuleContract contract{sizeof(AuthoredModuleContract), 1, module_magic, _countof(exports), exports, &receiver};
 }

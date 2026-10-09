@@ -9,7 +9,7 @@ public partial class RuntimeCoordinator
     private void LoadGodotLauncher()
     {
         var launcher = new NativeGodotLauncher();
-        launcher.Configure();
+        launcher.Configure(GodotLauncherProfileStore.Load(_options.GetValueOrDefault("profile-root")));
         launcher.LaunchRequested += request => StartInProcessLaunch(launcher, request);
         AddChild(launcher);
         SetMeta("opennv_product_entry", "godot-native-launcher-v1");
@@ -76,5 +76,14 @@ public partial class RuntimeCoordinator
     {
         var mod = FalloutModStackSelection.ReadOptions(_options)?.Resolve(baseRoot);
         RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), mod?.ActivePlugins, mod?.Settings);
+        var dependency = mod?.Dependencies.SingleOrDefault(row =>
+            row.LogicalPath.Equals("nvse_1_4.dll", StringComparison.OrdinalIgnoreCase));
+        if (dependency?.SourcePath is { } host)
+        {
+            var source = RuntimeLiveContentSource.Current ??
+                throw new InvalidOperationException("Selected native dependency has no configured content owner.");
+            source.BindNativePluginHostDependency(new(host,
+                "actual-launcher-selected-stack-dependency:" + source.StackId));
+        }
     }
 }

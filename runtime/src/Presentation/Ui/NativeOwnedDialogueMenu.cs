@@ -33,7 +33,7 @@ internal partial class NativeOwnedDialogueMenu : Control
         _tiles.Bind(menu, "_DialogVisible", 1); _tiles.Bind(menu, "_ShowSubtitles", 1);
         _tiles.Bind(_scrollbar, "_current_value", 0);
         _tiles.Bind(_list, "_scrollbar_vis", 0);
-        _skip = new Button { Flat = true, MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.None };
+        _skip = new Button { Flat = true, MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.All };
         _skip.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         _skip.Pressed += () => { if (!_submitted) { _submitted = true; skip(); } };
         AddChild(_skip);
@@ -58,6 +58,11 @@ internal partial class NativeOwnedDialogueMenu : Control
         _skip.Visible = speaking;
         Visible = true;
         Layout();
+        if (speaking && !_faulted) Callable.From(() =>
+        {
+            if (GodotObject.IsInstanceValid(_skip) && IsInsideTree() && IsVisibleInTree() && _skip.Visible && !_submitted)
+                _skip.GrabFocus();
+        }).CallDeferred();
     }
 
     public override void _Ready() { Layout(); }
@@ -203,7 +208,7 @@ internal partial class NativeOwnedDialogueMenu : Control
 
     public override void _Input(InputEvent inputEvent)
     {
-        if (_submitted) return;
+        if (!IsVisibleInTree() || _faulted || _submitted) return;
         if (inputEvent is InputEventKey { Pressed: true, Echo: false } key &&
             key.PhysicalKeycode is Key.Pageup or Key.Pagedown && _conversationChoices.Count > _visibleChoiceCount)
         {

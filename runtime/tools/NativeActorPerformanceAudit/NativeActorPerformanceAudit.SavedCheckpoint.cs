@@ -23,11 +23,11 @@ public partial class NativeActorPerformanceAudit
             using var records = FalloutPluginStack.Load(content.PluginSources);
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(path)) ??
                 throw new InvalidDataException("Reached checkpoint is absent.");
-            if (saved.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or FalloutNativeCampaignSave.ActivationRelaySchema or FalloutNativeCampaignSave.NativeSoundHistorySchema or FalloutNativeCampaignSave.TerminalResultsSchema or FalloutNativeCampaignSave.FactionRelationSchema or
-                FalloutNativeCampaignSave.DeathHistorySchema or FalloutNativeCampaignSave.ProcedureSchema) ||
+            if (saved.Schema is not (FalloutNativeCampaignSave.ExpectedSchema or "opennv-native-fnv-campaign-save/v44" or "opennv-native-fnv-campaign-save/v43" or "opennv-native-fnv-campaign-save/v42" or "opennv-native-fnv-campaign-save/v38" or
+                "opennv-native-fnv-campaign-save/v37" or "opennv-native-fnv-campaign-save/v36") ||
                 saved.SaveCompatibilityId != content.SaveCompatibilityId)
                 throw new InvalidDataException("Reached checkpoint belongs to a different schema or source stack.");
-            if (saved.Schema == FalloutNativeCampaignSave.ProcedureSchema)
+            if (saved.Schema == "opennv-native-fnv-campaign-save/v36")
                 saved = saved with
                 {
                     References = saved.References!.Select(reference => reference with

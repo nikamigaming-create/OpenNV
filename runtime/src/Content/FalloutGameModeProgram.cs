@@ -8,7 +8,7 @@ internal enum FalloutScriptArgumentKind
 {
     Number, Identifier, String, Value,
     OptionalNumber, OptionalIdentifier, OptionalString, OptionalValue,
-    SourceString,
+    SourceString, Pair,
 }
 internal readonly record struct FalloutScriptArgument(FalloutScriptValue Value, string? Identifier = null)
 {
@@ -87,7 +87,9 @@ internal sealed record FalloutScriptEventProgram(string Event, string? Filter, F
 
 internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 {
+    private readonly int _maximum = maximum;
     private int _remaining = maximum;
+    internal int Spent => _maximum - _remaining;
     internal void Spend()
     {
         if (--_remaining < 0) throw new NotSupportedException("Script execution exceeded the runtime instruction budget.");
@@ -98,7 +100,7 @@ internal sealed class FalloutScriptExecutionBudget(int maximum = 100_000)
 // Unsupported expressions/commands stop the caller and retain its executed prefix.
 internal sealed partial class FalloutGameModeProgram
 {
-    internal const int ParserVersion = 9;
+    internal const int ParserVersion = 10;
     private readonly IReadOnlyList<string[]> _lines;
     private int _startLine = 0;
     private IReadOnlyList<bool> _enteredBranches = [];
@@ -161,7 +163,7 @@ internal sealed partial class FalloutGameModeProgram
                 {
                     if (tokens.Length < 4 || tokens[2] != "{" || tokens[^1] != "}")
                         throw new InvalidDataException("Function header needs a parameter list in braces.");
-                    parameters = tokens[3..^1];
+                    parameters = tokens[3..^1].Where(token => token != ",").ToArray();
                     if (parameters.Count > 15 || parameters.Distinct(StringComparer.OrdinalIgnoreCase).Count() != parameters.Count ||
                         parameters.Any(name => !Regex.IsMatch(name, @"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)))
                         throw new InvalidDataException("Function parameter list is invalid.");
@@ -362,6 +364,12 @@ internal sealed partial class FalloutGameModeProgram
                     var arguments = new List<FalloutScriptArgument>();
                     foreach (var kind in command.Arguments)
                     {
+                        if (at < tokens.Count && tokens[at] == ",")
+                        {
+                            ++at;
+                            if (at >= tokens.Count || tokens[at] is "," or ")" or "]")
+                                throw new InvalidDataException($"Script function {token} has an empty comma-delimited argument.");
+                        }
                         if (kind == FalloutScriptArgumentKind.Number)
                             arguments.Add(new(Read(7, execute)));
                         else
@@ -410,7 +418,7 @@ internal sealed partial class FalloutGameModeProgram
 
     internal static string[] Tokens(string line)
     {
-        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||<<|>>|:=|[+*/%&|-]=|[\\[\\]{}$=()+*/%!<>&|-]|\\.", RegexOptions.CultureInvariant);
+        var matches = Regex.Matches(line, "\"[^\"]*\"|(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?(?![A-Za-z0-9_.])|[A-Za-z_][A-Za-z0-9_.]*|[0-9]+[A-Za-z_][A-Za-z0-9_.]*|==|!=|>=|<=|&&|\\|\\||<<|>>|:=|::|[+*/%&|-]=|[\\[\\]{}$=()+*/%!<>&|,-]|\\.", RegexOptions.CultureInvariant);
         var at = 0;
         foreach (Match match in matches)
         {
@@ -437,12 +445,12 @@ internal sealed partial class FalloutGameModeProgram
         }
         return tokens.ToArray();
 
-        // Source command arguments permit optional commas. Quoted strings are
-        // complete tokens above, so their commas remain part of the argument.
+        // Commas retain argument boundaries. Quoted commas belong to their
+        // string token; uncovered punctuation remains an explicit refusal.
         static bool Separators(ReadOnlySpan<char> value)
         {
             foreach (var character in value)
-                if (!char.IsWhiteSpace(character) && character != ',') return false;
+                if (!char.IsWhiteSpace(character)) return false;
             return true;
         }
     }
@@ -471,6 +479,7 @@ internal sealed partial class FalloutGameModeProgram
         var result = new List<string>();
         for (var index = 0; index < tokens.Count;)
         {
+            if (tokens[index] == ",") { ++index; continue; }
             if (tokens[index] == "(" || index + 1 < tokens.Count &&
                 (tokens[index] is "-" or "+" or "$" || tokens[index + 1] is "[" or "."))
             {

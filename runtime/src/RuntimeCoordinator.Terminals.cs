@@ -23,7 +23,7 @@ public partial class RuntimeCoordinator
             _nativeTerminalMenu = null; _nativeTerminalReference = null;
             GetTree().Paused = wasPaused; player.SetModalInput(false);
             Input.MouseMode = Input.MouseModeEnum.Captured;
-            if (session.Error is null) SaveNativeInteraction();
+            if (session.Error is null) RequestNativeInteractionSave(reference.FormKey);
         }
         void Fail(Exception error)
         {

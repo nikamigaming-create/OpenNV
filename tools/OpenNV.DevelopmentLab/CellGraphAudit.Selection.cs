@@ -118,6 +118,8 @@ internal static partial class CellGraphAudit
         var sourceGraph = graphSummary.Report;
         var resourceHashConsistency = accumulator.ResourceHashesMatch(auditResources.Resources);
         var sourceAccountingPassed = auditResources.AddonCatalogPassed && resourceHashConsistency && graphErrors.Count == 0 && graphSummary.FailureEvents == 0 && graphSummary.InvariantsPassed &&
+            alternatives.ActorAnimations is { DeclarationsPassed: true } &&
+            alternatives.IncomingAnimations is { DeclarationsPassed: true } &&
             alternatives.Failures.Count == 0 && alternatives.Records.All(row => row.Failures.Count == 0) &&
             alternatives.Resources.All(resource => resource.Failures.Count == 0) &&
             accumulator.PackageErrorEvents == 0 && accumulator.InvariantsPassed && accumulator.InspectedReportsPassed;

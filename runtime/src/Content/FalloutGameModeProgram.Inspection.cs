@@ -4,7 +4,7 @@ internal sealed record FalloutScriptInspectionContext(FalloutScriptValueContext 
     Func<string, FalloutScriptFunction?> Function,
     Func<string, string, FalloutScriptFunction> UserFunction);
 internal sealed record FalloutScriptStatementInspection(int Index, string Kind, string Operation,
-    int PredicateOutcomes, string Ownership, string? Error);
+    int PredicateOutcomes, string Ownership, string? Error, FalloutScriptExpressionSyntax? Expression = null);
 
 internal sealed partial class FalloutGameModeProgram
 {
@@ -22,6 +22,7 @@ internal sealed partial class FalloutGameModeProgram
             var operation = kind[(kind.LastIndexOf('.') + 1)..];
             var ownership = "control-flow";
             string? error = null;
+            FalloutScriptExpressionSyntax? syntax = null;
             try
             {
                 IReadOnlyList<string>? expression = null;
@@ -52,7 +53,7 @@ internal sealed partial class FalloutGameModeProgram
                 }
                 if (expression is not null)
                 {
-                    FalloutNvseNumericExpression.Inspect(expression, context.Values, context.Function,
+                    syntax = FalloutNvseNumericExpression.Inspect(expression, context.Values, context.Function,
                         context.UserFunction, inspectValue, nvse);
                     ownership = "expression-declarations-and-signatures";
                 }
@@ -60,7 +61,7 @@ internal sealed partial class FalloutGameModeProgram
             catch (Exception failure) when (failure is InvalidDataException or InvalidOperationException or
                 NotSupportedException or KeyNotFoundException or OverflowException)
             { error = failure.Message; ownership = "unbound"; }
-            result.Add(new(index, kind, operation, kind is "if" or "elseif" or "while" ? 2 : 0, ownership, error));
+            result.Add(new(index, kind, operation, kind is "if" or "elseif" or "while" ? 2 : 0, ownership, error, syntax));
         }
         return result;
     }

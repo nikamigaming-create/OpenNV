@@ -54,9 +54,11 @@ internal sealed partial class FalloutReferenceWorld
             (count, actor) => checked(count + actor.DeathCount));
     }
 
-    internal bool PlayerInCombat() => ResidentInstances.Any(actor =>
-        actor.Engagement is { } engagement && engagement.Target == _enginePlayer &&
-        IsEnabled(actor.Reference) && actor.Injury?.Dead != true);
+    internal bool PlayerInCombat()
+    {
+        ObserveRetiredCombatActors();
+        return CombatGroups.ReadPlayerCombatFlag();
+    }
 
     internal bool HasSelectedCombatTarget(FalloutFormKey reference, FalloutFormKey target)
     {

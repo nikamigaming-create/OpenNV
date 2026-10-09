@@ -104,7 +104,8 @@ public partial class RuntimeCoordinator
                     else if (cell.Cell.Lighting is null)
                         throw new NotSupportedException("Interior subject has no source lighting declaration.");
                     _nativeSkyLighting?.EnterCell(cell.Cell, _nativeGlobals, reference.Position);
-                    root = BuildNativeCellRoot(cell, null, sourceSide: true);
+                    root = BuildNativeCellRoot(cell, null, sourceSide: true,
+                        sourceCells: exterior is null ? null : exterior.Cells.Select(item => item.FormKey).Append(exterior.PersistentCell).Distinct(FalloutFormKeyComparer.Instance).ToArray());
                     if (exterior is not null) AddExteriorLandscape(root, exterior);
                     AddChild(root);
                     if (exterior is null) AddNativeCellEnvironment(root, cell);
@@ -206,7 +207,7 @@ public partial class RuntimeCoordinator
                 }
                 finally
                 {
-                    if (root is not null && GodotObject.IsInstanceValid(root)) root.Free();
+                    FreeNativeSourceCellRoot(root);
                     if (_nativeActiveCell is { } active) _nativeReferences?.UnloadCell(active.Cell.FormKey);
                     _nativeCurrentCellRoot = null; _nativeActiveCell = null;
                     foreach (var prototype in _nativeNifPrototypes.Values) prototype.Scene.Root.Free();

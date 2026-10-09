@@ -22,7 +22,10 @@ with failed imports or false DLL entry receives no module capability.
 
 This diagnostic module ABI is not NVSE. Unchanged third-party plugin admission
 requires a separate source-bound ABI owner, rather than rewriting that DLL to
-export the diagnostic declaration. No runtime launcher starts this companion.
+export the diagnostic declaration. Campaign startup now starts this companion
+through its separate source-bound plugin owner after real input admission.
+Completed original Load, PostLoad, game-object, hook and serialization behavior
+remain unaccepted.
 
 Calls admit exactly two DWORD arguments and a DWORD return through cdecl,
 stdcall or thiscall. Thiscall uses a real module-owned ECX receiver. The shim

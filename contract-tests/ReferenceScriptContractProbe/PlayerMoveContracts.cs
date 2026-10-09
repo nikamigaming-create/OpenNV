@@ -48,53 +48,44 @@ internal static class PlayerMoveContracts
             using var records = FalloutPluginStack.Load(directory, ["Moves.esm"]);
             BootstrapContracts(records, directory);
             using var world = new FalloutReferenceWorld(records);
-            var quests = new FalloutQuestState(records);
-            var executor = new FalloutReferenceScripts(records, world, quests,
-                new((_, _) => false, _ => throw new InvalidOperationException("Player movement invented a presentation effect.")));
-            var quest = records.GetEffective(Key(0x600)); var script = records.GetEffective(Key(0x500));
-            void Run(string body) => executor.ExecuteProgram(quest, script,
-                FalloutGameModeProgram.Read("begin GameMode\n" + body + "\nend"), 0);
-            executor.ExecuteProgram(quest, script, FalloutGameModeProgram.Read(source), .1);
-            var move = world.PlayerMoves.Next!;
-            Require(move is { Source.ObjectId: 0x600, Destination.ObjectId: 0x901, X: 2, Y: -3, Z: 4 } &&
-                quests.Variable(Key(0x600), 2) == 1 && world.Placement(Key(0x900)).Cell == Key(0x800),
-                "Player MoveTo lost its compiled variable, source prefix, offsets or deferred disposition.");
-            var placement = world.ResolvePlayerMove(move, new(Key(0x800), [1, 2, 3], [0, 0, 0]), 1);
-            Require(placement.Cell == Key(0x801) && placement.Position.SequenceEqual([12f, 17f, 34f]) &&
-                placement.RotationRadians.SequenceEqual([.1f, .2f, .3f]), "Player MoveTo did not resolve source placement.");
-            Reject(() => world.Capture());
-            Reject(() => Run("Player.MoveTo ArrivalREF 1e40\nset prefix to 99"));
-            Require(ReferenceEquals(move, world.PlayerMoves.Next) && quests.Variable(Key(0x600), 2) == 1,
-                "Rejected movement changed the pending request or executed its suffix.");
-            world.PlayerMoves.Complete(move);
-
-            var fallback = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(),
-                defaultProcessingDelay: .01f, references: world)
-            { Host = new((_, _) => throw new InvalidOperationException("Unexpected stage."), _ => 0, executor.ExecuteProgram) };
-            fallback.Advance(1);
-            Require(fallback.Capture().Instances.Single(instance => instance.Quest == Key(0x600)).Error is null && quests.Variable(Key(0x600), 2) == 2 &&
-                world.PlayerMoves.Next?.Destination == Key(0x901), "Quest execution did not use the shared player movement owner.");
-            world.PlayerMoves.Complete(world.PlayerMoves.Next!);
-            var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
-            using var cold = new FalloutReferenceWorld(records); cold.Restore(saved);
-            Require(!cold.PlayerMoves.Pending && cold.PlayerMoves.Error is null, "Cold world inherited a retired movement request.");
-
-            Run("Player.MoveTo ArrivalREF 8\nPlayer.MoveTo OriginREF");
-            var first = world.PlayerMoves.Next!;
-            world.SetPlacement(Key(0x901), new(Key(0x801), [100, 200, 300], [0, 0, .5f]));
-            Require(world.ResolvePlayerMove(first, placement, 1).Position.SequenceEqual([108f, 200f, 300f]),
-                "Queued movement used stale target placement.");
-            world.PlayerMoves.Complete(first);
-            var second = world.PlayerMoves.Next!;
-            Require(second.Destination == Key(0x900), "Independent movement requests lost their order.");
-            world.PlayerMoves.Fail(second, new InvalidDataException("Unavailable destination presentation."));
-            Require(world.PlayerMoves.Next is null && world.PlayerMoves.Pending && world.PlayerMoves.Error is not null,
-                "Failed movement lost its request or became eligible for automatic retry.");
-            Reject(() => world.Capture());
-            Reject(() => Run("Player.MoveTo ArrivalREF"));
-            world.Dispose();
-            Require(!world.PlayerMoves.Pending && world.PlayerMoves.Error is null, "World retirement retained movement state.");
-            Console.WriteLine("OPENNV_PLAYER_MOVE_CONTRACT_PASS source=true typedTarget=true offsets=true queued=true suffix=true sharedQuest=true invalidAtomic=true failureRetained=true cold=true retirement=true parity=unverified");
+            Reject(() => world.QueuePlayerMoveTo(Key(0x600), Key(0x901), 2, -3, 4));
+            Require(!world.PlayerMoves.Pending && world.PlayerMoves.SourcePending.Capture().Revision == 0,
+                "Absent actual Main/raw factory mutated the Player allocation before admission.");
+            var moves = new FalloutPlayerMoves();
+            var first = new FalloutPlayerMove(Key(0x600), Key(0x901), 2, -3, 4);
+            moves.Enqueue(first); var firstRequest = moves.SourcePending.Next!;
+            Require(ReferenceEquals(moves.Next, first) && moves.SourcePending.SaveBlocker is not null,
+                "A logical declaration certified the missing full raw allocation/native consumer.");
+            Reject(moves.RequireSettled);
+            Reject(() => moves.Enqueue(first with { X = float.PositiveInfinity }));
+            Require(moves.SourcePending.Next == firstRequest, "Rejected nonfinite input changed the exact pending allocation.");
+            var replacement = new FalloutPlayerMove(Key(0x600), Key(0x900), 8, 0, 0);
+            moves.Enqueue(replacement); var secondRequest = moves.SourcePending.Next!;
+            var current = moves.SourcePending.Capture();
+            Require(ReferenceEquals(moves.Next, replacement) && current.Revision == 2 &&
+                current.Replacement is { } overlap && overlap.Released == firstRequest.Identity && overlap.Stored == secondRequest.Identity,
+                "Original single-slot replacement was incorrectly represented as FIFO movement.");
+            Reject(() => moves.Complete(first));
+            Require(moves.SourcePending.Next == secondRequest, "Superseded completion cleared the newer original allocation.");
+            moves.Complete(replacement);
+            var returned = moves.SourcePending.Capture();
+            Require(!moves.Pending && returned.Completion?.Identity == secondRequest.Identity && returned.Replacement == current.Replacement,
+                "Current value-owner null store lost its exact replacement/completion lifecycle.");
+            var cold = new FalloutPlayerPendingSlot();
+            cold.Restore(JsonSerializer.Deserialize<FalloutPlayerPendingSlotSnapshot>(JsonSerializer.Serialize(returned))!);
+            Require(!cold.Pending && cold.Capture() == returned, "Cold completed slot invented a destination or replayed its null store.");
+            moves.Enqueue(first); moves.Fail(first, new InvalidDataException("Unavailable destination presentation."));
+            var failed = moves.SourcePending.Capture();
+            Require(moves.Next is null && moves.Pending && moves.Error is not null && failed.Pending?.Move == first,
+                "Failed movement forgot its actual request or became eligible for automatic retry.");
+            Reject(moves.RequireSettled); Reject(() => moves.Enqueue(replacement));
+            moves.Clear();
+            Require(moves.Pending && moves.Error == failed.Error && moves.SourcePending.Capture() == failed,
+                "Retirement fabricated a successful movement/null store or cleared the original failure.");
+            Reject(() => moves.Complete(first));
+            Console.WriteLine("OPENNV_PLAYER_MOVE_CONTRACT_PASS sourceFactoryAbsentRefused=true typedTarget=true offsets=true " +
+                "singleSlotReplacement=true invalidAtomic=true failureRetained=true completedSlotCold=true retirementKeepsFailure=true " +
+                "nativeTransferCompiledGameplayAndParity=UNEXECUTED");
         }
         finally
         {
@@ -128,42 +119,42 @@ internal static class PlayerMoveContracts
             (_, _, _, _) => throw new NotSupportedException("Unexpected startup command."),
             _ => throw new NotSupportedException("Unexpected startup effect."), () => true);
         Require(!quests.IsRunning(Key(0x610)), "Synthetic startup was already running.");
-        bootstrap.Start(); Require(quests.IsRunning(Key(0x610)) && bootstrap.Placement() is null, "Startup did not activate its configured source quest.");
-        bootstrap.Advance(0, [4]); var move = world.PlayerMoves.Next!;
-        Require(bootstrap.Placement()?.Cell == Key(0x801) && quests.Variable(Key(0x610), 1) == 1 &&
-            !bootstrap.Controls.Movement && bootstrap.Controls.Looking, "Startup lost source destination, following prefix or player controls.");
-        bootstrap.Advance(1, [4]); Require(ReferenceEquals(move, world.PlayerMoves.Next), "Startup repeated an entered source prefix.");
-        world.PlayerMoves.Complete(move);
-        using var stageWorld = new FalloutReferenceWorld(records);
-        var stageQuests = new FalloutQuestState(records);
-        var stageScripts = new FalloutQuestScripts(records, stageQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0, references: stageWorld);
-        var blocked = false; var calls = 0;
-        var stage = new FalloutNewGameBootstrap(records, FalloutInstallationSettings.ReadLayers([ini]), stageQuests, stageScripts, stageWorld,
-            (_, _, command, _) => { if (command != "BlockingPresentation") throw new NotSupportedException(command); blocked = true; ++calls; },
-            _ => throw new NotSupportedException("Unexpected startup effect."), () => !blocked);
-        stage.Start(); Require(blocked && calls == 1 && stage.Placement() is null && stageQuests.StageDone(Key(0x620), 0), "Stage zero skipped its blocking source presentation.");
-        stage.Advance(0, [4]); Require(calls == 1 && stage.Placement() is null, "Blocked stage replayed or advanced its prefix.");
-        blocked = false; stage.Advance(0, [4]); Require(calls == 1 && stage.Placement()?.Cell == Key(0x801), "Stage zero did not resume its source continuation.");
-        stageWorld.PlayerMoves.Complete(stageWorld.PlayerMoves.Next!);
-        var packages = new FalloutNewGameBootstrap(records, FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "00000640")]),
-            stageQuests, stageScripts, stageWorld, (_, _, _, _) => throw new NotSupportedException("Unexpected startup command."),
-            _ => throw new NotSupportedException("Player package escaped its ordered startup handoff."), () => true);
-        packages.Start();
-        Require(packages.Placement()?.Cell == Key(0x801) && stageQuests.StageDone(Key(0x640), 0) && stageQuests.StageDone(Key(0x640), 5),
-            "Player package blocked the authored nested startup stages or placement.");
-        var handed = new List<FalloutReferenceScriptEffect>();
-        Reject(() => packages.AttachPlayerPackages(_ => throw new NotSupportedException("Native owner rejected assignment.")));
-        packages.AttachPlayerPackages(handed.Add);
-        packages.AttachPlayerPackages(_ => throw new InvalidOperationException("Startup assignment replayed."));
-        Require(handed.Count == 2 && handed[0].Argument == Key(0x710) && handed[1].Argument is null &&
-            handed.All(effect => effect.Kind == FalloutReferenceEffectKind.ScriptPackage && effect.Target == Key(0x14)) &&
-            packages.CaptureStageResults().Count == 2,
-            "Startup package order, rejected prefix or stage-result handoff was lost.");
-        stageWorld.PlayerMoves.Complete(stageWorld.PlayerMoves.Next!);
-        var failed = new FalloutNewGameBootstrap(records, FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "00000630")]),
-            stageQuests, stageScripts, stageWorld, (_, _, _, _) => throw new NotSupportedException("Reached startup command."), _ => { }, () => true);
-        failed.Start(); Reject(() => failed.Advance(0, [4])); Reject(() => failed.Advance(1, [4]));
-        Require(stageQuests.Variable(Key(0x630), 1) == 1 && !stageWorld.PlayerMoves.Pending, "Failed startup replayed its mutation or invented a destination.");
+        Reject(bootstrap.Start);
+        Require(!quests.IsRunning(Key(0x610)) && bootstrap.Placement() is null && !world.PlayerMoves.Pending &&
+            quests.Variable(Key(0x610), 1) == 0 && bootstrap.Controls == FalloutPlayerControlState.AllEnabled,
+            "Missing original compiled startup changed controls, quest state or movement before admission.");
+        Reject(bootstrap.Start);
+        foreach (var id in new uint[] { 0x620, 0x640 })
+        {
+            using var stageWorld = new FalloutReferenceWorld(records);
+            var stageQuests = new FalloutQuestState(records);
+            var stageScripts = new FalloutQuestScripts(records, stageQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(),
+                defaultProcessingDelay: 0, references: stageWorld);
+            var calls = 0;
+            var stage = new FalloutNewGameBootstrap(records,
+                FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", id.ToString("X8"))]),
+                stageQuests, stageScripts, stageWorld, (_, _, _, _) => calls++, _ => calls++, () => true);
+            Reject(stage.Start);
+            Require(stageQuests.IsRunning(Key(id)) && !stageWorld.PlayerMoves.Pending && calls == 0 &&
+                !stageQuests.StageDone(Key(id), 5) && stage.CaptureStageResults().Any(row => row.Error is not null),
+                "Original missing compiled stage ran diagnostic text, nested package effects or a source suffix.");
+            var failedResults = stage.CaptureStageResults().ToArray();
+            stage.Advance(0, [4]); stage.Advance(1, [4]);
+            Require(calls == 0 && !stageWorld.PlayerMoves.Pending && stage.CaptureStageResults().Any(row => row.Error is not null),
+                "Repeated startup cleared its actual compiled refusal or replayed the failed result prefix.");
+            Require(stage.CaptureStageResults().SequenceEqual(failedResults), "Closed failed result was mutated by later startup polling.");
+        }
+        using var failedWorld = new FalloutReferenceWorld(records);
+        var failedQuests = new FalloutQuestState(records);
+        var failedScripts = new FalloutQuestScripts(records, failedQuests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(),
+            defaultProcessingDelay: 0, references: failedWorld);
+        var failed = new FalloutNewGameBootstrap(records,
+            FalloutInstallationSettings.ReadLayers([], [new("General", "SCharGenQuest", "00000630")]), failedQuests,
+            failedScripts, failedWorld, (_, _, _, _) => throw new InvalidOperationException("Diagnostic startup must not run."),
+            _ => throw new InvalidOperationException("Diagnostic startup must not apply an effect."), () => true);
+        Reject(failed.Start); Reject(failed.Start);
+        Require(!failedQuests.IsRunning(Key(0x630)) && failedQuests.Variable(Key(0x630), 1) == 0 && !failedWorld.PlayerMoves.Pending,
+            "Absent original SCDA replayed diagnostic local mutations or fabricated player movement.");
         var controlGraph = new FalloutOpeningControlGraph(new Dictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>>
         {
             ["FailedStartup"] = new Dictionary<short, FalloutOpeningControlStage>
@@ -173,7 +164,9 @@ internal static class PlayerMoveContracts
         });
         Require(FalloutOpeningStageTransitionResolver.Resolve(records, controlGraph, executeGameMode: true).Transitions.Count == 0,
             "Executed source stages were rejected or predicted from competing conditional destinations.");
-        Console.WriteLine("OPENNV_NEW_GAME_BOOTSTRAP_CONTRACT_PASS configuredQuest=true profileIsolation=true ownedIniReadOnly=true sourcePlacement=true controls=true stageZeroContinuation=true failurePrefix=true parity=unverified");
+        Console.WriteLine("OPENNV_NEW_GAME_BOOTSTRAP_CONTRACT_PASS configuredQuest=true profileIsolation=true ownedIniReadOnly=true " +
+            "compiledScriptMissingRefused=true compiledStageMissingRefused=true noDiagnosticEffects=true failurePrefix=true " +
+            "ordinaryCompiledStartupAndParity=UNEXECUTED");
     }
     private static byte[] Cell(uint id, uint reference, string name, float[] transform)
     {
@@ -206,7 +199,7 @@ internal static class PlayerMoveContracts
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
     private static void Reject(Action action)
     {
-        try { action(); } catch (Exception error) when (error is InvalidDataException or NotSupportedException) { return; }
+        try { action(); } catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException) { return; }
         throw new InvalidOperationException("Unsupported player movement was accepted.");
     }
 }

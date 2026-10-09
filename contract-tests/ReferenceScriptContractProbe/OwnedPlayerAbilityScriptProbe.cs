@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
@@ -11,6 +12,7 @@ internal static class OwnedPlayerAbilityScriptProbe
         RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.FalloutNewVegasGame);
         using var content = RuntimeLiveContentSource.Current!;
         using var records = FalloutPluginStack.Load(content.PluginSources);
+        var inputHashes = HashInputs();
         var separator = spellIdentity.LastIndexOf(':');
         if (separator <= 0) throw new ArgumentException("Expected plugin:hex-object-id ability identity.");
         var spell = new FalloutFormKey(spellIdentity[..separator], Convert.ToUInt32(spellIdentity[(separator + 1)..], 16));
@@ -35,28 +37,38 @@ internal static class OwnedPlayerAbilityScriptProbe
 
         var coldActor = new FalloutPlayerActorValues(records, actor.Capture());
         var coldSkills = Skills(coldActor);
-        coldSkills.RestoreValues(JsonSerializer.Deserialize<FalloutPlayerSkillValuesSnapshot>(JsonSerializer.Serialize(skillState))!);
         using var coldWorld = new FalloutReferenceWorld(records);
         var coldEffects = Bind(coldActor, coldSkills, coldWorld,
             JsonSerializer.Deserialize<FalloutPlayerAbilityScriptsSnapshot>(JsonSerializer.Serialize(effectState))!);
+        coldSkills.RestoreValues(JsonSerializer.Deserialize<FalloutPlayerSkillValuesSnapshot>(JsonSerializer.Serialize(skillState))!);
         _ = coldActor.ReadCurrent(5);
         if (!after.OrderBy(pair => pair.Key).SequenceEqual(coldSkills.SkillOrder.ToDictionary(value => value,
                 value => coldSkills.ReadSkill(value, FalloutActorValueRead.Permanent)).OrderBy(pair => pair.Key)) ||
             JsonSerializer.Serialize(skillState) != JsonSerializer.Serialize(coldSkills.CaptureValues()) ||
             JsonSerializer.Serialize(effectState) != JsonSerializer.Serialize(coldEffects.Capture()) || coldWorld.InstanceCount != 0)
             throw new InvalidDataException("Cold source ability changed locals, skill pools or its completed Start.");
+        if (!inputHashes.OrderBy(pair => pair.Key).SequenceEqual(HashInputs().OrderBy(pair => pair.Key)))
+            throw new InvalidDataException("Selected source ability audit changed an original input.");
         Console.WriteLine("OPENNV_OWNED_PLAYER_ABILITY_START_PASS " + JsonSerializer.Serialize(new
         {
             spell = spell.ToString(),
-            effects = effectState.Effects.Select(effect => new { effect.EffectOrdinal, effect.Script, effect.ScriptSha256, effect.Started, effect.Locals }),
+            effects = effectState.Effects.Select(effect => new { effect.EffectOrdinal, effect.Script, effect.ScriptSha256, effect.Started, effect.Locals, effect.Compiled }),
             changes = after.Where(pair => pair.Value != before[pair.Key]).Select(pair => new { actorValue = pair.Key, before = before[pair.Key], after = pair.Value }),
             skillPools = skillState.Pools,
             once = true,
             cold = true,
             actualPlayerReference = "00000014",
             proxyActors = world.InstanceCount + coldWorld.InstanceCount,
-            boundary = "selected-source-start-and-cold-state;ordinary-input-and-compiled-parity-independent"
+            originalInputsUnchanged = true,
+            inputHashes,
+            boundary = "selected-source-compiled-start-and-cold-state;ordinary-input-and-retail-parity-independent"
         }));
+
+        Dictionary<string, string> HashInputs() => content.PluginSources.ToDictionary(source => source.Name, source =>
+        {
+            using var input = new FileStream(source.AbsolutePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return Convert.ToHexString(SHA256.HashData(input));
+        }, StringComparer.OrdinalIgnoreCase);
 
         FalloutPlayerSkills Skills(FalloutPlayerActorValues values) => new(records, () => values.BaseSpecial,
             _ => false, () => [], null, new FalloutPlayerInventory(), values.Source.Player, () => race, () => false,

@@ -1,0 +1,12 @@
+LIBRARY bcrypt
+EXPORTS
+    OpenNVImportProviderBind=_OpenNVImportProviderBind@4
+    OpenNVImportProviderInspect=_OpenNVImportProviderInspect@8
+    OpenNVImportProviderUnbind=_OpenNVImportProviderUnbind@8
+    BCryptOpenAlgorithmProvider=_BCryptOpenAlgorithmProvider@16
+    BCryptGetProperty=_BCryptGetProperty@24
+    BCryptCreateHash=_BCryptCreateHash@28
+    BCryptHashData=_BCryptHashData@16
+    BCryptFinishHash=_BCryptFinishHash@16
+    BCryptDestroyHash=_BCryptDestroyHash@4
+    BCryptCloseAlgorithmProvider=_BCryptCloseAlgorithmProvider@8

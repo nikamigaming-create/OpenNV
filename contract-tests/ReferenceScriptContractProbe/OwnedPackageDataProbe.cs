@@ -31,10 +31,7 @@ internal static class OwnedPackageDataProbe
         var checkpointBytes = File.ReadAllBytes(checkpoint);
         var openingControls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
         var openingCell = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-        var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records,
-            FalloutNativeVigorResolver.Resolve(records, openingCell), FalloutNativeTagSkillResolver.Resolve(records, openingControls),
-            FalloutOpeningInventoryGrantResolver.Resolve(records, openingControls, "VCG01"),
-            FalloutNativeTraitFarewellResolver.Resolve(records, openingControls, openingCell)).State;
+        var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records).State;
         if (saved.SaveCompatibilityId != content.SaveCompatibilityId || saved.Quests is null || saved.Globals is null ||
             saved.GameTime is null || saved.References is null)
             throw new InvalidDataException("Package priority proof needs a complete checkpoint from the selected owned source graph.");

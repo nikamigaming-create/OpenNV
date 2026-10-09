@@ -24,7 +24,10 @@
     <Compile Include="..\..\runtime\src\Content\FalloutNewGamePlayerStart.cs" Link="FalloutNewGamePlayerStart.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutDoorTransition.cs" Link="FalloutDoorTransition.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutLandscapeTransport.cs" Link="FalloutLandscapeTransport.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutWorldspaceLandDefaults.cs" Link="FalloutWorldspaceLandDefaults.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutBsaArchive.SourceDirectory.cs" Link="FalloutBsaArchive.SourceDirectory.cs" />
+    <Compile Include="../../runtime/src/Content/FalloutArchiveNameHash.cs" Link="FalloutArchiveNameHash.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
     <Compile Include="..\..\runtime\src\Content\RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
     <Compile Include="..\..\runtime\src\Content\FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />

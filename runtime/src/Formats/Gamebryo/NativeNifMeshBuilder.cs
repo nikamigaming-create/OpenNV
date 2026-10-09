@@ -2523,6 +2523,7 @@ internal sealed record RuntimeNativeNifScene(
 internal sealed class RuntimeNativeNifPrototype
 {
     private readonly FalloutNifFile _source;
+    internal FalloutNifFile Source => _source;
     private readonly float _unitsToMetres;
     private readonly bool _requiresFreshOwners;
     internal RuntimeNativeNifScene Scene { get; }

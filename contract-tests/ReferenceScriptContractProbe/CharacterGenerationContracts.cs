@@ -63,7 +63,7 @@ internal static class CharacterGenerationContracts
                 if (effect.Kind == FalloutReferenceEffectKind.PlayerYouth) scripts.Session.SetPlayerYoung(effect.Enable);
                 else if (effect.Kind == FalloutReferenceEffectKind.PlayerToddler) scripts.Session.SetPlayerToddler(effect.Enable);
                 else if (effect.Kind == FalloutReferenceEffectKind.PlayerScale) scripts.Session.SetPlayerScale(effect.Scale);
-                else if (effect.Kind == FalloutReferenceEffectKind.CharacterGeneration) scripts.Session.SetInCharGen(effect.Enable, vitals.RequireLevelUpOwner);
+                else if (effect.Kind == FalloutReferenceEffectKind.CharacterGeneration) scripts.Session.SetInCharGen(effect.Enable);
                 else throw new InvalidDataException("Unexpected effect.");
             }, InCharGen: () => scripts.Session.InCharGen));
             void Run(string body) => executor.ExecuteProgram(records.GetEffective(Key(0x601)), records.GetEffective(Key(0x600)),
@@ -97,7 +97,12 @@ internal static class CharacterGenerationContracts
             cold.Session.Restore(legacy);
             Require(!cold.Session.PlayerYoung && !cold.Session.PlayerToddler && cold.Session.PlayerScale == 1,
                 "Cold legacy restoration retained earlier player policy.");
-            foreach (var invalid in new[] { "-1", "2", "0.5" }) Reject(() => Run("SetInCharGen " + invalid + "\nset sample to 99"));
+            foreach (var signed in new[] { "-1", "2" })
+            {
+                Run("SetInCharGen " + signed);
+                Require(scripts.Session.InCharGen, "A nonzero signed chargen flag did not publish the source Boolean.");
+            }
+            foreach (var invalid in new[] { "0.5", "2147483648", "-2147483649" }) Reject(() => Run("SetInCharGen " + invalid + "\nset sample to 99"));
             Require(scripts.Session.InCharGen && quests.Variable(Key(0x601), 1) == 0, "Invalid flag mutated state or executed its suffix.");
 
             var initial = vitals.State;
@@ -111,13 +116,13 @@ internal static class CharacterGenerationContracts
                 "Deferred XP changed level, disappeared during SPECIAL derivation or healed damage.");
             var coldVitals = new FalloutPlayerVitals(records, Key(7), special,
                 JsonSerializer.Deserialize<GameplayVitals>(JsonSerializer.Serialize(vitals.State))!);
-            Reject(coldVitals.RequireLevelUpOwner);
+            Require(coldVitals.State == vitals.State, "Cold state changed the earned XP before an admitted player update.");
             var before = vitals.State;
-            Reject(() => Run("SetInCharGen 0\nset sample to 99"));
-            Require(scripts.Session.InCharGen && vitals.State == before && quests.Variable(Key(0x601), 1) == 0,
-                "Unsupported earned level-up cleared chargen, lost XP or ran its suffix.");
-            Reject(() => scripts.Session.SetInCharGen(false, null));
-            Require(scripts.Session.InCharGen, "Missing player owner cleared character-generation state.");
+            Run("SetInCharGen 0\nset sample to 99");
+            Require(!scripts.Session.InCharGen && vitals.State == before && quests.Variable(Key(0x601), 1) == 99,
+                "Character-generation publication consumed earned XP or prevented its source suffix.");
+            scripts.Session.SetInCharGen(false);
+            Require(!scripts.Session.InCharGen, "Character-generation state did not retain the original flag.");
             Reject(() => vitals.Publish(before with { ExperiencePoints = -1 }));
             Reject(() => vitals.Publish(before with { NextLevelExperiencePoints = 0 }));
             Require(vitals.State == before, "Invalid vitals partially published.");
@@ -127,10 +132,11 @@ internal static class CharacterGenerationContracts
                 (_, _, _, _) => throw new InvalidDataException("Unexpected startup command."),
                 _ => throw new InvalidDataException("Unexpected startup effect."), () => true);
             scripts.Session.Restore(legacy);
-            bootstrap.Start();
-            Require(scripts.Session.InCharGen && scripts.Session.PlayerYoung && scripts.Session.PlayerToddler && scripts.Session.PlayerScale == .4f,
-                "Pre-world source result lost shared player policy.");
-            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true bootstrap=true youth=true youthSignedFlag=true youthRevision=true toddler=true toddlerSignedFlag=true sourceScale=true scalePrecisionClamp=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewardContracts=separate parity=unverified");
+            try { bootstrap.Start(); throw new InvalidDataException("Startup admitted diagnostic SCTX without its original compiled result."); }
+            catch (NotSupportedException error) when (error.Message.Contains("original compiled program", StringComparison.Ordinal)) { }
+            Require(!scripts.Session.InCharGen && !scripts.Session.PlayerYoung && !scripts.Session.PlayerToddler && scripts.Session.PlayerScale == 1,
+                "Rejected source-only startup changed the actual player policy.");
+            Console.WriteLine("OPENNV_CHARACTER_GENERATION_CONTRACT_PASS sharedScripts=true missingCompiledBootstrapRefused=true youth=true youthSignedFlag=true youthRevision=true toddler=true toddlerSignedFlag=true chargenSignedFlag=true sourceScale=true scalePrecisionClamp=true cold=true legacyDefault=true deferredXp=true specialDerivation=true invalidAtomic=true levelUpGapVisible=true xpRewardContracts=separate parity=unverified");
         }
         finally { File.Delete(path); Directory.Delete(directory); }
     }

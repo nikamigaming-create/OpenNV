@@ -95,10 +95,10 @@ internal static partial class CellGraphAuditContracts
                 var root = report.RootElement;
                 var alternatives = root.GetProperty("alternatives");
                 var reuse = alternatives.GetProperty("queryReuse");
-                Require(reuse.GetProperty("persistentCellQueries").GetInt32() == 3 && reuse.GetProperty("persistentCellEntries").GetInt32() == 3 &&
+                Require(reuse.GetProperty("persistentCellQueries").GetInt32() == 0 && reuse.GetProperty("persistentCellEntries").GetInt32() == 0 &&
                     reuse.GetProperty("resourceDirectoryQueries").GetInt32() == 2 && reuse.GetProperty("resourceDirectoryEntries").GetInt32() == 2 &&
                     reuse.GetProperty("stackId").GetString() == source.StackId && reuse.GetProperty("saveCompatibilityId").GetString() == source.SaveCompatibilityId,
-                    "The actual alternative inventory still rescanned a failing world or an inherited directory.");
+                    "LAND declarations required persistent residency or the alternative inventory rescanned an inherited directory; actual=" + reuse.GetRawText());
                 var worlds = alternatives.GetProperty("worldspaces").EnumerateArray().ToArray();
                 Require(worlds.Length == 4 && worlds.Where(world => world.GetProperty("lodName").GetString() == "Shared")
                     .All(world => world.GetProperty("resources").EnumerateArray().Select(value => value.GetString()).SequenceEqual(
@@ -114,10 +114,8 @@ internal static partial class CellGraphAuditContracts
                 {
                     var id = Key(0xa00 + index).ToString();
                     var error = failures.Single(row => row.GetProperty("landscape").GetString() == id).GetProperty("error").GetString();
-                    var expected = index <= 2 ? $"World {Key(0x101)} has 0 persistent cells." :
-                        index <= 4 ? $"World {Key(0x102)} has 2 persistent cells." : null;
-                    Require(expected is null ? error!.Contains("DATA must contain one uint32 flag field", StringComparison.Ordinal) : error == expected,
-                        "A cached refusal changed its LAND owner or suppressed an unrelated downstream source-reader failure.");
+                    Require(error!.Contains("DATA must contain one uint32 flag field", StringComparison.Ordinal),
+                        "LAND's actual declaration failure was replaced by unrelated persistent-residency admission.");
                     Require(graphRows.Single(row => row.GetProperty("identity").GetString() == id).GetProperty("failures").EnumerateArray()
                         .Any(row => row.GetProperty("lane").GetString() == "land-reader" && row.GetProperty("error").GetString() == error),
                         "The original per-LAND graph failure disappeared behind shared query metadata.");
@@ -133,12 +131,14 @@ internal static partial class CellGraphAuditContracts
             File.WriteAllBytes(Path.Combine(badGame, "Fallout_default.ini"), File.ReadAllBytes(defaultsPath));
             var badArchive = Path.Combine(badData, "FalloutNV.bsa"); File.WriteAllBytes(badArchive, [0, 1, 2, 3]);
             var badBefore = QueryInputHash(badArchive);
-            using (var source = RuntimeLiveContentSource.Open(badGame, RuntimeLiveContentSource.FalloutNewVegasGame,
+            var failedSource = RuntimeLiveContentSource.Open(badGame, RuntimeLiveContentSource.FalloutNewVegasGame,
                 activePlugins: [Plugin], archiveIniPath: archiveIni,
                 settings: [new("Landscape", "SDefaultLandDiffuseTexture", "fixture.dds"),
-                    new("Landscape", "SDefaultLandNormalTexture", "fixture.dds")]))
-            using (var records = FalloutPluginStack.Load(source.PluginSources))
+                    new("Landscape", "SDefaultLandNormalTexture", "fixture.dds")]);
+            try
             {
+                var source = failedSource;
+                using var records = FalloutPluginStack.Load(source.PluginSources);
                 var queries = new CellGraphAudit.AlternativeSourceQueries(source, records);
                 var failed = QueryRefusal(() => queries.ResourcePathsUnder("meshes/landscape/lod/Shared"));
                 var failedAgain = QueryRefusal(() => queries.ResourcePathsUnder("MESHES\\LANDSCAPE\\LOD\\SHARED"));
@@ -162,6 +162,19 @@ internal static partial class CellGraphAuditContracts
                     alternatives.GetProperty("failures").EnumerateArray().Count(row => row.TryGetProperty("world", out _)) == 4 &&
                     alternatives.GetProperty("queryReuse").GetProperty("resourceDirectoryQueries").GetInt32() == 2,
                     "Cached BSA refusals removed a declaring world failure or repeatedly scanned its inherited directory.");
+            }
+            finally
+            {
+                Exception? warmupFailure = null;
+                try { failedSource.ArchiveWarmup.GetAwaiter().GetResult(); }
+                catch (Exception error) { warmupFailure = error; }
+                Exception? retirementFailure = null;
+                try { failedSource.Dispose(); }
+                catch (Exception error) { retirementFailure = error; }
+                Require(warmupFailure is AggregateException aggregate &&
+                    aggregate.Flatten().InnerExceptions.All(error => error is InvalidDataException) &&
+                    ReferenceEquals(retirementFailure, warmupFailure),
+                    "Failed archive retirement discarded or replaced the actual background reader failure.");
             }
             Require(QueryInputHash(badArchive) == badBefore, "Refused archive inventory changed its malformed first-party input.");
             Console.WriteLine("OPENNV_CELL_GRAPH_ALTERNATIVE_QUERY_MEMO_PASS originalPersistentSuccess=true originalMissingRefusal=true originalAmbiguousRefusal=true inheritedPrefix=true perWorldDependencies=true perLandFailures=true downstreamFailure=true sourceInstanceBound=true immutableResults=true actualArchiveFailure=true compressedDenominator=true sourceReadOnly=true readinessUnverified=true");

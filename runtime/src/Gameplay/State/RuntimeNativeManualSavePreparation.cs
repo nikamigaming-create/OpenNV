@@ -21,9 +21,11 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
     private readonly Action<Exception> _reportFailure;
     private readonly FalloutScriptManualSaveRequests? _sourceRequests;
     private readonly Func<string?>? _originalSourceBlocker;
+    private readonly Node? _driverProducer;
     internal RuntimeManualSaveSourceOrder? SourceOrder { get; private set; }
     private FalloutFiniteSoundSaveDrain? _audio;
     private RuntimeNativeSaveProducerPause? _sourcePause;
+    private RuntimeNativeSaveDriverPause? _driverPause;
     private SceneTree? _tree;
     private Action? _releaseInput;
     private bool _priorPaused, _begun, _finished;
@@ -35,7 +37,8 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         Action<RuntimeManualSaveReceipt> publish, Action settled,
         ulong maximumWaitMilliseconds = RuntimeManualSavePreparation.MaximumWaitMilliseconds,
         IReadOnlyList<Node>? sourceProducers = null, Action<Exception>? reportFailure = null,
-        FalloutScriptManualSaveRequests? sourceRequests = null, Func<string?>? originalSourceBlocker = null)
+        FalloutScriptManualSaveRequests? sourceRequests = null, Func<string?>? originalSourceBlocker = null,
+        Node? driverProducer = null)
     {
         _requests = requests; _session = session; _source = source; _player = player; _sounds = sounds;
         _invalidation = invalidation; _admission = admission; _writer = writer; _publish = publish; _settled = settled;
@@ -43,6 +46,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         _sourceProducers = sourceProducers ?? [];
         _reportFailure = reportFailure ?? (error => GD.PushError($"OPENNV_NATIVE_MANUAL_SAVE_PREPARATION_FAILURE {error}"));
         _sourceRequests = sourceRequests; _originalSourceBlocker = originalSourceBlocker;
+        _driverProducer = driverProducer;
         Name = "ManualSavePreparation"; ProcessMode = ProcessModeEnum.Always;
     }
 
@@ -57,12 +61,14 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
             if (_invalidation() is { } reason) throw new InvalidOperationException(reason);
             if (_sourceRequests is not null)
             {
-                _requests.ObserveOrderedSourceSave(_sourceRequests.Receipt);
+                if (_driverProducer is null) throw new NotSupportedException("The shared save queue lacks its actual gameplay driver pause owner.");
+                _requests.ObserveOrderedRequests();
                 SourceOrder = new(_sourceRequests, _requests.Receipt!, Engine.GetProcessFrames());
-                _requests.ObserveOrderedSourceSave(SourceOrder.Receipt);
+                _requests.ObserveOrderedRequests();
             }
             _audio = _sounds.PrepareFiniteSaveDrain();
             _tree.Paused = true;
+            if (_driverProducer is not null) _driverPause = new(_driverProducer);
             _sourcePause = new(_sourceProducers);
             _releaseInput = _player.AcquirePausedSaveInput();
             Input.MouseMode = Input.MouseModeEnum.Visible;
@@ -88,6 +94,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
             if (_tree?.Paused != true || !_player.ModalInput || Input.MouseMode != Input.MouseModeEnum.Visible)
                 throw new FalloutFiniteSoundSaveDrainInvalidatedException("Manual save lost its gameplay/input pause lease.");
             _sourcePause!.Validate();
+            _driverPause?.Validate();
             SourceOrder?.Validate(_sourceRequests!, _requests.Receipt!, Engine.GetProcessFrames());
             _requests.DrainPrepared(_session, _source, Engine.GetProcessFrames(), Time.GetTicksMsec(),
                 () => _audio!.ObservePending(), _admission, WriteOrderedCheckpoint);
@@ -116,6 +123,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
             _invalidation() is not null || _tree?.Paused != true || !_player.ModalInput ||
             Input.MouseMode != Input.MouseModeEnum.Visible) return false;
         _sourcePause!.Validate();
+        _driverPause?.Validate();
         return source.PermitsOriginalSourceDrain(_sourceRequests!, _requests.Receipt!, Engine.GetProcessFrames()) &&
             _audio!.ObservePending().Count == 0 && _admission().Kind == RuntimeManualSaveAdmissionKind.Ready;
     }
@@ -132,13 +140,16 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
                 source.Validate(_sourceRequests!, _requests.Receipt!, Engine.GetProcessFrames());
                 _sourceRequests!.RequireCapture();
             }
-            finally { _requests.ObserveOrderedSourceSave(source.Receipt); }
+            finally { if (_requests.Pending) _requests.ObserveOrderedRequests(); }
         }
         if (_invalidation() is { } reason) throw new FalloutFiniteSoundSaveDrainInvalidatedException(reason);
         _sourcePause!.Validate();
+        _driverPause?.Validate();
         if (_audio!.ObservePending().Count != 0 || _admission().Kind != RuntimeManualSaveAdmissionKind.Ready)
             throw new NotSupportedException("Ordered source/manual preparation lost its complete quiescent capture boundary.");
-        return _writer(id);
+        if (SourceOrder is null || _requests.Receipt!.Slot != id)
+            throw new NotSupportedException("Manual checkpoint has no actual shared queue/preparation order.");
+        return SourceOrder.WriteManual(_requests.Receipt, Engine.GetProcessFrames(), _writer);
     }
 
     private void Finish()
@@ -170,6 +181,9 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
                     finally
                     {
                         _sourcePause = null;
+                        try { _driverPause?.Dispose(); }
+                        catch (Exception error) { errors.Add(error); }
+                        finally { _driverPause = null; }
                         try { _releaseInput?.Invoke(); }
                         catch (Exception error) { errors.Add(error); }
                         finally

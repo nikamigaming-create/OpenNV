@@ -103,6 +103,7 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private void RequireTerminalAdmission(FalloutFormKey reference)
     {
+        RequireLevelUpMenuFree("Terminal menu");
         RequireTerminalReference(reference);
         if (_scripts.References!.GetLocked(reference) != 0)
             throw new InvalidOperationException("Terminal selection requires its shared access owner to be unlocked.");
@@ -116,7 +117,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         // runs. The shared NOTE reader never substitutes text for other variants.
         if (selection.Entry.Note is { } note) _ = FalloutNote.Read(_pluginStack, note).RequireText();
         var scripts = _resultScripts ?? throw new InvalidOperationException("Terminal results have no shared script owner.");
-        try { scripts.ExecuteTerminalResult(selection); }
+        try { _terminalMenus[selection.Reference].BindResult(selection, scripts.ExecuteTerminalResult(selection)); }
         catch (Exception error)
         {
             if (_stageResults?.ClosedFailureFor(error) is { } stageFailure &&

@@ -1,13 +1,27 @@
 using System.Buffers.Binary;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutFurnitureSeat(FalloutFormKey Furniture, int Index, int MarkerId,
-    FalloutNifFurniturePosition Marker, float[] PlacementOffset, float HeadingDelta);
+    FalloutNifFurniturePosition Marker, float[] PlacementOffset, float HeadingDelta,
+    FalloutPlayerFurnitureKind Kind = FalloutPlayerFurnitureKind.Sitting);
 
 internal static class FalloutFurnitureSource
 {
+    internal static FalloutPlayerFurnitureKind ReadKind(FalloutPluginRecord furniture)
+    {
+        if (furniture.Signature != "FURN") throw new InvalidDataException("Furniture source is not FURN.");
+        var data = furniture.ReadSubrecords().Single(field => field.Signature == "MNAM").Data;
+        if (data.Length != 4) throw new InvalidDataException("Furniture marker flags have an invalid extent.");
+        return (BinaryPrimitives.ReadUInt32LittleEndian(data.Span) & 0xc0000000u) switch
+        {
+            0x40000000u => FalloutPlayerFurnitureKind.Sitting,
+            0x80000000u => FalloutPlayerFurnitureKind.Sleeping,
+            _ => throw new NotSupportedException("Furniture requires another source procedure kind."),
+        };
+    }
     internal static FalloutFurnitureSeat Read(FalloutPluginStack stack, FalloutPluginRecord furniture,
         FalloutNifFile nif)
     {
@@ -15,15 +29,22 @@ internal static class FalloutFurnitureSource
         return seats.Count == 1 ? seats[0] : throw new NotSupportedException("Furniture requires multi-marker approach/occupancy selection.");
     }
 
+    internal static FalloutFurnitureSeat ReadPlayer(FalloutPluginStack stack, FalloutPluginRecord furniture, FalloutNifFile nif)
+    {
+        var seats = ReadSeats(stack, furniture, nif, true);
+        return seats.Count == 1 ? seats[0] : throw new NotSupportedException("Player furniture requires multi-marker approach/occupancy selection.");
+    }
+
     internal static IReadOnlyList<FalloutFurnitureSeat> ReadSeats(FalloutPluginStack stack, FalloutPluginRecord furniture,
-        FalloutNifFile nif)
+        FalloutNifFile nif, bool allowSleeping = false, bool sourcePending = false)
     {
         if (furniture.Signature != "FURN") throw new InvalidDataException("Furniture source is not FURN.");
         var data = furniture.ReadSubrecords().Single(field => field.Signature == "MNAM").Data;
         if (data.Length != 4) throw new InvalidDataException("Furniture marker flags have an invalid extent.");
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(data.Span);
-        if ((flags & 0xc0000000u) != 0x40000000u)
-            throw new NotSupportedException("Furniture requires its sleep/non-sitting procedure owner.");
+        var kind = sourcePending ? FalloutPendingFurnitureSource.Kind(flags) : ReadKind(furniture);
+        if (kind == FalloutPlayerFurnitureKind.Sleeping && !allowSleeping)
+            throw new NotSupportedException("Furniture requires its source sleep procedure owner.");
         var tables = nif.Blocks.Where(block => block.TypeName == "BSFurnitureMarker")
             .Select(block => (FalloutNifFurnitureMarker)nif.ReadObject(block.Index)).ToArray();
         if (tables.Length != 1) throw new NotSupportedException("Furniture marker table is absent or ambiguous.");
@@ -39,7 +60,7 @@ internal static class FalloutFurnitureSource
                 throw new NotSupportedException("Furniture marker references require distinct entry/exit ownership.");
             var prefix = $"fFurnitureMarker{marker.PositionReference1:00}";
             return new(furniture.FormKey, selected, marker.PositionReference1, marker,
-                [Setting("DeltaX"), Setting("DeltaY"), Setting("DeltaZ")], Setting("HeadingDelta"));
+                [Setting("DeltaX"), Setting("DeltaY"), Setting("DeltaZ")], Setting("HeadingDelta"), kind);
 
             float Setting(string suffix)
             {

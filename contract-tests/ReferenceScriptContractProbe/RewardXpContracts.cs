@@ -17,7 +17,7 @@ internal static class RewardXpContracts
         GlobalFunction();
         Console.WriteLine("OPENNV_REWARD_XP_CONTRACT_PASS playerOwner=true sourceCap=true cappedTotal=true " +
             "signedDecrease=true float32=true noHeal=true object=true questSharedAndFallback=true " +
-            "globalFunction=true consumedPrefix=true cold=true activeXpPerkApplied=true " +
+            "globalFunction=true consumedPrefix=true cold=true activeXpPerk=true acquiredOrderRefused=true " +
             "levelUpGapVisible=true xpPresentation=unverified");
     }
 
@@ -39,10 +39,16 @@ internal static class RewardXpContracts
         Require(fixture.Experience.Reward(100000003) == 100000000, "RewardXP lost the engine Float32 conversion.");
         var retained = fixture.Vitals.State;
         fixture.Perks.Add(new(9, 3, 1.1f, []));
-        Require(fixture.Experience.Reward(10) == 11 && fixture.Vitals.State.ExperiencePoints == retained.ExperiencePoints + 11,
-            "XP perk multiplier did not apply before upward rounding.");
+        Require(fixture.Experience.Reward(1) == 2 &&
+            fixture.Vitals.State == retained with { ExperiencePoints = retained.ExperiencePoints + 2 },
+            "The owned Float32 XP modifier and source ceiling did not reach shared vitals.");
+        var afterModifier = fixture.Vitals.State;
         fixture.Perks[0] = new(9, 3, .9f, []);
         Require(fixture.Experience.Reward(10) == 9, "XP-reducing perk did not modify a discovery award.");
+        afterModifier = fixture.Vitals.State;
+        fixture.Perks.Add(new(9, 2, 3, []));
+        Reject(() => fixture.Experience.Reward(1));
+        Require(fixture.Vitals.State == afterModifier, "Missing acquired-entry ordering partially published another award.");
         fixture.Perks.Clear();
         fixture.Vitals.Publish(before);
         Reject(() => fixture.Experience.Reward(-1));
@@ -53,10 +59,10 @@ internal static class RewardXpContracts
         var beforeOverflow = fixture.Vitals.State;
         Reject(() => fixture.Experience.Reward(2147483520));
         Require(fixture.Vitals.State == beforeOverflow, "Signed XP overflow was hidden by cap clamping or partially published.");
-        var session = new FalloutScriptSession(); session.SetInCharGen(true, null);
-        Reject(() => session.SetInCharGen(false, fixture.Vitals.RequireLevelUpOwner));
-        Require(session.InCharGen && fixture.Vitals.State.ExperiencePoints == 200 && fixture.Vitals.State.Level == 1,
-            "Level-up refusal discarded consumed XP or falsely left character generation.");
+        var session = new FalloutScriptSession(); session.SetInCharGen(true);
+        session.SetInCharGen(false);
+        Require(!session.InCharGen && fixture.Vitals.State.ExperiencePoints == 200 && fixture.Vitals.State.Level == 1,
+            "Character-generation publication consumed XP before an admitted level-up update.");
     }
 
     private static void ObjectAndCold()

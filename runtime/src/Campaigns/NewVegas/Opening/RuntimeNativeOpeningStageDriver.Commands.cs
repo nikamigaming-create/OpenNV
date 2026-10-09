@@ -10,17 +10,33 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class RuntimeNativeOpeningStageDriver
 {
-    private FalloutFormKey? _music;
     private FalloutRadioHudDeclaration? _radioHudDeclaration;
-    internal FalloutFormKey? SourceMusic => _music;
-    private bool _saveRequested;
+    internal FalloutFormKey? SourceMusic => _scripts.Session.SourceMusic;
     private CanvasLayer? _recipeLayer;
     private NativeOwnedRecipeMenu? _recipeMenu;
     private CanvasLayer? _barterLayer;
     private NativeOwnedBarterMenu? _barterMenu;
     private readonly HashSet<CanvasItem> _screenSplatters = [];
     private string? SaveContinuationBlocker =>
-        _moviePlaying ? "movie" : _player.FurnitureActive ? "furniture" :
+        _scripts.References!.CampaignSharedScriptSaveBlocker is { } sharedScript ? sharedScript :
+        PlayerStatisticSaveBlocker is { } statistic ? statistic :
+        _playerSkills.ValueConstructionSaveBlocker is { } skillConstruction ? skillConstruction :
+        PlayerProgressSaveBlocker is { } progress ? progress :
+        ExperienceNotificationSaveBlocker is { } experience ? experience :
+        InterfaceActivationFrameSaveBlocker is { } activation ? activation :
+        _player.PlayerPhysicalSaveBlocker is { } physical ? physical :
+        CampaignRestSaveBlocker is { } rest ? rest :
+        SourceIndexedInterfaceSoundSaveBlocker is { } interfaceSound ? interfaceSound :
+        ActorUpdateSaveBlocker is { } actorUpdate ? actorUpdate :
+        CellProcessSaveBlocker is { } cellProcess ? cellProcess :
+        _skyLighting?.SourceTransferSaveBlocker is { } sourceSky ? sourceSky :
+        ActualProcessRuntimeSaveBlocker is { } processRuntime ? processRuntime :
+        ActualProcessCommonSaveBlocker is { } processCommon ? processCommon :
+        SourceProcessQueueSaveBlocker is { } processQueue ? processQueue :
+        ActorProcessSaveBlocker is { } process ? process :
+        ActorPerceptionSaveBlocker is { } perception ? perception :
+        CombatGroupSaveBlocker is { } combat ? combat :
+        _moviePlaying ? "movie" :
         _conversation?.Active == true ? "conversation" : _speech is { CanCaptureState: false } ? "speech" :
         _nameEntry is not null ? "name-menu" : _raceSexEntry is not null ? "race-menu" :
         _specialBookEntry is not null ? "special-book-menu" :
@@ -32,9 +48,29 @@ internal partial class RuntimeNativeOpeningStageDriver
         StageResultsSaveBlocker;
     internal object SaveRequestState => new
     {
-        requested = _saveRequested,
+        ordered = _scripts.ScriptManualSaves.Order.Requests,
         sourceManual = _scripts.ScriptManualSaves.Receipt,
         sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
+        playerProgress = PlayerProgressState,
+        playerStatistics = PlayerStatisticState,
+        sharedScriptContexts = _scripts.References!.ScriptEngineContextState,
+        sourceMainScriptCaller = SourceMainScriptCallerState,
+        sourceMainUtilities = _scripts.References!.MainUtilityState,
+        experienceNotifications = ExperienceNotificationState,
+        interfaceActivationFrames = InterfaceActivationFrameState,
+        playerPhysical = _player.PlayerPhysicalState,
+        playerRest = CampaignRestState,
+        indexedInterfaceSounds = SourceIndexedInterfaceSoundState,
+        combatGroups = CombatGroupState,
+        actorPerception = ActorPerceptionState,
+        actorProcesses = ActorProcessState,
+        actualProcessRuntime = ActualProcessRuntimeState,
+        actualProcessCommon = ActualProcessCommonState,
+        processQueues = SourceProcessQueueState,
+        sourceSky = _skyLighting?.SourceTransferState,
+        actorUpdates = ActorUpdateState,
+        cellProcesses = CellProcessState,
+        levelUp = PlayerLevelUpMenuState,
         deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
         activeContinuationSaving = "source-radio-pcm;other-continuations-unbound"
     };
@@ -58,29 +94,11 @@ internal partial class RuntimeNativeOpeningStageDriver
                 RefreshRadioStations(force: true);
                 break;
             case "sexchange" when arguments.Count <= 2 && (parts.Length == 1 || _pluginStack.RuntimeFormId(target) == 0x14):
-                var female = arguments.Count == 0 ? !_character.Female : arguments[0].ToLowerInvariant() switch
-                {
-                    "male" or "0" => false,
-                    "female" or "1" => true,
-                    _ => throw new InvalidDataException("SexChange target sex is invalid."),
-                };
-                var resetAppearance = arguments.Count == 2 ? arguments[1] switch
-                {
-                    "0" => false,
-                    "1" => true,
-                    _ => throw new InvalidDataException("SexChange reset flag is invalid."),
-                } : false;
-                if (female == _character.Female) break;
-                if (resetAppearance)
-                {
-                    var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Character content owner is absent.");
-                    var creation = new FalloutNativeCharacterCreation(_pluginStack, _raceSexContract, _character, FalloutInstallationSettings.Read(content));
-                    creation.ChangeIdentity(_character.RaceRuntimeFormId, female);
-                    _character = creation.Selection;
-                }
-                else _character = _raceSexContract.Select(_character.RaceRuntimeFormId, female, _character) with { Face = _character.Face };
-                FalloutNativeRaceSexResolver.Validate(_raceSexContract, _character);
-                _characterRevision++;
+                var changed = FalloutScriptStartupCommands.ChangeSex(_pluginStack, _raceSexContract, _character,
+                    () => FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current ??
+                        throw new InvalidOperationException("Character content owner is absent.")), arguments);
+                if (!ReferenceEquals(changed, _character))
+                { _character = changed; _characterRevision++; }
                 break;
             case "clearscreensplatter" when parts.Length == 1 && arguments.Count == 0:
                 foreach (var splatter in _screenSplatters)
@@ -113,7 +131,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 SynchronizeTagSkillEntry(sourceRequested: true);
                 if (_tagSkillEntry is null) throw new NotSupportedException("Tag input has no active menu owner.");
                 break;
-            case "showtraitmenu" when parts.Length == 1 && arguments.Count == 0:
+            case "showtraitmenu" or "traitmenu" when parts.Length == 1 && arguments.Count == 0:
                 SynchronizeTraitEntry(sourceRequested: true);
                 if (_traitEntry is null) throw new NotSupportedException("Trait input has no active menu owner.");
                 break;
@@ -149,10 +167,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 break;
             case "playmusic" when parts.Length == 1 && arguments.Count == 1:
                 var music = bindings.Form(arguments[0]);
-                if (music.Signature != "MUSC") throw new InvalidDataException("Script music is not MUSC.");
-                if (music.ReadSubrecords().Any(field => field.Signature != "EDID"))
-                    throw new NotSupportedException("Nonempty script music requires its streaming playback owner.");
-                _music = music.FormKey;
+                _scripts.Session.SetSourceMusic(_pluginStack, music.FormKey);
                 break;
             case "forceweather" when parts.Length == 1 && arguments.Count == 1:
                 (_skyLighting ?? throw new InvalidOperationException("Sky state owner is absent.")).ForceWeather(bindings.Form(arguments[0]).FormKey);
@@ -161,24 +176,17 @@ internal partial class RuntimeNativeOpeningStageDriver
                 (_skyLighting ?? throw new InvalidOperationException("Sky state owner is absent.")).ReleaseWeatherOverride();
                 break;
             case "autosave" when parts.Length == 1 && arguments.Count == 0:
-                _saveRequested = true;
+                _scripts.ScriptManualSaves.RequestAutoSave();
                 break;
             default:
                 throw new NotSupportedException($"Reached native script command {command} ({arguments.Count} arguments) has no owner.");
         }
     }
 
-    private void SaveCurrentState()
-    {
-        var state = CaptureCurrentState(_activeCell);
-        FalloutNativeCampaignSave.Write(_savePath, state);
-        _stage200Saved = state.CharacterCreationComplete;
-        _saveRequested = false;
-        GD.Print($"OPENNV_NATIVE_CAMPAIGN_SAVED quest={QuestEditorId} stage={Stage} creationComplete={state.CharacterCreationComplete} save={_savePath}");
-    }
-
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
+        ObserveCurrentNativeCellProcessesForCapture();
+        _scripts.References?.NativePlugins?.RequireIdleForSave();
         _scripts.ScriptManualSaves.RequireCapture();
         _scripts.References!.PlayerMoves.RequireSettled();
         if (SaveContinuationBlocker is { } blocker)
@@ -187,26 +195,23 @@ internal partial class RuntimeNativeOpeningStageDriver
         var vitals = Vitals;
         var transform = _player.GlobalTransform;
         var rotation = transform.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
-        var complete = _tagSkillContract is null ? !_scripts.Session.InCharGen :
-            _quests.IsCompleted(FalloutDialogueTopic.Find(_pluginStack, "QUST", FalloutNativeCampaignSave.OpeningQuestEditorId).FormKey);
-        var state = FalloutNativeCampaignSave.Capture(_saveCompatibilityId, activeCell, _inventory.Capture(), _playerName, _character,
-            _vigorContract, Special, _tagSkillContract, _tagSkills.Selection, _traitFarewellContract, _traits, PlayerControls,
+        var complete = !_scripts.Session.InCharGen;
+        return FalloutNativeCampaignSave.Capture(_pluginStack, _saveCompatibilityId, activeCell, _inventory.Capture(), _playerName, _character,
+            Special, _tagSkills.Selection, Traits, PlayerControls,
             [transform.Origin.X, transform.Origin.Y, transform.Origin.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
             _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
             QuestEditorId, Stage, complete, _player.ViewPitchRadians, _playerActorValues.Capture(), _tagSkills.Capture(),
             _scripts.References!.CaptureDetection(), _speech?.CaptureState(), CaptureFinishedSpeechStage(),
             CaptureStageResults(), _stageResultDriverFailure, CaptureTerminalResults(), _skillCatalog, _playerPackage!.CaptureAudio(),
-            playerSkillValues: _playerSkills.CaptureValues(), playerAbilityScripts: _playerAbilities.Capture());
-        return state with
-        {
-            Vitals = vitals,
-            WeaponHandling = _player.CaptureWeaponHandling(),
-            Ingestibles = _ingestibles.Capture(),
-            ActorOverrides = _scripts.References!.CaptureActorOverrides(),
-            FactionRelations = _scripts.References.CaptureFactionRelations(),
-            EncounterZones = _scripts.References.CaptureEncounterZones(),
-            ExplosionExposure = _player.CaptureExplosionExposure()
-        };
+            vitals, _player.CaptureWeaponHandling(), _ingestibles.Capture(), _scripts.References.CaptureActorOverrides(),
+            _scripts.References.CaptureEncounterZones(), _player.CaptureExplosionExposure(), _scripts.References.CaptureFactionRelations(),
+            CapturePlayerProgress(), _scripts.ScriptManualSaves.CaptureOrder(), CaptureExperienceNotifications(), CaptureInterfaceActivationFrames(),
+            _player.CapturePlayerPhysicalActivity(), CaptureSourceCombatGroups(), CaptureSourceActorPerception(), CaptureSourceActorProcesses(),
+            CaptureCurrentPlayerRest(), CaptureCurrentRestAutoSave(), CaptureCurrentRestWorldTime(),
+            CaptureCurrentRestInterfaceSounds(), CaptureSourceInterfaceFade(), CaptureCurrentHardcoreNeeds(),
+            CaptureSourceActorUpdates(), CaptureSourceCellProcesses(), CaptureCurrentProcessRuntime(), CaptureCurrentProcessCommon(),
+            _playerSkills.CaptureValues(), _playerAbilities.Capture(), CaptureCurrentPlayerStatistics(), CaptureCurrentProcessQueues(),
+            CaptureSourceIndexedInterfaceSounds(), _scripts.References.CaptureCampaignSharedScripts());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)
@@ -214,7 +219,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (_recipeMenu is not null) throw new InvalidOperationException("A recipe menu is already active.");
         if (_player.FurnitureActive || _conversation?.Active == true || _speech?.Active == true ||
             _nameEntry is not null || _raceSexEntry is not null || _vigorEntry is not null || _specialBookEntry is not null ||
-            _tagSkillEntry is not null || _traitEntry is not null)
+            _tagSkillEntry is not null || _traitEntry is not null || _levelUpEntry is not null)
             throw new InvalidOperationException("Crafting cannot open while another player interaction owns input.");
 
         var category = FalloutRecipeCategory.Read(_pluginStack, categoryForm);
@@ -246,6 +251,9 @@ internal partial class RuntimeNativeOpeningStageDriver
             throw new NotSupportedException($"Recipe condition {condition.Owner.FormKey}/{condition.Function} selects run-on actor {condition.RunOn}.");
         return condition.Function switch
         {
+            49 => ActorSleeping(_pluginStack.RuntimeFormKey(0x14)),
+            107 => ActorKnockedState(_pluginStack.RuntimeFormKey(0x14)),
+            159 => ActorSitting(_pluginStack.RuntimeFormKey(0x14)),
             14 => _playerSkills.Value(checked((int)condition.Argument1)),
             67 => FalloutCellQueries.InCell(_pluginStack, _activeCell, condition.FormArgument1) ? 1 : 0,
             69 => condition.FormArgument1 == _scripts.References!.ActorRace(_pluginStack.RuntimeFormKey(0x14)) ? 1 : 0,
@@ -273,7 +281,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (_barterMenu is not null) throw new InvalidOperationException("A barter menu is already active.");
         if (_moviePlaying || _player.FurnitureActive || _recipeMenu is not null || _nameEntry is not null ||
-            _raceSexEntry is not null || _vigorEntry is not null || _specialBookEntry is not null || _tagSkillEntry is not null || _traitEntry is not null)
+            _raceSexEntry is not null || _vigorEntry is not null || _specialBookEntry is not null || _tagSkillEntry is not null || _traitEntry is not null || _levelUpEntry is not null)
             throw new InvalidOperationException("Barter cannot open while another player interaction owns input.");
 
         var actor = _pluginStack.GetEffective(actorReference);

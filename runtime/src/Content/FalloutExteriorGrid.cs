@@ -7,7 +7,7 @@ internal sealed record FalloutExteriorGridScene(FalloutCellScene Scene, IReadOnl
 
 // Source cell ancestry and spatial residency are separate. The active grid uses
 // temporary children plus persistent world references at their authored positions.
-internal sealed class FalloutExteriorGrid(FalloutPluginStack records)
+internal sealed partial class FalloutExteriorGrid(FalloutPluginStack records)
 {
     private readonly object _gate = new();
     private readonly Dictionary<FalloutFormKey, Dictionary<(int X, int Y), FalloutFormKey>> _worlds = [];
@@ -70,22 +70,8 @@ internal sealed class FalloutExteriorGrid(FalloutPluginStack records)
 
     private FalloutExteriorGridScene ResolveCore(FalloutFormKey world, FalloutFormKey persistentCell, float x, float y, int diameter)
     {
-        if (diameter < 1 || diameter % 2 == 0) throw new InvalidDataException("Exterior grid diameter must be positive and odd.");
         if (!float.IsFinite(x) || !float.IsFinite(y)) throw new InvalidDataException("Exterior player position is not finite.");
-        var index = WorldCells(world);
-        var center = ((int)MathF.Floor(x / 4096), (int)MathF.Floor(y / 4096));
-        if (!index.TryGetValue(center, out var active)) throw new InvalidDataException("Player has no authored exterior grid cell.");
-        var radius = diameter / 2;
-        var cells = new List<FalloutCellScene>();
-        for (var gy = center.Item2 - radius; gy <= center.Item2 + radius; gy++)
-            for (var gx = center.Item1 - radius; gx <= center.Item1 + radius; gx++)
-                if (index.TryGetValue((gx, gy), out var key)) cells.Add(Cell(key));
-        var persistent = Cell(persistentCell);
-        var resident = cells.SelectMany(cell => cell.References).Concat(persistent.References.Where(reference =>
-            Math.Abs((int)MathF.Floor(reference.Position[0] / 4096) - center.Item1) <= radius &&
-            Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Item2) <= radius)).ToArray();
-        var bases = cells.Append(persistent).SelectMany(cell => cell.BaseObjects).DistinctBy(pair => pair.Key)
-            .ToDictionary(pair => pair.Key, pair => pair.Value);
-        return new(new(Cell(active).Cell, resident, bases), cells.Select(cell => cell.Cell).ToArray(), persistentCell, radius);
+        return ResolveSourceCoordinatesCore(world, persistentCell,
+            (int)MathF.Floor(x / 4096), (int)MathF.Floor(y / 4096), diameter);
     }
 }

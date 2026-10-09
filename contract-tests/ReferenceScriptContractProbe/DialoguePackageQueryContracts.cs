@@ -99,39 +99,39 @@ internal static class DialoguePackageQueryContracts
             bool Combat(FalloutCondition value) => combat.IsInCombat(FalloutAiPackages.ConditionSubject(value, speaker));
             Check(!Combat(combatCondition) && !Combat(combatCondition with { RunOn = 1 }), "Idle actors acquired an invented engagement.");
             combat.Get(listener).Engagement = new(player);
-            Check(!combat.PlayerInCombat(), "An unloaded actor acquired the resident player combat owner.");
+            Reject(() => combat.PlayerInCombat());
             combat.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
-            Check(combat.PlayerInCombat(), "Player combat required a Godot body instead of the resident engagement.");
+            Reject(() => combat.PlayerInCombat());
             Check(!Combat(combatCondition) && Combat(combatCondition with { RunOn = 1 }) &&
                 Combat(combatCondition with { RunOn = 2, Reference = 0x01000901 }),
                 "Combat query borrowed self state or lost source target/master identity.");
             using var combatCold = new FalloutReferenceWorld(records); combatCold.Restore(combat.Capture());
             combatCold.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
-            Check(combatCold.PlayerInCombat(), "Cold player combat lost the resident authoritative engagement.");
+            Reject(() => combatCold.PlayerInCombat());
             Check(combatCold.IsInCombat(listener), "Cold combat query lost retained engagement state.");
             foreach (var action in new[] { "pursue", "attack", "reload", "flee", "idle" })
             {
                 combat.Get(listener).Engagement = new(player, action);
-                Check(Combat(combatCondition with { RunOn = 1 }) && combat.PlayerInCombat() &&
+                Check(Combat(combatCondition with { RunOn = 1 }) &&
                     combat.HasSelectedCombatTarget(listener, player) &&
                     !combat.HasSelectedCombatTarget(listener, speaker),
                     $"Combat action {action} changed membership or borrowed a different selected target.");
                 using var actionCold = new FalloutReferenceWorld(records);
                 actionCold.Restore(combat.Capture());
                 actionCold.LoadCell(FalloutCellSceneReader.Read(records, Key(0x880)));
-                Check(actionCold.IsInCombat(listener) && actionCold.PlayerInCombat() &&
+                Check(actionCold.IsInCombat(listener) &&
                     actionCold.HasSelectedCombatTarget(listener, player),
                     $"Cold combat action {action} lost retained membership or its actual selected target.");
             }
             combat.Get(listener).Engagement = null;
-            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat() &&
+            Check(!Combat(combatCondition with { RunOn = 1 }) &&
                 !combat.HasSelectedCombatTarget(listener, player), "Retired engagement retained combat membership or a selected target.");
             combat.Get(listener).Engagement = new(player); combat.Get(listener).Enabled = false;
-            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat() &&
+            Check(!Combat(combatCondition with { RunOn = 1 }) &&
                 !combat.HasSelectedCombatTarget(listener, player), "Disabled actor retained combat membership or its selected target.");
             combat.Get(listener).Enabled = true;
             combat.Get(listener).Injury = new(true, null, new Dictionary<byte, float>());
-            Check(!Combat(combatCondition with { RunOn = 1 }) && !combat.PlayerInCombat() &&
+            Check(!Combat(combatCondition with { RunOn = 1 }) &&
                 !combat.HasSelectedCombatTarget(listener, player), "Dead actor retained combat membership or its selected target.");
             var playerCombat = false;
             Check(!combat.IsInCombat(player, () => playerCombat), "Idle player acquired combat state.");
@@ -141,7 +141,7 @@ internal static class DialoguePackageQueryContracts
             Reject(() => combat.IsInCombat(Key(0x903)));
             Reject(() => Combat(combatCondition with { RunOn = 2 }));
             Reject(() => Combat(combatCondition with { RunOn = 4 }));
-            Console.WriteLine("OPENNV_COMBAT_CONDITION_SUBJECT_PASS self=true sourceTarget=true explicitReference=true sourceMasters=true liveCombat=true actionIndependent=true exactSelectedTarget=true retiredDeadDisabledRefused=true cold=true playerOwner=true");
+            Console.WriteLine("OPENNV_COMBAT_CONDITION_SUBJECT_PASS self=true sourceTarget=true explicitReference=true sourceMasters=true liveCombat=true actionIndependent=true exactSelectedTarget=true retiredDeadDisabledRefused=true actorCold=true playerCallback=true missingCombatManagerRefused=true");
         }
         finally { speakerState.QueryCurrentPackage = null; listenerState.QueryCurrentPackage = null; }
     }

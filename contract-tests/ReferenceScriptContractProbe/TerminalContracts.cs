@@ -52,7 +52,9 @@ internal static partial class TerminalContracts
                 .SequenceEqual(new FalloutFormKey?[] { A(0x91), A(0x92), A(0x60) }),
             "Terminal links/result references were adjusted through load order instead of declaring masters.");
         Require(terminal.Entries[1].ResultText == "" && terminal.Entries[1].Program.CompiledSize == 0 &&
-            !terminal.Entries[1].Program.HasSource && terminal.Entries[1].Program.Fields.Count == 1,
+            !terminal.Entries[1].Program.HasSource &&
+            terminal.Entries[1].Program.Fields.Select(field => field.Signature)
+                .SequenceEqual(new[] { "ITXT", "RNAM", "ANAM", "TNAM", "SCHR" }),
             "An authored empty, SCHR-only result or padded empty RNAM was rejected.");
         terminal.Entries[1].Program.RequireSourceExecution();
         Require(terminal.Entries.Select(entry => entry.Program.Identity).Distinct().Count() == 8,
@@ -253,8 +255,10 @@ internal static partial class TerminalContracts
     }
 
     private static FalloutTerminalMenu Menu(FalloutPluginStack records, FalloutReferenceWorld world,
-        FalloutTerminalConditions conditions, FalloutReferenceScripts scripts, FalloutPlayerInventory inventory) =>
-        new(records, A(0x90), reference =>
+        FalloutTerminalConditions conditions, FalloutReferenceScripts scripts, FalloutPlayerInventory inventory)
+    {
+        FalloutTerminalMenu? menu = null;
+        menu = new(records, A(0x90), reference =>
         {
             if (!world.IsResident(reference) || !world.CanActivate(reference) || world.GetLocked(reference) != 0)
                 throw new InvalidOperationException("Synthetic terminal is not resident, available and unlocked.");
@@ -262,10 +266,13 @@ internal static partial class TerminalContracts
         {
             selection.Entry.RequireSelectionEffects();
             if (selection.Entry.Note is { } note) _ = FalloutNote.Read(records, note).RequireText();
-            scripts.ExecuteTerminalResult(selection);
+            var result = scripts.ExecuteTerminalResult(selection);
+            menu!.BindResult(selection, result);
             if (selection.Entry.AddNote && selection.Entry.Note is { } added && inventory.Item(added) is null)
                 inventory.Add(records, added, 1, 1, true);
         });
+        return menu;
+    }
 
     private static void VerifyMasterContext(string directory)
     {
@@ -366,8 +373,8 @@ internal static partial class TerminalContracts
         [Field("ITXT", Text(text)), Field("RNAM", result.Length == 0 ? new byte[4] : Text(result)),
             Field("ANAM", [flags]), .. program, .. conditions];
     private static byte[][] Program(string source, params uint[] references) =>
-        [Field("SCHR", ScriptHeader((uint)references.Length, source.Length == 0 ? 0u : 1u, 0)),
-            .. (source.Length == 0 ? Array.Empty<byte[]>() : new[] { Field("SCDA", [1]), Field("SCTX", Text(source)) }),
+        [Field("SCHR", ScriptHeader((uint)references.Length, 0, 0)),
+            .. (source.Length == 0 ? Array.Empty<byte[]>() : new[] { Field("SCTX", Text(source)) }),
             .. references.Select(reference => Field("SCRO", UInt(reference)))];
     private static byte[] ScriptHeader(uint references, uint size, uint locals)
     { var data = new byte[20]; Put(data, 4, references); Put(data, 8, size); Put(data, 12, locals); data[18] = 1; return data; }

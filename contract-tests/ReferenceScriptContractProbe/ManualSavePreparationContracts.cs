@@ -31,32 +31,43 @@ internal static class ManualSavePreparationContracts
             var voice = new FalloutFiniteSoundVoice(124, reference, generation, sound, entry.SoundSha256, entry.Path!, entry.MediaSha256!);
             var random = state.SoundRandom.State;
             var queue = new RuntimeManualSaveRequests();
-            var request = queue.Request(session, source, 10, RuntimeManualSaveOrigin.SessionMenu);
+            ulong phase = 10;
+            world.ScriptManualSaves.BindSelection(new(source, Path.GetFullPath(canonical),
+                id => Path.Combine(Path.GetFullPath(canonical) + RuntimeSaveSlotCatalog.SlotDirectorySuffix, id.ToString("N") + ".json")), () => phase);
+            queue.Bind(world.ScriptManualSaves, session, source);
+            var request = queue.Request(session, source, phase, RuntimeManualSaveOrigin.SessionMenu,
+                new(session, 1, records.RuntimeFormKey(0x14), state.Cell));
+            using var sourceOrder = new RuntimeManualSaveSourceOrder(world.ScriptManualSaves, request, phase);
             queue.Prepare(10, 1000, Finite(voice), [voice]);
-            Require(queue.Request(session, source, 10).Slot == request.Slot && queue.Receipt!.RequestCount == 2 &&
-                queue.Receipt.Origin == RuntimeManualSaveOrigin.SessionMenu, "F5/menu pending requests acquired different writers or slots.");
+            Require(queue.Source == world.ScriptManualSaves && queue.Receipt!.Origin == RuntimeManualSaveOrigin.SessionMenu,
+                "Prepared menu input lost its actual common source queue.");
             var writes = 0;
             RuntimeSaveSlotMetadata Write(Guid id)
             {
                 writes++;
-                return catalog.Create(id, () => File.WriteAllText(canonical, Encode(source, world.Capture())));
+                sourceOrder.DrainBeforeManual(queue.Receipt!, phase, () => null);
+                return sourceOrder.WriteManual(queue.Receipt!, phase,
+                    slot => catalog.Create(slot, () => File.WriteAllText(canonical, Encode(source, world.Capture()))));
             }
             Require(!queue.DrainPrepared(session, source, 10, 1000,
                 () => throw new InvalidDataException("Input-phase native inspection ran."),
                 () => throw new InvalidDataException("Input-phase capture admission ran."), Write) && writes == 0,
                 "Save preparation wrote within its input phase.");
-            Require(!queue.DrainPrepared(session, source, 11, 1010, () => [voice], () => Finite(voice), Write) &&
+            phase = 11;
+            Require(!queue.DrainPrepared(session, source, phase, 1010, () => [voice], () => Finite(voice), Write) &&
                 queue.Pending && writes == 0 && File.ReadAllBytes(canonical).SequenceEqual(previous) &&
                 !RuntimeManualSaveFeedback.Describe(queue.Receipt!).Contains("committed.", StringComparison.Ordinal),
                 "Finite save preparation reported creation, changed Continue or wrote active audio.");
             Reject(() => world.Capture());
             state.AnimationSoundEvents.Complete(generation, FalloutAnimationSoundEnd.NativeFinished);
-            Require(queue.DrainPrepared(session, source, 12, 1020, () => [], () => new(RuntimeManualSaveAdmissionKind.Ready), Write) &&
+            phase = 12;
+            Require(queue.DrainPrepared(session, source, phase, 1020, () => [], () => new(RuntimeManualSaveAdmissionKind.Ready), Write) &&
                 writes == 1 && queue.Receipt!.Preparation?.Phase == RuntimeManualSavePreparationPhase.Completed &&
                 queue.Receipt.AwaitedVoices?.Single() == voice && catalog.ReadSlots().Single().Id == request.Slot.ToString("N") &&
                 RuntimeManualSaveFeedback.Describe(queue.Receipt).StartsWith("New save committed.", StringComparison.Ordinal),
                 "Genuine completion did not commit exactly one shared complete slot and receipt.");
-            Require(!queue.DrainPrepared(session, source, 13, 1030, () => throw new InvalidDataException("Native lease replayed."),
+            phase = 13;
+            Require(!queue.DrainPrepared(session, source, phase, 1030, () => throw new InvalidDataException("Native lease replayed."),
                 () => throw new InvalidDataException("Admission replayed."), Write) && writes == 1,
                 "Completed prepared save replayed its writer.");
             using (var cold = new FalloutReferenceWorld(records))
@@ -67,7 +78,7 @@ internal static class ManualSavePreparationContracts
                     state.SoundRandom.State == random && state.AnimationSoundEvents.Events.Count == 1,
                     "Complete cold capture replayed finite selection, producer generations or source RNG.");
             }
-            QueueFailures(session, source, voice, queue, ref writes);
+            QueueFailures(voice);
             RegistryLeases(records, voice);
             CompletionPauseBoundary(voice);
             PausedSourceInput();
@@ -76,29 +87,44 @@ internal static class ManualSavePreparationContracts
             var fabricated = queue.History.First(receipt => receipt.Disposition == "completed") with
             { CommittedSlot = new(request.Slot.ToString("N"), Path.Combine(directory, "missing.json"), Schema, null, null, null, DateTime.UtcNow) };
             Reject(() => RuntimeManualSaveFeedback.Describe(fabricated));
-            Require(queue.History.Any(receipt => receipt.Disposition == "completed") &&
-                queue.History.Any(receipt => receipt.Disposition == "failed") &&
-                queue.History.Any(receipt => receipt.Disposition == "cancelled") && writes == 1,
-                "Failure/cancellation erased request history or retried a completed writer.");
+            Require(queue.History is [{ Disposition: "completed" }] && writes == 1,
+                "Independent failure cases rewrote the complete source request or repeated its writer.");
             Console.WriteLine("OPENNV_MANUAL_SAVE_PREPARATION_CONTRACT_PASS f5MenuOneOwner=true inputPhase=false fixedFiniteSet=true nativeFinishedOnly=true boundedFailure=true sourceNativeGenerationCancel=true unknownLoopRefused=true producerRngRetained=true writerOnce=true cold=true priorContinueRollback=true visibleReceipt=true campaignAndParity=unverified");
         }
         finally { Directory.Delete(directory, true); }
     }
 
-    private static void QueueFailures(Guid session, string source, FalloutFiniteSoundVoice voice,
-        RuntimeManualSaveRequests queue, ref int writes)
+    private static void QueueFailures(FalloutFiniteSoundVoice voice)
     {
-        var written = writes;
-        RuntimeSaveSlotMetadata NoWrite(Guid id) => throw new InvalidDataException("Refused prepared state reached its writer.");
-        queue.Request(session, source, 20); queue.Prepare(20, 2000, Finite(voice), [voice], 20);
-        Require(!queue.DrainPrepared(session, source, 21, 2021, () => [voice], () => Finite(voice), NoWrite) &&
-            queue.Receipt!.Disposition == "failed" && queue.Receipt.Error!.Contains("bounded", StringComparison.Ordinal),
-            "A finite voice waited forever or elapsed time supplied Finished.");
+        var writes = 0;
+        RuntimeSaveSlotMetadata NoWrite(Guid id)
+        {
+            ++writes;
+            throw new InvalidDataException("Refused prepared state reached its writer.");
+        }
+        static RuntimeManualSaveRequests Request(CompiledManualSaveFixture fixture)
+        {
+            var queue = new RuntimeManualSaveRequests();
+            fixture.BindManual(queue);
+            queue.Request(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase, site: fixture.Site(1));
+            return queue;
+        }
+        using (var fixture = new CompiledManualSaveFixture([], phase: 20))
+        {
+            var queue = Request(fixture); queue.Prepare(fixture.Phase, 2000, Finite(voice), [voice], 20);
+            fixture.AdvancePhase();
+            Require(!queue.DrainPrepared(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase, 2021,
+                () => [voice], () => Finite(voice), NoWrite) &&
+                queue.Receipt!.Disposition == "failed" && queue.Receipt.Error!.Contains("bounded", StringComparison.Ordinal),
+                "A finite voice waited forever or elapsed time supplied Finished.");
+        }
         foreach (var blocker in new[] { "unknown-audio", "looping-audio", "cancelled-audio", "opaque-audio",
             "actor-procedure", "movement", "conversation", "source-continuation", "missing-native-Finished" })
         {
-            queue.Request(session, source, 30); queue.Prepare(30, 3000, Finite(voice), [voice]);
-            Require(!queue.DrainPrepared(session, source, 31, 3010, () => [voice],
+            using var fixture = new CompiledManualSaveFixture([], phase: 30);
+            var queue = Request(fixture); queue.Prepare(fixture.Phase, 3000, Finite(voice), [voice]);
+            fixture.AdvancePhase();
+            Require(!queue.DrainPrepared(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase, 3010, () => [voice],
                 () => new(RuntimeManualSaveAdmissionKind.Refused, blocker), NoWrite) &&
                 queue.Receipt!.Disposition == "failed" && queue.Receipt.Error == blocker &&
                 queue.Receipt.AwaitedVoices?.Single() == voice, "An independent save owner was waived: " + blocker);
@@ -107,24 +133,39 @@ internal static class ManualSavePreparationContracts
             voice with { NativeOwner = voice.NativeOwner + 1 }, voice with { MediaSha256 = new string('b', 64) },
             voice with { SoundSha256 = new string('c', 64) } })
         {
-            queue.Request(session, source, 40); queue.Prepare(40, 4000, Finite(voice), [voice]);
-            Require(!queue.DrainPrepared(session, source, 41, 4010, () => [changed], () => Finite(changed), NoWrite) &&
+            using var fixture = new CompiledManualSaveFixture([], phase: 40);
+            var queue = Request(fixture); queue.Prepare(fixture.Phase, 4000, Finite(voice), [voice]);
+            fixture.AdvancePhase();
+            Require(!queue.DrainPrepared(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase, 4010,
+                () => [changed], () => Finite(changed), NoWrite) &&
                 queue.Receipt!.Disposition == "cancelled", "Save preparation migrated to changed source/native/media/generation.");
         }
-        queue.Request(session, source, 50); queue.Prepare(50, 5000, Finite(voice), [voice]);
-        Require(!queue.DrainPrepared(Guid.NewGuid(), source, 51, 5010,
-            () => throw new InvalidDataException("Retired native lease queried."), () => Finite(voice), NoWrite) &&
-            queue.Receipt!.Disposition == "cancelled", "Save preparation migrated across reload/session generation.");
-        queue.Request(session, source, 60); queue.Prepare(60, 6000, Finite(voice), [voice]);
-        queue.Cancel("Actual user cancellation.");
-        Require(queue.Receipt!.Disposition == "cancelled" && queue.Receipt.Preparation?.Phase == RuntimeManualSavePreparationPhase.Cancelled,
-            "Cancellation lost the actual prepared request.");
-        queue.Request(session, source, 70); queue.Prepare(70, 7000, Finite(voice), [voice]);
-        Require(!queue.DrainPrepared(session, source, 71, 7010, () => [], () => Finite(voice), NoWrite) &&
-            queue.Receipt!.Disposition == "failed", "A missing native generation was assumed finished from admission alone.");
+        using (var fixture = new CompiledManualSaveFixture([], phase: 50))
+        {
+            var queue = Request(fixture); queue.Prepare(fixture.Phase, 5000, Finite(voice), [voice]);
+            fixture.AdvancePhase();
+            Require(!queue.DrainPrepared(Guid.NewGuid(), fixture.Binding.SourceCompatibilityId, fixture.Phase, 5010,
+                () => throw new InvalidDataException("Retired native lease queried."), () => Finite(voice), NoWrite) &&
+                queue.Receipt!.Disposition == "cancelled", "Save preparation migrated across reload/session generation.");
+        }
+        using (var fixture = new CompiledManualSaveFixture([], phase: 60))
+        {
+            var queue = Request(fixture); queue.Prepare(fixture.Phase, 6000, Finite(voice), [voice]);
+            queue.Cancel("Actual user cancellation.");
+            Require(queue.Receipt!.Disposition == "cancelled" && queue.Receipt.Preparation?.Phase == RuntimeManualSavePreparationPhase.Cancelled,
+                "Cancellation lost the actual prepared request.");
+        }
+        using (var fixture = new CompiledManualSaveFixture([], phase: 70))
+        {
+            var queue = Request(fixture); queue.Prepare(fixture.Phase, 7000, Finite(voice), [voice]);
+            fixture.AdvancePhase();
+            Require(!queue.DrainPrepared(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase, 7010,
+                () => [], () => Finite(voice), NoWrite) &&
+                queue.Receipt!.Disposition == "failed", "A missing native generation was assumed finished from admission alone.");
+        }
         Reject(() => new RuntimeManualSavePreparation(1, 1, Finite(voice), [voice, voice]));
         Reject(() => new RuntimeManualSavePreparation(1, 1, new(RuntimeManualSaveAdmissionKind.Ready), [voice]));
-        Require(writes == written, "A refused prepared request invoked the writer.");
+        Require(writes == 0, "A refused prepared request invoked the writer.");
     }
 
     private static void RegistryLeases(FalloutPluginStack records, FalloutFiniteSoundVoice voice)

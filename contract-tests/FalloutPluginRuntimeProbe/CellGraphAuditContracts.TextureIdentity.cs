@@ -78,10 +78,11 @@ internal static partial class CellGraphAuditContracts
                     "Complete NIF decode or a later resource role changed the original texture namespace binding.");
                 Require(row.Dependencies.Order(StringComparer.Ordinal).SequenceEqual(positives.Select(test => test.Expected)
                     .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)), "NIF aliases lost an independent expected resource key; actual=" + string.Join(',', row.Dependencies));
-                var declared = row.DependencyDeclarations.Select(value => JsonSerializer.SerializeToElement(value)).ToArray();
+                var declared = TextureDeclarations(row.DependencyDeclarations);
                 Require(declared.Length == positives.Length + 1 && declared[^1].GetProperty("declaredPath").GetString() == "" &&
                     declared[^1].GetProperty("logicalPath").ValueKind == JsonValueKind.Null,
-                    "Raw alias/encoded-empty declarations were collapsed or assigned invented resources.");
+                    "Raw alias/encoded-empty declarations were collapsed or assigned invented resources; actual=" +
+                    JsonSerializer.Serialize(row.DependencyDeclarations));
                 for (var index = 0; index < positives.Length; index++)
                 {
                     var test = positives[index];
@@ -108,7 +109,7 @@ internal static partial class CellGraphAuditContracts
                     JsonSerializer.SerializeToElement(row.Native).GetProperty("admission").GetString() == "unverified",
                     "Decoys or alias duplicates entered the winning resource ledger, or path equality became native readiness.");
                 var malformed = resources.Read(malformedModel, "model");
-                var malformedDeclarations = malformed.DependencyDeclarations.Select(value => JsonSerializer.SerializeToElement(value)).ToArray();
+                var malformedDeclarations = TextureDeclarations(malformed.DependencyDeclarations);
                 Require(malformed.Failures.Count == invalid.Length && malformedDeclarations.Length == invalid.Length + 1 &&
                     malformed.Dependencies.SequenceEqual(["textures/probe.dds"]) &&
                     malformedDeclarations.Take(invalid.Length).Select(value => value.GetProperty("declaredPath").GetString()).SequenceEqual(invalid) &&
@@ -146,7 +147,7 @@ internal static partial class CellGraphAuditContracts
                 foreach (var type in new[] { "SkyShaderProperty", "TileShaderProperty" })
                 {
                     var separateOwner = resources.Read("meshes/" + type + ".nif", "model");
-                    var declaration = JsonSerializer.SerializeToElement(separateOwner.DependencyDeclarations.Single());
+                    var declaration = TextureDeclarations(separateOwner.DependencyDeclarations).Single();
                     Require(separateOwner.DecodedBlocks == separateOwner.Blocks && separateOwner.Dependencies.Count == 0 &&
                         separateOwner.Failures.Count == 1 && declaration.GetProperty("declaredPath").GetString() == "Data/textures/probe.dds" &&
                         declaration.GetProperty("logicalPath").ValueKind == JsonValueKind.Null,
@@ -165,6 +166,11 @@ internal static partial class CellGraphAuditContracts
     {
         var bytes = DdsFixture(); bytes[128] = tag; return bytes;
     }
+
+    private static JsonElement[] TextureDeclarations(IEnumerable<object> declarations) => declarations
+        .Select(value => JsonSerializer.SerializeToElement(value))
+        .Where(value => value.TryGetProperty("declaredPath", out _) && value.TryGetProperty("logicalPath", out _))
+        .ToArray();
 
     private static void WriteTextureIdentityInput(string root, string relative, byte[] bytes)
     {

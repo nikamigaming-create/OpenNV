@@ -42,12 +42,13 @@ internal sealed record FalloutIngestible(FalloutFormKey Form, string Hash, byte 
             if (group.Any(field => field.Signature is not ("EFIT" or "CTDA")))
                 throw new NotSupportedException("Ingestible effect has an unbound script/data extension.");
             var flags = BinaryPrimitives.ReadUInt32LittleEndian(definition);
-            var presentation = BinaryPrimitives.ReadUInt32LittleEndian(definition[8..]) != 0 ||
+            var archetype = BinaryPrimitives.ReadUInt32LittleEndian(definition[64..]);
+            var presentation = archetype != 1 && BinaryPrimitives.ReadUInt32LittleEndian(definition[8..]) != 0 ||
                 BinaryPrimitives.ReadUInt16LittleEndian(definition[20..]) != 0 ||
                 new[] { 24, 32, 36, 40, 44, 48, 52 }.Any(offset =>
                     BinaryPrimitives.ReadUInt32LittleEndian(definitionData.Span[offset..]) != 0) ||
                 effect.ReadSubrecords().Any(field => field.Signature == "MODL" && field.Data.Span.IndexOfAnyExcept((byte)0) >= 0);
-            effects.Add(new(effects.Count, effect.FormKey, HashOf(effect), BinaryPrimitives.ReadUInt32LittleEndian(definition[64..]),
+            effects.Add(new(effects.Count, effect.FormKey, HashOf(effect), archetype,
                 BinaryPrimitives.ReadInt32LittleEndian((flags & 0x180000) != 0 ? data[16..] : definition[68..]), flags,
                 BinaryPrimitives.ReadUInt32LittleEndian(data), BinaryPrimitives.ReadUInt32LittleEndian(data[8..]),
                 BinaryPrimitives.ReadUInt32LittleEndian(data[4..]), BinaryPrimitives.ReadUInt32LittleEndian(data[12..]), presentation,

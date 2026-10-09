@@ -44,9 +44,11 @@ internal sealed partial class FalloutQuestStages(FalloutPluginStack records, Fal
         var header = fields.Single(field => field.Signature == "DATA").Data;
         if (header.Length is not (2 or 8)) throw new InvalidDataException("Quest header extent is invalid.");
         if (quests.StageDone(key, stage) && (header.Span[0] & 8) == 0) return;
-        var begin = Array.FindIndex(fields, field => field.Signature == "INDX" &&
-            field.Data.Length == 2 && BinaryPrimitives.ReadInt16LittleEndian(field.Data.Span) == stage);
-        if (begin < 0) throw new NotSupportedException($"Quest {key} has no authored stage {stage}.");
+        var matchingStages = Enumerable.Range(0, fields.Length).Where(index => fields[index].Signature == "INDX" &&
+            fields[index].Data.Length == 2 && BinaryPrimitives.ReadInt16LittleEndian(fields[index].Data.Span) == stage).ToArray();
+        if (matchingStages.Length == 0) throw new NotSupportedException($"Quest {key} has no authored stage {stage}.");
+        if (matchingStages.Length != 1) throw new InvalidDataException("Quest stage ordinal is ambiguous.");
+        var begin = matchingStages[0];
         quests.SetRunning(key, true);
         quests.EnterStage(key, stage);
         _progress[(key, stage)] = (0, false);
@@ -61,7 +63,8 @@ internal sealed partial class FalloutQuestStages(FalloutPluginStack records, Fal
                 if (fields[index].Signature != "QSDT") throw new InvalidDataException("Quest stage entry has no flag header.");
                 var next = index + 1;
                 while (next < end && fields[next].Signature != "QSDT") ++next;
-                var entry = fields[index..next];
+                var entry = FalloutScriptScope.QuestEntry(quest, begin, index);
+                if (entry.FieldCount != next - index) throw new InvalidDataException("Stage result range changed during admission.");
                 var flags = entry[0].Data;
                 if (flags.Length != 1 || (flags.Span[0] & ~3) != 0) throw new NotSupportedException("Quest stage flags are unbound.");
                 var conditions = entry.Where(field => field.Signature == "CTDA").Select(field => FalloutCondition.Read(quest, field.Data.Span)).ToArray();
@@ -70,11 +73,12 @@ internal sealed partial class FalloutQuestStages(FalloutPluginStack records, Fal
                     if ((flags.Span[0] & 2) != 0) throw new NotSupportedException("Failed quest presentation and state are unbound.");
                     if ((flags.Span[0] & 1) != 0) quests.Complete(key);
                     var sources = entry.Where(field => field.Signature == "SCTX").ToArray();
-                    if (sources.Length > 1) throw new InvalidDataException("Quest stage entry has ambiguous source.");
-                    if (sources.Length == 1)
+                    if (!FalloutCompiledScriptProgram.HasProgram(entry) && sources.Length > 1)
+                        throw new InvalidDataException("Quest stage entry has ambiguous source.");
+                    if (FalloutCompiledScriptProgram.HasProgram(entry))
+                        foreach (var step in execute(quest, entry, "")) yield return step;
+                    else if (sources.Length == 1)
                         foreach (var step in execute(quest, entry, FalloutDialogueTopic.ScriptText(sources[0].Data.Span))) yield return step;
-                    else if (entry.Any(field => field.Signature == "SCDA" && field.Data.Length > 0))
-                        throw new NotSupportedException("Quest stage compiled program has no source execution owner.");
                     foreach (var field in entry.Where(field => field.Signature == "NAM0"))
                     {
                         if (field.Data.Length != 4) throw new InvalidDataException("Quest stage next-quest extent is invalid.");
@@ -121,7 +125,7 @@ internal sealed partial class FalloutQuestStages(FalloutPluginStack records, Fal
             }
             _pending.Add(execution);
         }
-        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException or OverflowException)
+        catch (Exception error)
         {
             _errors[(execution.Quest, execution.Stage)] = error.Message;
             RetainClosedFailure(execution.Quest, execution.Stage, error);

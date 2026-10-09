@@ -6,6 +6,8 @@ internal sealed class FalloutScriptMenus
 {
     private bool _gameMode = true;
     private HashSet<uint>? _codes;
+    internal bool GameMode => _gameMode;
+    internal IReadOnlyList<uint>? Codes => _codes?.Order().ToArray();
     internal object State => new { gameMode = _gameMode, codes = _codes?.Order().ToArray() };
 
     internal void Publish(bool gameMode, IEnumerable<uint>? codes = null)

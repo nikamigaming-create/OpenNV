@@ -26,6 +26,9 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         _ => throw new NotSupportedException("Script sound reference presentation has no world owner.");
     internal float SoundUnitsToMetres { get; set; }
     internal FalloutNewGameBootstrap? Bootstrap { get; set; }
+    internal Func<IEnumerable<uint>?>? StartupMenus { get; set; }
+    internal bool StartupMessagePending => _current?.Request is { } request && Scripts.MessageResults.IsPending(request) ||
+        Scripts.HasQueuedMessage;
     internal string? StartupError => _error;
     internal object State => Observe(detailed: true);
     internal object Observe(bool detailed) => new
@@ -48,14 +51,14 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         _events.Active = true;
     }
 
-    internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
-        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, FalloutReferenceWorld? references = null,
-        FalloutScriptEvents? events = null, FalloutScriptStorage? storage = null)
+    internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutPlayerInventory inventory, FalloutQuestScripts scripts)
     {
+        if (!ReferenceEquals(scripts.Records, records) || !ReferenceEquals(scripts.PlayerInventory, inventory))
+            throw new InvalidOperationException("Quest presentation requires its genuine prepared record and inventory owners.");
         Name = "NativeQuestScripts";
         _records = records;
         _inventory = inventory;
-        Scripts = new(records, quests, claimed, inventory, globals, references: references, events: events, storage: storage);
+        Scripts = scripts;
         _events = new(Scripts.Events, () => Scripts.Host?.InvokeFunction);
         _uiClock = new(() => Scripts.Ui);
         ProcessMode = ProcessModeEnum.Always;
@@ -105,7 +108,13 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         {
             if (Bootstrap is not null)
             {
-                try { Bootstrap.Advance(delta, [4, 1007, 2]); }
+                try
+                {
+                    var menus = StartupMenus?.Invoke()?.ToList();
+                    if (_layer is not null) { menus ??= []; menus.AddRange([1001, 2]); }
+                    Bootstrap.Advance(delta, menus);
+                    if (!Bootstrap.PresentationBlocked && !Bootstrap.PlacementPreparing) RefreshMessages();
+                }
                 catch (Exception error)
                 {
                     _error = error.Message;
@@ -115,7 +124,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             }
             // The current title path has no player/source-command host yet.
             // Keep its clocks without pretending those menu blocks executed.
-            Scripts.Advance(delta, gameMode: false, menus: [4], execute: false);
+            Scripts.Advance(delta, gameMode: false, menus: StartupMenus?.Invoke(), execute: false);
             return;
         }
         if (_layer is not null || GetTree().Paused)
@@ -133,6 +142,12 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         if (Scripts.TryTakeMessage(out var restored)) { Show(restored!); return; }
         Scripts.Advance(delta);
         if (Scripts.TryTakeMessage(out var message)) Show(message!);
+    }
+
+    private void RefreshMessages()
+    {
+        if (_current?.Request is { } request && !Scripts.MessageResults.IsPending(request)) CloseMessage();
+        if (_layer is null && Scripts.TryTakeMessage(out var message)) Show(message!);
     }
 
     private void Show(FalloutSourceMessage message)

@@ -12,6 +12,8 @@ internal sealed partial class FalloutScriptArrayStore
             foreach (var argument in args) Append(array, argument.Value);
             return array;
         }, variadic: FalloutScriptArgumentKind.Value),
+        "ar_map" => FalloutScriptFunction.Typed([], args => Map(args.Select(argument => argument.Value.Pair).ToArray()),
+            variadic: FalloutScriptArgumentKind.Pair),
         "ar_size" => new([FalloutScriptArgumentKind.Value], args => Size(args[0].Value)) { ReadOnly = true },
         "ar_haskey" => new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Value],
             args => HasKey(args[0].Value, args[1].Value) ? 1 : 0)

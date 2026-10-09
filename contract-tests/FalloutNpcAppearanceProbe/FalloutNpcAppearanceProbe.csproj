@@ -2,45 +2,12 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>OpenNV.FalloutNpcAppearanceProbe</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../runtime/src/Content/FalloutContentWorkers.cs" Link="FalloutContentWorkers.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutQuestObjectFlags.cs" Link="FalloutQuestObjectFlags.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutSoundVoices.cs" Link="FalloutSoundVoices.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutFiniteSoundVoice.cs" Link="FalloutFiniteSoundVoice.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutFiniteSoundSaveDrain.cs" Link="FalloutFiniteSoundSaveDrain.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutSoundLoop.cs" Link="FalloutSoundLoop.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutSoundRecord.cs" Link="FalloutSoundRecord.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutSoundPaths.cs" Link="FalloutSoundPaths.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPerkParameters.cs" Link="FalloutPerkParameters.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
-    <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
-    <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutNpcAppearance*.cs" Link="%(Filename)%(Extension)" />
-    <Compile Include="../../runtime/src/Content/FalloutNpcHeight.cs" Link="FalloutNpcHeight.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorTemplateOwner.cs" Link="FalloutActorTemplateOwner.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorTemplateSelection.cs" Link="FalloutActorTemplateSelection.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutSoundRandomState.cs" Link="FalloutSoundRandomState.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutNpcFaceMaterial.cs" Link="FalloutNpcFaceMaterial.cs" />
-    <Compile Include="../../runtime/src/Formats/FaceGen/*.cs" Link="%(Filename)%(Extension)" />
-    <Compile Include="../../runtime/src/Content/FalloutNumericGameSettings.cs" Link="FalloutNumericGameSettings.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableInputControls.cs" Link="FalloutExecutableInputControls.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Static.cs" Link="FalloutExecutableStringTable.Static.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Inline.cs" Link="FalloutExecutableStringTable.Inline.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Ini.cs" Link="FalloutExecutableStringTable.Ini.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.IniPayload.cs" Link="FalloutExecutableStringTable.IniPayload.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutNumericIniSettings.cs" Link="FalloutNumericIniSettings.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutNumericIniSettings.Read.cs" Link="FalloutNumericIniSettings.Read.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutInstallationSettings.cs" Link="FalloutInstallationSettings.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />
+    <ProjectReference Include="../../runtime/OpenNV.csproj" />
   </ItemGroup>
 </Project>

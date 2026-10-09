@@ -276,6 +276,12 @@ internal partial class RuntimeNativeNpc
         }
         else if (source.Procedure != 6 || source.LocationType != 0 || source.LocationRadius != 0 ||
             source.LocationReference != _furnitureReference) return false;
+        if (ScriptPackageAssignmentPending || _packageEvents!.Active?.Form != selected.FormKey)
+        {
+            _packageEvents!.Change(null);
+            if (_bindingScriptPackageRevision != ScriptPackageRevision || _requestedSelection is not null)
+            { _aiPollRemaining = 0; return true; }
+        }
         // A source package can enable seated conversation after occupation.
         // Its change/end events do not require leaving and re-entering the
         // same seat, and its existing animation keeps its observed phase.
@@ -291,6 +297,7 @@ internal partial class RuntimeNativeNpc
 
     public override void _ExitTree()
     {
+        RetainFollowMotion();
         RetainHeadTracking();
         RetainPendingSelection();
         RetainBindingFailure();

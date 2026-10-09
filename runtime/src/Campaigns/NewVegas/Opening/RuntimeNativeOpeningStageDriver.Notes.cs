@@ -9,6 +9,7 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private Node? _pipBoyNoteOwner;
     private FalloutDialogueVoiceIndex? _pipBoyNoteVoices;
+    private long _pipBoyNoteSoundOccurrence;
 
     internal void PlayPipBoyNote(FalloutNote note)
     {
@@ -21,13 +22,13 @@ internal partial class RuntimeNativeOpeningStageDriver
         {
             if (note.Kind == FalloutNoteKind.Sound && note.Sound is { } sound)
                 prepared.Enqueue(NativeOwnedSoundPlayback.CreateMenu(FalloutSoundRecordReader.Read(_pluginStack, sound),
-                    _pluginStack, source, _ingestibleSoundRandom));
+                    _pluginStack, NativeOwnedSoundPlayback.MenuCall(this, checked(++_pipBoyNoteSoundOccurrence), sound)));
             else if (note.Kind == FalloutNoteKind.Voice && note.Topic is { } topic && note.Actor is { } actor)
             {
                 var speaker = FalloutDialogueSpeaker.Read(_pluginStack, actor);
                 var conditions = new FalloutDialogueConditions(_pluginStack, _quests, actor, speaker, EvaluateMessageCondition);
                 var info = FalloutDialogueTopic.Read(_pluginStack, topic).Select(actor, new HashSet<FalloutFormKey>(),
-                    quest => _quests.Stage(quest), conditions.Evaluate, random: _ingestibleSoundRandom.NextBounded)
+                    quest => _quests.Stage(quest), conditions.Evaluate)
                     ?? throw new InvalidDataException("The note has no available voice response.");
                 if (!string.IsNullOrWhiteSpace(info.BeginScript) || !string.IsNullOrWhiteSpace(info.EndScript))
                     throw new NotSupportedException("The note's response script is not connected to note playback.");
@@ -36,7 +37,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 {
                     if (info.Responses[index].Sound is { } responseSound)
                         prepared.Enqueue(NativeOwnedSoundPlayback.CreateMenu(FalloutSoundRecordReader.Read(_pluginStack, responseSound),
-                            _pluginStack, source, _ingestibleSoundRandom));
+                            _pluginStack, NativeOwnedSoundPlayback.MenuCall(this, checked(++_pipBoyNoteSoundOccurrence), responseSound)));
                     else
                     {
                         var binding = _pipBoyNoteVoices.Resolve(speaker, info, index);

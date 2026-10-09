@@ -49,8 +49,18 @@ internal sealed record FalloutModStackInstallation(
         ? "Required package files found. Gameplay support is still under development."
         : "Missing package files: " + string.Join(", ", MissingDependencies.Select(row => row.LogicalPath));
 
-    internal RuntimeLiveContentSource OpenSource() => RuntimeLiveContentSource.Open(BaseInstallation.InstallRoot,
-        RuntimeLiveContentSource.FalloutNewVegasGame, ContentRoots.Skip(1).ToArray(), ActivePlugins, settings: Settings);
+    internal RuntimeLiveContentSource OpenSource()
+    {
+        var source = RuntimeLiveContentSource.Open(BaseInstallation.InstallRoot,
+            RuntimeLiveContentSource.FalloutNewVegasGame, ContentRoots.Skip(1).ToArray(), ActivePlugins, settings: Settings);
+        try
+        {
+            var host = Dependencies.SingleOrDefault(row => row.LogicalPath.Equals("nvse_1_4.dll", StringComparison.OrdinalIgnoreCase));
+            if (host?.SourcePath is { } path) source.BindNativePluginHostDependency(new(path, "actual-selected-stack-dependency:" + source.StackId));
+            return source;
+        }
+        catch { source.Dispose(); throw; }
+    }
 
     internal IReadOnlyList<FalloutInstallationSetting> Settings => Mods.SelectMany(mod => FalloutModCatalog.Get(mod.Id).Settings ?? []).ToArray();
 

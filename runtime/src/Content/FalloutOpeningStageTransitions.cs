@@ -45,6 +45,8 @@ internal sealed class FalloutOpeningStageMachine
     {
         _transitions = transitions ?? throw new ArgumentNullException(nameof(transitions));
         _controls = controls ?? throw new ArgumentNullException(nameof(controls));
+        if (controls.ResultDriven)
+            throw new NotSupportedException("Original result-driven opening cannot execute a diagnostic stage machine.");
         ControlState = initialControlState ?? FalloutPlayerControlState.AllEnabled;
         Enter(initialQuestEditorId, initialStage);
     }
@@ -211,6 +213,8 @@ internal static partial class FalloutOpeningStageTransitionResolver
     internal static FalloutOpeningStageTransitionGraph AddDialogueWaits(
         FalloutOpeningControlGraph stages, FalloutOpeningStageTransitionGraph transitions)
     {
+        if (stages.ResultDriven)
+            throw new NotSupportedException("Original result-driven opening cannot predict diagnostic dialogue waits.");
         var result = transitions.Transitions.ToList();
         foreach (var quest in stages.Quests.Values)
             foreach (var stage in quest.Values)
@@ -245,6 +249,11 @@ internal static partial class FalloutOpeningStageTransitionResolver
     {
         ArgumentNullException.ThrowIfNull(stack);
         ArgumentNullException.ThrowIfNull(stages);
+        // Actual result commands and recurring SCDA own every reached target,
+        // wait and timer. Diagnostic source cannot predeclare their effects.
+        if (executeGameMode) return new([]);
+        if (stages.ResultDriven)
+            throw new NotSupportedException("Result-driven opening has no diagnostic transition/timer authority.");
         var result = new List<FalloutOpeningStageTransition>();
         foreach (var quest in stages.Quests)
         {
@@ -312,6 +321,8 @@ internal static partial class FalloutOpeningStageTransitionResolver
         ArgumentNullException.ThrowIfNull(transitions);
         ArgumentException.ThrowIfNullOrWhiteSpace(questEditorId);
         ArgumentNullException.ThrowIfNull(dialogueStages);
+        if (stages.ResultDriven)
+            throw new NotSupportedException("Original result-driven opening cannot predict diagnostic INFO destinations.");
         if (dialogueStages.Count == 0 || dialogueStages.Distinct().Count() != dialogueStages.Count)
             throw new ArgumentException("Native opening dialogue stages are empty or duplicated.");
 

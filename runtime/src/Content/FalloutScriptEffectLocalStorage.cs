@@ -5,8 +5,9 @@ namespace OpenNV.Runtime.Content;
 // Complete ordered source cells, independent of the declaration name index.
 // A bare variable addresses the first matching slot; later entries remain owned
 // and retain their actual initial/mutated payload through a cold snapshot.
-internal sealed class FalloutScriptEffectLocalStorage
+internal sealed partial class FalloutScriptEffectLocalStorage
 {
+    private readonly FalloutPluginRecord _script;
     private readonly IReadOnlyDictionary<string, FalloutScriptLocalDeclaration> _declarations;
     private readonly List<(uint Index, byte Flags, ulong Payload)> _entries = [];
     private readonly Dictionary<uint, int> _first = [];
@@ -15,7 +16,7 @@ internal sealed class FalloutScriptEffectLocalStorage
     internal FalloutScriptEffectLocalStorage(FalloutPluginRecord script,
         IReadOnlyList<FalloutScriptEffectLocalCell>? restore = null)
     {
-        Script = script.FormKey;
+        Script = script.FormKey; _script = script;
         _declarations = FalloutScriptLocals.ReadDeclarations(script);
         if (_declarations.Values.Any(value => value.Kind is not (FalloutScriptLocalKind.Number or FalloutScriptLocalKind.Form)))
             throw new NotSupportedException("Active-effect string/array local retention requires its value lifetime owner.");

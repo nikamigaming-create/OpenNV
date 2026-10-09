@@ -4,7 +4,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.World.Cells;
 
-internal static class RuntimeNativePlayerMoves
+internal static partial class RuntimeNativePlayerMoves
 {
     internal static async Task<FalloutPlayerMove?> ApplyNextAsync(FalloutReferenceWorld world, RuntimeNativePlayer player,
         FalloutFormKey activeCell, Func<FalloutReferencePlacement, Transform3D, Task> transfer)

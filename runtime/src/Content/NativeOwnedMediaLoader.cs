@@ -3,7 +3,7 @@ using OpenNV.Runtime.Presentation.Rendering;
 
 namespace OpenNV.Runtime.Content;
 
-internal static class NativeOwnedMediaLoader
+internal static partial class NativeOwnedMediaLoader
 {
     private const string WavExtension = ".wav";
     private const string OggExtension = ".ogg";
@@ -21,9 +21,11 @@ internal static class NativeOwnedMediaLoader
 
     internal static AudioStream LoadAudio(
         string logicalPath,
-        string? preferredArchive = null)
+        string? preferredArchive = null, long? menuSelectionOrdinal = null)
     {
-        var payload = Read(logicalPath, preferredArchive, out var source);
+        string source;
+        var payload = menuSelectionOrdinal is { } ordinal ? ReadSourceMenu(logicalPath, preferredArchive, ordinal, out source) :
+            Read(logicalPath, preferredArchive, out source);
         var extension = Path.GetExtension(logicalPath).ToLowerInvariant();
         AudioStream? stream;
         if (extension == WavExtension)
@@ -38,16 +40,26 @@ internal static class NativeOwnedMediaLoader
                 $"Unsupported owned audio extension: {logicalPath}");
         }
         if (stream is null) throw new InvalidDataException($"Godot rejected owned audio data from {source}");
-        stream.SetMeta("opennv_owned_media_source", source);
-        stream.SetMeta("opennv_owned_media_path", logicalPath);
-        stream.SetMeta("opennv_owned_media_sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)));
-        if (extension == OggExtension)
+        try
         {
-            var format = NativeOwnedMediaFormat.OggFormat(payload);
-            stream.SetMeta("opennv_owned_media_rate", format.Rate);
-            stream.SetMeta("opennv_owned_media_channels", format.Channels);
+            stream.SetMeta("opennv_owned_media_source", source);
+            stream.SetMeta("opennv_owned_media_path", logicalPath);
+            stream.SetMeta("opennv_owned_media_sha256", Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)));
+            if (extension == OggExtension)
+            {
+                var format = NativeOwnedMediaFormat.OggFormat(payload);
+                stream.SetMeta("opennv_owned_media_rate", format.Rate);
+                stream.SetMeta("opennv_owned_media_channels", format.Channels);
+            }
+            return stream;
         }
-        return stream;
+        catch (Exception original)
+        {
+            try { stream.Dispose(); }
+            catch (Exception cleanup)
+            { throw new AggregateException("Owned audio decode retained original metadata and resource-release failures.", original, cleanup); }
+            throw;
+        }
     }
 
     private static AudioStreamWav? LoadWav(byte[] payload)

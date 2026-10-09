@@ -19,6 +19,8 @@ internal sealed partial class FalloutReferenceScripts
         if (instance.Script is null) return true;
         try
         {
+            if (FalloutCompiledScriptProgram.HasProgram(instance.Script.Record.ReadSubrecords().ToArray()))
+                return !CompiledObjectProgram(instance).Events.Any(block => block.Event == 2);
             return !Program(instance).Events.Any(block => block.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or KeyNotFoundException or OverflowException)

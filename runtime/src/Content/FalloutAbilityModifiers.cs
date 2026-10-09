@@ -7,8 +7,11 @@ internal sealed record FalloutAbilityModifier(FalloutFormKey Spell, FalloutFormK
     float Amount, IReadOnlyList<FalloutCondition> Conditions, FalloutActorValuePool Pool = FalloutActorValuePool.Temporary);
 internal sealed record FalloutAbilityScript(FalloutFormKey Spell, FalloutFormKey Effect, FalloutFormKey Script,
     IReadOnlyList<FalloutCondition> Conditions, int EffectOrdinal = 0);
+internal sealed record FalloutPerkQuestStage(FalloutFormKey Perk, FalloutFormKey Quest, ushort Stage,
+    byte SourceRank, byte Priority, int SourceIndex);
 internal sealed record FalloutPerkEntry(byte Entry, byte Function, float Value, IReadOnlyList<FalloutCondition> Conditions,
-    IReadOnlyDictionary<byte, IReadOnlyList<FalloutCondition>>? ConditionGroups = null, int SourceIndex = -1)
+    IReadOnlyDictionary<byte, IReadOnlyList<FalloutCondition>>? ConditionGroups = null, int SourceIndex = -1,
+    byte Priority = 0, byte SourceRank = 0)
 {
     internal void RequireActorConditionScope()
     {
@@ -23,7 +26,8 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
 {
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutAbilityModifier>> _spells = [];
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutAbilityScript>> _scripts = [];
-    private readonly Dictionary<FalloutFormKey, (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries)> _perks = [];
+    private readonly Dictionary<(FalloutFormKey Form, int Rank),
+        (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries, FalloutPerkQuestStage[] QuestStages)> _perks = [];
 
     internal IReadOnlyList<FalloutAbilityModifier> Spell(FalloutFormKey form) => Spell(form, null);
 
@@ -60,15 +64,18 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
             var effectId = fields[index].Data.Span;
             if (effectId.Length != 4) return false;
             var effectForm = source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(effectId));
-            if (effectForm is null || !records.TryGetEffective(effectForm.Value, out var effect)) return false;
+            if (effectForm is null || !records.TryGetEffective(effectForm.Value, out var effect) || effect.IsDeleted)
+                throw new InvalidDataException($"Ability {form} has a missing or deleted winning effect.");
             var end = index + 1;
             while (end < fields.Length && fields[end].Signature != "EFID") end++;
             var group = fields[(index + 1)..end];
             var efitFields = group.Where(field => field.Signature == "EFIT").ToArray();
-            if (efitFields.Length != 1 || efitFields[0].Data.Length != 20 || effect.Signature != "MGEF") return false;
+            if (efitFields.Length != 1 || efitFields[0].Data.Length != 20 || effect.Signature != "MGEF")
+                throw new InvalidDataException($"Ability {form}/{effect.FormKey} has an invalid EFIT/MGEF declaration.");
             var data = efitFields[0].Data.Span;
             var defFields = effect.ReadSubrecords().Where(field => field.Signature == "DATA").ToArray();
-            if (defFields.Length != 1 || defFields[0].Data.Length != 72) return false;
+            if (defFields.Length != 1 || defFields[0].Data.Length != 72)
+                throw new NotSupportedException($"Ability {form}/{effect.FormKey} has an unowned MGEF layout.");
             var definition = defFields[0].Data.Span;
             var flags = BinaryPrimitives.ReadUInt32LittleEndian(definition);
             var archetype = BinaryPrimitives.ReadUInt32LittleEndian(definition[64..]);
@@ -82,7 +89,7 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
                     scripts.Add(new(form, effect.FormKey, scriptId.Value, group.Where(field => field.Signature == "CTDA")
                         .Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray(), ordinal));
                 }
-                else return false;
+                else throw new InvalidDataException($"Ability {form}/{effect.FormKey} has no winning attached SCPT.");
                 index = end - 1;
                 continue;
             }
@@ -99,7 +106,7 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
                 result.Add(new(form, effect.FormKey, value, (flags & 4) == 0 ? magnitude : -(float)magnitude, conditions,
                     source.Signature == "SPEL" && conditions.Length == 0 ? FalloutActorValuePool.Permanent : FalloutActorValuePool.Temporary));
             }
-            else return false;
+            else throw new NotSupportedException($"Ability {form}/{effect.FormKey} archetype {archetype} requires its original effect owner.");
             index = end - 1;
         }
         _scripts.Add(form, scripts);
@@ -125,25 +132,45 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
         return modifiers;
     }
 
-    internal (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries) Perk(FalloutFormKey form)
+    internal (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries, FalloutPerkQuestStage[] QuestStages) Perk(
+        FalloutFormKey form, int acquiredRank = 1)
     {
-        if (_perks.TryGetValue(form, out var cached)) return Project(cached);
+        if (_perks.TryGetValue((form, acquiredRank), out var cached)) return Project(cached);
         var source = records.GetEffective(form);
         if (source.Signature != "PERK") throw new InvalidDataException("Acquired perk is not PERK.");
+        var declaration = FalloutPerkDeclaration.Read(source);
+        if (acquiredRank < 0 || acquiredRank > declaration.Ranks)
+            throw new InvalidDataException($"Perk {form} acquired rank is outside its winning declaration.");
         var fields = source.ReadSubrecords().ToArray();
         var spells = new List<FalloutFormKey>(); var entries = new List<FalloutPerkEntry>();
+        var questStages = new List<FalloutPerkQuestStage>();
         var sourceIndex = 0;
         for (var index = 0; index < fields.Length; index++)
         {
             if (fields[index].Signature != "PRKE") continue;
             var header = fields[index].Data.Span;
             if (header.Length != 3) throw new InvalidDataException("Perk entry header extent is invalid.");
-            if (header[1] != 0) throw new NotSupportedException($"Perk {form} requires acquired rank state.");
+            if (header[1] >= declaration.Ranks)
+                throw new InvalidDataException($"Perk {form} effect rank is outside its winning declaration.");
             var end = Array.FindIndex(fields, index + 1, field => field.Signature == "PRKF");
             if (end < 0 || fields[(index + 1)..end].Any(field => field.Signature == "PRKE")) throw new InvalidDataException("Perk entry is unterminated.");
+            if (header[1] + 1 != acquiredRank)
+            {
+                ++sourceIndex;
+                index = end;
+                continue;
+            }
             var group = fields[(index + 1)..end];
             var data = group.Single(field => field.Signature == "DATA").Data.Span;
-            if (header[0] == 1 && data.Length == 4 && group.Length == 1)
+            if (header[0] == 0 && data.Length == 8 && group.Length == 1)
+            {
+                var quest = source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(data));
+                var target = records.GetEffective(quest);
+                if (target.Signature != "QUST" || target.IsDeleted)
+                    throw new InvalidDataException($"Perk {form} quest effect has no winning QUST.");
+                questStages.Add(new(form, quest, BinaryPrimitives.ReadUInt16LittleEndian(data[4..]), header[1], header[2], sourceIndex));
+            }
+            else if (header[0] == 1 && data.Length == 4 && group.Length == 1)
                 spells.Add(source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(data)));
             else if (header[0] == 2 && data.Length == 3)
             {
@@ -172,18 +199,20 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
                     }
                 }
                 entries.Add(new(data[0], data[1], value, conditions.GetValueOrDefault((byte)0) ?? [],
-                    conditions.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<FalloutCondition>)pair.Value.ToArray()), sourceIndex));
+                    conditions.ToDictionary(pair => pair.Key, pair => (IReadOnlyList<FalloutCondition>)pair.Value.ToArray()), sourceIndex,
+                    header[2], header[1]));
             }
             else throw new NotSupportedException($"Perk {form} entry type {header[0]} is unbound.");
             ++sourceIndex;
             index = end;
         }
-        var result = (spells.ToArray(), entries.ToArray());
-        _perks.Add(form, result);
+        var result = (spells.ToArray(), entries.ToArray(), questStages.ToArray());
+        _perks.Add((form, acquiredRank), result);
         return Project(result);
 
-        (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries) Project((FalloutFormKey[] Spells, FalloutPerkEntry[] Entries) source) =>
+        (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries, FalloutPerkQuestStage[] QuestStages) Project(
+            (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries, FalloutPerkQuestStage[] QuestStages) source) =>
             !records.PerkParameters.HasOverrides(form) ? source : (source.Spells, source.Entries.Select(entry => entry with
-            { Value = records.PerkParameters.Get(form, (uint)entry.SourceIndex) }).ToArray());
+            { Value = records.PerkParameters.Get(form, (uint)entry.SourceIndex) }).ToArray(), source.QuestStages);
     }
 }

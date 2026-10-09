@@ -21,7 +21,7 @@ internal partial class RuntimeNativeNpc
         _packageEvents is { Active: null, Done: false, Error: null } &&
         _packageIdleSource is not null && _packageIdles is not null &&
         _sitting == 0 && !_furnitureApproaching && !_travelActive && _travelProgress?.ArrivalPending != true &&
-        _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _patrol is null &&
+        _escortPackage is null && _editorTravel is null && _dialoguePackage is null && _patrol is null && _followPackage is null &&
         (_animation is null || CanCaptureStoppedIndependentIdle(allowFiniteSoundWait)) && !_responseIdleActive && AnimationError is null &&
         _conversationTarget is null && CanCaptureStoppedAiPose(allowFiniteSoundWait) &&
         _baseClock.Resource.Length != 0;
@@ -52,7 +52,7 @@ internal partial class RuntimeNativeNpc
         Refuse(_sitting != 0, "sitting");
         Refuse(_furnitureApproaching, "furniture-approach");
         Refuse(_travelActive || _travelProgress?.ArrivalPending == true, "travel-continuation");
-        Refuse(_escortPackage is not null || _editorTravel is not null || _dialoguePackage is not null || _patrol is not null,
+        Refuse(_escortPackage is not null || _editorTravel is not null || _dialoguePackage is not null || _patrol is not null || _followPackage is not null,
             "independent-package-continuation");
         Refuse(_animation is not null && !CanCaptureStoppedIndependentIdle(), "independent-idle",
             $"owner={_idleOwner ?? "none"} complete={_idlePlayback?.Complete} objects={_animationObjects.Count} weapon={Combat?.AnimationWeapon is not null} finiteReady={CanCaptureStoppedIndependentIdle(allowFiniteSoundWait: true)} " +
@@ -129,7 +129,8 @@ internal partial class RuntimeNativeNpc
             _aiPollRemaining = failure.PollRemaining; _aiScheduleTime = failure.ScheduleTime;
             _aiQuestRevision = _questState!.Revision; _aiActivityRevision = Activity.Revision;
         }
-        else _requestedSelection = new(package, declaration);
+        else _requestedSelection = new(package, declaration, ScriptPackageRevision,
+            _aiReferenceState?.ScriptPackage?.Package == package.FormKey);
         _selectedSourcePackage = package.FormKey; _sourceSelectionKnown = true;
         _selectionCaptureBlocker = _aiReferenceState!.ProcedureCaptureBlocker;
         RestoreBindingFailurePose(failure);

@@ -15,7 +15,7 @@ internal enum FalloutBsaMemberEncoding
 
 internal readonly record struct FalloutBsaMemberRead(byte[] Data, FalloutBsaMemberEncoding Encoding);
 
-internal sealed class FalloutBsaArchive : IDisposable
+internal sealed partial class FalloutBsaArchive : IDisposable
 {
     private const uint ExpectedMagic = 0x00415342;
     private const uint ExpectedVersion = 104;
@@ -60,7 +60,8 @@ internal sealed class FalloutBsaArchive : IDisposable
         var fileCount = reader.ReadUInt32();
         var totalFolderNameBytes = reader.ReadUInt32();
         var totalFileNameBytes = reader.ReadUInt32();
-        _ = reader.ReadUInt32();
+        _sourceTypeFlags = reader.ReadUInt32();
+        _sourceArchiveFlags = archiveFlags;
         var requiredFlags = DirectoryNamesFlag | FileNamesFlag;
         if ((archiveFlags & requiredFlags) != requiredFlags || folderRecordsOffset < HeaderBytes)
             throw new InvalidDataException($"BSA name tables are unavailable or invalid: {_path}");
@@ -71,8 +72,8 @@ internal sealed class FalloutBsaArchive : IDisposable
         var folders = new Folder[checked((int)folderCount)];
         for (var index = 0; index < folders.Length; ++index)
         {
-            _ = reader.ReadUInt64();
-            folders[index] = new Folder(reader.ReadUInt32(), reader.ReadUInt32());
+            var hash = reader.ReadUInt64();
+            folders[index] = new Folder(hash, reader.ReadUInt32(), reader.ReadUInt32(), index);
         }
 
         var minimumFolderOffset = checked((long)folderRecordsOffset + folderTableBytes);
@@ -104,6 +105,10 @@ internal sealed class FalloutBsaArchive : IDisposable
         var archiveCompressed = (archiveFlags & ArchiveCompressedFlag) != 0;
         _embeddedNames = (archiveFlags & EmbeddedNamesFlag) != 0;
         var minimumDataOffset = checked(folderBlocksEnd + totalFileNameBytes);
+        _directoryExtentBytes = minimumDataOffset;
+        _sourceLength = stream.Length;
+        _sourceFolders = Array.AsReadOnly(directory.Value.SourceFolders.ToArray());
+        var sourceMembers = new List<FalloutBsaSourceMember>(indexed.Count);
         _members = new Dictionary<string, Member>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < indexed.Count; ++index)
         {
@@ -114,12 +119,15 @@ internal sealed class FalloutBsaArchive : IDisposable
             if (row.Offset < minimumDataOffset || checked((long)row.Offset + storedBytes) > stream.Length)
                 throw new InvalidDataException($"BSA member data falls outside the archive: {_path}");
             var logicalPath = CanonicalPath($"{row.Folder}\\{fileNames[index]}");
+            sourceMembers.Add(new(row.FolderOrdinal, row.FileOrdinal, row.Hash, fileNames[index],
+                logicalPath, row.Offset, row.RawSize));
             if (!_members.TryAdd(logicalPath, new Member(
                     row.Offset,
                     storedBytes,
                     archiveCompressed != ((row.RawSize & CompressedOverrideFlag) != 0))))
                 throw new InvalidDataException($"Duplicate BSA member path: {logicalPath}");
         }
+        _sourceMembers = Array.AsReadOnly(sourceMembers.ToArray());
         _readHandle = File.OpenHandle(
             _path,
             FileMode.Open,
@@ -265,6 +273,7 @@ internal sealed class FalloutBsaArchive : IDisposable
         var cursor = 0;
         long observedFolderNameBytes = 0;
         var indexed = new List<IndexedMember>(checked((int)fileCount));
+        var sourceFolders = new List<FalloutBsaSourceFolder>(folders.Count);
         foreach (var folder in folders)
         {
             var blockOffset = checked((long)folder.StoredOffset - totalFileNameBytes);
@@ -274,20 +283,22 @@ internal sealed class FalloutBsaArchive : IDisposable
             if (folderNameBytes == 0 || folderNameBytes > buffer.Length - cursor ||
                 buffer[cursor + folderNameBytes - 1] != 0)
                 throw new InvalidDataException($"BSA folder name is unterminated: {_path}");
-            var folderName = CanonicalPath(
-                Encoding.UTF8.GetString(buffer.AsSpan(cursor, folderNameBytes - 1)));
+            var originalFolder = Encoding.UTF8.GetString(buffer.AsSpan(cursor, folderNameBytes - 1));
+            var folderName = CanonicalPath(originalFolder);
+            sourceFolders.Add(new(folder.Ordinal, folder.Hash, originalFolder, folderName, folder.FileCount));
             cursor += folderNameBytes;
             observedFolderNameBytes += folderNameBytes;
             for (var index = 0U; index < folder.FileCount; ++index)
             {
                 if (buffer.Length - cursor < FileRecordBytes)
                     throw new InvalidDataException($"BSA file table is truncated: {_path}");
+                var hash = BinaryPrimitives.ReadUInt64LittleEndian(buffer.AsSpan(cursor));
                 cursor += sizeof(ulong);
                 var rawSize = BinaryPrimitives.ReadUInt32LittleEndian(buffer.AsSpan(cursor));
                 cursor += sizeof(uint);
                 var offset = BinaryPrimitives.ReadUInt32LittleEndian(buffer.AsSpan(cursor));
                 cursor += sizeof(uint);
-                indexed.Add(new IndexedMember(folderName, rawSize, offset));
+                indexed.Add(new IndexedMember(folderName, folder.Ordinal, checked((int)index), hash, rawSize, offset));
             }
         }
         if (cursor != folderBlockBytes || indexed.Count != fileCount ||
@@ -301,7 +312,8 @@ internal sealed class FalloutBsaArchive : IDisposable
             fileNames,
             minimumFolderOffset + folderBlockBytes,
             ReadOperations: 1,
-            directoryBytes);
+            directoryBytes,
+            sourceFolders);
     }
 
     private DirectoryIndex ReadOffsetDirectory(
@@ -317,6 +329,7 @@ internal sealed class FalloutBsaArchive : IDisposable
         long folderBlocksEnd = 0;
         long observedFolderNameBytes = 0;
         long bytesRead = 0;
+        var sourceFolders = new List<FalloutBsaSourceFolder>(folders.Count);
         foreach (var folder in folders)
         {
             var blockOffset = checked((long)folder.StoredOffset - totalFileNameBytes);
@@ -328,12 +341,14 @@ internal sealed class FalloutBsaArchive : IDisposable
             bytesRead += sizeof(byte) + folderNameBytes;
             if (rawFolderName.Length == 0 || rawFolderName[^1] != 0)
                 throw new InvalidDataException($"BSA folder name is unterminated: {_path}");
-            var folderName = CanonicalPath(Encoding.UTF8.GetString(rawFolderName, 0, rawFolderName.Length - 1));
+            var originalFolder = Encoding.UTF8.GetString(rawFolderName, 0, rawFolderName.Length - 1);
+            var folderName = CanonicalPath(originalFolder);
+            sourceFolders.Add(new(folder.Ordinal, folder.Hash, originalFolder, folderName, folder.FileCount));
             observedFolderNameBytes += folderNameBytes;
             for (var index = 0U; index < folder.FileCount; ++index)
             {
-                _ = reader.ReadUInt64();
-                indexed.Add(new IndexedMember(folderName, reader.ReadUInt32(), reader.ReadUInt32()));
+                var hash = reader.ReadUInt64();
+                indexed.Add(new IndexedMember(folderName, folder.Ordinal, checked((int)index), hash, reader.ReadUInt32(), reader.ReadUInt32()));
                 bytesRead += FileRecordBytes;
             }
             folderBlocksEnd = Math.Max(folderBlocksEnd, stream.Position);
@@ -348,7 +363,8 @@ internal sealed class FalloutBsaArchive : IDisposable
             SplitNullTerminatedNames(fileNameTable, checked((int)fileCount)),
             folderBlocksEnd,
             checked(folders.Count + 1),
-            bytesRead);
+            bytesRead,
+            sourceFolders);
     }
 
     private static string[] SplitNullTerminatedNames(ReadOnlySpan<byte> table, int expectedCount)
@@ -370,13 +386,14 @@ internal sealed class FalloutBsaArchive : IDisposable
         return names;
     }
 
-    private readonly record struct Folder(uint FileCount, uint StoredOffset);
-    private readonly record struct IndexedMember(string Folder, uint RawSize, uint Offset);
+    private readonly record struct Folder(ulong Hash, uint FileCount, uint StoredOffset, int Ordinal);
+    private readonly record struct IndexedMember(string Folder, int FolderOrdinal, int FileOrdinal, ulong Hash, uint RawSize, uint Offset);
     private readonly record struct Member(uint Offset, uint StoredBytes, bool Compressed);
     private readonly record struct DirectoryIndex(
         List<IndexedMember> Members,
         string[] FileNames,
         long FolderBlocksEnd,
         int ReadOperations,
-        long BytesRead);
+        long BytesRead,
+        IReadOnlyList<FalloutBsaSourceFolder> SourceFolders);
 }

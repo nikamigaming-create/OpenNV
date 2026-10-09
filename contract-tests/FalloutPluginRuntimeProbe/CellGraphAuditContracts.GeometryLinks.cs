@@ -146,7 +146,7 @@ internal static partial class CellGraphAuditContracts
                     var row = resources.Resources["meshes/" + item.Name + ".nif"];
                     Require(row.Source == Path.Combine(data, "meshes", item.Name + ".nif") &&
                         row.Sha256 == Convert.ToHexString(SHA256.HashData(item.Bytes)) && row.Bytes == item.Bytes.Length &&
-                        row.Dependencies.SequenceEqual(["textures/geometry.dds"]) && row.DependencyDeclarations.Count == 1 &&
+                        row.Dependencies.SequenceEqual(["textures/geometry.dds"]) && TextureDeclarations(row.DependencyDeclarations).Length == 1 &&
                         JsonSerializer.SerializeToElement(row.Native).GetProperty("admission").GetString() == "unverified",
                         "A typed link lost original source identity, later texture declarations or independent native refusal boundaries.");
                     var serialized = JsonSerializer.SerializeToElement(row, new JsonSerializerOptions(JsonSerializerDefaults.Web));

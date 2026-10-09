@@ -50,6 +50,7 @@ public partial class RuntimeCoordinator
     private void FocusNativeXrPipBoy(bool focused)
     {
         if (_nativeXr is null || _nativePipBoy is null) return;
+        var wasFocused = _nativeXr.PointAtPipBoy is not null;
         focused &= _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && _nativeOpeningStageDriver!.PipBoy.Available;
         _nativeOpeningStageDriver!.PipBoy.SetOpen(focused);
         if (focused)
@@ -60,6 +61,6 @@ public partial class RuntimeCoordinator
         }
         _nativePipBoy.SetXrFocus(focused);
         _nativeXr.PointAtPipBoy = focused ? _nativePipBoy.PointFromXr : null;
-        if (!focused) SaveNativeInteraction();
+        if (wasFocused && !focused) RequestNativePipBoySave();
     }
 }

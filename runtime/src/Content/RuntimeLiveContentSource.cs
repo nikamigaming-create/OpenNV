@@ -321,15 +321,24 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     public void Dispose()
     {
+        List<Exception>? failures = null;
+        void Retire(Action operation)
+        {
+            try { operation(); }
+            catch (Exception failure) { (failures ??= []).Add(failure); }
+        }
+        Retire(RetireNativePluginDeclarationRead);
+        Retire(RetireMenuSoundSelection);
         // Warmup owns archive handles too; do not let it reopen them after disposal.
-        try { ArchiveWarmup.GetAwaiter().GetResult(); }
-        catch (Exception) { /* A failed warmup still has to release every opened archive. */ }
-        _payloads.Clear();
+        Retire(() => ArchiveWarmup.GetAwaiter().GetResult());
+        Retire(_payloads.Clear);
         foreach (var archive in _openArchives.Values)
         {
             if (archive.IsValueCreated)
-                archive.Value.Dispose();
+                Retire(archive.Value.Dispose);
         }
+        if (failures is { Count: 1 }) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        if (failures is { Count: > 1 }) throw new AggregateException("Selected source retirement retained independent owner failures.", failures);
     }
 
     internal static IReadOnlyList<string> ResolvePluginOrder(string dataRoot, NativeGame game, string? activePluginsPath = null)

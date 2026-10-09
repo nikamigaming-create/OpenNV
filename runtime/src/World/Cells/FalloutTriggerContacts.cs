@@ -9,6 +9,7 @@ internal sealed class FalloutTriggerContacts
 {
     private readonly List<FalloutFormKey> _admitted = [];
     private readonly HashSet<FalloutFormKey> _members = [];
+    internal bool HasAdmittedContacts => _admitted.Count != 0;
 
     internal IReadOnlyList<FalloutReferenceScriptEvent> Advance(IReadOnlyList<FalloutFormKey> overlapping)
     {

@@ -1,7 +1,6 @@
 using System.Buffers.Binary;
 using System.Reflection;
 using System.Text;
-using System.Text.Json;
 using Godot;
 using OpenNV.Runtime;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
@@ -51,44 +50,27 @@ public partial class NativeReferenceEventsAudit
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var owner = typeof(RuntimeNativeOpeningStageDriver);
         void Bind(string field, object value) => owner.GetField(field, flags)!.SetValue(driver, value);
-        JsonElement State() => JsonSerializer.SerializeToElement(driver.SaveRequestState);
         try
         {
             Bind("_player", player); Bind("_scripts", scripts);
-            var abilities = new FalloutPlayerAbilityScripts(records, () => [],
-                _ => throw new InvalidOperationException("Unexpected ability condition in save-deferral fixture."));
-            abilities.BindExecutor((_, _, _, _) => throw new InvalidOperationException("Unexpected active effect in save-deferral fixture."));
-            Bind("_playerAbilities", abilities);
-            Bind("_activeCell", Key(0x800));
-            Bind("_stageResults", new FalloutQuestStages(records, new(records),
-                (_, _, _) => throw new InvalidOperationException("Unexpected stage result in save-deferral fixture."),
-                _ => throw new InvalidOperationException("Unexpected stage condition in save-deferral fixture.")));
-            // No Aid is active and the fixture advances zero time. The real
-            // driver frame still evaluates and retains its autosave request.
-            Bind("_ingestibles", new FalloutPlayerIngestibles(records, inventory, null!, new(Key(0x702), []),
-                _ => throw new InvalidOperationException("Unexpected Aid evaluation."), _ => false, () => false));
-            Bind("_imageSpaceState", new FalloutImageSpaceState());
             var reference = world.Get(Key(0x901));
             reference.ProcedureCaptureBlocker = "First native procedure snapshot is pending.";
             var source = records.GetEffective(Key(0x700));
-            driver.ApplyNativeSourceCommand(source.FormKey, new(records, source, source, []), "AutoSave", []);
-            for (var frame = 0; frame < 3; frame++) driver._Process(0);
-            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
-                State().GetProperty("deferredBy").GetString() == "actor-procedure-initialization",
-                "A temporary procedure capture blocker consumed or permanently failed the queued autosave.");
             try
             {
-                owner.GetMethod("CaptureCurrentState", flags)!.Invoke(driver, [Key(0x800)]);
-                throw new InvalidOperationException("Explicit capture admitted an uninitialized procedure.");
+                driver.ApplyNativeSourceCommand(source.FormKey, new(records, source, source, []), "AutoSave", []);
+                throw new InvalidDataException("A diagnostic command fabricated an entered source AutoSave instruction.");
             }
-            catch (TargetInvocationException error) when (error.InnerException is NotSupportedException &&
-                error.InnerException.Message.Contains("actor-procedure-initialization", StringComparison.Ordinal))
+            catch (InvalidOperationException error) when (error.Message == "Source save requires an actual entered instruction.")
             { }
+            Require(scripts.ScriptManualSaves.Order.Requests.Count == 0 && world.PendingProcedureCaptureCount == 1 &&
+                reference.ProcedureCaptureBlocker == "First native procedure snapshot is pending.",
+                "A rejected source save created a request or consumed its independent procedure capture blocker.");
             reference.ProcedureCaptureBlocker = null;
-            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
-                State().GetProperty("deferredBy").ValueKind == JsonValueKind.Null && world.Capture().Count > 0,
-                "Settled procedure did not release the same pending autosave for normal capture.");
-            GD.Print("OPENNV_NATIVE_SAVE_DEFERRAL_PASS sourceRequest=true transientBlockedFrames=true explicitCaptureRefused=true sameRequestEligible=true");
+            Require(scripts.ScriptManualSaves.Order.Requests.Count == 0 && world.PendingProcedureCaptureCount == 0 && world.Capture().Count > 0,
+                "Settling the independent procedure capture fabricated a source autosave request.");
+            GD.Print("OPENNV_NATIVE_SAVE_DEFERRAL_PASS absentInstructionRefused=true queueUnchanged=true independentProcedureBlocker=true " +
+                "settledCapture=true actualSourceAutoSave=unexecuted");
         }
         finally { driver.Free(); }
     }

@@ -13,6 +13,9 @@ internal sealed record FalloutActorPendingPackageSelection(FalloutFormKey Priori
     string? Error, FalloutFormKey? FailedPackage, string? FailedPackageSha256,
     FalloutActorPackageIdleState? IdleState, string? IdleError)
 {
+    internal long OverrideRevision { get; init; }
+    internal bool ScriptOverride { get; init; }
+
     internal const string CaptureBlocker = "Actor package selection awaits its native procedure continuation.";
 
     internal void Validate()
@@ -24,6 +27,8 @@ internal sealed record FalloutActorPendingPackageSelection(FalloutFormKey Priori
             (FailedPackage is null ? FailedPackageSha256 is not null : !FalloutActorFurnitureContinuation.ValidHash(FailedPackageSha256)) ||
             Error is not null && string.IsNullOrWhiteSpace(Error) || IdleError is not null && string.IsNullOrWhiteSpace(IdleError) ||
             !double.IsFinite(PollRemaining) || PollRemaining < 0 || QuestRevision < -1 || ActivityRevision < -1 ||
+            OverrideRevision < 0 || OverrideRevision == long.MaxValue ||
+            ScriptOverride && (Package is null || OverrideRevision == 0) ||
             Activity is null || Retirement is null || IdleState?.ActiveAnimation is not null ||
             IdleState is not null && IdleState.Error != IdleError ||
             ScheduleTime is { } time && (time.Month is < 0 or > 11 || time.Date is < 1 or > 31 || time.Weekday is < 0 or > 6 ||
@@ -40,13 +45,19 @@ internal sealed record FalloutActorPendingPackageSelection(FalloutFormKey Priori
             actor.PackageBindingFailure is not null || actor.SelectionFailure is not null ||
             actor.FurnitureContinuation is not null || actor.DialogueContinuation is not null)
             throw new InvalidDataException("Pending package selection has an active or conflicting procedure.");
+        var currentRevision = actor.ScriptPackage?.Revision ?? 0;
+        if (OverrideRevision > currentRevision || OverrideRevision == currentRevision &&
+            (ScriptOverride ? actor.ScriptPackage?.Package != Package : actor.ScriptPackage?.Package is not null))
+            throw new InvalidDataException("Pending selection has no matching actor script-package epoch.");
+        // An older consumed selection can still own the stopped native pose.
+        // The resident frame discards its election before starting a superseding command.
         var owner = FalloutActorTemplateOwner.Resolve(records, records.GetEffective(actor.Base), 32, actor.Templates);
         if (owner.FormKey != PriorityOwner || FalloutActorFurnitureContinuation.RecordHash(owner) != PrioritySha256)
             throw new InvalidDataException("Saved pending selection differs from its winning priority owner.");
         if (Package is { } package)
         {
             RequirePackage(records, package, PackageSha256!);
-            if (!owner.ReadSubrecords().Where(field => field.Signature == "PKID").Any(field =>
+            if (!ScriptOverride && !owner.ReadSubrecords().Where(field => field.Signature == "PKID").Any(field =>
                 field.Data.Length == 4 && owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) == package))
                 throw new InvalidDataException("Pending selection is absent from the actor's source package list.");
             _ = FalloutScriptPackage.Read(records.GetEffective(package));

@@ -316,6 +316,7 @@ internal sealed class FalloutPlugin : IDisposable
     }
 
     internal string Path { get; }
+    internal bool NativeSourceAvailable => !_handle.IsClosed && !_handle.IsInvalid;
     internal string Name { get; }
     internal IReadOnlyList<string> Masters => _masters;
     internal IReadOnlyList<string> Namespaces => _namespaces;

@@ -19,6 +19,7 @@ internal enum FalloutScriptValueKind
     String,
     Form,
     Array,
+    Pair,
 }
 
 // Script expressions need to keep forms distinct from numbers. A form still
@@ -31,16 +32,23 @@ internal readonly record struct FalloutScriptValue
 
     private readonly double _number;
     private readonly string? _text;
+    private readonly FalloutScriptPair? _pair;
 
     internal FalloutScriptValueKind Kind { get; }
-    internal double Number => Kind == FalloutScriptValueKind.String
-        ? throw new InvalidDataException("A string cannot be used as a numeric script value.")
-        : _number;
+    internal double Number => Kind is FalloutScriptValueKind.String or FalloutScriptValueKind.Pair
+        ? throw new InvalidDataException("A string or transient pair cannot be used as a numeric script value.") : _number;
     internal string Text => Kind == FalloutScriptValueKind.String
         ? _text!
         : throw new InvalidDataException("A script value is not a string.");
-    internal bool Truth => Kind == FalloutScriptValueKind.String ? _text!.Length != 0 : _number != 0;
-    internal double Logical => Kind == FalloutScriptValueKind.String ? (Truth ? 1 : 0) : _number;
+    internal FalloutScriptPair Pair => Kind == FalloutScriptValueKind.Pair ? _pair! :
+        throw new InvalidDataException("A script value is not a transient pair.");
+    internal bool Truth => Kind switch
+    {
+        FalloutScriptValueKind.String => _text!.Length != 0,
+        FalloutScriptValueKind.Pair => throw new InvalidDataException("A transient pair has no truth value."),
+        _ => _number != 0,
+    };
+    internal double Logical => Kind == FalloutScriptValueKind.String ? (Truth ? 1 : 0) : Number;
 
     private FalloutScriptValue(FalloutScriptValueKind kind, double number, string? text)
     {
@@ -50,6 +58,24 @@ internal readonly record struct FalloutScriptValue
         Kind = kind;
         _number = number;
         _text = text;
+        _pair = null;
+    }
+
+    private FalloutScriptValue(FalloutScriptPair pair)
+    {
+        Kind = FalloutScriptValueKind.Pair;
+        _number = 0;
+        _text = null;
+        _pair = pair;
+    }
+
+    internal static FalloutScriptValue MakePair(FalloutScriptValue key, FalloutScriptValue value)
+    {
+        if (key.Kind is not (FalloutScriptValueKind.Number or FalloutScriptValueKind.String) ||
+            value.Kind is not (FalloutScriptValueKind.Number or FalloutScriptValueKind.String or
+                FalloutScriptValueKind.Form or FalloutScriptValueKind.Array))
+            throw new InvalidDataException("Transient pairs require a numeric/string key and a basic value.");
+        return new(new FalloutScriptPair(key, value));
     }
 
     public static implicit operator FalloutScriptValue(double value) =>
@@ -91,6 +117,8 @@ internal readonly record struct FalloutScriptValue
     }
 }
 
+internal sealed record FalloutScriptPair(FalloutScriptValue Key, FalloutScriptValue Value);
+
 internal sealed record FalloutScriptValueContext(
     Func<string, FalloutScriptValue> Read,
     Action<string, FalloutScriptValue> Write,
@@ -129,7 +157,7 @@ internal sealed record FalloutScriptValueStoreSnapshot(
 // Compiled string_var locals retain numeric handles for compatibility with
 // the source format. Text ownership lives here, so a typed assignment can
 // copy text without turning the local into an untyped numeric slot.
-internal sealed class FalloutScriptValueStore
+internal sealed partial class FalloutScriptValueStore
 {
     private readonly Dictionary<uint, FalloutScriptStringSnapshot> _strings = [];
     private uint _lastStringId;
@@ -258,6 +286,7 @@ internal sealed class FalloutScriptValueStore
         if (string.IsNullOrWhiteSpace(ownerPlugin))
             throw new InvalidDataException("Script string has no plugin owner.");
         var id = checked(_lastStringId + 1);
+        if (id == uint.MaxValue) throw new NotSupportedException("Script string identities are exhausted.");
         _strings.Add(id, new(id, ownerPlugin, value.Text));
         _lastStringId = id;
         return id;

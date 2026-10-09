@@ -27,6 +27,16 @@ if (args.Length > 0 && args[0] == "--audit-campaign-goals")
             System.Globalization.CultureInfo.InvariantCulture), args[7..]);
     return;
 }
+if (args is ["--test-land-reference-source"])
+{
+    LandscapeSourceDefaultsProbe.Run();
+    return;
+}
+if (args is ["--test-particle-shapes-colors"])
+{
+    ParticleShapesColorsContracts.Run();
+    return;
+}
 if (args is ["--test-cell-graph"])
 {
     CellGraphAuditContracts.Run();
@@ -159,6 +169,8 @@ WeatherLightingContracts.Run();
 CellLightingContracts.Run();
 PlacedLightEnableContracts.Run();
 CellGraphAuditContracts.Run();
+LandscapeSourceDefaultsProbe.Run();
+ParticleShapesColorsContracts.Run();
 QuestGraphAuditContracts.Run();
 WindForceProbe.Run();
 ContentWorkerProbe.Run();
@@ -1197,7 +1209,10 @@ try
         syntheticCellForVigor);
     var syntheticTraits = syntheticTraitFarewell.Traits.Take(2).ToArray();
     FalloutNativeTraitFarewellResolver.ValidateTraits(syntheticTraitFarewell, syntheticTraits);
-    var traitDraft = new FalloutTraitMenuSelection(cellStack, syntheticTraitFarewell with { MaximumTraits = 1 }, [syntheticTraits[0]]);
+    var syntheticTraitCatalogue = FalloutTraitMenuCatalogue.Read(cellStack);
+    float UnboundTraitCondition(FalloutCondition condition) => throw new NotSupportedException($"Authored trait condition {condition.Function} has no fixture owner.");
+    var traitDraft = new FalloutTraitMenuSelection(cellStack, syntheticTraitCatalogue with { MaximumTraits = 1 },
+        [syntheticTraits[0]], FalloutPlayerActorValueSource.Read(cellStack).Level, UnboundTraitCondition);
     Require(traitDraft.Choices[0].Description == "A source description." &&
         traitDraft.Choices[0].Icon == "Interface/Icons/SyntheticTrait.dds" && traitDraft.Choices[1].Description == "" &&
         !traitDraft.Toggle(syntheticTraits[1]) && traitDraft.Submit().SequenceEqual([syntheticTraits[0]]),
@@ -1207,8 +1222,9 @@ try
         traitDraft.Submit().SequenceEqual([syntheticTraits[1]]) && syntheticTraits[0] == syntheticTraitFarewell.Traits[0],
         "Trait reset/acceptance changed committed input or restored the initial selection.");
     ExpectFailure(() => traitDraft.Toggle(syntheticTraits[0] with { EditorId = "ForeignTrait" }), "outside its source contract");
-    ExpectFailure(() => new FalloutTraitMenuSelection(cellStack, syntheticTraitFarewell with
-    { Traits = [syntheticTraits[0] with { DisplayName = "Changed identity" }] }, []), "differs from its winning PERK");
+    ExpectFailure(() => new FalloutTraitMenuSelection(cellStack, syntheticTraitCatalogue with
+    { Traits = [syntheticTraits[0] with { DisplayName = "Changed identity" }] }, [],
+        FalloutPlayerActorValueSource.Read(cellStack).Level, UnboundTraitCondition), "differs from its winning PERK");
     Require(FalloutTraitMenuSelection.FormatCount("CHOOSE %d TRAITS", 1) == "CHOOSE 1 TRAITS", "Source trait count formatting failed.");
     ExpectFailure(() => FalloutTraitMenuSelection.FormatCount("%d %d", 1), "another source format owner");
     ExpectFailure(() => cellStack.NumericSettings.Set("iTraitMenuMaxNumTraits", 3), "trait selection contract");
@@ -1435,633 +1451,48 @@ try
     var coldSky = new FalloutSkyLightingState(cellStack, 0.5f);
     coldSky.Restore(JsonSerializer.Deserialize<FalloutSkyLightingSnapshot>(skyJson)!);
     Require(coldSky.RegionEmittance(syntheticRegion, 23).SequenceEqual(nightColor), "Cold sky restore changed region emittance.");
-    ExpectFailure(() => coldSky.Restore(new(campaignSky.Climate.Form,
-        [new(syntheticRegion, cellStack.RuntimeFormKey(0x110))])), "does not resolve to WTHR");
+    ExpectFailure(() => coldSky.Restore(campaignSky.Capture() with
+    {
+        Regions = [new(syntheticRegion, cellStack.RuntimeFormKey(0x110))]
+    }), "does not resolve to WTHR");
     Require(JsonSerializer.Serialize(coldSky.Capture()) == skyJson, "Rejected sky restore changed authoritative state.");
-    var syntheticCampaignState = FalloutNativeCampaignSave.Capture(
-        syntheticSaveCompatibilityId,
-        syntheticCellForVigor.Cell.FormKey,
-        syntheticCompletedGrant,
-        "Synthetic Courier",
-        syntheticRaceSex.Female,
-        syntheticVigor,
-        syntheticSpecial,
-        syntheticTagSkills,
-        syntheticTags,
-        syntheticTraitFarewell,
-        syntheticTraits,
-        stageMachine.ControlState,
-        [1.0f, 2.0f, 3.0f],
-        [0.0f, 0.0f, 0.0f, 1.0f],
-        globals: campaignGlobals.Capture(), gameTime: campaignTime.Capture(), skyLighting: campaignSky.Capture(),
-        playerViewPitchRadians: -0.3562573f);
+    // Earlier OpenNV schema upgrades and capsule offsets are not product
+    // behavior. Current saves require all real runtime owners; this fixture
+    // deliberately provides none of them and must never publish a save.
+    var incompleteSave = new FalloutNativeCampaignState(FalloutNativeCampaignSave.ExpectedSchema,
+        syntheticSaveCompatibilityId, syntheticCellForVigor.Cell.FormKey, "SyntheticQuest", 0,
+        "Synthetic Courier", syntheticRaceSex.Female, syntheticSpecial, syntheticTags, syntheticTraits,
+        [], [], [], [1, 2, 3], [0, 0, 0, 1]);
     var syntheticSavePath = Path.Combine(fixtureRoot, "native-campaign-save.json");
-    var centeredState = syntheticCampaignState with
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, incompleteSave),
+        "missing an authoritative runtime owner");
+    Require(!File.Exists(syntheticSavePath), "Incomplete current authority produced a save file.");
+    foreach (var version in Enumerable.Range(1, 50))
     {
-        Schema = FalloutNativeCampaignSave.CapsuleCenteredSchema, QuestStageResults = null, TerminalResults = null,
-        PlayerPosition = [1.0f, 2.5f, 3.0f],
-        Globals = null,
-        GameTime = null,
-        SkyLighting = null,
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, centeredState);
-    var centeredRestore = FalloutNativeCampaignSave.Read(syntheticSavePath,
-        syntheticSaveCompatibilityId, cellStack, syntheticVigor, syntheticTagSkills,
-        syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(centeredRestore.State.PlayerActorValues is { } migratedPlayer && migratedPlayer.Values.Count == 7 &&
-        migratedPlayer.Values.All(pair => pair.Value.Base == centeredState.Special.Values[pair.Key - 5] &&
-            pair.Value.Permanent == 0 && pair.Value.Temporary == 0 && pair.Value.Damage == 0),
-        "Legacy campaign SPECIAL did not migrate into source-bound BASE pools with zero runtime modifiers.");
-    var playerValues = new FalloutPlayerActorValues(cellStack, legacy: syntheticSpecial);
-    playerValues.BindConstantModifiers((_, _) => []);
-    playerValues.WriteBaseInteger(5, 14);
-    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Permanent, .5f);
-    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Temporary, -2);
-    playerValues.AddModifier(5, OpenNV.Runtime.World.Actors.FalloutActorValuePool.Damage, -1);
-    var pooledCampaign = syntheticCampaignState with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign);
-    var pooledRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    var coldPlayerValues = new FalloutPlayerActorValues(cellStack, pooledRestore.State.PlayerActorValues!);
-    coldPlayerValues.BindConstantModifiers((_, _) => []);
-    Require(coldPlayerValues.ReadBase(5) == 14 && coldPlayerValues.ReadPermanent(5) == 10 && coldPlayerValues.ReadCurrent(5) == 11.5f,
-        "Campaign restore conflated player modifier pools or imposed the Vigor menu's allocation budget on runtime values.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with
-    { PlayerActorValues = playerValues.Capture() with { PlayerSha256 = new string('0', 64) } });
-    ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell), "winning source identity");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, pooledCampaign with { Special = syntheticSpecial }), "BASE pools");
-    playerValues.WriteBaseInteger(5, int.MaxValue);
-    var boundaryCampaign = pooledCampaign with { Special = playerValues.BaseSpecial, PlayerActorValues = playerValues.Capture() };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, boundaryCampaign);
-    var boundaryRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(boundaryRestore.State.Special.Strength == int.MaxValue && boundaryRestore.State.PlayerActorValues!.Values[5].Base == 2147483648f,
-        "Campaign save lost the signed BASE boundary between its authoritative Float32 and legacy integer views.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, centeredState);
-    Require(FalloutNativeCampaignSave.RestorePlayerPosition(centeredRestore.State, 0.5f)
-            .SequenceEqual(syntheticCampaignState.PlayerPosition) &&
-        FalloutNativeCampaignSave.RestorePlayerPosition(syntheticCampaignState, 0.5f)
-            .SequenceEqual(syntheticCampaignState.PlayerPosition),
-        "Legacy capsule-center saves and current foot-root saves must restore the same physical pose.");
-    var upgradedState = FalloutNativeCampaignSave.WithWorldState(centeredRestore.State,
-        centeredRestore.State.ActiveCell,
-        FalloutNativeCampaignSave.RestorePlayerPosition(centeredRestore.State, 0.5f),
-        centeredRestore.State.PlayerRotation);
-    Require(upgradedState.Schema == FalloutNativeCampaignSave.QuestScriptsSchema &&
-        FalloutNativeCampaignSave.RestorePlayerPosition(upgradedState, 0.5f)
-            .SequenceEqual(syntheticCampaignState.PlayerPosition),
-        "Saving a restored legacy player must upgrade its anchor without applying the offset twice.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
-    var validSaveBytes = File.ReadAllBytes(syntheticSavePath);
-    var referenceSave = syntheticCampaignState with
-    { Schema = FalloutNativeCampaignSave.ObjectPcmSchema, References = [], EncounterZones = [], QuestStageResults = [], TerminalResults = [] };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave);
-    var referenceRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(referenceRestore.State.Schema == FalloutNativeCampaignSave.ObjectPcmSchema && referenceRestore.State.References?.Count == 0,
-        "Campaign save lost its explicit reference state owner.");
-    Require(referenceRestore.State.QuestStageResults is { Count: 0 }, "Current save lost its explicit closed-stage result owner.");
-    Require(referenceRestore.State.TerminalResults is { Count: 0 }, "Current save lost its explicit closed-terminal result owner.");
-    var playerSounds = new FalloutAnimationSoundEvents(cellStack.RuntimeFormKey(0x14));
-    playerSounds.Fail(null, "unbound-original-emitter", "Sound: source-event");
-    var sourcePlayerValues = new FalloutPlayerActorValues(cellStack);
-    var sourcePlayerSkills = new FalloutPlayerSkills(cellStack, () => sourcePlayerValues.BaseSpecial,
-        _ => false, () => [], null, new FalloutPlayerInventory(), sourcePlayerValues.Source.Player,
-        () => FalloutDialogueTopic.RequiredForm(cellStack.GetEffective(sourcePlayerValues.Source.Player), "RNAM"),
-        () => false, actorValues: sourcePlayerValues);
-    var sourcePlayerEffects = new FalloutPlayerAbilityScripts(cellStack, sourcePlayerSkills.SelectedConstantEffects,
-        sourcePlayerSkills.AbilityCondition);
-    var playerAudioSave = referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.ExpectedSchema,
-        PlayerPackageAudio = new(playerSounds.Capture(), 1234567),
-        PlayerSkillValues = sourcePlayerSkills.CaptureValues(),
-        PlayerAbilityScripts = sourcePlayerEffects.Capture()
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave);
-    var playerAudioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(JsonSerializer.Serialize(playerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio),
-        "Ended player package lost its persistent sound fault or RNG state cold.");
-    var priorPlayerAudioSave = playerAudioSave with
-    { Schema = FalloutNativeCampaignSave.PlayerAudioSchema, PlayerSkillValues = null, PlayerAbilityScripts = null };
-    var priorRadioSave = playerAudioSave with
-    { Schema = FalloutNativeCampaignSave.FinishedRadioSchema, PlayerSkillValues = null, PlayerAbilityScripts = null };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, priorRadioSave);
-    var priorRadioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(priorRadioRestore.State.Schema == FalloutNativeCampaignSave.FinishedRadioSchema &&
-        JsonSerializer.Serialize(priorRadioRestore.State.References) == JsonSerializer.Serialize(playerAudioSave.References),
-        "Historical radio state acquired an incomplete current authority or changed its reference state.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorRadioSave with
-    {
-        FinishedSpeech = new([], 0, 0, 0, 0, 0, null, ActiveRadio: [])
-    }), "future active radio continuation");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, priorPlayerAudioSave);
-    var priorPlayerAudioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(priorPlayerAudioRestore.State.Schema == FalloutNativeCampaignSave.PlayerAudioSchema &&
-        JsonSerializer.Serialize(priorPlayerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio) &&
-        JsonSerializer.Serialize(priorPlayerAudioRestore.State.References) == JsonSerializer.Serialize(playerAudioSave.References),
-        "Historical player audio acquired an incomplete current authority or changed source history.");
-    var deferredAssignment = new FalloutActorPackageAssignment(new("Synthetic.esm", 1), new('a', 64), false);
-    var deferredReference = new FalloutReferenceSnapshot(new("Synthetic.esm", 2), new("Synthetic.esm", 3),
-        new("Synthetic.esm", 4), null, null, new Dictionary<uint, double>(), null, PackageAssignment: deferredAssignment,
-        DeferredPackageContinuation: new(new("Synthetic.esm", 2), deferredAssignment, 1));
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorPlayerAudioSave with
-    {
-        References = [deferredReference]
-    }), "future deferred actor packages");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorPlayerAudioSave with
-    {
-        FinishedSpeech = new([], 0, 0, 0, 0, 0, null, FinishedRadio: [])
-    }), "future ended radio history");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { PlayerPackageAudio = null }),
-        "player package sound owner");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { Schema = FalloutNativeCampaignSave.ObjectPcmSchema }),
-        "future player package sound history");
-    var mismatchedPlayerPackage = new FalloutPlayerScriptPackageSnapshot(new("Synthetic.esm", 1), new string('a', 64),
-        null, null, 0, false, true, 0, 0, SoundRandomState: 7654321);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with
-    {
-        Scripts = new([], [], Session: new(false, false, [], PlayerPackage: mismatchedPlayerPackage))
-    }), "package and audio random state disagree");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { TerminalResults = null }),
-        "closed terminal result owner");
-    var priorClosedStageSave = referenceSave with { Schema = FalloutNativeCampaignSave.ClosedStageSchema, TerminalResults = null };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, priorClosedStageSave);
-    var priorClosedStageRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(priorClosedStageRestore.State.Schema == FalloutNativeCampaignSave.ObjectPcmSchema &&
-        priorClosedStageRestore.State.TerminalResults is { Count: 0 } &&
-        JsonSerializer.Serialize(priorClosedStageRestore.State.QuestStageResults) == JsonSerializer.Serialize(priorClosedStageSave.QuestStageResults),
-        "The v41 migration invented terminal history or changed closed stage receipts.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath,
-        priorClosedStageSave with { TerminalResults = [] }), "future closed terminal results");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { QuestStageResults = null }),
-        "closed quest-stage result owner");
-    var completedStageSave = referenceSave with { Schema = FalloutNativeCampaignSave.FinishedSpeechSchema, QuestStageResults = null, TerminalResults = null };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, completedStageSave);
-    var completedStageRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(completedStageRestore.State.Schema == FalloutNativeCampaignSave.ObjectPcmSchema &&
-        completedStageRestore.State.QuestStageResults is { Count: 0 } && completedStageRestore.State.StageResultFailure is null &&
-        JsonSerializer.Serialize(completedStageRestore.State.Quests) == JsonSerializer.Serialize(completedStageSave.Quests) &&
-        JsonSerializer.Serialize(completedStageRestore.State.References) == JsonSerializer.Serialize(completedStageSave.References),
-        "The v40 migration replayed source or fabricated a legacy closed stage failure.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath,
-        completedStageSave with { QuestStageResults = [] }), "future quest-stage execution receipts");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath,
-        referenceSave with { StageResultFailure = new(new("Cell.esm", 0x20), 0, "Unmatched failure.") }),
-        "matching closed source result");
-    using (var factionWorld = new FalloutReferenceWorld(cellStack))
-    {
-        factionWorld.SetFactionRelationship(new("SkillLabel.esp", 0x760), new("SkillLabel.esp", 0x761), true, 1, 0);
-        var priorFactionSave = referenceSave with
-        { Schema = FalloutNativeCampaignSave.FactionRelationSchema, QuestStageResults = null, TerminalResults = null, FactionRelations = factionWorld.CaptureFactionRelations() };
-        FalloutNativeCampaignSave.Write(syntheticSavePath, priorFactionSave);
-        var priorFactionRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-            cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-        Require(priorFactionRestore.State.Schema == FalloutNativeCampaignSave.ObjectPcmSchema &&
-            JsonSerializer.Serialize(priorFactionRestore.State.FactionRelations) == JsonSerializer.Serialize(priorFactionSave.FactionRelations) &&
-            JsonSerializer.Serialize(priorFactionRestore.State.References) == JsonSerializer.Serialize(priorFactionSave.References) &&
-            JsonSerializer.Serialize(priorFactionRestore.State.GameTime) == JsonSerializer.Serialize(priorFactionSave.GameTime),
-            "The v38 checkpoint lost directional source faction reactions or changed state while upgrading the idle-continuation schema.");
-        var priorIdleSave = priorFactionSave with { Schema = FalloutNativeCampaignSave.OccupiedIdleSchema, QuestStageResults = null, TerminalResults = null };
-        FalloutNativeCampaignSave.Write(syntheticSavePath, priorIdleSave);
-        var priorIdleRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-            cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-        Require(priorIdleRestore.State.Schema == FalloutNativeCampaignSave.ObjectPcmSchema &&
-            JsonSerializer.Serialize(priorIdleRestore.State.FactionRelations) == JsonSerializer.Serialize(priorIdleSave.FactionRelations) &&
-            JsonSerializer.Serialize(priorIdleRestore.State.Quests) == JsonSerializer.Serialize(priorIdleSave.Quests) &&
-            JsonSerializer.Serialize(priorIdleRestore.State.GameTime) == JsonSerializer.Serialize(priorIdleSave.GameTime) &&
-            priorIdleRestore.State.DetectionEvents is null && priorIdleRestore.State.FinishedSpeech is null,
-            "The v39 checkpoint lost prior source state or fabricated historical detection/speech during migration.");
-        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorIdleSave with
-        { DetectionEvents = new(0, 0, []) }), "future detection/speech invocation state");
-        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorIdleSave with
-        {
-            FinishedSpeech = new OpenNV.Runtime.World.Actors.FalloutNativeFinishedSpeechSnapshot([], 0, 0, 0, 0, 0, null,
-                new(0, 0, 0, []))
-        }), "future detection/speech invocation state");
-        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorFactionSave with { FactionRelations = null }),
-            "faction reaction state");
+        var obsolete = incompleteSave with { Schema = $"opennv-native-fnv-campaign-save/v{version}" };
+        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, obsolete),
+            "current complete source-owned schema");
+        File.WriteAllText(syntheticSavePath, JsonSerializer.Serialize(obsolete));
+        ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId, cellStack),
+            "current complete source-owned schema");
+        File.Delete(syntheticSavePath);
     }
-    var selectedOverlay = new FalloutActorPackageIdleAnimation(new("Cell.esm", 0x30), new string('a', 64),
-        "meshes/synthetic-selected.kf", new string('b', 64), new(.75, 4, 3, 1, false, false), 1);
-    var forwardOnlyFailure = new FalloutActorPackageBindingFailure(new("Cell.esm", 0x20), new string('c', 64),
-        "Source failed before begin.", [0, 0, 0], [1, 0, 0, 0, 1, 0, 0, 0, 1], false, 1, 0, null,
-        new(0, null, null, null), IdleState: new(new("Cell.esm", 0x20), new string('c', 64), new(1, 1, 0, false), [], null, selectedOverlay));
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.FactionRelationSchema, QuestStageResults = null, TerminalResults = null,
-        References = [new(new("Cell.esm", 1), referenceSave.ActiveCell, new("Cell.esm", 2), null, null,
-            new Dictionary<uint, double>(), null, PackageBindingFailure: forwardOnlyFailure)]
-    }), "Legacy campaign schema has an active package collection animation");
-    var forwardRandomReference = new FalloutReferenceSnapshot(new("Cell.esm", 1), referenceSave.ActiveCell,
-        new("Cell.esm", 2), null, null, new Dictionary<uint, double>(), null);
-    foreach (var legacySchema in new[] { FalloutNativeCampaignSave.FinishedSpeechSchema, FalloutNativeCampaignSave.OccupiedIdleSchema })
-        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
-        {
-            Schema = legacySchema, QuestStageResults = null, TerminalResults = null,
-            References = [forwardRandomReference with { HeadTracking = new(null!, null!, null, null, null) }]
-        }), "future native head-tracking continuation");
-    foreach (var futureRandom in new[]
-    {
-        forwardRandomReference with { AttackRandomState = 1 },
-        forwardRandomReference with { Engagement = new(new("Cell.esm", 0x14), AttackRandomState: 1) },
-        forwardRandomReference with { Engagement = new(new("Cell.esm", 0x14),
-            WeaponHandling: new(false, [], AttackRandomState: 1)) },
-    })
-        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
-        { Schema = FalloutNativeCampaignSave.FactionRelationSchema, QuestStageResults = null, TerminalResults = null, References = [futureRandom] }),
-            "Legacy campaign schema has attack selection random state");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.FactionRelationSchema, QuestStageResults = null, TerminalResults = null,
-        WeaponHandling = new(false, [], AttackRandomState: 1),
-    }), "Legacy campaign schema has attack selection random state");
-    var indexedTags = new FalloutPlayerTagSkills(cellStack, syntheticTagSkills);
-    indexedTags.Set("Science", 3);
-    indexedTags.Set("Guns", 0);
-    var indexedGrant = FalloutNativeTraitFarewellResolver.ResolveGrant(syntheticTraitFarewell, syntheticOpeningGrant, indexedTags.Selection);
-    var indexedSave = referenceSave with
-    {
-        TagSkills = indexedTags.Selection, TagSkillSlots = indexedTags.Capture(),
-        Inventory = indexedGrant.Inventory.Items.Select(item => new FalloutNativeSavedItem(item.RuntimeFormId, item.EditorId, item.RecordType, item.Count)).ToArray(),
-        EquippedRuntimeFormIds = indexedGrant.EquippedRuntimeFormIds
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave);
-    var indexedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(JsonSerializer.Serialize(indexedRestore.State.TagSkillSlots) == JsonSerializer.Serialize(indexedSave.TagSkillSlots) &&
-        new FalloutPlayerTagSkills(cellStack, syntheticTagSkills, indexedRestore.State.TagSkillSlots).IsTagged("Science"),
-        "Campaign cold restore compacted the fourth tag slot or imposed the creation-menu count on script tags.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with { TagSkillSlots = null }), "indexed player tag");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with { TagSkills = [] }), "membership projection");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with { Schema = FalloutNativeCampaignSave.IndexedTagSchema, QuestStageResults = null, TerminalResults = null });
-    var v34Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(JsonSerializer.Serialize(v34Restore.State.TagSkillSlots) == JsonSerializer.Serialize(indexedSave.TagSkillSlots) &&
-        FalloutNativeCampaignSave.WithWorldState(v34Restore.State, referenceSave.ActiveCell,
-            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The v34 checkpoint lost indexed tags or failed to upgrade broadcast-state saving.");
-    var v34Bytes = File.ReadAllBytes(syntheticSavePath);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, indexedSave with
-    {
-        Schema = FalloutNativeCampaignSave.IndexedTagSchema, QuestStageResults = null, TerminalResults = null,
-        References = [new(new("Cell.esm", 1), referenceSave.ActiveCell, new("Cell.esm", 2), null, null, new Dictionary<uint, double>(), null, BroadcastState: false)]
-    }), "Legacy campaign schema has mutable radio broadcast state");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(v34Bytes), "Rejected legacy broadcast state replaced a valid save.");
-    var broadcastSave = referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.BroadcastSchema, QuestStageResults = null, TerminalResults = null,
-        References = [new(new("Cell.esm", 0x7fff24), new("Cell.esm", 0x7fff22), new("Cell.esm", 0x7fff23), null, null,
-            new Dictionary<uint, double>(), null, BroadcastState: false)]
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, broadcastSave);
-    var v35Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(v35Restore.State.References!.Single().BroadcastState == false &&
-        FalloutNativeCampaignSave.WithWorldState(v35Restore.State, referenceSave.ActiveCell,
-            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The v35 checkpoint lost broadcast state or failed to upgrade queued event saving.");
-    using var eventWorld = new FalloutReferenceWorld(cellStack);
-    eventWorld.PackageEvents.Mark(new("Cell.esm", 0x7fff21), new("Cell.esm", 0x7fff20), FalloutReferencePackageEventKind.Done);
-    var pendingEventSave = referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.ObjectPcmSchema,
-        References = eventWorld.Capture()
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, pendingEventSave);
-    var pendingEventRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(JsonSerializer.Serialize(pendingEventRestore.State.References) == JsonSerializer.Serialize(pendingEventSave.References),
-        "Campaign cold state lost pending source event identity, kind or revision.");
-    var pendingEventBytes = File.ReadAllBytes(syntheticSavePath);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, pendingEventSave with
-        { Schema = FalloutNativeCampaignSave.BroadcastSchema, QuestStageResults = null, TerminalResults = null }), "Legacy campaign schema has pending actor package events");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(pendingEventBytes), "Rejected legacy package events replaced a valid save.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.UnindexedTagSchema, QuestStageResults = null, TerminalResults = null, TagSkillSlots = null });
-    var unindexedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(unindexedRestore.State.TagSkillSlots!.Slots.Take(referenceSave.TagSkills.Count).SequenceEqual(referenceSave.TagSkills) &&
-        FalloutNativeCampaignSave.WithWorldState(unindexedRestore.State, referenceSave.ActiveCell,
-            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The v33 membership checkpoint did not preserve its stored order or upgrade indexed tag saving.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.SignedRaceSchema, QuestStageResults = null, TerminalResults = null });
-    var v27Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(v27Restore.State.Schema == FalloutNativeCampaignSave.SignedRaceSchema &&
-        FalloutNativeCampaignSave.WithWorldState(v27Restore.State, referenceSave.ActiveCell,
-            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The v27 checkpoint no longer restores and upgrades through the campaign owner.");
-    var editorCell = new FalloutFormKey("Cell.esm", 0x7fff22);
-    var editorProgress = new FalloutEditorTravelProgress(editorCell, [1, 2, 3], true);
-    var editorPackage = cellStack.GetEffective(new("Cell.esm", 0x7fff20));
-    var editorMotion = new FalloutActorPackageMotion(editorPackage.FormKey, Convert.ToHexString(SHA256.HashData(editorPackage.ReadData())),
-        "meshes/actor/mtidle.kf", new string('b', 64), 4, false, [4, 5, 6], [0, 0, 0, 1], EditorTravel: editorProgress);
-    var editorSave = referenceSave with
-    {
-        References = [new(new("Cell.esm", 0x7fff21), editorCell,
-        new("Cell.esm", 7), null, null, new Dictionary<uint, double>(), null, PackageMotion: editorMotion)]
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, editorSave);
-    var editorRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(editorRestore.State.References!.Single().PackageMotion?.EditorTravel is { Complete: true } retainedEditor &&
-        retainedEditor.Location.SequenceEqual([1f, 2f, 3f]), "Campaign cold state lost its source editor-travel arrival.");
-    var editorSaveBytes = File.ReadAllBytes(syntheticSavePath);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, editorSave with { Schema = FalloutNativeCampaignSave.SignedRaceSchema, QuestStageResults = null, TerminalResults = null }),
-        "Legacy campaign schema has editor travel progress");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(editorSaveBytes), "Rejected legacy editor-travel state replaced a valid save.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema, QuestStageResults = null, TerminalResults = null });
-    var v26Restore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(v26Restore.State.Schema == FalloutNativeCampaignSave.ReferenceAccessSchema &&
-        FalloutNativeCampaignSave.WithWorldState(v26Restore.State, referenceSave.ActiveCell,
-            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The v26 checkpoint no longer restores and upgrades through the campaign owner.");
-    var challengeForm = cellStack.RuntimeFormKey(0x9d0);
-    var campaignChallenges = new FalloutChallenges(cellStack, new());
-    campaignChallenges.Unlock(challengeForm); campaignChallenges.IncrementScripted(challengeForm);
-    var challengeSave = referenceSave with
-    {
-        Quests = [], Scripts = new([], [], Challenges: campaignChallenges.Capture()),
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, challengeSave);
-    var challengeRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    var coldChallenges = new FalloutChallenges(cellStack, new()); coldChallenges.Restore(challengeRestore.State.Scripts!.Challenges);
-    Require(coldChallenges.State(challengeForm) is { Unlocked: true, Progress: 1, Completed: false },
-        "Current campaign save lost unlocked partial challenge progress.");
-    coldChallenges.IncrementScripted(challengeForm); coldChallenges.IncrementScripted(challengeForm);
-    Require(coldChallenges.State(challengeForm) is { Completed: true, Progress: 2 } && coldChallenges.ChallengesCompleted == 1,
-        "Cold campaign challenge failed to finish once through its authoritative owner.");
-    foreach (var oldSchema in new[] { FalloutNativeCampaignSave.ReferenceAccessSchema, FalloutNativeCampaignSave.ReferenceAccessLegacySchema })
-    {
-        foreach (var legacyChallenge in new FalloutChallengesSnapshot?[] { null, new([], 0) })
-        {
-            var legacyChallengeSave = challengeSave with { Schema = oldSchema, QuestStageResults = null, TerminalResults = null, Scripts = challengeSave.Scripts! with { Challenges = legacyChallenge } };
-            FalloutNativeCampaignSave.Write(syntheticSavePath, legacyChallengeSave);
-            _ = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-                cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-        }
-        foreach (var invalidChallenges in new[] { campaignChallenges.Capture(), new FalloutChallengesSnapshot([], 1) })
-        {
-            // Read deliberately bypasses Write so the schema boundary is tested
-            // against existing bytes, not only the writer's validation.
-            var invalidLegacy = challengeSave with { Schema = oldSchema, QuestStageResults = null, TerminalResults = null, Scripts = challengeSave.Scripts! with { Challenges = invalidChallenges } };
-            File.WriteAllText(syntheticSavePath, JsonSerializer.Serialize(invalidLegacy));
-            ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-                cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell),
-                "Challenge state requires the current campaign save schema");
-        }
-    }
-    FalloutNativeCampaignSave.Write(syntheticSavePath, challengeSave);
-    var validChallengeBytes = File.ReadAllBytes(syntheticSavePath);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, challengeSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema, QuestStageResults = null, TerminalResults = null }),
-        "Challenge state requires the current campaign save schema");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(validChallengeBytes), "Rejected legacy challenge state replaced a current save.");
-    var playerBase = cellStack.GetEffective(cellStack.RuntimeFormKey(7));
-    var heightSave = referenceSave with
-    {
-        ActorOverrides = [new(playerBase.FormKey, Convert.ToHexString(SHA256.HashData(playerBase.ReadData())).ToLowerInvariant(), [], [],
-            Height: .8f, Hair: new(null, null))],
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, heightSave);
-    var heightRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(heightRestore.State.ActorOverrides!.Single() is { Height: .8f, Hair: { Form: null } },
-        "Campaign restoration lost stored height or an explicit bald race fallback.");
-    var currentHeightBytes = File.ReadAllBytes(syntheticSavePath);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, heightSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema, QuestStageResults = null, TerminalResults = null }),
-        "Legacy campaign save cannot contain stored actor height or race hair state");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(currentHeightBytes), "Rejected v26 appearance state replaced a valid save.");
-    var alertSave = referenceSave with { ActorOverrides = [new(cellStack.RuntimeFormKey(0x14),
-        Convert.ToHexString(SHA256.HashData(playerBase.ReadData())).ToLowerInvariant(), [], [], Alerted: true)] };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, alertSave);
-    var alertRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(alertRestore.State.ActorOverrides!.Single().Alerted == true, "Campaign cold load lost the independent actor alert flag.");
-    var currentAlertBytes = File.ReadAllBytes(syntheticSavePath);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, alertSave with { Schema = FalloutNativeCampaignSave.OccupiedIdleSchema, QuestStageResults = null, TerminalResults = null }),
-        "Legacy campaign schema contains future actor alert state");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(currentAlertBytes), "Rejected older alert state replaced a valid save.");
-    var lockItem = referenceSave.Inventory.First(item => item.RecordType is "ARMO" or "WEAP" && referenceSave.EquippedRuntimeFormIds.Contains(item.RuntimeFormId));
-    var lockedSave = referenceSave with { Inventory = referenceSave.Inventory.Select(item => item.RuntimeFormId == lockItem.RuntimeFormId ? item with { UnequipLocked = true } : item).ToArray() };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, lockedSave);
-    var lockedRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(lockedRestore.Inventory.Items.Single(item => item.RuntimeFormId == lockItem.RuntimeFormId).UnequipLocked,
-        "Campaign cold inventory lost an equipped script lock.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, lockedSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessSchema, QuestStageResults = null, TerminalResults = null }),
-        "Equipment locks require the current campaign save schema");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ReferenceAccessLegacySchema, QuestStageResults = null, TerminalResults = null });
-    var legacyAccessState = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(FalloutNativeCampaignSave.WithWorldState(legacyAccessState.State, referenceSave.ActiveCell,
-        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The preceding access save no longer loads and upgrades through the ordinary save owner.");
-    var accessSaveBytes = File.ReadAllBytes(syntheticSavePath);
-    foreach (var accessSchema in new[] { FalloutNativeCampaignSave.ReferenceAccessLegacySchema, FalloutNativeCampaignSave.RaceOverridesSchema })
-        foreach (var accessReference in new[]
-        {
-            new FalloutReferenceSnapshot(new("SyntheticCells.esm", 1), referenceSave.ActiveCell, new("SyntheticCells.esm", 2),
-                null, null, new Dictionary<uint, double>(), null, LockState: new(new string('0', 64), 100, true)),
-            new FalloutReferenceSnapshot(new("SyntheticCells.esm", 1), referenceSave.ActiveCell, new("SyntheticCells.esm", 2),
-                null, null, new Dictionary<uint, double>(), null, OwnershipOverride: new(new string('0', 64), new("SyntheticCells.esm", 7))),
-        })
-            ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
-            { Schema = accessSchema, QuestStageResults = null, TerminalResults = null, References = [accessReference] }), "Legacy campaign save cannot contain reference lock or ownership overrides");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(accessSaveBytes), "Rejected legacy access state replaced a valid save.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.RaceOverridesSchema, QuestStageResults = null, TerminalResults = null });
-    var legacyRaceState = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(legacyRaceState.State.Schema == FalloutNativeCampaignSave.RaceOverridesSchema &&
-        FalloutNativeCampaignSave.WithWorldState(legacyRaceState.State, referenceSave.ActiveCell,
-            referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The preceding race-override save no longer loads and upgrades through the ordinary save owner.");
-    var legacyFaceState = referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.RaceOverridesSchema, QuestStageResults = null, TerminalResults = null,
-        ActorOverrides = [new(new("SyntheticNPC.esm", 0x100), new string('0', 64), [], [],
-            FaceGeometry: new(new("SyntheticNPC.esm", 0x100), new string('0', 64), new("SyntheticNPC.esm", 0x400),
-                new string('0', 64), new string('0', 64), new byte[200], new byte[120]))],
-    };
-    var legacyRaceBytes = File.ReadAllBytes(syntheticSavePath);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, legacyFaceState), "Legacy save cannot contain actor face geometry");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(legacyRaceBytes), "Rejected legacy face state replaced a valid save.");
-    var legacyFacePath = Path.Combine(fixtureRoot, "legacy-face-save.json");
-    File.WriteAllText(legacyFacePath, JsonSerializer.Serialize(legacyFaceState));
-    ExpectFailure(() => FalloutNativeCampaignSave.Read(legacyFacePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell),
-        "Legacy save cannot contain actor face geometry");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ScriptValuesSchema, QuestStageResults = null, TerminalResults = null });
-    var legacyScriptValues = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(FalloutNativeCampaignSave.WithWorldState(legacyScriptValues.State, referenceSave.ActiveCell,
-        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The preceding script-values save no longer upgrades through the ordinary save owner.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.ScriptValuesSchema, QuestStageResults = null, TerminalResults = null,
-        ActorOverrides = [new(new("SyntheticNPC.esm", 0x100), new string('0', 64), [], [],
-            Race: new(new("SyntheticNPC.esm", 0x400), new string('0', 64), 0))],
-    }), "Legacy campaign save cannot contain actor race state");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ObjectAnimationSchema, QuestStageResults = null, TerminalResults = null });
-    var legacyAnimation = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(FalloutNativeCampaignSave.WithWorldState(legacyAnimation.State, referenceSave.ActiveCell,
-        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The preceding object-animation save no longer upgrades through the ordinary save owner.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.ObjectAnimationSchema, QuestStageResults = null, TerminalResults = null,
-        Scripts = new([], [], Values: new(0, [], LastArrayId: 1, Arrays: [new(1, FalloutScriptArrayKind.Map, [])])),
-    }), "Legacy campaign save cannot contain script array state");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.DestructionSchema, QuestStageResults = null, TerminalResults = null });
-    var legacyDestruction = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(FalloutNativeCampaignSave.WithWorldState(legacyDestruction.State, referenceSave.ActiveCell,
-        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The preceding destruction save no longer upgrades through the ordinary save owner.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.DeathEventSchema, QuestStageResults = null, TerminalResults = null });
-    var legacyDeath = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(FalloutNativeCampaignSave.WithWorldState(legacyDeath.State, referenceSave.ActiveCell,
-        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The preceding death-event save no longer upgrades through the ordinary save owner.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.PatrolSchema, QuestStageResults = null, TerminalResults = null });
-    var legacyPatrol = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(FalloutNativeCampaignSave.WithWorldState(legacyPatrol.State, referenceSave.ActiveCell,
-        referenceSave.PlayerPosition, referenceSave.PlayerRotation).Schema == FalloutNativeCampaignSave.ObjectPcmSchema,
-        "The preceding patrol save no longer upgrades through the ordinary save owner.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { EncounterZones = null }), "missing encounter-zone state");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { Schema = FalloutNativeCampaignSave.ActorOverridesSchema, QuestStageResults = null, TerminalResults = null, EncounterZones = null });
-    var legacyZones = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(FalloutNativeCampaignSave.WithWorldState(legacyZones.State, referenceSave.ActiveCell,
-        referenceSave.PlayerPosition, referenceSave.PlayerRotation).EncounterZones is { Count: 0 },
-        "Legacy campaign did not acquire an explicit empty encounter owner when upgraded.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave);
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, referenceSave with { References = null }), "no retained reference world");
-    Require(FalloutNativeCampaignSave.RestorePlayerViewPitch(referenceRestore.State) == -0.3562573f,
-        "Cold campaign save lost the independent player look pitch.");
-    var pitchedSaveBytes = File.ReadAllBytes(syntheticSavePath);
-    foreach (var invalidPitch in new float?[] { null, float.NaN, float.PositiveInfinity, 2f, -2f })
-        ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath,
-            referenceSave with { PlayerViewPitchRadians = invalidPitch }), "save state is invalid");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(pitchedSaveBytes),
-        "Rejected camera state replaced a valid campaign save.");
-    var legacyPitchSave = JsonSerializer.SerializeToNode(referenceSave with
-    {
-        Schema = FalloutNativeCampaignSave.ReferenceStateSchema, QuestStageResults = null, TerminalResults = null,
-    })!.AsObject();
-    legacyPitchSave.Remove(nameof(FalloutNativeCampaignState.PlayerViewPitchRadians));
-    File.WriteAllText(syntheticSavePath, legacyPitchSave.ToJsonString());
-    var legacyPitchRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(FalloutNativeCampaignSave.RestorePlayerViewPitch(legacyPitchRestore.State) == 0 &&
-        FalloutNativeCampaignSave.WithWorldState(legacyPitchRestore.State, referenceSave.ActiveCell,
-            referenceSave.PlayerPosition, referenceSave.PlayerRotation) is
-        { Schema: FalloutNativeCampaignSave.ObjectPcmSchema, PlayerViewPitchRadians: 0 },
-        "Legacy save without pitch did not upgrade with its documented level view.");
-    FalloutNativeCampaignSave.Write(syntheticSavePath, syntheticCampaignState);
-    var missingScriptClock = syntheticCampaignState with
-    {
-        Quests = [],
-        Scripts = new([new(new("Master.esm", 0x70), new("Master.esm", 0x73), 0, 1, null)], []),
-    };
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, missingScriptClock),
-        "no elapsed/cadence clock owner");
-    Require(File.ReadAllBytes(syntheticSavePath).SequenceEqual(validSaveBytes),
-        "Rejected script clocks replaced a valid campaign save.");
-    var missingClockPath = Path.Combine(fixtureRoot, "missing-script-clock-save.json");
-    File.WriteAllText(missingClockPath, JsonSerializer.Serialize(missingScriptClock));
-    ExpectFailure(() => FalloutNativeCampaignSave.Read(missingClockPath, syntheticSaveCompatibilityId,
-        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell),
-        "no elapsed/cadence clock owner");
-    var syntheticRestore = FalloutNativeCampaignSave.Read(
-        syntheticSavePath,
-        syntheticSaveCompatibilityId,
-        cellStack,
-        syntheticVigor,
-        syntheticTagSkills,
-        syntheticOpeningGrant,
-        syntheticTraitFarewell);
+    File.WriteAllText(syntheticSavePath, JsonSerializer.Serialize(incompleteSave));
+    ExpectFailure(() => FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId, cellStack),
+        "missing an authoritative runtime owner");
+    File.Delete(syntheticSavePath);
     var campaignColdGlobals = FalloutGlobalState.Read(cellStack);
-    campaignColdGlobals.Restore(syntheticRestore.State.Globals!);
+    campaignColdGlobals.Restore(campaignGlobals.Capture());
     var campaignColdTime = new FalloutGameTime(campaignColdGlobals, FalloutGameTimeBindings.Read(cellStack), campaignCalendar);
-    campaignColdTime.Restore(syntheticRestore.State.GameTime!);
+    campaignColdTime.Restore(campaignTime.Capture());
     for (var tick = 0; tick < 31; tick++)
     {
         campaignTime.AdvanceSimulation(1f / 60);
         campaignColdTime.AdvanceSimulation(1f / 60);
     }
-    Require(syntheticRestore.State.Schema == FalloutNativeCampaignSave.QuestClockSchema &&
-        campaignColdGlobals.Capture().Values.SequenceEqual(campaignGlobals.Capture().Values) &&
+    Require(campaignColdGlobals.Capture().Values.SequenceEqual(campaignGlobals.Capture().Values) &&
         campaignColdTime.Capture() == campaignTime.Capture(),
-        "Cold campaign Continue changed clock phase or Float32 globals after the same simulation ticks.");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath,
-        syntheticCampaignState with { GameTime = null }), "save state is invalid");
-    Require(
-        syntheticRestore.State.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
-        syntheticRestore.State.ActiveCell == syntheticCellForVigor.Cell.FormKey &&
-        syntheticRestore.State.PlayerName == "Synthetic Courier" &&
-        syntheticRestore.State.Character == syntheticRaceSex.Female &&
-        syntheticRestore.State.Special == syntheticSpecial &&
-        syntheticRestore.State.TagSkills.SequenceEqual(syntheticTags) &&
-        syntheticRestore.State.Traits.SequenceEqual(syntheticTraits) &&
-        FalloutNativeCampaignSave.RestorePlayerControls(syntheticRestore.State) ==
-            stageMachine.ControlState &&
-        syntheticRestore.Inventory.Items.Select(value => value.RuntimeFormId)
-            .SequenceEqual(syntheticCompletedGrant.Inventory.Items
-                .OrderBy(value => value.RuntimeFormId)
-                .Select(value => value.RuntimeFormId)) &&
-        Directory.GetFiles(fixtureRoot, "*.tmp").Length == 0,
-        "Native opening campaign save did not cold-restore atomically.");
-    var syntheticExteriorCell = new FalloutFormKey("Cell.esm", 0x100);
-    var movedCampaignState = FalloutNativeCampaignSave.WithWorldState(
-        syntheticRestore.State,
-        syntheticExteriorCell,
-        [4.0f, 5.0f, 6.0f],
-        [0.0f, 0.0f, 0.0f, 1.0f]);
-    FalloutNativeCampaignSave.Write(syntheticSavePath, movedCampaignState);
-    var movedRestore = FalloutNativeCampaignSave.Read(
-        syntheticSavePath,
-        syntheticSaveCompatibilityId,
-        cellStack,
-        syntheticVigor,
-        syntheticTagSkills,
-        syntheticOpeningGrant,
-        syntheticTraitFarewell);
-    Require(
-        movedRestore.State.ActiveCell == syntheticExteriorCell &&
-        movedRestore.State.PlayerPosition.SequenceEqual([4.0f, 5.0f, 6.0f]) &&
-        FalloutNativeCampaignSave.RestorePlayerViewPitch(movedRestore.State) == -0.3562573f,
-        "Native campaign world state did not cold-restore its active CELL and player transform.");
-    var staleCharacterState = syntheticCampaignState with
-    {
-        Character = syntheticCampaignState.Character with
-        {
-            HairRuntimeFormId = 0x00000185,
-            HairEditorId = "StaleHair",
-        },
-    };
-    FalloutNativeCampaignSave.Write(syntheticSavePath, staleCharacterState);
-    ExpectFailure(
-        () => FalloutNativeCampaignSave.Read(
-            syntheticSavePath,
-            syntheticSaveCompatibilityId,
-            cellStack,
-            syntheticVigor,
-            syntheticTagSkills,
-            syntheticOpeningGrant,
-            syntheticTraitFarewell),
-        "differs from the live Player/RACE graph");
+        "Cold clock ownership changed Float32 globals or cadence after identical simulation ticks.");
     var cell = syntheticCellForVigor;
     using var eagerCellStack = FalloutPluginStack.Load(
         [new FalloutPluginSource("Cell.esm", Path.Combine(fixtureRoot, "Cell.esm")),
@@ -2564,16 +1995,14 @@ if (args.Length > 0)
         try
         {
             var liveSave = FalloutNativeCampaignSave.Capture(
+                owned,
                 liveSaveCompatibilityId,
                 new FalloutFormKey("FalloutNV.esm", 0x103df9),
                 liveCompletedGrant,
                 "Live Courier",
                 liveRaceSex.Female,
-                liveVigor,
                 liveSpecial,
-                liveTagSkills,
                 liveTags,
-                liveTraitFarewell,
                 liveTraits,
                 completedControls,
                 [12.5f, 2.0f, -8.25f],
@@ -2582,13 +2011,9 @@ if (args.Length > 0)
             var liveRestore = FalloutNativeCampaignSave.Read(
                 liveSavePath,
                 liveSaveCompatibilityId,
-                owned,
-                liveVigor,
-                liveTagSkills,
-                stage200Grant,
-                liveTraitFarewell);
+                owned);
             Require(
-                liveRestore.State.Stage == FalloutNativeCampaignSave.CompletedOpeningStage &&
+                liveRestore.State.Stage == liveSave.Stage &&
                 liveRestore.State.PlayerName == "Live Courier" &&
                 FalloutNativeCampaignSave.RestorePlayerViewPitch(liveRestore.State) == 0.425f &&
                 liveRestore.State.Character == liveRaceSex.Female &&
@@ -2870,11 +2295,12 @@ static void ExpectFailure(Action action, string messageFragment)
     try
     {
         action();
-        throw new InvalidOperationException($"Expected failure containing '{messageFragment}' was not raised.");
     }
     catch (Exception error) when (error.Message.Contains(messageFragment, StringComparison.OrdinalIgnoreCase))
     {
+        return;
     }
+    throw new InvalidOperationException($"Expected failure containing '{messageFragment}' was not raised.");
 }
 
 static byte[] Record(string signature, uint formId, uint flags, byte[] data)

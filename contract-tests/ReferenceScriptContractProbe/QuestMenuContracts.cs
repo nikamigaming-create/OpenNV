@@ -29,9 +29,11 @@ internal static class QuestMenuContracts
                 !FalloutGameModeProgram.WasRejectedByParser(Body, 8), "Block migration changed unrelated parser admission.");
             var state = new FalloutQuestState(records);
             var scripts = Scripts(records, state);
-            var legacy = scripts.Capture() with { Instances = [], ParserVersion = 7 };
-            scripts.Restore(legacy);
-            Require(scripts.Capture().Instances.Count == 1, "Legacy parser omitted the newly admitted shared script owner.");
+            var current = scripts.Capture();
+            var legacy = current with { Instances = [], ParserVersion = 7 };
+            Reject(() => scripts.Restore(legacy));
+            Require(JsonSerializer.Serialize(scripts.Capture()) == JsonSerializer.Serialize(current),
+                "A rejected parser continuation changed current script ownership.");
             state.SetRunning(Key(0x100), false);
             var before = scripts.Capture(); scripts.Advance(1, gameMode: false, menus: [1001, 2]);
             Require(JsonSerializer.Serialize(before) == JsonSerializer.Serialize(scripts.Capture()), "Stopped quest advanced a menu clock.");

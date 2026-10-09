@@ -14,6 +14,10 @@ public partial class NativeLandscapeTransportAudit : Node3D
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args.Length != 0 && args[0] == "--construction-lifetime")
+            {
+                await RunConstructionLifetimeAsync(args); GetTree().Quit(); return;
+            }
             if (args.Length != 0 && args[0] == "--portal-capsule")
             {
                 await RunPortalCapsuleAsync(args);
@@ -50,7 +54,7 @@ public partial class NativeLandscapeTransportAudit : Node3D
             var terrain = new List<RuntimeNativeLandscapeTransport>();
             foreach (var cell in grid.Cells)
             {
-                var land = RuntimeNativeLandscapeTransportBuilder.Build(FalloutLandscapeTransportResolver.ResolveCell(records, cell, grid.PersistentCell), units, textureCache);
+                var land = RuntimeNativeLandscapeTransportBuilder.Build(FalloutLandscapeTransportResolver.ResolveCell(records, cell), units, textureCache);
                 terrain.Add(land); AddChild(land);
                 if (!land.Geometry.Visible || Enumerable.Range(0, 4).Any(surface =>
                     land.Geometry.Mesh.SurfaceGetMaterial(surface) is not ShaderMaterial material ||

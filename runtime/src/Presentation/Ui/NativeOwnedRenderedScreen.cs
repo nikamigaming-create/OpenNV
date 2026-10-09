@@ -115,6 +115,7 @@ internal sealed partial class NativeOwnedRenderedScreen : Node
 
     public override void _Input(InputEvent input)
     {
+        if (!_device.IsVisibleInTree() || !ContentView.IsInsideTree()) return;
         var focus = GetViewport().GuiGetFocusOwner();
         var externalFocus = focus is not null && _externalControls.Any(control => control == focus || control.IsAncestorOf(focus));
         if (input is InputEventMouse pointer)

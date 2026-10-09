@@ -15,17 +15,16 @@ internal sealed class FalloutPlayerTagSkills
     private readonly FalloutNativeSkillIdentity?[] _slots;
 
     internal FalloutPlayerTagSkills(FalloutPluginStack records, FalloutNativeTagSkillContract contract,
-        FalloutPlayerTagSkillsSnapshot? snapshot = null, IReadOnlyList<FalloutNativeSkillIdentity>? legacy = null)
-        : this(records, contract.Skills, contract.RequiredCount, snapshot, legacy) { }
+        FalloutPlayerTagSkillsSnapshot? snapshot = null)
+        : this(records, contract.Skills, contract.RequiredCount, snapshot) { }
 
     internal FalloutPlayerTagSkills(FalloutPluginStack records, IReadOnlyList<FalloutNativeSkillIdentity> catalog,
-        int? requiredCount = null, FalloutPlayerTagSkillsSnapshot? snapshot = null,
-        IReadOnlyList<FalloutNativeSkillIdentity>? legacy = null)
+        int? requiredCount = null, FalloutPlayerTagSkillsSnapshot? snapshot = null)
     {
         _catalog = catalog;
         _requiredCount = requiredCount;
         _skills = catalog.ToDictionary(skill => FalloutPlayerSkills.SkillName(records, skill), StringComparer.OrdinalIgnoreCase);
-        snapshot ??= FromLegacy(legacy ?? []);
+        snapshot ??= new(new FalloutNativeSkillIdentity?[SlotCount]);
         Validate(snapshot);
         if (snapshot.Slots.Any(skill => skill is not null && !catalog.Contains(skill)))
             throw new InvalidDataException("Player tag slot differs from its winning AVIF identity.");
@@ -51,17 +50,17 @@ internal sealed class FalloutPlayerTagSkills
         var count = requiredCount ?? _requiredCount ?? throw new NotSupportedException("Tag menu has no source selection count.");
         if (count is < 1 or > SlotCount) throw new NotSupportedException("Tag acceptance requires an owned count from one through four.");
         FalloutNativeTagSkillResolver.Validate(new(_catalog, count), selection);
-        var snapshot = FromLegacy(selection);
+        var snapshot = FromMenuSelection(selection);
         Array.Copy(snapshot.Slots.ToArray(), _slots, SlotCount);
     }
 
     internal FalloutPlayerTagSkillsSnapshot Capture() => new(_slots.ToArray());
 
-    internal static FalloutPlayerTagSkillsSnapshot FromLegacy(IReadOnlyList<FalloutNativeSkillIdentity> selection)
+    internal static FalloutPlayerTagSkillsSnapshot FromMenuSelection(IReadOnlyList<FalloutNativeSkillIdentity> selection)
     {
         if (selection.Count > SlotCount || selection.Any(skill => skill is null) ||
             selection.Select(skill => skill.RuntimeFormId).Distinct().Count() != selection.Count)
-            throw new InvalidDataException("Legacy player tags cannot be represented as four distinct indexed slots.");
+            throw new InvalidDataException("Menu player tags cannot be represented as four distinct indexed slots.");
         var slots = new FalloutNativeSkillIdentity?[SlotCount];
         for (var index = 0; index < selection.Count; ++index) slots[index] = selection[index];
         return new(slots);

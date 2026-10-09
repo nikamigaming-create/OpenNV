@@ -49,7 +49,8 @@ internal static class PerkParameterContracts
             var inventory = new FalloutPlayerInventory();
             inventory.Publish([new(Key(0x20), 0x20, "Weapon", "WEAP", 1, 1, 1)]);
             var skills = new FalloutPlayerSkills(records, () => new(5, 5, 5, 5, 5, 5, 5), _ => false,
-                () => [], null, inventory, Key(7), () => Key(8), () => false, () => world.AcquiredPerks(Key(0x14)));
+                () => [], null, inventory, Key(7), () => Key(8), () => false,
+                () => world.AcquiredPerks(Key(0x14)), perkRank: perk => world.PerkRank(Key(0x14), perk));
             var damage = new FalloutWeaponDamageResolver(records, inventory, _ => 100, () => skills.PerkEntries);
             Require(damage.Resolve(Key(0x20), 10).Amount == 30, "Winning perk value did not reach weapon damage.");
             Require(records.NumericSettings.Set("fDamageWeaponMult", 2) && damage.Resolve(Key(0x20), 10).Amount == 60,
@@ -106,6 +107,7 @@ internal static class PerkParameterContracts
 
     private static byte[] MixedPerk(float damage, float spread) => Record("PERK", 1, Field("EDID", Text("TestPerk")),
         Field("FULL", Text("Display name differs from the compiled identity")),
+        Field("DATA", [0, 1, 1, 1]),
         Field("PRKE", [1, 0, 0]), Field("DATA", BitConverter.GetBytes(40u)), Field("PRKF", []),
         Numeric(0, 3, 1, damage), Numeric(34, 3, 1, spread));
     private static byte[] Numeric(byte entry, byte function, byte type, params float[] values) => Join(

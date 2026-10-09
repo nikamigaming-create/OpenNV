@@ -46,11 +46,13 @@ internal static partial class CorpusInventoryContracts
         // A malformed selected archive directory leaves the remaining namespace unknown.
         var discoveryGame = Game(directory, "bad-directory");
         File.WriteAllBytes(Path.Combine(discoveryGame, "Data", "FalloutNV.bsa"), [0, 1, 2]);
-        using (var source = Open(discoveryGame))
-        using (var records = FalloutPluginStack.Load(source.PluginSources))
+        var discoveryBefore = FileHashes(discoveryGame);
+        var discoverySource = Open(discoveryGame);
+        try
         {
+            using var records = FalloutPluginStack.Load(discoverySource.PluginSources);
             var report = Path.Combine(directory, "bad-directory-report");
-            Require(CorpusInventory.Run(records, source, report) == 1, "Unknown archive member denominator returned success.");
+            Require(CorpusInventory.Run(records, discoverySource, report) == 1, "Unknown archive member denominator returned success.");
             var failures = Rows(report, "failure-instances.jsonl");
             Require(failures.Any(row => row.GetProperty("lane").GetString() == "archive-member-discovery") &&
                 failures.Any(row => row.GetProperty("lane").GetString() == "ordinary-archive-index"),
@@ -60,6 +62,23 @@ internal static partial class CorpusInventoryContracts
                 summary.RootElement.GetProperty("resourceInventory").GetProperty("remainingDenominator").GetString() == "unknown",
                 "A failed directory claimed a complete resource denominator.");
         }
+        finally
+        {
+            // Retirement drains the actual background reader and retains its original
+            // malformed-source failure after closing the remaining source owners.
+            Exception? warmupFailure = null;
+            try { discoverySource.ArchiveWarmup.GetAwaiter().GetResult(); }
+            catch (Exception error) { warmupFailure = error; }
+            Exception? retirementFailure = null;
+            try { discoverySource.Dispose(); }
+            catch (Exception error) { retirementFailure = error; }
+            Require(warmupFailure is AggregateException aggregate &&
+                aggregate.Flatten().InnerExceptions.All(error => error is InvalidDataException) &&
+                ReferenceEquals(retirementFailure, warmupFailure),
+                "Malformed archive retirement lost or replaced its actual background reader failure.");
+        }
+        Require(discoveryBefore.SequenceEqual(FileHashes(discoveryGame)),
+            "Malformed archive retirement mutated its authored source bytes.");
     }
 
     private static void ByteReuseAndChanges(string directory)

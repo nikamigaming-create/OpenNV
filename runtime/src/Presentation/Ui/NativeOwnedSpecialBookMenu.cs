@@ -21,7 +21,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     private readonly Dictionary<string, int> _targetPages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _input = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (FalloutSoundRecord Source, long Revision)> _sounds = new(StringComparer.Ordinal);
-    private readonly FalloutSoundRandomState _soundRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
+    private long _menuSoundOccurrence;
     private IReadOnlyList<int> _values = [];
     private int _page, _index = 1;
     private bool _turning, _submitted;
@@ -255,7 +255,8 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             var record = FalloutSoundRecordReader.Find(_records, editorId);
             entry = (FalloutSoundRecordReader.Read(_records, record.FormKey), _records.SoundPaths.Revision(record.FormKey)); _sounds[editorId] = entry;
         }
-        var player = NativeOwnedSoundPlayback.CreateMenu(entry.Source, _records, RuntimeLiveContentSource.Current!, _soundRandom);
+        var player = NativeOwnedSoundPlayback.CreateMenu(entry.Source, _records,
+            NativeOwnedSoundPlayback.MenuCall(this, checked(++_menuSoundOccurrence), entry.Source.FormKey));
         AddChild(player); player.Finished += player.QueueFree; player.Play();
     }
     private void Try(Action action)

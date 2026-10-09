@@ -19,7 +19,9 @@ public partial class NativeLoveTesterAudit : Node
             var scene = FalloutCellSceneReader.Read(records, records.RuntimeFormKey(Convert.ToUInt32(cell, 16)));
             var contract = FalloutNativeVigorResolver.Resolve(records, scene);
             var layer = new CanvasLayer();
-            var menu = new NativeOwnedLoveTesterMenu(contract, contract.Initial, records)
+            var source = FalloutExecutableStringTable.ReadLoveTesterSource(content.FalloutExecutablePath);
+            var allocation = source.Allocate(contract.RequiredTotal);
+            var menu = new NativeOwnedLoveTesterMenu(source, allocation, contract.Initial, records)
             {
                 LayoutMode = 1,
                 AnchorsPreset = (int)Control.LayoutPreset.FullRect,

@@ -463,7 +463,7 @@ try
     byte[] EventPackage(uint id, byte[] scriptBytes)
     {
         var eventHeader = new byte[20];
-        var eventCode = FalloutDialogueTopic.CodeLines(FalloutDialogueTopic.ScriptText(scriptBytes)).Any() ? new byte[] { 0 } : [];
+        var eventCode = FalloutDialogueTopic.CodeLines(FalloutDialogueTopic.ScriptText(scriptBytes)).Any() ? new byte[] { 0, 0x10, 0, 0 } : [];
         BinaryPrimitives.WriteUInt32LittleEndian(eventHeader.AsSpan(8), (uint)eventCode.Length);
         return Record("PACK", id, Field("EDID", Encoding.ASCII.GetBytes("EventPackage" + id + "\0"))
             .Concat(Field("PKDT", packageData)).Concat(Field("PLDT", packageLocation))

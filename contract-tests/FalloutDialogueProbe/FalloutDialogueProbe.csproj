@@ -1,93 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>OpenNV.FalloutDialogueProbe</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../runtime/src/Content/FalloutContentWorkers.cs" Link="FalloutContentWorkers.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutDialogueVoice.cs" Link="FalloutDialogueVoice.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutScriptValues.cs" Link="FalloutScriptValues.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutScriptArrayStore.cs" Link="FalloutScriptArrayStore.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutScriptArrayStore.Functions.cs" Link="FalloutScriptArrayStore.Functions.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutNvseNumericExpression.cs" Link="FalloutNvseNumericExpression.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutGameModeProgram.cs" Link="FalloutGameModeProgram.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutScriptLocals.cs" Link="FalloutScriptLocals.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutScriptHeader.cs" Link="FalloutScriptHeader.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutConditions.cs" Link="FalloutConditions.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutQuestState.cs" Link="FalloutQuestState.cs" />
-    <Compile Include="../../runtime/src/Gameplay/State/FalloutHudNotifications.cs" Link="FalloutHudNotifications.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutAiPackages.cs" Link="FalloutAiPackages.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPackageSchedule.cs" Link="FalloutPackageSchedule.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutCalendar.cs" Link="FalloutCalendar.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutGlobal.cs" Link="FalloutGlobal.cs" />
-    <Compile Include="../../runtime/src/Gameplay/State/FalloutGlobalState.cs" Link="FalloutGlobalState.cs" />
-    <Compile Include="../../runtime/src/Gameplay/State/FalloutGameTime.cs" Link="FalloutGameTime.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorTemplateOwner.cs" Link="FalloutActorTemplateOwner.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorTemplateSelection.cs" Link="FalloutActorTemplateSelection.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutSoundRandomState.cs" Link="FalloutSoundRandomState.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutFurnitureIdleTree.cs" Link="FalloutFurnitureIdleTree.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutHitReactionTree.cs" Link="FalloutHitReactionTree.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorHitReaction.cs" Link="FalloutActorHitReaction.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorAnimationState.cs" Link="FalloutActorAnimationState.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorIdleCommand.cs" Link="FalloutActorIdleCommand.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorPackageCommand.cs" Link="FalloutActorPackageCommand.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorActivityState.cs" Link="FalloutActorActivityState.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutFaceBlink.cs" Link="FalloutFaceBlink.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutGameSettingFloats.cs" Link="FalloutGameSettingFloats.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutBodyPartLook.cs" Link="FalloutBodyPartLook.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutHeadTrackingState.cs" Link="FalloutHeadTrackingState.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutHeadTrackingSnapshot.cs" Link="FalloutHeadTrackingSnapshot.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutLookCommands.cs" Link="FalloutLookCommands.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutIdleCollectionPlayback.cs" Link="FalloutIdleCollectionPlayback.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutIdleCollection.cs" Link="FalloutIdleCollection.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutIdleConditions.cs" Link="FalloutIdleConditions.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutIdleAnimationData.cs" Link="FalloutIdleAnimationData.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutIdleAnimationPlayback.cs" Link="FalloutIdleAnimationPlayback.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutScriptPackage.cs" Link="FalloutScriptPackage.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPackageData.cs" Link="FalloutPackageData.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPackageRetirement.cs" Link="FalloutPackageRetirement.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutImageSpaceCommands.cs" Link="FalloutImageSpaceCommands.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutMenuXml.cs" Link="FalloutMenuXml.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutUiOrganizer.cs" Link="FalloutUiOrganizer.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutInstallationSettings.cs" Link="FalloutInstallationSettings.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutRendererConfiguration.cs" Link="FalloutRendererConfiguration.cs" />
-    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutBitmapFont.cs" Link="FalloutBitmapFont.cs" />
-    <Compile Include="../../runtime/src/Formats/FaceGen/FalloutTriFile.cs" Link="FalloutTriFile.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutGameSettingStrings.cs" Link="FalloutGameSettingStrings.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutGameSettingIntegers.cs" Link="FalloutGameSettingIntegers.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableInputControls.cs" Link="FalloutExecutableInputControls.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Static.cs" Link="FalloutExecutableStringTable.Static.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Inline.cs" Link="FalloutExecutableStringTable.Inline.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.Ini.cs" Link="FalloutExecutableStringTable.Ini.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.IniPayload.cs" Link="FalloutExecutableStringTable.IniPayload.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutNumericIniSettings.cs" Link="FalloutNumericIniSettings.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutNumericIniSettings.Read.cs" Link="FalloutNumericIniSettings.Read.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableControlTable.cs" Link="FalloutExecutableControlTable.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableControlTable.Pooled.cs" Link="FalloutExecutableControlTable.Pooled.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableHud.cs" Link="FalloutExecutableHud.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableSubtitles.cs" Link="FalloutExecutableSubtitles.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableRaceMenu.cs" Link="FalloutExecutableRaceMenu.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableActivationSounds.cs" Link="FalloutExecutableActivationSounds.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutExecutableMessageMenu.cs" Link="FalloutExecutableMessageMenu.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutActorIdleSource.cs" Link="FalloutActorIdleSource.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPluginReader.cs" Link="FalloutPluginReader.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPluginStack.cs" Link="FalloutPluginStack.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutQuestObjectFlags.cs" Link="FalloutQuestObjectFlags.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutSoundVoices.cs" Link="FalloutSoundVoices.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutFiniteSoundVoice.cs" Link="FalloutFiniteSoundVoice.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutFiniteSoundSaveDrain.cs" Link="FalloutFiniteSoundSaveDrain.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutSoundLoop.cs" Link="FalloutSoundLoop.cs" />
-    <Compile Include="..\..\runtime\src\Content\FalloutSoundRecord.cs" Link="FalloutSoundRecord.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutSoundPaths.cs" Link="FalloutSoundPaths.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutPerkParameters.cs" Link="FalloutPerkParameters.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutCellScene.cs" Link="FalloutCellScene.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutDialogueTopic.cs" Link="FalloutDialogueTopic.cs" />
-    <Compile Include="../../runtime/src/Content/RuntimeLiveContentSource.cs" Link="RuntimeLiveContentSource.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutContentLayers.cs" Link="FalloutContentLayers.cs" />
-    <Compile Include="../../runtime/src/Content/NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
-    <Compile Include="../../runtime/src/Content/FalloutNumericGameSettings.cs" Link="FalloutNumericGameSettings.cs" />
+    <ProjectReference Include="../../runtime/OpenNV.csproj" />
   </ItemGroup>
 </Project>

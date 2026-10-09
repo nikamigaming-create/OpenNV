@@ -75,13 +75,14 @@ public partial class NativeRenderedMenuAudit
             var expectedResults = new HashSet<(FalloutFormKey Actor, FalloutFormKey Info, bool Begin)>();
             void ExpectResults(FalloutFormKey actor, FalloutDialogueInfo info)
             {
-                if (FalloutDialogueTopic.CodeLines(info.BeginScript).Any()) expectedResults.Add((actor, info.Record.FormKey, true));
-                if (FalloutDialogueTopic.CodeLines(info.EndScript).Any()) expectedResults.Add((actor, info.Record.FormKey, false));
+                if (FalloutScriptResultReceipt.HasProgram(FalloutScriptScope.Dialogue(info.Record, true))) expectedResults.Add((actor, info.Record.FormKey, true));
+                if (FalloutScriptResultReceipt.HasProgram(FalloutScriptScope.Dialogue(info.Record, false))) expectedResults.Add((actor, info.Record.FormKey, false));
             }
-            speech.ExecuteResults = (info, actor, begin) =>
+            speech.ExecuteOwnedResults = (info, actor, begin) =>
             {
-                scripts.ExecuteResult(info, actor, begin);
+                var result = scripts.ExecuteResultOwned(info, actor, begin);
                 results.Add((actor, info.Record.FormKey, begin));
+                return result;
             };
             var completedInfos = new List<FalloutFormKey>();
             var committedInfos = new Dictionary<FalloutFormKey, int>();
@@ -186,9 +187,9 @@ public partial class NativeRenderedMenuAudit
                     quests: quests, playerFemale: () => saved.Character.Female, references: world);
                 speech.PrepareSubtitle = _ => { };
                 var prefix = 0;
-                speech.ExecuteResults = (info, actor, begin) =>
+                speech.ExecuteOwnedResults = (info, actor, begin) =>
                 {
-                    scripts.ExecuteResult(info, actor, begin); ++prefix;
+                    _ = scripts.ExecuteResultOwned(info, actor, begin); ++prefix;
                     throw new NotSupportedException("Isolated INFO prefix divergence.");
                 };
                 AddChild(speech);

@@ -45,7 +45,8 @@ public partial class NativeTagSkillMenuAudit
                         driver = new();
                         void Bind(string field, object value) => (ownerType.GetField(field, flags) ?? throw new MissingFieldException(field)).SetValue(driver, value);
                         var failValue = false;
-                        var tags = new FalloutPlayerTagSkills(records, contract, legacy: contract.Skills.Take(3).ToArray());
+                        var tags = new FalloutPlayerTagSkills(records, contract);
+                        tags.AcceptMenu(contract.Skills.Take(3).ToArray());
                         var skills = new FalloutPlayerSkills(records,
                             () => failValue ? throw new NotSupportedException("Synthetic unsupported player SPECIAL.") : new(5, 5, 5, 5, 5, 5, 5),
                             tags.IsTagged, () => [], null, new(), actor, () => race, () => false);

@@ -108,7 +108,7 @@ public partial class RuntimeCoordinator
             await ShowNativeLoadingScreens(placement.Cell);
             if (placement.Cell == active.Cell.FormKey) player.Teleport(transform);
             else await StreamNativePlayerMove(placement, transform);
-            SaveNativeInteraction();
+            RequestNativeInteractionSave(target);
             GD.Print($"OPENNV_FAST_TRAVEL destination={target} cell={_nativeActiveCell!.Cell.FormKey}");
         }
         catch (Exception error)

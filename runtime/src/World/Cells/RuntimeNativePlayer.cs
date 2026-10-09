@@ -29,9 +29,14 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     private float _jumpHeightMeters;
     private FalloutInputControls? _inputControls;
 
-    internal void ConfigureInputControls(FalloutInputControls controls, Func<int, bool> physicalKeyPressed)
+    internal void ConfigureInputControls(FalloutInputControls controls, Func<int, bool> physicalKeyPressed, FalloutDirectInputState? directInput = null)
     {
         if (_inputControls is not null) throw new InvalidOperationException("Player input controls already have an owner.");
+        if (directInput is not null)
+        {
+            if (!ReferenceEquals(directInput.Controls, controls)) throw new InvalidDataException("Player controls differ from the actual device source.");
+            directInput.RequireCurrent();
+        }
         _inputControls = controls;
         var adapter = new RuntimeNativeInputControls(controls, _configuration.Player.DesktopInput, physicalKeyPressed);
         adapter.Remapped += changed =>
@@ -42,6 +47,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
                 _holdHandled = false; _aiming = false; CancelWeaponAction();
             }
         };
+        if (directInput is not null) adapter.BindDirectInput(directInput);
         AddChild(adapter);
     }
     internal bool Sprinting { get; private set; }
@@ -296,6 +302,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled(); return;
         }
         if (PresentationInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
+        if (SourceRestInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (!_modalInput && _furniturePhase == 0 && GetMeta("opennv_source_pipboy_enabled", false).AsBool() &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F1 or Key.F2 or Key.F3 } pageKey)
         {
@@ -369,7 +376,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         PublishXrPointer();
         if (_xr is not null && GetTree().Paused) return;
+        if (_playerPhysical?.Failure is not null) { Velocity = Vector3.Zero; return; }
         AdvanceExplosionExposure(delta);
+        if (AdvancePlayerKnockdown(delta)) return;
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
         var alive = IsDefeated?.Invoke() != true;

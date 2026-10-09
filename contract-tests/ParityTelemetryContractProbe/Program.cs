@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 
 NativeReferenceObservationProbe.Run();
 RecordedInputProbe.Run();
+SequentialInputProbe.Run();
 
 var publicationCadence = new LiveHarnessPublicationCadence();
 if (publicationCadence.Due(249) || !publicationCadence.Due(250))

@@ -5,7 +5,8 @@ using System.Security.Cryptography;
 namespace OpenNV.Runtime.Content;
 
 /// <summary>Owned engine calendar declaration; it has fixed month lengths, independent of the year.</summary>
-internal sealed record FalloutCalendar(IReadOnlyList<ushort> MonthDays, string SourceSha256)
+internal sealed record FalloutCalendar(IReadOnlyList<ushort> MonthDays, string SourceSha256,
+    bool CarryAtDayBoundary = false, bool SinglePrecisionProduct = false)
 {
     internal static FalloutCalendar Read(string executable)
     {
@@ -22,8 +23,17 @@ internal sealed record FalloutCalendar(IReadOnlyList<ushort> MonthDays, string S
         }
         if (matches.Count != 1) throw new NotSupportedException("Owned calendar declaration is missing or ambiguous.");
         var days = matches[0];
-        var declaration = days.SelectMany(BitConverter.GetBytes).ToArray();
-        return new(days, Convert.ToHexString(SHA256.HashData(declaration)).ToLowerInvariant());
+        var engine = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        var consumer = engine switch
+        {
+            "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57" => (CarryAtBoundary: true, SinglePrecisionProduct: false),
+            "c3f97c2255fa041a851c17cf372d69aaadd8694e2dc4230ba556001bbfbd2f3e" => (CarryAtBoundary: false, SinglePrecisionProduct: true),
+            _ => throw new NotSupportedException("Owned calendar has no selected clock boundary/arithmetic consumer."),
+        };
+        var declaration = System.Text.Encoding.UTF8.GetBytes(engine + "\0" + consumer.CarryAtBoundary + "\0" + consumer.SinglePrecisionProduct)
+            .Concat(days.SelectMany(BitConverter.GetBytes)).ToArray();
+        return new(days, Convert.ToHexString(SHA256.HashData(declaration)).ToLowerInvariant(),
+            consumer.CarryAtBoundary, consumer.SinglePrecisionProduct);
     }
 
     internal static ushort[]? Decode(ReadOnlySpan<byte> data)

@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
@@ -70,6 +71,7 @@ internal sealed partial class RuntimeNativeActorCombat
         RetireUnusedPursuitSearch();
         CaptureEngagement();
         _state.Engagement = null;
+        InvalidateFollowRoute();
         Activity.SetCombat(false); Activity.SetAlerted(false); Activity.SetWeaponDrawn(false);
         Activity.SetMovement(false, false);
         if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;
@@ -98,7 +100,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
         if (_actor.GlobalPosition.DistanceTo(target._actor.GlobalPosition) > ThreatRadius(threat) ||
             !CanSeePoint(target.BodyTargetPoint(), target)) return false;
-        _state.Engagement = new(target._state.Reference);
+        _world.SelectSourceCombatTarget(_state.Reference, target._state.Reference, FalloutCombatGroupTransitionKind.CompanionJoin);
         _assistsReceived++;
         return true;
     }

@@ -5,10 +5,10 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed record FalloutRegionWeatherSnapshot(FalloutFormKey Region, FalloutFormKey Weather);
 internal sealed record FalloutSkyLightingSnapshot(FalloutFormKey Climate, IReadOnlyList<FalloutRegionWeatherSnapshot> Regions,
     FalloutFormKey? ForcedWeather = null, FalloutFormKey? ExteriorWeather = null, ulong? RandomState = null,
-    FalloutFormKey? ClimateWeather = null);
+    FalloutFormKey? ClimateWeather = null, FalloutSkyTransferSnapshot? SourceTransfer = null, string? TransferUnowned = null);
 
 /// <summary>Shared sky/climate identity and region weather caches; renderers only sample this state.</summary>
-internal sealed class FalloutSkyLightingState
+internal sealed partial class FalloutSkyLightingState
 {
     private readonly FalloutPluginStack _records;
     private readonly Dictionary<FalloutFormKey, FalloutFormKey> _regions = [];
@@ -50,7 +50,7 @@ internal sealed class FalloutSkyLightingState
     {
         RequireBound();
         return new(_climate.Form, _regions.OrderBy(pair => pair.Key.ToString(), StringComparer.Ordinal)
-            .Select(pair => new FalloutRegionWeatherSnapshot(pair.Key, pair.Value)).ToArray(), ForcedWeather, ExteriorWeather, _random.State, _climateWeather);
+            .Select(pair => new FalloutRegionWeatherSnapshot(pair.Key, pair.Value)).ToArray(), ForcedWeather, ExteriorWeather, _random.State, _climateWeather, CaptureSourceTransfer(), CaptureSourceTransferUnowned());
     }
 
     internal void Restore(FalloutSkyLightingSnapshot snapshot)
@@ -71,12 +71,20 @@ internal sealed class FalloutSkyLightingState
         if (snapshot.RandomState is { } random) _random.Restore(random);
         _regions.Clear();
         foreach (var row in regions) _regions.Add(row.Key, row.Value);
+        RestoreSourceTransfer(snapshot);
         _unbound = null;
     }
 
     internal static void ValidateSnapshot(FalloutPluginStack records, FalloutSkyLightingSnapshot snapshot)
     {
         _ = FalloutClimateLighting.Read(records.GetEffective(snapshot.Climate));
+        if (snapshot.SourceTransfer is { } sourceSky)
+        {
+            if (snapshot.TransferUnowned is not null) throw new InvalidDataException("Saved Sky has both an admitted owner and an unowned declaration.");
+            FalloutSkyTransferState.Validate(sourceSky, sourceSky.Source, sourceSky.Stack, records);
+        }
+        else if (string.IsNullOrWhiteSpace(snapshot.TransferUnowned))
+            throw new InvalidDataException("Saved Sky omitted the current source reset owner or its explicit unowned boundary.");
         if (snapshot.ForcedWeather is { } forced) _ = FalloutWeatherLighting.Read(records.GetEffective(forced));
         if (snapshot.ClimateWeather is { } climateWeather) _ = FalloutWeatherLighting.Read(records.GetEffective(climateWeather));
         if (snapshot.ExteriorWeather is { } exterior)
@@ -111,6 +119,7 @@ internal sealed class FalloutSkyLightingState
                     _regions.Add(region, selected = FalloutExteriorClimate.SelectWeather(_records, region, globals, _random));
                 ExteriorWeather = selected;
             }
+            SourceClimateSelected();
             _unbound = null;
             return;
         }
@@ -120,7 +129,11 @@ internal sealed class FalloutSkyLightingState
         if (fields[0].Data.Length != 4) throw new InvalidDataException("CELL climate override requires one FormID.");
         var record = _records.GetEffective(cell.FormKey);
         var form = record.Plugin.AdjustOptionalFormId(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(fields[0].Data.Span));
-        if (form is { } value) _climate = FalloutClimateLighting.Read(_records.GetEffective(value));
+        if (form is { } value)
+        {
+            _climate = FalloutClimateLighting.Read(_records.GetEffective(value));
+            SourceClimateSelected();
+        }
     }
 
     internal void MarkUnbound(string reason) => _unbound = reason;

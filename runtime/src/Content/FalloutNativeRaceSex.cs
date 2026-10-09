@@ -14,7 +14,7 @@ internal sealed record FalloutNativeRaceSexSelection(
     FalloutNativeFaceState? Face = null);
 
 // The player's editable appearance retains original source Float32 bytes.
-// A null value is the explicit legacy-save state: use the winning NPC fields.
+// A null editable value uses the authoritative winning NPC face fields.
 internal sealed record FalloutNativeFaceState(byte[] SymmetricGeometry, byte[] AsymmetricGeometry,
     byte[] SymmetricTexture, byte[] HairColor, byte[] HairLength, uint[] HeadParts)
 {
@@ -86,14 +86,9 @@ internal static class FalloutNativeRaceSexResolver
     internal static FalloutNativeRaceSexContract Resolve(FalloutPluginStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);
-        var players = stack.EffectiveRecords("NPC_")
-            .Where(record => ReadEditorId(record)
-                .Equals("Player", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (players.Length != 1)
-            throw new InvalidDataException(
-                $"Native player identity must resolve to one winning NPC_; found {players.Length}.");
-        var player = players[0];
+        var player = stack.GetEffective(stack.RuntimeFormKey(7));
+        if (player.Signature != "NPC_" || player.IsDeleted)
+            throw new InvalidDataException("Engine player appearance requires the winning live base NPC_.");
         var actorConfiguration = Single(player, "ACBS");
         if (actorConfiguration.Length != ActorConfigurationBytes)
             throw new InvalidDataException("Native Player ACBS layout is unsupported.");

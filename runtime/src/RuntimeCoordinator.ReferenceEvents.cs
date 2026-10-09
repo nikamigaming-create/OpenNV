@@ -13,6 +13,7 @@ public partial class RuntimeCoordinator
     public override void _Process(double delta)
     {
         if (GetTree().Paused) return;
+        if (_nativeCellProcessRetirements.Count != 0) ObservePendingNativeCellRetirements();
         AdvanceNativePipBoyWorld(delta);
         AdvanceNativePlayerMoves();
         AdvanceNativeDeath();
@@ -21,6 +22,11 @@ public partial class RuntimeCoordinator
         if (_nativeReferences is { } world && world.PlacementRevision != _nativePlacementRevision &&
             _nativeCurrentCellRoot is { } root && _nativeActiveCell is { } scene && !_nativeDoorLoading)
         {
+            if (scene.Cell.Worldspace is not null)
+            {
+                QueueNativeExteriorReferenceProjection(world, root, scene);
+                return;
+            }
             var moved = world.MovedSince(_nativePlacementRevision);
             var cells = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>()
                 .Where(land => _nativeWalkableGrid.Contains(land.Source.ActiveCoordinates))
@@ -81,6 +87,7 @@ public partial class RuntimeCoordinator
             _nativeReferenceEvents = existing;
             existing.ActivateHitCallbacks();
             existing.SetProcess(true);
+            PublishNativeSourceCellAttachment(root, existing);
             return;
         }
         var events = new RuntimeNativeReferenceEvents
@@ -118,6 +125,7 @@ public partial class RuntimeCoordinator
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;
+        PublishNativeSourceCellAttachment(root, events);
         foreach (var reference in events.BoundTriggers)
             _parityObservations.Observe("world/active-cell", $"{cell.Cell.FormKey}/{reference.FormKey}",
                 NativeReferenceState(reference, cell.BaseObjects[reference.Base], "source-primitive-contact-owner"));

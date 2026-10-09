@@ -64,6 +64,15 @@ internal static class DevelopmentLabSource
             var resolved = selection.Resolve(selectedRoot);
             RuntimeLiveContentSource.Configure(resolved.BaseInstallation.InstallRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
                 resolved.ContentRoots.Skip(1).ToArray(), resolved.ActivePlugins, resolved.Settings);
+            var dependency = resolved.Dependencies.SingleOrDefault(row =>
+                row.LogicalPath.Equals("nvse_1_4.dll", StringComparison.OrdinalIgnoreCase));
+            if (dependency?.SourcePath is { } host)
+            {
+                var source = RuntimeLiveContentSource.Current ??
+                    throw new InvalidOperationException("Selected native dependency has no configured content owner.");
+                source.BindNativePluginHostDependency(new(host,
+                    "actual-development-lab-selected-stack-dependency:" + source.StackId));
+            }
         }
     }
 

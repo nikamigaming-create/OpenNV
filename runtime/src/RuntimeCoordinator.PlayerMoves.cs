@@ -8,7 +8,8 @@ public partial class RuntimeCoordinator
 {
     private void AdvanceNativePlayerMoves()
     {
-        if (_nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession ||
+        if (_nativeReferences?.CampaignMainPlayerCellConstructed == true) return; // The actual Main child owns source delivery.
+        if (_nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession || _nativeBootstrap?.PlacementPreparing == true ||
             _nativeReferences is not { } references || references.PlayerMoves.Next is not { } move ||
             _nativePlayer is not { } player || _nativeOpeningStageDriver is not { } driver || _nativeActiveCell is not { } active)
             return;
@@ -48,9 +49,9 @@ public partial class RuntimeCoordinator
         var current = _nativeCurrentCellRoot ?? throw new InvalidOperationException("Player MoveTo has no resident CELL root.");
         var active = _nativeActiveCell ?? throw new InvalidOperationException("Player MoveTo has no active CELL.");
         var sky = _nativeSkyLighting ?? throw new InvalidOperationException("Player MoveTo has no sky owner.");
-        var previousSky = sky.Capture();
+        var previousSky = sky.CaptureLightingProjection();
         var scene = FalloutCellSceneReader.Read(_nativePluginStack!, placement.Cell);
-        var grid = scene.Cell.Worldspace is { } world ? ResolveExterior(world, placement.Position) : null;
+        var grid = scene.Cell.Worldspace is { } world ? ResolveExteriorFromSourceCell(world, placement.Cell) : null;
         scene = _nativeReferences!.ComposeResidency(grid?.Scene ?? scene, grid?.Cells);
         if (grid is not null) grid = grid with { Scene = scene };
         Node3D? root = null;
@@ -58,7 +59,8 @@ public partial class RuntimeCoordinator
         {
             sky.EnterCell(scene.Cell, _nativeGlobals, placement.Position);
             SetLoadingStatus("Loading the world");
-            root = await BuildNativeCellRootResponsive(scene, null, sourceSide: false);
+            root = await BuildNativeCellRootResponsive(scene, null, sourceSide: false,
+                sourceCells: grid is null ? null : grid.Cells.Select(definition => definition.FormKey).Append(grid.PersistentCell).Distinct(FalloutFormKeyComparer.Instance).ToArray());
             root.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) AddExteriorLandscape(root, grid);
             AddChild(root);
@@ -73,8 +75,8 @@ public partial class RuntimeCoordinator
         }
         catch
         {
-            root?.Free();
-            sky.Restore(previousSky);
+            FreeNativeSourceCellRoot(root);
+            sky.RestoreLightingProjection(previousSky);
             DiscoverNativeCellReferences(active);
             ObserveNativeResidentReferences(active);
             throw;
@@ -110,6 +112,6 @@ public partial class RuntimeCoordinator
         root.ProcessMode = ProcessModeEnum.Inherit;
         NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(current);
         current.ProcessMode = ProcessModeEnum.Disabled;
-        current.QueueFree();
+        QueueNativeSourceCellRetirement(current);
     }
 }

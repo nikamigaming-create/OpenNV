@@ -1,14 +1,30 @@
 # Product status
 
-The October 9 gameplay batch restores visible Pip-Boy Stats rows and note/quest
-bodies, adds resident Local Map and discovered-destination transfer, binds
-F1/F2/F3 page input, and retains companion perks separately from player perks.
-Large outdoor telemetry packets span ring slots without dropping fields. Ordinary
-retail input recording and C# delivery have run; the two saves have not been
-established as a matched gameplay checkpoint. Travel time/followers, complete
-inventory actions, source statistics, compiled scripts, AI, procedural trees,
-full native mods and complete campaigns remain open. See current-work.md for
-the active implementation and next runtime failures.
+The published October 9 gameplay slice includes source Pip-Boy pages/notes/maps,
+separate teammate perks, discovered-destination transfer, attached loop retirement
+and validated source collision construction. Ordinary packaged discovery, travel,
+settled save and cold Continue ran. FNV Test selects fnv-windows-03c3d23a.
+Fresh FO3 vault exit, FNV opening/Goodsprings/ED-E/companions, full Pip-Boy actions
+and the requested exported smoke route still need their actual acceptance.
+
+The separate protocol 26 source candidate joins compiled scripts/effects, actual
+Main Player transfers, source Sky resets, calling-thread FISTP, Steam/native plugin
+owners, shared CNG buffers, mutexes, source menu/archive lifetimes and CELL/LAND.
+The preceding C#/x86 builds, combined script suite, negative corpus cleanup and
+selected owned LAND audit pass. Authored imported CNG executes real SDK hashing,
+shared nonnull buffers and actual detach/normal exit. OS-selected common placement
+now passes real placeholder reservation/replacement in both living x86 children,
+offset views and the complete digest. Original native compatibility remains open.
+Merged gameplay, protocol 25, FISTP, FO3 Main/Player, mutex and archive registry compile with zero
+warnings/errors. Actual archive, current-thread FISTP and CNG checks pass. The
+mutex caller's real named CreateMutexA returns ERROR_ACCESS_DENIED (5), retained
+as a failure. Retained Local-directory capability/caller-thread NtCreateMutant
+integration compiles but still returns actual NTSTATUS c0000022/error 5. Companion
+event order/topic filters and current/cold Follow contracts pass; ordinary Follow
+and Sandbox dismissal remain unaccepted. The complete combined Test-GodotRuntime
+gate and selected owned LAND construction audit pass with recording off.
+Checked publication and fresh exported acceptance are next; no new root package
+is claimed.
 
 Exterior window models now accept their authored refraction/material controller
 chains and animate source opacity. The reached source scripts select the daytime
@@ -24,48 +40,21 @@ same active source identity. Release/Debug builds, authored key/action/failure c
 and the genuine native camera/texture/triangle ownership fixture pass with fresh
 assembly identity and clean exit. The full required publication gate and selected
 FNV/FO3 winning SPECIAL XML/model/executable declaration audits pass. Checked
-publication remains next. Ordinary native key dispatch, source pose/framing, pixel coverage,
+publication is merged in PR186. Ordinary native key dispatch, source pose/framing, pixel coverage,
 complete campaign and matched retail/XR acceptance remain unverified.
 
-The FNV first-person beard and post-trait sofa trap are repaired in the pinned
-development Release. A private ordinary replay performs Continue, Vito-Matic,
-the questionnaire, tags and Skilled/Wild Wasteland selection, reaches stage 110,
-exits the source sofa with Activate and moves 2.6 metres with forward input. The
-seated first-person native frame is beard-free. F5, quit, cold Continue and another
-F5 preserve all 13 skill pools at +5 and the completed effect's exact local state;
-the original user save remains unchanged. Cold quit exits 0 and telemetry
-publication retains zero failures. Focused source/ordered-local/current-save
-checks and the actual owned Skilled ability audit pass. The required Release/Debug
-publication gate, native Godot checks and diff check pass. The immutable export
-also observes the real furniture approach/entry, exits with Activate, moves
-2.76 metres and quits with exit code 0. The refreshed Release is pinned and the
-checked fix is merged through PR 182 with every CI check passing. An independent
-reached malformed source-text script still refuses; its compiled execution owner
-and matched retail acceptance remain open.
+Actual JIP Query passed; original Load has not. Standalone FO3's distinct source
+Main/Player and mandatory current/cold state are integrated; authored checks pass,
+while ordinary vault exit and its UI/scene/task/TLS producers remain unaccepted.
+Unknown native/script/model/AI/render/audio
+behavior remains visible. Full campaigns, selected mod stacks, matched retail
+and physical XR are unfinished. All 36 broad requirements remain open; no counts
+or component receipts establish a completion percentage. Current owners, today's
+release priority and the next executable outcome are in current-work.md.
 
-The native launcher refresh passes the required runtime gate and selected owned
-FNV/TTW launcher-stack checks. Actual FNV New Game enters the source confirmation;
-cancel and source-menu quit preserve the user's save. Native pixels are inspected
-at 1440x900 and the minimum 1060x700 setup window. Original artwork, persistent
-play controls, source-menu entry actions and packaged build identity are present.
-The standalone FNV development Release package `fnv-dev-6c79290edde5` is pinned
-at `local/releases/FNV Test.cmd`. Its clean source commit, toolchain and 201 file
-hashes are retained; exported launcher startup matches the package identity and
-loads the refreshed artwork. The package includes Godot/.NET and first-party
-native dependencies. Earlier versioned packages remain unchanged, and owned
-installations and saves remain external.
-Complete campaign and mod-stack support remains unfinished.
-
-The preceding independent runtime slice implements source NIF sized/unsized extents,
-typed blend/joint/motor declarations, native controller-chain binding, particle
-sphere/plane contacts and source RGBA keys. Construction/retirement preserves
-independent instance ownership. Its required Release/Debug runtime gate, native
-controller-chain and particle checks pass. Owned reads decode all newly owned
-declarations in the selected investigation families. Complete model reads retain
-gravity-controller, breakable/prismatic-joint and orient-action failures; earlier
-header families retain binary-extra-data and user-version-12 refusals. All original
-archives remain unchanged. Full scene/pixel acceptance, complete campaigns and
-the complete selected mod stack remain unfinished.
+One hot package and the active work area/candidate are the retention target.
+Obsolete build/run/proof cleanup is pending because automatic review rejected
+directory deletion with "blocked by policy". No completed cleanup is claimed.
 
 The expanded corpus/quest audits finish independently for FNV, FO3, TTW and
 the exact combined selection. All winning/deleted payload layouts and discovered

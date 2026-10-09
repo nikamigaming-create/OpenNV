@@ -20,15 +20,16 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     private MeshInstance3D[] _partMeshes = [];
     private MeshInstance3D[] _skinMeshes = [];
     private RuntimeNativeNifSkeleton _skeleton = null!;
-    private FalloutReferenceInstance _state = null!;
+    private FalloutNativeRagdollOwner _owner = null!;
     private string _sourceHash = "";
     private readonly Dictionary<int, Body> _bySource = [];
     private bool _active;
     private FalloutActorRagdollState? _retiredCapture;
     private Vector3 _lastSeparationVelocity;
     internal bool Active => _active;
-    internal bool CaptureReady => _active && (_state.CaptureRagdoll == Capture ||
-        _retiredCapture is not null && ReferenceEquals(_state.Ragdoll, _retiredCapture));
+    internal bool CaptureReady => _active && (_owner.ReadCapture() == Capture ||
+        _retiredCapture is not null && ReferenceEquals(_owner.ReadState(), _retiredCapture));
+    internal IEnumerable<Rid> BodyRids => _bodies.Select(body => body.Node.GetRid());
     internal bool Settled => _active && _bodies.All(body => body.Node.Sleeping);
     internal IReadOnlyList<(string Name, FalloutNifTransformComponents Covered)> PoseCoverage =>
         Enumerable.Range(0, _skeleton.Node.GetBoneCount()).Select(index =>
@@ -58,8 +59,8 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
 
     internal void EndLivingSimulation()
     {
-        if (_state.Injury?.Dead == true) throw new InvalidOperationException("A dead actor cannot recover from knockdown.");
-        _active = false; _state.CaptureRagdoll = null; _state.Ragdoll = null;
+        if (_owner.Dead()) throw new InvalidOperationException("A dead actor cannot recover from knockdown.");
+        _active = false; _owner.WriteCapture(null); _owner.WriteState(null);
         foreach (var body in _bodies) { body.Node.Freeze = true; body.Node.CollisionLayer = 0; body.Node.CollisionMask = 0; }
     }
     internal IEnumerable<Vector3> AimPoints => _bodies.Select(body => body.Node.GlobalTransform * body.Center);
@@ -84,12 +85,22 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
         FalloutReferenceInstance state, RuntimeLiveContentSource content, string path, uint layer, uint mask,
         IReadOnlyList<FalloutBodyPart> parts, FalloutAuthoredRagdoll? authored = null)
     {
+        return Prepare(actor, skeleton, FalloutNativeRagdollOwner.Actor(state), content, path, layer, mask, parts, authored);
+    }
+
+    internal static RuntimeNativeActorRagdoll Prepare(Node3D actor, RuntimeNativeNifSkeleton skeleton,
+        FalloutNativeRagdollOwner owner, RuntimeLiveContentSource content, string path, uint layer, uint mask,
+        IReadOnlyList<FalloutBodyPart> parts, FalloutAuthoredRagdoll? authored = null)
+    {
+        owner.Validate();
+        if (!actor.IsInsideTree() || skeleton.Node.GetParent() != actor)
+            throw new InvalidDataException("Native ragdoll requires the actual attached source skeleton owner.");
         if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Ragdoll skeleton is absent: " + path);
         var result = new RuntimeNativeActorRagdoll
         {
             Name = "SourceDeathRagdoll",
             _skeleton = skeleton,
-            _state = state,
+            _owner = owner,
             _parts = parts,
             _sourceHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()
         };
@@ -129,7 +140,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
                     rigid.SetMeta("opennv_nif_collision_bone", node.Name);
                     rigid.SetMeta("opennv_nif_collision_body", body.Block.Index);
                     rigid.SetMeta("opennv_collision_havok_layer", built.Body.GetMeta("opennv_collision_havok_layer"));
-                    rigid.SetMeta("opennv_reference_form_key", state.Reference.ToString());
+                    rigid.SetMeta("opennv_reference_form_key", owner.Reference.ToString());
                     var center = GamebryoCoordinate.ConvertVector(new(body.Center.X, body.Center.Y, body.Center.Z)) * (7 * skeleton.UnitsToMetres);
                     var entry = new Body(body.Block.Index, skeleton.BoneIndex(node.Name), built.Body.Transform, center, rigid);
                     result._bodies.Add(entry); result._bySource.Add(entry.Source, entry);
@@ -147,7 +158,7 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             // XRGB is the nonphysical accumulation frame. Restore that same
             // source frame before publishing saved world-body poses; XRGD
             // local body transforms belong only to initial authored assembly.
-            if (authored is not null) ApplyAuthoredPose(skeleton, authored, state.Ragdoll is null);
+            if (authored is not null) ApplyAuthoredPose(skeleton, authored, owner.ReadState() is null);
             actor.AddChild(result);
             if (!result.IsInsideTree()) throw new InvalidOperationException("Death rig did not enter the actor's live scene.");
             foreach (var body in result._bodies)
@@ -238,8 +249,8 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
     internal void Activate()
     {
         if (_active) return;
-        if (_state.Injury?.Dead != true && !_state.KnockedDown) throw new InvalidOperationException("A living actor needs a knockdown owner to activate a ragdoll.");
-        var saved = _state.Ragdoll;
+        if (!_owner.Dead() && !_owner.KnockedDown()) throw new InvalidOperationException("A living actor needs a knockdown owner to activate a ragdoll.");
+        var saved = _owner.ReadState();
         ValidateSavedSource();
         foreach (var body in _bodies)
         {
@@ -255,20 +266,20 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
             }
         }
         foreach (var cut in saved?.Cuts ?? []) Sever(cut.Part, cut);
-        _active = true; _state.CaptureRagdoll = Capture;
+        _active = true; _owner.WriteCapture(Capture);
         Publish();
     }
 
     private void ValidateSavedSource()
     {
-        var saved = _state.Ragdoll;
+        var saved = _owner.ReadState();
         if (saved is not null)
         {
             saved.Validate();
             if (saved.SkeletonSha256 != _sourceHash || !saved.Bodies.Select(body => body.SourceBody).Order().SequenceEqual(_bySource.Keys.Order()))
                 throw new InvalidDataException("Saved ragdoll differs from its winning source skeleton.");
         }
-        if (!(saved?.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual((_state.Injury?.SeveredParts ?? []).Order()))
+        if (!(saved?.Cuts ?? []).Select(cut => cut.Part).Order().SequenceEqual(_owner.SeveredParts().Order()))
             throw new InvalidDataException("Saved limb separation lacks its cut-time skin pose.");
     }
 
@@ -344,10 +355,10 @@ internal sealed partial class RuntimeNativeActorRagdoll : Node3D
 
     public override void _ExitTree()
     {
-        if (_active && _state.CaptureRagdoll == Capture)
+        if (_active && _owner.ReadCapture() == Capture)
         {
             _retiredCapture = Capture(); _retiredCapture.Validate();
-            _state.Ragdoll = _retiredCapture; _state.CaptureRagdoll = null;
+            _owner.WriteState(_retiredCapture); _owner.WriteCapture(null);
         }
         foreach (var joint in _joints) PhysicsServer3D.FreeRid(joint.Handle);
         _joints.Clear();

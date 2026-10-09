@@ -50,11 +50,14 @@ internal static class ScriptRecoveryContracts
         var globals = new OpenNV.Runtime.Gameplay.State.FalloutGlobalState(
             [new(Key(0x38), "GameHour", (byte)'s', 6.75f, "synthetic")]);
         const string clockError = "GameMode: Script operand GetCurrentTime has no variable owner.";
-        var snapshots = world.Capture().Select(state => state with
+        foreach (var reference in new[] { Key(0x920), Key(0x921), Key(0x922) })
         {
-            Variables = new Dictionary<uint, double> { [1] = 17, [2] = 41 },
-            ScriptError = state.Reference == Key(0x922) ? "OnLoad: Script operand GetRandomPercent has no variable owner." : clockError
-        }).ToArray();
+            var instance = world.Get(reference);
+            instance.Write(1, 17);
+            instance.Write(2, 41);
+            instance.ScriptError = reference == Key(0x922) ? "OnLoad: Script operand GetRandomPercent has no variable owner." : clockError;
+        }
+        var snapshots = world.Capture();
         using var cold = new FalloutReferenceWorld(records);
         cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(snapshots))!);
         cold.LoadCell(cell);
@@ -66,7 +69,7 @@ internal static class ScriptRecoveryContracts
         Require(result is { Error: null, Blocks: 1, RecoveredError: clockError } && cold.Get(Key(0x920)).Read(1) == 6.75 &&
             cold.Get(Key(0x920)).Read(2) == 42, "Cold recovery lost locals, repeated work or skipped the repaired expression.");
         Require(scripts.Dispatch(Key(0x921), "GameMode").Error == clockError && cold.Get(Key(0x921)).Read(2) == 41,
-            "Legacy failure with an executed prefix was replayed.");
+            "A retained failure with an executed prefix was replayed.");
         var expectedRandom = new FalloutSoundRandomState(123);
         Require(scripts.Dispatch(Key(0x922), "OnLoad") is { Error: null, Blocks: 1, RecoveredError: not null } &&
             cold.Get(Key(0x922)).Read(1) == expectedRandom.NextBounded(100) && cold.Get(Key(0x922)).Read(2) == 42,
@@ -79,7 +82,7 @@ internal static class ScriptRecoveryContracts
             Require(value < 100 && value == next.RandomPercent(), "Script randomness escaped 0..99 or changed on cold restore.");
         }
         next.Restore(new(0, []));
-        Require(next.Capture().RandomState is null, "Legacy value state inherited a previous session's random stream.");
+        Require(next.Capture().RandomState is null, "A fresh value state inherited a previous session's random stream.");
         Console.WriteLine("OPENNV_SCRIPT_RECOVERY_PASS preservedLocals=true noRepeatedEffects=true noQueryInvocation=true randomRange=true coldRandom=true");
     }
 }

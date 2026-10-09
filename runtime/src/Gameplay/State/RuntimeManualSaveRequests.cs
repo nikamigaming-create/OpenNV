@@ -29,38 +29,77 @@ internal sealed record RuntimeManualSaveReceipt(ulong Generation, Guid Slot, Gui
     IReadOnlyList<FalloutFiniteSoundVoice>? AwaitedVoices = null,
     RuntimeManualSaveOrigin Origin = RuntimeManualSaveOrigin.PlayerInput,
     RuntimeManualSavePreparationReceipt? Preparation = null, string? CleanupError = null,
-    FalloutScriptManualSaveReceipt? OrderedSourceSave = null);
+    FalloutScriptManualSaveReceipt? OrderedSourceSave = null, ulong Order = 0,
+    IReadOnlyList<RuntimeSaveRequest>? OrderedRequests = null, string? DeferredBy = null);
 
-// Player/manual requests wait for a genuine later, fully captureable phase.
-// Source ForceSave retains its separate invocation/cursor and ordering owner.
+// Player requests retain their individual order in the same persistent queue
+// as source and native requests. A preparation owns one exact request only.
 internal sealed class RuntimeManualSaveRequests
 {
     private readonly List<RuntimeManualSaveReceipt> _history = [];
-    private ulong _generation;
+    private FalloutScriptManualSaveRequests? _source;
+    private Guid _session;
+    private string? _identity;
+    private int _active = -1;
     private bool _writing;
     private RuntimeManualSavePreparation? _preparation;
-    internal RuntimeManualSaveReceipt? Receipt => _history.LastOrDefault();
+    internal RuntimeManualSaveReceipt? Receipt => _active >= 0 ? _history[_active] : _history.LastOrDefault();
     internal IReadOnlyList<RuntimeManualSaveReceipt> History => _history.AsReadOnly();
     internal bool Pending => Receipt?.Disposition == "pending";
 
-    internal RuntimeManualSaveReceipt Request(Guid session, string sourceCompatibilityId, ulong phase,
-        RuntimeManualSaveOrigin origin = RuntimeManualSaveOrigin.PlayerInput)
+    internal RuntimeManualSaveReceipt Find(ulong order) => _history.Single(row => row.Order == order);
+    internal void ObserveQueueDeferral(string reason)
     {
-        if (_writing || session == Guid.Empty || string.IsNullOrWhiteSpace(sourceCompatibilityId) || !Enum.IsDefined(origin))
-            throw new InvalidOperationException("Manual save has no settled engine session/source owner.");
-        if (Pending)
+        if (!Pending || _preparation is not null || string.IsNullOrWhiteSpace(reason)) throw new InvalidOperationException("Queue deferral lacks its unprepared request.");
+        Replace(Receipt! with { DeferredBy = reason });
+    }
+
+    internal bool Queued => _history.Any(row => row.Disposition == "pending");
+    internal FalloutScriptManualSaveRequests Source => _source ?? throw new InvalidOperationException("Player saves have no joined source queue.");
+
+    internal void Bind(FalloutScriptManualSaveRequests source, Guid session, string sourceCompatibilityId)
+    {
+        if (ReferenceEquals(_source, source))
         {
-            var current = Receipt!;
-            if (current.Session != session || current.SourceCompatibilityId != sourceCompatibilityId || phase < current.RequestedPhase)
-                throw new InvalidOperationException("Pending manual save belongs to a different engine session or phase.");
-            Replace(current with { RequestCount = checked(current.RequestCount + 1) });
+            if (_session != session || _identity != sourceCompatibilityId || source.Order.SourceCompatibilityId != sourceCompatibilityId)
+                throw new InvalidDataException("Player-save binding changed its actual session or source selection.");
+            return;
         }
-        else
-        {
-            _preparation = null;
-            _history.Add(new(checked(++_generation), Guid.NewGuid(), session, sourceCompatibilityId, phase, 1, "pending", Origin: origin));
-        }
-        return Receipt!;
+        if (_source is not null || _history.Count != 0 || session == Guid.Empty)
+            throw new InvalidOperationException("Player-save queue cannot switch source/session owners.");
+        if (source.Order.SourceCompatibilityId != sourceCompatibilityId) throw new InvalidDataException("Player/source save selections differ.");
+        _source = source; _session = session; _identity = sourceCompatibilityId;
+        foreach (var row in source.Order.Requests.Where(row => row.Origin is RuntimeSaveRequestOrigin.PlayerInput or RuntimeSaveRequestOrigin.SessionMenu))
+            _history.Add(new(row.Order, row.Request, session, sourceCompatibilityId, row.HandoffPhase ?? row.RequestedPhase,
+                1, row.Disposition.ToString().ToLowerInvariant(), Error: row.Error, CommittedSlot: row.Committed,
+                Origin: row.Origin == RuntimeSaveRequestOrigin.SessionMenu ? RuntimeManualSaveOrigin.SessionMenu : RuntimeManualSaveOrigin.PlayerInput,
+                Order: row.Order));
+        ActivateNext();
+    }
+
+    internal RuntimeManualSaveReceipt Request(Guid session, string sourceCompatibilityId, ulong phase,
+        RuntimeManualSaveOrigin origin = RuntimeManualSaveOrigin.PlayerInput, RuntimeSaveNativeSite? site = null)
+    {
+        if (_writing || session == Guid.Empty || string.IsNullOrWhiteSpace(sourceCompatibilityId) || !Enum.IsDefined(origin) ||
+            site is null || site.Session != session || session != _session || sourceCompatibilityId != _identity || Source.ObservedEnginePhase != phase)
+            throw new InvalidOperationException("Manual save has no actual engine/input/session/source identity.");
+        var request = Source.RequestNative(origin == RuntimeManualSaveOrigin.PlayerInput ? RuntimeSaveRequestOrigin.PlayerInput : RuntimeSaveRequestOrigin.SessionMenu, site);
+        var receipt = new RuntimeManualSaveReceipt(request.Order, request.Request, session, sourceCompatibilityId, phase, 1, "pending", Origin: origin, Order: request.Order);
+        _history.Add(receipt);
+        if (_active < 0 || !Pending && _preparation is null) ActivateNext();
+        return receipt;
+    }
+
+    private void ActivateNext()
+    {
+        _active = _history.FindIndex(row => row.Disposition == "pending");
+        _preparation = null;
+    }
+
+    internal void RetirePreparation()
+    {
+        if (_writing || Pending) throw new InvalidOperationException("Pending/writing player save preparation cannot retire.");
+        ActivateNext();
     }
 
     internal void Prepare(ulong phase, ulong milliseconds, RuntimeManualSaveAdmission admission,
@@ -73,6 +112,7 @@ internal sealed class RuntimeManualSaveRequests
         Replace(Receipt! with
         {
             Preparation = _preparation.Receipt,
+            DeferredBy = null,
             DeferredVoices = voices.Count == 0 ? null : _preparation.Receipt.Voices,
             AwaitedVoices = _preparation.Receipt.Voices
         });
@@ -115,6 +155,9 @@ internal sealed class RuntimeManualSaveRequests
             }
             _writing = true;
             var slot = writer(current.Slot);
+            var committedRequest = Source.Order.Find(current.Order);
+            if (committedRequest.Disposition != RuntimeSaveRequestDisposition.Completed || committedRequest.Committed != slot)
+                throw new InvalidDataException("Manual writer bypassed the actual common head-order commitment.");
             current = Receipt!;
             if (slot.Id != current.Slot.ToString("N") || string.IsNullOrWhiteSpace(slot.Path) || !File.Exists(slot.Path))
                 throw new InvalidDataException("Manual writer returned no matching committed slot.");
@@ -148,6 +191,7 @@ internal sealed class RuntimeManualSaveRequests
         if (_writing) throw new InvalidOperationException("Cannot cancel a writing manual slot.");
         if (!Pending) return;
         if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("Cancellation needs its actual boundary.", nameof(reason));
+        Source.Order.Cancel(Receipt!.Order, reason);
         Replace(Receipt! with
         {
             Disposition = "cancelled",
@@ -165,9 +209,34 @@ internal sealed class RuntimeManualSaveRequests
         ReplaceFailed(reason);
     }
 
+    internal void CancelQueued(string reason)
+    {
+        if (_writing || _preparation is not null || string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("Queued player cancellation lacks its retired preparation and actual boundary.");
+        foreach (var current in _history.Where(row => row.Disposition == "pending").ToArray())
+        {
+            Source.Order.Cancel(current.Order, reason);
+            _history[_history.FindIndex(row => row.Order == current.Order)] = current with { Disposition = "cancelled", Error = reason, DeferredBy = null };
+        }
+        ActivateNext();
+    }
+
     private void ReplaceFailed(string reason)
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("Save failure needs its actual boundary.", nameof(reason));
+        var request = Source.Order.Find(Receipt!.Order);
+        if (request.Disposition == RuntimeSaveRequestDisposition.Completed)
+        {
+            Replace(Receipt! with
+            {
+                Disposition = "completed",
+                CommittedSlot = request.Committed,
+                CleanupError = "The destination committed before later feedback failed: " + reason,
+                DeferredVoices = null
+            });
+            return;
+        }
+        if (request.Disposition == RuntimeSaveRequestDisposition.Pending) Source.Order.Fail(request.Order, reason);
         Replace(Receipt! with
         {
             Disposition = "failed",
@@ -192,5 +261,16 @@ internal sealed class RuntimeManualSaveRequests
         Replace(Receipt! with { OrderedSourceSave = source });
     }
 
-    private void Replace(RuntimeManualSaveReceipt receipt) => _history[^1] = receipt;
+    internal void ObserveOrderedRequests()
+    {
+        if (!Pending) throw new InvalidOperationException("Ordered receipt publication lacks its current player request.");
+        Replace(Receipt! with { OrderedRequests = Source.Order.Requests.Where(row => row.Order < Receipt!.Order).ToArray() });
+    }
+
+    private void Replace(RuntimeManualSaveReceipt receipt)
+    {
+        var index = _history.FindIndex(row => row.Order == receipt.Order);
+        if (index < 0 || index != _active) throw new InvalidOperationException("Player-save mutation differs from its active exact order.");
+        _history[index] = receipt;
+    }
 }

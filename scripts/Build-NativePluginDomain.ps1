@@ -10,7 +10,8 @@ $output = Join-Path $generated $Configuration
 $fixtures = Join-Path $output 'fixtures'
 $missingImport = Join-Path $output 'missing-import'
 $protocolFixtures = Join-Path $output 'protocol-fixtures'
-foreach ($directory in @($output, $fixtures, $missingImport, $protocolFixtures)) { [IO.Directory]::CreateDirectory($directory) | Out-Null }
+$importProviders = Join-Path $output 'providers/cng'
+foreach ($directory in @($output, $fixtures, $missingImport, $protocolFixtures, $importProviders)) { [IO.Directory]::CreateDirectory($directory) | Out-Null }
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
 $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (!$installation) { throw 'The plugin execution-domain proposal requires installed MSVC x86 build tools.' }
@@ -42,6 +43,12 @@ Push-Location $output
 try {
     Invoke-Compile @((Join-Path $repository 'runtime/native/plugins/opennv_plugin_domain.cpp'),
         "/Fo$output/opennv_plugin_domain.obj", '/link', '/MACHINE:X86', "/OUT:$output/opennv_plugin_domain.exe")
+    Invoke-Compile @('/DOPENNV_SYSTEM_CNG_SERVICE', (Join-Path $repository 'runtime/native/plugins/opennv_plugin_domain.cpp'),
+        "/Fo$output/opennv_cng_service.obj", '/link', '/MACHINE:X86', "/OUT:$output/opennv_cng_service.exe")
+    Invoke-Compile @('/LD', (Join-Path $repository 'runtime/native/plugins/opennv_plugin_cng_import_provider.cpp'),
+        "/Fo$output/cng-import-provider.obj", '/link', '/MACHINE:X86',
+        "/DEF:$repository/runtime/native/plugins/opennv_plugin_cng_import_provider.def",
+        "/OUT:$importProviders/bcrypt.dll", "/IMPLIB:$output/cng-import-provider.lib")
     Invoke-Compile @('/LD', (Join-Path $fixtureSource 'NativeFixtureDependency.cpp'),
         "/Fo$output/dependency.obj", '/link', '/MACHINE:X86', "/DEF:$fixtureSource/NativeFixtureDependency.def",
         "/OUT:$fixtures/opennv_domain_fixture_dependency.dll", "/IMPLIB:$output/opennv_domain_fixture_dependency.lib")
@@ -57,9 +64,28 @@ try {
         Invoke-Compile @((Join-Path $fixtureSource 'NativeFaultEnvelopeFixture.cpp'), "/DOPENNV_FAULT_ENVELOPE_MODE=$mode",
             "/Fo$output/fault-envelope-$mode.obj", '/link', '/MACHINE:X86', "/OUT:$protocolFixtures/opennv_fault_envelope_$mode.exe")
     }
-    $files = @('opennv_plugin_domain.exe', 'fixtures/opennv_domain_fixture.dll',
+    # This public NVSE caller uses the genuine dynamically imported Windows CRT.
+    # Its entry has no initial I/O and does not depend on a copied game image.
+    $crtArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/GS-', '/LD',
+        (Join-Path $fixtureSource 'NativeCrtFixture.cpp'), "/Fo$output/crt-fixture.obj", '/link',
+        '/MACHINE:X86', '/ENTRY:DllMain@12', 'ucrt.lib', 'kernel32.lib', "/DEF:$fixtureSource/NativeCrtFixture.def",
+        "/OUT:$fixtures/opennv_crt_fixture.dll", "/IMPLIB:$output/crt-fixture.lib")
+    & $compiler @crtArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Authored public-ABI CRT fixture compilation failed.' }
+    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeCngSharedFixture.cpp'), "/Fo$output/cng-shared-fixture.obj", '/link',
+        '/MACHINE:X86', '/ENTRY:DllMain@12', "/DEF:$fixtureSource/NativeCrtFixture.def", "/OUT:$fixtures/opennv_cng_shared_fixture.dll",
+        "/IMPLIB:$output/cng-shared-fixture.lib", 'bcrypt.lib', 'kernel32.lib')
+    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeMutexFixture.cpp'),
+        "/Fo$output/mutex-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
+        "/DEF:$fixtureSource/NativeCrtFixture.def",
+        "/OUT:$fixtures/opennv_mutex_fixture.dll", "/IMPLIB:$output/mutex-fixture.lib", 'kernel32.lib')
+    $files = @('opennv_plugin_domain.exe', 'opennv_cng_service.exe', 'fixtures/opennv_domain_fixture.dll',
         'fixtures/opennv_domain_fixture_dependency.dll', 'fixtures/opennv_domain_fixture_reject.dll', 'missing-import/opennv_domain_fixture.dll')
     $files += @(0..6 | ForEach-Object { "protocol-fixtures/opennv_fault_envelope_$_.exe" })
+    $files += 'fixtures/opennv_crt_fixture.dll'
+    $files += 'fixtures/opennv_cng_shared_fixture.dll'
+    $files += 'fixtures/opennv_mutex_fixture.dll'
+    $files += 'providers/cng/bcrypt.dll'
     $manifest = [ordered]@{ authoredOnly = $true; configuration = $Configuration; machine = 'I386'; executionVerified = $false; files = @() }
     foreach ($file in $files) {
         $built = Join-Path $output $file

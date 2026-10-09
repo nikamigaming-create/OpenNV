@@ -8,6 +8,13 @@ internal sealed partial class RuntimeNativeGameTime : Node
 {
     private readonly FalloutGameTime _clock;
     private string? _error;
+    private Func<bool>? _restOwnsClock;
+    internal void BindSourceRestClock(Func<bool> ownsClock)
+    {
+        ArgumentNullException.ThrowIfNull(ownsClock);
+        if (_restOwnsClock is not null) throw new InvalidOperationException("Game time already has a rest clock owner.");
+        _restOwnsClock = ownsClock;
+    }
     internal object State => new
     {
         hour = _clock.Hour,
@@ -22,14 +29,31 @@ internal sealed partial class RuntimeNativeGameTime : Node
     {
         _clock = clock;
         Name = "NativeGameTime";
-        ProcessMode = ProcessModeEnum.Always;
+        // The coordinator may parent this clock while asynchronous source
+        // construction is still loading. Its real process phase starts only
+        // after the world-time, rest and effect consumers have been attached.
+        ProcessMode = ProcessModeEnum.Disabled;
         ProcessPriority = int.MinValue;
+    }
+
+    internal void StartSourceGameplayFrames()
+    {
+        if (!IsInsideTree() || IsQueuedForDeletion() || ProcessMode != ProcessModeEnum.Disabled ||
+            _restOwnsClock is null || _restWorldTime is null || _consumeSourceEffectFrame is null ||
+            _beginSourceDataFrame is null || _endSourceDataFrame is null || _error is not null)
+            throw new InvalidOperationException("Gameplay frames require the living constructed source clock and its actual consumers.");
+        ProcessMode = ProcessModeEnum.Always;
     }
 
     public override void _Process(double delta)
     {
         if (_error is not null || GetTree().Paused) return;
-        try { _clock.AdvanceSimulation((float)delta); }
+        try
+        {
+            if (_restOwnsClock?.Invoke() == true) return;
+            AdvanceCurrentCumulativeWorldTime((float)delta);
+            _clock.AdvanceSimulation((float)delta);
+        }
         catch (Exception error)
         {
             _error = error.Message;

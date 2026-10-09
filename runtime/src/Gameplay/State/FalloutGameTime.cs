@@ -15,7 +15,7 @@ internal sealed record FalloutGameTimeSnapshot(float PreviousHour, bool Reconcil
 internal readonly record struct FalloutScheduleTime(int Month, int Date, int Weekday, float Hour);
 
 /// <summary>Simulation-owned calendar/time advance. Presentation only reads this owner.</summary>
-internal sealed class FalloutGameTime
+internal sealed partial class FalloutGameTime
 {
     private readonly FalloutGlobalState _globals;
     private readonly FalloutGameTimeBindings _forms;
@@ -27,6 +27,7 @@ internal sealed class FalloutGameTime
     internal float TimeScale => _globals.Get(_forms.TimeScale);
     internal float DaysPassed => _globals.Get(_forms.DaysPassed);
     internal int CalendarDays => _calendar.MonthDays.Sum(value => value);
+    internal bool CarryAtDayBoundary => _calendar.CarryAtDayBoundary;
 
     internal FalloutScheduleTime ScheduleTime(int daysBefore = 0)
     {
@@ -104,7 +105,8 @@ internal sealed class FalloutGameTime
     {
         if (!float.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
         Validate();
-        var increment = (float)((double)TimeScale * seconds / 3600.0);
+        var increment = _calendar.SinglePrecisionProduct ? TimeScale * seconds / 3600.0f :
+            (float)((double)TimeScale * seconds / 3600.0);
         var hour = Hour + increment;
         if (!float.IsFinite(hour)) throw new InvalidDataException("Game-time advance overflowed.");
         var daysPassed = DaysPassed;
@@ -113,9 +115,9 @@ internal sealed class FalloutGameTime
         var year = _globals.Get(_forms.Year);
         var month = _globals.Get(_forms.Month);
         var day = _globals.Get(_forms.Day);
-        if (hour > 24)
+        if (_calendar.CarryAtDayBoundary ? hour >= 24 : hour > 24)
         {
-            while (hour > 24)
+            while (_calendar.CarryAtDayBoundary ? hour >= 24 : hour > 24)
             {
                 var nextHour = hour - 24;
                 var nextDay = day + 1;
