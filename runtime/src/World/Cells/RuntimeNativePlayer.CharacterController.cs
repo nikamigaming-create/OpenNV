@@ -17,7 +17,9 @@ internal partial class RuntimeNativePlayer
             throw new InvalidOperationException("Current Player transfer/controller already owns a real body lease.");
         _sourcePlayerTransferThread = System.Environment.CurrentManagedThreadId;
         _sourcePlayerTransferPlacementLease = world.BindCurrentPlayerTransferPlacement(CaptureRawPlayerTransferPlacement, UnitsToMeters);
-        if (!world.CampaignMainPlayerCellConstructed) return; // Distinct selected source family remains unowned.
+        if (!world.CampaignMainPlayerCellConstructed || !world.CampaignMainPlayerCellSource.HasOuterPendingScalar) return;
+        // This projection owns the source outer scalar child. FO3 has no
+        // such store; its actual native physics body remains independent.
         var body = new SourcePlayerCharacterControllerBody(this, world, world.ReadSourcePlayerCharacterControllerFactory());
         _sourcePlayerControllerBody = body;
         _sourcePlayerControllerLease = world.BindCurrentPlayerCharacterController(body);

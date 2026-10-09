@@ -12,7 +12,7 @@ internal sealed record FalloutPlayerTransferPayload(string SourceContract, strin
     FalloutFormKey? Cell, FalloutFormKey? Worldspace, FalloutFormKey? Reference,
     uint PositionX, uint PositionY, uint PositionZ,
     uint RotationX, uint RotationY, uint RotationZ, byte TransferArgument,
-    FalloutPlayerTransferCallback? Callback, FalloutFormKey? Furniture, FalloutPlayerRawTransferReceipt? FactoryReceipt = null)
+    FalloutPlayerTransferCallback? Callback, FalloutFormKey? Furniture, FalloutPlayerRawTransferReceipt? FactoryReceipt = null, uint? SourceTailWord = null)
 {
     // All three original pointer cells are retained. Selection follows the
     // original reference-first, then worldspace, then CELL branch; a losing
@@ -25,6 +25,8 @@ internal sealed record FalloutPlayerTransferPayload(string SourceContract, strin
     {
         source.Validate();
         ValidateDeclaration();
+        if (!source.Player.Main.HasNewVegasChildren && SourceTailWord is null)
+            throw new InvalidDataException("FO3 pending allocation omitted its independently initialized final word.");
         if (SourceContract != source.Contract)
             throw new InvalidDataException("Pending transfer changed its selected source consumer declaration.");
     }

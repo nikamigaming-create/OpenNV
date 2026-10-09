@@ -16,7 +16,11 @@ internal static class NativeMutexContracts
             var selection = new NativePluginIoSelection(stack, originals[fixture], fixture, Path.GetDirectoryName(runtime)!,
                 Path.Combine(temporary, "private-state"),
                 [Path.GetDirectoryName(runtime)!, Path.GetDirectoryName(nvse)!, Path.GetDirectoryName(fixture)!],
-                [], _ => null, "authored-mutex-public-imports", new HashSet<string>(StringComparer.Ordinal));
+                [], _ => null, "authored-mutex-public-imports", new HashSet<string>(StringComparer.Ordinal)
+                {
+                    "kernel32.dll!GetLastError",
+                    "kernel32.dll!SetLastError",
+                });
             using var host = NativeNvseHostSource.Open(runtime, originals[runtime], nvse, originals[nvse], stack,
                 false, "authored-mutex-caller-selected-owned-standard-edition");
             using var io = new NativePluginPrivateIo(selection);
@@ -47,7 +51,10 @@ internal static class NativeMutexContracts
             {
                 Console.Error.WriteLine($"OPENNV_NATIVE_MUTEX_PREFIX calls={domain.NvseMutexReceipts.Count} " +
                     $"comparisons={domain.NvseMutexComparisons.Count} detach={domain.NvseMutexDetachReceipts.Count} " +
-                    $"pending={domain.NvseMutexPending is not null}"); throw;
+                    $"pending={domain.NvseMutexPending is not null}");
+                foreach (var row in domain.NvseMutexReceipts)
+                    Console.Error.WriteLine($"OPENNV_NATIVE_MUTEX_RESULT api={row.Api} result={row.Result} error={row.LastError}");
+                throw;
             }
         }
         finally

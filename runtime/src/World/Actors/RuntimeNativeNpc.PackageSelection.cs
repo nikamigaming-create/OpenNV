@@ -14,6 +14,12 @@ internal partial class RuntimeNativeNpc
 
     private PackageSelection SelectSourcePackage(bool? reevaluateScript = null)
     {
+        if (_restoredFollowSelection is { } retained)
+        {
+            if (reevaluateScript is not null) throw new NotSupportedException("Cold Follow election must bind before a new explicit evaluation.");
+            _restoredFollowSelection = null;
+            return retained;
+        }
         _failedSelectionCondition = null;
         var world = _aiWorld ?? throw new NotSupportedException("NPC package selection has no reference state owner.");
         var selected = _aiReferenceState?.PendingPackageChoice is { } choice ? choice.Bind(_aiStack!, _aiReferenceState) :

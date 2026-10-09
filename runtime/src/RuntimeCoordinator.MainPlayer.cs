@@ -17,6 +17,7 @@ public partial class RuntimeCoordinator
         if (!world.CampaignMainPlayerCellConstructed) return; // The source-absent family has no promoted FNV Main segment.
         BindActualNativeQueuedCallerThread();
         if (_nativeMainPlayerLease is not null) throw new InvalidOperationException("Main Player native children already own a living lease.");
+        BindNativeCallingThreadFistp(world);
         var consumers = new NativeMainPlayerConsumers(this, world, world.CampaignMainPlayerCellSource);
         _nativeMainPlayerLease = world.BindCampaignMainPlayerCell(consumers, "actual-native-Player-CELL/" + GetInstanceId());
         _nativeMainPlayerConsumers = consumers;
@@ -38,6 +39,7 @@ public partial class RuntimeCoordinator
         if (_nativeMainPlayerReplacement is not null && _nativeMainPlayerBoundWorld is { } world)
             world.PlayerMoves.SourcePending.Replaced -= _nativeMainPlayerReplacement;
         _nativeMainPlayerReplacement = null; _nativeMainPlayerBoundWorld = null;
+        RetireNativeCallingThreadFistp();
         if (!_nativeMainPlayerCancellationDisposed) { _nativeMainPlayerCancellation.Dispose(); _nativeMainPlayerCancellationDisposed = true; }
     }
     private sealed class NativeMainPlayerConsumers(RuntimeCoordinator coordinator, FalloutReferenceWorld world,
@@ -108,7 +110,7 @@ public partial class RuntimeCoordinator
             var player = coordinator._nativePlayer!;
             var raw = player.GlobalPosition / player.UnitsToMeters;
             return new(BitConverter.SingleToUInt32Bits(raw.X), BitConverter.SingleToUInt32Bits(-raw.Z), BitConverter.SingleToUInt32Bits(raw.Y),
-                new(null, "actual-original-calling-thread-FISTP-rounding-producer-unowned"));
+                new(null, "source-Float32-conversion-deferred-to-actual-living-Main-child"));
         }
         public FalloutMainPlayerCellTarget? TargetCell(FalloutMainPlayerCellInvocation invocation,
             FalloutMainPlayerSourceCell before, FalloutMainPlayerSourcePosition position)

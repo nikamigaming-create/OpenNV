@@ -30,9 +30,9 @@ internal sealed record FalloutPreparedMenuSound(FalloutSoundRecord Descriptor, l
 // Exact and directory requests share one selected-source lifetime. A committed
 // draw/history mutation is never rolled back because a later decoder or native
 // player fails. The native voice remains owned by the existing audio ledger.
-internal sealed class FalloutMenuSoundSelection
+internal sealed partial class FalloutMenuSoundSelection
 {
-    internal const string Schema = "opennv-source-menu-sound-selection/v2";
+    internal const string Schema = "opennv-source-menu-sound-selection/v3";
     internal const int MaximumRepeatDraws = 4096;
     private readonly object _sync = new();
     private readonly FalloutPluginStack _records;
@@ -370,7 +370,9 @@ internal sealed class FalloutMenuSoundSelection
             if (path is null || path != FalloutBsaArchive.CanonicalPath(path) || !path.StartsWith(prefix, StringComparison.Ordinal) ||
                 path[prefix.Length..].Contains('\\'))
                 throw new InvalidDataException("Menu directory changed its exact direct-child source names.");
-        if (row.Paths.Distinct(StringComparer.OrdinalIgnoreCase).Count() != row.Paths.Count)
-            throw new InvalidDataException("Loose menu directory has ambiguous repeated source names.");
+        // Original archive callbacks preserve duplicate paths. Their list
+        // indices remain independent RNG/history entries; the actual source
+        // validator, not distinct filenames, owns current/cold order.
+
     }
 }

@@ -188,6 +188,7 @@ internal sealed class FalloutReferenceInstance
     internal bool? BroadcastState { get; set; }
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
+    internal Func<FalloutActorPackageMotion?>? CapturePackageMotion { get; set; }
     internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
     internal FalloutActorScriptPackageSnapshot? ScriptPackage { get; set; }
     internal FalloutActorPackageChoice? PendingPackageChoice { get; set; }
@@ -385,7 +386,7 @@ internal sealed class FalloutReferenceInstance
             _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
             Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
             CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
-            TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
+            TalkedToPlayer, CapturePackageMotion is { } captureMotion ? captureMotion() : PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
             CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
             PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor,
             CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure, BroadcastState,
@@ -740,6 +741,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     if (package.Signature != "PACK" || !Convert.ToHexString(SHA256.HashData(package.ReadData()))
                         .Equals(motion.PackageSha256, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidDataException("Saved package motion differs from the winning package.");
+                    if (motion.Follow is { } follow)
+                        FalloutFollowPackage.Read(package).ValidateContinuation(records, snapshot.Reference, follow);
                     if (motion.Patrol is { } patrol) FalloutPatrolRoute.Read(records, package, snapshot.Reference).Validate(patrol);
                     if (motion.Escort is { } escort) { _ = FalloutEscortPackage.Read(package); escort.Validate(); }
                     if (motion.EditorTravel is { } editorTravel)
@@ -762,7 +765,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                         RouteTarget = travel.RouteTarget is null ? null : (float[])travel.RouteTarget.Clone(),
                         RouteWaypoints = travel.RouteWaypoints?.Select(point => (float[])point.Clone()).ToArray()
                     } : null,
-                    Guard = motion.Guard is { } guard ? guard with { Location = (float[])guard.Location.Clone() } : null
+                    Guard = motion.Guard is { } guard ? guard with { Location = (float[])guard.Location.Clone() } : null,
+                    Follow = motion.Follow?.Copy()
                 };
             }
             validated.RestorePackageTiming(instance, snapshot);

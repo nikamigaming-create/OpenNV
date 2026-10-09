@@ -129,7 +129,16 @@ LPVOID mapping_view(HANDLE handle, DWORD access, DWORD high, DWORD low, SIZE_T b
     request.put(offset); request.put(static_cast<std::uint32_t>(bytes)); request.put(address(preferred));
     auto response = io_host(mapping_callback, request); Reader decision{response.data}; const auto id = decision.get<std::uint64_t>(); decision.finish();
     if (!id) throw Fatal(ERROR_INVALID_DATA, "Native view has no correlated source mapping plan.");
-    const auto base = MapViewOfFileEx(handle, access, high, low, bytes, preferred); const auto last = GetLastError();
+    SYSTEM_INFO granularity{}; GetSystemInfo(&granularity);
+    const auto requested_length = bytes ? static_cast<std::uint64_t>(bytes) : offset < object.maximum ? object.maximum - offset : 0;
+    const auto common = object.writable && object.protection == PAGE_READWRITE &&
+        (access == FILE_MAP_ALL_ACCESS || (!(access & FILE_MAP_COPY) && (access & FILE_MAP_WRITE))) &&
+        offset < object.maximum && requested_length && requested_length <= object.maximum - offset && requested_length <= UINT32_MAX &&
+        granularity.dwAllocationGranularity && offset % granularity.dwAllocationGranularity == 0;
+    const auto incoming = GetLastError(); DWORD placement_error = ERROR_SUCCESS;
+    const auto base = common ? shared_placement_map(2U, object.id, id, handle, object.maximum, offset,
+        static_cast<std::uint32_t>(requested_length), preferred, placement_error) : MapViewOfFileEx(handle, access, high, low, bytes, preferred);
+    const auto last = common ? base ? incoming : placement_error : GetLastError();
     std::uint64_t logical = 0, region = 0; DWORD native_state = 0, protection = 0;
     if (base) {
         try {
@@ -145,10 +154,14 @@ LPVOID mapping_view(HANDLE handle, DWORD access, DWORD high, DWORD low, SIZE_T b
                 (!object.writable && page == PAGE_READWRITE))
                 throw Fatal(ERROR_ACCESS_DENIED, "Actual mapping view violates the original read-only/data protection contract.");
             region = static_cast<std::uint64_t>(memory.RegionSize); native_state = memory.State; protection = memory.Protect;
-            if (!owner.views.emplace(address(base), PluginMappingView{id, object.id, offset, logical, region, base, access, native_state, protection}).second)
+            if (!owner.views.emplace(address(base), PluginMappingView{id, object.id, offset, logical, region, base, access, native_state, protection, nullptr, common}).second)
                 throw Fatal(ERROR_INVALID_ADDRESS, "Actual view address aliases another live mapping capability.");
         }
-        catch (...) { UnmapViewOfFile(base); throw; }
+        catch (const std::exception& primary) {
+            if (common) shared_placement_abort_map(id, base, primary); else if (!UnmapViewOfFile(base))
+                throw Fatal(GetLastError(), (std::string("Unpublished source map construction: ") + primary.what() + "; unmap cleanup failed.").c_str());
+            throw;
+        }
     }
     if (base) cng_shared_retain_mapping_view(owner.views.at(address(base)), handle);
     Bytes completion; completion.put(4U); completion.put(id); completion.put(address(base)); completion.put(logical); completion.put(region);
@@ -175,6 +188,7 @@ BOOL WINAPI mapping_unmap(LPCVOID base) {
         const auto active = mapping_existing_view(base); cng_shared_require_releasable(2U, active.id);
         const auto success = UnmapViewOfFile(base); const auto last = GetLastError();
         if (success) { cng_shared_forget(2U, active.id); cng_shared_close_mapping_view(mapping_owner().views.at(address(base)));
+            if (active.common_placement) shared_placement_source_released(2U, active.id, const_cast<void*>(base));
             mapping_owner().views.erase(address(base)); mapping_collect(active.object); }
         mapping_event({5, active.id, address(base), 0, success != FALSE, success ? ERROR_SUCCESS : last}); SetLastError(last); return success;
     });

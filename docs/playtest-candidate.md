@@ -28,6 +28,8 @@ Installation folders, mod selections and OpenNV saves remain outside the pinned
 package. OpenNV saves live under
 `%APPDATA%/Godot/app_userdata/OpenNV/profiles/`. Retail saves are not loaded or
 modified. A save from a different source stack can be refused visibly.
+For an independent fresh profile store, pass an absolute directory with
+`OpenNV.exe -- --launcher --profile-root <directory>`.
 
 ## Controls
 
@@ -48,13 +50,14 @@ release to confirm. The wrist device shares inventory and gameplay state.
 `release-manifest.json` identifies the exact source commit and every packaged
 file's SHA-256. `build-toolchain.json`, when built through the playtest helper,
 also records the source tree, exporter and SDK. The launcher displays the build
-identity. Each versioned package and ZIP keeps its original path.
+identity. Keep one current package and ZIP plus the active development candidate.
 
 For local development, `scripts/Build-OpenNVPlaytest.ps1` creates a checked-source
 Release package and a stable named `.cmd` shortcut. Updating that shortcut points
-it to a newer package without replacing earlier pinned versions. The sibling
+it to the accepted newer package. Retire obsolete packages after promotion. The sibling
 `.json` records the selected version, commit and archive checksum. The helper
 requires a clean committed source tree and a successful exported-launcher start.
+Advance the stable test pin only after ordinary exported gameplay is accepted.
 
 ## Report a failure
 

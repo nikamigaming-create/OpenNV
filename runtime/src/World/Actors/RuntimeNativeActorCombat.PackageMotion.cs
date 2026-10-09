@@ -111,6 +111,7 @@ internal sealed partial class RuntimeNativeActorCombat
             _routeStall = 0;
             _waypointDistance = float.PositiveInfinity;
         }
+        if (!Dead) RestoreFollowRoute(motion);
         _actor.GlobalTransform = new(new Basis(new Quaternion(motion.Rotation[0], motion.Rotation[1],
             motion.Rotation[2], motion.Rotation[3])).Scaled(_actor.Scale),
             new(motion.Position[0], motion.Position[1], motion.Position[2]));
@@ -167,7 +168,8 @@ internal sealed partial class RuntimeNativeActorCombat
             retained?.Package == package.FormKey ? retained.EditorTravel : null,
             retained?.Package == package.FormKey && retained.DialogueCompleted,
             retained?.Package == package.FormKey ? retained.Travel : null,
-            retained?.Package == package.FormKey ? retained.Guard : null);
+            retained?.Package == package.FormKey ? retained.Guard : null,
+            retained?.Package == package.FormKey ? retained.Follow : null);
         PackageOwnsPose = true;
     }
 }

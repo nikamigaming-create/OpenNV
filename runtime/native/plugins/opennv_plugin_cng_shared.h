@@ -25,7 +25,7 @@ struct CngSharedClient {
     std::uint64_t detach_call = 0;
 };
 struct CngSharedServiceView {
-    std::uint64_t id = 0;
+    std::uint64_t id = 0, placement = 0;
     void* base = nullptr;
     std::uint32_t length = 0, offset = 0;
     bool release_entered = false;

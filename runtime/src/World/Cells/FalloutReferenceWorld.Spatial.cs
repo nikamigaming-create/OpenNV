@@ -42,8 +42,7 @@ internal sealed partial class FalloutReferenceWorld
         var request = PlayerMoves.SourcePending.Next;
         if (request is not { Kind: FalloutPlayerPendingKind.MoveTo } || !ReferenceEquals(request.Move, move))
             throw new InvalidOperationException("Player destination belongs to a superseded or absent source allocation.");
-        return ReadSourcePlayerRawPlacement(request,
-            new(null, "actual-original-calling-thread-FISTP-rounding-producer-unowned"));
+        return ReadSourcePlayerRawPlacement(RequireCurrentPendingConversion(request), request);
     }
 
     internal bool IsInInterior(FalloutFormKey reference, FalloutFormKey? playerCell = null)

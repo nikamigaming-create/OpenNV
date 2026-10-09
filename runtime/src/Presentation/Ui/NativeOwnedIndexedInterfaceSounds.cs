@@ -73,7 +73,8 @@ internal sealed partial class NativeOwnedIndexedInterfaceSounds : Node
         {
             var source = SoundState.Resolve(_lease, entered.Ordinal);
             if (source.Descriptor is null) return entered.Ordinal;
-            var prepared = NativeOwnedSoundPlayback.CreateTwoDimensional(source.Descriptor, SoundState.Source.Records);
+            var prepared = NativeOwnedSoundPlayback.CreateTwoDimensional(source.Descriptor, SoundState.Source.Records,
+                menuSelectionOrdinal: source.SelectionOrdinal ?? throw new InvalidDataException("Indexed media lost its actual selection ordinal."));
             if (prepared is not NativeOwnedTwoDimensionalSoundPlayer player)
             {
                 prepared.Free();

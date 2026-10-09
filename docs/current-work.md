@@ -31,9 +31,9 @@ Workers supply compact ignored first-party additions and narrow hooks.
 | Owner | Current implementation |
 | --- | --- |
 | Primary | Finish combined source publication, export one candidate and run the fresh ordinary smoke route |
-| active_radio_save | Actual multi-archive category/shadow order, directory weighting and separate byte winner |
-| fo3_special_book | Standalone FO3 source Main/Player and pending-transfer owners needed for Vault 101 |
-| scope_plugin_audit | Common section placement in both actual native processes before pointer publication, retaining lazy SDK admission |
+| active_radio_save | Repair the reached companion callback check, then creature idle and source Sandbox dismissal |
+| fo3_special_book | Actual standalone FO3 interface predicates and menu/HUD publication lifetimes |
+| scope_plugin_audit | Actual restricted named-object directory capabilities and caller-thread mutex creation/open |
 
 Compile joined batches; combine broad checks about every four hours and before
 publication. Recording stays off except a specific private comparison; temporary
@@ -43,14 +43,14 @@ frames are removed after inspection. Component checks do not certify games.
 
 Origin/main 3aaa48f4 includes checked PR185's launcher, Pip-Boy, travel, collision
 and save work. The actual FNV Test command/desktop shortcut select packaged
-Release fnv-gameplay-5a156b84, currently running. Root's separate branch is
-codex/full-runtime-owner-integration; source checkpoint78fd181b retains the
-joined batch, and integration with origin/main is underway. No root push/PR/new
+Release fnv-gameplay-5a156b84. That pinned process is retired. Root's separate branch is
+codex/full-runtime-owner-integration; source checkpoint 78fd181b retains the
+joined batch, and merge 081d94b9 integrates origin/main. No root push/PR/new
 package for that batch is claimed yet.
 
 Published work supplies source Stats/note/quest bodies, resident Local Map,
 discovered destinations, F1/F2/F3 pages and separate teammate perks. Ordinary
-packaged movement discovered Goodsprings and awarded9XP with Skilled. Ordinary
+packaged movement discovered Goodsprings and awarded 9 XP with Skilled. Ordinary
 Pip-Boy travel reached a source-linked destination; settled save and another
 process's Continue retained destination/discovery/XP. Attached audio loops stop
 on actual unload; matching NPC package failures transfer to their current CELL
@@ -65,7 +65,13 @@ failures. Today's smoke test must independently exercise the fresh exported path
 
 ## Joined source candidate
 
-Protocol24 joins shared script/effect/actor current/cold state, actual Main Player
+Source companion callbacks and typed NPC/CREA Follow, route continuation and
+shared follower door transfer are integrated. Combined Debug compilation passes.
+The new callback execution check reaches an event-order/topic-filter mismatch;
+its owner is repairing that failure. Sandbox dismissal remains unowned. Ordinary
+ED-E recruitment, transfer and cold Follow are still unexecuted.
+
+Protocol 25 joins shared script/effect/actor current/cold state, actual Main Player
 pending transfers, Steam source/platform callbacks, complete DirectInput, native
 command/value/object owners, private CNG/mappings and same-root CELL/reference/LAND.
 Source background readers prepare the full C# graph and native declarations;
@@ -80,9 +86,15 @@ exact actual background-reader failure; the reached negative corpus check passes
 Main Player preserves one replaceable pending slot and captured target placement.
 Source Sky reset/image-instance/cloud-child ownership joins current/cold state;
 authored reset/failure/cold checks pass. Actual calling-thread x87/FISTP and three
-Player conversion sites now join the existing adapter/save owner. New native/ISA/
-ordinary checks are unexecuted; cold requires a fresh actual thread binding. FO3's
-own Main/Player is under implementation. Sky frame/Clouds/Moon/TLS and other
+Player conversion sites now join the existing adapter/save owner. Actual native
+checks pass eight conversions across four rounding modes, current-thread binding,
+wrong-thread refusal and fresh cold leases. Ordinary gameplay and the standalone
+ISA fixture remain unexecuted. Cold requires a fresh actual thread binding. FO3's
+distinct Main/Player is now integrated: independent source dispatch, Float32
+context storage, captured pending placement, signed cell coordinates and its own
+current/cold owner. Authored source/cold checks pass; ordinary Vault 101 does not
+follow from those checks. FO3 UI/scene/task/TLS producers remain open.
+Sky frame/Clouds/Moon/TLS and other
 unowned producers remain explicit refusals.
 
 Borrowed constant Boolean leaves have source instruction classification and
@@ -92,40 +104,57 @@ completed original Load has not. FNVXR/ShowOff refusals remain visible.
 
 Menu sounds own source RNG/path/hash/history/current-cold state. Actual archive
 startup modes, installation/DATA search roots, BSA type/hash/table order and
-invalidation read lifetimes are integrated; their new full-reader checks are
-unexecuted. Multi-archive order, invalidation/root mutations and native audio
-remain separate next owners. Never infer directory success from a loose folder.
+invalidation read lifetimes are integrated; actual full-reader/table/shadow,
+failure-prefix, input-identity and cold checks pass. The joined archive registry
+preserves actual FNV category ordering, FO3 append ordering, duplicate/directory
+registration weights and the separate first byte winner. Real BSA and cold checks
+pass. Invalidation/root mutations and native audio remain separate owners.
+Never infer directory success from a loose folder.
 
-An authored imported CNG caller passes real Windows SDK hashing of140,013 bytes
+An authored imported CNG caller passes real Windows SDK hashing of 140,013 bytes
 through nonnull shared buffers, offset views, complete digest, actual DLL detach
-and normal process closure. Its explicit authored address layout establishes
-that case. The arbitrary OS-selected address collision remains open until common
-placement works. Kernelbase comparison and child-closure-dependent source leases
-repair the real reached failures. Original mod compatibility is unaccepted.
+and normal process closure. Common placement now reserves and maps the same real
+section in both retained x86 processes before publishing the original pointer.
+The OS-selected placement check passes both offset views, actual API receipts,
+complete digest, actual detach and normal closure. Its installed Windows entry
+points repaired the reached export failure. Kernelbase comparison and
+child-closure-dependent source leases retain independent lifetimes. Original mod
+compatibility is unaccepted.
 
 Win32 mutex create/open/wait/release/close ownership is integrated behind selected
 source/import/thread checks, real restricted Windows calls, aliases and ordered
-detach cleanup. The new fixture is uncompiled/unexecuted; native mutex cold
-reconstruction refuses. No handle count certifies global object destruction.
+detach cleanup. Actual compilation passes. The authored caller enters original
+Load, then real named CreateMutexA returns ERROR_ACCESS_DENIED (5). Its completed
+failure receipt remains visible; named-object namespace access is still unowned.
+No mutex success is claimed. Native mutex cold reconstruction refuses. No handle
+count certifies global object destruction.
 
 ## Checks and ordinary acceptance
 
 Preceding protocol23 C#/x86 Debug compile, combined script suite and selected
 owned LAND construction/borrower/retirement audit pass. Pixels/GPU/retail parity
 are unverified. The reached corrupt archive fixture repair passes. New combined
-protocol24/FISTP/merge needs compilation, selected owned audit and required
+protocol 25/FISTP/registry/FO3/merge compiles with zero warnings/errors. Actual
+archive/FISTP/common-placement CNG checks pass with the named mutex failure above
+retained. Current script and complete plugin-runtime contracts pass after updating
+obsolete fixture expectations for current source owners and retained first-person
+resource failures. These component results do not establish ordinary play.
+Selected owned audit and required
 Test-GodotRuntime/diff checks before push.
 
-Latest root New/Yes candidate settled while the complete graph prepared in34.2s,
+Latest root New/Yes candidate settled while the complete graph prepared in 34.2s,
 then waited for actual foreground DirectInput. Activation produced no real sample;
 it was forcibly retired with recording off. Normal campaign/native retirement and
-original Load are not accepted from that kill. Its predecessor obtained sample1
+original Load are not accepted from that kill. Its predecessor obtained sample 1
 and JIP Query, then reached callback ownership refusal. Those candidates are retired.
 
 Questionnaire progression, post-trait chair departure, first-person beard and
 complete FO3 text remain ordinary exported acceptance work despite earlier checks.
 No fresh matched retail opening take, complete candidate campaign/cold route,
 ED-E interaction or physical-headset acceptance is claimed. Use fresh profiles.
+The launcher now accepts an absolute --profile-root for independent current
+profiles/saves; obsolete registration import is removed. Root's smoke route must
+use its own profile root while the separate gameplay worktree is running.
 
 ## Retained full-source failures
 

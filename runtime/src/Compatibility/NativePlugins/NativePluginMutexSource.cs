@@ -103,14 +103,22 @@ internal sealed class NativePluginMutexSource : IDisposable
             throw new InvalidDataException("Actual Windows ANSI mutex conversion did not retain its terminated extent.");
         return new(chars, 0, count - 1);
     }
-    internal static string ApiName(NativePluginMutexApi api) => api switch {
-        NativePluginMutexApi.CreateA => "CreateMutexA", NativePluginMutexApi.CreateW => "CreateMutexW",
-        NativePluginMutexApi.CreateExA => "CreateMutexExA", NativePluginMutexApi.CreateExW => "CreateMutexExW",
-        NativePluginMutexApi.OpenA => "OpenMutexA", NativePluginMutexApi.OpenW => "OpenMutexW",
-        NativePluginMutexApi.Release => "ReleaseMutex", NativePluginMutexApi.Close => "CloseHandle",
-        NativePluginMutexApi.Wait => "WaitForSingleObject", NativePluginMutexApi.WaitEx => "WaitForSingleObjectEx",
-        NativePluginMutexApi.WaitMany => "WaitForMultipleObjects", NativePluginMutexApi.WaitManyEx => "WaitForMultipleObjectsEx",
-        _ => throw new InvalidDataException("Unknown mutex API.") };
+    internal static string ApiName(NativePluginMutexApi api) => api switch
+    {
+        NativePluginMutexApi.CreateA => "CreateMutexA",
+        NativePluginMutexApi.CreateW => "CreateMutexW",
+        NativePluginMutexApi.CreateExA => "CreateMutexExA",
+        NativePluginMutexApi.CreateExW => "CreateMutexExW",
+        NativePluginMutexApi.OpenA => "OpenMutexA",
+        NativePluginMutexApi.OpenW => "OpenMutexW",
+        NativePluginMutexApi.Release => "ReleaseMutex",
+        NativePluginMutexApi.Close => "CloseHandle",
+        NativePluginMutexApi.Wait => "WaitForSingleObject",
+        NativePluginMutexApi.WaitEx => "WaitForSingleObjectEx",
+        NativePluginMutexApi.WaitMany => "WaitForMultipleObjects",
+        NativePluginMutexApi.WaitManyEx => "WaitForMultipleObjectsEx",
+        _ => throw new InvalidDataException("Unknown mutex API.")
+    };
     public void Dispose() { _pe.Dispose(); _source.Dispose(); }
     [DllImport("kernel32", EntryPoint = "MultiByteToWideChar", SetLastError = true)]
     private static extern int ConvertMutexAnsi(uint codePage, uint flags, byte[] input, int bytes,

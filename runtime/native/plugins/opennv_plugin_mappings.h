@@ -18,6 +18,7 @@ struct PluginMappingView {
     void* base;
     std::uint32_t access, state, protection;
     HANDLE shared_handle = nullptr;
+    bool common_placement = false;
 };
 struct PluginMappingEvent {
     std::uint32_t operation;

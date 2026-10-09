@@ -28,10 +28,13 @@ void* values_heap_allocate(std::uint32_t length, std::uint32_t abi = 0, std::uin
     if (abi) values_heap_contract(NvseHeapOperation::allocate, static_cast<Abi>(abi), receiver);
     if (!length) throw Fatal(ERROR_NOT_SUPPORTED, "Zero-size original heap allocation has no admitted lifetime extent.");
     if (owner.created == std::numeric_limits<std::uint32_t>::max()) throw Fatal(ERROR_NOT_ENOUGH_QUOTA, "Native heap capability sequence exhausted.");
-    const auto region = owner.shared_heap.allocate(length);
+    const auto region = owner.shared_heap.allocate(length, [](std::uint64_t id, HANDLE section,
+        std::uint32_t logical, std::uint32_t extent, DWORD& error) {
+        return shared_placement_map(1U, id, id, section, extent, 0, logical, nullptr, error);
+    });
     const auto pointer = address(region.base);
     try { owner.allocations.emplace(pointer, NvseHeapAllocation{region, values_caller_id()}); }
-    catch (...) { owner.shared_heap.release(region.id); throw; }
+    catch (...) { owner.shared_heap.release(region.id); shared_placement_source_released(1U, region.id, region.base); throw; }
     ++owner.created; values_heap_note(region, 1, abi, receiver); return region.base;
 }
 bool values_heap_contains(const void* pointer) {
@@ -47,7 +50,8 @@ void values_heap_release(void* pointer, std::uint32_t abi = 0, std::uint32_t rec
     const auto found = owner.allocations.find(address(pointer));
     if (found == owner.allocations.end()) throw Fatal(ERROR_INVALID_HANDLE, "Native heap free targets a foreign, interior or retired allocation.");
     const auto region = found->second.region; cng_shared_require_releasable(1U, region.id);
-    owner.shared_heap.release(region.id); cng_shared_forget(1U, region.id); owner.allocations.erase(found);
+    owner.shared_heap.release(region.id); cng_shared_forget(1U, region.id);
+    shared_placement_source_released(1U, region.id, region.base); owner.allocations.erase(found);
     ++owner.destroyed; values_heap_note(region, 2, abi, receiver);
 }
 void* __cdecl values_heap_allocate_cdecl(std::uint32_t length) { return nvse_adapter([&] { return values_heap_allocate(length, 1); }); }

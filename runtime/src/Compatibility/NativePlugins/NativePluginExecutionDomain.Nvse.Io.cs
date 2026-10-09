@@ -25,6 +25,11 @@ internal sealed partial class NativePluginExecutionDomain
         var enteredLoader = IsEnteredOriginalLoaderIo(frame.Operation, module, parent);
         if (thread != NativeThread || !enteredLoader && (_nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation))
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
+        if (frame.Operation == SharedPlacementCallback)
+        {
+            if (enteredLoader) throw new NotSupportedException("Original pre-entry shared heap publication has no intercepted source caller.");
+            return DispatchSharedPlacement(parent, owner, reader);
+        }
         if (frame.Operation == MutexCallback)
         {
             if (enteredLoader) throw new NotSupportedException("Original pre-entry mutex construction has no intercepted loader/TLS caller owner.");
@@ -85,6 +90,7 @@ internal sealed partial class NativePluginExecutionDomain
     private void RequirePrivateIoRetired()
     {
         if (_ioFiles.Count != 0) throw new InvalidDataException("Original module retirement retains native file handles.");
+        RequireSharedPlacementsSourceReleased();
         RequirePrivateMutexesRetired(); RequirePrivateMappingsRetired(); RequirePrivateCryptoRetired();
         RequirePrivateCrtRetired(); _privateIo?.RequireFindRetired();
         _privateIo?.RequireRetired();
@@ -94,6 +100,6 @@ internal sealed partial class NativePluginExecutionDomain
         if (!ChildExited) throw new InvalidOperationException("Native I/O source/provider cleanup requires verified child closure.");
         RetainPrivateProfileReceipts(); RetainPrivateFindReceipts();
         ClearPrivateMutexesAfterChildExit(); ClearNativeImportProvidersAfterChildExit();
-        ClearPrivateMappings(); ClearPrivateCrypto(); ClearPrivateCrt(); _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
+        ClearPrivateMappings(); ClearPrivateCrypto(); ClearSharedPlacementsAfterChildExit(); ClearPrivateCrt(); _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
     }
 }

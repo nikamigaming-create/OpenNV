@@ -30,13 +30,15 @@ internal static class ScriptExpressionProbe
         Require(Evaluate("Measure -2 + 3") == 5 && Evaluate("Measure (Measure -2 - 4)") == 2,
             "A numeric function argument consumed an outer operator or nested expression incorrectly.");
         Require(FalloutGameModeProgram.Tokens("Notify \"one, two\", Example, -2")
-            .SequenceEqual(["Notify", "\"one, two\"", "Example", "-", "2"]),
-            "Optional argument commas changed quoted text or signed arguments.");
+            .SequenceEqual(["Notify", "\"one, two\"", ",", "Example", ",", "-", "2"]),
+            "Argument boundary tokens changed quoted text or signed arguments.");
         Require(Evaluate("State, Example == 7 && Measure, -2 == 2") == 1,
             "Optional commas prevented source function evaluation.");
         var separated = new List<string>();
+        var commandValues = new FalloutScriptValueContext(_ => 0, (_, _) => { });
         FalloutGameModeProgram.Read("begin GameMode\nNotify Example,1,2\nend")
-            .Execute(_ => 0, (_, _) => { }, (name, arguments) => separated.Add(name + ":" + string.Join('|', arguments)));
+            .Execute(_ => 0, (_, _) => { }, (name, arguments) => separated.Add(name + ":" +
+                string.Join('|', FalloutGameModeProgram.ResolveCommandArguments(arguments, commandValues))));
         Require(separated.SequenceEqual(["Notify:Example|1|2"]), "Comma-separated command arguments changed order.");
         Reject(() => FalloutGameModeProgram.Tokens("Notify Example@, 1"));
         Reject(() => Evaluate("1, 2"));

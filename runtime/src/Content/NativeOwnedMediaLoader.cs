@@ -3,7 +3,7 @@ using OpenNV.Runtime.Presentation.Rendering;
 
 namespace OpenNV.Runtime.Content;
 
-internal static class NativeOwnedMediaLoader
+internal static partial class NativeOwnedMediaLoader
 {
     private const string WavExtension = ".wav";
     private const string OggExtension = ".ogg";
@@ -21,9 +21,11 @@ internal static class NativeOwnedMediaLoader
 
     internal static AudioStream LoadAudio(
         string logicalPath,
-        string? preferredArchive = null)
+        string? preferredArchive = null, long? menuSelectionOrdinal = null)
     {
-        var payload = Read(logicalPath, preferredArchive, out var source);
+        string source;
+        var payload = menuSelectionOrdinal is { } ordinal ? ReadSourceMenu(logicalPath, preferredArchive, ordinal, out source) :
+            Read(logicalPath, preferredArchive, out source);
         var extension = Path.GetExtension(logicalPath).ToLowerInvariant();
         AudioStream? stream;
         if (extension == WavExtension)

@@ -33,8 +33,8 @@ internal sealed record FalloutArchiveFileManagerSource(string EngineSha256, stri
         "original-file-type8;ordinary-runtime-mark0-independent-header;offset-topbit-equalsmark-low31-nonzero;" +
         "ascii-crt-lower-namehash;leading-star-encoded-extension-class;folderhash-exact-owner;" +
         "startup-empty-root-list-then-data-prefix;pre-registration-direct-then-prefix;" +
-        "original-file-table-prepend;configured-single-contributing-archive;missing-configured-reader-refused;nonempty-invalidation-unowned;" +
-        "multi-registry-and-runtime-setting-writes-unowned;winning-shared-resource-agrees-before-admission";
+        "original-file-table-prepend;isolated-single-contributing-archive-or-actual-source-registry;missing-configured-reader-refused;nonempty-invalidation-unowned;" +
+        "typed-registry-owns-multi-order-and-menu-bytes;runtime-setting-writes-unowned;isolated-single-winner-agrees-before-admission";
     internal static string CurrentContractSha256 => FalloutAdvancementRuntimeReceipt.Hash(Contract);
     internal string Identity => FalloutAdvancementRuntimeReceipt.Hash(EngineSha256 + "\0" + RuntimeSha256 + "\0" + ContractSha256);
 
@@ -71,8 +71,14 @@ internal sealed record FalloutArchiveFileManagerSource(string EngineSha256, stri
         var invalidationFile = settings.SourceString(FalloutIniCollection.Main, "sInvalidationFile:Archive", strings);
         var root = settings.SourceString(FalloutIniCollection.Main, "sLocalMasterPath:General", strings);
         var identity = FalloutAdvancementRuntimeReceipt.Hash(settings.NumericIni.Source + "\0" +
-            JsonSerializer.Serialize(new { use = new { use.Value, use.Origin },
-                invalidate = new { invalidate.Value, invalidate.Origin }, archiveList, invalidationFile, root }));
+            JsonSerializer.Serialize(new
+            {
+                use = new { use.Value, use.Origin },
+                invalidate = new { invalidate.Value, invalidate.Origin },
+                archiveList,
+                invalidationFile,
+                root
+            }));
         var result = new FalloutArchiveStartupModes(use.Value, invalidate.Value, use.Origin, invalidate.Origin,
             archiveList, invalidationFile, root, identity);
         result.Validate(); return result;

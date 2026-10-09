@@ -71,6 +71,7 @@ internal sealed partial class RuntimeNativeActorCombat
         RetireUnusedPursuitSearch();
         CaptureEngagement();
         _state.Engagement = null;
+        InvalidateFollowRoute();
         Activity.SetCombat(false); Activity.SetAlerted(false); Activity.SetWeaponDrawn(false);
         Activity.SetMovement(false, false);
         if (_actor is CharacterBody3D body) body.Velocity = Vector3.Zero;

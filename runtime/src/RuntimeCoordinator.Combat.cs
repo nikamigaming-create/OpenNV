@@ -22,5 +22,10 @@ public partial class RuntimeCoordinator
         }, () => _nativeActiveCell?.Cell.FormKey, _configuration.Player.MaximumWalkableSlopeDegrees,
         (actor, collider, activate) => _nativeReferenceEvents?.RouteDoor(actor, collider, activate) ??
             new(null, Error: "NPC route door has no resident activation owner."),
-        collider => _nativeReferenceEvents?.CollisionReference(collider));
+        collider => _nativeReferenceEvents?.CollisionReference(collider),
+        () =>
+        {
+            EnsureNativeBotNavigation();
+            return _botNavigation!.SourceSha256;
+        });
 }

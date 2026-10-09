@@ -46,12 +46,12 @@ extern "C" bool __cdecl NVSEPlugin_Load(const opennv_domain::NvseCoreInterface* 
     if (!core || !core->get_handle || core->get_handle() == opennv_domain::nvse_invalid_handle) return false;
     section = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, 262144, nullptr);
     if (!section) return false;
-    // This independently authored ABI case chooses its own original view
-    // layout. It does not establish collision-free placement for game buffers.
+    // Both processes must own the actual common layout before either source
+    // view publishes its pointer. This case requests ordinary OS placement.
     objects = static_cast<PUCHAR>(MapViewOfFileEx(section, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, 196608,
-        reinterpret_cast<void*>(0x30000000u)));
+        nullptr));
     output = static_cast<PUCHAR>(MapViewOfFileEx(section, FILE_MAP_READ | FILE_MAP_WRITE, 0, 196608, 65536,
-        reinterpret_cast<void*>(0x30030000u)));
+        nullptr));
     if (!objects || !output || objects == output) return false;
     if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0 || !algorithm) return false;
     auto* object_length = reinterpret_cast<PULONG>(output);

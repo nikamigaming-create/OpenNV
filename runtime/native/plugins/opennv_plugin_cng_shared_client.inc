@@ -19,7 +19,7 @@ CngSharedSource cng_shared_find(const void* pointer, std::uint32_t length) {
         if (length > view.logical_bytes - (at - base)) throw Fatal(ERROR_INVALID_PARAMETER, "Shared CNG pointer crosses its actual source view.");
         const auto& object = io.mappings->objects.at(view.object);
         if (!object.writable || view.protection != PAGE_READWRITE || view.state != MEM_COMMIT ||
-            (view.access & FILE_MAP_COPY) || !view.shared_handle || object.maximum > UINT32_MAX || view.offset > UINT32_MAX || view.logical_bytes > UINT32_MAX)
+            ((view.access & FILE_MAP_COPY) && view.access != FILE_MAP_ALL_ACCESS) || !view.shared_handle || object.maximum > UINT32_MAX || view.offset > UINT32_MAX || view.logical_bytes > UINT32_MAX)
             throw Fatal(ERROR_NOT_SUPPORTED, "CNG source view is private-copy, readonly, reserved or lacks a complete x86 shared extent.");
         MEMORY_BASIC_INFORMATION memory{};
         if (!VirtualQuery(view.base, &memory, sizeof(memory)) || memory.AllocationBase != view.base || memory.Type != MEM_MAPPED ||
@@ -158,7 +158,7 @@ void cng_shared_flush_detach() {
     while (!shared.views.empty()) { const auto key = shared.views.begin()->first; cng_shared_forget(key.first, key.second); }
 }
 void cng_shared_retain_mapping_view(PluginMappingView& view, HANDLE original) {
-    if (view.protection != PAGE_READWRITE || view.state != MEM_COMMIT || (view.access & FILE_MAP_COPY)) return;
+    if (view.protection != PAGE_READWRITE || view.state != MEM_COMMIT || ((view.access & FILE_MAP_COPY) && view.access != FILE_MAP_ALL_ACCESS)) return;
     if (view.shared_handle) throw Fatal(ERROR_INVALID_STATE, "Source mapping shared reference cannot repeat its constructor.");
     if (!DuplicateHandle(GetCurrentProcess(), original, GetCurrentProcess(), &view.shared_handle,
         SECTION_MAP_READ | SECTION_MAP_WRITE, FALSE, 0))

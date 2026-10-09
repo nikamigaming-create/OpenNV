@@ -60,7 +60,7 @@ internal sealed partial class FalloutReferenceScripts
                     var name = FalloutCompiledScriptEvents.Name(block.Event);
                     if (!admitted.ContainsKey(name)) continue;
                     running = "Compiled/" + name;
-                    FalloutCompiledScriptEvents.RequireAdmission(program, block);
+                    if (!MatchesCompiledActorCallback(program, block, admitted[name], instance.Reference)) continue;
                     if (block.Event == 2) observeActivationBegin?.Invoke();
                     foreach (var _ in CompiledSteps(instance.Reference, program, block, elapsedSeconds, block.Event == 2 ? admitted[name].ActionReference : null)) { }
                     if (block.Event == 2) observeActivationEnd?.Invoke();

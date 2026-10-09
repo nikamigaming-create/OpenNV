@@ -1451,8 +1451,10 @@ try
     var coldSky = new FalloutSkyLightingState(cellStack, 0.5f);
     coldSky.Restore(JsonSerializer.Deserialize<FalloutSkyLightingSnapshot>(skyJson)!);
     Require(coldSky.RegionEmittance(syntheticRegion, 23).SequenceEqual(nightColor), "Cold sky restore changed region emittance.");
-    ExpectFailure(() => coldSky.Restore(new(campaignSky.Climate.Form,
-        [new(syntheticRegion, cellStack.RuntimeFormKey(0x110))])), "does not resolve to WTHR");
+    ExpectFailure(() => coldSky.Restore(campaignSky.Capture() with
+    {
+        Regions = [new(syntheticRegion, cellStack.RuntimeFormKey(0x110))]
+    }), "does not resolve to WTHR");
     Require(JsonSerializer.Serialize(coldSky.Capture()) == skyJson, "Rejected sky restore changed authoritative state.");
     // Earlier OpenNV schema upgrades and capsule offsets are not product
     // behavior. Current saves require all real runtime owners; this fixture

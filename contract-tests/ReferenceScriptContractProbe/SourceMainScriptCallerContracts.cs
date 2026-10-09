@@ -14,7 +14,7 @@ internal static partial class SourceMainScriptCallerContracts
         SuccessfulOrderAndCold(); FailedSteamPrefixAndCold(); ShortCircuitAndForbiddenReentry(); ActualMissingHost();
         SourceMainUtilityCases();
         RunPlayerCellContracts();
-        SourceSkyTransferContracts.Run();
+        SourceSkyTransferContracts.Run(); SourceFistpContracts.Run();
         RunRawPlayerTransferContracts();
         Console.WriteLine("OPENNV_SOURCE_MAIN_SCRIPT_CALLER_PASS authoredScopeOnly=true realTwoSites=true orderedPlayerSteamContexts=true " +
             "independentContextClock=true sourceOrdinalNotDeliveryFrame=true coldNoReplay=true callbackFailurePrefix=true " +

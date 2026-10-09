@@ -66,6 +66,11 @@ replaceable pending transfer slot before Steam and the second sample; CELL DATA
 flags and actual Float32 FISTP rounding determine source grid behavior.
 Unavailable children remain refused.
 
+Standalone FO3 selects its own executable source family. Its independent Main,
+Player world bracket, pending-transfer replacement and current/cold state do not
+admit FNV-only platform or movement calls. Unowned UI/scene/task/TLS children
+remain visible source dispatch failures.
+
 Restricted child creation retains a fresh hidden desktop and only the explicit
 pipe/station/desktop inheritance list. Failed construction keeps exact creation
 handles and source leases until observed child closure; existing object ACLs
@@ -77,7 +82,9 @@ dispatch cannot enter game/mod code. The original child retains local opaque
 capabilities; real service SDK objects/buffers/statuses have independent source
 and retirement owners. Frontend and primitives loader references are separate.
 Shared original CNG buffers retain their actual section handles and exact mapped
-addresses/offsets in the Windows-only service. SDK hash objects pin the actual
+addresses/offsets in the Windows-only service. Common placement uses the exact
+retained x86 creation processes, real placeholder reservations and replacement
+views of the same section before original pointer publication. SDK hash objects pin the actual
 views through DestroyHash; original FreeLibrary has a distinct checked unload
 scope. Address collision remains a failure, never a copied or relocated alias.
 Borrowed engine command leaves use source-decoded semantics and first-party
@@ -106,12 +113,16 @@ one-shot typed request until source indexing and menu construction succeed, then
 use the same authored menu actions as ordinary input. Source or save admission
 failures cancel that request visibly. Window-close callbacks, launcher fonts and
 artwork have explicit instance lifetime owners.
+An optional absolute profile root selects the current launcher/profile store and
+save directory, allowing independent ordinary play sessions. Historical external
+registration import has no admission path.
 
 Development playtest packages pin a clean source commit/tree, exporter/SDK
 identity and every packaged file hash. The self-contained Godot/.NET runtime and
 first-party native companions accompany the executable. Owned installations and
-saves stay external. A stable local shortcut can advance without replacing any
-versioned package. The launcher shows supplied package identity; this badge does
+saves stay external. A stable local shortcut advances to an accepted package;
+one current package/ZIP and the active candidate are the retention target.
+The launcher shows supplied package identity; this badge does
 not replace package hash checks or establish gameplay readiness.
 
 NIF header versions select their original sized or unsized block envelopes.

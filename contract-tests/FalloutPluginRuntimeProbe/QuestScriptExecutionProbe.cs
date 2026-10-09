@@ -85,14 +85,15 @@ internal static class QuestScriptExecutionProbe
                 new FalloutPlayerInventory(), defaultProcessingDelay: 1);
             var commaScripts = CommaScripts();
             var commaInitial = commaScripts.Capture();
-            commaScripts.Restore(commaInitial with { Instances = [], ParserVersion = 0 });
+            Reject(() => commaScripts.Restore(commaInitial with { Instances = [], ParserVersion = 0 }));
+            commaScripts.Restore(commaInitial);
             Require(commaState.Variable(commaQuest, 2) == 123.5 && commaScripts.Capture().Instances.Single().Executions == 0 &&
                 commaScripts.Capture().Instances.Single().Clock!.HasSameBits(commaInitial.Instances.Single().Clock!),
-                "Legacy parser migration reset quest locals or invented script executions/timing.");
+                "Current parser restoration reset quest locals or invented script executions/timing.");
             Reject(() => CommaScripts().Restore(commaInitial with { Instances = [] }));
             var commaCold = CommaScripts(); commaCold.Restore(commaScripts.Capture());
             Require(JsonSerializer.Serialize(commaCold.Capture()) == JsonSerializer.Serialize(commaScripts.Capture()),
-                "Migrated script owners did not survive a current-version cold restore.");
+                "Current script owners did not survive a cold restore.");
             NumericColdState(directory);
             BranchAdmissionColdState(directory);
             File.WriteAllBytes(Path.Combine(directory, "Bad.esm"), Header().Concat(Quest())
@@ -124,7 +125,7 @@ internal static class QuestScriptExecutionProbe
         var savedQuests = JsonSerializer.Serialize(quests.Capture());
         var detailed = JsonSerializer.SerializeToElement(scripts.State);
         var summary = JsonSerializer.SerializeToElement(scripts.Observe(detailed: false));
-        foreach (var field in new[] { "quests", "unbound", "newlyParsedOnRestore", "events", "session", "strings", "menus" })
+        foreach (var field in new[] { "quests", "unbound", "events", "session", "strings", "menus" })
             Require(detailed.GetProperty(field).GetRawText() == summary.GetProperty(field).GetRawText(),
                 "Periodic script observation lost identities, errors, clocks or event state: " + field);
         Require(summary.GetProperty("detail").GetString()!.Contains("request-state", StringComparison.Ordinal) &&
@@ -153,17 +154,11 @@ internal static class QuestScriptExecutionProbe
         FalloutQuestScripts Scripts() => new(records, state, new HashSet<FalloutFormKey>(),
             new FalloutPlayerInventory(), defaultProcessingDelay: 1);
         var initial = Scripts().Capture();
-        var legacy = initial with { ParserVersion = 1 };
-        var restored = Scripts(); restored.Restore(legacy);
-        Require(restored.Capture().Instances.SequenceEqual(legacy.Instances) && state.Variable(quest, 2) == 123.5,
-            "Branch parser changes rejected or reset an existing quest script owner.");
-        foreach (var version in new[] { 3, 4 })
-        {
-            var newlyAdmitted = Scripts();
-            newlyAdmitted.Restore(initial with { ParserVersion = version, Instances = [] });
-            Require(newlyAdmitted.Capture().Instances.SequenceEqual(initial.Instances),
-                "Strict branch parser migration fabricated prior execution.");
-        }
+        foreach (var version in new[] { 1, 3, 4 })
+            Reject(() => Scripts().Restore(initial with { ParserVersion = version, Instances = [] }));
+        var restored = Scripts(); restored.Restore(initial);
+        Require(restored.Capture().Instances.SequenceEqual(initial.Instances) && state.Variable(quest, 2) == 123.5,
+            "Current branch restoration reset an existing quest script owner.");
         Reject(() => Scripts().Restore(initial with { Instances = [] }));
         restored.Advance(1);
         Require(state.Variable(quest, 3) == 7 && restored.Capture().Instances.Single().Error is not null,
@@ -186,11 +181,12 @@ internal static class QuestScriptExecutionProbe
             new FalloutPlayerInventory(), defaultProcessingDelay: 1);
         var scripts = Scripts(state);
         var initial = scripts.Capture();
-        scripts.Restore(initial with { Instances = [], ParserVersion = 1 });
+        Reject(() => scripts.Restore(initial with { Instances = [], ParserVersion = 1 }));
+        scripts.Restore(initial);
         Require(state.Variable(quest, 19) == 20 && scripts.Capture().Instances.Single().Executions == 0 &&
             scripts.Capture().Instances.Single().Clock!.HasSameBits(initial.Instances.Single().Clock!),
-            "Numeric parser migration reset compiled locals or invented executions/timing.");
-        Scripts(state).Restore(initial with { Instances = [], ParserVersion = 0 });
+            "Current numeric restoration reset compiled locals or invented executions/timing.");
+        Reject(() => Scripts(state).Restore(initial with { Instances = [], ParserVersion = 0 }));
         Reject(() => Scripts(state).Restore(initial with { Instances = [] }));
         FalloutQuestScriptHost host = new((_, _) => throw new InvalidOperationException("Unexpected stage effect."),
             _ => throw new InvalidOperationException("Unexpected player query."));

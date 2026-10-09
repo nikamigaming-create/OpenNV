@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
 
-internal sealed record FalloutFollowPackage(FalloutFormKey Form, FalloutFormKey Target, int Distance, uint Flags)
+internal sealed partial record FalloutFollowPackage(FalloutFormKey Form, FalloutFormKey Target, int Distance, uint Flags)
 {
     internal static FalloutFollowPackage Read(FalloutPluginRecord record)
     {

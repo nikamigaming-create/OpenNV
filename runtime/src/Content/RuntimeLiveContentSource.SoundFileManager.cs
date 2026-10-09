@@ -28,15 +28,17 @@ internal sealed partial class RuntimeLiveContentSource
         var modes = declaration.ReadStartup(this);
         IReadOnlyList<FalloutBsaArchive> archives = [];
         FalloutArchiveInvalidationInput? invalidation = null;
+        FalloutSourceArchiveRegistry? registry = null;
         if (modes.UseArchives != 0)
         {
             ArchiveWarmup.GetAwaiter().GetResult();
             archives = Array.AsReadOnly(_archivePaths.Select(GetArchive).ToArray());
             invalidation = ReadSourceInvalidation(modes, declaration);
+            registry = OpenSourceSoundRegistry(source, modes, restore?.Registry);
         }
         return new(declaration, modes, archives, invalidation,
             (raw, extension) => ReadActualLooseSoundDirectory(modes, raw, extension),
-            path => TryResolve(path, null, out var winner) ? winner : null, restore);
+            path => TryResolve(path, null, out var winner) ? winner : null, restore, registry);
     }
 
     private FalloutArchiveInvalidationInput ReadSourceInvalidation(FalloutArchiveStartupModes modes,
@@ -96,6 +98,8 @@ internal sealed partial class RuntimeLiveContentSource
     {
         List<Exception>? failures = null;
         try { _soundFileManager?.Retire(); }
+        catch (Exception error) when (FalloutPlayerPhysicalActivity.Ordinary(error)) { (failures ??= []).Add(error); }
+        try { RetireSourceSoundRegistry(); }
         catch (Exception error) when (FalloutPlayerPhysicalActivity.Ordinary(error)) { (failures ??= []).Add(error); }
         foreach (var file in _soundInvalidationLeases.ToArray())
             try { file.Dispose(); _soundInvalidationLeases.Remove(file); }

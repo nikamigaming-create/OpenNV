@@ -45,7 +45,7 @@ public:
         }
     }
     std::uint32_t live() const { return live_; }
-    GuestRegion allocate(std::uint32_t length) {
+    template<class Mapper> GuestRegion allocate(std::uint32_t length, Mapper&& mapper) {
         if (failed_) throw GuestArenaFailure(ERROR_INVALID_STATE, "Failed shared allocation cannot replay.", true);
         if (!length || length > max_guest_committed || live_ >= max_guest_live ||
             regions_.size() >= max_guest_reservations || next_ == UINT64_MAX)
@@ -59,8 +59,9 @@ public:
         value.section = CreateFileMappingW(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, extent, nullptr);
         if (!value.section) throw GuestArenaFailure(GetLastError(), "Shared heap paging-file section allocation failed.");
         regions_.push_back(value); auto& current = regions_.back();
-        current.region.base = MapViewOfFile(current.section, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, extent);
-        if (!current.region.base) { current.failed = failed_ = true; throw GuestArenaFailure(GetLastError(), "Shared heap view allocation failed with retained section.", true); }
+        DWORD error = ERROR_SUCCESS;
+        current.region.base = mapper(current.region.id, current.section, length, extent, error);
+        if (!current.region.base) { current.failed = failed_ = true; throw GuestArenaFailure(error, "Shared heap common placement failed with retained section.", true); }
         try { verify(current); }
         catch (...) { current.failed = failed_ = true; throw; }
         mapped_ += extent; ++live_; return current.region;

@@ -26,7 +26,7 @@ internal sealed record FalloutMainPlayerPendingSource(FalloutMainPlayerCellSourc
     internal static FalloutMainPlayerPendingSource Read(FalloutMainPlayerCellSource player)
     {
         player.Validate();
-        return new(player, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(player.Contract + "\0" + Rules))).ToLowerInvariant());
+        return new(player, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(player.Contract + "\0" + FalloutSourceMainFamily.PendingRules(player.Main.EngineSha256, Rules)))).ToLowerInvariant());
     }
     internal void Validate()
     {

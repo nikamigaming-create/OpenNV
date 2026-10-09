@@ -108,7 +108,7 @@ internal sealed partial class FalloutReferenceWorld
         // fields remain on this exact retained actor. No save/audio consumer,
         // package election or event execution is entered by a process copy.
         return new(reference, actor.CapturePackageAssignment?.Invoke() ?? actor.PackageAssignment,
-            actor.PackageMotion, actor.ScriptPackage, actor.PendingPackageChoice, actor.DeferredPackageContinuation,
+            actor.CapturePackageMotion is { } captureMotion ? captureMotion() : actor.PackageMotion, actor.ScriptPackage, actor.PendingPackageChoice, actor.DeferredPackageContinuation,
             actor.CaptureFurniture?.Invoke() ?? actor.FurnitureContinuation,
             actor.CaptureDialogue?.Invoke() ?? actor.DialogueContinuation,
             actor.SelectionFailure, actor.PackageBindingFailure, actor.PendingPackageSelection, actor.ProcedureCaptureBlocker,

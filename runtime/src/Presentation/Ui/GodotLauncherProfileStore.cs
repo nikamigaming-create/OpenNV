@@ -36,12 +36,15 @@ internal sealed class GodotLauncherProfileStore
 
     private GodotLauncherProfileStore(string path, string saveRoot) => (_path, _saveRoot) = (path, saveRoot);
 
-    internal static GodotLauncherProfileStore Load()
+    internal static GodotLauncherProfileStore Load(string? profileRoot = null)
     {
-        var path = ProjectSettings.GlobalizePath("user://launcher/profiles-v1.json");
-        var store = Open(path, ProjectSettings.GlobalizePath("user://profiles"));
-        store.ImportLegacyRegistrations();
-        return store;
+        if (profileRoot is null)
+            return Open(ProjectSettings.GlobalizePath("user://launcher/profiles-v1.json"),
+                ProjectSettings.GlobalizePath("user://profiles"));
+        if (!Path.IsPathFullyQualified(profileRoot))
+            throw new ArgumentException("The launcher profile root must be an absolute directory.", nameof(profileRoot));
+        var root = Path.GetFullPath(profileRoot);
+        return Open(Path.Combine(root, "launcher", "profiles-v1.json"), Path.Combine(root, "profiles"));
     }
 
     internal static GodotLauncherProfileStore Open(string path, string saveRoot)
@@ -222,91 +225,6 @@ internal sealed class GodotLauncherProfileStore
         {
             // A structurally invalid JSON value is treated like a stale profile
             // file; the picker remains available for a clean registration.
-        }
-    }
-
-    private void ImportLegacyRegistrations()
-    {
-        var appData = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
-        if (string.IsNullOrWhiteSpace(appData))
-            return;
-        var legacy = Path.Combine(appData, "@open-nevada", "launcher");
-        var changed = false;
-        changed |= ImportDataRegistration(legacy, "newvegas", "newvegas-data-registration.json");
-        changed |= ImportDataRegistration(legacy, "fallout3", "fallout3-data-registration.json");
-        changed |= ImportFo1Profile(legacy);
-        changed |= ImportFo2Profile(legacy);
-        if (changed)
-            Persist();
-    }
-
-    private bool ImportDataRegistration(string legacyRoot, string campaignId, string fileName)
-    {
-        if (_profiles.ContainsKey(campaignId))
-            return false;
-        var path = Path.Combine(legacyRoot, fileName);
-        var root = ReadJson(path);
-        if (root is null || !root.Value.TryGetProperty("dataRoot", out var dataRoot))
-            return false;
-        var selected = dataRoot.GetString();
-        if (string.IsNullOrWhiteSpace(selected))
-            return false;
-        _profiles[campaignId] = new GodotLauncherProfile(campaignId, selected, SavePath(campaignId));
-        return true;
-    }
-
-    private bool ImportFo1Profile(string legacyRoot)
-    {
-        if (_profiles.ContainsKey("fallout1"))
-            return false;
-        var profile = ReadJson(Path.Combine(legacyRoot, "profiles", "fallout1", "fallout1-profile.json"));
-        if (profile is null || !profile.Value.TryGetProperty("install", out var install) ||
-            !install.TryGetProperty("root", out var root))
-            return false;
-        var selected = root.GetString();
-        if (string.IsNullOrWhiteSpace(selected))
-            return false;
-        _profiles["fallout1"] = new GodotLauncherProfile("fallout1", selected, SavePath("fallout1"));
-        return true;
-    }
-
-    private bool ImportFo2Profile(string legacyRoot)
-    {
-        if (_profiles.ContainsKey("fallout2"))
-            return false;
-        var registration = ReadJson(Path.Combine(legacyRoot, "fallout2-profile-registration.json"));
-        if (registration is null || !registration.Value.TryGetProperty("manifest", out var manifest))
-            return false;
-        var manifestPath = manifest.GetString();
-        if (string.IsNullOrWhiteSpace(manifestPath))
-            return false;
-        var profile = ReadJson(manifestPath);
-        if (profile is null || !profile.Value.TryGetProperty("install", out var install) ||
-            !install.TryGetProperty("root", out var root))
-            return false;
-        var selected = root.GetString();
-        if (string.IsNullOrWhiteSpace(selected))
-            return false;
-        _profiles["fallout2"] = new GodotLauncherProfile("fallout2", selected, SavePath("fallout2"));
-        return true;
-    }
-
-    private static JsonElement? ReadJson(string path)
-    {
-        try
-        {
-            if (!File.Exists(path))
-                return null;
-            using var document = JsonDocument.Parse(File.ReadAllBytes(path));
-            return document.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-        catch (IOException)
-        {
-            return null;
         }
     }
 

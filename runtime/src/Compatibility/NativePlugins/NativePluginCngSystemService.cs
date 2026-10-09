@@ -38,7 +38,7 @@ internal sealed partial class NativePluginCngSystemService
     internal int ProcessId => _domain?.ProcessId ?? 0;
     internal bool ChildExited => _domain?.ChildExited ?? true;
     internal bool ResourcesRetired => _sourcesRetired && SharedOwnersRetired && (_domain?.CngServiceProcessResourcesRetired ?? true);
-    internal bool OrderlyRetired => !_emergencyEntered && _providerRetired && (_domain?.NaturallyRetired ?? false) && ChildExited && _sourcesRetired && SharedOwnersRetired && !_sharedFailed;
+    internal bool OrderlyRetired => !_emergencyEntered && (_providerRetired || _memoryOnlyRetired) && (_domain?.NaturallyRetired ?? false) && ChildExited && _sourcesRetired && SharedOwnersRetired && !_sharedFailed;
     internal IReadOnlyList<NativePluginCngServiceReceipt> Receipts => _receipts.AsReadOnly();
     internal IReadOnlyList<NativePluginCngEmergencyReceipt> EmergencyReceipts => _emergency.AsReadOnly();
     internal IReadOnlyList<NativePluginCngLocalPublication> LocalPublications => _publications.AsReadOnly();
@@ -53,18 +53,8 @@ internal sealed partial class NativePluginCngSystemService
         {
             _domain = new NativePluginExecutionDomain(_sources.Image.Path);
             _sources.RequireCurrent();
-            using var request = new MemoryStream(); using (var writer = new BinaryWriter(request, Encoding.UTF8, true))
-            {
-                writer.Write((uint)NativePluginCngServiceStep.Prepare);
-                Text(writer, _sources.Provider.Path); Text(writer, _sources.Provider.Sha256);
-                Text(writer, _sources.Primitives.Path); Text(writer, _sources.Primitives.Sha256);
-            }
-            using var reader = Reader(_domain.CngSystemExchange(request.ToArray()));
-            if (reader.ReadUInt32() != 1 || reader.ReadUInt32() != 1 ||
-                ReadText(reader) != _sources.Provider.Path || ReadText(reader) != _sources.Provider.Sha256 ||
-                ReadText(reader) != _sources.Primitives.Path || ReadText(reader) != _sources.Primitives.Sha256)
-                throw new InvalidDataException("Actual CNG mapped file/signature admission lost selected source identities.");
-            Finish(reader); _sources.RequireCurrent();
+            // Windows memory-only lifetime. No SDK provider is admitted
+            // until PrepareSdkForActualConsumer enters a genuine CNG call.
         }
         catch (Exception error)
         {
@@ -81,6 +71,7 @@ internal sealed partial class NativePluginCngSystemService
         if (originalCall == 0 || request.Length < 4 || _providerRetired || _sourcesRetired)
             throw new InvalidDataException("CNG forwarding lost its current original invocation/provider owner.");
         _sources.RequireCurrent(); RequireDetachStep(originalCall, request, actualUnload);
+        PrepareSdkForActualConsumer(request);
         if (ForwardSharedChecked(originalCall, request, actualUnload, out var sharedReply))
         { if (!_sourcesRetired) _sources.RequireCurrent(); return sharedReply; }
         using var input = Reader(request); var step = (NativePluginCngServiceStep)input.ReadUInt32();
@@ -239,7 +230,7 @@ internal sealed partial class NativePluginCngSystemService
         if (!originalChildExited) throw new InvalidOperationException("CNG system resources must survive until exact original child closure.");
         if (_sourcesRetired) { ReleaseSharedAfterServiceExit(); if (_retirementError is not null) throw _retirementError; return; }
         var failures = new List<Exception>();
-        if (!_providerRetired && !_emergencyEntered && _domain is { Fault: null, ChildExited: false })
+        if (_sdkPrepareEntered && !_providerRetired && !_emergencyEntered && _domain is { Fault: null, ChildExited: false })
         {
             _emergencyEntered = true;
             try
@@ -252,6 +243,7 @@ internal sealed partial class NativePluginCngSystemService
             catch (Exception error) { failures.Add(error); }
         }
         try { _domain?.Dispose(); } catch (Exception error) { failures.Add(error); }
+        if (!_sdkPrepareEntered && _domain is { NaturallyRetired: true, ChildExited: true }) _memoryOnlyRetired = true;
         if (ChildExited)
         {
             try { ReleaseSharedAfterServiceExit(); } catch (Exception error) { failures.Add(error); }

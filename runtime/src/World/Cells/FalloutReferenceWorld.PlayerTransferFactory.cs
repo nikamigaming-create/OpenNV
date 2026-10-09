@@ -117,9 +117,9 @@ internal sealed partial class FalloutReferenceWorld
         // captured values, which survive a genuine cold queue continuation.
     }
 
-    internal FalloutReferencePlacement ReadSourcePlayerRawPlacement(FalloutPlayerPendingRequest request,
-        FalloutActorProcessFact<FalloutSourceFloatRounding> rounding)
+    internal FalloutReferencePlacement ReadSourcePlayerRawPlacement(FalloutMainPlayerCellInvocation invocation, FalloutPlayerPendingRequest request)
     {
+        RequireCampaignMainPlayerInvocation(invocation, FalloutMainPlayerCellStep.PendingDestination);
         PlayerMoves.SourcePending.Require(request);
         var payload = ReadMainPlayerPendingPayload(request); RequireSourcePlayerRawTransfer(payload);
         FalloutFormKey cell;
@@ -129,9 +129,8 @@ internal sealed partial class FalloutReferenceWorld
                 cell = payload.Cell!.Value;
                 break;
             case FalloutPlayerTransferTarget.Worldspace:
-                var mode = rounding.Require();
-                var x = FalloutQueuedReferencePriority.ConvertSourcePosition(payload.PositionX, mode) >> 12;
-                var y = FalloutQueuedReferencePriority.ConvertSourcePosition(payload.PositionY, mode) >> 12;
+                var (x, y) = ProcessRuntime.ConvertMainPlayerSourceGrid(invocation, payload.PositionX, payload.PositionY,
+                    FalloutSourceFistpSite.PlayerPendingWorldspace, request);
                 cell = _mainPlayerExterior.SpatialCellAtSourceCoordinates(payload.Worldspace!.Value, x, y);
                 if (ReadMainPlayerSourceCell(cell).Source.Worldspace != payload.Worldspace)
                     throw new InvalidDataException("Raw Player world lookup changed its exact source world.");

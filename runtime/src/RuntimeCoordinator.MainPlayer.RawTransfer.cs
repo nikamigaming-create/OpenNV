@@ -14,7 +14,7 @@ public partial class RuntimeCoordinator
         (_nativeReferences ?? throw new InvalidOperationException("Raw Player transfer has no actual current world."))
             .RequireSourcePlayerRawTransfer(payload);
 
-    private FalloutReferencePlacement ReadSourcePlayerRawPlacement(FalloutPlayerPendingRequest request) =>
+    private FalloutReferencePlacement ReadSourcePlayerRawPlacement(FalloutMainPlayerCellInvocation invocation, FalloutPlayerPendingRequest request) =>
         (_nativeReferences ?? throw new InvalidOperationException("Raw Player transfer has no actual source world."))
-            .ReadSourcePlayerRawPlacement(request, new(null, "actual-original-transfer-thread-FISTP-rounding-producer-unowned"));
+            .ReadSourcePlayerRawPlacement(invocation, request);
 }

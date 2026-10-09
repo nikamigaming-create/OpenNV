@@ -11,7 +11,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal void AttachSourceMainScriptCaller()
     {
         var world = _scripts.References ?? throw new InvalidOperationException("Main caller has no actual campaign world.");
-        if (world.Challenges.Source is null) return;
+        if (!world.CampaignMainRuntimeConfigured) throw new NotSupportedException("Actual selected Main runtime must construct before native delivery.");
         if (_sourceMainScriptCaller is not null || _sourceMainScriptCallerRetired || !IsInsideTree())
             throw new InvalidOperationException("Source Main native delivery cannot attach twice or before the living driver.");
         _sourceMainScriptCaller = RuntimeNativeSourceMainScriptCaller.Attach(this, world,
@@ -20,7 +20,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     }
     internal void StartSourceMainScriptCaller()
     {
-        if (_scripts.References!.Challenges.Source is null) return;
+        if (!_scripts.References!.CampaignMainRuntimeConfigured) throw new NotSupportedException("Actual selected Main runtime is absent at source delivery start.");
         (_sourceMainScriptCaller ?? throw new NotSupportedException("Actual native Main source caller is absent.")).Start();
     }
     internal void RetireSourceMainScriptCaller()

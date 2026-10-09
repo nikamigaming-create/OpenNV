@@ -26,7 +26,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
     {
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack); ArgumentNullException.ThrowIfNull(identity);
         _source = source; _stack = stack; _player = player; _identity = identity;
-        ConstructSourceMainFrame();
+        ConstructSourceMainFrame(); ConstructSourceFistp();
         _forced = source.InitialMainForcedProcessing; _travelCounter = source.InitialPlayerTravelCounter;
         if (restore is null) Construct(player); else Restore(restore);
     }
@@ -37,6 +37,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         MainUtilityCommandSaveBlocker is { } commands ? commands :
         PlatformStartupSaveBlocker is { } startup ? startup :
         MainFrameSaveBlocker is { } frame ? frame :
+        _sourceFistp.SaveBlocker is { } fistp ? fistp :
         _main.FirstOrDefault(item => item.Phase != FalloutMainProcessPhase.Complete) is { } main ?
             "actual-Main-source-operation:" + main.Owner + ":" + (main.Failure ?? main.Phase.ToString()) :
         _travel is { Phase: not FalloutPlayerTravelPhase.Complete } travel ?
@@ -52,6 +53,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         mainWord = _mainWord,
         mainWindows = _mainWindows.ToArray(),
         mainFrameBoundary = _mainFrameBoundary,
+        callingThreadFistp = _sourceFistp.State,
         scriptCaller = MainScriptCallerState,
         playerCell = MainPlayerCellState,
         utilityCommands = MainUtilityCommandState,
@@ -170,7 +172,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         RetireMainUtilityCommands(); RequireMainUtilityBoundary(retiring: true);
         if (MainFrameSaveBlocker is not null || _main.Any(item => item.Phase != FalloutMainProcessPhase.Complete) || _travel is { Phase: not FalloutPlayerTravelPhase.Complete })
             throw new NotSupportedException("Source process runtime retains a live or failed Main/Player invocation.");
-        RetireMainPlayerCell();
+        RetireMainPlayerCell(); RetireStandaloneMain(); _sourceFistp.Dispose();
         _disposed = true; _actors.Clear();
     }
 }

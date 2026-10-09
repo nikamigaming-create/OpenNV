@@ -31,7 +31,17 @@ internal static class NativeCngSharedContracts
                 var shared = domain.CngSharedReceipts;
                 Require(shared.Count >= 2 && shared.All(row => row.OriginalGeneration == domain.Generation && row.OriginalCall != 0 &&
                     row.ServiceGeneration != 0 && row.ServiceProcess > 0 && row.Source.Kind == 2 &&
-                    row.Source.Address == row.ServiceAddress), "actual same-address mapped caller/service views");
+                    row.Source.Address == row.ServiceAddress && row.CommonPlacement != 0), "actual same-address mapped caller/service views");
+                var placements = domain.SharedPlacementReceipts;
+                Require(placements.Count == 2 && placements.All(row => row.Published && row.Failure is null &&
+                    row.OriginalGeneration == domain.Generation && row.OriginalProcess == domain.ProcessId &&
+                    row.ServiceProcess > 0 && row.ServiceProcess != row.OriginalProcess && row.Source.Preferred == 0 &&
+                    row.OriginalMemory == NativePluginSharedPlacementMemory.Mapped && row.ServiceMemory == NativePluginSharedPlacementMemory.Mapped),
+                    "both actual process mappings precede OS-selected pointer publication");
+                Require(placements.All(row => domain.SharedPlacementApiReceipts.Count(api => api.Placement == row.Id &&
+                    api.Succeeded && api.RequestedAddress == row.Address && api.ReturnedAddress == row.Address &&
+                    api.Operation is "VirtualAlloc2/placeholder" or "MapViewOfFile3/replace-placeholder") == 4),
+                    "actual reservation and section replacement in each retained creation process");
                 Require(shared.Select(row => row.Source.Offset).Distinct().Order().SequenceEqual(new uint[] { 0, 196608 }) &&
                     shared.Select(row => row.Section).Distinct().Count() == 1, "same kernel section with independent offset views");
                 Require(domain.CngSharedCalls.Count(row => row.Operation == NativePluginCryptoOperation.CreateHash && row.Object is not null &&
@@ -46,8 +56,12 @@ internal static class NativeCngSharedContracts
                 domain.Dispose();
                 Require(domain.NaturallyRetired && domain.ChildExited && domain.CngServiceProcessResourcesRetired,
                     "normal exact original/service process retirement");
+                Require(domain.SharedPlacementReceipts.All(row => row.SourceReleased && row.CngBorrowRetired &&
+                    row.ParentSectionClosed && row.OriginalMemory is NativePluginSharedPlacementMemory.None or NativePluginSharedPlacementMemory.ClosedProcess &&
+                    row.ServiceMemory is NativePluginSharedPlacementMemory.None or NativePluginSharedPlacementMemory.ClosedProcess),
+                    "independent actual source maps, service maps and retained kernel sections retired");
                 Console.WriteLine("OPENNV_CNG_SHARED_CALLER_PASS importedProvider=true actualWindowsSdk=true nonnullObject=true " +
-                    "sameAddresses=true offsetViews=true completeDigest=true actualDetach=true normalExit=true originalModCompatibility=UNACCEPTED");
+                    "sameAddresses=true offsetViews=true commonPlacement=true completeDigest=true actualDetach=true normalExit=true originalModCompatibility=UNACCEPTED");
             }
             catch
             {

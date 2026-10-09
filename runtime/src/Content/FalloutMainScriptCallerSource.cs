@@ -20,20 +20,20 @@ internal sealed record FalloutMainScriptCallerSource(string EngineSha256, string
     internal string Identity => FalloutAdvancementRuntimeReceipt.Hash(EngineSha256 + "\0" + RuntimeSha256 +
         "\0" + ImmediateSource + "\0" + ContractSha256);
     internal uint InitialContextTimeBits => 0;
+    internal bool HasNewVegasChildren => FalloutSourceMainFamily.HasNewVegasChildren(EngineSha256);
     internal static FalloutMainScriptCallerSource Read(FalloutImmediateScriptSource source)
     {
         source.Validate();
         return new(source.EngineSha256, source.RuntimeSha256, source.Identity,
-            FalloutAdvancementRuntimeReceipt.Hash(Contract));
+            FalloutAdvancementRuntimeReceipt.Hash(FalloutSourceMainFamily.MainRules(source.EngineSha256, Contract)));
     }
     internal void Validate()
     {
-        if (EngineSha256 != "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57")
-            throw new NotSupportedException("Selected original Main script sampling/child sequence is unowned.");
+        var selectedRules = FalloutSourceMainFamily.MainRules(EngineSha256, Contract);
         if (!FalloutAdvancementRuntimeReceipt.Digest(RuntimeSha256) || !FalloutAdvancementRuntimeReceipt.Digest(ImmediateSource) ||
-            ContractSha256 != FalloutAdvancementRuntimeReceipt.Hash(Contract))
+            ContractSha256 != FalloutAdvancementRuntimeReceipt.Hash(selectedRules))
             throw new InvalidDataException("Source Main script caller changed its selected runtime or neutral declaration.");
-        var immediate = new FalloutImmediateScriptSource(EngineSha256, RuntimeSha256, FalloutImmediateScriptSource.CurrentContractSha256);
+        var immediate = new FalloutImmediateScriptSource(EngineSha256, RuntimeSha256, FalloutImmediateScriptSource.ContractForEngine(EngineSha256));
         immediate.Validate();
         if (ImmediateSource != immediate.Identity) throw new InvalidDataException("Main caller changed its real shared interpreter/cache declaration.");
     }

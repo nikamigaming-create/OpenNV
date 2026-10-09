@@ -28,6 +28,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
             saved.Calls < 0 || (saved.Calls == 0) != (saved.LastCall is null))
             throw new InvalidDataException("Player/CELL continuation omitted its actual source/process/call owner.");
         saved.Source.Validate(); FalloutPlayerPendingSlot.Validate(saved.Pending); RequirePendingConsumersContinuation(saved);
+        if (!saved.Source.HasSourceRootStore && (saved.RootBinding is not null || saved.PlayerBracket is not null))
+            throw new InvalidDataException("FO3 Player continuation invented an absent movement bracket/root-store source arm.");
         if (saved.RootBinding is { } binding && (binding.Process != saved.CapturedProcess || binding.NativeRoot == 0 ||
             binding.Changed < 1 || binding.Changed > saved.Changed || binding.Cell.ObjectId == 0 || string.IsNullOrWhiteSpace(binding.Cell.OwnerPlugin)))
             throw new InvalidDataException("Player source root store lost its actual process/native lifetime.");
@@ -74,7 +76,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 // reaches furniture, but does not store scalar/invoke callback.
                 if (returned && call.PendingKind != FalloutPlayerPendingKind.ReferenceTravel)
                 {
-                    Need(FalloutMainPlayerCellStep.PendingSceneScalar); Need(FalloutMainPlayerCellStep.PendingCallback);
+                    if (saved.Source.HasOuterPendingScalar) Need(FalloutMainPlayerCellStep.PendingSceneScalar);
+                    Need(FalloutMainPlayerCellStep.PendingCallback);
                 }
                 if (call.PendingKind != FalloutPlayerPendingKind.ReferenceTravel) Need(FalloutMainPlayerCellStep.PendingFurniture);
                 Need(FalloutMainPlayerCellStep.PendingDeferredDestruction); Need(FalloutMainPlayerCellStep.PendingNullStore);
@@ -105,9 +108,12 @@ internal sealed partial class FalloutActorProcessRuntimeState
             if (target != (call.AfterCell is not null)) throw new InvalidDataException("Player exterior target read lost its exact selected source identity.");
             if (!target) { Finish(FalloutMainPlayerCellDisposition.CellReturned); return; }
             if (!Read(FalloutMainPlayerCellStep.TargetPhaseQuery)) Need(FalloutMainPlayerCellStep.WorldLoad);
-            Need(FalloutMainPlayerCellStep.WorldBracketSet); Need(FalloutMainPlayerCellStep.PlayerBracketSet);
-            Need(FalloutMainPlayerCellStep.CellAttach); Need(FalloutMainPlayerCellStep.RootStore);
-            Need(FalloutMainPlayerCellStep.PlayerBracketClear); Need(FalloutMainPlayerCellStep.WorldBracketClear);
+            Need(FalloutMainPlayerCellStep.WorldBracketSet);
+            if (saved.Source.HasPlayerMovementBracket) Need(FalloutMainPlayerCellStep.PlayerBracketSet);
+            Need(FalloutMainPlayerCellStep.CellAttach);
+            if (saved.Source.HasSourceRootStore) Need(FalloutMainPlayerCellStep.RootStore);
+            if (saved.Source.HasPlayerMovementBracket) Need(FalloutMainPlayerCellStep.PlayerBracketClear);
+            Need(FalloutMainPlayerCellStep.WorldBracketClear);
             Need(FalloutMainPlayerCellStep.OptionalTreeChild); Finish(FalloutMainPlayerCellDisposition.CellReturned);
         }
         catch (PlayerCellFailedPrefix) { }

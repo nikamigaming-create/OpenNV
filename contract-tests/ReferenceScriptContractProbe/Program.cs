@@ -4,6 +4,19 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--test-source-fistp"])
+{
+    SourceFistpContracts.Run();
+    return;
+}
+
+if (args is ["--audit-calling-thread-fistp", var firstPartyFloatAdapter])
+{
+    SourceFistpContracts.Run();
+    SourceMainScriptCallerContracts.RunCallingThreadFistp(firstPartyFloatAdapter);
+    return;
+}
+
 if (args is ["--test-source-sky-transfer"])
 {
     SourceSkyTransferContracts.Run();
@@ -69,6 +82,12 @@ if (args is ["--rest-host-contracts"])
 if (args is ["--test-source-rest-cues"])
 {
     SourceRestCueContracts.Run();
+    return;
+}
+
+if (args is ["--source-archive-registry-contracts"])
+{
+    SourceArchiveRegistryContracts.Run();
     return;
 }
 
@@ -231,6 +250,11 @@ if (args is ["--compiled-result-authority-contracts"])
 if (args is ["--compiled-nested-result-contracts"])
 {
     CompiledScriptContracts.NestedResults();
+    return;
+}
+if (args is ["--companion-callback-contracts"])
+{
+    CompiledScriptContracts.RunCompanionCallbacks();
     return;
 }
 if (args is ["--compiled-script-contracts"])
@@ -1130,6 +1154,7 @@ finally
 }
 
 CompiledScriptContracts.Run();
+CompiledScriptContracts.RunCompanionCallbacks();
 ActorScriptPackageContracts.Run();
 NativeSourceConstructionContracts.Run();
 NativeSourceFileContracts.Run();
@@ -1149,6 +1174,7 @@ RestWorldConsumerContracts.Run();
 SourceRestCueContracts.Run();
 SourceMenuSoundSelectionContracts.Run();
 SourceArchiveFileManagerContracts.Run();
+SourceArchiveRegistryContracts.Run();
 IndexedInterfaceSoundContracts.Run();
 PlayerAdvancementContracts.Run();
 PlayerPhysicalActivityContracts.Run();

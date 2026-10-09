@@ -106,10 +106,13 @@ internal static partial class CellGraphAuditContracts
             var emptyHeader = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(emptyHeader, 1.34f);
             File.WriteAllBytes(Path.Combine(data, Plugin), Join(Record("TES4", 0, 0, Field("HEDR", emptyHeader)), Cell(0x800, "EmptySource")));
             using (var empty = Read(Audit("empty-source", false)))
-                Require(empty.RootElement.GetProperty("coverage").GetProperty("sourceAccountingPassed").GetBoolean() &&
+                Require(!empty.RootElement.GetProperty("coverage").GetProperty("sourceAccountingPassed").GetBoolean() &&
                     !empty.RootElement.GetProperty("coverage").GetProperty("readinessPassed").GetBoolean() &&
-                    empty.RootElement.GetProperty("sourceGraph").GetProperty("denominator").GetProperty("runtimeOwnersUnverified").GetInt32() == 1,
-                    "A complete, error-free empty source CELL was mistaken for native/gameplay readiness.");
+                    empty.RootElement.GetProperty("sourceGraph").GetProperty("denominator").GetProperty("runtimeOwnersUnverified").GetInt32() == 1 &&
+                    empty.RootElement.GetProperty("alternatives").GetProperty("resources").EnumerateArray()
+                        .Any(row => row.GetProperty("path").GetString() == "meshes/characters/_1stperson/skeleton.nif" &&
+                            row.GetProperty("failures").GetArrayLength() != 0),
+                    "An empty source CELL concealed its missing first-person input or established native/gameplay readiness.");
             Reject(() => CellGraphAudit.ParseOptions([game, "x", "--scope", "component", "--runtime-config", configuration]), "--seed");
             Reject(() => CellGraphAudit.ParseOptions([game, "x", "--scope", "universe", "--runtime-config", configuration]), "scope");
             Reject(() => CellGraphAudit.ParseOptions([game, "x", "--runtime-config", configuration, "--snapshot", "x.json"]), "--seed");

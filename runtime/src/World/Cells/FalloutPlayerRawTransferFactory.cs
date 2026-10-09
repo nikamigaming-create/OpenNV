@@ -44,7 +44,8 @@ internal static class FalloutPlayerRawTransferFactory
         return new(receipt.Source.Pending.Contract, receipt.Writer == FalloutPlayerRawTransferWriter.MoveTo ?
             "source-Player-MoveTo-pending-allocation" : "source-DOOR-XTEL-pending-allocation",
             interior ? receipt.ParentCell.Cell : null, interior ? null : receipt.ParentCell.Worldspace, null,
-            position.X, position.Y, position.Z, rotation.X, rotation.Y, rotation.Z, argument, callback, furniture, receipt);
+            position.X, position.Y, position.Z, rotation.X, rotation.Y, rotation.Z, argument, callback, furniture, receipt,
+            receipt.Source.Pending.Player.Main.HasNewVegasChildren ? null : 0u);
     }
 
     private static void Require(FalloutPlayerRawTransferReceipt receipt, FalloutPlayerRawTransferWriter writer)

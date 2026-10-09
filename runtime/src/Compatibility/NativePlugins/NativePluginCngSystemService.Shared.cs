@@ -115,14 +115,16 @@ internal sealed partial class NativePluginCngSystemService
             try
             {
                 section.Entered = true;
+                var placement = original.BorrowSharedPlacement(source, verified);
+                section.CommonPlacements.Add(source.View, placement);
                 var bind = SharedPayload(writer =>
                 {
                     writer.Write((uint)NativePluginCngServiceStep.SharedBind); writer.Write(section.Id); writer.Write(remote); writer.Write(source.Maximum);
-                    writer.Write(source.View); writer.Write(source.Address); writer.Write(source.Length); writer.Write(source.Offset);
+                    writer.Write(source.View); writer.Write(source.Address); writer.Write(source.Length); writer.Write(source.Offset); writer.Write(placement);
                 });
                 using var output = Reader((_domain ?? throw new InvalidOperationException("CNG service process is absent.")).CngSystemExchange(bind));
                 if (output.ReadUInt64() != section.Id || output.ReadUInt64() != source.View || output.ReadUInt32() != source.Address ||
-                    output.ReadUInt32() != source.Length || output.ReadUInt32() != source.Offset)
+                    output.ReadUInt32() != source.Length || output.ReadUInt32() != source.Offset || output.ReadUInt64() != placement)
                     throw new InvalidDataException("Actual shared service view changed original pointer/offset/extent identity.");
                 Finish(output); section.ServiceAddresses.Add(source.View, source.Address);
                 section.ServiceAddress = source.Address;
@@ -152,9 +154,11 @@ internal sealed partial class NativePluginCngSystemService
             if (output.ReadUInt64() != id || output.ReadUInt64() != view || output.ReadUInt32() != 1)
                 throw new InvalidDataException("Actual shared service view/handle did not retire.");
             Finish(output);
+            var placement = section.CommonPlacements.GetValueOrDefault(view);
+            (_sharedOriginal ?? throw new InvalidOperationException("Shared source process owner is absent.")).RetireSharedPlacementBorrow(source, placement);
             if (last)
             {
-                section.ServiceViewRetired = true;
+                section.ServiceViewRetired = placement == 0;
                 section.Parent.CloseChecked(); section.ParentHandleRetired = true;
                 _sharedObjects.Remove((kind, section.Object));
             }
@@ -269,7 +273,8 @@ internal sealed partial class NativePluginCngSystemService
         call.Pointers.Concat([call.Object, call.Copied]).OfType<NativePluginCngSharedPointer>();
     private NativePluginCngSharedReceipt SharedReceipt(ulong call, NativePluginCngSharedSection section, NativePluginCngSharedSource source, bool viewRetired = false) =>
         new(_originalGeneration, call, Generation, ProcessId, section.Id, source, section.ServiceAddresses.GetValueOrDefault(source.View), section.RemoteHandle,
-            viewRetired, section.ParentHandleRetired);
+            viewRetired && section.CommonPlacements.GetValueOrDefault(source.View) == 0, section.ParentHandleRetired,
+            section.CommonPlacements.GetValueOrDefault(source.View), viewRetired && section.CommonPlacements.GetValueOrDefault(source.View) != 0);
     private void RequireSharedRetired()
     {
         if (_sharedFailed || _sharedViews.Count != 0 || _sharedInvocations.Count != 0 || _sharedHashObjects.Count != 0 || !SharedOwnersRetired)

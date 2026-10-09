@@ -23,11 +23,14 @@ internal sealed record FalloutMainPlayerCellSource(FalloutMainScriptCallerSource
         "genuine-child-return-and-native-publication-retirement-distinct;" +
         "failed-entered-prefix-never-replayed;current-source-process-handoff-no-native-identity-promotion";
 
+    internal bool HasPlayerMovementBracket => Main.HasNewVegasChildren;
+    internal bool HasSourceRootStore => Main.HasNewVegasChildren;
+    internal bool HasOuterPendingScalar => Main.HasNewVegasChildren;
     internal static FalloutMainPlayerCellSource Read(FalloutMainScriptCallerSource main)
     {
         main.Validate();
         return new(main, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-            main.Identity + "\0" + Rules))).ToLowerInvariant());
+            main.Identity + "\0" + FalloutSourceMainFamily.PlayerRules(main.EngineSha256, Rules)))).ToLowerInvariant());
     }
     internal void Validate()
     {

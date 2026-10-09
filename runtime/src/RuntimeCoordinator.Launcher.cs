@@ -9,7 +9,7 @@ public partial class RuntimeCoordinator
     private void LoadGodotLauncher()
     {
         var launcher = new NativeGodotLauncher();
-        launcher.Configure();
+        launcher.Configure(GodotLauncherProfileStore.Load(_options.GetValueOrDefault("profile-root")));
         launcher.LaunchRequested += request => StartInProcessLaunch(launcher, request);
         AddChild(launcher);
         SetMeta("opennv_product_entry", "godot-native-launcher-v1");

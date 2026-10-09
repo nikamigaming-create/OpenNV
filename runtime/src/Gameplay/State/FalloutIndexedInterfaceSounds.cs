@@ -68,7 +68,7 @@ internal sealed class FalloutIndexedInterfaceSounds
             restore.Selection is null || restore.LastOrdinal != restore.Voices.Count || restore.Failure is not null && string.IsNullOrWhiteSpace(restore.Failure))
             throw new InvalidDataException("Cold indexed interface audio lacks its complete selected source/caller ledger.");
         source.Selection.RequireSameSnapshot(restore.Selection);
-        var mediaHashes = new Dictionary<string, string>(StringComparer.Ordinal);
+        var mediaHashes = new Dictionary<(string Path, long SelectionOrdinal), string>();
         foreach (var row in restore.Voices)
         {
             if (row is null || row.Ordinal != _voices.Count + 1L || row.Call is null || row.Entry is null ||
@@ -85,8 +85,10 @@ internal sealed class FalloutIndexedInterfaceSounds
             if (row.MediaSha256 is { } expected)
             {
                 var path = row.LogicalPath ?? throw new InvalidDataException("Cold indexed media has no actual prepared path.");
-                if (!mediaHashes.TryGetValue(path, out var actual))
-                    mediaHashes.Add(path, actual = Source.ReadPreparedMediaSha256(path));
+                var selected = row.SelectionOrdinal ?? throw new InvalidDataException("Cold indexed media lost its actual source selection ordinal.");
+                var key = (path, selected);
+                if (!mediaHashes.TryGetValue(key, out var actual))
+                    mediaHashes.Add(key, actual = Source.ReadPreparedMediaSha256(path, selected));
                 if (actual != expected) throw new InvalidDataException("Cold indexed sound changed its complete winning media bytes.");
             }
             _voices.Add(row);

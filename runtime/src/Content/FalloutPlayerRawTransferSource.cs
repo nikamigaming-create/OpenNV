@@ -22,7 +22,7 @@ internal sealed record FalloutPlayerRawTransferSource(FalloutMainPlayerPendingSo
     {
         pending.Validate();
         return new(pending, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-            pending.Contract + "\0" + Rules))).ToLowerInvariant());
+            pending.Contract + "\0" + FalloutSourceMainFamily.RawRules(pending.Player.Main.EngineSha256, Rules)))).ToLowerInvariant());
     }
 
     internal void Validate()

@@ -8,8 +8,11 @@ internal sealed partial class FalloutReferenceWorld
     private Exception? _campaignSharedScriptConstructionFailure;
     internal bool CampaignSharedScriptRuntimeConfigured => _scriptEngineContexts is not null && _processRuntime?.MainScriptCallerConstructed == true &&
         _processRuntime.MainPlayerCellConstructed && _processRuntime.MainUtilityCommandsConstructed;
+    internal bool CampaignMainRuntimeConfigured => _processRuntime?.StandaloneMainConstructed == true || CampaignSharedScriptRuntimeConfigured;
     internal object? CampaignMainScriptCallerState => _processRuntime?.MainScriptCallerState;
-    internal string? CampaignSharedScriptSaveBlocker => CampaignChallengesConfigured && Challenges.Source is not null ?
+    internal string? CampaignSharedScriptSaveBlocker => CampaignChallengesConfigured &&
+        _campaignPlayerRuntimeSource is { } selected && FalloutSourceMainFamily.IsFallout3(selected.Receipt.EngineSha256) ? StandaloneMainSaveBlocker :
+        CampaignChallengesConfigured && Challenges.Source is not null ?
         _campaignSharedScriptConstructionFailure is not null ? "source-shared-script-construction-failed:" + _campaignSharedScriptConstructionFailure.Message :
         !CampaignSharedScriptRuntimeConfigured ? "source-shared-script-context-Main-caller-construction-unbound" :
         _scriptEngineContexts!.SaveBlocker ?? ProcessRuntime.MainScriptCallerSaveBlocker ?? ProcessRuntime.MainPlayerCellSaveBlocker ?? ProcessRuntime.MainUtilitySaveBlocker ??
@@ -19,11 +22,14 @@ internal sealed partial class FalloutReferenceWorld
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_campaignSharedScriptConstructionFailure is { } retained) throw new InvalidOperationException("Shared script construction retains its actual attempted prefix.", retained);
         if (!CampaignChallengesConfigured) throw new InvalidOperationException("Shared scripts must follow actual campaign registry construction.");
-        if (Challenges.Source is null)
+        if (FalloutSourceMainFamily.IsFallout3(runtime.Receipt.EngineSha256))
         {
-            if (restore is not null) throw new InvalidDataException("Source-absent family has a foreign immediate-script/Main continuation.");
+            if (restore is not null) throw new InvalidDataException("FO3 owns an independent Main continuation, not foreign challenge/Steam interpreters.");
+            try { ConfigureStandaloneMain(runtime); }
+            catch (Exception failure) { _campaignSharedScriptConstructionFailure = failure; throw; }
             return;
         }
+        if (Challenges.Source is null) throw new NotSupportedException("Selected original Main/interpreter construction is unowned.");
         if (!ActualProcessRuntimeConfigured) throw new InvalidOperationException("Shared scripts must reuse the genuine constructed Main runtime before bootstrap.");
         if ((_processRuntimeRestore is null) != (restore is null)) throw new InvalidDataException("Current cold shared script state is mandatory; an omitted owner cannot become a fresh constructor.");
         if (restore is not null) restore.Validate(_processRuntimeRestore ?? throw new InvalidDataException("Cold shared scripts have no actual captured Main runtime."));

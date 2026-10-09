@@ -86,20 +86,16 @@ internal sealed class FalloutQueuedReferencePriority : IDisposable
     }
     // Float32 bits and the original calling thread's actual rounding mode are
     // independent inputs. Nonfinite/out-of-range FISTP produces Int32.MinValue.
-    internal static int ConvertSourcePosition(uint bits, FalloutSourceFloatRounding rounding)
-    {
-        if (!Enum.IsDefined(rounding)) throw new NotSupportedException("Original floating-point conversion mode is unowned.");
-        var input = BitConverter.UInt32BitsToSingle(bits);
-        var rounded = rounding switch
+    internal static int ConvertSourcePosition(uint bits, FalloutSourceFloatRounding rounding) =>
+        FalloutFistp32Semantics.Read(bits, rounding switch
         {
-            FalloutSourceFloatRounding.NearestEven => Math.Round((double)input, MidpointRounding.ToEven),
-            FalloutSourceFloatRounding.Down => Math.Floor((double)input),
-            FalloutSourceFloatRounding.Up => Math.Ceiling((double)input),
-            FalloutSourceFloatRounding.TowardZero => Math.Truncate((double)input),
-            _ => throw new NotSupportedException("Original floating-point conversion mode is unowned.")
-        };
-        return !double.IsFinite(rounded) || rounded < int.MinValue || rounded > int.MaxValue ? int.MinValue : (int)rounded;
-    }
+            FalloutSourceFloatRounding.NearestEven => FalloutFistpRounding.NearestEven,
+            FalloutSourceFloatRounding.Down => FalloutFistpRounding.Down,
+            FalloutSourceFloatRounding.Up => FalloutFistpRounding.Up,
+            FalloutSourceFloatRounding.TowardZero => FalloutFistpRounding.TowardZero,
+            _ => throw new InvalidDataException("Source float conversion mode is unowned.")
+        }).Integer;
+
     internal static void RequireCell(FalloutQueuedPriorityCell cell)
     {
         if (cell is null || cell.Source is null || cell.Instance == Guid.Empty ||

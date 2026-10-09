@@ -191,8 +191,11 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         VerifyThread();
         if (_disposed && ChildExited && _process.ResourcesRetired)
         {
-            if (!CngSystemOwnersRetired) ReleaseCngSystemServiceAfterChildExit();
-            if (!ImportProviderSourcesRetired) ClearNativeImportProvidersAfterChildExit();
+            var failures = new List<Exception>();
+            try { if (!CngSystemOwnersRetired) ReleaseCngSystemServiceAfterChildExit(); } catch (Exception error) { failures.Add(error); }
+            try { if (!SharedPlacementOwnersRetired) ClearSharedPlacementsAfterChildExit(); } catch (Exception error) { failures.Add(error); }
+            try { if (!ImportProviderSourcesRetired) ClearNativeImportProvidersAfterChildExit(); } catch (Exception error) { failures.Add(error); }
+            if (failures.Count != 0) throw FaultException(new AggregateException("Independent native source/section retries failed.", failures));
             return;
         }
         if (_callDepth != 0) throw new InvalidOperationException("A native call/callback prevents retirement of its process generation.");

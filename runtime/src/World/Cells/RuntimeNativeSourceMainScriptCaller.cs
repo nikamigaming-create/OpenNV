@@ -35,7 +35,7 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
         FalloutInterfaceFade actualFade, Action<Exception> failed)
     {
         ArgumentNullException.ThrowIfNull(failed); ArgumentNullException.ThrowIfNull(actualFade);
-        if (!OperatingSystem.IsWindows() || !parent.IsInsideTree() || parent.IsQueuedForDeletion() || !world.CampaignSharedScriptRuntimeConfigured)
+        if (!OperatingSystem.IsWindows() || !parent.IsInsideTree() || parent.IsQueuedForDeletion() || !world.CampaignMainRuntimeConfigured)
             throw new NotSupportedException("Original Main caller needs its actual selected Windows/native/source construction lifetime.");
         var source = world.CampaignMainScriptSource; source.Validate();
         var result = new RuntimeNativeSourceMainScriptCaller(world, failed);

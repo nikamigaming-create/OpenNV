@@ -48,6 +48,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         RequireNotBusy(); source.Validate(); ArgumentNullException.ThrowIfNull(pending);
         if (_mainPlayerCellSource is not null || source.Main != MainScriptCallerSource() || pending.Pending || pending.Error is not null)
             throw new InvalidOperationException("Player child must construct on its actual Main and initially null pending slot once.");
+        pending.BindSourceFamily(source);
         if (saved is not null)
         {
             ValidateMainPlayerCell(saved);
@@ -134,7 +135,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 SetLastBoolean(destinationReturned);
                 if (destinationReturned && request.Kind != FalloutPlayerPendingKind.ReferenceTravel)
                 {
-                    Enter(FalloutMainPlayerCellStep.PendingSceneScalar, child => consumers.StorePendingSceneScalar(child, request));
+                    if (_mainPlayerCellSource!.HasOuterPendingScalar)
+                        Enter(FalloutMainPlayerCellStep.PendingSceneScalar, child => consumers.StorePendingSceneScalar(child, request));
                     Enter(FalloutMainPlayerCellStep.PendingCallback, child => consumers.InvokePendingCallback(child, request));
                 }
                 // Empty target assertion also reaches the original furniture
@@ -186,7 +188,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
             }) || Read(FalloutMainPlayerCellStep.ContainmentQuery, child =>
             {
                 child.Require(FalloutMainPlayerCellStep.ContainmentQuery);
-                return MainPlayerPositionContained(before, position!);
+                return MainPlayerPositionContained(child, before, position!);
             })) { Finish(FalloutMainPlayerCellDisposition.CellUnchanged); return; }
             FalloutMainPlayerCellTarget? target = null;
             Enter(FalloutMainPlayerCellStep.TargetCellRead, child =>
@@ -201,10 +203,13 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 child.Require(FalloutMainPlayerCellStep.TargetPhaseQuery); return target.SourcePhase is 3 or 6;
             })) await EnterAsync(FalloutMainPlayerCellStep.WorldLoad, child => consumers.LoadTarget(child, target, position!));
             Enter(FalloutMainPlayerCellStep.WorldBracketSet, child => consumers.SetWorldBracket(child, true));
-            Enter(FalloutMainPlayerCellStep.PlayerBracketSet, child => consumers.SetPlayerBracket(child, true));
+            if (_mainPlayerCellSource!.HasPlayerMovementBracket)
+                Enter(FalloutMainPlayerCellStep.PlayerBracketSet, child => consumers.SetPlayerBracket(child, true));
             Enter(FalloutMainPlayerCellStep.CellAttach, child => consumers.AttachCell(child, target));
-            Enter(FalloutMainPlayerCellStep.RootStore, child => consumers.StoreRoot(child, target));
-            Enter(FalloutMainPlayerCellStep.PlayerBracketClear, child => consumers.SetPlayerBracket(child, false));
+            if (_mainPlayerCellSource!.HasSourceRootStore)
+                Enter(FalloutMainPlayerCellStep.RootStore, child => consumers.StoreRoot(child, target));
+            if (_mainPlayerCellSource!.HasPlayerMovementBracket)
+                Enter(FalloutMainPlayerCellStep.PlayerBracketClear, child => consumers.SetPlayerBracket(child, false));
             Enter(FalloutMainPlayerCellStep.WorldBracketClear, child => consumers.SetWorldBracket(child, false));
             Enter(FalloutMainPlayerCellStep.OptionalTreeChild, consumers.OptionalTreeChild);
             Finish(FalloutMainPlayerCellDisposition.CellReturned);

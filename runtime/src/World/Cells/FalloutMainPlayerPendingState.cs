@@ -18,12 +18,14 @@ internal sealed partial class FalloutMainPlayerPendingState
     private bool _busy, _retired;
     private long _callbackFault;
     private FalloutActorProcessRuntimeHandoff? _cold;
-    internal FalloutExteriorCellLoaderState ExteriorLoaders { get; }
+    private readonly FalloutExteriorCellLoaderState? _exteriorLoaders;
+    internal FalloutExteriorCellLoaderState ExteriorLoaders => _exteriorLoaders ??
+        throw new NotSupportedException("source-FO3-TaskManager-reset-array-state-and-cancellation-consumers-unowned");
     internal string? SaveBlocker => _busy ? "source-Player-pending-tail-consumer-entered" :
         _error is not null ? "source-Player-pending-tail:" + _error :
         _ownedChild is not null ? "source-Player-refcount-child-cold-rebind-unowned" :
         _scalar is not null && _characterController is null ? "source-Player-character-controller-field-owner-absent" :
-        CharacterControllerSaveBlocker ?? ExteriorLoaders.SaveBlocker;
+        CharacterControllerSaveBlocker ?? _exteriorLoaders?.SaveBlocker;
     internal object State => new
     {
         source = _source,
@@ -43,7 +45,8 @@ internal sealed partial class FalloutMainPlayerPendingState
         error = _error,
         retired = _retired,
         cold = _cold,
-        exteriorLoaders = ExteriorLoaders.State,
+        exteriorLoaders = _exteriorLoaders?.State,
+        pendingWorldPrelude = _exteriorLoaders is null ? "source-FO3-TaskManager-reset-consumers-unowned" : "source-NV-exterior-map-cancellation",
         blocker = SaveBlocker
     };
     internal FalloutMainPlayerPendingState(FalloutMainPlayerPendingSource source, string stack, Guid process,
@@ -52,7 +55,7 @@ internal sealed partial class FalloutMainPlayerPendingState
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack);
         if (process == Guid.Empty) throw new InvalidDataException("Player pending constructor omitted its actual shared Main process.");
         _source = source; _stack = stack; _process = process;
-        ExteriorLoaders = new(source, stack, process, restore?.ExteriorLoaders);
+        if (source.Player.Main.HasNewVegasChildren) _exteriorLoaders = new(source, stack, process, restore?.ExteriorLoaders);
         // These are the selected Player constructor's actual null pointer and
         // zero byte. Pause, body presence and activity cannot produce either.
         if (restore is not null) Restore(restore);
@@ -150,11 +153,11 @@ internal sealed partial class FalloutMainPlayerPendingState
     {
         var result = false;
         Run(invocation, FalloutMainPlayerCellStep.PendingFlagQueries, () => result =
-            (managerWord() & 2u) == 0 && (_flags & 2) == 0);
+            FalloutSourceMainFamily.PendingFinalFlagRequired(_source.Player.Main.EngineSha256, managerWord(), _flags));
         return result;
     }
     internal void StoreFinalFlag(FalloutMainPlayerCellInvocation invocation) => Run(invocation,
-        FalloutMainPlayerCellStep.PendingFlagChild, () => { _flags |= 1; _flagStores = checked(_flagStores + 1); _ = Next(); });
+        FalloutMainPlayerCellStep.PendingFlagChild, () => { _flags = FalloutSourceMainFamily.PendingFinalFlagValue(_source.Player.Main.EngineSha256, _flags); _flagStores = checked(_flagStores + 1); _ = Next(); });
     internal FalloutPlayerTransferPayload Payload(FalloutPlayerPendingRequest request)
     {
         var payload = request.SourcePayload ?? throw new NotSupportedException("source-Player-pending-raw-payload-factory-unowned:" + request.Owner);

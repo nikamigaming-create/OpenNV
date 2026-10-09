@@ -9,7 +9,8 @@ internal sealed record NativePluginCngSharedSource(uint Kind, ulong Object, ulon
 internal sealed record NativePluginCngSharedPointer(ulong Section, ulong View, uint Offset, uint Length);
 internal sealed record NativePluginCngSharedReceipt(ulong OriginalGeneration, ulong OriginalCall,
     ulong ServiceGeneration, int ServiceProcess, ulong Section, NativePluginCngSharedSource Source,
-    uint ServiceAddress, uint RemoteHandle, bool ServiceViewRetired, bool ParentHandleRetired);
+    uint ServiceAddress, uint RemoteHandle, bool ServiceViewRetired, bool ParentHandleRetired,
+    ulong CommonPlacement = 0, bool ServiceBorrowRetired = false);
 internal sealed record NativePluginCngSharedCallReceipt(ulong OriginalCall, ulong Invocation,
     NativePluginCryptoOperation Operation, NativePluginCngServiceResult Result,
     IReadOnlyList<NativePluginCngSharedPointer?> Buffers, NativePluginCngSharedPointer? Object,
@@ -44,6 +45,7 @@ internal sealed class NativePluginCngSharedSection(ulong id, NativePluginCngShar
     internal Dictionary<ulong, NativePluginCngSharedSource> Views { get; } = [];
     internal Dictionary<ulong, NativePluginCngSectionHandle> References { get; } = [];
     internal Dictionary<ulong, uint> ServiceAddresses { get; } = [];
+    internal Dictionary<ulong, ulong> CommonPlacements { get; } = [];
     internal uint RemoteHandle { get; set; }
     internal uint ServiceAddress { get; set; }
     internal bool Entered { get; set; }

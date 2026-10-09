@@ -24,15 +24,15 @@ internal sealed record FalloutArchiveDirectoryAttempt(long Ordinal, string RawPa
 internal sealed record FalloutArchiveFileManagerSnapshot(string Schema, string SourceSha256,
     FalloutArchiveStartupModes Modes, FalloutArchiveInvalidationInput? Invalidation,
     IReadOnlyList<FalloutBsaDirectorySource> Archives, IReadOnlyList<FalloutArchiveDirectoryAttempt> Attempts,
-    FalloutArchiveModeFailure? SetterFailure, string? Failure);
+    FalloutArchiveModeFailure? SetterFailure, string? Failure, FalloutSourceArchiveRegistrySnapshot? Registry = null);
 internal sealed record FalloutLooseSoundDirectory(string Root, IReadOnlyList<string> Paths, string ProducerSha256);
 
 // One selected source lifetime; it borrows archive readers from that lifetime.
 // Actual directory calls keep their returned/refused prefix independently of
 // later RNG, audio decoding, native allocation and native voice completion.
-internal sealed class FalloutArchiveFileManager
+internal sealed partial class FalloutArchiveFileManager
 {
-    internal const string Schema = "opennv-source-archive-file-manager/v1";
+    internal const string Schema = "opennv-source-archive-file-manager/v2";
     private readonly object _sync = new();
     private readonly FalloutArchiveFileManagerSource _source;
     private readonly FalloutArchiveStartupModes _modes;
@@ -49,7 +49,7 @@ internal sealed class FalloutArchiveFileManager
     internal FalloutArchiveFileManager(FalloutArchiveFileManagerSource source, FalloutArchiveStartupModes modes,
         IReadOnlyList<FalloutBsaArchive> archives, FalloutArchiveInvalidationInput? invalidation,
         Func<string, string, FalloutLooseSoundDirectory> loose, Func<string, string?> resolve,
-        FalloutArchiveFileManagerSnapshot? restore = null)
+        FalloutArchiveFileManagerSnapshot? restore = null, FalloutSourceArchiveRegistry? registry = null)
     {
         source.Validate(); modes.Validate(); invalidation?.Validate();
         ArgumentNullException.ThrowIfNull(archives); ArgumentNullException.ThrowIfNull(loose); ArgumentNullException.ThrowIfNull(resolve);
@@ -60,7 +60,10 @@ internal sealed class FalloutArchiveFileManager
         _archiveSources = Array.AsReadOnly(archives.Select(archive => archive.DirectorySource).ToArray());
         if (_archiveSources.Select(row => row.Archive).Distinct(StringComparer.OrdinalIgnoreCase).Count() != archives.Count)
             throw new InvalidDataException("Archive input inventory repeats a physical source reader.");
-        _loose = loose; _resolve = resolve;
+        _loose = loose; _resolve = resolve; _registry = registry;
+        if (modes.UseArchives == 0 && registry is not null)
+            throw new InvalidDataException("Disabled archives acquired a source registry.");
+        registry?.RequireFileManagerOwner(source, modes);
         if (restore is not null) Restore(restore);
     }
 
@@ -74,15 +77,23 @@ internal sealed class FalloutArchiveFileManager
             try
             {
                 var current = ReadInputs(raw, extension);
-                _attempts[^1] = row with { Phase = FalloutArchiveDirectoryPhase.Returned,
-                    OrderSha256 = current.OrderSha256, ProducerSha256 = current.ProducerSha256 };
+                _attempts[^1] = row with
+                {
+                    Phase = FalloutArchiveDirectoryPhase.Returned,
+                    OrderSha256 = current.OrderSha256,
+                    ProducerSha256 = current.ProducerSha256
+                };
                 return current;
             }
             catch (Exception error) when (FalloutPlayerPhysicalActivity.Ordinary(error))
             {
                 _failure = error.Message;
-                _attempts[^1] = row with { Phase = FalloutArchiveDirectoryPhase.Failed,
-                    FailureType = error.GetType().Name, Error = error.Message };
+                _attempts[^1] = row with
+                {
+                    Phase = FalloutArchiveDirectoryPhase.Failed,
+                    FailureType = error.GetType().Name,
+                    Error = error.Message
+                };
                 throw;
             }
             finally { _entered = false; }
@@ -139,6 +150,7 @@ internal sealed class FalloutArchiveFileManager
         }
         else
         {
+            if (_registry is not null) return ReadRegisteredSoundDirectory(raw, extension, folder);
             if (_invalidation?.UnownedReason is { } unowned)
                 throw new NotSupportedException("Archive visibility has no genuine startup search-root/invalidation observation: " + unowned);
             if (_invalidation is { Present: true, Bytes: > 0 })
@@ -183,7 +195,7 @@ internal sealed class FalloutArchiveFileManager
         {
             ObjectDisposedException.ThrowIf(_retired, this);
             if (_entered) throw new NotSupportedException("File-manager capture intersects an entered original source directory caller.");
-            return new(Schema, _source.Identity, _modes, _invalidation, _archiveSources, _attempts.ToArray(), _setterFailure, _failure);
+            return new(Schema, _source.Identity, _modes, _invalidation, _archiveSources, _attempts.ToArray(), _setterFailure, _failure, _registry?.Capture());
         }
     }
 
@@ -216,7 +228,8 @@ internal sealed class FalloutArchiveFileManager
         if (saved.Schema != Schema || saved.SourceSha256 != _source.Identity || saved.Modes is null || saved.Archives is null ||
             saved.Attempts is null || JsonSerializer.Serialize(saved.Modes) != JsonSerializer.Serialize(_modes) ||
             JsonSerializer.Serialize(saved.Invalidation) != JsonSerializer.Serialize(_invalidation) ||
-            JsonSerializer.Serialize(saved.Archives) != JsonSerializer.Serialize(_archiveSources))
+            JsonSerializer.Serialize(saved.Archives) != JsonSerializer.Serialize(_archiveSources) ||
+            JsonSerializer.Serialize(saved.Registry) != JsonSerializer.Serialize(_registry?.Capture()))
             throw new InvalidDataException("Cold file manager lost its actual startup modes/archive/input identities.");
         foreach (var row in saved.Attempts)
         {

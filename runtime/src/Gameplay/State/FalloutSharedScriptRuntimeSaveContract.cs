@@ -21,7 +21,7 @@ internal static class FalloutSharedScriptRuntimeSaveContract
             throw new InvalidDataException("Main/script continuation selected another campaign source lifetime.");
         if (saved.MainField.Error is not null || saved.MainCaller.LastCall is { Disposition: FalloutMainScriptCallerDisposition.Failed } ||
             saved.PlayerCell.LastCall is { Disposition: FalloutMainPlayerCellDisposition.Failed } || saved.PlayerCell.Pending.Error is not null ||
-            saved.PlayerCell.PendingConsumers.Error is not null || saved.PlayerCell.PendingConsumers.ExteriorLoaders.Error is not null ||
+            saved.PlayerCell.PendingConsumers.Error is not null || saved.PlayerCell.PendingConsumers.ExteriorLoaders?.Error is not null ||
             saved.PlayerCell.PendingConsumers.CharacterController?.Error is not null ||
             saved.PlayerCell.Pending.Pending is { SourcePayload: null } || saved.PlayerCell.Pending.Pending?.SourcePayload?.Callback is not null ||
             saved.Utilities.LastFrame?.Error is not null || saved.Utilities.LastCommand?.Error is not null ||

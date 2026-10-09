@@ -81,10 +81,16 @@ void cng_shared_service_release_view(CngSystemService& owner, std::uint64_t id, 
         throw Fatal(ERROR_BUSY, "Shared CNG section is retained by an entered invocation or live hash object.");
     view.release_entered = true;
     const auto base = view.base;
-    if (!UnmapViewOfFile(base)) throw Fatal(GetLastError(), "Shared CNG service view release failed with retained section.");
-    view.base = nullptr; MEMORY_BASIC_INFORMATION memory{};
-    if (!VirtualQuery(base, &memory, sizeof(memory)) || memory.State != MEM_FREE)
-        throw Fatal(ERROR_INVALID_DATA, "Shared CNG service view remains mapped after release.");
+    if (!view.placement) {
+        if (!UnmapViewOfFile(base)) throw Fatal(GetLastError(), "Shared CNG service view release failed with retained section.");
+        view.base = nullptr; MEMORY_BASIC_INFORMATION memory{};
+        if (!VirtualQuery(base, &memory, sizeof(memory)) || memory.State != MEM_FREE)
+            throw Fatal(ERROR_INVALID_DATA, "Shared CNG service view remains mapped after release.");
+    } else {
+        // The entered CNG borrow retires here. The actual mapping remains
+        // owned by the parent/source allocator until its independent release.
+        view.base = nullptr;
+    }
     section.views.erase(view_id);
     if (section.views.empty()) {
         section.release_entered = true;
@@ -109,7 +115,7 @@ void cng_shared_service_step(const Frame& frame, Reader& reader, CngServiceStep 
     if (step == CngServiceStep::shared_bind) {
         const auto id = reader.get<std::uint64_t>(); const auto handle = reader.get<std::uint32_t>();
         const auto maximum = reader.get<std::uint32_t>(); const auto view_id = reader.get<std::uint64_t>();
-        const auto base = reader.get<std::uint32_t>(); const auto length = reader.get<std::uint32_t>(); const auto offset = reader.get<std::uint32_t>(); reader.finish();
+        const auto base = reader.get<std::uint32_t>(); const auto length = reader.get<std::uint32_t>(); const auto offset = reader.get<std::uint32_t>(); const auto placement = reader.get<std::uint64_t>(); reader.finish();
         if (!id || handle == UINT32_MAX || !maximum || !view_id || !base || !length || offset >= maximum || length > maximum - offset)
             throw Fatal(ERROR_INVALID_DATA, "Shared CNG section bind repeats or omits its actual duplicated handle/extent.");
         if (!shared.sections.count(id)) {
@@ -119,14 +125,15 @@ void cng_shared_service_step(const Frame& frame, Reader& reader, CngServiceStep 
         } else if (handle || shared.sections.at(id).maximum != maximum)
             throw Fatal(ERROR_INVALID_DATA, "Shared CNG alias changed its canonical section handle/extent.");
         auto& current = cng_shared_service_section(owner, id);
-        CngSharedServiceView view; view.id = view_id; view.length = length; view.offset = offset;
+        CngSharedServiceView view; view.id = view_id; view.placement = placement; view.length = length; view.offset = offset;
         if (!current.views.emplace(view_id, view).second) throw Fatal(ERROR_INVALID_DATA, "Shared CNG source view bind repeated.");
         auto& mapped = current.views.at(view_id);
-        mapped.base = MapViewOfFileEx(current.handle, FILE_MAP_READ | FILE_MAP_WRITE, 0, offset, length, reinterpret_cast<void*>(base));
+        mapped.base = placement ? reinterpret_cast<void*>(base) :
+            MapViewOfFileEx(current.handle, FILE_MAP_READ | FILE_MAP_WRITE, 0, offset, length, reinterpret_cast<void*>(base));
         if (!mapped.base) throw Fatal(GetLastError(), "Exact original CNG view address collides or could not map in the service.");
         if (address(mapped.base) != base) throw Fatal(ERROR_INVALID_ADDRESS, "CNG service map replaced the original caller address.");
         (void)cng_shared_service_view(owner, CngSharedPointer{id, view_id, offset, length});
-        receipt.put(id); receipt.put(view_id); receipt.put(address(mapped.base)); receipt.put(length); receipt.put(offset);
+        receipt.put(id); receipt.put(view_id); receipt.put(address(mapped.base)); receipt.put(length); receipt.put(offset); receipt.put(placement);
     } else if (step == CngServiceStep::shared_release) {
         const auto id = reader.get<std::uint64_t>(); const auto view = reader.get<std::uint64_t>(); reader.finish();
         cng_shared_service_release_view(owner, id, view); receipt.put(id); receipt.put(view); receipt.put(1U);

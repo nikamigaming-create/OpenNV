@@ -35,7 +35,9 @@ internal sealed class FalloutScriptEngineContexts : IDisposable
     };
     internal FalloutScriptEngineContexts(FalloutImmediateScriptSource source, FalloutScriptEngineContextsSnapshot? restore = null)
     {
-        source.Validate(); _source = source;
+        source.Validate();
+        if (!source.HasImmediateInterpreter) throw new NotSupportedException("FO3 Main cached fields do not admit an unreviewed shared immediate interpreter.");
+        _source = source;
         if (restore is null) return;
         Validate(restore);
         if (restore.Source != source.Identity) throw new InvalidDataException("Cold interpreter context changed selected source.");

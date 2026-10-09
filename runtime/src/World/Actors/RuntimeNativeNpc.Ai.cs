@@ -59,6 +59,7 @@ internal partial class RuntimeNativeNpc
         ? throw new NotSupportedException("Current AI procedure has no admitted native continuation.")
         : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
+        : _followPackage is not null ? throw new NotSupportedException("Follow script-visible procedure code has no selected source declaration.")
         : _guardPackage is not null ? throw new NotSupportedException("Guard script-visible procedure code has no source declaration.")
         : _escortPackage is not null ? _escortProgress?.Complete == true ? 17 : _escortStatus switch
         {
@@ -120,7 +121,8 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = _sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null ? (int?)null : CurrentAiProcedure,
+        currentProcedure = _sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null || _followPackage is not null ? (int?)null : CurrentAiProcedure,
+        follow = FollowState,
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,
@@ -218,7 +220,9 @@ internal partial class RuntimeNativeNpc
         else if (_aiReferenceState?.PackageAssignment is { } retained && _aiReferenceState.PackageMotion?.Package != retained.Package)
             retained.Bind(stack, _packageEvents);
         RestoreScriptPackageLifecycle();
+        RestoreFollowLifecycleBeforeSelection();
         RestoreMarkerTravelLifecycleBeforeSelection();
+        BindFollowMotionCapture();
         if (_aiReferenceState is { } packageState)
             packageState.CapturePackageAssignment = _packageAssignmentCapture = () => FalloutActorPackageAssignment.Capture(stack, _packageEvents, _boundScriptPackageRevision);
         BindFailureCapture();
@@ -348,7 +352,8 @@ internal partial class RuntimeNativeNpc
         if (_animation is not null || _responseIdleActive || _packageIdles is null || _packageIdleError is not null ||
             _aiError is not null || _sitting is 2 or 4 || _travelActive || _escortPackage is not null && _escortProgress?.Complete != true ||
             _patrol is not null && _patrolProgress?.Arrived != true ||
-            _editorTravel is not null && _editorTravelProgress?.Complete != true) return delta;
+            _editorTravel is not null && _editorTravelProgress?.Complete != true ||
+            _followPackage is not null && (!_followTargetObserved || Combat?.PackageMoving != false)) return delta;
         var remaining = _packageIdles.AdvanceWait(delta);
         try
         {
@@ -431,6 +436,7 @@ internal partial class RuntimeNativeNpc
                 _packageIdleSource = null;
                 _packageIdles = null;
                 _travelProgress?.Cancel();
+                ClearFollow();
                 ClearFurniture();
                 _findFurniture = null;
                 if (_aiReferenceState?.ProcedureCaptureBlocker == FindFurnitureCaptureBlocker)
@@ -455,6 +461,7 @@ internal partial class RuntimeNativeNpc
             _packageIdles = new(_packageIdleSource, _idleReplays,
                 idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
             if (_packageIdleSource.Procedure == 0) { BeginFindFurniture(selected); return; }
+            if (_packageIdleSource.Procedure == 1) { BeginFollow(selected, restoring); return; }
             if (_packageIdleSource.Procedure == 2) { BeginEscort(selected, restoring); return; }
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, restoring); return; }
@@ -498,7 +505,7 @@ internal partial class RuntimeNativeNpc
                 throw new NotSupportedException($"PACK {selected.FormKey} requires its furniture location-radius owner.");
             BeginFurniturePackage(selected, reference, furniture, restoring);
         }
-        catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException or InvalidOperationException)
+        catch (Exception error)
         {
             var changed = _aiError != error.Message;
             _aiError = error.Message;

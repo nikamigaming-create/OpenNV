@@ -24,6 +24,7 @@ internal sealed class FalloutCampaignMainScriptConsumers(FalloutMainScriptCaller
     public void Prologue(FalloutMainScriptInvocation invocation)
     {
         invocation.Require(FalloutMainScriptCallerStep.Prologue);
+        if (!Source.HasNewVegasChildren) { invocation.Owner.ExecuteStandaloneMainPrologue(invocation); return; }
         using var scope = invocation.Owner.EnterBoundMainUtilityScope(invocation);
         invocation.Owner.ExecuteMainUtilities(invocation);
     }

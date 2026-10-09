@@ -400,12 +400,12 @@ void io_flush_detach(const Frame& frame) {
     if (!state->io) return; auto& owner = *state->io; owner.loader_retiring = false;
     state->calls.push_back(frame.header.id);
     for (const auto& event : owner.pending) io_event(PluginIoFile{event.capability, reinterpret_cast<HANDLE>(event.handle), false}, event.api, event.count, event.error);
-    owner.pending.clear(); mutex_flush_detach(); crt_flush_detach(); find_flush_detach(); mapping_flush_detach(); cng_client_flush_detach(); crypto_flush_detach(); state->calls.pop_back();
+    owner.pending.clear(); mutex_flush_detach(); crt_flush_detach(); find_flush_detach(); mapping_flush_detach(); shared_placement_flush_detach(); cng_client_flush_detach(); crypto_flush_detach(); state->calls.pop_back();
 }
 void io_retire() {
     if (!state->io) return; auto& owner = *state->io;
     if (!owner.files.empty() || !owner.pending.empty()) throw Fatal(ERROR_BUSY, "Selected native file capabilities remain after module retirement.");
-    mutex_retire(); mapping_retire(); cng_client_require_retired(); crypto_retire(); crt_retire(); find_retire(); owner.imports.clear();
+    shared_placement_require_retired(); mutex_retire(); mapping_retire(); cng_client_require_retired(); crypto_retire(); crt_retire(); find_retire(); owner.imports.clear();
     if (owner.stdin_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdin_file)) throw Fatal(GetLastError(), "Native standard input boundary did not retire."); owner.stdin_file = INVALID_HANDLE_VALUE; }
     if (owner.stdout_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdout_file)) throw Fatal(GetLastError(), "Native stdout diagnostic file did not retire."); owner.stdout_file = INVALID_HANDLE_VALUE; }
     if (owner.stderr_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stderr_file)) throw Fatal(GetLastError(), "Native stderr diagnostic file did not retire."); owner.stderr_file = INVALID_HANDLE_VALUE; }

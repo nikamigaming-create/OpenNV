@@ -45,16 +45,17 @@ internal sealed partial class FalloutReferenceWorld
         if (_currentPlayerProcessCell is null) throw new NotSupportedException("actual-Player-parent-CELL-producer-unbound");
         return _currentPlayerProcessCell() is { } cell ? ReadMainPlayerSourceCell(cell) : null;
     }
-    internal FalloutMainPlayerCellTarget ReadMainPlayerTargetCell(FalloutMainPlayerCellInvocation invocation,
+    internal FalloutMainPlayerCellTarget? ReadMainPlayerTargetCell(FalloutMainPlayerCellInvocation invocation,
         FalloutMainPlayerSourceCell before, FalloutMainPlayerSourcePosition position)
     {
         invocation.Require(FalloutMainPlayerCellStep.TargetCellRead);
         if (ReadMainPlayerSourceCell(before.Source.Cell) != before || (before.CellFlags & 1) != 0 ||
             before.Source.Worldspace is not { } world)
             throw new InvalidDataException("Player exterior lookup has no actual winning current CELL/world declaration.");
-        var rounding = position.Rounding.Require();
-        var x = FalloutQueuedReferencePriority.ConvertSourcePosition(position.XBits, rounding) >> 12;
-        var y = FalloutQueuedReferencePriority.ConvertSourcePosition(position.YBits, rounding) >> 12;
+        RequireCampaignMainPlayerInvocation(invocation, FalloutMainPlayerCellStep.TargetCellRead);
+        var (x, y) = ProcessRuntime.ConvertMainPlayerSourceGrid(invocation, position.XBits, position.YBits, FalloutSourceFistpSite.PlayerTargetCell);
+        if (FalloutSourceMainFamily.IsFallout3(CampaignMainScriptSource.EngineSha256) &&
+            (x is < short.MinValue or > short.MaxValue || y is < short.MinValue or > short.MaxValue)) return null;
         var cell = _mainPlayerExterior.SpatialCellAtSourceCoordinates(world, x, y);
         var source = ReadMainPlayerSourceCell(cell);
         if (source.X != x || source.Y != y || source.Source.Worldspace != world || (source.CellFlags & 1) != 0)

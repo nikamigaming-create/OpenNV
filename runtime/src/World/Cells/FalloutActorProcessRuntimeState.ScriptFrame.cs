@@ -93,6 +93,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IFalloutChalleng
     public FalloutChallengeGameModeObservation Observe()
     {
         var source = ScriptFrameSource(); var frame = _scriptFrame!;
+        if (!source.HasImmediateInterpreter) throw new NotSupportedException("FO3 Main sampling is distinct from an admitted challenge immediate-script scalar consumer.");
         if (MainScriptCallerFailure is { } caller) throw new InvalidOperationException("Source Main caller retains its exact entered child prefix: " + caller);
         if (frame.Error is not null) throw new InvalidOperationException("Source Main GameMode sample retains its exact failed write: " + frame.Error);
         return new(source.EngineSha256, source.Identity, frame.Changed, !frame.BlocksGameMode);

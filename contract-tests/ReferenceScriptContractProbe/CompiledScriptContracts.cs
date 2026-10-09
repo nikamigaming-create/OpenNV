@@ -156,7 +156,7 @@ internal static partial class CompiledScriptContracts
         var absent = scripts.Dispatch(Key(0x904), "GameMode");
         Require(absent.Error?.StartsWith("Compiled:", StringComparison.Ordinal) == true && world.Get(Key(0x904)).Read(1) == 0,
             "Missing SCN framing was admitted or ran source fallback.");
-        var death = scripts.Dispatch(Key(0x905), "OnDeath");
+        var death = scripts.Dispatch(Key(0x905), "OnMurder");
         Require(death.Error?.Contains("filter/callback semantics are unowned", StringComparison.Ordinal) == true &&
             world.Get(Key(0x905)).Read(1) == 0, "Unowned compiled event semantics were silently dropped.");
     }
@@ -217,7 +217,7 @@ internal static partial class CompiledScriptContracts
             Script(0x50, main, [Field("SCRO", U32(0x901)), Field("SCRO", U32(0x20)), Field("SCRO", U32(0x21)), Field("SCRV", U32(3))],
                 sourcePresent ? "array_var value\nfloat suffix\nshort target\nshort integral\nfloat sourceOnlyWithoutSlot\nbegin GameMode\nset value to 999\nend\nbegin OnLoad\nset value to 998\ninvalid diagnostic source without end" : null),
             Script(0x51, Join(Instruction(0x1d)), []), Script(0x52, fault, [Field("SCRO", U32(0x20))]), Script(0x53, activation, []),
-            Script(0x54, Set('f', 1, " 999"), []), Script(0x55, Join(Instruction(0x1d), Block(10, Set('f', 1, " 999"))), []),
+            Script(0x54, Set('f', 1, " 999"), []), Script(0x55, Join(Instruction(0x1d), Block(11, Set('f', 1, " 999"))), []),
             Script(0x30, Instruction(0x1d), [], quest: true),
             Record("QUST", 0x20, Field("DATA", new byte[8]), Field("SCRI", U32(0x30)), Field("INDX", U16(10)), Field("QSDT", [0]),
                 Field("SCHR", Header(stage, 1)), Field("SCDA", stage), Field("SCRO", U32(0x20)),

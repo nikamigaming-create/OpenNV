@@ -81,10 +81,10 @@ internal sealed class FalloutIndexedInterfaceSoundSource
         // the next source call; this receipt keeps the actual earlier path.
     }
 
-    internal string ReadPreparedMediaSha256(string logicalPath)
+    internal string ReadPreparedMediaSha256(string logicalPath, long selectionOrdinal)
     {
         var source = _records.OwnedSource ?? throw new NotSupportedException("Indexed sound media has no actual source graph.");
-        if (!source.TryRead(logicalPath, null, out var bytes, out _))
+        if (!source.TryReadSourceMenuAudio(logicalPath, selectionOrdinal, out var bytes, out _))
             throw new FileNotFoundException("Indexed sound continuation lost its actual winning media.", logicalPath);
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
     }

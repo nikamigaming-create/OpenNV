@@ -491,6 +491,7 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_crypto.inc"
 #include "opennv_plugin_cng_client.inc"
 #include "opennv_plugin_import_providers.inc"
+#include "opennv_plugin_shared_placement.inc"
 #include "opennv_plugin_mappings.inc"
 #include "opennv_plugin_cng_shared_client.inc"
 #include "opennv_plugin_source_objects.inc"

@@ -12,8 +12,7 @@ internal static partial class RuntimeNativePlayerMoves
         world.RequireCampaignMainPlayerInvocation(invocation, FalloutMainPlayerCellStep.PendingDestination);
         var payload = world.ReadMainPlayerPendingPayload(request);
         world.RequireSourcePlayerRawTransfer(payload);
-        var placement = world.ReadSourcePlayerRawPlacement(request,
-            new(null, "actual-original-transfer-thread-FISTP-rounding-producer-unowned"));
+        var placement = world.ReadSourcePlayerRawPlacement(invocation, request);
         return (placement, RawTransform(placement, player.UnitsToMeters));
     }
     private static Transform3D RawTransform(FalloutReferencePlacement placement, float unitsToMeters)

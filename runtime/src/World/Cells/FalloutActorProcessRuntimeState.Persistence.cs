@@ -8,7 +8,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
     {
         RequireNotBusy(); RequireMainScriptClosureBoundary(retiring: false); RequireMainUtilityBoundary(retiring: false);
         return new(Schema, _source.Contract, _stack, _player, _process, _sequence, _forced, _travelCounter,
-            _main.ToArray(), _travel, _actors.Values.ToArray(), _cold, CaptureMainFrame());
+            _main.ToArray(), _travel, _actors.Values.ToArray(), _cold, CaptureMainFrame(), CaptureSourceFistp(), CaptureStandaloneMain());
     }
     private void Restore(FalloutActorProcessRuntimeSnapshot saved)
     {
@@ -22,7 +22,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         }
         _forced = saved.MainForcedProcessing; _travelCounter = saved.PlayerTravelCounter; _sequence = saved.Sequence;
         _main.AddRange(saved.MainOperations); _travel = saved.Travel;
-        RestoreMainFrame(saved.MainFrame);
+        RestoreMainFrame(saved.MainFrame); RestoreSourceFistp(saved.Fistp);
         _cold = new(saved.CapturedProcess, _process, Next());
         // No source writer, hour, completion or constructor is replayed. A
         // failed/in-flight original invocation remains failed/in-flight.
@@ -41,7 +41,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
             saved.MainOperations is null || saved.MainOperations.Any(value => value is null) || saved.Actors is null || saved.Actors.Any(actor => actor is null || actor.Source is null) ||
             saved.Actors.Select(actor => actor.Source.Reference).Distinct(FalloutFormKeyComparer.Instance).Count() != saved.Actors.Count)
             throw new InvalidDataException("Process runtime snapshot has no complete source/current lifetime.");
-        ValidateRuntimeMainFrame(saved);
+        ValidateRuntimeMainFrame(saved); ValidateRuntimeSourceFistp(saved);
+        if (saved.StandaloneMain is { } standalone) ValidateStandaloneMain(standalone, saved);
         var active = 0; long previous = 0; var identities = new HashSet<Guid>();
         foreach (var item in saved.MainOperations)
         {

@@ -88,7 +88,10 @@ internal static partial class CellGraphAuditContracts
                         semantics.GetProperty("adjacencyTrianglesExcludedByFlags").GetArrayLength() == (mode == "source-flag8-out-of-bounds" ? 1 : 0),
                         "The complete source report omitted an NVEX entry, cleared a repeated target refusal or claimed excluded adjacency inspection.");
                 }
-                Require(report.RootElement.GetProperty("coverage").GetProperty("sourceAccountingPassed").GetBoolean() == valid &&
+                Require(!report.RootElement.GetProperty("coverage").GetProperty("sourceAccountingPassed").GetBoolean() &&
+                    report.RootElement.GetProperty("alternatives").GetProperty("resources").EnumerateArray()
+                        .Any(row => row.GetProperty("path").GetString() == "meshes/characters/_1stperson/skeleton.nif" &&
+                            row.GetProperty("failures").GetArrayLength() != 0) &&
                     !report.RootElement.GetProperty("coverage").GetProperty("readinessPassed").GetBoolean(),
                     "Exact external target failures were cleared or source accounting became runtime readiness.");
                 using var cell = Read(Path.Combine(output, "cell-FalloutNV-esm-000800.private.json"));

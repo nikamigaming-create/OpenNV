@@ -17,7 +17,7 @@ internal partial class RuntimeNativeNpc
         (_packageIdleSource is null ? _packageIdles is null && _idleReplays.Remaining.Count == 0 : _packageIdles is not null) &&
         _findFurniture is null && _seat is null && _sitting == 0 && !_furnitureApproaching && !_travelActive &&
         _travelProgress?.ArrivalPending != true && _escortPackage is null && _editorTravel is null &&
-        _nativeMarkerTravel is null && _dialoguePackage is null && _guardPackage is null && _patrol is null &&
+        _nativeMarkerTravel is null && _dialoguePackage is null && _guardPackage is null && _patrol is null && _followPackage is null &&
         _animation is null && !_responseIdleActive && AnimationError is null && _animationSounds?.CanCaptureSilent != false && _conversationTarget is null &&
         CanCaptureStoppedAiPose() && !_baseLocomotionMoving && _baseClock.Resource.Length != 0;
 

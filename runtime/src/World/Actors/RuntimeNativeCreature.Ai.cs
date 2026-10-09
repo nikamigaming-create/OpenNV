@@ -32,7 +32,9 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutFormKey? _waitingForTarget;
     internal Action<FalloutDialoguePackage, Action>? BeginPackageDialogue { get; set; }
     internal bool FollowingPlayer => _aiState?.PlayerTeammate == true && _aiError is null &&
-        _followPackage?.Target == _aiRecords?.RuntimeFormKey(0x14) && Combat?.Dead == false && !_aiState.Restrained;
+        _packageEvents is { Error: null, Done: false } && _followPackage is not null &&
+        _aiPackage?.FormKey == _followPackage.Form && _followPackage.Target == _aiRecords?.RuntimeFormKey(0x14) &&
+        _aiWorld?.IsEnabled(Appearance.Reference!.Value) == true && Combat?.Dead == false && !_aiState.Restrained;
     internal object AiState => new
     {
         package = _aiPackage?.FormKey.ToString(),
@@ -79,6 +81,8 @@ internal sealed partial class RuntimeNativeCreature
         _aiState.CapturePackageAssignment = _packageAssignmentCapture = () => _initialPackageSelected
             ? FalloutActorPackageAssignment.Capture(records, _packageEvents, _boundScriptPackageRevision) : _aiState.PackageAssignment;
         RestoreScriptPackageLifecycle();
+        RestoreFollowLifecycleBeforeSelection();
+        BindFollowMotionCapture();
         RestoreEventIdle();
     }
 
@@ -95,6 +99,7 @@ internal sealed partial class RuntimeNativeCreature
 
     public override void _ExitTree()
     {
+        RetainFollowMotion();
         if (_aiState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
         {
             if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
@@ -165,19 +170,20 @@ internal sealed partial class RuntimeNativeCreature
         return _aiWorld!.EvaluateActorReferenceCondition(Appearance.Reference!.Value, condition, placement, Skeleton.UnitsToMetres)!.Value;
     }
 
-    private void SelectPackage()
+    private void SelectPackage(double elapsed)
     {
         var previousFailure = _failedPackage;
         _failedPackage = null;
         var retained = !_initialPackageSelected ? _aiState!.PackageMotion : null;
         var restoreTravel = retained?.Travel is not null;
         var restoreGuard = retained?.Guard is not null;
+        var restoreFollow = retained?.Follow is not null;
         var choice = _aiState!.PendingPackageChoice;
-        var selected = restoreTravel || restoreGuard ? _aiRecords!.GetEffective(retained!.Package) :
+        var selected = restoreTravel || restoreGuard || restoreFollow ? _aiRecords!.GetEffective(retained!.Package) :
             choice is not null ? choice.Bind(_aiRecords!, _aiState) : SelectSourcePackage(reevaluateScript: _initialPackageSelected);
         var selectionRevision = ScriptPackageRevision;
         _observedScriptPackageRevision = _bindingScriptPackageRevision = selectionRevision;
-        if (!restoreTravel && !restoreGuard) _aiState.PendingPackageChoice = null;
+        if (!restoreTravel && !restoreGuard && !restoreFollow) _aiState.PendingPackageChoice = null;
         if (_aiError is not null && selected is not null && previousFailure == selected.FormKey)
         { _failedPackage = previousFailure; return; }
         _aiError = null;
@@ -190,7 +196,14 @@ internal sealed partial class RuntimeNativeCreature
         FalloutGuardPackage? guard = null;
         if (source is not null)
         {
-            if (source.Procedure == 1) follow = FalloutFollowPackage.Read(selected!);
+            if (source.Procedure == 1)
+            {
+                follow = FalloutFollowPackage.Read(selected!);
+                follow.RequireActorTarget(_aiRecords!, Appearance.Reference!.Value);
+                if (source.Idles.Count != 0)
+                    throw new NotSupportedException("Creature Follow idle collection requires its native collection clock owner.");
+                if (restoreFollow) follow.ValidateContinuation(_aiRecords!, Appearance.Reference!.Value, retained!.Follow!);
+            }
             else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
             else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!);
             else if (source.Procedure == 15)
@@ -202,11 +215,12 @@ internal sealed partial class RuntimeNativeCreature
             else throw new NotSupportedException($"Creature package {source.Form} procedure {source.Procedure} is unbound.");
         }
         var restoredDialogue = !_initialPackageSelected && _aiState.ScriptPackage?.Pending != true && dialogue?.Type == 1 && _aiState!.PackageMotion is { DialogueCompleted: true } motion && motion.Package == source!.Form;
-        if (!restoreTravel && !restoreGuard && _packageEvents!.Active is { } active &&
+        if (!restoreTravel && !restoreGuard && !restoreFollow && _packageEvents!.Active is { } active &&
             (active.Form != selected?.FormKey || _aiState.ScriptPackage?.Pending == true))
             _packageEvents.Change(null);
-        if (selectionRevision != ScriptPackageRevision || !restoreTravel && !restoreGuard &&
+        if (selectionRevision != ScriptPackageRevision || !restoreTravel && !restoreGuard && !restoreFollow &&
             _aiState.PendingPackageChoice is not null) { _evaluateRequested = true; return; }
+        if (_followPackage is not null && _followPackage.Form != selected?.FormKey) Combat!.RetireFollowRoute();
         if (travel is not null) BeginTravel(selected!, restoreTravel);
         else { _travelPackage = null; _travelProgress = null; _travelDestination = null; }
         if (guard is not null)
@@ -220,13 +234,23 @@ internal sealed partial class RuntimeNativeCreature
         }
         else { _guardPackage = null; _guardProgress = null; }
         _initialPackageSelected = true;
-        if (restoreTravel || restoreGuard || restoredDialogue) _packageEvents!.Restore(source!, restoreGuard ? false : restoreTravel ? _travelProgress!.Complete : true);
+        if (restoreFollow)
+        {
+            if (_packageEvents!.Active?.Form != source!.Form || _packageEvents.Done)
+                throw new InvalidDataException("Cold Follow lost its bound original lifecycle.");
+        }
+        else if (restoreTravel || restoreGuard || restoredDialogue) _packageEvents!.Restore(source!, restoreGuard ? false : restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
         _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restoredDialogue;
-        if (travel is null && guard is null)
+        if (travel is null && guard is null && follow is null)
             _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? "Dialogue package continuation has no cold restoration owner." : null;
         if (!restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
+        if (follow is not null)
+        {
+            if (restoreFollow) RestoreFollowElection(retained!.Follow!, elapsed);
+            else Combat!.BeginFollowObservation();
+        }
         if (restoreTravel) _evaluateRequested = true;
         _failedPackage = null;
         GD.Print($"OPENNV_CREATURE_PACKAGE reference={Appearance.Reference} package={source?.Form} procedure={source?.Procedure}");
@@ -267,7 +291,7 @@ internal sealed partial class RuntimeNativeCreature
                 _aiScheduleTime = scheduleTime;
                 _aiQuestRevision = _aiQuests!.Revision;
                 selecting = true;
-                SelectPackage();
+                SelectPackage(delta);
                 selecting = false;
             }
             if (_aiError is not null) return;
@@ -276,16 +300,7 @@ internal sealed partial class RuntimeNativeCreature
                 _guardProgress = Combat.AdvanceGuard(_aiPackage!, guard, _guardProgress!, delta);
             else if (_followPackage is { } follow)
             {
-                var target = TargetNode(follow.Target);
-                if (target is null) { _waitingForTarget = follow.Target; return; }
-                var running = target switch
-                {
-                    RuntimeNativePlayer player => player.Activity.Running,
-                    RuntimeNativeNpc npc => npc.Activity.Running,
-                    RuntimeNativeCreature creature => creature.Activity.Running,
-                    _ => false,
-                };
-                Combat.AdvancePackageMotion(_aiPackage!, target.GlobalPosition, follow.Distance * Skeleton.UnitsToMetres, running, delta);
+                if (!Combat.AdvanceFollowPackageMotion(_aiPackage!, follow, delta)) _waitingForTarget = follow.Target;
             }
             else if (_dialoguePackage is { } dialogue && !_dialogueRequested)
             {
@@ -308,8 +323,9 @@ internal sealed partial class RuntimeNativeCreature
                 }
             }
         }
-        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
+        catch (Exception error)
         {
+            if (_followPackage is not null) _aiState!.ProcedureCaptureBlocker ??= "Follow native suffix failed: " + error.Message;
             var changed = _aiError != error.Message;
             _aiError = error.Message;
             if (_guardPackage is not null) _guardProgress = Combat.PackageMotion?.Guard ?? _guardProgress;

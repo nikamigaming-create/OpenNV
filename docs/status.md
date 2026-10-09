@@ -1,26 +1,32 @@
 # Product status
 
-The published October9 gameplay slice includes source Pip-Boy pages/notes/maps,
+The published October 9 gameplay slice includes source Pip-Boy pages/notes/maps,
 separate teammate perks, discovered-destination transfer, attached loop retirement
 and validated source collision construction. Ordinary packaged discovery, travel,
 settled save and cold Continue ran. FNV Test selects fnv-gameplay-5a156b84.
 Fresh FO3 vault exit, FNV opening/Goodsprings/ED-E/companions, full Pip-Boy actions
 and the requested exported smoke route still need their actual acceptance.
 
-The separate protocol24 source candidate joins compiled scripts/effects, actual
+The separate protocol 25 source candidate joins compiled scripts/effects, actual
 Main Player transfers, source Sky resets, calling-thread FISTP, Steam/native plugin
 owners, shared CNG buffers, mutexes, source menu/archive lifetimes and CELL/LAND.
 The preceding C#/x86 builds, combined script suite, negative corpus cleanup and
 selected owned LAND audit pass. Authored imported CNG executes real SDK hashing,
-shared nonnull buffers and actual detach/normal exit at an explicit authored
-layout; arbitrary common placement and original native compatibility remain open.
-Newly composed protocol24/FISTP/mutex/archive and merged gameplay code require
-combined build/audit/publication checks. No new root PR/package is claimed.
+shared nonnull buffers and actual detach/normal exit. OS-selected common placement
+now passes real placeholder reservation/replacement in both living x86 children,
+offset views and the complete digest. Original native compatibility remains open.
+Merged gameplay, protocol 25, FISTP, FO3 Main/Player, mutex and archive registry compile with zero
+warnings/errors. Actual archive, current-thread FISTP and CNG checks pass. The
+mutex caller's real named CreateMutexA returns ERROR_ACCESS_DENIED (5), retained
+as a failure. Required combined audit/publication checks remain pending. No new
+root PR/package is claimed.
 
 Actual JIP Query passed; original Load has not. Standalone FO3's distinct source
-Main/Player is under implementation. Unknown native/script/model/AI/render/audio
+Main/Player and mandatory current/cold state are integrated; authored checks pass,
+while ordinary vault exit and its UI/scene/task/TLS producers remain unaccepted.
+Unknown native/script/model/AI/render/audio
 behavior remains visible. Full campaigns, selected mod stacks, matched retail
-and physical XR are unfinished. All36 broad requirements remain open; no counts
+and physical XR are unfinished. All 36 broad requirements remain open; no counts
 or component receipts establish a completion percentage. Current owners, today's
 release priority and the next executable outcome are in current-work.md.
 

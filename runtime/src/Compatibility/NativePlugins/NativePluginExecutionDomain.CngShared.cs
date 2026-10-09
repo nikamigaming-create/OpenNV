@@ -26,7 +26,7 @@ internal sealed partial class NativePluginExecutionDomain
             if (!_mappingViews.TryGetValue(source.View, out var view) || !_mappingObjects.TryGetValue(source.Object, out var obj) ||
                 view.Object != source.Object || view.Address != source.Address || view.LogicalBytes != source.Length ||
                 view.Offset != source.Offset || obj.Maximum != source.Maximum || !obj.Writable ||
-                obj.Protection != 4 || view.State != 0x1000 || view.Protection != 4 || (view.Access & 1) != 0)
+                obj.Protection != 4 || view.State != 0x1000 || view.Protection != 4 || (view.Access & 1) != 0 && view.Access != 0x000f001f)
                 throw new InvalidDataException("Shared CNG mapping is not its actual writable non-copy source view.");
         }
         _process.RequireCngMappedView(source);

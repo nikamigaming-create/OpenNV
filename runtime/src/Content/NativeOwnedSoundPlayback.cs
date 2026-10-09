@@ -31,7 +31,7 @@ internal static partial class NativeOwnedSoundPlayback
         var policy = new FalloutMenuCuePlaybackSource(selection.Source.EngineSha256, selection.Source.RuntimeSha256,
             FalloutMenuCuePlaybackSource.CurrentContractSha256);
         var selected = policy.PreparedFile(records, prepared, selection, sourceLoop: true);
-        var player = CreateTwoDimensional(selected, records);
+        var player = CreateTwoDimensional(selected, records, menuSelectionOrdinal: prepared.SelectionOrdinal);
         try
         {
             player.SetMeta("opennv_menu_sound_source", descriptor.FormKey.ToString());
@@ -51,7 +51,7 @@ internal static partial class NativeOwnedSoundPlayback
         }
     }
 
-    internal static AudioStreamPlayer CreateTwoDimensional(FalloutSoundRecord descriptor, FalloutPluginStack records)
+    internal static AudioStreamPlayer CreateTwoDimensional(FalloutSoundRecord descriptor, FalloutPluginStack records, long? menuSelectionOrdinal = null)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         if (!descriptor.HasExactFile)
@@ -64,7 +64,7 @@ internal static partial class NativeOwnedSoundPlayback
             throw Unsupported(descriptor,
                 "random frequency, environmental, envelope, timed, or nonpositive pitch behavior");
 
-        var stream = NativeOwnedMediaLoader.LoadAudio(descriptor.LogicalPath);
+        var stream = NativeOwnedMediaLoader.LoadAudio(descriptor.LogicalPath, menuSelectionOrdinal: menuSelectionOrdinal);
         NativeOwnedTwoDimensionalSoundPlayer? player = null;
         try
         {

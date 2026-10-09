@@ -160,8 +160,9 @@ internal static class ScriptPostfixProbe
                 new FalloutPlayerInventory(), defaultProcessingDelay: 1);
             var quests = QuestScripts(state);
             var initial = quests.Capture();
-            quests.Restore(initial with { Instances = [], ParserVersion = 8 });
-            Require(quests.Capture().Instances.Single().Executions == 0, "Lexical migration invented a prior quest execution.");
+            Reject(() => quests.Restore(initial with { Instances = [], ParserVersion = 8 }));
+            quests.Restore(initial);
+            Require(quests.Capture().Instances.Single().Executions == 0, "Current restoration invented a prior quest execution.");
             Reject(() => QuestScripts(state).Restore(initial with { Instances = [] }));
             var host = new FalloutQuestScriptHost((_, _) => throw new InvalidOperationException("Unexpected stage effect."),
                 name => name == "Health" ? 31 : throw new InvalidOperationException("Unexpected actor value."));

@@ -135,13 +135,13 @@ internal static partial class SourceMainScriptCallerContracts
         Reject(() => state.ExteriorLoaders.Capture());
         foreach (var task in tasks) { task.Retired = true; state.ExteriorLoaders.RetireReturnedTask(task); }
         var saved = fixture.Owner.CaptureMainPlayerCell();
-        Require(saved.PendingConsumers.ExteriorLoaders.LastCancellation is { Returned: 3, Error: null },
+        Require(saved.PendingConsumers.ExteriorLoaders!.LastCancellation is { Returned: 3, Error: null },
             "Actual task cancellation completion was replaced by map emptiness or scheduled retirement.");
         using var cold = new Fixture(fixture.Owner.Capture(), fixture.Owner.CaptureMainScriptFrameEvidence(),
             fixture.Owner.CaptureMainScriptCaller(), fixture.Fade.Capture());
         cold.Owner.ConstructMainPlayerCell(source, new FalloutPlayerPendingSlot(), saved);
-        Require(cold.Owner.CaptureMainPlayerCell().PendingConsumers.ExteriorLoaders.Handoff?.PreviousProcess ==
-            saved.PendingConsumers.ExteriorLoaders.Process && log.Count == 3,
+        Require(cold.Owner.CaptureMainPlayerCell().PendingConsumers.ExteriorLoaders!.Handoff?.PreviousProcess ==
+            saved.PendingConsumers.ExteriorLoaders!.Process && log.Count == 3,
             "Cold empty source map replayed native cancellation or reused the old process owner.");
     }
     private static void RejectPendingRetirement(Action action)

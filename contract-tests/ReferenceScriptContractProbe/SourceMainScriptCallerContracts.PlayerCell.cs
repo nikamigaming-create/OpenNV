@@ -6,6 +6,7 @@ internal static partial class SourceMainScriptCallerContracts
     internal static void RunPlayerCellContracts()
     {
         PendingSlotReplacement(); SourceContainment(); AwaitedPlayerOrder(); AwaitedPlayerFailure(); PlayerCellCurrentAndCold(); RunPendingConsumerContracts();
+        RunStandaloneMainContracts();
         Console.WriteLine("OPENNV_SOURCE_MAIN_PLAYER_CELL_PASS singlePendingSlot=true supersededOwnerRefused=true " +
             "awaitedPlayerBeforeSteam=true sameThread=true sourceDataFlags=true fistpCoordinates=true " +
             "interiorSkipsRounding=true coldNoReplay=true nativeGameplay=UNEXECUTED unknownChildren=RETAINED");

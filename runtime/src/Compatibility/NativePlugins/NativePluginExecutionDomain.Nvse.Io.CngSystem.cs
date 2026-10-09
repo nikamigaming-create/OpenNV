@@ -61,6 +61,7 @@ internal sealed partial class NativePluginExecutionDomain
     }
     private void RequireCngSystemServiceRetired()
     {
+        RetireUnenteredCngMemoryService();
         if (_cngService is not null && !_cngService.OrderlyRetired)
             throw new InvalidDataException("Original CNG caller still owns a live or failed system-service lifetime.");
     }

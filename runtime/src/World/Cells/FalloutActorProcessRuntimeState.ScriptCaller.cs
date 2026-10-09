@@ -111,7 +111,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         {
             // Its selected source body returns zero and writes nothing. The
             // original argument therefore establishes no clock ownership.
-            Enter(FalloutMainScriptCallerStep.ClockPrelude, () => { });
+            if (source.HasNewVegasChildren) Enter(FalloutMainScriptCallerStep.ClockPrelude, () => { });
             if (Read(FalloutMainScriptCallerStep.TabKey, () => consumers.AsyncKeyHighBit(invocation, 9)) &&
                 Read(FalloutMainScriptCallerStep.AltKey, () => consumers.AsyncKeyHighBit(invocation, 18)))
             { Finish(FalloutMainScriptCallerDisposition.InputSuppressed); return; }
@@ -126,7 +126,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
             var kind = ReadInteger(FalloutMainScriptCallerStep.ContextKind, () => consumers.InterfaceContextKind(invocation));
             if (kind == 3 && !foreign) Enter(FalloutMainScriptCallerStep.KindThreePrelude, () => consumers.KindThreePrelude(invocation));
             await EnterAsync(FalloutMainScriptCallerStep.Player, () => consumers.Player(invocation));
-            Enter(FalloutMainScriptCallerStep.SteamCallbacks, () => consumers.SteamCallbacks(invocation));
+            if (source.HasNewVegasChildren) Enter(FalloutMainScriptCallerStep.SteamCallbacks, () => consumers.SteamCallbacks(invocation));
             var advance = !menu && !Read(FalloutMainScriptCallerStep.MainHold, () => consumers.MainHold(invocation));
             Enter(FalloutMainScriptCallerStep.TimedContexts, () => consumers.TimedContexts(invocation, advance));
             var afterMenu = Read(FalloutMainScriptCallerStep.MenuGateAfter, () => consumers.MenuGate(invocation)) ||
@@ -214,7 +214,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 value = read();
                 var children = _scriptCallerLast!.Children.ToArray(); children[^1] = children[^1] with { Integer = value };
                 _scriptCallerLast = _scriptCallerLast with { Children = children };
-                if (value is < sbyte.MinValue or > sbyte.MaxValue) throw new InvalidDataException("Main interface context query lost its original signed-byte result.");
+                if (source.HasNewVegasChildren ? value is < sbyte.MinValue or > sbyte.MaxValue : value is < byte.MinValue or > byte.MaxValue)
+                    throw new InvalidDataException("Main interface context query lost its selected original byte transport.");
             });
             return value;
         }
@@ -247,7 +248,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
         var menu = children.Any(child => (child.Step is FalloutMainScriptCallerStep.MenuGateBefore or FalloutMainScriptCallerStep.GuiModeBefore) && child.Boolean == true);
         if (menu || children.FirstOrDefault(child => child.Step == FalloutMainScriptCallerStep.MainHold)?.Boolean != false)
         { FaultMainScriptReentry(); throw new InvalidOperationException("Main context timer branch was not entered by the original current predicate."); }
-        var before = _contextTimeBits; var after = (float)((double)BitConverter.UInt32BitsToSingle(before) + delta);
+        var before = _contextTimeBits; var after = FalloutSourceMainFamily.ContextClockValue(MainScriptCallerSource().EngineSha256,
+            BitConverter.UInt32BitsToSingle(before), delta);
         _contextTimeBits = BitConverter.SingleToUInt32Bits(after); _contextTimeWrites = checked(_contextTimeWrites + 1);
         _contextTimeLast = new(_contextTimeWrites, invocation.Identity, before, BitConverter.SingleToUInt32Bits(delta), _contextTimeBits, Next());
     }

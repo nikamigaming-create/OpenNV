@@ -8,7 +8,7 @@ internal sealed record FalloutMainPlayerPendingSnapshot(string Schema, FalloutMa
     Guid CapturedProcess, long Sequence, Guid? OwnedChild, byte Flags, FalloutPlayerOwnedChildMutation? ChildMutation,
     FalloutPlayerControllerScalarReceipt? Scalar, long Callbacks, Guid? LastCallbackRequest, Guid? LastFurnitureRequest,
     long FlagStores, string? FailureType, string? Error, FalloutActorProcessRuntimeHandoff? Handoff,
-    FalloutExteriorCellLoaderSnapshot ExteriorLoaders, FalloutCharacterControllerSnapshot? CharacterController);
+    FalloutExteriorCellLoaderSnapshot? ExteriorLoaders, FalloutCharacterControllerSnapshot? CharacterController);
 internal sealed record FalloutExteriorCellLoaderTaskSource(Guid Identity, uint Key, FalloutCellProcessIdentity Cell,
     int X, int Y, Guid Invocation, string Owner);
 internal sealed record FalloutExteriorCellLoaderCancellation(Guid Main, IReadOnlyList<Guid> Tasks, int Returned,

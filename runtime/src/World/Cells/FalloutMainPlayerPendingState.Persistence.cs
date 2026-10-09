@@ -11,7 +11,7 @@ internal sealed partial class FalloutMainPlayerPendingState
             throw new NotSupportedException("Source Player refcounted child requires its real typed native cold reconstruction owner.");
         var result = new FalloutMainPlayerPendingSnapshot(Schema, _source, _stack, _process, _sequence, null,
             _flags, _childMutation, _scalar, _callbacks, _lastCallback, _lastFurniture, _flagStores,
-            _failureType, _error, _cold, ExteriorLoaders.Capture(), CaptureCharacterController());
+            _failureType, _error, _cold, _exteriorLoaders?.Capture(), CaptureCharacterController());
         Validate(result); return result;
     }
     private void Restore(FalloutMainPlayerPendingSnapshot saved)
@@ -33,11 +33,18 @@ internal sealed partial class FalloutMainPlayerPendingState
             (saved.FlagStores == 0) != ((saved.Flags & 1) == 0) ||
             (saved.Error is null) != (saved.FailureType is null) || saved.Error is { Length: 0 } ||
             saved.LastCallbackRequest == Guid.Empty || saved.LastFurnitureRequest == Guid.Empty ||
-            saved.Callbacks > 0 && saved.LastCallbackRequest is null || saved.ExteriorLoaders is null)
+            saved.Callbacks > 0 && saved.LastCallbackRequest is null)
             throw new InvalidDataException("Player pending snapshot omitted mandatory source field/lifetime state.");
-        saved.Source.Validate(); FalloutExteriorCellLoaderState.Validate(saved.ExteriorLoaders, saved.Source);
-        if (saved.ExteriorLoaders.Stack != saved.Stack || saved.ExteriorLoaders.Process != saved.CapturedProcess)
-            throw new InvalidDataException("Pending reset and Player fields belong to different actual source processes.");
+        saved.Source.Validate();
+        if (saved.Source.Player.Main.HasNewVegasChildren)
+        {
+            var loaders = saved.ExteriorLoaders ?? throw new InvalidDataException("Source NV pending reset omitted its actual loader map.");
+            FalloutExteriorCellLoaderState.Validate(loaders, saved.Source);
+            if (loaders.Stack != saved.Stack || loaders.Process != saved.CapturedProcess)
+                throw new InvalidDataException("Pending reset and Player fields belong to different actual source processes.");
+        }
+        else if (saved.ExteriorLoaders is not null || saved.Scalar is not null || saved.CharacterController is not null)
+            throw new InvalidDataException("FO3 pending continuation imported a different source loader map or outer scalar arm.");
         if (saved.ChildMutation is { } mutation && (mutation.Changed < 1 || mutation.Changed > saved.Sequence ||
             mutation.Before == Guid.Empty || mutation.After == Guid.Empty || string.IsNullOrWhiteSpace(mutation.Owner) ||
             mutation.Returned == (mutation.Error is not null) || (mutation.Error is null) != (mutation.FailureType is null) ||
@@ -69,7 +76,7 @@ internal sealed partial class FalloutMainPlayerPendingState
             }
             catch (Exception failure) { failures.Add(failure); }
         }
-        try { ExteriorLoaders.Retire(); }
+        try { _exteriorLoaders?.Retire(); }
         catch (Exception failure) { failures.Add(failure); }
         try { _characterController?.Retire(); }
         catch (Exception failure) { failures.Add(failure); }

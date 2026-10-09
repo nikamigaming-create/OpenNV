@@ -78,7 +78,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         {
             var added = BitConverter.UInt32BitsToSingle(write.AddedBits);
             var before = BitConverter.UInt32BitsToSingle(write.BeforeBits);
-            var next = (float)((double)before + added);
+            var next = FalloutSourceMainFamily.ContextClockValue(value.Source.EngineSha256, before, added);
             if (write.Mutation != value.ContextTimeWrites || write.Invocation == Guid.Empty || write.Changed < 1 ||
                 write.Changed > value.Changed || write.AfterBits != value.ContextTimeBits ||
                 write.AfterBits != BitConverter.SingleToUInt32Bits(next) || write.Mutation == 1 && write.BeforeBits != value.Source.InitialContextTimeBits)
@@ -109,7 +109,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
         }
         var expected = new List<FalloutMainScriptCallerStep>();
         var stopped = false;
-        Add(FalloutMainScriptCallerStep.ClockPrelude); Add(FalloutMainScriptCallerStep.TabKey);
+        if (value.Source.HasNewVegasChildren) Add(FalloutMainScriptCallerStep.ClockPrelude);
+        Add(FalloutMainScriptCallerStep.TabKey);
         if (Bool(FalloutMainScriptCallerStep.TabKey)) Add(FalloutMainScriptCallerStep.AltKey);
         var suppressed = Bool(FalloutMainScriptCallerStep.TabKey) && Bool(FalloutMainScriptCallerStep.AltKey);
         if (!suppressed)
@@ -122,7 +123,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
             Add(FalloutMainScriptCallerStep.ContextKind);
             if (values.TryGetValue(FalloutMainScriptCallerStep.ContextKind, out var kind) && kind.Integer == 3 &&
                 !Bool(FalloutMainScriptCallerStep.ForeignMenu)) Add(FalloutMainScriptCallerStep.KindThreePrelude);
-            Add(FalloutMainScriptCallerStep.Player); Add(FalloutMainScriptCallerStep.SteamCallbacks);
+            Add(FalloutMainScriptCallerStep.Player);
+            if (value.Source.HasNewVegasChildren) Add(FalloutMainScriptCallerStep.SteamCallbacks);
             if (!(Bool(FalloutMainScriptCallerStep.MenuGateBefore) || Bool(FalloutMainScriptCallerStep.GuiModeBefore)))
                 Add(FalloutMainScriptCallerStep.MainHold);
             Add(FalloutMainScriptCallerStep.TimedContexts); Add(FalloutMainScriptCallerStep.MenuGateAfter);
@@ -148,7 +150,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 FalloutMainScriptCallerStep.FirstBeforeStore or FalloutMainScriptCallerStep.FirstAfterStore or
                 FalloutMainScriptCallerStep.FinalBeforeStore or FalloutMainScriptCallerStep.FinalAfterStore;
             if (isBool != (child.Boolean is not null) || (child.Step == FalloutMainScriptCallerStep.ContextKind) != (child.Integer is not null) ||
-                child.Integer is < sbyte.MinValue or > sbyte.MaxValue)
+                (value.Source.HasNewVegasChildren ? child.Integer is < sbyte.MinValue or > sbyte.MaxValue : child.Integer is < byte.MinValue or > byte.MaxValue))
                 throw new InvalidDataException("Main predicate return omitted its actual result value.");
         }
         RequireCachedStore(FalloutMainScriptCallerStep.MenuBeforeStore, FalloutMainScriptCallerStep.MenuAfterStore,

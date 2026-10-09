@@ -25,6 +25,14 @@ internal sealed partial class FalloutPlayerPendingSlot
     private string? _restoredFailureType, _restoredError;
     private bool _retired;
     private bool _setting;
+    private FalloutMainPlayerCellSource? _selectedSource;
+    internal void BindSourceFamily(FalloutMainPlayerCellSource source)
+    {
+        source.Validate(); ObjectDisposedException.ThrowIf(_retired, this);
+        if (_selectedSource is not null || _revision != 0 || _pending is not null || _entered is not null || _setting || Error is not null)
+            throw new InvalidOperationException("Player pending source setter must bind its actual initially empty constructor once.");
+        _selectedSource = source;
+    }
     internal event Action<FalloutPlayerPendingReplacement>? Replaced;
     internal FalloutPlayerPendingRequest? Next => _failure is null && _restoredError is null ? _pending : null;
     internal bool Pending => _pending is not null;
@@ -60,7 +68,7 @@ internal sealed partial class FalloutPlayerPendingSlot
         _setting = true;
         try
         {
-            if (replacement is not null) Replaced?.Invoke(replacement);
+            if (replacement is not null && (_selectedSource?.Main.HasNewVegasChildren ?? true)) Replaced?.Invoke(replacement);
             if (_failure is not null) throw new InvalidOperationException("Player overlap assertion swallowed a setter/capture reentry.", _failure);
         }
         catch (Exception failure) { throw Retain(failure); }

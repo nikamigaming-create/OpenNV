@@ -91,7 +91,10 @@ internal static partial class CellGraphAuditContracts
                 }
                 Require(graph.GetProperty("denominator").GetProperty("winningNavMeshes").GetInt32() == 3 &&
                     graph.GetProperty("denominator").GetProperty("initiallyDisabledNavMeshes").GetInt32() == (item.Disabled ? 2 : 1) &&
-                    root.GetProperty("coverage").GetProperty("sourceAccountingPassed").GetBoolean() == (!item.Error && !externalError) &&
+                    !root.GetProperty("coverage").GetProperty("sourceAccountingPassed").GetBoolean() &&
+                    root.GetProperty("alternatives").GetProperty("resources").EnumerateArray()
+                        .Any(row => row.GetProperty("path").GetString() == "meshes/characters/_1stperson/skeleton.nif" &&
+                            row.GetProperty("failures").GetArrayLength() != 0) &&
                     !root.GetProperty("coverage").GetProperty("readinessPassed").GetBoolean(),
                     "Source NAVM validation dropped a declaration, cleared its failure or awarded runtime readiness.");
                 using var cell = Read(Path.Combine(output, "cell-FalloutNV-esm-000800.private.json"));

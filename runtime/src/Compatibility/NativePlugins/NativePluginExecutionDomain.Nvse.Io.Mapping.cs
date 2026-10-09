@@ -168,7 +168,7 @@ internal sealed partial class NativePluginExecutionDomain
     }
     internal void RequirePrivateCryptoMappingSaveOwned()
     {
-        VerifyOwner();
+        VerifyOwner(); RequireSharedPlacementSaveOwned();
         if (_mappingReceipts.Count != 0 || _cryptoReceipts.Count != 0 || _mappingPlans.Count != 0)
             throw new NotSupportedException("Original native mapped pages, CNG hash state and current/cold pointer graph have no unified campaign continuation owner.");
     }

@@ -60,7 +60,7 @@ public partial class RuntimeCoordinator
                     var door = active.References.SingleOrDefault(value => value.FormKey == request.Door) ??
                         throw new InvalidDataException("Pending door request has no exact active winning source reference.");
                     _ = FalloutDoorDestinationResolver.Resolve(_nativePluginStack!, door);
-                    var doorPlacement = ReadSourcePlayerRawPlacement(request);
+                    var doorPlacement = ReadSourcePlayerRawPlacement(invocation, request);
                     await StreamNativeDoorTransition(door, doorPlacement);
                     Check(); RequireMainPlayerPublishedTarget(world, doorPlacement.Cell);
                     break;

@@ -11,7 +11,7 @@ internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Playe
     Action<FalloutFormKey, string>? DispatchEvent = null, Func<FalloutFormKey?>? PlayerCell = null,
     float MaximumWalkableSlopeDegrees = PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees,
     Func<FalloutFormKey, ulong, bool, NativeRouteDoorStatus>? RouteDoor = null,
-    Func<ulong, FalloutFormKey?>? CollisionReference = null);
+    Func<ulong, FalloutFormKey?>? CollisionReference = null, Func<string>? NavigationSourceSha256 = null);
 
 internal sealed partial class RuntimeNativeActorCombat
 {

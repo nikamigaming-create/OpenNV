@@ -12,7 +12,8 @@ internal static class FalloutActorProcessRuntimeSaveContract
     {
         if (runtime is null || common is null || processes is null)
             throw new InvalidDataException("Current save omitted its actual Main/Player/life/common process ownership.");
-        FalloutActorProcessRuntimeState.Validate(runtime); FalloutActorProcessCommonState.Validate(common);
+        FalloutActorProcessRuntimeState.Validate(runtime); FalloutActorProcessRuntimeState.RequireStandaloneMainPlayable(runtime);
+        FalloutActorProcessCommonState.Validate(common);
         FalloutActorProcessManager.ValidateShape(processes);
         if (runtime.Contract != common.Contract || runtime.Stack != common.Stack || runtime.Stack != processes.Stack ||
             runtime.Player != processes.Player || runtime.MainFrame.Boundary is not null ||
