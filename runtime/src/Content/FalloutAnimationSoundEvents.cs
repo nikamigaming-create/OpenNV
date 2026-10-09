@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 
 namespace OpenNV.Runtime.Content;
 
-internal enum FalloutAnimationSoundEnd { Active, NativeFinished, SourceStopped, ChanceSkipped, Cancelled, Faulted }
+internal enum FalloutAnimationSoundEnd { Active, NativeFinished, SourceStopped, ChanceSkipped, Cancelled, Faulted, SourceUnloaded }
 internal sealed record FalloutAnimationSoundBoneEmitterSnapshot(FalloutFormKey Reference,
     string SkeletonPath, string SkeletonSha256, int Block, string Name)
 {
@@ -99,7 +99,7 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
             throw new NotSupportedException("Disabled source sound bone requires its independent emitter continuation.");
     }
     internal FalloutAnimationSoundHistoryDiagnostic CaptureDiagnostic => new(reference, _generation, CanCapture, _opaqueError,
-        _events.Where(entry => entry.End is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped))
+        _events.Where(entry => entry.End is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.SourceUnloaded))
             .Select(entry => new FalloutAnimationSoundCaptureBlocker(entry.Generation, entry.Sound, entry.SoundSha256,
                 entry.TextKey, entry.Path, entry.MediaSha256, entry.End, entry.Error)).ToArray());
     internal bool CanCapture => (_opaqueError is null || _faults.Any(fault => fault.Error == _opaqueError)) &&
@@ -108,7 +108,7 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
             FalloutAnimationSoundEnd.Active => CanCapturePlayback(entry.Generation),
             FalloutAnimationSoundEnd.Faulted => _faults.Any(fault => fault.TextKey == entry.TextKey && fault.Error == entry.Error),
             FalloutAnimationSoundEnd.Cancelled => false,
-            _ => entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped
+            _ => entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.SourceUnloaded
         });
     internal IReadOnlyList<FalloutAnimationSoundEvent> Events => _events.AsReadOnly();
     // This is admission to wait in the live session, never admission to capture.
@@ -118,7 +118,7 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
         {
             FalloutAnimationSoundEnd.Active => entry.Played && FalloutAnimationSoundEventsSnapshot.Hash(entry.MediaSha256),
             FalloutAnimationSoundEnd.Faulted => _faults.Any(fault => fault.TextKey == entry.TextKey && fault.Error == entry.Error),
-            _ => entry.Error is null && entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped
+            _ => entry.Error is null && entry.End is FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.SourceUnloaded
         });
     internal IEnumerable<FalloutAnimationSoundEvent> PendingNativeCompletion =>
         _events.Where(entry => entry.End == FalloutAnimationSoundEnd.Active && !CanCapturePlayback(entry.Generation));
@@ -162,8 +162,8 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
 
     internal bool Complete(long generation, FalloutAnimationSoundEnd end)
     {
-        if (end is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped))
-            throw new ArgumentException("Only native Finished or authored Stop completes a voice.", nameof(end));
+        if (end is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.SourceUnloaded))
+            throw new ArgumentException("A voice can end through native Finished, authored Stop or source unload.", nameof(end));
         var entry = Find(generation);
         if (entry.End == end) return false;
         if (entry.End != FalloutAnimationSoundEnd.Active || !FalloutAnimationSoundEventsSnapshot.Hash(entry.MediaSha256))

@@ -70,6 +70,12 @@ Skilled, and the ordinary Pip-Boy Travel click reaches its source-linked arrival
 in another cell. Loading closes, floor contact settles and movement resumes.
 Multiple simultaneous XP entries and full level-up remain separately unbound.
 
+The reached post-travel save refusal came from old dust-devil PCM loops being
+cancelled when the previous cell root retired. Committed cell/reference unloads
+now explicitly end attached loops and retain that terminal state for saving.
+Finite audio tails keep their independent native host; unexpected destruction
+still reports cancellation. Post-transfer save/Continue is the immediate smoke.
+
 Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
 statistics and all inventory actions remain incomplete. Outdoor play still
 exposes compiled-script, AI procedure, SpeedTree and LOD material omissions.
