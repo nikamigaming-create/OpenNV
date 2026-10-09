@@ -41,7 +41,7 @@ with every CI check passing. Preserve this delivered package while
 integrating the larger current/compiled candidate; it is not campaign completion.
 SourceFiles18 and LoadedFiles13 now share the actual selected contributor parser,
 binary buffer, metadata and retained source lifetime. The integrated binary-member
-owner now uses managed/native protocol 10. C#, x86 Debug and the joined source
+owner and selected UCRT streams now use managed/native protocol 11. C#, x86 Debug and the joined source
 contract project compile with zero warnings/errors. The separate
 parser-only cache is removed. Native child closure precedes source collection
 retirement, and cleanup failures remain retained on repeated calls. Complete
@@ -58,8 +58,14 @@ lifetimes. Its required cue RNG, hourly world/effect, console and interface-cloc
 producers remain unowned, and reached operations refuse without them. These joins
 compile; their source contracts, native callbacks and ordinary gameplay have not
 run. Missing process election, common transfer, pair/light and original frame
-producers remain visible. The frozen UCRT stream and source-menu projection packets
-are next for serial integration and execution.
+producers remain visible. Genuine selected-provider UCRT FILE streams, native
+buffers/variadic output, source/private path decisions, actual error results and
+stream/provider retirement are integrated and compile. Protocol-11 authored
+fault/domain/arena execution passes; it exercises no selected CRT file import or
+original DLL compatibility. Actual CRT stream execution is next. The source-menu
+shortcut/projection slice has passed its required gate and selected FNV/FO3 source
+audits and is published for checked merge as PR 183. The current pinned repair
+Release remains unchanged.
 Source-only packets and successful compilation remain distinct from executed gameplay.
 
 ## Integrated candidate

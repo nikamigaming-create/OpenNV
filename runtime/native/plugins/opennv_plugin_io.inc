@@ -252,6 +252,8 @@ FARPROC WINAPI io_proc(HMODULE module, LPCSTR pointer) {
         for (auto& character : filename) if (character >= 'A' && character <= 'Z') character = static_cast<char>(character + ('a' - 'A'));
         if (filename == "kernel32.dll" || filename == "kernelbase.dll" || filename.rfind("api-ms-win-core-", 0) == 0)
             if (auto* replacement = io_entry(name)) return reinterpret_cast<FARPROC>(replacement);
+        if (auto* replacement = crt_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
+        if (crt_io_import_name(filename, name)) throw Fatal(ERROR_NOT_SUPPORTED, "Dynamic CRT file API has no actual selected provider/callable owner.");
         if (module != state->module && !io_owner().non_io_imports.count(filename + "!" + name))
             throw Fatal(ERROR_NOT_SUPPORTED, "Dynamic API lookup has no selected native I/O/non-I/O owner.");
         return GetProcAddress(module, pointer);
@@ -291,7 +293,8 @@ void io_prepare(const Frame& frame) {
     Reader reader{frame.payload}; const auto root = io_from_utf8(reader.text()), directory = io_from_utf8(reader.text()), sid_text = io_from_utf8(reader.text()); const auto count = reader.get<std::uint32_t>();
     if (state->io || state->module || !state->calls.empty() || count > 4096) { reply(frame, ERROR_INVALID_STATE, "Private I/O must prepare once before native loader admission."); return; }
     auto owner = std::make_unique<PluginIoRuntime>(); owner->root = root; owner->logical_directory = directory;
-    for (std::uint32_t at = 0; at < count; ++at) if (!owner->non_io_imports.insert(reader.text()).second) throw Fatal(ERROR_INVALID_DATA, "Private I/O import declarations repeat."); reader.finish();
+    for (std::uint32_t at = 0; at < count; ++at) if (!owner->non_io_imports.insert(reader.text()).second) throw Fatal(ERROR_INVALID_DATA, "Private I/O import declarations repeat.");
+    crt_prepare(*owner, reader); reader.finish();
     HANDLE token = nullptr; PSID expected = nullptr; DWORD size = 0; bool found = false;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token) || !ConvertStringSidToSidW(sid_text.c_str(), &expected)) throw Fatal(GetLastError(), "Native write restriction has no actual token/SID.");
     GetTokenInformation(token, TokenRestrictedSids, nullptr, 0, &size); std::vector<std::uint8_t> bytes(size);
@@ -341,21 +344,30 @@ void io_bind_imports(HMODULE image) {
             if (!original.u1.AddressOfData) { ended = true; break; }
             if (IMAGE_SNAP_BY_ORDINAL32(original.u1.Ordinal) || original.u1.AddressOfData >= extent - sizeof(WORD)) throw Fatal(ERROR_NOT_SUPPORTED, "Ordinal native I/O import ownership is unbound.");
             const auto name = nvse_string(reinterpret_cast<const char*>(base + original.u1.AddressOfData + sizeof(WORD)), false);
-            auto* replacement = platform ? io_entry(name) : nullptr;
+            auto** slot = reinterpret_cast<void**>(const_cast<std::uint8_t*>(base) + item.FirstThunk + static_cast<std::size_t>(relative));
+            const auto prior = nvse_copy(slot); const auto crt_file = crt_io_import_name(library, name);
+            auto* replacement = platform ? io_entry(name) : crt_file ? crt_import_entry(library, name, prior) : nullptr;
             if (!replacement) {
-                if (!owner.non_io_imports.count(library + "!" + name)) throw Fatal(ERROR_NOT_SUPPORTED, "Imported function has neither native I/O nor selected non-I/O declaration ownership.");
+                if (crt_file || !owner.non_io_imports.count(library + "!" + name)) throw Fatal(ERROR_NOT_SUPPORTED, "Imported function has neither actual native I/O nor selected non-I/O ownership.");
                 continue;
             }
-            auto** slot = reinterpret_cast<void**>(const_cast<std::uint8_t*>(base) + item.FirstThunk + static_cast<std::size_t>(relative));
-            const auto expected32 = GetProcAddress(GetModuleHandleW(L"kernel32.dll"), name.c_str());
-            const auto expected_base = GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), name.c_str());
-            if (*slot != reinterpret_cast<void*>(expected32) && *slot != reinterpret_cast<void*>(expected_base))
-                throw Fatal(ERROR_INVALID_DATA, "Selected native I/O import was altered or has an unowned platform binding.");
+            if (platform) {
+                const auto expected32 = GetProcAddress(GetModuleHandleW(L"kernel32.dll"), name.c_str());
+                const auto expected_base = GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), name.c_str());
+                if (prior != reinterpret_cast<void*>(expected32) && prior != reinterpret_cast<void*>(expected_base))
+                    throw Fatal(ERROR_INVALID_DATA, "Selected native I/O import was altered or has an unowned platform binding.");
+            }
+            if (std::any_of(owner.imports.begin(), owner.imports.end(), [&](const auto& imported) { return imported.first == slot; }))
+                throw Fatal(ERROR_INVALID_DATA, "Native I/O import repeats an already-owned writable slot.");
+            // Retain the preimage before any native mutation. A failed page
+            // publication cannot discard the actual module/callable ownership.
+            owner.imports.emplace_back(slot, prior);
             DWORD previous = 0;
             if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &previous)) throw Fatal(GetLastError(), "Selected import table could not publish its owned API entry.");
-            const auto prior = *slot; *slot = replacement;
+            *slot = replacement;
             DWORD ignored = 0; if (!VirtualProtect(slot, sizeof(void*), previous, &ignored)) throw Fatal(GetLastError(), "Selected import table protection could not restore.");
-            owner.imports.emplace_back(slot, prior); ++owner.bound_imports;
+            if (nvse_copy(slot) != replacement) throw Fatal(ERROR_INVALID_DATA, "Native I/O import publication has no actual readback equality.");
+            ++owner.bound_imports;
         }
         if (!ended) throw Fatal(ERROR_BAD_EXE_FORMAT, "Selected import list has no complete terminator.");
     }
@@ -365,12 +377,12 @@ void io_flush_detach(const Frame& frame) {
     if (!state->io) return; auto& owner = *state->io; owner.loader_retiring = false;
     state->calls.push_back(frame.header.id);
     for (const auto& event : owner.pending) io_event(PluginIoFile{event.capability, reinterpret_cast<HANDLE>(event.handle), false}, event.api, event.count, event.error);
-    owner.pending.clear(); state->calls.pop_back();
+    owner.pending.clear(); crt_flush_detach(); state->calls.pop_back();
 }
 void io_retire() {
     if (!state->io) return; auto& owner = *state->io;
     if (!owner.files.empty() || !owner.pending.empty()) throw Fatal(ERROR_BUSY, "Selected native file capabilities remain after module retirement.");
-    owner.imports.clear();
+    crt_retire(); owner.imports.clear();
     if (owner.stdin_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdin_file)) throw Fatal(GetLastError(), "Native standard input boundary did not retire."); owner.stdin_file = INVALID_HANDLE_VALUE; }
     if (owner.stdout_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdout_file)) throw Fatal(GetLastError(), "Native stdout diagnostic file did not retire."); owner.stdout_file = INVALID_HANDLE_VALUE; }
     if (owner.stderr_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stderr_file)) throw Fatal(GetLastError(), "Native stderr diagnostic file did not retire."); owner.stderr_file = INVALID_HANDLE_VALUE; }

@@ -5,7 +5,7 @@
 // The bridge never publishes a host-process pointer to a 32-bit module.
 namespace opennv_domain {
 constexpr std::uint32_t protocol_magic = 0x444e564f;
-constexpr std::uint32_t protocol_version = 10;
+constexpr std::uint32_t protocol_version = 11;
 constexpr std::uint32_t max_payload = 65536;
 constexpr std::uint32_t max_call_depth = 8;
 constexpr std::uint32_t module_magic = 0x4d4e564f;

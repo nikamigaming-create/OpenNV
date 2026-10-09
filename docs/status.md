@@ -7,11 +7,17 @@ entry/exit/movement/quit pass with the original user save unchanged. The stable
 FNV Test shortcut is advanced and all older packages remain intact.
 
 The larger candidate now joins selected contributor parser, real binary buffer,
-OS metadata, shared loaded-file lifetime and callable binary members at managed/native protocol 10. C#,
+OS metadata, shared loaded-file lifetime, callable binary members and selected
+UCRT streams at managed/native protocol 11. C#,
 x86 Debug and the joined source contract project compile. Complete BSFile/CRT,
 original DLL execution and native source-state cold gameplay remain unverified
 or unowned; source save admission remains refused. This is not complete-game
-acceptance.
+acceptance. Actual selected-provider FILE streams now retain native buffer,
+variadic output, source/private route, errno/stream status and lifetime results.
+Runtime/script/native-probe and x86 Debug compilation pass with zero warnings/errors.
+Protocol-11 authored fault/domain/arena execution passes with unchanged inputs;
+that lane contains no selected CRT file import or original DLL compatibility.
+Actual CRT stream execution remains pending.
 
 Actor detection/cache state, the actual four-tier process cohort/scheduler and
 selected constructor-registration inputs are integrated into the large candidate.
@@ -26,7 +32,7 @@ establish a High process or completed detection frame.
 Source sleep/wait, rest admission, furniture publication, save-queue ownership,
 cumulative world time, interface fades and rest sound lifetimes are integrated.
 Current capture and cold validation retain the same owners. The combined runtime,
-script-contract project and protocol-10 x86 Debug companion compile with zero
+script-contract project and protocol-11 x86 Debug companion compile with zero
 warnings/errors. Real rest cue RNG, hourly world/effect, console and interface-clock
 producers remain required; no absent producer is replaced by a fixed value or empty
 callback. Contract/native execution and ordinary sleep/wait gameplay remain pending.

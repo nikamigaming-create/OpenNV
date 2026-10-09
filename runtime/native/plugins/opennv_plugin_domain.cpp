@@ -378,6 +378,12 @@ void values_heap_release(void*, std::uint32_t, std::uint32_t);
 void io_bind_imports(HMODULE);
 void io_flush_detach(const Frame&);
 void io_retire();
+void crt_prepare(PluginIoRuntime&, Reader&);
+void* crt_import_entry(const std::string&, const std::string&, void*);
+bool crt_io_import_name(const std::string&, const std::string&);
+void* crt_dynamic_entry(HMODULE, const std::string&);
+void crt_flush_detach();
+void crt_retire();
 void source_locals_retire_all();
 SourceObject& source_object(std::uint64_t);
 void source_objects_retire_all();
@@ -391,6 +397,9 @@ void* expression_source_form(NvseExpressionEvaluator&, NvseExpressionToken&);
 #include "opennv_plugin_values.inc"
 #include "opennv_plugin_value_heap.inc"
 #include "opennv_plugin_io.inc"
+#include "opennv_plugin_crt.inc"
+#include "opennv_plugin_crt_open.inc"
+#include "opennv_plugin_crt_members.inc"
 #include "opennv_plugin_source_objects.inc"
 #include "opennv_plugin_source_refresh.inc"
 #include "opennv_plugin_source_local_attach.inc"

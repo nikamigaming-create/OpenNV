@@ -3,6 +3,17 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Native plugin CRT streams remain opaque pointers allocated by the exact selected
+x86 export provider. Import declarations, retained provider bytes and genuine IAT
+entries select that provider before the first file call. Native buffers and
+variadic cursors reach its real exports; C# retains route, error/result and
+generation/lifetime receipts. Winning read-only inputs and declared private write
+scopes decide paths before opening. Source absence/deletion cannot reopen a loser.
+Close retires the actual pointer once even when flushing fails; child closure
+precedes source/provider cleanup, and failed leases remain retained. The game's
+static CRT, whole BSFile construction and unified current/cold CRT stream graph
+remain separate required owners.
+
 Trait selection reads the winning PERK selection header independently of nested
 PRKE effects. Trait/playable/optional hidden flags, minimum level, rank count and
 top-level CTDA remain source-owned; live condition evaluation and the original

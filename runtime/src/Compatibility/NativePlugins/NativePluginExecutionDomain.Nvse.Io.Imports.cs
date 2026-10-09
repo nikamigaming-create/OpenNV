@@ -50,8 +50,10 @@ internal static class NativePluginIoImports
                 if (pointer == 0) { terminated = true; break; }
                 if ((pointer & 0x80000000) != 0) throw new NotSupportedException("Original ordinal import I/O/call ownership is unbound.");
                 var name = Text(pe, checked(pointer + 2));
-                if (Unowned.Contains(name)) throw new NotSupportedException("Original file import has no callable private I/O owner: " + library + "!" + name);
-                if (!(platform && Owned.Contains(name)) && !io.Selection.DeclaredNonIoImports.Contains(library + "!" + name))
+                var crtFile = NativePluginCrtImports.IsFileImport(library, name);
+                if (crtFile) NativePluginCrtImports.Require(io, library, name);
+                else if (Unowned.Contains(name)) throw new NotSupportedException("Original file import has no callable private I/O owner: " + library + "!" + name);
+                if (!crtFile && !(platform && Owned.Contains(name)) && !io.Selection.DeclaredNonIoImports.Contains(library + "!" + name))
                     throw new NotSupportedException("Original import lacks native I/O or an exact declared non-I/O owner: " + library + "!" + name);
                 _ = pe.GetSectionData(checked((int)(slots + checked((uint)at * 4)))).GetReader(0, 4).ReadUInt32();
             }

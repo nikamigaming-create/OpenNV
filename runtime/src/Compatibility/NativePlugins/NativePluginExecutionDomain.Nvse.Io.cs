@@ -13,6 +13,7 @@ internal sealed partial class NativePluginExecutionDomain
             WriteText(writer, owner.ModuleRoot); WriteText(writer, owner.CurrentDirectory); WriteText(writer, owner.RestrictingSid);
             writer.Write(checked((uint)owner.Selection.DeclaredNonIoImports.Count));
             foreach (var import in owner.Selection.DeclaredNonIoImports.Order(StringComparer.Ordinal)) WriteText(writer, import);
+            WriteCrtProviders(writer, owner);
         }));
         if (reader.ReadUInt32() != 1) throw new InvalidDataException("Private native I/O has no restricted-token/diagnostic initialization receipt.");
         Finish(reader);
@@ -23,6 +24,7 @@ internal sealed partial class NativePluginExecutionDomain
         using var reader = Reader(frame.Payload); var thread = reader.ReadUInt32(); var module = reader.ReadUInt64();
         if (thread != NativeThread || _nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation)
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
+        if (frame.Operation is >= CrtProvider and <= CrtPathResult) return DispatchPrivateCrt(frame, parent, owner, reader);
         switch (frame.Operation)
         {
             case 1:
@@ -64,10 +66,12 @@ internal sealed partial class NativePluginExecutionDomain
     private void RequirePrivateIoRetired()
     {
         if (_ioFiles.Count != 0) throw new InvalidDataException("Original module retirement retains native file handles.");
+        RequirePrivateCrtRetired();
         _privateIo?.RequireRetired();
     }
     private void ClearPrivateIo()
     {
-        _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
+        if (!ChildExited) throw new InvalidOperationException("Native I/O source/provider cleanup requires verified child closure.");
+        ClearPrivateCrt(); _ioFiles.Clear(); _privateIo?.Dispose(); _privateIo = null;
     }
 }

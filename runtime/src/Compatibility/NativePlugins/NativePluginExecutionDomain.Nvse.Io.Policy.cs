@@ -11,7 +11,12 @@ internal sealed record NativePluginIoReadWinner(string PhysicalPath, string Sha2
 internal sealed record NativePluginIoSelection(string StackSha256, string ModuleSha256, string ModulePath,
     string RuntimeDirectory, string PrivateStateRoot, IReadOnlyList<string> OriginalRoots,
     IReadOnlyList<NativePluginIoWriteScope> WriteScopes, Func<string, NativePluginIoReadWinner?> ResolveWinningRead,
-    string ImportDeclarationOwner, IReadOnlySet<string> DeclaredNonIoImports);
+    string ImportDeclarationOwner, IReadOnlySet<string> DeclaredNonIoImports)
+{
+    // Null derives the exact original import graph. Explicit empty means no
+    // provider and never admits an imported file arm through a non-I/O list.
+    internal IReadOnlyList<NativePluginCrtProviderSelection>? CrtProviders { get; init; }
+}
 internal sealed record NativePluginIoReceipt(ulong Sequence, ulong Generation, ulong Parent, uint Api,
     string VirtualPath, string? PhysicalPath, string? WinnerSha256, NativePluginIoRole? Role, uint Error, uint Transferred = 0);
 internal sealed record NativePluginIoRoute(ulong Id, uint Api, NativePluginIoAction Action, string VirtualPath, string? PhysicalPath, uint Error,
@@ -19,7 +24,7 @@ internal sealed record NativePluginIoRoute(ulong Id, uint Api, NativePluginIoAct
 
 // Selection and source-winner decisions belong to C#. The native adapter only
 // opens the exact returned path with the admitted Windows API access mode.
-internal sealed class NativePluginPrivateIo : IDisposable
+internal sealed partial class NativePluginPrivateIo : IDisposable
 {
     internal NativePluginIoSelection Selection { get; }
     internal string ModuleRoot { get; }
@@ -50,9 +55,12 @@ internal sealed class NativePluginPrivateIo : IDisposable
         {
             OriginalRoots = selection.OriginalRoots.Select(Canonical).ToArray(),
             WriteScopes = selection.WriteScopes.ToArray(),
-            DeclaredNonIoImports = new HashSet<string>(selection.DeclaredNonIoImports, StringComparer.Ordinal)
+            DeclaredNonIoImports = new HashSet<string>(selection.DeclaredNonIoImports, StringComparer.Ordinal),
+            CrtProviders = (selection.CrtProviders ?? NativePluginCrtImports.ReadProviders(selection.ModulePath, selection.ModuleSha256))
+                .Select(row => row with { Imports = row.Imports.ToDictionary(pair => pair.Key.ToLowerInvariant(),
+                    pair => (IReadOnlySet<string>)new HashSet<string>(pair.Value, StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase) }).ToArray()
         };
-        if (Selection.DeclaredNonIoImports.Any(declaration => NativePluginIoImports.Unowned.Contains(declaration[(declaration.LastIndexOf('!') + 1)..])))
+        if (Selection.DeclaredNonIoImports.Any(declaration => NativePluginIoImports.Unowned.Contains(declaration[(declaration.LastIndexOf('!') + 1)..]) || NativePluginCrtImports.IsFileDeclaration(declaration)))
             throw new NotSupportedException("A file API cannot be admitted as a non-I/O import.");
         CurrentDirectory = Canonical(selection.RuntimeDirectory);
         if (!Selection.OriginalRoots.Any(root => Within(root, Canonical(selection.ModulePath))) ||
@@ -93,6 +101,7 @@ internal sealed class NativePluginPrivateIo : IDisposable
         _moduleLease = new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         try
         {
+            InitializeCrtProviders();
             if (File.Exists(_deletionFile))
             {
                 NoReparse(_deletionFile);
@@ -104,7 +113,14 @@ internal sealed class NativePluginPrivateIo : IDisposable
                 }
             }
         }
-        catch { _moduleLease.Dispose(); throw; }
+        catch (Exception error)
+        {
+            var failures = new List<Exception> { error };
+            try { DisposeCrtProviderLeases(); } catch (Exception cleanup) { failures.Add(cleanup); }
+            try { _moduleLease.Dispose(); } catch (Exception cleanup) { failures.Add(cleanup); }
+            if (failures.Count != 1) throw new AggregateException("Native I/O construction and retained source cleanup failed.", failures);
+            throw;
+        }
     }
     internal void Claim(ulong generation)
     {
@@ -289,8 +305,18 @@ internal sealed class NativePluginPrivateIo : IDisposable
     }
     public void Dispose()
     {
-        if (_disposed) return; _disposed = true;
-        foreach (var lease in _reads.Values) lease.Dispose(); _reads.Clear(); _winners.Clear(); _moduleLease.Dispose();
+        if (_disposed) { if (_ioDisposeFailure is not null) throw _ioDisposeFailure; return; }
+        var failures = new List<Exception>();
+        try { DisposeCrtProviderLeases(); } catch (Exception error) { failures.Add(error); }
+        foreach (var lease in _reads.Values) try { lease.Dispose(); } catch (Exception error) { failures.Add(error); }
+        _reads.Clear(); _winners.Clear();
+        try { _moduleLease.Dispose(); } catch (Exception error) { failures.Add(error); }
+        _disposed = true;
+        if (failures.Count != 0)
+        {
+            var error = new AggregateException("Native I/O source leases did not all retire.", failures);
+            _ioDisposeFailure = error; throw error;
+        }
     }
     internal static string Canonical(string path)
     {
