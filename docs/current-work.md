@@ -11,9 +11,12 @@ defines the complete graph, ordinary campaigns, cold continuation, matched
 retail evidence and checked publication. All 36 broad requirements remain open;
 component checks establish no completion percentage.
 
-All four owners remain active. Primary integrates and publishes completed slices
-to origin. Parallel owners implement sleep/wait and its live world consumers,
-actor detection/process clocks, and native plugin constructor/object graphs.
+All four owners remain active. Primary integrates the larger gameplay/current-save
+and native-plugin candidate and publishes completed slices to origin. The FNV
+development playtest remains available independently through its pinned shortcut.
+Parallel owners implement sleep/wait and its live world consumers, actor
+detection/process clocks, and native plugin source-file consumers after
+constructor/object graphs.
 The user requires substantial greenfield code batches, fully data-driven behavior
 and no earlier OpenNV/save compatibility. Compile during integration; execute
 combined broad/native/owned checks at roughly four-hour intervals and before
@@ -26,7 +29,7 @@ authority. Recording and trace stay off outside a specific visual check.
 
 ## Verified state
 
-The current publication slice, `codex/source-nif-runtime-readers`, adds source
+The checked NIF implementation is merged on origin/main and adds source
 NIF header/block extents, typed blend/joint declarations, actual controller-chain
 binding, sphere/plane particle contacts, source color keys and independent
 particle construction/retirement. Release/Debug builds, formatting/analyzers,
@@ -40,10 +43,22 @@ pixel acceptance remain open. The larger compiled-gameplay/current-save/player-s
 plugin candidate remains under implementation; it is not campaign acceptance.
 Every complete-game requirement remains open.
 
-The user also requires a pinned standalone FNV development executable and stable
-local launch path. Package the checked commit with the pinned Godot/.NET/native
-dependencies, source commit and file hashes. Keep this build available separately
-from subsequent integration; owned inputs and saves remain external. The existing
+The native launcher refresh replaces the actual native
+launcher layout with original artwork, a persistent play dock, source-menu New
+Game/Continue actions and an exact package build badge. The checked standalone FNV
+Release package is `fnv-dev-0a592d3cb1c8`, built from clean source commit
+`0a592d3cb1c838057b9af47e6d44bf51a1db8c92`. Its stable local entry is
+`local/releases/FNV Test.cmd`; the sibling JSON records the package and archive
+identity. The package contains Godot/.NET and first-party native dependencies,
+toolchain metadata and 201 verified file identities. Its exported launcher starts
+with the matching build badge, runtime manifest and loaded artwork. Earlier
+versioned packages remain unchanged; owned inputs and saves remain external.
+The required
+runtime gate, owned FNV/TTW launcher-stack check and actual source New Game
+confirmation/cancel/quit pass. Native launcher pixels have been inspected at
+1440x900 and the minimum 1060x700 setup window. The next integration joins the
+compiled gameplay/current saves, sleep/wait live hosts, actor process scheduler
+and native source-file consumers. The existing
 standalone NIF probe still references a removed source owner and needs migration;
 the working full-reader contract tool retains the current owned declaration audit.
 

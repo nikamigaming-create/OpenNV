@@ -195,7 +195,8 @@ public partial class RuntimeCoordinator
     {
         if (_retiringNativeSession) GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=enter");
         CancelNativeManualSave("Native session retired before the pending manual save could commit.");
-        GetWindow().CloseRequested -= OnNativeCloseRequested;
+        DetachNativeCloseRequest();
+        CancelNativeLauncherEntry();
         CancelNativeGridRead();
         if (!_retiringNativeSession) return;
         // Session retirement has drained source workers. Detached prototypes are outside

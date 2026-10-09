@@ -24,6 +24,7 @@ public partial class RuntimeCoordinator
     {
         try
         {
+            ConfigureLauncherEntry(request);
             _options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["data-root"] = request.DataRoot,
@@ -63,6 +64,7 @@ public partial class RuntimeCoordinator
         }
         catch (Exception exception)
         {
+            CancelNativeLauncherEntry();
             RuntimeLiveContentSource.Clear();
             launcher.Show();
             launcher.ReportLaunchFailure(exception.Message);

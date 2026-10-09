@@ -388,7 +388,7 @@ public partial class RuntimeCoordinator
         try
         {
             await Task.Run(() => IndexNativeLiveStack(sources));
-            if (_nativeSessionTransitioning) return;
+            if (_nativeSessionTransitioning) { CancelNativeLauncherEntry(); return; }
             var stack = _nativePluginStack ??
                 throw new InvalidOperationException("Native plugin stack was not indexed.");
             if (_nativeOpeningControls is not null) CreateNativeQuestScripts();
@@ -403,11 +403,17 @@ public partial class RuntimeCoordinator
                 if (_continueAfterRestart)
                     _sessionLoadFailure = RejectNativePendingLoad(new InvalidDataException("The selected save could not be restored from this source stack."));
                 DismissLoadingScreen();
-                if (_sessionLoadFailure is { } failure) menu.ShowLoadFailure(failure, canRetry: true);
+                if (_sessionLoadFailure is { } failure)
+                {
+                    CancelNativeLauncherEntry();
+                    menu.ShowLoadFailure(failure, canRetry: true);
+                }
+                else ConsumeNativeLauncherEntry(menu);
             }
         }
         catch (Exception exception)
         {
+            CancelNativeLauncherEntry();
             var failure = RejectNativePendingLoad(exception);
             DismissLoadingScreen();
             menu.ShowLoadFailure(failure, canRetry: false);
@@ -417,7 +423,7 @@ public partial class RuntimeCoordinator
     private void ShowNativeLiveMenu(IReadOnlyList<FalloutPluginSource> sources)
     {
         GetTree().AutoAcceptQuit = false;
-        GetWindow().CloseRequested += OnNativeCloseRequested;
+        AttachNativeCloseRequest();
         var layer = new CanvasLayer { Name = "NativeLiveMenu", Layer = NativeMenuCanvasLayer };
         var menu = new NativeGamebryoStartMenu(action =>
         {

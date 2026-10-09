@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9.-]+$')][string]$Version,
     [string]$ExportDirectory = "",
+    [string]$OutputRoot = "",
     [switch]$AllowDirty
 )
 $ErrorActionPreference = 'Stop'
@@ -11,11 +12,21 @@ if (!$ExportDirectory) { $ExportDirectory = Join-Path $repo 'tmp/development-run
 $export = (Resolve-Path -LiteralPath $ExportDirectory).Path
 $commit = (& git -C $repo rev-parse HEAD).Trim()
 if ($LASTEXITCODE) { throw 'Cannot identify the source commit.' }
-$dirty = @(& git -C $repo status --porcelain).Count -ne 0
+& git -C $repo diff --quiet
+if ($LASTEXITCODE -gt 1) { throw 'Cannot compare the working source tree.' }
+$workingDirty = $LASTEXITCODE -ne 0
+& git -C $repo diff --cached --quiet
+if ($LASTEXITCODE -gt 1) { throw 'Cannot compare staged source changes.' }
+$dirty = $workingDirty -or $LASTEXITCODE -ne 0 -or @(& git -C $repo ls-files --others --exclude-standard).Count -ne 0
 if ($dirty -and !$AllowDirty) { throw 'Commit the tested source before packaging a public release.' }
 $name = "OpenNV-$Version-windows-x64"
-$output = Join-Path $repo "local/releases/$name"
-if (Test-Path -LiteralPath $output) { throw "Package directory already exists: $output" }
+if (!$OutputRoot) { $OutputRoot = Join-Path $repo 'local/releases' }
+$OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
+[IO.Directory]::CreateDirectory($OutputRoot) | Out-Null
+$output = Join-Path $OutputRoot $name
+if ((Test-Path -LiteralPath $output) -or (Test-Path -LiteralPath ($output + '.zip'))) {
+    throw "Package already exists: $output"
+}
 $runtimeData = @(Get-ChildItem -LiteralPath $export -Directory -Filter 'data_OpenNV_windows_x86_64')
 if ($runtimeData.Count -ne 1) { throw 'Expected exactly one official exported .NET runtime directory.' }
 foreach ($file in @('OpenNV.exe', 'OpenNV.pck', 'runtime-manifest.json', 'opennv_audio.dll')) {
@@ -33,6 +44,20 @@ foreach ($file in Get-ChildItem -LiteralPath $runtimeData[0].FullName -Recurse -
     $destination = Join-Path $output $relative
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $destination
+}
+$domain = Join-Path $repo 'runtime/generated/native-plugins/Release/opennv_plugin_domain.exe'
+if (!(Test-Path -LiteralPath $domain -PathType Leaf)) { throw 'Build the first-party Release native plugin domain before packaging.' }
+$domainOutput = Join-Path $output 'generated/native-plugins/Release'
+[IO.Directory]::CreateDirectory($domainOutput) | Out-Null
+Copy-Item -LiteralPath $domain -Destination $domainOutput
+$toolchainPath = Join-Path $export 'build-toolchain.json'
+if (Test-Path -LiteralPath $toolchainPath -PathType Leaf) {
+    $toolchain = Get-Content -LiteralPath $toolchainPath -Raw | ConvertFrom-Json
+    if ($toolchain.schema -ne 'opennv-build-toolchain/v1' -or $toolchain.sourceCommit -ne $commit -or
+        $toolchain.sourceTree -ne (& git -C $repo rev-parse 'HEAD^{tree}').Trim()) {
+        throw 'Export toolchain metadata does not identify the packaged source.'
+    }
+    Copy-Item -LiteralPath $toolchainPath -Destination $output
 }
 Copy-Item -LiteralPath (Join-Path $repo 'runtime/licenses') -Destination $output -Recurse
 foreach ($file in @('NOTICE.md')) {

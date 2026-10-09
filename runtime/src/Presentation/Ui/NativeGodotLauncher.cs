@@ -26,7 +26,8 @@ internal sealed record NativeGodotLauncherLaunchRequest(
     string SavePath,
     string? AppearanceDataRoot,
     string? Fallout3WorldRoot,
-    FalloutModStackSelection? ModSelection = null);
+    FalloutModStackSelection? ModSelection = null,
+    NativeGodotLauncherEntry Entry = NativeGodotLauncherEntry.Menu);
 
 /// <summary>
 /// Godot-native product entry point. The launcher deliberately consumes the
@@ -47,6 +48,7 @@ internal sealed partial class NativeGodotLauncher : Control
         };
 
     private IReadOnlyList<NativeGodotLauncherCampaign> _campaigns = [];
+    private string _launcherManifestSha256 = string.Empty;
     private GodotLauncherProfileStore _profiles = null!;
     private string _selectedId = "newvegas";
     private string _selectedGameId = "newvegas";
@@ -104,7 +106,7 @@ internal sealed partial class NativeGodotLauncher : Control
         if (_configured)
             return;
         _profiles = profiles ?? GodotLauncherProfileStore.Load();
-        _campaigns = LoadManifest();
+        _campaigns = LoadManifest(out _launcherManifestSha256);
         _configured = true;
     }
 
@@ -120,6 +122,7 @@ internal sealed partial class NativeGodotLauncher : Control
         BuildBackground();
         BuildInterface();
         Refresh();
+        ReportLauncherReady();
     }
 
     public override void _UnhandledInput(InputEvent inputEvent)
@@ -131,9 +134,13 @@ internal sealed partial class NativeGodotLauncher : Control
             GetViewport().SetInputAsHandled();
             if (_fileDialog is not null)
                 CloseFileDialog();
+            else if (_stackWindow is not null)
+                CloseStackWindow();
             else
                 GetTree().Quit();
         }
+        else if (_fileDialog is not null || _stackWindow is not null)
+            return;
         else if (key.PhysicalKeycode == Key.F1)
         {
             GetViewport().SetInputAsHandled();
@@ -144,7 +151,7 @@ internal sealed partial class NativeGodotLauncher : Control
             GetViewport().SetInputAsHandled();
             ChooseInstallation();
         }
-        else if (key.PhysicalKeycode is Key.Enter or Key.KpEnter && !_launch.Disabled)
+        else if (key.PhysicalKeycode is Key.Enter or Key.KpEnter && !_launch.Disabled && !_search.HasFocus())
         {
             GetViewport().SetInputAsHandled();
             LaunchSelected();
@@ -260,7 +267,7 @@ internal sealed partial class NativeGodotLauncher : Control
         _fileDialog = null;
     }
 
-    private void LaunchSelected()
+    private void LaunchSelected(NativeGodotLauncherEntry entry = NativeGodotLauncherEntry.Menu)
     {
         if (_launching)
             return;
@@ -284,6 +291,7 @@ internal sealed partial class NativeGodotLauncher : Control
 
         try
         {
+            RequireLauncherEntry(campaign, entry);
             var selection = _profiles.ModStack(campaign.Id);
             var mod = selection?.Resolve(profile.InstallRoot);
             var unsupported = _profiles.EnabledMods(campaign.Id).Where(id =>
@@ -301,15 +309,18 @@ internal sealed partial class NativeGodotLauncher : Control
                 _profiles.LaunchSavePath(campaign.Id),
                 ValidProfileRoot("newvegas"),
                 ValidProfileRoot("fallout3"),
-                selection);
+                selection, entry);
             GD.Print($"OPENNV_GODOT_LAUNCH_REQUEST campaign={campaign.Id} presentation={_selectedPresentation} " +
                 $"source={profile.InstallRoot} save={profile.SavePath} mode=in-process");
-            LaunchRequested?.Invoke(request);
+            Refresh();
+            if (LaunchRequested is not { } launch) throw new NotSupportedException("The launcher has no runtime launch owner.");
+            launch(request);
         }
         catch (Exception exception)
         {
             _toast.Text = exception.Message;
             _launching = false;
+            Refresh();
         }
     }
 
@@ -368,9 +379,12 @@ internal sealed partial class NativeGodotLauncher : Control
         _ => throw new ArgumentException($"No native game maps to launcher campaign {id}.", nameof(id)),
     };
 
-    private static IReadOnlyList<NativeGodotLauncherCampaign> LoadManifest()
+    private static IReadOnlyList<NativeGodotLauncherCampaign> LoadManifest(out string sourceSha256)
     {
-        var json = Godot.FileAccess.GetFileAsString("res://runtime-manifest.json");
+        var bytes = Godot.FileAccess.GetFileAsBytes("res://runtime-manifest.json");
+        sourceSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+        var json = System.Text.Encoding.UTF8.GetString(bytes);
+        if (json.StartsWith('\uFEFF')) json = json[1..];
         if (string.IsNullOrWhiteSpace(json))
             throw new InvalidDataException("OpenNV runtime manifest is missing from the Godot product.");
         using var document = JsonDocument.Parse(json);

@@ -1,6 +1,19 @@
 # Product status
 
-The current independent runtime slice implements source NIF sized/unsized extents,
+The native launcher refresh passes the required runtime gate and selected owned
+FNV/TTW launcher-stack checks. Actual FNV New Game enters the source confirmation;
+cancel and source-menu quit preserve the user's save. Native pixels are inspected
+at 1440x900 and the minimum 1060x700 setup window. Original artwork, persistent
+play controls, source-menu entry actions and packaged build identity are present.
+The standalone FNV development Release package `fnv-dev-0a592d3cb1c8` is pinned
+at `local/releases/FNV Test.cmd`. Its clean source commit, toolchain and 201 file
+hashes are retained; exported launcher startup matches the package identity and
+loads the refreshed artwork. The package includes Godot/.NET and first-party
+native dependencies. Earlier versioned packages remain unchanged, and owned
+installations and saves remain external.
+Complete campaign and mod-stack support remains unfinished.
+
+The preceding independent runtime slice implements source NIF sized/unsized extents,
 typed blend/joint/motor declarations, native controller-chain binding, particle
 sphere/plane contacts and source RGBA keys. Construction/retirement preserves
 independent instance ownership. Its required Release/Debug runtime gate, native
@@ -9,8 +22,7 @@ declarations in the selected investigation families. Complete model reads retain
 gravity-controller, breakable/prismatic-joint and orient-action failures; earlier
 header families retain binary-extra-data and user-version-12 refusals. All original
 archives remain unchanged. Full scene/pixel acceptance, complete campaigns and
-the complete selected mod stack remain unfinished. A pinned standalone FNV
-development package and stable local launch path are being prepared.
+the complete selected mod stack remain unfinished.
 
 The expanded corpus/quest audits finish independently for FNV, FO3, TTW and
 the exact combined selection. All winning/deleted payload layouts and discovered

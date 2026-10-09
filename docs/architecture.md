@@ -3,6 +3,20 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+The product launcher is native Godot UI with original decorative artwork and a
+persistent play dock. Play opens the source menu. New Game and Continue retain a
+one-shot typed request until source indexing and menu construction succeed, then
+use the same authored menu actions as ordinary input. Source or save admission
+failures cancel that request visibly. Window-close callbacks, launcher fonts and
+artwork have explicit instance lifetime owners.
+
+Development playtest packages pin a clean source commit/tree, exporter/SDK
+identity and every packaged file hash. The self-contained Godot/.NET runtime and
+first-party native companions accompany the executable. Owned installations and
+saves stay external. A stable local shortcut can advance without replacing any
+versioned package. The launcher shows supplied package identity; this badge does
+not replace package hash checks or establish gameplay readiness.
+
 NIF header versions select their original sized or unsized block envelopes.
 Unsized blocks advance through a complete admitted field decoder before the next
 block begins; unknown layouts refuse instead of guessing an extent. The shared
