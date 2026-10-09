@@ -53,11 +53,11 @@ remain open.
 Root branch: `codex/full-runtime-owner-integration`, based on origin/main
 `1b159f3b9e00333eb926f3d1a7b19cd52f055175`. The protected
 `codex/compiled-authority-world-dependencies` checkpoint `a9fac69e` remains intact.
-Local checkpoint `c922d127` integrates private ordinary input recording/replay,
+Local checkpoint `282a1644` integrates private ordinary input recording/replay,
 actual Main/frame declarations, source queue priorities, queued native actor
 assembly/publication and presentation-thread binding, indexed interface audio
 and nested challenge/script-context owners with the merged NIF, launcher and
-couch/head work. The current uncommitted batch additionally joins original
+couch/head work. The same checkpoint additionally joins original
 native module declarations and loader ordering, genuine retained CommandTable
 callbacks, shared script construction/current capture/cold/native delivery,
 Main achievement/login utilities, and same-root exterior CELL/reference/LAND
