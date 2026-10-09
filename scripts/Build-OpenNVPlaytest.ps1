@@ -69,8 +69,18 @@ foreach ($taskFile in $taskManifest.files) {
 }
 
 $taskSmokeLog = Join-Path $OutputRoot ($LaunchName + '-startup.log')
-& (Join-Path $taskPackage 'OpenNV.exe') --headless --xr-mode off --quit-after 3 -- --launcher *> $taskSmokeLog
-$taskStartupExit = $LASTEXITCODE
+# Windows GUI exports do not inherit the PowerShell console's output handles.
+# Use the runtime's own file logger and wait for the actual exported process.
+$taskStartup = Start-Process -FilePath (Join-Path $taskPackage 'OpenNV.exe') -ArgumentList (
+    '--headless --xr-mode off --quit-after 3 --log-file "' + $taskSmokeLog + '" -- --launcher') -WindowStyle Hidden -PassThru
+if (!$taskStartup.WaitForExit(45000)) {
+    $taskStartup.Kill()
+    throw "Pinned launcher startup did not finish: $taskSmokeLog"
+}
+$taskStartupExit = $taskStartup.ExitCode
+if (!(Test-Path -LiteralPath $taskSmokeLog -PathType Leaf)) {
+    throw "The exported launcher did not write its startup log: $taskSmokeLog"
+}
 $taskStartupText = [IO.File]::ReadAllText($taskSmokeLog)
 if ($taskStartupExit -ne 0 -or $taskStartupText -match '(?im)^(?:ERROR:|SCRIPT ERROR:|WARNING:.*(?:leaked at exit|ObjectDB.*leak|RIDs? .*not freed|resources still in use))') {
     throw "Pinned launcher startup failed; inspect $taskSmokeLog"
