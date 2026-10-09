@@ -2,7 +2,7 @@ using System.Numerics;
 using System.Text.Json;
 using OpenNV.Runtime.Gameplay.Bots;
 
-internal static class BotInteractionContracts
+internal static partial class BotInteractionContracts
 {
     internal static void Run()
     {
@@ -71,6 +71,7 @@ internal static class BotInteractionContracts
         CheckBotResponse();
         CheckPortalObservation();
         CheckDefeatedObservation();
+        CheckDeferredFurnitureObservation();
         Console.WriteLine("Reference bot interaction evidence: source-target results, actual book menu, unrelated stage/timer/pause/menu rejection, other-target isolation, failed prefix and deferred target UI PASS.");
     }
 

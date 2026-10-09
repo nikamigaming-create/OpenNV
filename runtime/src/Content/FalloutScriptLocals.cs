@@ -45,9 +45,10 @@ internal static class FalloutScriptLocals
             var name = FalloutDialogueTopic.Text(field.Data.Span);
             if (declarations.TryGetValue(index.Value, out var previous))
             {
-                // SLSD has an index, one flag byte and 19 unused bytes. Owned
-                // duplicate declarations contain different compiler padding;
-                // only the slot, name and flags define the same local.
+                // This declaration lookup joins slot, name and storage kind.
+                // SLSD also carries an initial payload at bytes 8..15; runtime
+                // cell owners must preserve that payload and source entry order.
+                // Declaration equality does not certify runtime-cell equality.
                 if (previous.Name != name || previous.Flags != flags)
                     throw new InvalidDataException($"Conflicting duplicate script variable slot {index} in {script.FormKey}.");
             }

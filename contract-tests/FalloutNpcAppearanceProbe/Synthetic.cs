@@ -114,6 +114,7 @@ internal static class Synthetic
             Require(appearance.Models.Count(part => part.Role == "armor-addon") == 2 &&
                 !appearance.Models.Any(part => part.Role is "body" or "hand-left" or "hand-right"), "BIPL addons replace source slots");
             Require(appearance.Models.Count(part => part.Role == "head-addon") == 2, "recursive HDPT addons");
+            PlayerHeadVisibilityContracts.Run(appearance);
             var texture = appearance.Models.Single(part => part.Role == "armor").AlternateTextures.Single();
             Require(texture.ShapeName == "BodyShape" && texture.ShapeIndex == 2 && texture.TextureSet == Key(0x500) &&
                 texture.Textures["TX00"] == "textures/winning.dds", "shape/index/adjusted winning texture binding");

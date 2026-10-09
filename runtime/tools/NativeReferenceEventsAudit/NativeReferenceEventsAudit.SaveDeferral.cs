@@ -37,7 +37,9 @@ public partial class NativeReferenceEventsAudit
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
         BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6); referenceBytes.CopyTo(group, 24);
+        var playerStats = new byte[24]; playerStats[8] = 1;
         File.WriteAllBytes(path, Record("TES4", 0, Field("HEDR", header)).Concat(Record("ACTI", 0x700))
+            .Concat(Record("NPC_", 7, Field("ACBS", playerStats), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5])))
             .Concat(Record("CELL", 0x800, Field("DATA", [1]))).Concat(group).ToArray());
         using var records = FalloutPluginStack.Load(Path.GetDirectoryName(path)!, ["Contact.esm"]);
         using var world = new FalloutReferenceWorld(records);
@@ -53,6 +55,10 @@ public partial class NativeReferenceEventsAudit
         try
         {
             Bind("_player", player); Bind("_scripts", scripts);
+            var abilities = new FalloutPlayerAbilityScripts(records, () => [],
+                _ => throw new InvalidOperationException("Unexpected ability condition in save-deferral fixture."));
+            abilities.BindExecutor((_, _, _, _) => throw new InvalidOperationException("Unexpected active effect in save-deferral fixture."));
+            Bind("_playerAbilities", abilities);
             Bind("_activeCell", Key(0x800));
             Bind("_stageResults", new FalloutQuestStages(records, new(records),
                 (_, _, _) => throw new InvalidOperationException("Unexpected stage result in save-deferral fixture."),

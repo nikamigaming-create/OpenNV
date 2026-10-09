@@ -230,14 +230,16 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             if (name.Equals("XP", StringComparison.OrdinalIgnoreCase)) return Vitals.ExperiencePoints;
             return IsSpecial(name) ? _playerActorValues.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)) : _playerSkills.Value(name);
         }, RequireLevelUpOwner: () => _vitals.RequireLevelUpOwner(),
-            ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: _playerActorValues.Change,
+            ReadPlayerActorValue: ReadPlayerActorValue, ChangePlayerActorValue: ChangePlayerActorValue,
             Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
             Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: value => _experience.Reward(value), GameTime: gameTime);
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,
             () => _scripts.References!.AcquiredPerks(pluginStack.RuntimeFormKey(0x14)), _playerActorValues);
+        BindPlayerAbilityState(restore, gameTime);
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
+        _playerAbilities.Synchronize();
         _vitals = FalloutPlayerVitals.FromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
         _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
         _ingestibles = new(pluginStack, inventory, _vitals,
@@ -295,6 +297,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (BlockingExecutionError is not null) return;
         try
         {
+            _playerAbilities.Synchronize();
             DrainSourceManualSaves();
             if (BlockingExecutionError is not null) return;
             RefreshRadioStations();
@@ -701,6 +704,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     {
         FalloutNativeCampaignSave.ValidateTraits(_traitFarewellContract, selection);
         _traits = selection.OrderBy(value => value.RuntimeFormId).ToArray();
+        _playerAbilities.Synchronize();
         if (_traitEntry is not null)
         {
             _traitEntry.Accepted -= AcceptTraits;

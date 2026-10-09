@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutAbilityModifier(FalloutFormKey Spell, FalloutFormKey Effect, int ActorValue,
     float Amount, IReadOnlyList<FalloutCondition> Conditions, FalloutActorValuePool Pool = FalloutActorValuePool.Temporary);
 internal sealed record FalloutAbilityScript(FalloutFormKey Spell, FalloutFormKey Effect, FalloutFormKey Script,
-    IReadOnlyList<FalloutCondition> Conditions);
+    IReadOnlyList<FalloutCondition> Conditions, int EffectOrdinal = 0);
 internal sealed record FalloutPerkEntry(byte Entry, byte Function, float Value, IReadOnlyList<FalloutCondition> Conditions,
     IReadOnlyDictionary<byte, IReadOnlyList<FalloutCondition>>? ConditionGroups = null, int SourceIndex = -1)
 {
@@ -25,10 +25,14 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutAbilityScript>> _scripts = [];
     private readonly Dictionary<FalloutFormKey, (FalloutFormKey[] Spells, FalloutPerkEntry[] Entries)> _perks = [];
 
-    internal IReadOnlyList<FalloutAbilityModifier> Spell(FalloutFormKey form)
+    internal IReadOnlyList<FalloutAbilityModifier> Spell(FalloutFormKey form) => Spell(form, null);
+
+    internal IReadOnlyList<FalloutAbilityModifier> Spell(FalloutFormKey form, IFalloutAbilityScriptLifetime? lifecycle)
     {
         var result = ConstantModifiers(form);
-        if (_scripts[form].Count != 0) throw new NotSupportedException($"Ability {form} requires its script lifecycle owner.");
+        if (_scripts[form].Count != 0)
+            (lifecycle ?? throw new NotSupportedException($"Ability {form} requires its script lifecycle owner."))
+                .RequireStarted(form, _scripts[form]);
         return result;
     }
 
@@ -48,21 +52,23 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
             return false;
         var result = new List<FalloutAbilityModifier>();
         var scripts = new List<FalloutAbilityScript>();
+        var effectOrdinal = 0;
         for (var index = 0; index < fields.Length; index++)
         {
             if (fields[index].Signature != "EFID") continue;
+            var ordinal = effectOrdinal++;
             var effectId = fields[index].Data.Span;
             if (effectId.Length != 4) return false;
             var effectForm = source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(effectId));
-            if (effectForm is null || !records.TryGetEffective(effectForm.Value, out var effect)) continue;
+            if (effectForm is null || !records.TryGetEffective(effectForm.Value, out var effect)) return false;
             var end = index + 1;
             while (end < fields.Length && fields[end].Signature != "EFID") end++;
             var group = fields[(index + 1)..end];
             var efitFields = group.Where(field => field.Signature == "EFIT").ToArray();
-            if (efitFields.Length != 1 || efitFields[0].Data.Length != 20 || effect.Signature != "MGEF") continue;
+            if (efitFields.Length != 1 || efitFields[0].Data.Length != 20 || effect.Signature != "MGEF") return false;
             var data = efitFields[0].Data.Span;
             var defFields = effect.ReadSubrecords().Where(field => field.Signature == "DATA").ToArray();
-            if (defFields.Length != 1 || defFields[0].Data.Length != 72) continue;
+            if (defFields.Length != 1 || defFields[0].Data.Length != 72) return false;
             var definition = defFields[0].Data.Span;
             var flags = BinaryPrimitives.ReadUInt32LittleEndian(definition);
             var archetype = BinaryPrimitives.ReadUInt32LittleEndian(definition[64..]);
@@ -74,8 +80,9 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
                 if (scriptId is not null && records.TryGetEffective(scriptId.Value, out var scpt) && scpt.Signature == "SCPT")
                 {
                     scripts.Add(new(form, effect.FormKey, scriptId.Value, group.Where(field => field.Signature == "CTDA")
-                        .Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray()));
+                        .Select(field => FalloutCondition.Read(source, field.Data.Span)).ToArray(), ordinal));
                 }
+                else return false;
                 index = end - 1;
                 continue;
             }
@@ -92,6 +99,7 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
                 result.Add(new(form, effect.FormKey, value, (flags & 4) == 0 ? magnitude : -(float)magnitude, conditions,
                     source.Signature == "SPEL" && conditions.Length == 0 ? FalloutActorValuePool.Permanent : FalloutActorValuePool.Temporary));
             }
+            else return false;
             index = end - 1;
         }
         _scripts.Add(form, scripts);
@@ -110,7 +118,9 @@ internal sealed class FalloutAbilityModifiers(FalloutPluginStack records)
         var declaration = fields.Single(field => field.Signature == (source.Signature == "SPEL" ? "SPIT" : "ENIT")).Data.Span;
         if (declaration.Length != 16 || BinaryPrimitives.ReadUInt32LittleEndian(declaration) != (source.Signature == "SPEL" ? 4 : 3))
             throw new NotSupportedException($"Actor effect {form} requires a timed/scripted effect owner.");
-        if (modifiers.Count == 0 && _scripts.GetValueOrDefault(form)?.Count == 0)
+        if (!_scripts.ContainsKey(form))
+            throw new NotSupportedException($"Ability {form} contains an effect without its source/runtime owner.");
+        if (modifiers.Count == 0 && _scripts[form].Count == 0)
             throw new InvalidDataException($"Ability {form} has no effects.");
         return modifiers;
     }

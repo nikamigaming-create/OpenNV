@@ -1,5 +1,19 @@
 # Product status
 
+The FNV first-person beard and post-trait sofa trap are repaired in the current
+publication candidate. A private ordinary replay performs Continue, Vito-Matic,
+the questionnaire, tags and Skilled/Wild Wasteland selection, reaches stage 110,
+exits the source sofa with Activate and moves 2.6 metres with forward input. The
+seated first-person native frame is beard-free. F5, quit, cold Continue and another
+F5 preserve all 13 skill pools at +5 and the completed effect's exact local state;
+the original user save remains unchanged. Cold quit exits 0 and telemetry
+publication retains zero failures. Focused source/ordered-local/current-save
+checks and the actual owned Skilled ability audit pass. The required Release/Debug
+publication gate, native Godot checks and diff check pass. The refreshed immutable
+Release package and checked merge remain next. An independent
+reached malformed source-text script still refuses; its compiled execution owner
+and matched retail acceptance remain open.
+
 The native launcher refresh passes the required runtime gate and selected owned
 FNV/TTW launcher-stack checks. Actual FNV New Game enters the source confirmation;
 cancel and source-menu quit preserve the user's save. Native pixels are inspected

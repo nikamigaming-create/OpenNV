@@ -1525,24 +1525,35 @@ try
     Require(referenceRestore.State.TerminalResults is { Count: 0 }, "Current save lost its explicit closed-terminal result owner.");
     var playerSounds = new FalloutAnimationSoundEvents(cellStack.RuntimeFormKey(0x14));
     playerSounds.Fail(null, "unbound-original-emitter", "Sound: source-event");
+    var sourcePlayerValues = new FalloutPlayerActorValues(cellStack);
+    var sourcePlayerSkills = new FalloutPlayerSkills(cellStack, () => sourcePlayerValues.BaseSpecial,
+        _ => false, () => [], null, new FalloutPlayerInventory(), sourcePlayerValues.Source.Player,
+        () => FalloutDialogueTopic.RequiredForm(cellStack.GetEffective(sourcePlayerValues.Source.Player), "RNAM"),
+        () => false, actorValues: sourcePlayerValues);
+    var sourcePlayerEffects = new FalloutPlayerAbilityScripts(cellStack, sourcePlayerSkills.SelectedConstantEffects,
+        sourcePlayerSkills.AbilityCondition);
     var playerAudioSave = referenceSave with
     {
         Schema = FalloutNativeCampaignSave.ExpectedSchema,
-        PlayerPackageAudio = new(playerSounds.Capture(), 1234567)
+        PlayerPackageAudio = new(playerSounds.Capture(), 1234567),
+        PlayerSkillValues = sourcePlayerSkills.CaptureValues(),
+        PlayerAbilityScripts = sourcePlayerEffects.Capture()
     };
     FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave);
     var playerAudioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(JsonSerializer.Serialize(playerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio),
         "Ended player package lost its persistent sound fault or RNG state cold.");
-    var priorPlayerAudioSave = playerAudioSave with { Schema = FalloutNativeCampaignSave.PlayerAudioSchema };
-    var priorRadioSave = playerAudioSave with { Schema = FalloutNativeCampaignSave.FinishedRadioSchema };
+    var priorPlayerAudioSave = playerAudioSave with
+    { Schema = FalloutNativeCampaignSave.PlayerAudioSchema, PlayerSkillValues = null, PlayerAbilityScripts = null };
+    var priorRadioSave = playerAudioSave with
+    { Schema = FalloutNativeCampaignSave.FinishedRadioSchema, PlayerSkillValues = null, PlayerAbilityScripts = null };
     FalloutNativeCampaignSave.Write(syntheticSavePath, priorRadioSave);
     var priorRadioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(priorRadioRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+    Require(priorRadioRestore.State.Schema == FalloutNativeCampaignSave.FinishedRadioSchema &&
         JsonSerializer.Serialize(priorRadioRestore.State.References) == JsonSerializer.Serialize(playerAudioSave.References),
-        "The v48 migration changed source reference state.");
+        "Historical radio state acquired an incomplete current authority or changed its reference state.");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, priorRadioSave with
     {
         FinishedSpeech = new([], 0, 0, 0, 0, 0, null, ActiveRadio: [])
@@ -1550,10 +1561,10 @@ try
     FalloutNativeCampaignSave.Write(syntheticSavePath, priorPlayerAudioSave);
     var priorPlayerAudioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(priorPlayerAudioRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+    Require(priorPlayerAudioRestore.State.Schema == FalloutNativeCampaignSave.PlayerAudioSchema &&
         JsonSerializer.Serialize(priorPlayerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio) &&
         JsonSerializer.Serialize(priorPlayerAudioRestore.State.References) == JsonSerializer.Serialize(playerAudioSave.References),
-        "The v47 migration changed native reference state or player sound history.");
+        "Historical player audio acquired an incomplete current authority or changed source history.");
     var deferredAssignment = new FalloutActorPackageAssignment(new("Synthetic.esm", 1), new('a', 64), false);
     var deferredReference = new FalloutReferenceSnapshot(new("Synthetic.esm", 2), new("Synthetic.esm", 3),
         new("Synthetic.esm", 4), null, null, new Dictionary<uint, double>(), null, PackageAssignment: deferredAssignment,

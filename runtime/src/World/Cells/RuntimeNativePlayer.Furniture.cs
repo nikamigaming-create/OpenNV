@@ -68,6 +68,7 @@ internal partial class RuntimeNativePlayer
         var body = CreateFurnitureBody?.Invoke() ?? throw new NotSupportedException("Player furniture requires the current owned player body.");
         try
         {
+            NativePlayerSelfVisibility.Apply(body);
             var tree = new FalloutFurnitureIdleTree(records, body.Appearance.SkeletonPath);
             _furnitureBody = body;
             foreach (var state in new[] { 2, 1, 4 })
@@ -150,6 +151,7 @@ internal partial class RuntimeNativePlayer
             body.Visible = false;
             body.SetProcess(false);
             AddChild(body);
+            _furnitureInteractionOrdinal = checked(_furnitureInteractionOrdinal + 1);
             GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_BEGIN reference={reference.FormKey} marker={seat.Index} source=owned-furn-idle-kf camera=first-person-only parity=unverified");
         }
         catch
@@ -182,10 +184,6 @@ internal partial class RuntimeNativePlayer
         _furnitureBody!.Skeleton.Node.SetBonePose(_furnitureBody.Skeleton.BoneIndex(_furnitureClip.Sequence.TargetName), Transform3D.Identity);
         _furnitureClip.Animation.ApplySourceTime(_furnitureClip.Sequence.StartTime);
         _furnitureBody.Visible = true;
-        // The head is still a real player part, culled from its own first-person camera.
-        foreach (var part in _furnitureBody.Parts.Where(part => part.Root.GetMeta("opennv_source_part").AsString() is
-            "head" or "hair" or "ears" or "mouth" or "teeth-lower" or "teeth-upper" or "tongue" or "eye-left" or "eye-right"))
-            part.Root.Visible = false;
         Velocity = Vector3.Zero;
         PublishFurnitureCamera();
     }

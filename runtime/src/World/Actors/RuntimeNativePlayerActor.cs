@@ -136,6 +136,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
                         foreach (var mesh in part.FindChildren("*", "", true, false).OfType<GeometryInstance3D>())
                         { mesh.Layers = 0; mesh.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off; }
             }
+            if (firstPerson) NativePlayerSelfVisibility.Apply(Actor);
             SetAmbient(ambient);
             _idle = Clip(firstPerson ? "mtidle" : "locomotion/mtidle");
             if (Weapon?.Grip is { } grip && grip != 255)

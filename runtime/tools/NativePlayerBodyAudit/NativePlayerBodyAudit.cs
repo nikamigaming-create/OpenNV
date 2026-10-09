@@ -27,7 +27,14 @@ public partial class NativePlayerBodyAudit : Node3D
             var body = new RuntimeNativePlayerActor(records, content, appearance, weapon, false, .0142875f, Colors.White);
             AddChild(first); AddChild(body);
             body.ConfigureBodyContacts(2);
+            CheckSourceHeadVisibility(body);
             first.SetViewPolicy(true, false);
+            var sourceDevices = appearance.Models.Where(model => (model.BipedSlots & 64) != 0 && model.ModelPath is not null).ToArray();
+            if (sourceDevices.Length > 1) throw new InvalidDataException("Source player has multiple equipped wrist-device owners.");
+            var sourceDevicePath = sourceDevices.SingleOrDefault()?.ModelPath;
+            var sourceDevicePresent = sourceDevicePath is not null;
+            if (first.WristDevice()?.Path != sourceDevicePath || body.WristDevice()?.Path != sourceDevicePath)
+                throw new InvalidOperationException("Player views disagree with the source-equipped wrist device.");
             if (body.BodyContacts.Count == 0) throw new InvalidOperationException("Complete source body has no contacts.");
             var sourceBodies = body.Skeleton.Source.Blocks.Where(block => block.TypeName is "NiNode" or "NiBone" or "BSFadeNode")
                 .Select(block => body.Skeleton.Source.ReadNode(block.Index)).Count(node => node.CollisionObject >= 0);
@@ -70,8 +77,8 @@ public partial class NativePlayerBodyAudit : Node3D
                 CheckContacts(body);
                 if (body.WristDevice() is { } hiddenDevice && hiddenDevice.Root.IsVisibleInTree())
                     throw new InvalidOperationException("Two world Pip-Boy casters are active.");
-                if (first.WristDevice() is not { } liveDevice || !liveDevice.Root.FindChildren("*", "", true, false).OfType<GeometryInstance3D>()
-                    .Any(mesh => mesh.IsVisibleInTree() && mesh.CastShadow != GeometryInstance3D.ShadowCastingSetting.Off))
+                if (sourceDevicePresent && (first.WristDevice() is not { } liveDevice || !liveDevice.Root.FindChildren("*", "", true, false).OfType<GeometryInstance3D>()
+                    .Any(mesh => mesh.IsVisibleInTree() && mesh.CastShadow != GeometryInstance3D.ShadowCastingSetting.Off)))
                     throw new InvalidOperationException("Live cuff no longer casts its own enlarged shadow.");
             }
             var negative = body.BodyContacts[0]; negative.CollisionLayer = 0;
@@ -141,7 +148,8 @@ public partial class NativePlayerBodyAudit : Node3D
                 visibilityIndependentContacts = true,
                 anatomicalWristTargets = true,
                 trackedHeadTiltAndRoll = true,
-                singleLiveWristCaster = true,
+                sourceDevicePresent,
+                singleLiveWristCaster = sourceDevicePresent ? true : (bool?)null,
                 collisionNegative = true,
                 fullBodyWithHeadEyeExclusion = true,
                 crouchRetainsSourceFootTargets = true,

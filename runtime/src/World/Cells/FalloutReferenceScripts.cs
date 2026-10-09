@@ -325,7 +325,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     private IEnumerable<bool> Steps(FalloutFormKey source, FalloutScriptBindings bindings, FalloutGameModeProgram program,
         FalloutFormKey? actor, double seconds, FalloutUserFunctionFrame? frame = null, FalloutScriptExecutionBudget? budget = null,
         Action<Func<string, FalloutScriptFunction?>>? inspectFunctions = null,
-        Action<FalloutScriptInspectionContext>? inspectProgram = null)
+        Action<FalloutScriptInspectionContext>? inspectProgram = null, FalloutScriptEffectLocals? effectLocals = null)
     {
         budget ??= new();
         var valueStore = world.ScriptValues;
@@ -342,6 +342,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         }
         FalloutScriptValue ReadValue(string name)
         {
+            if (effectLocals?.Contains(name) == true) return effectLocals.Read(name);
             if (frame?.Contains(name) == true) return frame.ReadValue(name);
             if (name.Equals("this", StringComparison.OrdinalIgnoreCase))
                 return FalloutScriptValue.Form(CallingReference() is { } caller ? records.RuntimeFormId(caller) : 0);
@@ -359,6 +360,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         double Read(string name) => ReadValue(name).Number;
         void WriteValue(string name, FalloutScriptValue value)
         {
+            if (effectLocals?.Contains(name) == true) { effectLocals.Write(name, value); return; }
             if (frame?.Contains(name) == true) { frame.WriteValue(name, value); return; }
             if (bindings.TryForm(name) is { Signature: "GLOB" } global)
             {
@@ -391,11 +393,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             else world.Get(key.Owner).Write(key.Index, cleared);
         }
         void Write(string name, double value) => WriteValue(name, value);
-        bool IsForm(string name) => frame?.Contains(name) == true
+        bool IsForm(string name) => effectLocals?.Contains(name) == true
+            ? effectLocals.Kind(name) == FalloutScriptLocalKind.Form
+            : frame?.Contains(name) == true
             ? frame.Definition.Kind(name) == FalloutScriptLocalKind.Form
             : FalloutScriptBindings.IsPlayer(name) || bindings.TryForm(name) is { Signature: not "GLOB" } ||
                 bindings.HasVariable(name) && bindings.VariableKind(name) == FalloutScriptLocalKind.Form;
-        bool HasValueOwner(string name) => frame?.Contains(name) == true ||
+        bool HasValueOwner(string name) => effectLocals?.Contains(name) == true || frame?.Contains(name) == true ||
             name.Equals("this", StringComparison.OrdinalIgnoreCase) || FalloutScriptBindings.IsPlayer(name) ||
             bindings.TryForm(name) is not null || bindings.HasVariable(name);
         var values = new FalloutScriptValueContext(ReadValue, WriteValue, FormName, valueStore.Arrays,

@@ -11,12 +11,31 @@ defines the complete graph, ordinary campaigns, cold continuation, matched
 retail evidence and checked publication. All 36 broad requirements remain open;
 component checks establish no completion percentage.
 
-All four owners remain active. Primary integrates the larger gameplay/current-save
-and native-plugin candidate and publishes completed slices to origin. The FNV
-development playtest remains available independently through its pinned shortcut.
-Parallel owners implement sleep/wait and its live world consumers, actor
-detection/process clocks, and native plugin source-file consumers after
-constructor/object graphs.
+The reported first-person beard and post-trait sofa trap are repaired in the
+publication candidate. Source appearance roles and BMDT slots assign the complete
+head, including zero-slot HDPT attachments, to the self-camera layer. The actual
+scripted ability owns mutable skills and ordered effect locals. Ordinary private
+Continue, Vito-Matic allocation, questionnaire, tags and Skilled/Wild Wasteland
+selection reach stage 110; Activate completes exiting -> none and forward input
+moves the standing player 2.6 metres. The seated native frame has no beard in the
+self view. F5, ordinary quit, cold Continue and a second F5 retain identical
+13 skill pools at +5 and the one completed effect generation/local cell. Telemetry
+publication failures are zero, cold quit exits 0, and the original user save is
+byte-identical. The required Release/Debug publication gate, native Godot checks,
+selected owned ability audit and diff check pass. The new immutable Release pin
+and checked merge are next. This establishes the selected opening repair, not
+complete campaign or
+matched retail acceptance. A reached malformed source-text branch still refuses
+and requires the compiled-script execution owner.
+
+All four owners remain active. The larger gameplay/current-save and native-plugin
+candidate is preserved separately while this reported gameplay fault is repaired
+and published. The FNV development playtest remains available independently
+through its pinned shortcut.
+Parallel owners implement source actor-AI and CELL lifecycle producers, declared
+menu shortcuts, and native binary-file members after the loaded-source collection.
+Sleep/wait consumers, detection/process constructors and source-file collection
+packets remain preserved for primary integration.
 The user requires substantial greenfield code batches, fully data-driven behavior
 and no earlier OpenNV/save compatibility. Compile during integration; execute
 combined broad/native/owned checks at roughly four-hour intervals and before
