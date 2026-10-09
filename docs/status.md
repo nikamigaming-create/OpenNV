@@ -1,5 +1,16 @@
 # Product status
 
+Source-declared PC menu shortcuts share the native mouse actions. Rendered-menu
+input now clips the actual source triangles against the six camera planes and
+actual displayed/canvas clip extent, preserving material and reflection culling.
+Offscreen candidates supply no input point; surviving points must pick their
+same active source identity. Release/Debug builds, authored key/action/failure contracts
+and the genuine native camera/texture/triangle ownership fixture pass with fresh
+assembly identity and clean exit. The full required publication gate and selected
+FNV/FO3 winning SPECIAL XML/model/executable declaration audits pass. Checked
+publication remains next. Ordinary native key dispatch, source pose/framing, pixel coverage,
+complete campaign and matched retail/XR acceptance remain unverified.
+
 The FNV first-person beard and post-trait sofa trap are repaired in the pinned
 development Release. A private ordinary replay performs Continue, Vito-Matic,
 the questionnaire, tags and Skilled/Wild Wasteland selection, reaches stage 110,

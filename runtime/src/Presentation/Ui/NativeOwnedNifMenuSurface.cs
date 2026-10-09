@@ -123,39 +123,8 @@ internal sealed partial class NativeOwnedNifMenuSurface : Control
     }
 
     internal IReadOnlyList<NativeOwnedNifMenuTarget> Targets(Func<string, MeshInstance3D, bool> active) =>
-        _geometry.Where(item => active(item.Key, item.Value)).Select(item =>
-        {
-            var mesh = item.Value; var bounds = mesh.Mesh.GetAabb();
-            var points = Enumerable.Range(0, 8).Select(index => Camera.UnprojectPosition(mesh.GlobalTransform * bounds.GetEndpoint(index))).ToArray();
-            var minimum = points.Aggregate((a, b) => new Vector2(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y)));
-            var maximum = points.Aggregate((a, b) => new Vector2(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y)));
-            var center = mesh.GlobalTransform * bounds.GetCenter();
-            return new NativeOwnedNifMenuTarget(item.Key, Camera.UnprojectPosition(center), new(minimum, maximum - minimum), !Camera.IsPositionBehind(center));
-        }).ToArray();
+        ProjectedTargets(active);
 
-    internal string? Pick(Vector2 position, Func<string, MeshInstance3D, bool> active)
-    {
-        const float tolerance = 1e-5f;
-        var origin = Camera.ProjectRayOrigin(position); var direction = Camera.ProjectRayNormal(position);
-        var nearest = float.PositiveInfinity; string? result = null;
-        foreach (var (name, mesh) in _geometry.Where(item => active(item.Key, item.Value)))
-        {
-            var inverse = mesh.GlobalTransform.AffineInverse(); var o = inverse * origin; var d = inverse.Basis * direction;
-            var arrays = mesh.Mesh.SurfaceGetArrays(0); var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
-            var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
-            for (var index = 0; index < indices.Length; index += 3)
-            {
-                var a = vertices[indices[index]]; var first = vertices[indices[index + 1]] - a; var second = vertices[indices[index + 2]] - a;
-                var cross = d.Cross(second); var determinant = first.Dot(cross);
-                if (MathF.Abs(determinant) < 1e-8f) continue;
-                var offset = o - a; var u = offset.Dot(cross) / determinant;
-                if (u < -tolerance || u > 1 + tolerance) continue;
-                var q = offset.Cross(first); var v = d.Dot(q) / determinant;
-                if (v < -tolerance || u + v > 1 + tolerance) continue;
-                var hit = second.Dot(q) / determinant;
-                if (hit > 0 && hit < nearest) { nearest = hit; result = name; }
-            }
-        }
-        LastPicked = result; return result;
-    }
+    internal string? Pick(Vector2 position, Func<string, MeshInstance3D, bool> active) =>
+        PickProjected(position, active);
 }

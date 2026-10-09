@@ -26,13 +26,18 @@ selected owned ability audit and diff check pass. The immutable export also
 observes the exact furniture reservation while approaching, completes actual
 entry, exits with Activate, moves 2.76 metres and quits with exit code 0. The
 stable FNV Test entry is advanced and PR 182 is merged with every CI check
-passing. Main is synchronized to `4a739468d70a58c5b1db8ab59779a6d0a9c22d09`.
+passing. The delivered repair is merged on main.
 Source-declared PC menu input now joins the existing native mouse actions on
-`codex/source-menu-input-projection`. Debug compilation and the authored alternate
-key/action/failure checks pass. Original Back remains an explicit missing-target
-transition refusal. Native dispatch, Release/publication checks and general
-source-screen projection remain next while the larger compiled/native candidate
-continues.
+`codex/source-menu-input-projection`. General source-triangle projection now
+joins both rendered menus, all six native camera planes, source material culling,
+actual display/canvas transforms and ancestor clips. Reported click points must
+pick the same active source identity; offscreen candidates retain no input point.
+Release/Debug compilation, authored alternate-key/action/failure contracts and the real
+native projection/ownership fixture pass. The complete required publication gate
+and selected FNV/FO3 winning SPECIAL XML/model/executable declaration audits pass.
+Original Back remains an explicit missing-target transition refusal. Checked
+publication is next. Native ordinary key dispatch, source animation/framing and matched
+retail/XR pixels remain open while the larger compiled/native candidate continues.
 This establishes
 the selected opening repair, not complete campaign or matched retail acceptance.
 A reached malformed source-text branch still refuses
@@ -42,10 +47,13 @@ All four owners remain active. The larger gameplay/current-save and native-plugi
 candidate is preserved separately and the reported gameplay fix is published.
 The FNV development playtest remains available independently
 through its pinned shortcut.
-Parallel owners implement source actor-AI and CELL lifecycle producers, declared
-menu shortcuts, and native binary-file members after the loaded-source collection.
-Sleep/wait consumers, detection/process constructors and source-file collection
-packets remain preserved for primary integration.
+The larger candidate has integrated actor detection/process constructors,
+actual AI/CELL lifecycle, source sleep/wait/save/time/fade/sound owners and callable
+native binary members. Combined C# and protocol-10 x86 Debug compilation pass;
+their contracts, native callbacks and ordinary gameplay remain unexecuted. Parallel
+owners implement actual rest RNG/hourly consumers, Main/Player/tree process transfer
+and source-winning native profile/directory imports. The selected UCRT stream
+packet is frozen for primary integration. Missing real producers remain refused.
 The user requires substantial greenfield code batches, fully data-driven behavior
 and no earlier OpenNV/save compatibility. Compile during integration; execute
 combined broad/native/owned checks at roughly four-hour intervals and before

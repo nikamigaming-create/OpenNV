@@ -44,6 +44,8 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
         error = Error,
         pointerGeometry = _surface.LastPicked,
         animation = _animation.Observation,
+        projectionCoordinates = "surface-control-local",
+        projectionCandidates = _surface.ProjectionCandidates(IsActiveTarget).Select(candidate => candidate.Observation).ToArray(),
         targets = Targets.Select(target => new
         {
             target.Geometry,
@@ -52,7 +54,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             target.InFront
         }),
         integration = "explicit-permanent-read-and-base-write-binding;host-owns-command-menu-and-save-policy",
-        unbound = "PC-shortcut-repeat,texture-input-mode-switching,fade-and-postprocessing,clip-plane-and-animated-bound-fitting,language-remapping,matched-retail-and-XR-pixels"
+        unbound = "PC-shortcut-repeat,texture-input-mode-switching,fade-and-postprocessing,source-pose-and-animated-bound-fitting,alpha-pixel-coverage,unrelated-occluders,shader-draw-order,language-remapping,matched-retail-and-XR-pixels"
     };
 
     internal NativeOwnedSpecialBookMenu(FalloutPluginStack records, FalloutSpecialAllocationBinding binding, int? budget,
@@ -154,7 +156,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     public override void _GuiInput(InputEvent input)
     {
         if (_submitted || Error is not null || input is not InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } click) return;
-        Try(() => { var hit = _surface.Pick(click.Position, IsActiveTarget); if (hit is not null) _actions[hit](); AcceptEvent(); });
+        Try(() => { var hit = _surface.PickFrom(this, click.Position, IsActiveTarget); if (hit is not null) _actions[hit](); AcceptEvent(); });
     }
 
     public override void _UnhandledInput(InputEvent input)

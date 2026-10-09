@@ -145,6 +145,15 @@ if ($LASTEXITCODE -ne 0 -or $pcmText -match $godotFailurePattern -or $pcmText -n
 }
 Write-Output "OPENNV_NATIVE_PCM_PLAYBACK_PASS fractionalCold=true envelope=true mixer=true pause=true"
 
+$menuProjectionOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeMenuGeometryProjectionAudit/NativeMenuGeometryProjectionAudit.tscn 2>&1
+$menuProjectionText = $menuProjectionOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $menuProjectionText -match $godotFailurePattern -or
+    $menuProjectionText -notmatch "OPENNV_NATIVE_MENU_PROJECTION_ASSEMBLY mvid=[0-9a-f-]{36}" -or
+    $menuProjectionText -notmatch "OPENNV_NATIVE_MENU_GEOMETRY_PROJECTION_PASS") {
+    throw "OpenNV native menu geometry/input ownership failed:`n$menuProjectionText"
+}
+Write-Output "OPENNV_NATIVE_MENU_GEOMETRY_PROJECTION_PASS actualCamera=true displayedTransform=true clipping=true sourceUnchanged=true"
+
 $instanceOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeNifInstanceAudit/NativeNifInstanceAudit.tscn 2>&1
 $instanceText = $instanceOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $instanceText -match $godotFailurePattern -or

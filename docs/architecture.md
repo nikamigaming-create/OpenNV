@@ -34,6 +34,18 @@ use the same component reader, and missing or malformed channels refuse
 publication. The no-system-color token leaves the canvas untinted. Native menu,
 name-entry and start-menu consumers use this owner without game-specific colors.
 
+PC shortcuts read the selected menu XML button declarations and dispatch through
+the same actions as mouse input. Unknown key tokens, missing actions and unowned
+Back transitions refuse; input repeats cannot replay a completed callback prefix.
+Rendered-menu input uses actual source triangles, six camera planes, material
+culling, display/canvas transforms and ancestor clip rectangles. A reported point
+must lie inside a surviving triangle and pick the same active source identity at
+the actual ray depth. Raw source centers remain diagnostic; offscreen geometry
+supplies no click point. Missing deformed vertices or material geometry ownership
+refuses, while pixel alpha, unrelated occlusion and retail/XR framing remain
+separate acceptance lanes. The adapter borrows native objects and retires only
+its decoded in-process triangle cache.
+
 Player self visibility follows the winning appearance part role and BMDT slots,
 including recursive zero-slot HDPT attachments. Complete head geometry retains
 its world visibility and shadow settings on a reserved layer; first-person,
