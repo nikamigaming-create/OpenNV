@@ -67,7 +67,7 @@ internal sealed partial class NativeOwnedRestInterfaceSounds : Node
             var descriptor = receipt.Source.RequireCurrent(_records);
             if (descriptor.IsLooping)
                 throw new NotSupportedException("Looping rest interface cues require their genuine explicit stop/cold-continuation owner.");
-            player = NativeOwnedSoundPlayback.CreateMenu(descriptor, _records, _records.OwnedSource!, _owner.SoundRandom);
+            player = NativeOwnedSoundPlayback.CreateSourceMenu(descriptor, _records, _owner.PlaybackSource);
             _voices.Add(player, receipt);
             _owner.NativeAllocated(_lease, receipt.Sequence, player.GetInstanceId());
             player.ProcessMode = ProcessModeEnum.Always;

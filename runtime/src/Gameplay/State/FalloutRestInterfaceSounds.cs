@@ -9,13 +9,13 @@ internal sealed record FalloutRestInterfaceVoice(long Sequence, long RequestOrdi
     FalloutRestInterfaceCue Source, FalloutRestInterfaceVoiceState State, RuntimeSaveProcessIdentity Process,
     ulong? NativePlayer, string? Failure, bool NativeVoiceRetired = false);
 internal sealed record FalloutRestInterfaceSoundSnapshot(string Schema, string SourceSha256,
-    ulong RandomState, long LastSequence, IReadOnlyList<FalloutRestInterfaceVoice> Voices, string? Failure);
+    string PlaybackSourceSha256, long LastSequence, IReadOnlyList<FalloutRestInterfaceVoice> Voices, string? Failure);
 
 // A cue request, native start and actual Finished callback are independent
 // receipts. Active native menu audio has no invented cold sample cursor.
 internal sealed class FalloutRestInterfaceSounds
 {
-    internal const string Schema = "opennv-rest-interface-sounds/v1";
+    internal const string Schema = "opennv-rest-interface-sounds/v2";
     private readonly FalloutPluginStack _records;
     private readonly FalloutSleepWait _rest;
     private readonly List<FalloutRestInterfaceVoice> _voices = [];
@@ -23,7 +23,7 @@ internal sealed class FalloutRestInterfaceSounds
     private long _sequence;
     private string? _failure;
     internal FalloutRestInterfaceSoundSource Source { get; }
-    internal FalloutSoundRandomState SoundRandom { get; }
+    internal FalloutMenuCuePlaybackSource PlaybackSource { get; }
     internal string? Failure => _failure;
     internal bool Active => _voices.Any(row => row.State is FalloutRestInterfaceVoiceState.Requested or
         FalloutRestInterfaceVoiceState.NativeAllocated or FalloutRestInterfaceVoiceState.NativeStarted ||
@@ -33,16 +33,17 @@ internal sealed class FalloutRestInterfaceSounds
         nativePublished = _native is not null, saveBlocker = SaveBlocker };
 
     internal FalloutRestInterfaceSounds(FalloutPluginStack records, FalloutSleepWait rest,
-        FalloutSoundRandomState soundRandom, FalloutRestInterfaceSoundSnapshot? restore = null)
+        FalloutRestInterfaceSoundSnapshot? restore = null)
     {
-        ArgumentNullException.ThrowIfNull(records); ArgumentNullException.ThrowIfNull(rest); ArgumentNullException.ThrowIfNull(soundRandom);
-        _records = records; _rest = rest; SoundRandom = soundRandom; Source = FalloutRestInterfaceSoundSource.Read(records, rest.Source);
+        ArgumentNullException.ThrowIfNull(records); ArgumentNullException.ThrowIfNull(rest);
+        _records = records; _rest = rest; Source = FalloutRestInterfaceSoundSource.Read(records, rest.Source);
+        PlaybackSource = FalloutMenuCuePlaybackSource.Read(rest.Source); PlaybackSource.Validate();
         if (restore is null) return;
         if (restore.Schema != Schema || restore.SourceSha256 != Source.Identity || restore.Voices is null ||
             restore.Voices.Any(row => row is null) ||
-            restore.LastSequence != restore.Voices.Count || restore.RandomState != soundRandom.State ||
+            restore.LastSequence != restore.Voices.Count || restore.PlaybackSourceSha256 != PlaybackSource.Identity ||
             restore.Failure is not null && string.IsNullOrWhiteSpace(restore.Failure))
-            throw new InvalidDataException("Cold rest interface sounds lack their complete source/RNG/voice prefix.");
+            throw new InvalidDataException("Cold rest interface sounds lack their complete source/playback/voice prefix.");
         foreach (var row in restore.Voices)
         {
             if (row.Sequence != _voices.Count + 1L || row.RequestOrdinal <= 0 || row.RequestOrdinal > rest.RequestOrdinal ||
@@ -80,7 +81,7 @@ internal sealed class FalloutRestInterfaceSounds
             kind == FalloutRestInterfaceCueKind.Cancel && _rest.Phase is not (FalloutRestPhase.Choosing or FalloutRestPhase.Running or FalloutRestPhase.Completed) ||
             _voices.Any(row => row.RequestOrdinal == _rest.RequestOrdinal && row.Kind == kind))
             throw new InvalidOperationException("Interface sound requires the actual once-only current start/cancel menu branch.");
-        var source = Cue(kind); _ = source.RequireCurrent(_records);
+        var source = Cue(kind); _ = PlaybackSource.ExactFile(_records, source.RequireCurrent(_records));
         var sequence = checked(_sequence + 1);
         var row = new FalloutRestInterfaceVoice(sequence, _rest.RequestOrdinal, kind, source,
             FalloutRestInterfaceVoiceState.Requested, RuntimeSaveProcessIdentity.Current, null, null);
@@ -154,12 +155,28 @@ internal sealed class FalloutRestInterfaceSounds
         new(FalloutRestFactState.Unowned, "actual-rest-interface-sound-host", "The actual source sound host has not published.") :
         new(FalloutRestFactState.Satisfied, "actual-rest-interface-sound-host:" + Source.Identity);
 
+    internal FalloutRestObservation ObserveCueCapability(FalloutRestInterfaceCueKind kind)
+    {
+        var publication = ObserveNativePublication();
+        if (publication.State != FalloutRestFactState.Satisfied) return publication;
+        try
+        {
+            _ = PlaybackSource.ExactFile(_records, Cue(kind).RequireCurrent(_records));
+            return new(FalloutRestFactState.Satisfied, "actual-exact-menu-cue:" + PlaybackSource.Identity);
+        }
+        catch (Exception error) when (FalloutPlayerPhysicalActivity.Ordinary(error))
+        {
+            return new(FalloutRestFactState.Unowned, "actual-exact-menu-cue:" + PlaybackSource.Identity,
+                error.GetType().Name + ": " + error.Message);
+        }
+    }
+
     internal FalloutRestInterfaceSoundSnapshot Capture()
     {
         if (SaveBlocker is { } blocker)
             throw new NotSupportedException("Rest interface sound capture requires " + blocker + "; active cold sample continuation is unowned.");
         Source.RequireSource(_records, _rest.Source);
-        return new(Schema, Source.Identity, SoundRandom.State, _sequence, _voices.ToArray(), _failure);
+        return new(Schema, Source.Identity, PlaybackSource.Identity, _sequence, _voices.ToArray(), _failure);
     }
 
     private FalloutRestInterfaceCue Cue(FalloutRestInterfaceCueKind kind) => kind switch

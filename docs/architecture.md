@@ -59,9 +59,14 @@ Sleep/wait retains the source player counter and UI countdown independently. Sou
 furniture publication, rest admission, the persistent save queue, cumulative world
 time, fades and completed audio voices share current capture and cold validation.
 Actual campaign callbacks own restriction observations, source counting, each
-world/effect hour and completion. Missing callbacks or the selected cue RNG remain
-explicitly unowned; an ordinary world tick or convenient random stream cannot
-stand in for their source behavior. Cold validation never replays these prefixes.
+world/effect hour and completion. Exact finite named WAV cues use the selected
+original no-folder/no-RNG branch and the real shared native sound host. Their raw
+current FNAM is checked before canonicalization or native allocation, preserving
+directory requests and descriptor drift. Current cold sound state pins the
+playback/source history and constructs no random stream or voice. Missing world
+callbacks, random playback and folder/history selection remain explicitly unowned;
+an ordinary world tick or convenient random stream cannot stand in for their
+source behavior. Cold validation never replays these prefixes.
 
 XP notifications retain actual award order and source-selected tile declarations,
 raw wall-clock fades and a distinct pausable level-text timer. Genuine native draws,

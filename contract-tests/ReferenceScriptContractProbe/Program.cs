@@ -18,6 +18,12 @@ if (args is ["--rest-host-contracts"])
     return;
 }
 
+if (args is ["--test-source-rest-cues"])
+{
+    SourceRestCueContracts.Run();
+    return;
+}
+
 if (args is ["--test-rest-interface-consumers"])
 {
     RestWorldConsumerContracts.Run();
@@ -1053,6 +1059,7 @@ ActorUpdateCellProcessContracts.Run();
 SleepWaitContracts.Run();
 RestHostContracts.Run();
 RestWorldConsumerContracts.Run();
+SourceRestCueContracts.Run();
 PlayerAdvancementContracts.Run();
 PlayerPhysicalActivityContracts.Run();
 LevelUpPerkSourceContracts.Run();

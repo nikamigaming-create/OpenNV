@@ -205,17 +205,17 @@ internal static class RestHostContracts
         {
             using var records = FalloutPluginStack.Load(folder.FullName, ["AuthoredRest.esm"]);
             var rest = new RestFixture(); rest.Open(FalloutRestKind.Wait);
-            var owner = new FalloutRestInterfaceSounds(records, rest.Owner, new(9)); var lease = owner.BindNative();
+            var owner = new FalloutRestInterfaceSounds(records, rest.Owner); var lease = owner.BindNative();
             var cue = owner.RequestCue(lease, rest.Owner.Request!, FalloutRestInterfaceCueKind.Start);
             owner.NativeAllocated(lease, cue.Sequence, 900); owner.NativeStarted(lease, cue.Sequence, 900);
             owner.Failed(lease, cue.Sequence, new IOException("authored-native-prefix")); Reject(() => owner.Capture());
             owner.NativeStopped(lease, cue.Sequence, 900); var snapshot = RoundTrip(owner.Capture());
             Require(snapshot.Voices.Single() is { State: FalloutRestInterfaceVoiceState.Failed, NativeVoiceRetired: true } &&
                 snapshot.Failure is not null, "A stopped failed cue invented successful completion or lost its error.");
-            var cold = new FalloutRestInterfaceSounds(records, rest.Cold().Owner, new(snapshot.RandomState), snapshot);
+            var cold = new FalloutRestInterfaceSounds(records, rest.Cold().Owner, snapshot);
             var coldLease = cold.BindNative(); Reject(() => cold.RequestCue(coldLease, rest.Owner.Request!, FalloutRestInterfaceCueKind.Start));
-            Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(snapshot), "Cold cue changed its retained failed prefix/RNG.");
-            Reject(() => new FalloutRestInterfaceSounds(records, rest.Owner, new(snapshot.RandomState), snapshot with
+            Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(snapshot), "Cold cue changed its retained failed source/playback prefix.");
+            Reject(() => new FalloutRestInterfaceSounds(records, rest.Owner, snapshot with
                 { Voices = [snapshot.Voices.Single() with { State = FalloutRestInterfaceVoiceState.NativeStarted, Failure = null, NativeVoiceRetired = false }] }));
             Require(File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes), "Rest cue parsing changed its source bytes.");
         }

@@ -24,7 +24,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         _restAutoSave?.Failure ?? _restInterfaceSounds?.Failure ?? _hardcoreNeeds?.Failure;
     internal string? CampaignRestSaveBlocker => _playerRest is null ? "source-rest-owner-absent" :
         _playerRest.SaveBlocker ?? SourceRestInterfaceSaveBlocker ?? _restInterfaceSoundsNative?.SaveBlocker ??
-        (_restInterfaceSounds is null ? "source-rest-interface-cue-rng-provider-unbound" : _restInterfaceSounds.SaveBlocker) ??
+        (_restInterfaceSounds is null ? "source-rest-interface-cue-playback-unpublished" : _restInterfaceSounds.SaveBlocker) ??
         (_restAutoSave is null ? "source-rest-autosave-owner-absent" : null) ??
         (_restWorldTime is null ? "source-rest-cumulative-world-time-owner-absent" : null) ??
         ((_hardcoreNeedRestore is not null || _scripts.Session.Hardcore) && _hardcoreNeeds is null
@@ -35,7 +35,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         autosave = _restAutoSave?.Capture(), worldTime = _restWorldTime?.Capture(),
         sounds = _restInterfaceSounds?.State, interfaceState = SourceRestInterfaceState,
         hardcore = _hardcoreNeeds?.State, consumersBound = _campaignRestConsumerLease is not null,
-        cueRandomProviderBound = _restInterfaceSounds is not null, retired = _campaignRestRetired,
+        cuePlaybackPublished = _restInterfaceSounds is not null, retired = _campaignRestRetired,
         failure = CampaignRestFailure, saveBlocker = CampaignRestSaveBlocker,
     };
 
@@ -77,9 +77,9 @@ internal partial class RuntimeNativeOpeningStageDriver
         _restInterfaceSoundRestore = restore is null ? null : restore.RestInterfaceSounds ??
             throw new InvalidDataException("Current campaign has no rest interface sound continuation.");
         _hardcoreNeedRestore = restore?.HardcoreNeeds;
-        // Cue records and event order are admitted separately. The actual
-        // original RNG provider is still required; no convenient stream or
-        // fresh/fixed seed stands in for that missing producer.
+        // The original exact-file branch performs no variant/random draw.
+        // Random/folder requests retain their distinct unowned consumers.
+        BindSourceRestCuePlayback();
     }
 
     internal IDisposable BindActualCampaignRestConsumers(FalloutCampaignRestConsumers consumers)
@@ -105,14 +105,11 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutCampaignRestConsumers RequireCampaignRestConsumers(string reached) => _campaignRestConsumers ??
         throw new NotSupportedException("original-rest-" + reached + "-producer-unbound");
 
-    // Called only by a producer that has traced the selected original cue RNG
-    // scope. Merely constructing this adapter does not prove that admission.
-    internal void BindActualRestCueRandom(FalloutSoundRandomState actualRandom)
+    internal void BindSourceRestCuePlayback()
     {
-        ArgumentNullException.ThrowIfNull(actualRandom);
         if (_campaignRestRetired || _restInterfaceSounds is not null || !IsInsideTree())
-            throw new InvalidOperationException("Rest cue RNG has no new living campaign publication.");
-        var sounds = new FalloutRestInterfaceSounds(_pluginStack, PlayerRest, actualRandom, _restInterfaceSoundRestore);
+            throw new InvalidOperationException("Rest cue playback has no new living campaign publication.");
+        var sounds = new FalloutRestInterfaceSounds(_pluginStack, PlayerRest, _restInterfaceSoundRestore);
         _restInterfaceSounds = sounds;
         _restInterfaceSoundsNative = NativeOwnedRestInterfaceSounds.Attach(this, _pluginStack,
             PlayerRest, sounds, RetainCurrentPlayerRestFailure);
@@ -129,12 +126,17 @@ internal partial class RuntimeNativeOpeningStageDriver
         _hardcoreNeeds = actualNeeds;
     }
     private NativeOwnedRestInterfaceSounds RequireRestCuePublication() => _restInterfaceSoundsNative ??
-        throw new NotSupportedException("original-rest-interface-cue-rng-provider-and-native-publication-unbound");
+        throw new NotSupportedException("original-rest-interface-cue-native-publication-unbound");
     private FalloutRestObservation ObserveOtherCampaignRestFact(FalloutRestRequest request, FalloutRestFact fact)
     {
         if (fact == FalloutRestFact.SourceMenuBeginConsumerOwned && _restInterfaceSoundsNative is null)
-            return new(FalloutRestFactState.Unowned, "original-rest-interface-cue-rng-provider",
-                "The selected original cue RNG scope has no living admitted provider.");
+            return new(FalloutRestFactState.Unowned, "original-rest-interface-cue-native-publication",
+                "The actual selected cue host has not published.");
+        if (fact == FalloutRestFact.SourceMenuBeginConsumerOwned)
+        {
+            var cue = _restInterfaceSounds!.ObserveCueCapability(FalloutRestInterfaceCueKind.Start);
+            if (cue.State != FalloutRestFactState.Satisfied) return cue;
+        }
         if (fact == FalloutRestFact.SourceMenuBeginConsumerOwned && request.Kind == FalloutRestKind.Sleep)
         {
             var fade = ObserveSourceRestFadePublication();
@@ -175,7 +177,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal FalloutRestWorldTimeSnapshot CaptureCurrentRestWorldTime() => (_restWorldTime ??
         throw new NotSupportedException("Current campaign has no cumulative rest world-time owner.")).Capture();
     internal FalloutRestInterfaceSoundSnapshot CaptureCurrentRestInterfaceSounds() => (_restInterfaceSounds ??
-        throw new NotSupportedException("Current campaign has no actual rest cue RNG provider.")).Capture();
+        throw new NotSupportedException("Current campaign has no actual rest cue playback owner.")).Capture();
     internal FalloutHardcoreNeedSnapshot? CaptureCurrentHardcoreNeeds()
     {
         if ((_scripts.Session.Hardcore || _hardcoreNeedRestore is not null) && _hardcoreNeeds is null)

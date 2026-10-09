@@ -54,18 +54,26 @@ Debug builds pass with zero warnings/errors. Actual Actor AI update state and CE
 load/attach/detach/release now join genuine native reference construction and
 retirement, current capture and cold validation. Sleep/wait joins source furniture,
 physical state, the real save queue, cumulative world time, source fades and sound
-lifetimes. Its required cue RNG, hourly world/effect, console and interface-clock
-producers remain unowned, and reached operations refuse without them. These joins
-compile; their source contracts, native callbacks and ordinary gameplay have not
-run. Missing process election, common transfer, pair/light and original frame
+lifetimes. Exact finite source WAV cues now use the original no-selector/no-RNG
+branch and the actual native sound host. The raw source path keeps directory and
+random requests refused before native allocation; current cold cue state retains
+the source/playback identity without fabricating a random stream. Combined Debug
+runtime compilation and focused Debug/Release cue/rest-host contracts pass. Hourly
+world/effect, console and interface-clock producers remain unowned; ordinary rest
+and real cue audio have not run. Missing process election, common transfer, pair/light and original frame
 producers remain visible. Genuine selected-provider UCRT FILE streams, native
 buffers/variadic output, source/private path decisions, actual error results and
 stream/provider retirement are integrated and compile. Protocol-11 authored
 fault/domain/arena execution passes; it exercises no selected CRT file import or
 original DLL compatibility. Actual CRT stream execution is next. The source-menu
 shortcut/projection slice has passed its required gate and selected FNV/FO3 source
-audits and is published for checked merge as PR 183. The current pinned repair
-Release remains unchanged.
+audits and is merged as PR 183 on origin/main at
+`1b159f3b9e00333eb926f3d1a7b19cd52f055175` with every CI check passing.
+Local publication main matched origin/main cleanly before the fresh
+`codex/source-menu-live-continuation` block. A bounded ordinary activation retains
+the source-text branch error and absent Vito-Matic menu at stage 60; it is not an
+ordinary menu acceptance result. Quit exits 0 and the original save is unchanged.
+The current pinned repair Release remains unchanged.
 Source-only packets and successful compilation remain distinct from executed gameplay.
 
 ## Integrated candidate
@@ -105,7 +113,8 @@ require actual healthy native body publication before source execution. Independ
 IsPCSleeping, actor sleep and knocked queries bind the same owners; retained physical
 faults stop dependent script execution. Obsolete furniture-body factories are removed.
 The source sleep/wait owner, rest-host admission, save/time/fade/sound continuation
-and mandatory cold state are integrated and compile. Required real rest RNG and
+and mandatory cold state are integrated and compile. Exact nonrandom cue admission
+and current sound-prefix contracts pass; random/folder selection and real
 hourly world/effect producers, active ordinary sleep/wait execution,
 interruption/death and camera/headset acceptance remain open. Player appearance now resolves the canonical
 engine base instead of an editor-name search.

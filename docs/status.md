@@ -33,9 +33,13 @@ Source sleep/wait, rest admission, furniture publication, save-queue ownership,
 cumulative world time, interface fades and rest sound lifetimes are integrated.
 Current capture and cold validation retain the same owners. The combined runtime,
 script-contract project and protocol-11 x86 Debug companion compile with zero
-warnings/errors. Real rest cue RNG, hourly world/effect, console and interface-clock
-producers remain required; no absent producer is replaced by a fixed value or empty
-callback. Contract/native execution and ordinary sleep/wait gameplay remain pending.
+warnings/errors. Exact finite source WAV cues now use the actual shared native
+sound host and perform no selector/RNG draw. Raw directories, random playback,
+unsupported codecs and source drift refuse before native allocation. The current
+sound snapshot retains source/playback history. Focused cue and rest-host
+contracts pass in Debug/Release; callbacks in that lane are authored. Actual
+audio, random/folder selection, hourly world/effect, console and interface-clock
+producers and ordinary sleep/wait remain open.
 
 The current greenfield integration candidate adds compiled startup/query/effect
 owners, player package result execution, typed NIF physics and particle families,

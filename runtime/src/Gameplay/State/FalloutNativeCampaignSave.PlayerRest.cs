@@ -80,8 +80,8 @@ internal static partial class FalloutNativeCampaignSave
         };
         var rest = new FalloutSleepWait(saved.Source, clock, host, saved);
         var sound = state.RestInterfaceSounds ?? throw new InvalidDataException("Current save has no rest cue state.");
-        _ = new FalloutRestInterfaceSounds(records, rest, new(sound.RandomState), sound);
-        // The RNG above restores only the exact captured value for validation.
-        // It is never bound as a new living interface cue provider.
+        _ = new FalloutRestInterfaceSounds(records, rest, sound);
+        // Cold validation constructs or draws no random provider, voice or
+        // source effect. Only exact source/playback history is restored.
     }
 }
