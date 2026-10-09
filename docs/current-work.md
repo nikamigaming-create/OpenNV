@@ -65,8 +65,10 @@ mesh. A fresh packaged Continue loads all 49 resident cells and remains alive.
 Walking into Goodsprings discovery range exposed the shared XP owner's refusal
 of Skilled's XP entry. The existing integration branch's numeric perk dispatcher
 now serves RewardXP and discovery here, with live player conditions and upward
-rounding. Multiple simultaneous XP entries and full level-up remain separately
-unbound. Successful discovered-marker arrival still needs the updated live run.
+rounding. A fresh packaged Continue discovers Goodsprings, awards 9 XP with
+Skilled, and the ordinary Pip-Boy Travel click reaches its source-linked arrival
+in another cell. Loading closes, floor contact settles and movement resumes.
+Multiple simultaneous XP entries and full level-up remain separately unbound.
 
 Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
 statistics and all inventory actions remain incomplete. Outdoor play still
