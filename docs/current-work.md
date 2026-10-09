@@ -55,6 +55,12 @@ exterior prefetch. Invalid model data now reaches the ordinary per-reference
 failure owner, which retains the missing reference and its error, while the
 remaining cell preparation can continue.
 
+A packaged cold load exposed a native crash in Mesh.CreateTrimeshShape while
+constructing packed NIF collision. The builder now supplies validated source
+triangles directly to the concave physics shape, preserving vertex transforms,
+winding, backface collision and face-material order without a temporary render
+mesh.
+
 Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
 statistics and all inventory actions remain incomplete. Outdoor play still
 exposes compiled-script, AI procedure, SpeedTree and LOD material omissions.
