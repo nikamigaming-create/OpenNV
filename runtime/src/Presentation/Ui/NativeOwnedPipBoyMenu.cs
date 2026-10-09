@@ -32,6 +32,16 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private readonly Dictionary<string, XElement> _templates = [];
     private NativeOwnedWorldMap? _map;
     private int _offset;
+    private int _statusMode;
+    private float _textOffset;
+    private long _displayedInventoryRevision = -1;
+    private FalloutFormKey? _selectedNote;
+    private FalloutMapMarker? _travelTarget;
+    internal Func<FalloutFormKey, string?>? FastTravel { get; init; }
+    internal Func<Color, Control>? LocalMap { get; init; }
+    internal Func<FalloutIngestiblesSnapshot>? ActiveEffects { get; init; }
+    internal Func<string>? DateTimeText { get; init; }
+    internal Action<FalloutNote>? PlayNote { get; init; }
     private FalloutCampaignItem? _selectedItem;
     private int _selectedAttribute;
     private FalloutFormKey? _selectedDetail;
@@ -55,7 +65,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         map = _map?.State,
         radio = _radio?.State,
         error = Error,
-        unbound = "limb-movement-and-effect-rules,radiation,timed-skill-effects,skill-advancement,perks,local-map,radio,fast-travel,scripted-and-addictive-aid-effects,item-drop-and-repair"
+        unbound = "limb-movement-and-effect-rules,skill-advancement,constant-ability-effect-list,complete-general-statistics,radio-broadcast-playback,fast-travel-time-and-followers,scripted-and-addictive-aid-effects,item-drop-and-repair"
     };
 
     internal NativeOwnedPipBoyMenu(FalloutPluginStack records, FalloutPipBoyState state, FalloutPlayerInventory inventory,
@@ -79,6 +89,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         if (_tiles is not null && Error is null && _state.Page == FalloutPipBoyPage.Data && _state.Selection == 4 && _radioRevision != _radio?.Revision)
         { Refresh(); return; }
         if (_tiles is null || Error is not null || _state.Page != FalloutPipBoyPage.Items) return;
+        if (_displayedInventoryRevision != _inventory.Revision) { Refresh(); return; }
         var vitals = _vitals();
         if (_displayedHealth == (vitals.HitPoints, vitals.MaximumHitPoints)) return;
         _displayedHealth = (vitals.HitPoints, vitals.MaximumHitPoints);
@@ -91,13 +102,16 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     private void Bind(string name, string trait, float value) => _tiles.Bind(Tile(name), trait, value);
     private void Text(string name, string value) => _tiles.Text[Tile(name)] = value;
     private void Hide(params string[] names) { foreach (var name in names) Bind(name, "visible", 0); }
-    internal void Select(FalloutPipBoyPage page, int index = 0)
+    internal void Select(FalloutPipBoyPage page) => Select(page, _state.SelectionFor(page));
+    internal void Select(FalloutPipBoyPage page, int index)
     {
-        _state.Select(page, index); _offset = 0; _selectedItem = null; Refresh(); PageChanged?.Invoke();
+        _state.Select(page, index); _offset = 0; _textOffset = 0; _selectedItem = null; _travelTarget = null; Refresh(); PageChanged?.Invoke();
     }
     private void Refresh()
     {
         Error = null;
+        RemoveMeta("opennv_pipboy_error");
+        _displayedInventoryRevision = _inventory.Revision;
         SetMeta("opennv_page", (int)_state.Page);
         foreach (var child in GetChildren()) { RemoveChild(child); child.QueueFree(); }
         _buttons.Clear(); _templates.Clear(); _map = null;
@@ -159,6 +173,15 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         _offset = Math.Clamp(_offset, 0, Math.Max(0, items.Count - 1));
         var y = 0f;
         var available = _tiles.Number(list, "height");
+        // Retail initializes list height from the authored visible row count.
+        // Leaving an empty height at zero clips every Stats row away.
+        if (available <= 0)
+        {
+            var visibleRows = Math.Max(1, _tiles.Number(list, "_number_of_visible_items"));
+            available = Math.Min(480, visibleRows * 48);
+            _tiles.Bind(list, "height", available);
+        }
+        _tiles.Bind(list, "_num_filtered", items.Count);
         foreach (var (item, index) in items.Skip(_offset).Take(8).Select((item, index) => (item, index)))
         {
             var tile = new XElement(_templates[template]); tile.SetAttributeValue("name", "PipBoyRow" + index); list.Add(tile);
@@ -216,6 +239,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         }
         else if (_state.Selection == 0)
         {
+            Bind("stats_status_container", "user0", _statusMode);
             Bind("stats_CND_button", "_x", 0); Bind("stats_CND_button", "_y", 0);
             foreach (var (part, art) in new[] { ("head", "head"), ("face", "face_00"), ("torso", "torso"),
                 ("leftarm", "left_arm"), ("rightarm", "right_arm"), ("leftleg", "left_leg"), ("rightleg", "right_leg") })
@@ -239,14 +263,24 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             foreach (var (button, label) in new[] { ("CND", "CND"), ("RAD", "RAD"), ("EFF", "EFF") })
                 Target(Tile("stats_" + button + "_button"), label, () =>
                 {
-                    if (button == "CND") return;
-                    throw new NotSupportedException($"Player {label} state is not connected yet.");
+                    _statusMode = button == "CND" ? 0 : button == "RAD" ? 1 : 2;
+                    Refresh();
                 });
+            if (_statusMode == 1)
+                AddText($"Radiation: {vitals.RadiationRads:0} RADS\nResistance: {_actorValue?.Invoke("RadResist"):0}%", new(120, 240), new(640, 160));
+            else if (_statusMode == 2)
+            {
+                var effects = ActiveEffects?.Invoke().Effects ?? [];
+                AddText(effects.Count == 0 ? "No active effects." : string.Join("\n", effects.Skip(_offset).Take(8)
+                    .Select(effect => $"{NameOf(effect.Item)}  {effect.Magnitude:+0.##;-0.##;0}  {Math.Ceiling(effect.Duration - effect.Elapsed):0}s")),
+                    new(120, 240), new(680, 350));
+            }
         }
         else if (_state.Selection is 2 or 3)
         {
             var forms = _state.Selection == 2 ? _skills.Select(skill => _records.RuntimeFormKey(skill.RuntimeFormId)).ToArray() :
-                _traits.Select(trait => _records.RuntimeFormKey(trait.RuntimeFormId)).ToArray();
+                _traits.Select(trait => _records.RuntimeFormKey(trait.RuntimeFormId))
+                    .Concat(_references.AcquiredPerks(_records.RuntimeFormKey(0x14))).Distinct().ToArray();
             _selectedDetail = forms.Contains(_selectedDetail ?? default) ? _selectedDetail : forms.Select(form => (FalloutFormKey?)form).FirstOrDefault();
             var list = Tile(_state.Selection == 2 ? "stats_skills_container" : "stats_perks_container");
             var rows = ListRows(list, "stats_list_template", forms.Select(form =>
@@ -265,7 +299,12 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         else
         {
             Hide("stats_skills_container", "stats_perks_container", "stats_genrep_container", "stats_icon_separator", "stats_description_rect");
-            AddText("This player-state page is not connected yet.", new(100, 200), new(720, 150));
+            var quests = _quests.Capture();
+            var markers = FalloutWorldMap.SourceMarkers(_records);
+            AddText($"Level  {vitals.Level}\nExperience  {vitals.ExperiencePoints}\nQuests completed  {quests.Count(quest => quest.Completed)}\n" +
+                $"Locations discovered  {markers.Count(marker => _references.MapMarkerState(marker.Marker).CanTravel)}\n" +
+                $"Notes collected  {_state.Items.Count(item => item.RecordType == "NOTE")}\n" +
+                $"Items carried  {_state.Items.Sum(item => item.Count)}", new(100, 155), new(720, 400));
         }
     }
     private void StatDetail(FalloutFormKey form)
@@ -273,7 +312,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         var fields = _records.GetEffective(form).ReadSubrecords().ToArray();
         var icon = fields.SingleOrDefault(field => field.Signature == "ICON").Data;
         if (!icon.IsEmpty) { _tiles.SetFilename(Tile("stats_icon"), FalloutDialogueTopic.Text(icon.Span)); Bind("stats_icon", "visible", 1); }
-        Text("stats_description", FalloutDialogueTopic.Text(fields.Single(field => field.Signature == "DESC").Data.Span));
+        var description = fields.SingleOrDefault(field => field.Signature == "DESC").Data;
+        Text("stats_description", description.IsEmpty ? "" : FalloutDialogueTopic.Text(description.Span));
     }
 
     private FalloutBodyPartData PlayerBodyParts => _playerBodyParts ??=
@@ -350,7 +390,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
         Text("IM_Headline_PlayerDRInfo", ""); Text("IM_Headline_PlayerDTInfo", "");
         var caps = _state.Items.Where(item => item.EditorId.Equals("Caps001", StringComparison.OrdinalIgnoreCase)).Sum(item => item.Count);
         _tiles.BindText(Tile("IM_Headline_PlayerCapsInfo"), "_Value", caps.ToString(CultureInfo.InvariantCulture));
-        var items = _state.Items.Where(item => FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), false))
+        var items = _state.Items.Where(item => _records.QuestObjects.IsQuestObject(item.FormKey) ||
+                FalloutInventoryAccess.CanTransfer(_records, _records.GetEffective(item.FormKey), false))
             .Where(item => _state.Selection switch
             {
                 0 => item.RecordType == "WEAP",
@@ -381,6 +422,8 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 : "";
             AddText($"{NameOf(selected.FormKey)}\nWG {selected.Weight:0.0}   VAL {selected.Value}{condition}",
                 new(470, 440), new(400, 160));
+            if (_records.QuestObjects.IsQuestObject(selected.FormKey))
+                AddText("Quest item", new(470, 605), new(400, 40));
             var equipped = _inventory.Equipped.Contains(selected.RuntimeFormId);
             var aid = selected.RecordType == "ALCH";
             _tiles.Text[equip] = Setting(aid ? "sInventoryUse" : equipped ? "sInventoryUnequip" : "sInventoryEquip");
@@ -426,7 +469,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     {
         Tabs("MM_Tabline", ["Local Map", "World Map", "Quests", "Notes", "Radio"]);
         Hide("MM_ButtonA", "MM_ButtonX", "MM_ButtonY", "MM_Highlight_ClipWindow");
-        Text("MM_Headline_LocationInfo", _world is { } world ? NameOf(world) : ""); Text("MM_Headline_TimeDateInfo", "");
+        Text("MM_Headline_LocationInfo", _world is { } world ? NameOf(world) : ""); Text("MM_Headline_TimeDateInfo", DateTimeText?.Invoke() ?? "");
         if (_state.Selection == 1)
         {
             Hide("MM_WorldMap_ParentImage", "MM_WorldMapCursor");
@@ -434,16 +477,38 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             var clip = Tile("MM_WorldMap_ClipWindow");
             _map = new(_records, _references, sourceWorld, _player.X, _player.Y, _heading, _tiles.TileColor(clip))
             { Position = _tiles.Position(clip), Size = new(_tiles.Number(clip, "width"), _tiles.Number(clip, "height")) };
+            _map.Selected += marker => { _travelTarget = marker; Refresh(); };
+            if (_travelTarget is { } target)
+            {
+                Bind("MM_ButtonA", "visible", 1);
+                Text("MM_ButtonA", "Travel: " + target.Name);
+                Target(Tile("MM_ButtonA"), "Fast travel to " + target.Name,
+                    () =>
+                    {
+                        var refusal = (FastTravel ?? throw new InvalidOperationException("Fast travel is unavailable."))(target.Reference);
+                        if (refusal is not null) ShowNotice(refusal);
+                    });
+            }
             _map.Hovered += name => { Text("MM_Headline_LocationInfo", name.Length == 0 ? NameOf(sourceWorld) : name); QueueRedraw(); };
             AddChild(_map); _map.CenterPlayer();
+        }
+        else if (_state.Selection == 0)
+        {
+            Hide("MM_LocalMap_ClipWindow", "MM_NotesList", "MM_RadioStationList", "MM_DataRect", "MM_WaveformRect");
+            var clip = Tile("MM_LocalMap_ClipWindow");
+            var map = (LocalMap ?? throw new InvalidOperationException("Local map is unavailable."))(_tiles.TileColor(clip));
+            map.Position = _tiles.Position(clip);
+            map.Size = new(_tiles.Number(clip, "width"), _tiles.Number(clip, "height"));
+            AddChild(map);
         }
         else if (_state.Selection == 2)
         {
             Hide("MM_TextScrollbar");
+            Bind("MM_DataRect", "visible", 1); Bind("MM_DataRect", "_ItemType", 1);
             var quests = _quests.Capture().Where(quest => quest.Objectives?.Any(objective => objective.Displayed) == true)
                 .OrderBy(quest => quest.Completed).ThenBy(quest => NameOf(quest.Quest)).ToArray();
             ListRows(Tile("MM_QuestsList"), "MM_ListMarkerTemplate", quests.Select(quest =>
-                (NameOf(quest.Quest), (Action)(() => { _quests.ForceActive(quest.Quest); Refresh(); }), quest.Active)).ToArray());
+                (NameOf(quest.Quest), (Action)(() => { _textOffset = 0; _quests.ForceActive(quest.Quest); Refresh(); }), quest.Active)).ToArray());
             var active = quests.FirstOrDefault(quest => quest.Active) ?? quests.FirstOrDefault();
             Text("MM_DataText", active is null ? "" : string.Join("\n\n", active.Objectives!.Where(objective => objective.Displayed)
                 .Select(objective => (objective.Completed ? "[✓] " : "[ ] ") + _quests.ObjectiveText(active.Quest, objective.Index))));
@@ -454,14 +519,50 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             _radioRevision = radio.Revision;
             Hide("MM_LocalMap_ClipWindow", "MM_NotesList", "MM_DataRect", "MM_WaveformRect");
             ListRows(Tile("MM_RadioStationList"), "MM_ListTemplate", radio.Available.Select(station =>
-                (NameOf(station.Base), (Action)(() => { radio.SelectPipBoy(station.Reference); Refresh(); }),
+                (NameOf(station.Base), (Action)(() =>
+                {
+                    if (_references.PipBoyRadio.CurrentStation == station.Reference) _references.PipBoyRadio.Off();
+                    else radio.SelectPipBoy(station.Reference);
+                    Refresh();
+                }),
                     _references.PipBoyRadio.CurrentStation == station.Reference)).ToArray());
         }
-        else
+        else if (_state.Selection == 3) BuildNotes();
+        if (_state.Selection is 2 or 3)
         {
-            Hide("MM_LocalMap_ClipWindow", "MM_NotesList", "MM_RadioStationList", "MM_DataRect", "MM_WaveformRect");
-            AddText(_state.Selection == 0 ? "Local map rendering is not connected yet." :
-                _state.Selection == 3 ? "Notes playback is not connected yet." : "Radio tuning is not connected yet.", new(100, 200), new(720, 150));
+            var maximum = Math.Max(0, _tiles.Number(Tile("MM_DataText"), "height") - _tiles.Number(Tile("MM_DataTextRect"), "height"));
+            _textOffset = Math.Clamp(_textOffset, 0, maximum);
+            Bind("MM_TextScrollbar", "_current_value", _textOffset / 20);
+        }
+    }
+    private void ShowNotice(string text)
+    {
+        NativeOwnedMessageMenu? message = null;
+        message = new(new(default, "", text, true, [Setting("sOK")]), _records,
+            _ => message!.QueueFree(), Fail)
+        { Size = Size, MouseFilter = MouseFilterEnum.Stop };
+        AddChild(message);
+    }
+    private void BuildNotes()
+    {
+        Hide("MM_LocalMap_ClipWindow", "MM_RadioStationList", "MM_WaveformRect", "MM_TextScrollbar");
+        var notes = _state.Items.Where(item => item.RecordType == "NOTE").Select(item => FalloutNote.Read(_records, item.FormKey))
+            .OrderBy(note => note.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+        var selected = notes.FirstOrDefault(note => note.Record.FormKey == _selectedNote) ?? notes.FirstOrDefault();
+        _selectedNote = selected?.Record.FormKey;
+        Bind("MM_DataRect", "visible", 1);
+        Bind("MM_DataRect", "_ItemType", selected?.Kind == FalloutNoteKind.Image ? 2 : 1);
+        ListRows(Tile("MM_NotesList"), "MM_ListTemplate", notes.Select(note =>
+            (note.Name, (Action)(() => { _selectedNote = note.Record.FormKey; _textOffset = 0; Refresh(); }), note.Record.FormKey == _selectedNote)).ToArray());
+        Text("MM_DataText", selected?.Kind == FalloutNoteKind.Text ? selected.RequireText() : notes.Length == 0 ? "No notes collected." : selected!.Name);
+        if (selected?.Kind == FalloutNoteKind.Image && selected.Texture is { } texture)
+        {
+            _tiles.SetFilename(Tile("MM_DataImage"), texture);
+        }
+        else if (selected?.Kind is FalloutNoteKind.Sound or FalloutNoteKind.Voice)
+        {
+            Bind("MM_ButtonA", "visible", 1); Text("MM_ButtonA", "Play");
+            Target(Tile("MM_ButtonA"), "Play note", () => (PlayNote ?? throw new InvalidOperationException("Note audio is unavailable."))(selected));
         }
     }
     private bool VisibleTile(XElement tile) => tile.AncestorsAndSelf().All(parent => parent.Attribute("name") is null || _tiles.Number(parent, "visible") != 0);
@@ -475,8 +576,21 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
     }
     public override void _Input(InputEvent input)
     {
-        if (input is InputEventMouseButton { Pressed: true } mouse && mouse.ButtonIndex is MouseButton.WheelDown or MouseButton.WheelUp && _map is null)
-        { _offset += mouse.ButtonIndex == MouseButton.WheelDown ? 1 : -1; Refresh(); GetViewport().SetInputAsHandled(); }
+        if (input is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F1 or Key.F2 or Key.F3 } key)
+        {
+            Select((FalloutPipBoyPage)(key.PhysicalKeycode - Key.F1));
+            GetViewport().SetInputAsHandled(); return;
+        }
+        if (input is InputEventMouseButton { Pressed: true } mouse && mouse.ButtonIndex is MouseButton.WheelDown or MouseButton.WheelUp && _map is null && !(_state.Page == FalloutPipBoyPage.Data && _state.Selection == 0))
+        {
+            var step = mouse.ButtonIndex == MouseButton.WheelDown ? 1 : -1;
+            if (_state.Page == FalloutPipBoyPage.Data && _state.Selection is 2 or 3 &&
+                new Rect2(_tiles.Position(Tile("MM_DataTextRect")), new(_tiles.Number(Tile("MM_DataTextRect"), "width"),
+                    _tiles.Number(Tile("MM_DataTextRect"), "height"))).HasPoint(GetLocalMousePosition()))
+                _textOffset += step * 40;
+            else _offset += step;
+            Refresh(); GetViewport().SetInputAsHandled();
+        }
     }
     public override void _Draw()
     {

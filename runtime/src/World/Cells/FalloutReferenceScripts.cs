@@ -666,7 +666,13 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             if (parts.Length <= 2 && parts[^1].Equals("GetIgnoreFriendlyHits", StringComparison.OrdinalIgnoreCase))
                 return new([], _ => world.IgnoresFriendlyHits(Target()) ? 1 : 0);
             if (parts.Length <= 2 && parts[^1].Equals("HasPerk", StringComparison.OrdinalIgnoreCase))
-                return new([FalloutScriptArgumentKind.Identifier], args => world.AcquiredPerks(Target()).Contains(bindings.Form(args[0].Identifier!).FormKey) ? 1 : 0);
+                return new([FalloutScriptArgumentKind.Identifier], args =>
+                {
+                    if (args.Count > 2) throw new InvalidDataException("HasPerk requires a perk and optional teammate flag.");
+                    return world.AcquiredPerks(Target(), args.Count == 2 && args[1].Number != 0)
+                        .Contains(bindings.Form(args[0].Identifier!).FormKey) ? 1 : 0;
+                })
+                { Variadic = FalloutScriptArgumentKind.Number, ReadOnly = true };
             if (parts.Length <= 2 && parts[^1].ToLowerInvariant() is "getinfaction" or "getfactionrank")
                 return new([FalloutScriptArgumentKind.Identifier], args =>
                 {
@@ -1058,8 +1064,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 case "sifh" or "setignorefriendlyhits" when arguments.Count == 1:
                     world.SetActorFlag(target, Boolean(arguments[0]), true);
                     break;
-                case "addperk" or "removeperk" when arguments.Count == 1:
-                    world.ChangePerk(target, bindings.Form(arguments[0]).FormKey, operation == "addperk");
+                case "addperk" or "removeperk" when arguments.Count is 1 or 2:
+                    world.ChangePerk(target, bindings.Form(arguments[0]).FormKey, operation == "addperk",
+                        arguments.Count == 2 && Number(arguments[1]) != 0);
                     break;
                 case "setcs" or "setcombatstyle" when arguments.Count == 1:
                     world.SetCombatStyle(target, bindings.Form(arguments[0]).FormKey);

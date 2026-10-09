@@ -15,6 +15,9 @@ internal sealed partial class NativeOwnedWorldMap : Control
     private Vector2 _offset;
     private float _zoom = 1;
     private Vector2? _drag;
+    private Vector2 _press;
+    private float _dragDistance;
+    internal event Action<FalloutMapMarker>? Selected;
     internal event Action<string>? Hovered;
     internal object State => new
     {
@@ -67,7 +70,7 @@ internal sealed partial class NativeOwnedWorldMap : Control
         }
         Resized += CenterPlayer;
         SetMeta("opennv_map_source", map.World.ToString() + ":MNAM/ICON;winning-XMRK/DATA");
-        SetMeta("opennv_map_unbound", "fast-travel,quest-target-routing,local-map,discovery-radius");
+        SetMeta("opennv_map_unbound", "fast-travel-time-and-nearby-enemy-policy,quest-target-routing");
     }
     private Vector2 Extent => _texture.GetSize() * _zoom;
     internal void CenterPlayer() { _offset = Size / 2 - _player * Extent; QueueRedraw(); }
@@ -81,11 +84,25 @@ internal sealed partial class NativeOwnedWorldMap : Control
                 _zoom = Math.Clamp(_zoom * (mouse.ButtonIndex == MouseButton.WheelUp ? 1.2f : 1 / 1.2f), 0.25f, 4);
                 _offset = mouse.Position - point * Extent; QueueRedraw(); AcceptEvent();
             }
-            if (mouse.ButtonIndex == MouseButton.Left) { _drag = mouse.Pressed ? mouse.Position : null; AcceptEvent(); }
+            if (mouse.ButtonIndex == MouseButton.Left)
+            {
+                if (mouse.Pressed) { _drag = _press = mouse.Position; _dragDistance = 0; }
+                else if (_drag is not null)
+                {
+                    _drag = null;
+                    if (_dragDistance < 6 && _press.DistanceTo(mouse.Position) < 6)
+                    {
+                        var selected = _markers.Where(marker => (_offset + marker.Point * Extent).DistanceTo(mouse.Position) < 22)
+                            .OrderBy(marker => (_offset + marker.Point * Extent).DistanceSquaredTo(mouse.Position)).FirstOrDefault();
+                        if (selected.Marker is { } marker) Selected?.Invoke(marker);
+                    }
+                }
+                AcceptEvent();
+            }
         }
         if (input is InputEventMouseMotion motion)
         {
-            if (_drag is { } previous) { _offset += motion.Position - previous; _drag = motion.Position; QueueRedraw(); }
+            if (_drag is { } previous) { _dragDistance += motion.Position.DistanceTo(previous); _offset += motion.Position - previous; _drag = motion.Position; QueueRedraw(); }
             var selected = _markers.Where(marker => (_offset + marker.Point * Extent).DistanceTo(motion.Position) < 22)
                 .OrderBy(marker => (_offset + marker.Point * Extent).DistanceSquaredTo(motion.Position)).FirstOrDefault();
             Hovered?.Invoke(selected.Marker?.Name ?? ""); AcceptEvent();

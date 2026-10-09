@@ -199,11 +199,28 @@ internal sealed class NativeOwnedMenuTree
             return literal.StartsWith("entity_-", StringComparison.Ordinal)
                 ? (_stringSetting ?? throw new NotSupportedException("Owned string setting has no record owner."))(literal[8..]) : literal;
         }
-        var copy = property.Elements().SingleOrDefault();
+        var operations = property.Elements().ToArray();
+        var copy = operations.LastOrDefault();
         if (copy?.Name != "copy" || copy.Attribute("src") is not { } source || copy.Attribute("trait") is not { } key)
             throw new NotSupportedException("Owned text expression has an unbound operation.");
         if (!_evaluatingText.Add((tile, trait))) throw new InvalidDataException("Owned text expression contains a cycle.");
-        try { return String(Owner(tile, source.Value), key.Value); }
+        try
+        {
+            var selectedTrait = key.Value;
+            if (operations.Length > 1)
+            {
+                // Native menus select strings using a numeric expression
+                // followed by a copy of a trait prefix, e.g. _Title_3.
+                if (!selectedTrait.EndsWith('_'))
+                    throw new NotSupportedException("Owned text expression has no indexed trait selector.");
+                var selector = FalloutMenuXml.Number(new XElement("selector", operations[..^1]),
+                    (owner, name) => Number(Owner(tile, owner), name));
+                if (!float.IsFinite(selector) || selector != MathF.Truncate(selector) || selector < int.MinValue || (double)selector > int.MaxValue)
+                    throw new InvalidDataException("Owned text selector is not an integral trait index.");
+                selectedTrait += ((int)selector).ToString(CultureInfo.InvariantCulture);
+            }
+            return String(Owner(tile, source.Value), selectedTrait);
+        }
         finally { _evaluatingText.Remove((tile, trait)); }
     }
 

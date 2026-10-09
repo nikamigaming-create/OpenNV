@@ -385,6 +385,20 @@ if (OperatingSystem.IsWindows())
     {
     }
 
+    var spanning = new byte[64 * 1024 + 317];
+    new Random(2718).NextBytes(spanning);
+    var spanningSequence = writer.Publish(spanning);
+    if (!reader.TryRead(spanningSequence, out var assembled) || !assembled.AsSpan().SequenceEqual(spanning))
+        throw new InvalidOperationException("A scene spanning slots lost canonical bytes.");
+    writer.Publish(spanning);
+    writer.Publish(encoded);
+    try
+    {
+        _ = reader.TryRead(spanningSequence, out _);
+        throw new InvalidOperationException("A partially overwritten scene was returned as a complete frame.");
+    }
+    catch (InvalidDataException) { }
+
     var retailChannel = "retail_" + Guid.NewGuid().ToString("N");
     var openNvChannel = "opennv_" + Guid.NewGuid().ToString("N");
     using var retailWriter = ParitySharedMemoryRing.CreateOrOpen(retailChannel, 4, 64 * 1024);

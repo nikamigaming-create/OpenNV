@@ -102,6 +102,9 @@ internal sealed class SequentialInputCommandClient : IDisposable
             try { state = ReadJson(path); break; }
             catch (FileNotFoundException) when (publication.ElapsedMilliseconds < Math.Min(_timeoutMilliseconds, 250) && !_process.HasExited)
             { Thread.Sleep(5); }
+            catch (IOException error) when (OperatingSystem.IsWindows() && (error.HResult & 0xffff) is 32 or 33 or 1175 &&
+                publication.ElapsedMilliseconds < Math.Min(_timeoutMilliseconds, 250) && !_process.HasExited)
+            { Thread.Sleep(5); }
         }
         if (state.GetProperty("process").GetInt32() != _processId)
             throw new InvalidDataException("The command channel belongs to another native process.");

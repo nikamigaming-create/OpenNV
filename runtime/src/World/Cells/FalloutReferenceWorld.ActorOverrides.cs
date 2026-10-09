@@ -46,7 +46,10 @@ internal sealed partial class FalloutReferenceWorld
                 !RecordHash(ActorOverrideSource(snapshot.Target)).Equals(snapshot.SourceSha256, StringComparison.OrdinalIgnoreCase) ||
                 !admitted.TryAdd(snapshot.Target, snapshot)) throw new InvalidDataException("Saved actor overrides changed source or repeat a target.");
             if (snapshot.Alerted is not null) RequireAlertActor(snapshot.Target);
-            foreach (var (items, signature) in new[] { (snapshot.Perks, "PERK"), (snapshot.Factions, "FACT") })
+            if (snapshot.TeammatePerks is { Count: > 0 } && snapshot.Target != records.RuntimeFormKey(0x14))
+                throw new InvalidDataException("Shared teammate perks must be retained on the player.");
+            foreach (var (items, signature) in new[] { (snapshot.Perks, "PERK"), (snapshot.Factions, "FACT"),
+                (snapshot.TeammatePerks ?? [], "PERK") })
             {
                 var seen = new HashSet<FalloutFormKey>();
                 foreach (var item in items)
@@ -81,16 +84,24 @@ internal sealed partial class FalloutReferenceWorld
         foreach (var key in changedAppearance) _appearanceRevisions[key] = ++_appearanceRevision;
     }
 
-    internal void ChangePerk(FalloutFormKey reference, FalloutFormKey perk, bool add)
+    internal void ChangePerk(FalloutFormKey reference, FalloutFormKey perk, bool add, bool forTeammates = false)
     {
         var current = Overrides(reference);
         var entry = FormOverride(perk, "PERK", add ? 1 : 0);
         if (add) _ = _perkAbilities.Perk(perk);
-        _actorOverrides[reference] = current with { Perks = current.Perks.Where(item => item.Form != perk).Append(entry).ToArray() };
+        if (forTeammates && reference == records.RuntimeFormKey(0x14))
+            _actorOverrides[reference] = current with
+            { TeammatePerks = (current.TeammatePerks ?? []).Where(item => item.Form != perk).Append(entry).ToArray() };
+        else
+            _actorOverrides[reference] = current with { Perks = current.Perks.Where(item => item.Form != perk).Append(entry).ToArray() };
     }
 
-    internal IReadOnlyList<FalloutFormKey> AcquiredPerks(FalloutFormKey reference)
+    internal IReadOnlyList<FalloutFormKey> AcquiredPerks(FalloutFormKey reference, bool forTeammates = false)
     {
+        var player = records.RuntimeFormKey(0x14);
+        var shared = _actorOverrides.GetValueOrDefault(player)?.TeammatePerks ?? [];
+        if (forTeammates && reference == player)
+            return shared.Where(item => item.Value > 0).Select(item => item.Form).ToArray();
         var result = new Dictionary<FalloutFormKey, int>();
         var source = records.GetEffective(ActorBase(reference));
         foreach (var field in source.ReadSubrecords().Where(field => field.Signature == "PRKR"))
@@ -100,6 +111,8 @@ internal sealed partial class FalloutReferenceWorld
             result[source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(data))] = data[4];
         }
         foreach (var item in _actorOverrides.GetValueOrDefault(reference)?.Perks ?? []) result[item.Form] = item.Value;
+        if (reference != player && Actor(reference).PlayerTeammate)
+            foreach (var item in shared.Where(item => item.Value > 0)) result[item.Form] = item.Value;
         return result.Where(item => item.Value > 0).Select(item => item.Key).ToArray();
     }
 
