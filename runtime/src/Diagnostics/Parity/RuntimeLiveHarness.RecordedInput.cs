@@ -155,7 +155,9 @@ internal sealed partial class RuntimeLiveHarness
             });
         RecordInput(JsonSerializer.SerializeToElement(new
         {
-            op = "mouse", button = button.ToString(), pressed,
+            op = "mouse",
+            button = button.ToString(),
+            pressed,
             leaseMilliseconds = pressed ? (int)lease : 20,
         }, Json), stateKey);
     }

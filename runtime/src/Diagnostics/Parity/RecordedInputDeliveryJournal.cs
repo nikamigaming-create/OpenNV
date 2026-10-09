@@ -48,8 +48,16 @@ internal sealed class RecordedInputDeliveryJournal : IDisposable
         _closed = true;
         try
         {
-            _writer.WriteLine(JsonSerializer.Serialize(new { complete = error is null, error, microseconds,
-                entries = _ordinal, sha256 = Convert.ToHexString(_hash.GetHashAndReset()), state, gameplayParity = "unverified" }, RecordedInputTape.Json));
+            _writer.WriteLine(JsonSerializer.Serialize(new
+            {
+                complete = error is null,
+                error,
+                microseconds,
+                entries = _ordinal,
+                sha256 = Convert.ToHexString(_hash.GetHashAndReset()),
+                state,
+                gameplayParity = "unverified"
+            }, RecordedInputTape.Json));
         }
         finally { _writer.Dispose(); _hash.Dispose(); }
     }
