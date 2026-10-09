@@ -27,7 +27,8 @@ internal static class NativeOwnedSoundVoice
     // only while its native presentation owner is resident; retirement is
     // idempotent across Finished, tree exit and explicit StopSound.
     internal static void Bind(FalloutPluginStack records, Node player, FalloutFormKey sound,
-        Func<FalloutFormKey?> reference, string owner, Func<bool> playing, Action stop)
+        Func<FalloutFormKey?> reference, string owner, Func<bool> playing, Action stop,
+        Func<bool>? checkpointReady = null)
     {
         IDisposable? registration = null;
         void Retire() { registration?.Dispose(); registration = null; }
@@ -37,7 +38,7 @@ internal static class NativeOwnedSoundVoice
             registration = records.SoundVoices.Register(sound, reference(), owner, playing, () =>
             {
                 stop(); Retire(); player.QueueFree();
-            });
+            }, checkpointReady: checkpointReady);
         }
         player.TreeEntered += Enter;
         player.TreeExiting += Retire;

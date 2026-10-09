@@ -16,6 +16,12 @@ internal static class Program
     {
         try
         {
+            if (args is ["--inspect-opennv-frame", var frameConfiguration])
+            {
+                LiveFrameInspection.Run(frameConfiguration).GetAwaiter().GetResult();
+                return 0;
+            }
+            if (SequentialInputRunner.TryRun(args, out var inputResult)) return inputResult;
             if (args is ["--record-single", var channel, var processId, var seconds, var encoder, var output, .. var recordingOptions])
             {
                 var stopSignal = recordingOptions switch

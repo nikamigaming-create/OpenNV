@@ -58,3 +58,27 @@ observed button activation, recorder save refusal, playback and owner retirement
 It can use a selected owned plugin stack, while its checkpoint callback remains
 an explicitly synthetic save-owner fixture. These checks establish the input
 capability, not a campaign checkpoint, retail parity or the requested journey.
+
+## Retail input into the native runtime
+
+Build `tools/OpenNV.LiveHarness` and run `--record-retail-input <configuration.json>`
+against the existing private native device adapter. The configuration supplies
+`retailCommandDirectory`, `retailProcessId`, `retailExecutablePath`, `actionsPath`,
+`inputTapePath` and `receiptJournalPath`. Use `actionsPath: "-"` for ordinary JSON
+input on stdin. A file contains `{ "microseconds": 0, "input": { ... } }` rows.
+
+Physical input includes `key` with `key`, `pressed`, `leaseMilliseconds`; `look`
+with integral `dx` and `dy`; and `mouse` with `button`, `pressed`,
+`leaseMilliseconds`. Buttons are Left, Right, Middle, Xbutton1 and Xbutton2.
+Leases are 20–1000 milliseconds; renew a held input before it expires. EOF releases
+held inputs. The standard keyboard includes letters, digits, modifiers, function
+keys, navigation and keypad keys. Both `3` and `Key3`, and Ctrl/Control, address
+the same physical key.
+
+Use `--replay-input <configuration.json>` with `openNvCommandDirectory`,
+`openNvProcessId`, `inputTapePath`, `transportJournalPath` and
+`deliveryJournalPath`. The command selects the tape's mode automatically. A bound
+tape also needs `checkpointId`; an unjoined retail tape plays from the game's
+current state and does not restore or manufacture a checkpoint. Both use ordinary
+Godot input. File validation and actual delivery errors remain visible. Frame
+recording is independent and stays off.

@@ -54,15 +54,20 @@ internal static class NativeOwnedSoundPlayback
 
         var stream = NativeOwnedMediaLoader.LoadAudio(descriptor.LogicalPath);
         ConfigureLoop(stream, descriptor);
+        var menuFeedback = descriptor.Flags.HasFlag(FalloutSoundFlags.MenuSound) && !descriptor.IsLooping;
         var player = new AudioStreamPlayer
         {
             Name = $"NativeSound_{descriptor.EditorId}",
             Stream = stream,
             VolumeDb = -descriptor.StaticAttenuationDb,
             PitchScale = descriptor.FixedPitchScale,
+            ProcessMode = menuFeedback ? Node.ProcessModeEnum.Always : Node.ProcessModeEnum.Inherit,
         };
+        // A finite menu cue has no script or actor continuation to serialize.
+        // Let the original playback finish while the world is paused for saving,
+        // including cues parented outside the menu that just closed.
         NativeOwnedSoundVoice.Bind(records, player, descriptor.FormKey, () => null, "source-2D-or-menu",
-            () => player.Playing, player.Stop);
+            () => player.Playing, player.Stop, menuFeedback ? () => true : null);
         return player;
     }
 

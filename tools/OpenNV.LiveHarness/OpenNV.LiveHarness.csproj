@@ -11,5 +11,8 @@
     <Compile Include="../../runtime/src/Diagnostics/Parity/LiveHarnessFrameBuffer.cs" Link="LiveHarnessFrameBuffer.cs" />
     <Compile Include="../../runtime/src/Diagnostics/Parity/LiveHarnessFrameMailbox.cs" Link="LiveHarnessFrameMailbox.cs" />
     <Compile Include="../../runtime/src/Diagnostics/Parity/TemporaryCaptureDirectory.cs" Link="TemporaryCaptureDirectory.cs" />
+    <Compile Include="../../runtime/src/Diagnostics/Parity/RecordedInputTape.cs" Link="RecordedInputTape.cs" />
+    <Compile Include="../../runtime/src/Diagnostics/Parity/RecordedInputPlayback.cs" Link="RecordedInputPlayback.cs" />
+    <Compile Include="../../runtime/src/Diagnostics/Parity/RecordedInputDeliveryJournal.cs" Link="RecordedInputDeliveryJournal.cs" />
   </ItemGroup>
 </Project>
