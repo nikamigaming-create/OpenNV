@@ -264,6 +264,8 @@ internal sealed partial class FalloutNifFile
                 ReadTimeController(ref cursor, "emittance controller"), ReadReference(ref cursor, "emittance interpolator")),
             "BSRefractionStrengthController" => new FalloutNifRefractionController(block,
                 ReadTimeController(ref cursor, "refraction controller"), ReadReference(ref cursor, "refraction interpolator")),
+            "BSRefractionFirePeriodController" => new FalloutNifRefractionFirePeriodController(block,
+                ReadTimeController(ref cursor, "refraction period controller"), ReadReference(ref cursor, "refraction period interpolator")),
             "bhkBlendController" => ReadBlendController(block, ref cursor),
             "NiTransformController" => ReadTransformController(block, ref cursor),
             "NiFloatExtraDataController" => new FalloutNifFloatExtraDataController(block,

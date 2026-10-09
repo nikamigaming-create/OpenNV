@@ -23,6 +23,17 @@ internal readonly record struct FalloutNifFogBlend(bool Additive, bool Destinati
 internal readonly record struct FalloutNifAlphaState(
     FalloutNifBlendMode Blend, bool TestEnabled, byte TestFunction, byte Threshold, bool Sort)
 {
+    internal static FalloutNifAlphaState ForLighting(FalloutNifShaderProperty shader, FalloutNifAlphaProperty? property)
+    {
+        var state = property is null ? new FalloutNifAlphaState(FalloutNifBlendMode.Opaque, false, 0, 0, true)
+            : Read(property.Flags, property.Threshold);
+        // Dynamic alpha enables the shader's material-opacity channel without
+        // requiring a separate NiAlphaProperty. Keep authored tests and any
+        // explicit blend factors while the source controller changes opacity.
+        return state.Blend == FalloutNifBlendMode.Opaque && (shader.ShaderFlags & (1U << 19)) != 0
+            ? state with { Blend = FalloutNifBlendMode.SourceAlpha } : state;
+    }
+
     internal static FalloutNifAlphaState ForNoLighting(
         FalloutNifNoLightingProperty shader, FalloutNifAlphaProperty? property)
     {

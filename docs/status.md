@@ -10,6 +10,12 @@ inventory actions, source statistics, compiled scripts, AI, procedural trees,
 full native mods and complete campaigns remain open. See current-work.md for
 the active implementation and next runtime failures.
 
+Exterior window models now accept their authored refraction/material controller
+chains and animate source opacity. The reached source scripts select the daytime
+sequence, whose eight material float fields match both observed retail windows.
+Owned day/night sequence sampling passes; final pixels and complete scene parity
+remain unverified.
+
 Source-declared PC menu shortcuts share the native mouse actions. Rendered-menu
 input now clips the actual source triangles against the six camera planes and
 actual displayed/canvas clip extent, preserving material and reflection culling.

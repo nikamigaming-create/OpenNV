@@ -276,6 +276,7 @@ public partial class NativeNifInstanceAudit : Node
                     GD.Print($"OPENNV_NIF_SOURCE_MATERIAL flags2={material.GetMeta("opennv_nif_shader_flags2").AsUInt32():x8} " +
                         $"environment={material.GetShaderParameter("use_environment").AsBool()} lightFade={material.GetShaderParameter("environment_light_fade").AsBool()}");
                 GD.Print($"OPENNV_NIF_SOURCE_BUILD_PASS source={identity} nodes={scene.Nodes} surfaces={scene.Surfaces} vertices={scene.Vertices}");
+                ExerciseOwnedMaterialSequences(scene.Root);
                 GetTree().Quit();
                 return;
             }

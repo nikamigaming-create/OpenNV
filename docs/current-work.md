@@ -80,6 +80,19 @@ controller cannot leave the new one unable to save. Post-transfer save/Continue
 both succeed in the packaged runtime: a fresh process restores the destination
 cell, discovered marker and 9 XP, with no pending actor procedure captures.
 
+The reached exterior windows now bind their complete source shader controller
+chains, including fire period followed by refraction strength, and their managed
+specular, emissive and opacity channels. Dynamic alpha selects the material
+opacity pass without requiring a separate alpha property. Direct controllers
+update only their owned field, preserving other managed channels on the same
+material. Inactive refraction properties cannot select a different shader.
+Ordinary Continue runs the source window scripts and reaches the daytime Right
+endpoint on both observed references without a window-script failure. The eight
+daytime material float fields match the live retail bytes on both references.
+The owned Left sequence reaches the night opacity endpoint; its transition and
+final pixels are not a matched retail comparison. Active refraction distortion
+still retains its existing unmatched-kernel declaration.
+
 Fast-travel elapsed time, nearby-enemy policy, follower transfer, complete General
 statistics and all inventory actions remain incomplete. Outdoor play still
 exposes compiled-script, AI procedure, SpeedTree and LOD material omissions.
@@ -89,6 +102,6 @@ playability are not established. Do not equate these menu fixes with completion.
 The separate codex/full-runtime-owner-integration checkout owns the larger
 compiled gameplay/native startup candidate and is actively modified. Reuse its
 working implementations without publishing its unfinished native startup as
-game support. The runnable batch is tracked in PR 185 and the FNV Test shortcut
-selects its packaged Release. The next gameplay owners are the reached outdoor
-script and exterior-streaming failures and complete fast-travel consequences.
+game support. The FNV Test shortcut selects the packaged Release. The next
+gameplay owners are the reached outdoor script/creature-package failures,
+SpeedTree and LOD omissions, and complete fast-travel consequences.
