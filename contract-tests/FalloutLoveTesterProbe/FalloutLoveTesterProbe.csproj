@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.ConvexLists.cs" Link="FalloutNifFile.ConvexLists.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.Particles.cs" Link="FalloutNifFile.Particles.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.ParticleShapesColors.cs" Link="FalloutNifFile.ParticleShapesColors.cs" />
     <Compile Include="../../runtime/src/Content/FalloutLoveTesterPresentation.cs" Link="FalloutLoveTesterPresentation.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableStringTable.cs" Link="FalloutExecutableStringTable.cs" />
     <Compile Include="../../runtime/src/Content/FalloutExecutableInputControls.cs" Link="FalloutExecutableInputControls.cs" />
@@ -17,6 +18,7 @@
     <Compile Include="../../runtime/src/Content/FalloutBsaArchive.cs" Link="FalloutBsaArchive.cs" />
     <Compile Include="../../runtime/src/Content/FalloutDeflateExtent.cs" Link="FalloutDeflateExtent.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.cs" Link="FalloutNifFile.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.Physics.cs" Link="FalloutNifFile.Physics.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifMorphAnimation.cs" Link="FalloutNifMorphAnimation.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifSkinContract.cs" Link="FalloutNifSkinContract.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifAnimationSampler.cs" Link="FalloutNifAnimationSampler.cs" />

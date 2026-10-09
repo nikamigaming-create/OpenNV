@@ -83,6 +83,8 @@ internal sealed partial class FalloutNifFile
                 return new FalloutNifParticleGrowFade(header, cursor.ReadFiniteSingle("grow time"),
                     cursor.ReadUInt16("grow generation"), cursor.ReadFiniteSingle("fade time"),
                     cursor.ReadUInt16("fade generation"), cursor.ReadFiniteSingle("particle base scale"));
+            case "NiPSysColorModifier":
+                return new FalloutNifParticleColorKeys(header, ReadReference(ref cursor, "particle color data"));
             case "BSPSysSimpleColorModifier":
                 return new FalloutNifParticleColor(header, cursor.ReadFiniteSingle("color fade in"),
                     cursor.ReadFiniteSingle("color fade out"), cursor.ReadFiniteSingle("color 1 end"),
@@ -169,7 +171,8 @@ internal sealed record FalloutNifParticleColliderManager(FalloutNifParticleModif
     : FalloutNifParticleModifier(Header.Block, Header.Name, Header.Order, Header.Target, Header.Active);
 internal sealed record FalloutNifParticlePlanarCollider(FalloutNifBlock Block, float Bounce, bool SpawnOnCollide,
     bool DieOnCollide, int Spawn, int Manager, int Next, int Object, float Width, float Height,
-    FalloutNifVector3 XAxis, FalloutNifVector3 YAxis) : FalloutNifObject(Block);
+    FalloutNifVector3 XAxis, FalloutNifVector3 YAxis)
+    : FalloutNifParticleCollider(Block, Bounce, SpawnOnCollide, DieOnCollide, Spawn, Manager, Next, Object);
 internal sealed record FalloutNifParticleWind(FalloutNifParticleModifier Header, float Strength)
     : FalloutNifParticleModifier(Header.Block, Header.Name, Header.Order, Header.Target, Header.Active);
 internal record FalloutNifParticleEmitter(FalloutNifParticleModifier Header, float Speed, float SpeedVariation,

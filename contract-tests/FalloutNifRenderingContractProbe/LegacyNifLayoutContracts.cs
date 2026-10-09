@@ -1,11 +1,11 @@
 using System.Text;
 using OpenNV.Runtime.Formats.Gamebryo;
 
-internal static class LegacyNifLayoutContracts
+internal static partial class LegacyNifLayoutContracts
 {
     internal static void Run()
     {
-        foreach (var version in new uint[] { 21, 30, 34 })
+        foreach (var version in new uint[] { 14, 21, 26, 30, 34 })
         {
             var node = Node(version);
             var material = Material(version);
@@ -82,11 +82,13 @@ internal static class LegacyNifLayoutContracts
                 malformed[index] = (blocks[index].Item1, [.. blocks[index].Item2, 0]);
                 Reject(() => FalloutNifFile.Read(File(version, malformed)).ReadObject(index));
             }
-            var wrongWidth = blocks.ToArray(); wrongWidth[0] = ("NiNode", Node(version == 21 ? 34U : 21U));
+            var wrongWidth = blocks.ToArray(); wrongWidth[0] = ("NiNode", Node(version <= 26 ? 34U : 21U));
             Reject(() => FalloutNifFile.Read(File(version, wrongWidth)).ReadNode(0));
         }
         Reject(() => FalloutNifFile.Read(File(22, [("NiNode", Node(21))])));
-        Console.WriteLine("OPENNV_LEGACY_NIF_LAYOUT_CONTRACT_PASS streams=21,30,34 flagsWidths=true materialColors=true falloffGates=true phantomSourcePreserved=true malformedRejected=true");
+        RunShaderLayouts();
+        UnsizedNifLayoutContracts.Run();
+        Console.WriteLine("OPENNV_LEGACY_NIF_LAYOUT_CONTRACT_PASS streams=14,21,26,30,34 flagsWidths=true materialColors=true falloffGates=true phantomSourcePreserved=true malformedRejected=true");
     }
 
     private static byte[] Node(uint version) => Bytes(w =>

@@ -17,18 +17,18 @@ requirements without limiting newly discovered behavior.
 
 ### Parallel ownership
 
-Use all available agent slots for independent owners. The current four-slot
-allocation is primary integration/audit execution/live evidence/publication,
-implicit actor KF/IDLE/ANIO source closure, typed controller-link admission, and
-source-selected startup ownership. Addon-model and animation-sound dependencies
-are integrated with actual Debug/Release contracts. Complete corpus/program-body packets are
-integrated and their four independent owned runs retain failures. The configured
-subset sweep retains its source/dependency refusals; new-reader subsets remain
-next and full scene sweeps are running under immutable binaries. The source Eat, compiled SCDA/result/save,
-native-plugin and OpenXR proposals remain queued for integration and execution.
-Reassign a finished slot to the next proven
-failure: creature terrain navigation, SpeedTree geometry, material/LOD coverage,
-compiled SCDA, unchanged x86 plugin execution, then remaining campaign owners.
+The user now prioritizes substantial greenfield implementation batches and
+publication of completed slices to origin. Keep all four available owners active:
+primary integration/publication, sleep/wait and live world effects, actor detection
+and process clocks, and native plugin constructors/object graphs. The ten-minute
+follow-up reassigns completed owners and checks actual code progress. Broad checks
+run at roughly four-hour intervals and before publication.
+
+The larger compiled-gameplay, current-save, player-state and native-plugin
+candidate remains under integration independently of the completed NIF slices.
+Retained source failures drive each next runtime owner. Reassign a completed slot
+to the next missing gameplay, native-plugin, navigation, geometry, material or
+OpenXR capability while primary publishes completed work.
 One owner controls builds, game processes, input, checkpoint writes and checked
 publication. Parallel owners coordinate files, submit bounded proposals and do
 not run competing live sessions or mutate another owner's source/save state.

@@ -11,18 +11,41 @@ defines the complete graph, ordinary campaigns, cold continuation, matched
 retail evidence and checked publication. All 36 broad requirements remain open;
 component checks establish no completion percentage.
 
-All four owners remain active. Primary integrates, builds, plays and publishes
-serially. The user prioritizes complete data/scene/selection audits before broad
-repeated gameplay. Parallel owners trace incoming animation declarations,
-classify the completed scene failures and establish xNVSE pair-expression
-grammar. Primary executes the complete audit lanes and integrates general
-source owners. The shared source color binding fixes the reproduced black FO3
-text.
+All four owners remain active. Primary integrates and publishes completed slices
+to origin. Parallel owners implement sleep/wait and its live world consumers,
+actor detection/process clocks, and native plugin constructor/object graphs.
+The user requires substantial greenfield code batches, fully data-driven behavior
+and no earlier OpenNV/save compatibility. Compile during integration; execute
+combined broad/native/owned checks at roughly four-hour intervals and before
+publication. The active ten-minute follow-up checks actual code and keeps the
+available slots assigned. The shared source color binding fixes the reproduced
+black FO3 text.
 C# remains authoritative;
 owned files are read-only inputs and private observations never become gameplay
 authority. Recording and trace stay off outside a specific visual check.
 
 ## Verified state
+
+The current publication slice, `codex/source-nif-runtime-readers`, adds source
+NIF header/block extents, typed blend/joint declarations, actual controller-chain
+binding, sphere/plane particle contacts, source color keys and independent
+particle construction/retirement. Release/Debug builds, formatting/analyzers,
+contract probes, native fixtures, launcher tests and Godot loading pass. The new
+native chain and particle checks pass with independent instances and no resource
+growth. Owned reads decode every newly owned blend/joint/sphere/color declaration
+in the selected investigation families; broader model reads retain unowned
+gravity controllers, breakable/prismatic joints and orient actions. Earlier header
+families retain binary-extra-data and user-version-12 refusals. Full model and
+pixel acceptance remain open. The larger compiled-gameplay/current-save/player-state/native
+plugin candidate remains under implementation; it is not campaign acceptance.
+Every complete-game requirement remains open.
+
+The user also requires a pinned standalone FNV development executable and stable
+local launch path. Package the checked commit with the pinned Godot/.NET/native
+dependencies, source commit and file hashes. Keep this build available separately
+from subsequent integration; owned inputs and saves remain external. The existing
+standalone NIF probe still references a removed source owner and needs migration;
+the working full-reader contract tool retains the current owned declaration audit.
 
 Independent corpus/quest audits finish against all four exact launcher selections
 with unchanged audit binaries and natural nonzero exits. Every discovered winning

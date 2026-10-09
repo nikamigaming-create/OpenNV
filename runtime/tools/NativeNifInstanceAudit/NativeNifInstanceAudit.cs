@@ -12,6 +12,14 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--particle-shapes-colors"])
+            {
+                ExerciseParticleShapesColors(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--source-controller-chains"])
+            {
+                await ExerciseSourceControllerChains(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--convex-list-sources", var sourceRoot, .. var sourceOptions])
             {
                 AuditConvexListSources(sourceRoot, sourceOptions); GetTree().Quit(); return;
@@ -171,6 +179,7 @@ public partial class NativeNifInstanceAudit : Node
             ExerciseMorphBasis();
             ExerciseManagedMorph();
             ExerciseParticleChannels();
+            ExerciseParticleShapesColors();
             ExerciseDdsImages();
             ExerciseTextureAddressing();
             ExerciseHeadTracking();
