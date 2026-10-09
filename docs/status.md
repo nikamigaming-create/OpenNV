@@ -13,6 +13,15 @@ original DLL execution and native source-state cold gameplay remain unverified
 or unowned; source save admission remains refused. This is not complete-game
 acceptance.
 
+Actor detection/cache state, the actual four-tier process cohort/scheduler and
+selected constructor-registration inputs are integrated into the large candidate.
+Reference construction, native player/actor publication, source update, capture,
+cold validation and retirement share those owners. The runtime and script-contract
+project compile in Debug with zero warnings/errors. Their source contracts and
+ordinary gameplay have not run. Current AI/CELL, complete process election/transfer,
+light/pair and original frame consumers remain required; body presence cannot
+establish a High process or completed detection frame.
+
 The current greenfield integration candidate adds compiled startup/query/effect
 owners, player package result execution, typed NIF physics and particle families,
 source trait selection and complete current-state capture. Actor script-package

@@ -258,6 +258,12 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _ExitTree()
     {
+        try { RetireActorPerceptionBinding(); }
+        catch (Exception error)
+        {
+            Error = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
+            GD.PushError($"OPENNV_ACTOR_PERCEPTION_RETIRE_FAILED reference={_state.Reference} {Error}");
+        }
         RetainCorpseEquipment();
         if (_state.PrepareNativeInventoryRemoval == PrepareNativeInventoryRemoval) _state.PrepareNativeInventoryRemoval = null;
         RetainStoppedPoseReadiness();

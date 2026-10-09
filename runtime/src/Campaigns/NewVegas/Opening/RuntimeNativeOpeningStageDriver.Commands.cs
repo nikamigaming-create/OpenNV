@@ -22,6 +22,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         ExperienceNotificationSaveBlocker is { } experience ? experience :
         InterfaceActivationFrameSaveBlocker is { } activation ? activation :
         _player.PlayerPhysicalSaveBlocker is { } physical ? physical :
+        ActorProcessSaveBlocker is { } process ? process :
+        ActorPerceptionSaveBlocker is { } perception ? perception :
         CombatGroupSaveBlocker is { } combat ? combat :
         _moviePlaying ? "movie" :
         _conversation?.Active == true ? "conversation" : _speech is { CanCaptureState: false } ? "speech" :
@@ -43,6 +45,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         interfaceActivationFrames = InterfaceActivationFrameState,
         playerPhysical = _player.PlayerPhysicalState,
         combatGroups = CombatGroupState,
+        actorPerception = ActorPerceptionState,
+        actorProcesses = ActorProcessState,
         levelUp = PlayerLevelUpMenuState,
         deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
         activeContinuationSaving = "source-radio-pcm;other-continuations-unbound"
@@ -176,7 +180,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             Vitals, _player.CaptureWeaponHandling(), _ingestibles.Capture(), _scripts.References.CaptureActorOverrides(),
             _scripts.References.CaptureEncounterZones(), _player.CaptureExplosionExposure(), _scripts.References.CaptureFactionRelations(),
             CapturePlayerProgress(), _scripts.ScriptManualSaves.CaptureOrder(), CaptureExperienceNotifications(), CaptureInterfaceActivationFrames(),
-            _player.CapturePlayerPhysicalActivity(), CaptureSourceCombatGroups());
+            _player.CapturePlayerPhysicalActivity(), CaptureSourceCombatGroups(), CaptureSourceActorPerception(), CaptureSourceActorProcesses());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

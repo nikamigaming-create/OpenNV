@@ -56,7 +56,9 @@ internal sealed record FalloutNativeCampaignState(
     FalloutExperienceNotificationSnapshot? ExperienceNotifications = null,
     FalloutInterfaceActivationFrameSnapshot? InterfaceActivationFrames = null,
     FalloutPlayerPhysicalSnapshot? PlayerPhysical = null,
-    FalloutCombatGroupsSnapshot? CombatGroups = null);
+    FalloutCombatGroupsSnapshot? CombatGroups = null,
+    FalloutActorPerceptionSnapshot? ActorPerception = null,
+    FalloutActorProcessesSnapshot? ActorProcesses = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -112,7 +114,9 @@ internal static partial class FalloutNativeCampaignSave
         FalloutExperienceNotificationSnapshot? experienceNotifications = null,
         FalloutInterfaceActivationFrameSnapshot? interfaceActivationFrames = null,
         FalloutPlayerPhysicalSnapshot? playerPhysical = null,
-        FalloutCombatGroupsSnapshot? combatGroups = null)
+        FalloutCombatGroupsSnapshot? combatGroups = null,
+        FalloutActorPerceptionSnapshot? actorPerception = null,
+        FalloutActorProcessesSnapshot? actorProcesses = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         ArgumentException.ThrowIfNullOrWhiteSpace(questEditorId);
@@ -160,7 +164,7 @@ internal static partial class FalloutNativeCampaignSave
             FinishedSpeechStage: finishedSpeechStage, QuestStageResults: questStageResults, StageResultFailure: stageResultFailure,
             TerminalResults: terminalResults, PlayerPackageAudio: playerPackageAudio, PlayerProgress: playerProgress, SaveOrder: saveOrder,
             ExperienceNotifications: experienceNotifications, InterfaceActivationFrames: interfaceActivationFrames,
-            PlayerPhysical: playerPhysical, CombatGroups: combatGroups);
+            PlayerPhysical: playerPhysical, CombatGroups: combatGroups, ActorPerception: actorPerception, ActorProcesses: actorProcesses);
         Validate(state, saveCompatibilityId);
         ValidateSaveOrderSource(records, state);
         ValidateExperienceNotificationSource(records, state);

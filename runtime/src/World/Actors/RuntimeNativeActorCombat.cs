@@ -97,6 +97,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
         _state.PrepareNativeInventoryRemoval = PrepareNativeInventoryRemoval;
         RestorePackageMotion();
         RestoreEngagementPose();
+        BindActorPerception();
         // A cold cell enters the tree with this owner already attached. Its
         // parent is still visiting children during Ready, so adding the death
         // rig there would be rejected by Godot.

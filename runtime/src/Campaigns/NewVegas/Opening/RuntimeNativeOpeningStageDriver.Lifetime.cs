@@ -10,6 +10,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         catch (Exception error) { RetainDriverFailure(error); }
         try { RetireExperienceNotifications(); }
         catch (Exception error) { RetainDriverFailure(error); }
+        try { RetireSourceActorPerceptionInputs(); }
+        catch (Exception error) { RetainDriverFailure(error); }
         try { RetireCombatGroupInputs(); }
         catch (Exception error) { RetainDriverFailure(error); }
     }

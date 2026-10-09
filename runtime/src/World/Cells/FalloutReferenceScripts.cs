@@ -709,6 +709,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getsitting")
                 return new([], _ => world.GetSitting(Target(), host.Sitting)) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getdetected")
+                return new([FalloutScriptArgumentKind.Value], arguments => world.GetDetected(Target(),
+                    arguments[0].Value.FormKey(records), world.PreparePerceptionPairPerks)) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getsleeping")
                 return new([], _ => world.GetSleeping(Target(), host.Sleeping)) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getknockedstate")

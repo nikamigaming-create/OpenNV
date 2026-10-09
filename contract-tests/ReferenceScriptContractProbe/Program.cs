@@ -22,6 +22,24 @@ if (args is ["--native-loaded-file-contracts"])
     return;
 }
 
+if (args is ["--actor-constructor-source-contracts"])
+{
+    ActorConstructorSourceContracts.Run();
+    return;
+}
+
+if (args is ["--actor-process-contracts"])
+{
+    ActorProcessContracts.Run();
+    return;
+}
+
+if (args is ["--actor-perception-contracts"])
+{
+    ActorPerceptionContracts.Run();
+    return;
+}
+
 if (args is ["--combat-group-contracts"])
 {
     CombatGroupContracts.Run();
@@ -1002,6 +1020,9 @@ NativeSourceConstructionContracts.Run();
 NativeSourceFileContracts.Run();
 NativeLoadedFileContracts.Run();
 CombatGroupContracts.Run();
+ActorPerceptionContracts.Run();
+ActorProcessContracts.Run();
+ActorConstructorSourceContracts.Run();
 PlayerAdvancementContracts.Run();
 PlayerPhysicalActivityContracts.Run();
 LevelUpPerkSourceContracts.Run();

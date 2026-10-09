@@ -67,6 +67,16 @@ target selection. Missing detection, reaction/election, controller end and targe
 expiry inputs remain failures; full active-combat capture requires their genuine
 continuation. Pause holds this source update during finite save drains.
 
+Actor perception retains directional pending/committed caches, process epochs,
+source clocks and actual player/actor publication leases. The separate process
+manager owns ordered four-tier membership, factory prefixes and distinct FNV/FO3
+source scheduling. Original constructor inputs and selected Main settings decide
+registration; visual residency cannot decide the tier. Current saves require both
+owners and their constructor receipts. Cold construction replays no producer or
+factory prefix, and real native publication uses a new process lease. Missing
+election, common transfer, pair/light, controller and frame facts refuse their
+reached operations. Process retirement precedes its perception/source providers.
+
 SPECIAL menu requests use their compiled integer argument. The selected executable
 owns the reached menu type, XML/model arguments, integer bounds and presentation
 declarations. The product path has no named opening quest, trigger, tester reference

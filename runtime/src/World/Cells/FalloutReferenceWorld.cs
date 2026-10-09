@@ -535,6 +535,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         instance = new(record, definition, () => IsEnabled(key));
         _instances.Add(key, instance);
         BindCombatGroupInstance(instance);
+        BindActorPerceptionInstance(instance);
         return instance;
     }
 
@@ -890,6 +891,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             _instances.Add(key, instance);
             BindInventoryRemoval(instance);
             BindCombatGroupInstance(instance);
+            BindActorPerceptionInstance(instance);
         }
         foreach (var (key, results) in validated._packageResults) _packageResults.Add(key, results);
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
@@ -898,6 +900,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     public void Dispose()
     {
+        RetireActorProcessGraph();
         RetireCombatGroups();
         UnloadedPackages = null;
         _beforeActorHit = null;

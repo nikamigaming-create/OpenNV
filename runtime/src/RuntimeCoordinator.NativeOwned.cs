@@ -149,6 +149,8 @@ public partial class RuntimeCoordinator
                 experienceNotifications = _nativeOpeningStageDriver.ExperienceNotificationState,
                 interfaceActivationFrames = _nativeOpeningStageDriver.InterfaceActivationFrameState,
                 combatGroups = _nativeOpeningStageDriver.CombatGroupState,
+                actorPerception = _nativeOpeningStageDriver.ActorPerceptionState,
+                actorProcesses = _nativeOpeningStageDriver.ActorProcessState,
                 advancementRuntime = _nativeOpeningStageDriver.PlayerAdvancementRuntimeState,
                 playerPhysical = _nativePlayer?.PlayerPhysicalState,
                 nativePlugins = _nativeOpeningStageDriver.NativePluginExecutionState,
@@ -313,6 +315,8 @@ public partial class RuntimeCoordinator
         _nativeReferences = new(_nativePluginStack, auxiliary: _nativeScriptStorage.Auxiliary,
             ini: _nativeScriptStorage.Ini, ui: _nativeUi, controls: _nativeScriptStorage.Controls);
         _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId);
+        _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId);
+        _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId);
         _nativeStartingQuest = FalloutNewGameBootstrap.StartingQuest(_nativePluginStack, FalloutInstallationSettings.Read(content));
         _nativeGlobals = FalloutGlobalState.Read(_nativePluginStack);
         _nativeGameTime = new(_nativeGlobals, FalloutGameTimeBindings.Read(_nativePluginStack),
@@ -508,6 +512,10 @@ public partial class RuntimeCoordinator
             var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Cold combat groups have no selected source.");
             _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId,
                 restore.State.CombatGroups ?? throw new InvalidDataException("Current campaign has no combat group continuation."));
+            _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId,
+                restore.State.ActorPerception ?? throw new InvalidDataException("Current campaign has no actor perception continuation."));
+            _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId,
+                restore.State.ActorProcesses ?? throw new InvalidDataException("Current campaign has no actor process continuation."));
         }
         else if (_nativeBootstrap is null)
         {

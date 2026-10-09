@@ -12,6 +12,8 @@ internal static partial class FalloutNativeCampaignSave
             throw new InvalidDataException("Campaign XP notifications differ from the selected executable, menu or settings.");
         ValidateAdvancementFrameSource(state, source.Declaration);
         ValidateCombatGroupSource(records, state, source.Declaration);
+        ValidateActorPerceptionSource(records, state);
+        ValidateActorProcessSource(records, state);
     }
 
     // Current complete-schema shape/capture joins this mandatory snapshot.

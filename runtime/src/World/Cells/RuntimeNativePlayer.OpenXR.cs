@@ -123,11 +123,15 @@ internal partial class RuntimeNativePlayer
     }
     public override void _ExitTree()
     {
-        try { RetirePlayerPhysicalActivity(); }
+        try { RetirePlayerPerception(); }
         finally
+        {
+            try { RetirePlayerPhysicalActivity(); }
+            finally
         {
             try { ReleaseFurnitureReservation(); }
             finally { ReleaseXrContacts(); }
+            }
         }
     }
     internal void AttachXr(NativeXrRig rig)

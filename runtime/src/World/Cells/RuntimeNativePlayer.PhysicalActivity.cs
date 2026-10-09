@@ -96,6 +96,7 @@ internal partial class RuntimeNativePlayer
             var error = new NotSupportedException("Player appearance/equipment replacement requires the active physical pose and sound transfer owner.");
             _playerPhysical.Retain("replace-physical-player-body", error); throw error;
         }
+        RetirePlayerPerceptionBody();
         _physicalSounds?.Free(); _physicalSounds = null;
         _playerPhysical.RetireNativeOwner();
     }
@@ -129,6 +130,7 @@ internal partial class RuntimeNativePlayer
             actor.AddChild(_physicalSounds); _physicalSounds.RequirePcmRestored();
             if (!_physicalSounds.IsInsideTree()) throw new InvalidOperationException("Player physical sound owner did not attach.");
             _restorePlayerPhysical = null;
+            PublishPlayerPerception();
         }
         catch (Exception error) when (FalloutPlayerPhysicalActivity.Ordinary(error))
         {

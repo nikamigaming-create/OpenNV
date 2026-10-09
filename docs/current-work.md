@@ -24,7 +24,7 @@ C# owns formats/gameplay/persistence and Godot adapts presentation/input/OpenXR.
 | Primary | Frozen packet integration, actual driver/coordinator/capture/lifecycle joins, retained source-data failures and combined compilation/publication |
 | active_radio_save | Source menu shortcut packet frozen; general source-screen projection and clipping owners |
 | fo3_special_book | Source Actor AI update byte and genuine CELL load/attach/detach/release producers |
-| scope_plugin_audit | Loaded-source and binary-file members, separate logical/backend positions and native callable-page ownership |
+| scope_plugin_audit | Original selected UCRT provider/FILE streams and binary-member child-closure ownership |
 
 The three parallel owners submit immutable first-party source proposals. Primary
 alone controls tracked integration, builds, native/game processes, input, saves
@@ -45,8 +45,13 @@ compilation pass, and the joined source contract project compiles. The separate
 parser-only cache is removed. Native child closure precedes source collection
 retirement, and cleanup failures remain retained on repeated calls. Complete
 BSFile/CRT, original DLL behavior and current native source-topology persistence
-remain unowned; their existing admission refusals remain enabled. Binary14,
-rest, detection/process and source constructor-registration proposals are next.
+remain unowned; their existing admission refusals remain enabled. Actor detection,
+four-tier process scheduling and source constructor registration are now joined
+to real reference construction, native body leases, frame execution, complete
+current capture and cold validation. Their combined runtime and contract project
+Debug builds pass with zero warnings/errors. No source contracts or gameplay have
+been executed for this batch. AI/CELL producers, Binary14 and rest are next;
+missing process election, transfer, pair/light and frame producers remain visible.
 Source-only packets and successful compilation remain distinct from executed gameplay.
 
 ## Integrated candidate

@@ -227,6 +227,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new InvalidDataException("Current interface frame continuation is absent."));
         ConfigureSourceCombatGroups(restore is null ? null : restore.State.CombatGroups ??
             throw new InvalidDataException("Current combat group continuation is absent."));
+        ConfigureSourceActorPerception(restore is null ? null : restore.State.ActorPerception ??
+            throw new InvalidDataException("Current actor perception continuation is absent."));
+        ConfigureSourceActorProcesses(restore is null ? null : restore.State.ActorProcesses ??
+            throw new InvalidDataException("Current actor process continuation is absent."));
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
@@ -289,6 +293,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _stageResults?.Continue();
             _playerPackage?.Advance(delta);
             _scripts.References!.UnloadedPackages?.Advance(delta);
+            AdvanceSourceActorPerception(delta);
             AdvanceSourceCombatGroups(delta);
             AdvanceNativePlayerInCurrentFrame();
             if (!CanProcess()) return; // Native advancement can acquire a modal gameplay pause in this same frame.
@@ -344,6 +349,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _scripts.References!.GetDeadCount);
         AddChild(_speech);
         ConfigureConversation();
+        AttachSourceActorPerception();
         ConfigureDetectionAndFinishedSpeech();
         ApplyEnteredActorCommands();
     }
