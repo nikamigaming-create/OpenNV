@@ -46,7 +46,8 @@ internal sealed partial class FalloutActorProcessConstructionSource
         var reference = _records.GetEffective(actor);
         var expected = source.BaseSignature switch
         {
-            "NPC_" => "ACHR", "CREA" => "ACRE",
+            "NPC_" => "ACHR",
+            "CREA" => "ACRE",
             _ => throw new InvalidDataException("Actor constructor base has no Character/Creature source factory."),
         };
         if (reference.Signature != expected || FalloutDialogueTopic.RequiredForm(reference, "NAME") != source.Base)

@@ -89,8 +89,7 @@ internal sealed partial class FalloutActorProcessCommonState
             else if (entry.Phase is not (FalloutProcessCommonPhase.OldRetired or FalloutProcessCommonPhase.Retired))
                 throw new InvalidDataException("Cold living common process omitted its real actor gameplay lease.");
             if (entry.Body is { } body) RequireBody(body, entry.Source.Reference);
-            if (entry.Phase == FalloutProcessCommonPhase.Initialized && entry.Body is null)
-                throw new InvalidDataException("Cold initialized High common owner omitted its genuine source body lookup.");
+            ValidateSourceBodyEntry(entry);
         }
         if (saved.Transfer is { } transfer)
         {

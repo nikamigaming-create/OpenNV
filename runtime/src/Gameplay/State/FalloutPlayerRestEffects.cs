@@ -61,8 +61,13 @@ internal sealed class FalloutPlayerRestEffects(FalloutSleepWaitSource source,
         if (isHardcore) return;
         var state = vitals.State;
         if (state.ExactHitPoints == 0) throw new NotSupportedException("Completed sleep cannot substitute for resurrection.");
-        vitals.Publish(state with { HitPoints = state.MaximumHitPoints, HitPointFraction = 0,
-            ActionPoints = state.MaximumActionPoints, LimbDamage = null });
+        vitals.Publish(state with
+        {
+            HitPoints = state.MaximumHitPoints,
+            HitPointFraction = 0,
+            ActionPoints = state.MaximumActionPoints,
+            LimbDamage = null
+        });
         // Rested quest/spell callbacks are owned by actual source world/script
         // update. This consumer grants no named PERK, spell or quest stage.
     }

@@ -66,8 +66,11 @@ internal sealed partial class FalloutReferenceWorld
     internal FalloutActorProcessElection JoinCurrentCellProcess(FalloutActorProcessElection election) =>
         election with { SourceCellPhase = ReadSourceActorCellPhase(election.Actor) };
     internal FalloutActorProcessScheduleObservation JoinCurrentActorUpdate(FalloutActorProcessScheduleObservation observation) =>
-        observation with { ActorUpdateEnabled = _actorUpdates is null ?
-            new(null, "actual-original-Actor-update-byte-owner-absent") : ReadSourceActorUpdate(observation.Actor) };
+        observation with
+        {
+            ActorUpdateEnabled = _actorUpdates is null ?
+            new(null, "actual-original-Actor-update-byte-owner-absent") : ReadSourceActorUpdate(observation.Actor)
+        };
     internal FalloutCellProcessesSnapshot CaptureCellProcesses() => CellProcesses.Capture();
     private void RetireCellProcesses()
     {

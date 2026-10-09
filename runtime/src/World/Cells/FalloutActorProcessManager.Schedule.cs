@@ -66,9 +66,12 @@ internal sealed partial class FalloutActorProcessManager
                     if (category > 0f)
                     { Visit(Simple(FalloutActorDetectionVisitKind.CategoryClockHeld, before)); continue; }
                     var word = _inputs.SharedWord(); var interval = _source.CadenceDraw(word, window);
-                    _schedule = _schedule with { InFlight = new(slot, key, actor.Epoch,
+                    _schedule = _schedule with
+                    {
+                        InFlight = new(slot, key, actor.Epoch,
                         FalloutActorDetectionVisitKind.ProducerEntered, before, before, word, interval, 0,
-                        "actual-shared-random-word-and-stored-interval-consumed-before-high-producer") };
+                        "actual-shared-random-word-and-stored-interval-consumed-before-high-producer")
+                    };
                     Next();
                     var produced = ProduceOriginalHigh(key.Value, actor.Epoch, interval, distance);
                     var current = RequireActor(key.Value);
@@ -142,8 +145,11 @@ internal sealed partial class FalloutActorProcessManager
         if (inFlight.Actor != actor || inFlight.Epoch != epoch || inFlight.RandomInterval != randomInterval)
             throw new InvalidDataException("High producer belongs to another actor/process/random draw.");
         _perception.BeginOriginalHighProducer(actor, epoch);
-        _schedule = schedule with { InFlight = inFlight with
-            { Owner = "actual-high-producer-both-pending-directions-cleared-before-early-guards" } };
+        _schedule = schedule with
+        {
+            InFlight = inFlight with
+            { Owner = "actual-high-producer-both-pending-directions-cleared-before-early-guards" }
+        };
         Next();
         var clock = _inputs.CategoryOneClock();
         if (!float.IsFinite(clock)) throw new InvalidDataException("Original producer category clock is non-finite.");

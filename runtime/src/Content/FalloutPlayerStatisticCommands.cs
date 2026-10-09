@@ -8,7 +8,8 @@ internal static class FalloutPlayerStatisticCommands
     internal static FalloutScriptFunction? Function(string operation, FalloutPlayerStatistics? owner) => operation switch
     {
         "getpcmiscstat" => new([FalloutScriptArgumentKind.Value], arguments =>
-            Require(owner).Read(Index(Require(owner), arguments[0].Value))) { ReadOnly = true },
+            Require(owner).Read(Index(Require(owner), arguments[0].Value)))
+        { ReadOnly = true },
         "modpcmiscstat" => new([FalloutScriptArgumentKind.Value, FalloutScriptArgumentKind.Number], arguments =>
         {
             var current = Require(owner); var delta = Integer(arguments[1].Number);

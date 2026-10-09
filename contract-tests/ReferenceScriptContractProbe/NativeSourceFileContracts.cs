@@ -112,7 +112,7 @@ internal static class NativeSourceFileContracts
     private static void Require(bool value, string reason) { if (!value) throw new InvalidOperationException("Source file contract: " + reason); }
     private static void Refuse(Action action, string reason)
     {
-        try { action(); } catch (Exception error) when (error is IOException or NotSupportedException or InvalidOperationException) { return; }
+        try { action(); } catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException) { return; }
         throw new InvalidOperationException("Source file contract falsely admitted " + reason);
     }
 }

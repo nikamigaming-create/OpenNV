@@ -24,7 +24,8 @@ internal static partial class FalloutNativeCampaignSave
             state.SleepWait is null || state.RestAutoSave is null || state.RestWorldTime is null ||
             state.RestInterfaceSounds is null || state.InterfaceFades is null ||
             state.ActorUpdates is null || state.CellProcesses is null || state.ActorProcessRuntime is null || state.ActorProcessCommon is null ||
-            state.PlayerSkillValues is null || state.PlayerAbilityScripts is null || state.PlayerStatistics is null)
+            state.PlayerSkillValues is null || state.PlayerAbilityScripts is null || state.PlayerStatistics is null || state.ProcessQueues is null ||
+            state.Scripts.Challenges is null)
             throw new InvalidDataException("Campaign state is missing an authoritative runtime owner.");
         ValidateResultAuthorityVersion(state);
         state.PlayerPackageAudio.Events.Validate();
@@ -57,6 +58,7 @@ internal static partial class FalloutNativeCampaignSave
         ValidateActorPerceptionContinuation(state);
         ValidateActorProcessContinuation(state);
         ValidateActualProcessRuntimeContinuation(state);
+        ValidateProcessQueueContinuation(state);
         if (state.Special.Values.Count != FalloutNativeVigorResolver.AttributeNames.Count ||
             state.Special.Values.Where((value, index) => state.PlayerActorValues.Values[index + 5].Base != (float)value).Any())
             throw new InvalidDataException("Saved SPECIAL view differs from the player BASE pools.");

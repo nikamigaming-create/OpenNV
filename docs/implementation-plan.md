@@ -2,6 +2,40 @@
 
 ## Complete-game direction and execution
 
+The October 9 direction changes the execution priority: recorded retail gameplay
+and the same ordinary input replayed through Godot drive implementation. A
+component-test pass cannot close a user-visible gameplay failure. The reported
+FNV question progression and post-trait chair trap remain open until the ordinary
+product flow is repaired. Do not ask the user to diagnose the build or script.
+
+Work in four simultaneous implementation streams:
+
+1. Primary owns retail capture, timestamped input, Godot replay, menus, player
+   control and source-driven campaign transitions, integration and publication.
+2. Script owner implements shared compiled commands, statistic/challenge events,
+   quest/dialogue execution and selected plugin consumers.
+3. World owner implements actor processes, frame dispatch, source priorities,
+   CELL streaming, collision, navigation, furniture and persistent lifetimes.
+4. Effect/presentation owner implements actual effect clocks and application
+   lifecycles, then source-driven animation, rendering, audio and UI consumers.
+
+Use the existing private native device adapter and read-only retail observer.
+Retail state supplies comparison evidence; replay delivers ordinary input into
+the authoritative Godot/C# game. Record source identity, input and visible/state
+divergences for each segment. Preserve failed gameplay in the active investigation
+and fix the earliest shared engine owner without named-location success paths.
+Expand segments across the campaign and profiles as gameplay permits; a gallery
+or selected scene does not replace the campaigns. Captures stay private and
+temporary frames are cleaned after inspection or requested video export.
+
+Each stream submits substantial working code with its actual integration hooks.
+Compile when integrating. Run focused checks for the change and the required
+combined gate before publishing; do not repeatedly traverse the broad contract
+suite while implementation is idle. Publish completed slices to origin and
+advance the immutable FNV test shortcut only after ordinary exported gameplay.
+The ten-minute follow-up tracks code changes, gameplay blockers, integration and
+publication and reassigns completed owners immediately.
+
 The October 8 direction treats the engine as greenfield. Replace incomplete
 owners and remove obsolete adapters freely; preserving earlier OpenNV schemas
 or implementation behavior is not an acceptance requirement. Implement general

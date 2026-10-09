@@ -64,11 +64,24 @@ internal sealed partial class FalloutActorPerception : IDisposable
     internal string? SaveBlocker => ProducerBlocker ??
         (_phase != FalloutPerceptionFramePhase.Idle ? "source-detection-frame-continuation-incomplete" :
             _seconds > 0 && _lastSourceFrame is not { Complete: true } ? "source-process-election-and-detection-cohort-schedule-unowned" : null);
-    internal object State => new { _seconds, revision = _revision, completedCacheCommits = _frames, phase = _phase,
-        computingPair = _computingPair, lastSourceFrame = _lastSourceFrame, highCohort = _high.ToArray(), frameReceivers = _frameReceivers, frameCursor = _frameCursor,
-        pairCursor = _pairCursor, actors = ActorSnapshots(), processes = _processHistory.ToArray(),
-        pairs = _pairs.ToArray(), failures = _failures.ToArray(),
-        boundary = "source-process-election-cadence-filtered-visibility-light-membership-current-sensory-values-pair-hearing-perk-refinement-and-controller-inputs-are-independent;native-residency-is-not-a-tier" };
+    internal object State => new
+    {
+        _seconds,
+        revision = _revision,
+        completedCacheCommits = _frames,
+        phase = _phase,
+        computingPair = _computingPair,
+        lastSourceFrame = _lastSourceFrame,
+        highCohort = _high.ToArray(),
+        frameReceivers = _frameReceivers,
+        frameCursor = _frameCursor,
+        pairCursor = _pairCursor,
+        actors = ActorSnapshots(),
+        processes = _processHistory.ToArray(),
+        pairs = _pairs.ToArray(),
+        failures = _failures.ToArray(),
+        boundary = "source-process-election-cadence-filtered-visibility-light-membership-current-sensory-values-pair-hearing-perk-refinement-and-controller-inputs-are-independent;native-residency-is-not-a-tier"
+    };
     internal bool HasActor(FalloutFormKey actor) => _actors.ContainsKey(actor);
     internal FalloutDetectionProcessPresence? Process(FalloutFormKey actor) => RequireActor(actor).Process;
     internal long ProcessEpoch(FalloutFormKey actor) => RequireActor(actor).ProcessEpoch;

@@ -30,8 +30,12 @@ internal sealed partial class FalloutActorPerception
                 throw new InvalidDataException("Cold perception actor changed its exact winning reference/base identity.");
             var state = new ActorState(saved.Source, saved.Process, new(saved.Source.Reference, 0, 0, _selectedActor))
             {
-                ProcessEpoch = saved.ProcessEpoch, ProcessBoundary = saved.ProcessBoundary, Source3D = saved.Source3D,
-                NativeRevision = saved.NativePublicationRevision, LastObservation = saved.LastObservation?.Copy(), Retired = saved.Retired,
+                ProcessEpoch = saved.ProcessEpoch,
+                ProcessBoundary = saved.ProcessBoundary,
+                Source3D = saved.Source3D,
+                NativeRevision = saved.NativePublicationRevision,
+                LastObservation = saved.LastObservation?.Copy(),
+                Retired = saved.Retired,
             };
             state.Action.Restore(saved.ActionSound);
             if (saved.Cache is { } cache)

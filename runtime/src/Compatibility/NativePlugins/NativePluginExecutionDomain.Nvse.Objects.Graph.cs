@@ -35,7 +35,8 @@ internal sealed partial class NativePluginExecutionDomain
                 // Metadata=image is a private staging sentinel, replaced before
                 // registration. Neither the object nor the sentinel is exposed.
                 var value = new NativeNvseSourceObject(Generation, plugin.Module, checked(++_nextNvseSourceObject), declaration.FormId,
-                    image, image, null, authority, lease, [], "", declaration.Class) { Staged = true };
+                    image, image, null, authority, lease, [], "", declaration.Class)
+                { Staged = true };
                 context.Add(declaration.Key, value, ReadNvseGraphBytes(image));
             }
             foreach (var value in context.Objects.Values)

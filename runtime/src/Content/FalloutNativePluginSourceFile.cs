@@ -191,28 +191,28 @@ internal sealed class FalloutNativePluginSourceFile : IDisposable
         var before = (_record, _body, _chunks, _header, _bodySha, _offset, _chunkType, _chunkBytes, _bytesRead, _end, _revision);
         try
         {
-        SelectRecord(record);
-        if (saved.RawFormId != record.RawFormId || saved.RecordHeader is null || !_header!.AsSpan().SequenceEqual(saved.RecordHeader) ||
-            !StringComparer.OrdinalIgnoreCase.Equals(saved.BodySha256, _bodySha) || saved.DataOffset > int.MaxValue)
-            throw new InvalidDataException("Cold native parser changed its original record header or complete decoded body.");
-        var at = checked((int)saved.DataOffset);
-        if (saved.AtEnd)
-        {
-            var tail = _chunks.Values.OrderBy(row => row.HeaderOffset).LastOrDefault();
-            if (at < (_body.IsEmpty ? FalloutPlugin.SubrecordHeaderSize : _body.Length) || (at - _body.Length) % FalloutPlugin.SubrecordHeaderSize != 0 ||
-                saved.ChunkType != 0 || saved.ChunkBytes != 0 || saved.BytesRead > (tail?.Bytes.Length ?? 0))
-                throw new InvalidDataException("Cold exhausted parser has no exact terminal source cursor/read count.");
-        }
-        else if (saved.ChunkType == 0)
-        {
-            if (at != 0 || saved.ChunkBytes != 0 || saved.BytesRead != 0)
-                throw new InvalidDataException("Cold unread parser has no actual initial-header state.");
-        }
-        else if (!_chunks.TryGetValue(at, out var chunk) || saved.ChunkType != chunk.Type ||
-            saved.ChunkBytes != chunk.Bytes.Length || saved.BytesRead > chunk.Bytes.Length)
-            throw new InvalidDataException("Cold native parser header/read fields differ from their actual source subrecord.");
-        _offset = at; _chunkType = saved.ChunkType; _chunkBytes = saved.ChunkBytes; _bytesRead = saved.BytesRead;
-        _end = saved.AtEnd; _revision = saved.Revision;
+            SelectRecord(record);
+            if (saved.RawFormId != record.RawFormId || saved.RecordHeader is null || !_header!.AsSpan().SequenceEqual(saved.RecordHeader) ||
+                !StringComparer.OrdinalIgnoreCase.Equals(saved.BodySha256, _bodySha) || saved.DataOffset > int.MaxValue)
+                throw new InvalidDataException("Cold native parser changed its original record header or complete decoded body.");
+            var at = checked((int)saved.DataOffset);
+            if (saved.AtEnd)
+            {
+                var tail = _chunks.Values.OrderBy(row => row.HeaderOffset).LastOrDefault();
+                if (at < (_body.IsEmpty ? FalloutPlugin.SubrecordHeaderSize : _body.Length) || (at - _body.Length) % FalloutPlugin.SubrecordHeaderSize != 0 ||
+                    saved.ChunkType != 0 || saved.ChunkBytes != 0 || saved.BytesRead > (tail?.Bytes.Length ?? 0))
+                    throw new InvalidDataException("Cold exhausted parser has no exact terminal source cursor/read count.");
+            }
+            else if (saved.ChunkType == 0)
+            {
+                if (at != 0 || saved.ChunkBytes != 0 || saved.BytesRead != 0)
+                    throw new InvalidDataException("Cold unread parser has no actual initial-header state.");
+            }
+            else if (!_chunks.TryGetValue(at, out var chunk) || saved.ChunkType != chunk.Type ||
+                saved.ChunkBytes != chunk.Bytes.Length || saved.BytesRead > chunk.Bytes.Length)
+                throw new InvalidDataException("Cold native parser header/read fields differ from their actual source subrecord.");
+            _offset = at; _chunkType = saved.ChunkType; _chunkBytes = saved.ChunkBytes; _bytesRead = saved.BytesRead;
+            _end = saved.AtEnd; _revision = saved.Revision;
         }
         catch
         {

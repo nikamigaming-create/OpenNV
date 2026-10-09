@@ -35,8 +35,13 @@ internal sealed partial class FalloutCellProcesses
             throw new InvalidDataException("Failed CELL child has invalid still-owned native identities.");
         var failure = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
         var children = owner.Children.ToArray();
-        children[index] = children[index] with { Phase = FalloutCellProcessChildPhase.Failed, NativeObjects = retained,
-            Owner = originalOwner, Failure = failure };
+        children[index] = children[index] with
+        {
+            Phase = FalloutCellProcessChildPhase.Failed,
+            NativeObjects = retained,
+            Owner = originalOwner,
+            Failure = failure
+        };
         _attachments[attachment] = owner with { Children = children, Failure = owner.Failure ?? failure };
         foreach (var cell in owner.CellEpochs.Keys) _cells[cell] = Require(cell) with { Failure = Require(cell).Failure ?? failure };
     }
@@ -56,9 +61,12 @@ internal sealed partial class FalloutCellProcesses
             if (child.Phase == FalloutCellProcessChildPhase.Pending && joined.Length == 0)
                 throw new NotSupportedException("Actual pending source primitive returned without its native contact consumer.");
             var children = owner.Children.ToArray();
-            children[index] = child with { NativeObjects = joined,
+            children[index] = child with
+            {
+                NativeObjects = joined,
                 Phase = joined.Length == 0 ? child.Phase : FalloutCellProcessChildPhase.Published,
-                Owner = originalOwner };
+                Owner = originalOwner
+            };
             _attachments[attachment] = owner with { Children = children };
         });
     }

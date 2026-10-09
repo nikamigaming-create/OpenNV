@@ -58,8 +58,11 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
             WriteScopes = selection.WriteScopes.ToArray(),
             DeclaredNonIoImports = new HashSet<string>(selection.DeclaredNonIoImports, StringComparer.Ordinal),
             CrtProviders = (selection.CrtProviders ?? NativePluginCrtImports.ReadProviders(selection.ModulePath, selection.ModuleSha256))
-                .Select(row => row with { Imports = row.Imports.ToDictionary(pair => pair.Key.ToLowerInvariant(),
-                    pair => (IReadOnlySet<string>)new HashSet<string>(pair.Value, StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase) }).ToArray()
+                .Select(row => row with
+                {
+                    Imports = row.Imports.ToDictionary(pair => pair.Key.ToLowerInvariant(),
+                    pair => (IReadOnlySet<string>)new HashSet<string>(pair.Value, StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase)
+                }).ToArray()
         };
         if (Selection.DeclaredNonIoImports.Any(declaration => NativePluginIoImports.Unowned.Contains(declaration[(declaration.LastIndexOf('!') + 1)..]) || NativePluginCrtImports.IsFileDeclaration(declaration)))
             throw new NotSupportedException("A file API cannot be admitted as a non-I/O import.");

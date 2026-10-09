@@ -83,12 +83,12 @@ internal sealed partial class FalloutReferenceWorld
             new(null, "original-actor-base-eligibility-producer-absent"), actual.SourcePosition.ToArray(), "actual-source-native-or-unloaded-actor-placement")));
     }
     private FalloutActorProcessElection ReadProcessElection(FalloutFormKey actor, long epoch) =>
-        JoinActualProcessRuntime(JoinCurrentCellProcess(_actorProcessInputs?.Election(actor, epoch) ?? new(actor, epoch,
+        JoinSourceProcessQueues(JoinActualProcessRuntime(JoinCurrentCellProcess(_actorProcessInputs?.Election(actor, epoch) ?? new(actor, epoch,
             new(null, "original-current-player-transition-counter-producer-absent"),
             new(null, "original-main-forced-processing-bit-producer-absent"),
             new(null, "original-processing-tree-membership-producer-absent"),
             new(null, "original-current-cell-load-phase-producer-absent"),
-            new(null, "original-cell-extra-data-nine-producer-absent"), "original-current-tier-factory-inputs")));
+            new(null, "original-cell-extra-data-nine-producer-absent"), "original-current-tier-factory-inputs"))));
     private FalloutActorProcessConstruction ReadProcessConstruction(FalloutFormKey actor) =>
         ReadActualSourceActorConstruction(actor);
     private FalloutActorProcessProducerGuards ReadProcessGuards(FalloutFormKey actor, long epoch) =>
@@ -123,8 +123,11 @@ internal sealed partial class FalloutReferenceWorld
         ProcessCommon.Copy(factory);
     private void RetireProcessOld(FalloutActorProcessFactorySnapshot factory) =>
         ProcessCommon.RetireOld(factory);
-    private void InitializeProcessNew(FalloutActorProcessFactorySnapshot factory) =>
+    private void InitializeProcessNew(FalloutActorProcessFactorySnapshot factory)
+    {
         ProcessCommon.InitializeNew(factory);
+        RebindSourceProcessQueueActor(factory.Actor, factory.BeforeEpoch, factory.NewEpoch);
+    }
 
     internal void AdvanceActualActorProcessSchedule(float seconds)
     {

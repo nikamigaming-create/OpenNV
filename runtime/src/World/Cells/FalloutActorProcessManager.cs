@@ -45,9 +45,20 @@ internal sealed partial class FalloutActorProcessManager : IDisposable
         _actors.Values.FirstOrDefault(actor => actor.Boundary is not null)?.Boundary ??
         (_seconds > 0 && _schedule is not { Complete: true } ? "source-actor-cohort-schedule-not-completed" :
          _schedule is { } schedule && schedule.CohortRevision != _cohort.Revision ? "source-actor-cohort-changed-after-detection-schedule" : null);
-    internal object State => new { source = _source.Contract, _stack, process = _process, _seconds, _sequence,
-        cohort = _cohort.Capture(), actors = _actors.Values.ToArray(), factory = _factory, schedule = _schedule,
-        faults = _faults.ToArray(), saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        source = _source.Contract,
+        _stack,
+        process = _process,
+        _seconds,
+        _sequence,
+        cohort = _cohort.Capture(),
+        actors = _actors.Values.ToArray(),
+        factory = _factory,
+        schedule = _schedule,
+        faults = _faults.ToArray(),
+        saveBlocker = SaveBlocker
+    };
     internal FalloutActorProcessRegistration Read(FalloutFormKey actor) => RequireActor(actor);
     internal IReadOnlyList<FalloutFormKey?> HighCohort => _cohort.Segment(0);
 
@@ -140,8 +151,18 @@ internal sealed partial class FalloutActorProcessManager : IDisposable
                 throw new InvalidDataException("Retired source actor lost its actual manager registration.");
             _perception.RetireActor(actor, owner);
             if (state.Registered && state.Level is { } current) _cohort.Remove(actor, current);
-            _actors[actor] = state with { Epoch = _perception.ProcessEpoch(actor), Level = null, Registered = false, Retired = true, Boundary = null,
-                DetectionTimer = null, DetectionGeneration = null, DetectionUpdated = null, LastTimerOwner = null };
+            _actors[actor] = state with
+            {
+                Epoch = _perception.ProcessEpoch(actor),
+                Level = null,
+                Registered = false,
+                Retired = true,
+                Boundary = null,
+                DetectionTimer = null,
+                DetectionGeneration = null,
+                DetectionUpdated = null,
+                LastTimerOwner = null
+            };
             Next();
         });
     }

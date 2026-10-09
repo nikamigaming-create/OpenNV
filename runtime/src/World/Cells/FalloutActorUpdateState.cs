@@ -40,8 +40,16 @@ internal sealed partial class FalloutActorUpdateState : IDisposable
     internal string? SaveBlocker => _busy ? "source-actor-update-mutation-in-flight" :
         _actors.Values.FirstOrDefault(actor => actor.Failure is not null) is { } failed ?
             "source-actor-update:" + failed.Source.Reference + ":" + failed.Failure : null;
-    internal object State => new { source = _source.Contract, process = _process, _sequence,
-        actors = _actors.Values.ToArray(), receipts = _receipts.ToArray(), cold = _cold, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        source = _source.Contract,
+        process = _process,
+        _sequence,
+        actors = _actors.Values.ToArray(),
+        receipts = _receipts.ToArray(),
+        cold = _cold,
+        saveBlocker = SaveBlocker
+    };
 
     internal void Construct(FalloutFormKey actor)
     {

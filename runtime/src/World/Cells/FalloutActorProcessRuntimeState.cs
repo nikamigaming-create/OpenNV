@@ -37,9 +37,19 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
             "actual-Player-travel-source-operation:" + travel.Owner + ":" + (travel.Failure ?? travel.Phase.ToString()) :
         _actors.Values.FirstOrDefault(item => item.Failure is not null) is { } actor ?
             "actual-Actor-neutral-life:" + actor.Source.Reference + ":" + actor.Failure : null;
-    internal object State => new { source = _source.Contract, process = _process, _sequence,
-        mainForcedProcessing = _forced, playerTravelCounter = _travelCounter,
-        main = _main.ToArray(), travel = _travel, actors = _actors.Values.ToArray(), cold = _cold, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        source = _source.Contract,
+        process = _process,
+        _sequence,
+        mainForcedProcessing = _forced,
+        playerTravelCounter = _travelCounter,
+        main = _main.ToArray(),
+        travel = _travel,
+        actors = _actors.Values.ToArray(),
+        cold = _cold,
+        saveBlocker = SaveBlocker
+    };
     internal void Construct(FalloutFormKey actor)
     {
         RequireNotBusy();
@@ -104,8 +114,12 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         RequireNotBusy(); var index = _main.FindIndex(item => item.Invocation == invocation);
         if (index < 0 || _main[index].Owner != owner || _main[index].Phase == FalloutMainProcessPhase.Complete)
             throw new InvalidDataException("Main failure has no still-owned real source invocation.");
-        _main[index] = _main[index] with { Phase = FalloutMainProcessPhase.Failed, LastChanged = Next(),
-            Failure = _main[index].Failure ?? Message(error) };
+        _main[index] = _main[index] with
+        {
+            Phase = FalloutMainProcessPhase.Failed,
+            LastChanged = Next(),
+            Failure = _main[index].Failure ?? Message(error)
+        };
     }
     private FalloutCombatActorIdentity Identity(FalloutFormKey actor)
     {

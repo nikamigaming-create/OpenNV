@@ -78,7 +78,9 @@ internal sealed partial class NativePluginExecutionDomain
     private void UpdateBinaryReceipt(NativeBinaryPending pending)
         => _nvseBinaryCalls[pending.Receipt] = _nvseBinaryCalls[pending.Receipt] with
         {
-            ProducedOutput = pending.OutputProduced, DeliveredOutput = pending.OutputDelivered,
-            ProducedBuffer = pending.BufferProduced, DeliveredBuffer = pending.BufferDelivered,
+            ProducedOutput = pending.OutputProduced,
+            DeliveredOutput = pending.OutputDelivered,
+            ProducedBuffer = pending.BufferProduced,
+            DeliveredBuffer = pending.BufferDelivered,
         };
 }

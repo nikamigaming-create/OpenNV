@@ -321,13 +321,15 @@ public partial class RuntimeCoordinator
         _nativeReferences?.Dispose();
         _nativeReferences = new(_nativePluginStack, auxiliary: _nativeScriptStorage.Auxiliary,
             ini: _nativeScriptStorage.Ini, ui: _nativeUi, controls: _nativeScriptStorage.Controls);
-        _nativeReferences.ConfigureCampaignPlayerRuntime();
+        _nativeReferences.ConfigureCampaignPlayerRuntime(_nativeInventory.Notifications);
         _nativeReferences.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ReadExecutable(content.FalloutExecutablePath), content.StackId);
         _nativeReferences.ConfigureActualActorCellProducers(content.StackId);
         _nativeReferences.ConfigureActorPerception(FalloutActorPerceptionDeclaration.Read(content.FalloutExecutablePath), content.StackId);
         _nativeReferences.ConfigureActualProcessRuntime(FalloutActorProcessRuntimeDeclaration.ForExecutable(
             FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId);
         _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId);
+        _nativeReferences.ConfigureSourceProcessQueues(FalloutActorProcessQueueDeclaration.ForExecutable(
+            FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId);
         _nativeStartingQuest = FalloutNewGameBootstrap.StartingQuest(_nativePluginStack, FalloutInstallationSettings.Read(content));
         _nativeGlobals = FalloutGlobalState.Read(_nativePluginStack);
         _nativeGameTime = new(_nativeGlobals, FalloutGameTimeBindings.Read(_nativePluginStack),
@@ -523,8 +525,11 @@ public partial class RuntimeCoordinator
             _nativeReferences?.Dispose();
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
                 ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
-            _nativeReferences.ConfigureCampaignPlayerRuntime(restore.State.PlayerStatistics ??
-                throw new InvalidDataException("Current campaign has no player statistics continuation."));
+            _nativeReferences.ConfigureCampaignPlayerRuntime(_nativeInventory.Notifications,
+                restore.State.PlayerStatistics ??
+                throw new InvalidDataException("Current campaign has no player statistics continuation."),
+                restore.State.Scripts?.Challenges ??
+                throw new InvalidDataException("Current campaign has no challenge continuation."));
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
             _nativeReferences.Restore(restore.State.References ??
                 throw new InvalidDataException("Current campaign has no retained reference state."));
@@ -545,6 +550,9 @@ public partial class RuntimeCoordinator
                 restore.State.ActorProcessCommon ?? throw new InvalidDataException("Current common process continuation is absent."));
             _nativeReferences.ConfigureActorProcesses(FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath), content.StackId,
                 restore.State.ActorProcesses ?? throw new InvalidDataException("Current campaign has no actor process continuation."));
+            _nativeReferences.ConfigureSourceProcessQueues(FalloutActorProcessQueueDeclaration.ForExecutable(
+                FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId,
+                restore.State.ProcessQueues ?? throw new InvalidDataException("Current campaign has no actual process queue continuation."));
         }
         else if (_nativeBootstrap is null)
         {
@@ -1335,6 +1343,7 @@ public partial class RuntimeCoordinator
         AttachNativeExperienceHud(_nativeOpeningStageDriver);
         _nativeImageSpaceClock = new(_nativeImageSpaceState);
         AddChild(_nativeImageSpaceClock);
+        _nativeGameTimeAdapter!.StartSourceGameplayFrames();
         GD.Print(
             $"OPENNV_NATIVE_PLAYER_START reference={_nativeReferences!.PlayerMoves.Next?.Destination} " +
             $"startupQuest={_nativeStartingQuest!.FormKey} startupStage={_nativeQuestState!.Stage(_nativeStartingQuest.FormKey)} " +

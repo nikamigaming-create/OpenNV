@@ -55,8 +55,8 @@ internal static class SoundEmitterPersistenceContracts
                     AnimationSoundEvents: sounds)],
                 PlayerPackageAudio: player ? new(sounds, 7) : null);
             try { validate.Invoke(null, [state, ""]); }
-            catch (TargetInvocationException error) when (error.InnerException is InvalidDataException rejected &&
-                rejected.Message == "Legacy campaign schema contains future source sound bone continuation.") { continue; }
+            catch (TargetInvocationException error) when (error.InnerException is NotSupportedException rejected &&
+                rejected.Message == "Campaign state requires the current complete source-owned schema.") { continue; }
             throw new InvalidDataException("Legacy campaign schema accepted future typed source emitter continuation.");
         }
     }

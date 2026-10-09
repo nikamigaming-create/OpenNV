@@ -395,7 +395,8 @@ internal sealed partial class FalloutQuestScripts
             FalloutScriptStartupCommands.RequireMusic(_records.GetEffective(music));
         // Authority, owner and clock refusals occur before any store is restored.
         // A source statement cursor cannot be promoted into a byte-program site.
-        Challenges.Restore(snapshot.Challenges);
+        if (Challenges.Restored) Challenges.RequireContinuation(snapshot.Challenges);
+        else Challenges.Restore(snapshot.Challenges);
         Radio?.Restore(snapshot.Radio);
         ScriptValues.Restore(snapshot.Values);
         Auxiliary.RestorePermanent(snapshot.Auxiliary);
@@ -459,7 +460,8 @@ internal sealed partial class FalloutQuestScripts
         Sounds = references?.Sounds ?? new(records, Menus);
         NoActivationSound = references?.NoActivationSound ?? new(records, Sounds);
         Session = new(NoActivationSound, records.QuestObjects);
-        Challenges = new(records, inventory.Notifications);
+        Challenges = references is { CampaignChallengesConfigured: true } ? references.Challenges :
+            new(records, inventory.Notifications);
         Radio = references is null ? null : new(records, references, inventory.Notifications);
         ScreenBlood = references?.ScreenBlood ?? new(records);
         Events = events ?? new();
@@ -776,7 +778,8 @@ internal sealed partial class FalloutQuestScripts
             if (parts.Length <= 2 && operation == "isactorsaioff")
                 return new([], _ => FalloutActorAiCommands.Query(References ??
                     throw new NotSupportedException("IsActorsAIOff has no actual reference owner."),
-                    caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))) { ReadOnly = true };
+                    caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0]))))
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation is "getsleeping" or "getknockedstate")
                 return new([], _ => operation == "getsleeping"
                     ? (References ?? throw new NotSupportedException("GetSleeping has no actual reference owner."))

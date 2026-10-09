@@ -113,7 +113,9 @@ internal sealed partial class FalloutDetectionCache
         var revision = checked(_revision + 1);
         pending[pendingHead] = pending[pendingHead] with
         {
-            Score = score, Visible = visible, SoundScore = soundScore,
+            Score = score,
+            Visible = visible,
+            SoundScore = soundScore,
             LastObservation = observation?.Copy() ?? pending[pendingHead].LastObservation
         };
         _revision = revision;

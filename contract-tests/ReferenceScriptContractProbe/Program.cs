@@ -96,6 +96,12 @@ if (args is ["--actor-constructor-source-contracts"])
     return;
 }
 
+if (args is ["--process-queue-contracts"])
+{
+    ProcessQueueContracts.Run();
+    return;
+}
+
 if (args is ["--actor-process-runtime-contracts"])
 {
     ActorProcessRuntimeContracts.Run();
@@ -1097,6 +1103,7 @@ CombatGroupContracts.Run();
 ActorPerceptionContracts.Run();
 ActorProcessContracts.Run();
 ActorProcessRuntimeContracts.Run();
+ProcessQueueContracts.Run();
 ActorConstructorSourceContracts.Run();
 ActorUpdateCellProcessContracts.Run();
 SleepWaitContracts.Run();

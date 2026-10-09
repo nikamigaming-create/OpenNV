@@ -31,6 +31,24 @@ internal static partial class NativeLoadedFileContracts
             CheckSharedContributors(root, records, context, construction);
             CheckSourceContinuations(records, context, construction);
 
+            foreach (var argument in new[] { 3U, unchecked((uint)-3) })
+            {
+                using var end = new FalloutNativePluginBinaryFile(records, context, construction, 8);
+                _ = Read(end, 3);
+                end.Seek(argument, construction.SeekEnd);
+                var sought = end.Capture();
+                var logical = unchecked((uint)original.Length - argument);
+                var backend = checked((uint)(original.Length + unchecked((int)argument)));
+                Require(sought.LogicalOffset == logical && sought.BackendOffset == backend &&
+                    sought.BinaryOffset == backend && sought.BufferBytes == 0 && sought.BufferConsumed == 0,
+                    "source End retains unsigned derived subtraction and unchanged signed inherited argument");
+                var bytes = Read(end, 2);
+                Require(argument == 3 ? bytes.Length == 0 : bytes.AsSpan().SequenceEqual(original.AsSpan(original.Length - 3, 2)),
+                    "actual End backend independently owns EOF or tail bytes");
+                Require(end.LogicalOffset == unchecked(logical + (uint)bytes.Length),
+                    "actual read advances the independent derived cursor without reconciling End roles");
+            }
+
             using (var reader = new FalloutNativePluginBinaryFile(records, context, construction, 8))
             {
                 Require(Read(reader, 3).AsSpan().SequenceEqual(original.AsSpan(0, 3)), "real initial buffered bytes");
@@ -42,9 +60,9 @@ internal static partial class NativeLoadedFileContracts
                 Require(reader.Capture().BackendOffset == 8 && reader.Capture().BufferConsumed == 1 &&
                     reader.Capture().BinaryOffset == unchecked((uint)-4), "absolute rewind reuses buffer and independent unsigned offset");
                 Require(Read(reader, 2).AsSpan().SequenceEqual(original.AsSpan(1, 2)), "actual repeated buffered bytes");
-                reader.Seek(3, construction.SeekEnd);
+                reader.Seek(checked((uint)original.Length - 3), construction.SeekSet);
                 Require(reader.LogicalOffset == original.Length - 3 &&
-                    Read(reader, 2).AsSpan().SequenceEqual(original.AsSpan(original.Length - 3, 2)), "source end-minus-argument seek");
+                    Read(reader, 2).AsSpan().SequenceEqual(original.AsSpan(original.Length - 3, 2)), "source Set transport reaches actual tail bytes");
                 var retained = reader.Capture();
                 Require(retained.WrittenExtent == 8 && retained.BufferBytes == 3 && retained.BufferSources.Count == 2 &&
                     retained.WrittenBuffer.AsSpan(3).SequenceEqual(original.AsSpan(3, 5)), "short refill retains original written tail provenance");
@@ -56,7 +74,7 @@ internal static partial class NativeLoadedFileContracts
                 Refuse(() => reader.Restore(retained with { BufferConsumed = retained.BufferBytes + 1 }), "unowned consumed extent");
                 Refuse(() => reader.Restore(retained with { BufferSources = retained.BufferSources.Skip(1).ToArray() }), "missing tail/source prefix");
                 Require(Same(before, reader.Capture()), "failed buffer restore is atomic");
-                Refuse(() => reader.Seek(0, 0x11223344), "unowned seek origin");
+                reader.Seek(0, 0x11223344);
                 Require(Same(before, reader.Capture()), "unknown origin changes no owner");
             }
             using (var loaded = new FalloutNativePluginLoadedFile(records, context, construction, 8))
@@ -160,7 +178,7 @@ internal static partial class NativeLoadedFileContracts
     private static void Require(bool value, string reason) { if (!value) throw new InvalidOperationException("Loaded file contract: " + reason); }
     private static void Refuse(Action action, string reason)
     {
-        try { action(); } catch (Exception error) when (error is IOException or InvalidOperationException or NotSupportedException or AggregateException) { return; }
+        try { action(); } catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or NotSupportedException or AggregateException) { return; }
         throw new InvalidOperationException("Loaded file contract falsely admitted " + reason);
     }
 }

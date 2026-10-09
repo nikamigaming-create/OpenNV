@@ -5,23 +5,35 @@ candidate with merged NIF, launcher, couch/head visibility, ability and source-m
 work. Runtime Debug compilation passes. Current saves require actual skill/effect
 owners with exact advancement agreement; cold formulas evaluate after ability
 binding. Historical save promotion and empty-effect admission are removed.
-Compiled magic-effect Start now uses original raw kind0x0100 SCDA with mandatory
-v2 source/event/cursor and actual retirement ownership. Construction prepares
+Compiled magic-effect Start, Update and Finish now use original raw kind0x0100
+SCDA with mandatory v2 source/event/cursor and actual retirement ownership.
+Player-ability schema v3 joins real effect timelines, condition polls, consumed
+Aid and the shared gameplay clock. Construction prepares
 stored player owners before entering scripts or evaluating cold formulas.
-Runtime/script Debug compile; actual execution and the owned audit remain pending.
-Update/Finish/clock and original native event-list projection remain unowned. Whole current campaign cold
-acceptance and the joined publication gate remain pending.
+Runtime/script Debug compile. Authored compiled-effect warm/cold contracts and
+the actual owned Skilled body pass: thirteen skill pools gain +5 once and the
+complete binary continuation restores without replay, with selected originals
+unchanged. The statistic catalogue reads now pass both original FNV and FO3
+executables. Source-coordinate file continuation and independent signed End-cursor
+contracts pass. Source CHAL11 transactions/completion scripts and genuine queued
+references/CELL ExtraData9 are integrated and the combined runtime compiles in
+Debug with zero warnings/errors. The real clock starts after gameplay construction
+and its saved effect/world prefixes must agree exactly. Ordinary execution of
+these new owners is pending. The combined publication gate has reached integration
+failures and has not passed. Rest-hour effect traversal, native event-list
+projection, whole campaign cold acceptance and the publication gate remain open.
 
-The separate FNV development Release `fnv-dev-6c79290edde5` repairs the reported
-first-person beard and post-trait couch fault. PR 182 is merged with all CI checks
-passing; ordinary source gameplay, save/cold state and the exported couch
-entry/exit/movement/quit pass with the original user save unchanged. The stable
-FNV Test shortcut is advanced and all older packages remain intact.
+The separate FNV development Release `fnv-dev-6c79290edde5` contains the earlier
+first-person beard and post-trait couch repair. PR 182 is merged with all CI checks
+passing and selected ordinary/save/cold/exported checks passed. The user's latest
+question progression and chair-departure failure remains open; those earlier
+checks do not dismiss it. The original user save and immutable test package are
+preserved, and the stable FNV Test shortcut still points to that package.
 
 The larger candidate now joins selected contributor parser, real binary buffer,
 OS metadata, shared loaded-file lifetime, callable binary members and selected
 UCRT streams, all sixteen real Windows profile entries and winning/private
-directory enumeration at managed/native protocol 12. C#,
+directory enumeration at managed/native protocol 13. C#,
 x86 Debug and the joined source contract project compile. Complete BSFile/CRT,
 original DLL execution and native source-state cold gameplay remain unverified
 or unowned; source save admission remains refused. This is not complete-game

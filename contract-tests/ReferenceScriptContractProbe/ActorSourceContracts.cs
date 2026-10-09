@@ -33,7 +33,7 @@ internal static class ActorSourceContracts
                 ActorList(0x821, 100, (1, 0x800)),
                 Record("MISC", 0x840, Field("EDID", Text("CreatureLoot")), Field("DATA", new byte[8])),
                 Record("FACT", 0x8e0), Record("FACT", 0x8e1),
-                Record("PERK", 0x8e2, Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 2]),
+                Record("PERK", 0x8e2, Field("DATA", [0, 1, 1, 1, 0]), Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 2]),
                     Field("PRKC", [1]), Field("CTDA", Condition(35, 0)), Field("EPFT", [1]),
                     Field("EPFD", BitConverter.GetBytes(2f)), Field("PRKF", [])),
                 Record("CSTY", 0x8e3, Field("CSSD", new byte[64])),

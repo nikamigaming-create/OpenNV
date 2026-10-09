@@ -66,7 +66,7 @@ internal static partial class EscortContracts
             Reject(() => (restored with { Escort = new(false, true) }).Validate());
             Reject(() => escort.Advance(initial, float.NaN, 0, 0, false));
             CheckColdPackageFault(records, motion);
-            Console.WriteLine("OPENNV_ESCORT_CONTRACT_PASS winningReferences=true sourceDistance=true acquireLeadWait=true targetAhead=true observedArrival=true coldProgress=true eventNoReplay=true coldUnscriptedFault=true legacyRecovery=true malformedRejected=true");
+            Console.WriteLine("OPENNV_ESCORT_CONTRACT_PASS winningReferences=true sourceDistance=true acquireLeadWait=true targetAhead=true observedArrival=true coldProgress=true eventNoReplay=true retainedFaultPrefix=true uncompletedResultRefused=true malformedRejected=true");
         }
         finally { Directory.Delete(directory, true); }
     }

@@ -5,67 +5,86 @@ internal static class ManualSaveQueueContracts
 {
     internal static void Run()
     {
-        var directory = Path.Combine(Path.GetTempPath(), "opennv-manual-queue-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try
+        var voice = new FalloutFiniteSoundVoice(10, new("Fixture.esm", 0x100), 7, new("Fixture.esm", 0x200),
+            new string('a', 64), "sound\\fixture\\finite.wav", new string('b', 64));
+        using (var fixture = new CompiledManualSaveFixture([], phase: 20))
         {
-            var session = Guid.NewGuid(); const string source = "synthetic-owned-source-stack";
-            var queue = new RuntimeManualSaveRequests(); var request = queue.Request(session, source, 20);
-            var coalesced = queue.Request(session, source, 21);
-            Require(coalesced.Slot == request.Slot && coalesced.RequestCount == 2, "Repeated pending F5 allocated a second slot.");
-            var voice = new FalloutFiniteSoundVoice(10, new("Fixture.esm", 0x100), 7, new("Fixture.esm", 0x200),
-                new string('a', 64), "sound\\fixture\\finite.wav", new string('b', 64));
+            var queue = Joined(fixture);
+            var first = Request(fixture, queue, 1);
+            var second = Request(fixture, queue, 2);
+            using var sourceOrder = new RuntimeManualSaveSourceOrder(fixture.Owner, first, fixture.Phase);
+            Require(first.Slot != second.Slot && second.Order == first.Order + 1 && queue.Source == fixture.Owner,
+                "Distinct native input requests lost their source queue or shared one fabricated slot.");
             var writes = 0;
-            var authoritative = "before-finished";
             RuntimeSaveSlotMetadata Write(Guid id)
             {
-                writes++;
-                var path = Path.Combine(directory, id.ToString("N") + ".json");
-                File.WriteAllText(path, authoritative);
-                return new(id.ToString("N"), path, "synthetic", null, null, null, DateTime.UtcNow);
+                sourceOrder.DrainBeforeManual(queue.Receipt!, fixture.Phase, () => null);
+                return sourceOrder.WriteManual(queue.Receipt!, fixture.Phase, slot => { writes++; return fixture.Write(slot); });
             }
-            Require(!queue.Drain(session, source, 20, () => throw new InvalidDataException("Same-phase admission ran."), Write) && writes == 0,
-                "Manual request captured within its input phase.");
-            Require(!queue.Drain(session, source, 21, () => new(RuntimeManualSaveAdmissionKind.FiniteSourceAudio, Voices: [voice]), Write) &&
-                queue.Pending && queue.Receipt!.DeferredVoices!.Single() == voice && writes == 0,
-                "An active source voice was discarded, falsely completed or saved.");
-            authoritative = "genuine-later-complete-state";
-            Require(queue.Drain(session, source, 22, () => new(RuntimeManualSaveAdmissionKind.Ready), Write) && writes == 1 &&
-                queue.Receipt!.CommittedSlot?.Id == request.Slot.ToString("N") &&
-                queue.Receipt.AwaitedVoices?.Single() == voice && queue.Receipt.DeferredVoices is null &&
-                File.ReadAllText(queue.Receipt.CommittedSlot.Path) == authoritative,
-                "Manual request did not commit the actual later complete state to its retained slot.");
-            Require(!queue.Drain(session, source, 23, () => throw new InvalidDataException("Completed request replayed."), Write) && writes == 1,
-                "Completed player save invoked its writer twice.");
-            foreach (var blocker in new[] { "player-defeated", "cancelled-source-voice", "unowned-physical-pose", "failed-source-event" })
-            {
-                queue.Request(session, source, 24);
-                queue.Drain(session, source, 25, () => new(RuntimeManualSaveAdmissionKind.FiniteSourceAudio, Voices: [voice]), Write);
-                Require(!queue.Drain(session, source, 26, () => new(RuntimeManualSaveAdmissionKind.Refused, blocker), Write) &&
-                    !queue.Pending && queue.Receipt!.Disposition == "failed" && queue.Receipt.Error == blocker &&
-                    queue.Receipt.AwaitedVoices?.Single() == voice && writes == 1,
-                    "An independent unknown, failed or defeated owner was waived.");
-            }
-            queue.Request(session, source, 26);
-            Require(!queue.Drain(Guid.NewGuid(), source, 27, () => throw new InvalidDataException("Other session queried."), Write) &&
-                queue.Receipt!.Disposition == "cancelled" && writes == 1, "Pending request migrated to a new session.");
-            queue.Request(session, source, 28);
-            Require(!queue.Drain(session, "different-source", 29, () => throw new InvalidDataException("Other source queried."), Write) &&
-                queue.Receipt!.Disposition == "cancelled" && writes == 1, "Pending request migrated to another source stack.");
-            queue.Request(session, source, 30);
-            Require(!queue.Drain(session, source, 31, () => new(RuntimeManualSaveAdmissionKind.FiniteSourceAudio, Voices: [voice, voice]), Write) &&
-                queue.Receipt!.Disposition == "failed" && writes == 1, "Duplicate source wait generations were admitted.");
-            queue.Request(session, source, 32);
-            Require(!queue.Drain(session, source, 33, () => new(RuntimeManualSaveAdmissionKind.Ready), _ => throw new IOException("Writer unavailable.")) &&
-                queue.Receipt!.Error == "Writer unavailable." && writes == 1, "Write failure became a completed save.");
-            queue.Request(session, source, 34); queue.Cancel("Actual quit before commit.");
-            Require(queue.Receipt!.Disposition == "cancelled" && queue.History.Any(receipt => receipt.Disposition == "completed") &&
-                queue.History.Count(receipt => receipt.Disposition == "failed") == 6 && writes == 1,
-                "Retry/cancellation erased previous manual request histories or replayed a write.");
-            Console.WriteLine("OPENNV_MANUAL_SAVE_QUEUE_CONTRACT_PASS phase=true knownFiniteAudioOnly=true laterCompleteState=true retainedSlot=true once=true independentRefused=true death=true sourceSessionCancel=true history=true writerFailure=true campaignAndParity=unverified");
+            Require(!queue.Drain(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase,
+                () => throw new InvalidDataException("Same-phase admission ran."), Write), "Input phase entered capture.");
+            fixture.AdvancePhase();
+            Require(!queue.Drain(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase,
+                () => new(RuntimeManualSaveAdmissionKind.FiniteSourceAudio, Voices: [voice]), Write) &&
+                queue.Receipt!.DeferredVoices!.Single() == voice && writes == 0, "Known finite generation lost its pending slot.");
+            fixture.AdvancePhase();
+            Require(queue.Drain(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase,
+                () => new(RuntimeManualSaveAdmissionKind.Ready), Write) && writes == 1 &&
+                queue.Receipt!.CommittedSlot!.Id == first.Slot.ToString("N") &&
+                queue.Receipt.AwaitedVoices!.Single() == voice && File.Exists(queue.Receipt.CommittedSlot.Path),
+                "The exact later complete state failed its original slot write: " + queue.Receipt!.Error);
+            Require(!queue.Drain(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase,
+                () => throw new InvalidDataException("Completed admission replayed."), Write), "Completed slot replayed.");
+            queue.RetirePreparation();
+            Require(queue.Receipt!.Slot == second.Slot && queue.Pending, "Retirement lost the independently queued second input.");
+            queue.Cancel("Actual quit before second write.");
+            Require(queue.History is [{ Disposition: "completed" }, { Disposition: "cancelled" }] && writes == 1,
+                "Second cancellation erased the earlier completed source request.");
         }
-        finally { Directory.Delete(directory, true); }
+        foreach (var blocker in new[] { "player-defeated", "cancelled-source-voice", "unowned-physical-pose", "failed-source-event" })
+        {
+            using var fixture = new CompiledManualSaveFixture([], phase: 1);
+            var queue = Joined(fixture); Request(fixture, queue, 1); fixture.AdvancePhase();
+            queue.Drain(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase,
+                () => new(RuntimeManualSaveAdmissionKind.FiniteSourceAudio, Voices: [voice]), NoWrite);
+            fixture.AdvancePhase();
+            Require(!queue.Drain(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase,
+                () => new(RuntimeManualSaveAdmissionKind.Refused, blocker), NoWrite) &&
+                queue.Receipt is { Disposition: "failed" } failed && failed.Error == blocker &&
+                failed.AwaitedVoices!.Single() == voice && fixture.Owner.Order.Requests.Single().Error == blocker,
+                "An independent failed owner disappeared from the shared queue.");
+        }
+        foreach (var otherSession in new[] { false, true })
+        {
+            using var fixture = new CompiledManualSaveFixture([], phase: 1);
+            var queue = Joined(fixture); Request(fixture, queue, 1); fixture.AdvancePhase();
+            Require(!queue.Drain(otherSession ? Guid.NewGuid() : fixture.Session,
+                otherSession ? fixture.Binding.SourceCompatibilityId : "different-source", fixture.Phase,
+                () => throw new InvalidDataException("Foreign admission queried."), NoWrite) &&
+                queue.Receipt!.Disposition == "cancelled", "A request migrated across source/session ownership.");
+        }
+        using (var fixture = new CompiledManualSaveFixture([], phase: 1))
+        {
+            var queue = Joined(fixture); Request(fixture, queue, 1); fixture.AdvancePhase();
+            Require(!queue.Drain(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase,
+                () => new(RuntimeManualSaveAdmissionKind.FiniteSourceAudio, Voices: [voice, voice]), NoWrite) &&
+                queue.Receipt!.Disposition == "failed", "Duplicate native wait generations were admitted.");
+        }
+        using (var fixture = new CompiledManualSaveFixture([], phase: 1))
+        {
+            var queue = Joined(fixture); Request(fixture, queue, 1); fixture.AdvancePhase();
+            Require(!queue.Drain(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase,
+                () => new(RuntimeManualSaveAdmissionKind.Ready), _ => throw new IOException("Writer unavailable.")) &&
+                queue.Receipt!.Error == "Writer unavailable.", "Writer failure became a completed source request.");
+        }
+        Console.WriteLine("OPENNV_MANUAL_SAVE_QUEUE_CONTRACT_PASS authored=true joinedSource=true distinctNativeSites=true phase=true knownFiniteAudioOnly=true originalSlot=true once=true independentRefused=true sourceSessionCancel=true history=true writerFailure=true campaignAndParity=unverified");
     }
-
+    private static RuntimeManualSaveRequests Joined(CompiledManualSaveFixture fixture)
+    {
+        var queue = new RuntimeManualSaveRequests(); fixture.BindManual(queue); return queue;
+    }
+    private static RuntimeManualSaveReceipt Request(CompiledManualSaveFixture fixture, RuntimeManualSaveRequests queue, ulong generation) =>
+        queue.Request(fixture.Session, fixture.Binding.SourceCompatibilityId, fixture.Phase, site: fixture.Site(generation));
+    private static RuntimeSaveSlotMetadata NoWrite(Guid id) => throw new InvalidDataException("Refused state reached its writer.");
     private static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }
 }

@@ -43,7 +43,8 @@ internal sealed partial class FalloutNativePluginGraphSource
             {
                 if (_disposed) return; _disposed = true;
                 var failures = new List<Exception>();
-                try { file.Dispose(); } catch (Exception failure) { failures.Add(failure); }
+                try { file.Dispose(); }
+                catch (Exception failure) { failures.Add(failure); }
                 finally { authority._loadedFile = null; }
                 try { original.Dispose(); } catch (Exception failure) { failures.Add(failure); }
                 if (failures.Count != 0) throw new AggregateException("Contributor loaded-source lease retirement failed.", failures);

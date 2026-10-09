@@ -25,7 +25,7 @@ internal sealed partial class FalloutReferenceScripts
             if (!_activeCompiledEffects.Add(effect.Owner))
                 throw new InvalidOperationException("Compiled active-effect execution is reentrant in its actual instance.");
             added = true;
-            foreach (var _ in CompiledSteps(effect.Target, program, block, 0,
+            foreach (var _ in CompiledSteps(effect.Target, program, block, effect.Seconds,
                 observeInvocation: actual => entered = actual, cursor: effect.Cursor,
                 canContinue: () => true, localAuthority: effect)) { }
         }
@@ -40,7 +40,7 @@ internal sealed partial class FalloutReferenceScripts
             if (added && !_activeCompiledEffects.Remove(effect.Owner))
                 throw new InvalidOperationException("Compiled active-effect execution lost its actual entered owner.");
         }
-        if (entered is null) throw new InvalidOperationException("Completed ScriptEffectStart has no actual shared invocation lease.");
+        if (entered is null) throw new InvalidOperationException("Completed script-effect event has no actual shared invocation lease.");
         var complete = Receipt("completed", null);
         complete.Require();
         return complete;

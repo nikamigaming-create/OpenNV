@@ -78,6 +78,7 @@ internal sealed partial class FalloutReferenceWorld
             ActorPerception.Construct(instance.Reference);
         ConstructActualProcessRuntimeActor(instance);
         BindSourceActorProcessInstance(instance);
+        ConstructSourceProcessQueueActor(instance);
     }
     private void EnsurePerceptionActor(FalloutFormKey actor)
     {
@@ -186,8 +187,11 @@ internal sealed partial class FalloutReferenceWorld
         ActorPerception.AdvanceClocks(seconds);
         foreach (var instance in _instances.Values.Where(instance => instance.Deleted && SelectedPerceptionActor(instance.Reference)).ToArray())
         {
+            var beforeEpoch = ActorProcesses.Read(instance.Reference).Epoch;
+            RequireSourceProcessQueueActorRetirement(instance.Reference, beforeEpoch);
             _nativePerception.Remove(instance.Reference);
             ActorProcesses.Retire(instance.Reference, "actual-reference-deletion-retirement");
+            RetireSourceProcessQueueActor(instance.Reference, beforeEpoch, ActorProcesses.Read(instance.Reference).Epoch);
             RetireActualProcessRuntimeActor(instance.Reference, "actual-reference-deletion-retirement");
         }
         foreach (var (actor, native) in _nativePerception.ToArray()) ActorPerception.ObserveNative(ReadNativePerception(actor, native));

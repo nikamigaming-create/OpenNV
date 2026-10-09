@@ -49,10 +49,28 @@ internal sealed partial class FalloutSleepWait
     internal bool NeedsMenuPublication => MenuPending && Request?.Origin != FalloutRestOrigin.ScriptHours;
     internal bool OwnsClock => Phase == FalloutRestPhase.Running && Request?.Origin != FalloutRestOrigin.ScriptHours;
     internal bool OwnsPhysicalSleepContinuation => Sleeping && Request is not null && (Active || MenuPending);
-    internal object State => new { Source, RequestOrdinal, Attempt, Request, Phase, SelectedHours, RemainingHours,
-        CommittedHours, Sleeping, Countdown, MenuPending, CompletionEffectsCommitted, LastHour, Failure, Published,
-        nativeFailures = _nativeFailures.ToArray(), menuControls = _menuControls?.State,
-        prefixReadFailure = _prefixReadFailure, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        Source,
+        RequestOrdinal,
+        Attempt,
+        Request,
+        Phase,
+        SelectedHours,
+        RemainingHours,
+        CommittedHours,
+        Sleeping,
+        Countdown,
+        MenuPending,
+        CompletionEffectsCommitted,
+        LastHour,
+        Failure,
+        Published,
+        nativeFailures = _nativeFailures.ToArray(),
+        menuControls = _menuControls?.State,
+        prefixReadFailure = _prefixReadFailure,
+        saveBlocker = SaveBlocker
+    };
     internal string? SaveBlocker => _busy ? "sleep-wait-operation-prefix" :
         _menuControls?.SaveBlocker is { } controls ? controls :
         _prefixReadFailure is not null ? "sleep-wait-physical-prefix-unread" : null;

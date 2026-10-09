@@ -34,11 +34,17 @@ internal static class FiniteSoundCompletionWaitContracts
             sourceReference: reference, finiteWait: () => wait.Observe(proof, 82, 83, 84, playing, phase, milliseconds),
             finiteWaitState: () => wait.State);
         var manual = new RuntimeManualSaveRequests(); var session = Guid.NewGuid(); const string compatibility = "fixture";
-        manual.Request(session, compatibility, 20);
+        ulong queuePhase = 20;
+        var continuePath = Path.Combine(Path.GetTempPath(), "opennv-finite-source-" + Guid.NewGuid().ToString("N"), "continue.json");
+        world.ScriptManualSaves.BindSelection(new(compatibility, continuePath,
+            id => Path.Combine(continuePath + RuntimeSaveSlotCatalog.SlotDirectorySuffix, id.ToString("N") + ".json")), () => queuePhase);
+        manual.Bind(world.ScriptManualSaves, session, compatibility);
+        manual.Request(session, compatibility, queuePhase, site: new(session, 1, records.RuntimeFormKey(0x14), state.Cell));
         playing = false; phase = 11; milliseconds = 200;
         Require(world.PendingAnimationSoundFiniteVoiceWait()?.Single() == proof && wait.Phase == "awaiting-native-finished",
             "Native inactivity dropped its still-registered exact finite generation.");
-        manual.Drain(session, compatibility, 21,
+        queuePhase = 21;
+        manual.Drain(session, compatibility, queuePhase,
             () => new(RuntimeManualSaveAdmissionKind.FiniteSourceAudio, Voices: world.PendingAnimationSoundFiniteVoiceWait()),
             _ => throw new InvalidDataException("Pre-Finished native audio reached the writer."));
         Require(manual.Pending && manual.Receipt!.DeferredVoices?.Single() == proof &&
@@ -49,7 +55,8 @@ internal static class FiniteSoundCompletionWaitContracts
         phase += FalloutFiniteSoundCompletionWait.MaximumNativePhases + 1;
         Require(world.PendingAnimationSoundFiniteVoiceWait() is null && wait.Error is not null,
             "Missing native Finished remained an unbounded eligible wait.");
-        manual.Drain(session, compatibility, 22,
+        queuePhase = 22;
+        manual.Drain(session, compatibility, queuePhase,
             () => new(RuntimeManualSaveAdmissionKind.Refused, "animation-sound-continuation"),
             _ => throw new InvalidDataException("Expired native wait reached the writer."));
         Require(manual.Receipt is { Disposition: "failed", Error: "animation-sound-continuation" } &&
@@ -84,19 +91,19 @@ internal static class FiniteSoundCompletionWaitContracts
         // The contract's genuine completion is independent of the expired
         // request; it cannot retry that request or alter its failure history.
         ledger.Complete(generation, FalloutAnimationSoundEnd.NativeFinished); registration.Dispose();
-        Require(!manual.Drain(session, compatibility, 23,
+        queuePhase = 23;
+        Require(!manual.Drain(session, compatibility, queuePhase,
             () => throw new InvalidDataException("Failed manual request replayed admission."),
             _ => throw new InvalidDataException("Failed manual request replayed writer.")) &&
             JsonSerializer.Serialize(manual.Receipt) == failedReceipt, "Late Finished rewrote or retried the failed request.");
-        var snapshot = JsonSerializer.Serialize(world.Capture());
-        using var cold = new FalloutReferenceWorld(records);
-        cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(snapshot)!);
-        Require(JsonSerializer.Serialize(cold.Capture()) == snapshot && cold.PendingAnimationSoundFiniteVoiceWait() is null &&
-            records.SoundVoices.ActiveVoices == 0 && state.SoundRandom.State == random,
-            "Cold finished history retained transient completion wait or replayed selection.");
+        Reject(() => world.Capture());
+        Require(world.ScriptManualSaves.Order.Requests.Single().Disposition == RuntimeSaveRequestDisposition.Failed &&
+            records.SoundVoices.ActiveVoices == 0 && state.SoundRandom.State == random &&
+            ledger.Events.Single().End == FalloutAnimationSoundEnd.NativeFinished,
+            "Late native completion erased the joined queue failure, retained a voice or replayed selection.");
         Console.WriteLine("OPENNV_FINITE_SOUND_COMPLETION_WAIT_CONTRACT_PASS preFinished=true exactPlayback=true missingStartupRefused=true " +
             "phaseTimeout=true stalledClockTimeout=true driftRefused=true resumedRefused=true activeCaptureRefused=true " +
-            "failedRequestImmutable=true coldNoReplay=true rng=true nativeOrderingAndOwnedAttribution=separate");
+            "failedRequestImmutable=true joinedFailureCaptureRefused=true rng=true nativeOrderingAndOwnedAttribution=separate");
     }
 
     private static void Reject(Action action)

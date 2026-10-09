@@ -73,7 +73,9 @@ internal sealed class FalloutNewGameBootstrap
                 LocationSpecificLoadScreensOnly: () => scripts.Session.LocationSpecificLoadScreensOnly,
                 InCharGen: () => scripts.Session.InCharGen, IsHardcore: () => scripts.Session.Hardcore, GameTime: gameTime,
                 Inventory: inventory, PlayerLevel: playerLevel,
+                Challenges: world.CampaignChallengesConfigured ? world.Challenges : null,
                 Statistics: world.PlayerStatisticsConfigured ? world.PlayerStatistics : null));
+        executor.BindCampaignChallengeRewards();
         _stages = new(records, quests, (owner, fields, _) =>
         {
             if (!FalloutCompiledScriptProgram.HasProgram(fields))

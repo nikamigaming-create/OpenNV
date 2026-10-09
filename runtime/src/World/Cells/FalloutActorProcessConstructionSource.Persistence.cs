@@ -27,7 +27,8 @@ internal sealed partial class FalloutActorProcessConstructionSource
             ValidateSourceIdentity(reference, actual);
             var expected = actual.BaseSignature switch
             {
-                "NPC_" => "ACHR", "CREA" => "ACRE",
+                "NPC_" => "ACHR",
+                "CREA" => "ACRE",
                 _ => throw new InvalidDataException("Retained actor has no original source constructor."),
             };
             if (receipt.Stack != _stack || receipt.ExecutableSha256 != _declaration.ExecutableSha256 ||

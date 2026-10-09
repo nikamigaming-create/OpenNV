@@ -13,7 +13,7 @@ internal static partial class NativeLoadedFileContracts
         using (var source = new FalloutNativePluginBinaryFile(records, context, construction, 8))
         {
             Require(Read(source, 3).AsSpan().SequenceEqual(original.AsSpan(0, 3)), "continuation actual buffered prefix");
-            source.Seek(3, construction.SeekEnd); _ = Read(source, 2);
+            source.Seek(checked((uint)original.Length - 3), construction.SeekSet); _ = Read(source, 2);
             var saved = source.CaptureSourceState();
             Require(saved.WrittenExtent == 8 && saved.BufferBytes == 3 && saved.BufferSources.Count == 2,
                 "source-coordinate continuation retains genuine short-refill tail origins");

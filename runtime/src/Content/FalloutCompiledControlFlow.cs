@@ -100,6 +100,10 @@ internal sealed partial class FalloutCompiledControlFlow
                 case 0x1e:
                     if (instruction.Receiver is not null || !instruction.Payload.IsEmpty)
                         throw new InvalidDataException("Compiled Return has an invalid payload/receiver.");
+                    // Return is a reached, committed instruction even when it
+                    // is the entire result. The shared invocation must retain
+                    // that prefix before closing; its suffix never executes.
+                    yield return true;
                     yield break;
                 default:
                     apply(instruction); ++index; break;

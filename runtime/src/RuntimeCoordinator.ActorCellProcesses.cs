@@ -124,7 +124,11 @@ public partial class RuntimeCoordinator
                 // A failed source operation retains its original phase/fault;
                 // cancellation cannot invent a successful release receipt.
                 var state = _nativeReferences.CellProcesses.ReadPhase(cell);
-                if (state.Failure is null) _nativeReferences.CellProcesses.ReleaseSource(cell);
+                if (state.Failure is null)
+                {
+                    _nativeReferences.ReleaseSourceCellExtraProcess(cell, "actual-CELL-source-release-after-native-retirement");
+                    _nativeReferences.CellProcesses.ReleaseSource(cell);
+                }
             }
         }
     }

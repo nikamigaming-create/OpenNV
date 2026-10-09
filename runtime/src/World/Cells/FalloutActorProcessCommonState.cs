@@ -40,9 +40,18 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         _transfer is { Initialized: false } transfer ? "actual-process-common-transfer:" + transfer.Owner + ":" + (transfer.Failure ?? "source-prefix-incomplete") :
         _current.Values.FirstOrDefault(entry => entry.Boundary is not null) is { } failed ?
             "actual-process-common:" + failed.Source.Reference + ":" + failed.Boundary : null;
-    internal object State => new { source = _source.Contract, process = _process, _sequence,
-        current = _current.Values.ToArray(), retired = _retired.ToArray(), pending = _pending,
-        transfer = _transfer, cold = _cold, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        source = _source.Contract,
+        process = _process,
+        _sequence,
+        current = _current.Values.ToArray(),
+        retired = _retired.ToArray(),
+        pending = _pending,
+        transfer = _transfer,
+        cold = _cold,
+        saveBlocker = SaveBlocker
+    };
 
     internal void Construct(FalloutFormKey actor, long epoch, FalloutDetectionProcessLevel level)
     {
@@ -88,7 +97,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         // Providers remain in the real reference world; release only the old
         // process lease. Package events and live native continuations survive.
         var sequence = Next();
-        var retired = old with { Gameplay = null, Body = null, Phase = FalloutProcessCommonPhase.OldRetired, Changed = sequence };
+        var retired = old with { Gameplay = null, Body = null, Source3D = null, Phase = FalloutProcessCommonPhase.OldRetired, Changed = sequence };
         _current[factory.Actor] = retired; _retired.Add(retired);
         _pending = _pending with { Phase = FalloutProcessCommonPhase.OldRetired, Changed = sequence };
         _transfer = _transfer with { OldRetired = true, Changed = sequence };
@@ -107,10 +116,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         // A real current native body supplies the source NIF/BPTD binding.
         // Missing nodes/controllers are legal nullable lookup results. An
         // unavailable body or source relationship is a genuine failed owner.
-        var body = Callback(() => _body(factory.Actor)) ?? throw new NotSupportedException("Actual new High process source skeleton publication is absent.");
-        RequireBody(body, factory.Actor);
-        _current[factory.Actor] = _current[factory.Actor] with
-        { Body = body, Phase = FalloutProcessCommonPhase.Initialized, Changed = Next() };
+        InitializeCurrentSourceBody(factory.Actor);
         _transfer = _transfer with { Initialized = true, Changed = Next() };
     });
     internal void ObserveExistingHighBody(FalloutFormKey actor, long epoch)
@@ -118,11 +124,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         RequireNotBusy(); var state = Require(actor);
         if (state.Epoch != epoch || state.Level != FalloutDetectionProcessLevel.High || state.Gameplay is null || state.Boundary is not null)
             throw new InvalidDataException("Current High body belongs to a retired/unadmitted process epoch.");
-        var body = Callback(() => _body(actor)) ?? throw new NotSupportedException("Existing High process has no actual source body publication.");
-        RequireBody(body, actor);
-        if (state.Body is { } previous && !BodyEquivalent(previous, body))
-            throw new NotSupportedException("Source High body replacement has no admitted body-part/LOD rebinding transaction.");
-        _current[actor] = state with { Body = body, Phase = FalloutProcessCommonPhase.Initialized, Changed = Next() };
+        ObserveExistingCurrentSourceBody(actor, state);
     }
     internal void RetainUnownedMutation(FalloutFormKey actor, string owner)
     {
@@ -145,7 +147,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         if (retirementEpoch != checked(state.Epoch + 1))
             throw new InvalidDataException("Common retirement lost the actual source process invalidation epoch.");
         if (_transfer is { Initialized: false }) throw new NotSupportedException("Actor retirement cannot discard an incomplete common transfer.");
-        var retired = state with { Gameplay = null, Body = null, Phase = FalloutProcessCommonPhase.Retired, Changed = Next() };
+        var retired = state with { Gameplay = null, Body = null, Source3D = null, Phase = FalloutProcessCommonPhase.Retired, Changed = Next() };
         _retired.Add(retired);
         _current[actor] = retired with { Epoch = retirementEpoch };
     }

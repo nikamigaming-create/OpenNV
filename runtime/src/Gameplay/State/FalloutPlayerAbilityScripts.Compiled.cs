@@ -6,44 +6,49 @@ internal sealed partial class FalloutPlayerAbilityScripts
 {
     private Entry BuildCompiled(FalloutAbilityScript definition, long generation, FalloutPlayerAbilityScriptState? saved)
     {
-        var spell = _records.GetEffective(definition.Spell);
-        var effect = _records.GetEffective(definition.Effect);
+        var source = FalloutScriptedEffectSource.Read(_records, definition);
+        if (source.Origin == FalloutScriptedEffectOrigin.DeliveredSpell)
+            throw new NotSupportedException("Timed spell still requires its genuine casting/delivery application owner.");
         var script = _records.GetEffective(definition.Script);
-        if (spell.Signature != "SPEL")
-            throw new NotSupportedException("Scripted constant enchantments require their equipped-item instance lifecycle.");
-        if (effect.Signature != "MGEF" || script.Signature != "SCPT")
-            throw new InvalidDataException("Active-effect source links are not MGEF/SCPT.");
         var initial = new FalloutPlayerAbilityScriptState(definition.Spell, definition.EffectOrdinal,
-            definition.Effect, definition.Script, spell.Plugin.Name, Hash(spell), effect.Plugin.Name, Hash(effect),
-            script.Plugin.Name, Hash(script), generation, false, false, null, [], null);
+            definition.Effect, definition.Script, source.ItemWinner, source.ItemSha256, source.EffectWinner, source.EffectSha256,
+            script.Plugin.Name, Hash(script), generation, false, false, null, [], null, null, null);
         if (saved is not null)
         {
-            var savedIdentity = saved with { Active = false, Started = false, Error = null, Locals = initial.Locals, Compiled = null };
-            if (savedIdentity != initial)
-                throw new InvalidDataException("Saved active-effect source/order differs from winning owned bytes.");
-            if (saved.Compiled is null)
-                throw new InvalidDataException("Current active effect lost its compiled event-list/cursor authority.");
+            var savedIdentity = saved with { Active = false, Started = false, Error = null, Locals = initial.Locals,
+                Compiled = null, Timeline = null, Consumption = null };
+            if (savedIdentity != initial || saved.Compiled is null || saved.Timeline is null)
+                throw new InvalidDataException("Saved effect differs from its complete winning source/timeline/cell owner.");
+            RequireConsumptionSource(saved.Consumption);
         }
-        var locals = new FalloutScriptEffectLocals(script, saved?.Locals);
-        var compiled = new FalloutCompiledActiveEffectExecution(_records,
-            _records.RuntimeFormKey(FalloutPlayerActorValues.PlayerReference), definition, generation, script, locals, saved?.Compiled);
-        compiled.RequireLifecycle(saved?.Started ?? false, saved?.Error);
-        var state = saved ?? initial with { Compiled = compiled.Capture(), Locals = locals.Capture() };
-        return new(definition, state, script, locals, compiled);
+        var lifetime = new FalloutScriptedActiveEffect(_records,
+            _records.RuntimeFormKey(FalloutPlayerActorValues.PlayerReference), definition, generation,
+            saved?.Timeline?.LastClockMutation ?? Clock.LastConsumedMutation, NextGeneration, Execute,
+            saved?.Timeline, saved?.Locals, saved?.Compiled);
+        var entry = new Entry(definition, saved ?? initial, lifetime);
+        entry.State = CaptureEntry(entry);
+        return entry;
     }
 
     private static void RequireCompiledState(FalloutPlayerAbilityScriptState effect)
     {
-        var compiled = effect.Compiled ?? throw new InvalidDataException("Current active effect has no compiled lifetime state.");
+        var compiled = effect.Compiled ?? throw new InvalidDataException("Current active effect has no compiled event list.");
+        var timeline = effect.Timeline ?? throw new InvalidDataException("Current active effect has no real elapsed/lifecycle owner.");
+        var lifecycle = compiled.Lifetime ?? throw new InvalidDataException("Current active effect has no event-list lifecycle.");
         FalloutCompiledActiveEffectExecution.Validate(compiled);
+        FalloutScriptedActiveEffect.Validate(timeline); ValidateConsumption(effect.Consumption);
         if (compiled.Target.ObjectId != FalloutPlayerActorValues.PlayerReference || compiled.Spell != effect.Spell ||
             compiled.EffectOrdinal != effect.EffectOrdinal || compiled.Effect != effect.Effect ||
             compiled.Script != effect.Script || compiled.Generation != effect.Generation ||
+            timeline.EventListGeneration != effect.Generation || timeline.InstanceGeneration > effect.Generation ||
             compiled.Winner != effect.ScriptWinner || compiled.RecordSha256 != effect.ScriptSha256 ||
-            effect.Started && compiled.Events.Any(row => !row.Attempted || !row.Cursor.Completed ||
-                row.Receipt?.Disposition != "completed" || row.Failure is not null) ||
-            !effect.Started && effect.Error is null && compiled.Events.Any(row => row.Attempted || row.Failure is not null) ||
-            effect.Error is not null && !compiled.Events.Any(row => row.Attempted && row.Failure is not null))
-            throw new InvalidDataException("Saved active-effect lifetime differs from its compiled instance/event authority.");
+            effect.Started != timeline.Started || effect.Error != timeline.Failure ||
+            effect.Active != (timeline.Applied && !timeline.Expired && !timeline.Removed) ||
+            lifecycle.Started != timeline.Started || lifecycle.Finished != timeline.FinishApplied ||
+            effect.Error is null && lifecycle.Failure is not null ||
+            effect.Consumption is { } use && (use.Item != effect.Spell || use.ItemSha256 != effect.SpellSha256 ||
+                !ConsumptionOwns(use, timeline.InstanceGeneration, effect.EffectOrdinal)))
+            throw new InvalidDataException("Saved effect differs from its actual source instance/event-list/application prefix.");
     }
+
 }

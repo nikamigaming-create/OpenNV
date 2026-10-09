@@ -83,6 +83,8 @@ internal static class ActorConstructorSourceContracts
         using var cold = new FalloutReferenceWorld(records);
         cold.Restore(world.Capture()); cold.ConfigureCombatGroups(group, Selection, world.CaptureCombatGroups());
         cold.ConfigureActorPerception(FalloutActorPerceptionDeclaration.ForExecutable(image), Selection, world.CaptureActorPerception());
+        cold.ConfigureActualProcessRuntime(FalloutActorProcessRuntimeDeclaration.ForExecutable(image), Selection,
+            world.CaptureActualProcessRuntime(), world.CaptureActualProcessCommon());
         cold.ConfigureActorProcesses(declaration, Selection, saved);
         var once = cold.CaptureActorProcesses();
         Require(once.CapturedProcess != saved.CapturedProcess && once.Actors.Single(actor => actor.Source.Reference == Npc).Construction ==
@@ -91,6 +93,8 @@ internal static class ActorConstructorSourceContracts
         using var twice = new FalloutReferenceWorld(records);
         twice.Restore(cold.Capture()); twice.ConfigureCombatGroups(group, Selection, cold.CaptureCombatGroups());
         twice.ConfigureActorPerception(FalloutActorPerceptionDeclaration.ForExecutable(image), Selection, cold.CaptureActorPerception());
+        twice.ConfigureActualProcessRuntime(FalloutActorProcessRuntimeDeclaration.ForExecutable(image), Selection,
+            cold.CaptureActualProcessRuntime(), cold.CaptureActualProcessCommon());
         twice.ConfigureActorProcesses(declaration, Selection, once);
         Require(twice.CaptureActorProcesses().CapturedProcess != once.CapturedProcess &&
             twice.CaptureActorProcesses().Actors.Single(actor => actor.Source.Reference == Npc).Construction!.Source!.ConstructedProcess ==
@@ -104,6 +108,7 @@ internal static class ActorConstructorSourceContracts
         world.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ForExecutable(image), Selection);
         world.ConfigureActorPerception(FalloutActorPerceptionDeclaration.ForExecutable(image), Selection);
         world.Get(Npc); world.Get(Creature);
+        world.ConfigureActualProcessRuntime(FalloutActorProcessRuntimeDeclaration.ForExecutable(image), Selection);
         var rejected = true;
         using var lease = world.BindActualActorRegistrationThreads(process =>
             rejected ? throw new InvalidDataException("Authored source producer failed before publication.") : Observation(process));
@@ -152,6 +157,7 @@ internal static class ActorConstructorSourceContracts
         var world = new FalloutReferenceWorld(records);
         world.ConfigureCombatGroups(FalloutCombatGroupDeclaration.ForExecutable(image), Selection);
         world.ConfigureActorPerception(FalloutActorPerceptionDeclaration.ForExecutable(image), Selection);
+        world.ConfigureActualProcessRuntime(FalloutActorProcessRuntimeDeclaration.ForExecutable(image), Selection);
         world.ConfigureActorProcesses(FalloutActorProcessDeclaration.ForExecutable(image), Selection);
         return world;
     }

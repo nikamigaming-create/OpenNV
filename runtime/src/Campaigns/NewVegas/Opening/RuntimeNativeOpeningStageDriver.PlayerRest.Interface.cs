@@ -13,8 +13,10 @@ internal partial class RuntimeNativeOpeningStageDriver
     private bool _sourceRestInterfaceRetired;
     internal object? SourceRestInterfaceState => new
     {
-        fade = _sourceInterfaceFade?.State, console = _sourceRestConsole?.State,
-        native = _sourceInterfaceFadeNative?.State, retired = _sourceRestInterfaceRetired,
+        fade = _sourceInterfaceFade?.State,
+        console = _sourceRestConsole?.State,
+        native = _sourceInterfaceFadeNative?.State,
+        retired = _sourceRestInterfaceRetired,
     };
     internal string? SourceRestInterfaceSaveBlocker => _sourceInterfaceFade?.SaveBlocker ??
         (_sourceInterfaceFade is null ? "source-interface-fade-owner" : null);

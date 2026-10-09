@@ -720,7 +720,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return new([], _ => world.GetSitting(Target(), host.Sitting)) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getdetected")
                 return new([FalloutScriptArgumentKind.Value], arguments => world.GetDetected(Target(),
-                    arguments[0].Value.FormKey(records), world.PreparePerceptionPairPerks)) { ReadOnly = true };
+                    arguments[0].Value.FormKey(records), world.PreparePerceptionPairPerks))
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "isactorsaioff")
                 return new([], _ => FalloutActorAiCommands.Query(world, Target())) { ReadOnly = true };
             if (parts.Length <= 2 && operation == "getsleeping")

@@ -10,7 +10,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         throw new NotSupportedException("The current player has no source-constructed miscellaneous statistic owner.");
     internal object? PlayerStatisticState => _playerStatistics?.State;
     internal string? PlayerStatisticFailure => _playerStatistics?.Failure;
-    internal string? PlayerStatisticSaveBlocker => _playerStatistics is null ? "source-statistic-owner-absent" : _playerStatistics.SaveBlocker;
+    internal string? PlayerStatisticSaveBlocker => _playerStatistics is null ? "source-statistic-owner-absent" :
+        _playerStatistics.SaveBlocker ?? _scripts.Challenges.SaveBlocker;
 
     // Join before any bootstrap/result/quest/reference call; source constructor
     // zero is a real initial value, independent of event or native UI readiness.

@@ -40,9 +40,19 @@ internal sealed class FalloutInterfaceFade
     internal FalloutInterfaceFadeFailure? Failure { get; private set; }
     internal IReadOnlyList<FalloutInterfaceFadeChannel> Channels => Array.AsReadOnly(_channels);
     internal string? SaveBlocker => _busy ? "interface-fade-operation-prefix" : null;
-    internal object State => new { source = Source, Attempt, ReleaseHold, channels = Channels, Failure,
-        nativePublished = _published.ToArray(), drawnRevisions = _drawn.ToArray(), retired = _retired,
-        nativeFailures = _nativeFailures.ToArray(), saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        source = Source,
+        Attempt,
+        ReleaseHold,
+        channels = Channels,
+        Failure,
+        nativePublished = _published.ToArray(),
+        drawnRevisions = _drawn.ToArray(),
+        retired = _retired,
+        nativeFailures = _nativeFailures.ToArray(),
+        saveBlocker = SaveBlocker
+    };
 
     internal FalloutInterfaceFade(FalloutInterfaceFadeSource source, FalloutInterfaceFadeSnapshot? restore = null)
     {
@@ -79,9 +89,14 @@ internal sealed class FalloutInterfaceFade
         Execute(channel, FalloutInterfaceFadeOperation.Start, () =>
         {
             var opaque = decreasing || duration == 0;
-            var next = old with { Generation = checked(old.Generation + 1), Revision = checked(_channels[channel].Revision + 1),
+            var next = old with
+            {
+                Generation = checked(old.Generation + 1),
+                Revision = checked(_channels[channel].Revision + 1),
                 Direction = decreasing ? FalloutInterfaceFadeDirection.Decreasing : FalloutInterfaceFadeDirection.Increasing,
-                Duration = duration, Opacity = opaque ? 1 : 0 };
+                Duration = duration,
+                Opacity = opaque ? 1 : 0
+            };
             _channels[channel] = next;
             if (opaque) ReleaseHold = 3;
             Publish(next);
@@ -101,9 +116,12 @@ internal sealed class FalloutInterfaceFade
                 var observation = observeGlobalForce(); observation.Validate(); forced = observation.Forced;
             }
             if (forced) { RetireChannel(current); return; }
-            var next = current with { Direction = FalloutInterfaceFadeDirection.Decreasing,
+            var next = current with
+            {
+                Direction = FalloutInterfaceFadeDirection.Decreasing,
                 Revision = checked(current.Revision + 1),
-                Opacity = current.Opacity == 1 ? BitConverter.Int32BitsToSingle(0x3f7ff972) : current.Opacity };
+                Opacity = current.Opacity == 1 ? BitConverter.Int32BitsToSingle(0x3f7ff972) : current.Opacity
+            };
             _channels[channel] = next; Write(next);
         });
     }
@@ -181,8 +199,12 @@ internal sealed class FalloutInterfaceFade
     {
         RequirePublished(channel);
         Native().Retire(channel); _published[channel.Channel] = false; _drawn[channel.Channel] = 0;
-        _channels[channel.Channel] = channel with { Direction = FalloutInterfaceFadeDirection.Absent,
-            Revision = checked(channel.Revision + 1), Opacity = 0 };
+        _channels[channel.Channel] = channel with
+        {
+            Direction = FalloutInterfaceFadeDirection.Absent,
+            Revision = checked(channel.Revision + 1),
+            Opacity = 0
+        };
     }
     private FalloutInterfaceFadeNativeHost Native() => _native ??
         throw new NotSupportedException("Interface fade has no actual owned texture/native root lifetime.");

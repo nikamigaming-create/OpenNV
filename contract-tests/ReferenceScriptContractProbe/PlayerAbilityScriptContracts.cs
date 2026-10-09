@@ -84,8 +84,9 @@ internal static partial class PlayerAbilityScriptContracts
         var savedEffects = JsonSerializer.Deserialize<FalloutPlayerAbilityScriptsSnapshot>(JsonSerializer.Serialize(effects.Capture()))!;
         using var coldWorld = new FalloutReferenceWorld(records);
         var coldActor = new FalloutPlayerActorValues(records, actor.Capture());
-        var coldSkills = Skills(records, coldActor); coldSkills.RestoreValues(savedSkills);
+        var coldSkills = Skills(records, coldActor);
         var coldEffects = Bind(records, coldWorld, coldActor, coldSkills, savedEffects);
+        coldSkills.RestoreValues(savedSkills);
         Require(coldActor.ReadPermanent(7) == 5 && coldSkills.ReadSkill("Barter", FalloutActorValueRead.Current) == 15 + amount &&
             JsonSerializer.Serialize(coldEffects.Capture()) == JsonSerializer.Serialize(savedEffects) && coldWorld.InstanceCount == 0,
             "Cold effect locals/source identity were lost or the committed skill mutation was applied twice.");

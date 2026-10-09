@@ -7,6 +7,15 @@ internal sealed partial class RuntimeNativeGameTime
 {
     private FalloutRestWorldTime? _restWorldTime;
     private bool _cumulativeFrameActive;
+    private Action? _consumeSourceEffectFrame;
+
+    internal void BindSourceEffectFrame(Action consume)
+    {
+        ArgumentNullException.ThrowIfNull(consume);
+        if (_consumeSourceEffectFrame is not null || _cumulativeFrameActive)
+            throw new InvalidOperationException("Native effect-frame ownership is already bound or executing.");
+        _consumeSourceEffectFrame = consume;
+    }
 
     internal void BindSourceCumulativeWorldTime(FalloutRestWorldTime owner)
     {
@@ -28,7 +37,13 @@ internal sealed partial class RuntimeNativeGameTime
         var owner = _restWorldTime ?? throw new NotSupportedException("Native game time has no cumulative source-world-time owner.");
         if (_cumulativeFrameActive) throw new InvalidOperationException("Cumulative source frame cannot reenter.");
         _cumulativeFrameActive = true;
-        try { owner.AdvanceActualSourceFrame(Engine.GetProcessFrames(), simulationSeconds); }
+        try
+        {
+            var consume = _consumeSourceEffectFrame ??
+                throw new NotSupportedException("Native gameplay clock has no current effect consumer.");
+            owner.AdvanceActualSourceFrame(Engine.GetProcessFrames(), simulationSeconds);
+            consume();
+        }
         finally { _cumulativeFrameActive = false; }
     }
 }

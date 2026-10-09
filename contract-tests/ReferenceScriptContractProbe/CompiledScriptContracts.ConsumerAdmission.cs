@@ -63,7 +63,8 @@ internal static partial class CompiledScriptContracts
                 {
                     menu.Select(0, generation);
                     Require(menu.LastReceipt is { State: FalloutTerminalSelectionState.Succeeded,
-                        ResultReceipt.Authority: FalloutScriptResultAuthority.CompiledVanilla } && selectionCalls == 1,
+                        ResultReceipt.Authority: FalloutScriptResultAuthority.CompiledVanilla } && selectionCalls == 1 &&
+                        menu.LastReceipt.ResultReceipt.CommittedSteps == (code.Length == 0 ? 0 : 1),
                         "Empty/Return terminal bytecode did not bind its actual shared compiled receipt.");
                     menu.Close();
                     var compiledClosed = menu.CaptureClosed([]);
@@ -105,10 +106,10 @@ internal static partial class CompiledScriptContracts
             "sourceDiagnosticControl=true originalInputUnchanged=true compiledTerminalExecution=true campaign=false");
     }
 
-    private static void ConsumerRefusal(Action action)
+    private static void ConsumerRefusal(Action action, string reason = "diagnostic SCTX fallback is refused")
     {
         try { action(); }
-        catch (NotSupportedException error) when (error.Message.Contains("diagnostic SCTX fallback is refused", StringComparison.Ordinal)) { return; }
+        catch (NotSupportedException error) when (error.Message.Contains(reason, StringComparison.Ordinal)) { return; }
         throw new InvalidDataException("Unsupported original compiled family reached diagnostic parsing/effects or lost its named refusal.");
     }
 
@@ -152,7 +153,7 @@ internal static partial class CompiledScriptContracts
             var saved = new FalloutReferenceSnapshot(Key(0x900), Key(0x800), Key(0x401), null, null,
                 new Dictionary<uint, double>(), null, PackageAssignment: new(source.FormKey, hash, done));
             using var cold = new FalloutReferenceWorld(records);
-            ConsumerRefusal(() => cold.Restore([saved]));
+            ConsumerRefusal(() => cold.Restore([saved]), "Consumed package result has no completed source-range execution receipt.");
             Require(cold.InstanceCount == 0, "Unsupported consumed package history allocated a cold reference.");
         }
         var future = records.GetEffective(Key(0x403));
@@ -161,7 +162,8 @@ internal static partial class CompiledScriptContracts
             PackageAssignment: new(future.FormKey, Convert.ToHexString(SHA256.HashData(future.ReadData())), false));
         FalloutReferenceWorld.ValidateRecordedPackageResults(records, [declared]);
         ConsumerRefusal(() => FalloutReferenceWorld.ValidateRecordedPackageResults(records,
-            [declared with { PackageAssignment = declared.PackageAssignment! with { Done = true } }]));
+            [declared with { PackageAssignment = declared.PackageAssignment! with { Done = true } }]),
+            "Consumed package result has no completed source-range execution receipt.");
     }
 
     private static byte[] ConsumerFixture(byte[]? code, string diagnostic)

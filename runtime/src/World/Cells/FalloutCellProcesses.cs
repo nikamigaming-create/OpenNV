@@ -38,9 +38,18 @@ internal sealed partial class FalloutCellProcesses : IDisposable
             (!attachment.RootPublished || attachment.Failure is not null || attachment.Children.Any(child =>
                 child.Phase is FalloutCellProcessChildPhase.Pending or FalloutCellProcessChildPhase.Failed))) is { } pending ?
             "source-cell-native-attachment-incomplete:" + pending.Identity : null;
-    internal object State => new { source = _declaration.Contract, process = _process, _sequence,
-        cells = _cells.Values.ToArray(), attachments = _attachments.Values.ToArray(), transitions = _transitions.ToArray(),
-        cold = _cold, saveBlocker = SaveBlocker, parity = "unmeasured" };
+    internal object State => new
+    {
+        source = _declaration.Contract,
+        process = _process,
+        _sequence,
+        cells = _cells.Values.ToArray(),
+        attachments = _attachments.Values.ToArray(),
+        transitions = _transitions.ToArray(),
+        cold = _cold,
+        saveBlocker = SaveBlocker,
+        parity = "unmeasured"
+    };
     internal FalloutBaseObjectDefinition ReadChildBase(FalloutCellProcessReference child) => _source.ReadChildBase(child);
 
     internal void Construct(FalloutFormKey cell)
@@ -127,9 +136,13 @@ internal sealed partial class FalloutCellProcesses : IDisposable
                     throw new InvalidDataException("CELL cold attachment has no complete source phase/epoch to rebind.");
                 epochs.Add(cell, checked(oldEpoch + 1));
             }
-            _attachments[identity] = previous with { NativeRoot = actualRoot, CellEpochs = epochs,
+            _attachments[identity] = previous with
+            {
+                NativeRoot = actualRoot,
+                CellEpochs = epochs,
                 Children = children.Select(child => new FalloutCellProcessChild(child.Source, child.Placement.Copy(),
-                    FalloutCellProcessChildPhase.Pending, [], null, null)).ToArray() };
+                    FalloutCellProcessChildPhase.Pending, [], null, null)).ToArray()
+            };
             foreach (var (cell, epoch) in epochs)
             {
                 _cells[cell] = Require(cell) with { Epoch = epoch };

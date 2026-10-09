@@ -240,6 +240,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new InvalidDataException("Current common process continuation is absent."));
         ConfigureSourceActorProcesses(restore is null ? null : restore.State.ActorProcesses ??
             throw new InvalidDataException("Current actor process continuation is absent."));
+        ConfigureCurrentProcessQueues(restore is null ? null : restore.State.ProcessQueues ??
+            throw new InvalidDataException("Current process queue continuation is absent."));
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
             _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
@@ -259,10 +261,6 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (restore is null && bootstrapStageResults is null)
             _initialStageResultRequest = (FalloutDialogueTopic.Find(_pluginStack, "QUST", initialQuestEditorId).FormKey, initialStage);
         Name = "NativeOpeningStageDriver";
-        _playerAbilities.Synchronize();
-        _playerSkills.CompleteValueConstruction();
-        _ = Vitals;
-        Synchronize();
     }
 
     internal void CompleteBlocker(string blocker)
@@ -365,7 +363,11 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         ConfigureConversation();
         AttachSourceActorPerception();
         ConfigureDetectionAndFinishedSpeech();
-        ApplyEnteredActorCommands();
+        // Active-effect bodies may query speech, quest stages or the shared
+        // conversation services. Construct those real owners before entering
+        // effects and deriving player values, then enter source stage commands.
+        CompleteCurrentPlayerValueConstruction();
+        Synchronize();
     }
 
     private void Synchronize()

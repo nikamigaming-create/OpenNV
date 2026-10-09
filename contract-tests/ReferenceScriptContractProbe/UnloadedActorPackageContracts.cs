@@ -132,9 +132,17 @@ internal static class UnloadedActorPackageContracts
         priorNative.UnloadedPackages = new(records, priorNative, quests, null, null,
             (program, _) => program.RequireEmptyScript(), () => 1);
         _ = priorNative.CurrentPackage(actor);
-        Check(priorNative.Get(actor).DeferredPackageContinuation is null && priorNative.PendingProcedureCaptureCount == 1,
-            "Prior native state was replaced with a deferred-initialization receipt.");
-        Reject(() => priorNative.Capture());
+        Check(priorNative.Get(actor) is { DeferredPackageContinuation: null, PackageAssignment: null,
+            PendingPackageChoice.Package: not null } prior && prior.Animation.Resource == "meshes/fixture/idle.kf" &&
+            priorNative.PendingPackageEventCount == 0,
+            "Prior native state was replaced, or a pending choice entered deferred Start effects.");
+        var priorState = priorNative.Capture();
+        using var priorCold = new FalloutReferenceWorld(records);
+        priorCold.Restore(priorState);
+        Check(priorCold.Get(actor).PendingPackageChoice == priorNative.Get(actor).PendingPackageChoice &&
+            priorCold.Get(actor).Animation.Capture() == priorNative.Get(actor).Animation.Capture() &&
+            priorCold.PendingPackageEventCount == 0,
+            "Cold pending choice changed the retained native clock or replayed Start.");
     }
 
     internal static byte[] StageCondition(uint quest)

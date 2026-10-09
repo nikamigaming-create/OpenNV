@@ -7,6 +7,7 @@ internal static partial class PlayerStatisticContracts
     // literal/data identities. They are parsed, never executed or retail bytes.
     private static void TransportCatalogue(bool challenge)
     {
+        LinkedCatalogueConstructor(challenge);
         var count = challenge ? 3 : 5;
         const uint array = 0x2200, table = 0x3300, format = 0x7700;
         var code = new byte[1024];

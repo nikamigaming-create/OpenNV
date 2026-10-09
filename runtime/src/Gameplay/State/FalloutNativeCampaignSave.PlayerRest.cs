@@ -16,6 +16,11 @@ internal static partial class FalloutNativeCampaignSave
             throw new InvalidDataException("Current rest and interface fades have different selected sources.");
         var elapsed = state.RestWorldTime ?? throw new InvalidDataException("Current save has no source elapsed-world-time state.");
         FalloutRestWorldTime.RequireSnapshot(FalloutRestWorldTimeSource.Read(rest.Source), elapsed);
+        var effects = state.PlayerAbilityScripts?.Clock ??
+            throw new InvalidDataException("Current save has no shared scripted-effect clock.");
+        FalloutScriptedEffectClock.Validate(effects);
+        if (effects.SourceSha256 != FalloutScriptedEffectClockSource.Read(rest.Source).Identity || effects.WorldPrefix != elapsed)
+            throw new InvalidDataException("Scripted effects and world time do not share the same committed source prefix.");
         if (elapsed.Last is { Origin: FalloutRestWorldTimeOrigin.RestHour } hour)
         {
             if (hour.RestRequest > rest.RequestOrdinal || hour.RestRequest == rest.RequestOrdinal &&
@@ -76,7 +81,8 @@ internal static partial class FalloutNativeCampaignSave
             _ => throw Replay(), _ => throw Replay(), _ => throw Replay(), _ => throw Replay(), (_, _) => throw Replay(),
             () => throw Replay())
         {
-            AfterMenuPlayerHours = _ => throw Replay(), BeforeCancelPlayerHours = _ => throw Replay(),
+            AfterMenuPlayerHours = _ => throw Replay(),
+            BeforeCancelPlayerHours = _ => throw Replay(),
         };
         var rest = new FalloutSleepWait(saved.Source, clock, host, saved);
         var sound = state.RestInterfaceSounds ?? throw new InvalidDataException("Current save has no rest cue state.");

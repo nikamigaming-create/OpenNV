@@ -921,10 +921,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         }
         try
         {
+            Retire(RetireSourceProcessQueues);
             Retire(RetireActorProcessGraph);
             Retire(RetireCellProcesses);
             Retire(RetireActorUpdates);
             Retire(RetireCombatGroups);
+            Retire(RetireCampaignChallenges);
             Retire(RetirePlayerStatistics);
             Retire(RetireCampaignPlayerRuntime);
             Retire(() => _sounds?.Clear());

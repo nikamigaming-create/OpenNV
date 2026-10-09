@@ -61,32 +61,28 @@ internal static partial class FalloutExecutableStringTable
         }
         if (constructors.Count != 1) throw new NotSupportedException("Statistic pointer array has no unique source constructor.");
         var constructor = StatisticFunctionBody(code, constructors[0]);
-        var catalogues = new List<IReadOnlyList<string>>();
+        var catalogues = new List<(uint Table, IReadOnlyList<string> Names)>();
         foreach (var table in StatisticIndexedLoads(constructor).Distinct())
         {
             if (table == delta.Array || !fileBacked(table, checked(delta.Count * sizeof(uint)))) continue;
             var words = read(table, checked(delta.Count * sizeof(uint)));
             var names = Enumerable.Range(0, delta.Count).Select(index => literal(U32(words, index * sizeof(uint)))).ToArray();
             if (names.Any(string.IsNullOrWhiteSpace) || names.Distinct(StringComparer.OrdinalIgnoreCase).Count() != delta.Count) continue;
-            catalogues.Add(Array.AsReadOnly(names.Select(name => name!).ToArray()));
+            catalogues.Add((table, Array.AsReadOnly(names.Select(name => name!).ToArray())));
         }
         if (catalogues.Count != 1) throw new NotSupportedException("Statistic constructor has no unique complete original literal catalogue.");
         var formats = StatisticFormats(constructor, literal).ToList();
         for (var at = 0; formats.Count == 0 && at + 7 <= constructor.Length; at++)
         {
-            if (!StatisticIndexedAddress(constructor, at, 0x8b, out var table) || table == delta.Array) continue;
+            if (!StatisticIndexedAddress(constructor, at, 0x8b, out var table) || table != catalogues[0].Table) continue;
             // A separately constructed entry follows its original catalogue
             // argument; do not inspect arbitrary allocator/helper bodies.
-            for (var next = at + 7; next + 5 <= Math.Min(constructor.Length, at + 32); next++)
-            {
-                if (constructor[next] != 0xe8) continue;
-                var entry = RelativeStatisticCall(code, constructors[0] + next);
-                formats.AddRange(StatisticFormats(StatisticFunctionBody(code, entry), literal)); break;
-            }
+            var entry = StatisticEntryConstructor(code, constructors[0], constructor, at);
+            if (entry is { } linked) formats.AddRange(StatisticFormats(StatisticFunctionBody(code, linked), literal));
         }
         var uniqueFormats = formats.Distinct(StringComparer.Ordinal).ToArray();
         if (uniqueFormats.Length != 1) throw new NotSupportedException("Statistic constructor has no unique owned setting-name formatter.");
-        return new(catalogues[0], uniqueFormats[0], menuId);
+        return new(catalogues[0].Names, uniqueFormats[0], menuId);
     }
 
     private static int FramePush(ReadOnlySpan<byte> body, int at, out sbyte slot)
@@ -98,6 +94,23 @@ internal static partial class FalloutExecutableStringTable
             body[at + 3] == 0x50 + ((body[at + 1] >> 3) & 7))
         { slot = unchecked((sbyte)body[at + 2]); return at + 4; }
         return -1;
+    }
+    private static int? StatisticEntryConstructor(byte[] code, int origin, ReadOnlySpan<byte> body, int load)
+    {
+        // Follow the loaded catalogue argument and frame-owned receiver on
+        // instruction boundaries. An operand containing E8 is not a CALL.
+        var register = (body[load + 1] >> 3) & 7;
+        var cursor = load + 7;
+        if (cursor >= body.Length || body[cursor++] != 0x50 + register) return null;
+        if (cursor + 3 <= body.Length && body[cursor] == 0x8b && body[cursor + 1] == 0x4d &&
+            unchecked((sbyte)body[cursor + 2]) < 0)
+            cursor += 3;
+        else if (cursor + 6 <= body.Length && body[cursor] == 0x8b && body[cursor + 1] == 0x8d &&
+            unchecked((int)U32(body, cursor + 2)) < 0)
+            cursor += 6;
+        else return null;
+        if (cursor + 5 > body.Length || body[cursor] != 0xe8) return null;
+        return RelativeStatisticCall(code, checked(origin + cursor));
     }
     private static int RelativeStatisticCall(byte[] code, int at)
     {
@@ -113,7 +126,11 @@ internal static partial class FalloutExecutableStringTable
         var body = code.AsSpan(entry, Math.Min(1024, code.Length - entry));
         for (var at = 3; at + 2 <= body.Length; at++)
             if (body[at] == 0x5d && body[at + 1] is 0xc3 or 0xc2)
-                return body[..(at + (body[at + 1] == 0xc2 ? 4 : 2))];
+            {
+                var end = at + (body[at + 1] == 0xc2 ? 4 : 2);
+                if (end > body.Length) throw new InvalidDataException("Statistic linked source return operand is truncated.");
+                return body[..end];
+            }
         throw new NotSupportedException("Statistic linked source function has no bounded owned return.");
     }
     private static int StatisticFrameEntry(byte[] code, int at)

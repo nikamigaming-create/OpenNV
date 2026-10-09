@@ -23,8 +23,13 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 throw new InvalidDataException("Original Player travel calculation has no signed stored-hour conversion.");
             var count = checked((int)MathF.Truncate(calculated));
             _travelCounter = count;
-            _travel = _travel with { InitialHours = count, RemainingHours = count,
-                LastChanged = Next(), Phase = count > 0 ? FalloutPlayerTravelPhase.WorldHours : FalloutPlayerTravelPhase.Destination };
+            _travel = _travel with
+            {
+                InitialHours = count,
+                RemainingHours = count,
+                LastChanged = Next(),
+                Phase = count > 0 ? FalloutPlayerTravelPhase.WorldHours : FalloutPlayerTravelPhase.Destination
+            };
             return invocation;
         }
         catch (Exception error)

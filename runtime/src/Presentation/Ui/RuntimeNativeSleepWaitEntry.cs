@@ -35,7 +35,7 @@ internal sealed partial class RuntimeNativeSleepWaitEntry : CanvasLayer
             session.Request?.Origin == FalloutRestOrigin.ScriptHours)
             throw new InvalidOperationException("Native sleep/wait has no living unpublished menu request.");
         var entry = new RuntimeNativeSleepWaitEntry(session, failed, retired)
-            { _acquireInput = acquireInput, _sourceCloseGate = sourceCloseGate };
+        { _acquireInput = acquireInput, _sourceCloseGate = sourceCloseGate };
         try
         {
             entry._menu = NativeOwnedSleepWaitMenu.Create(source, session, entry.Fail);

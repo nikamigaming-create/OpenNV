@@ -29,8 +29,15 @@ internal sealed class FalloutRestInterfaceSounds
         FalloutRestInterfaceVoiceState.NativeAllocated or FalloutRestInterfaceVoiceState.NativeStarted ||
         row.NativePlayer is not null && !row.NativeVoiceRetired);
     internal string? SaveBlocker => Active ? "source-finite-audio" : null;
-    internal object State => new { Source, sequence = _sequence, voices = _voices.ToArray(), failure = _failure,
-        nativePublished = _native is not null, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        Source,
+        sequence = _sequence,
+        voices = _voices.ToArray(),
+        failure = _failure,
+        nativePublished = _native is not null,
+        saveBlocker = SaveBlocker
+    };
 
     internal FalloutRestInterfaceSounds(FalloutPluginStack records, FalloutSleepWait rest,
         FalloutRestInterfaceSoundSnapshot? restore = null)
@@ -139,8 +146,12 @@ internal sealed class FalloutRestInterfaceSounds
         if (row.NativePlayer != player || player == 0)
             throw new InvalidOperationException("Rest sound stop receipt belongs to another native player.");
         if (row.State == FalloutRestInterfaceVoiceState.NativeFinished) return;
-        _voices[index] = row with { State = row.State == FalloutRestInterfaceVoiceState.Failed ? row.State : FalloutRestInterfaceVoiceState.SessionRetired,
-            Failure = row.Failure ?? "Actual campaign sound host stopped the voice; no Finished receipt was produced.", NativeVoiceRetired = true };
+        _voices[index] = row with
+        {
+            State = row.State == FalloutRestInterfaceVoiceState.Failed ? row.State : FalloutRestInterfaceVoiceState.SessionRetired,
+            Failure = row.Failure ?? "Actual campaign sound host stopped the voice; no Finished receipt was produced.",
+            NativeVoiceRetired = true
+        };
     }
 
     internal void NativeDestroyed(Guid lease, long sequence, ulong player) => NativeStopped(lease, sequence, player);

@@ -128,9 +128,9 @@ internal partial class RuntimeNativePlayer
         {
             try { RetirePlayerPhysicalActivity(); }
             finally
-        {
-            try { ReleaseFurnitureReservation(); }
-            finally { ReleaseXrContacts(); }
+            {
+                try { ReleaseFurnitureReservation(); }
+                finally { ReleaseXrContacts(); }
             }
         }
     }

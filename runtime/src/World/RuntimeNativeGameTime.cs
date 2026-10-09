@@ -29,8 +29,19 @@ internal sealed partial class RuntimeNativeGameTime : Node
     {
         _clock = clock;
         Name = "NativeGameTime";
-        ProcessMode = ProcessModeEnum.Always;
+        // The coordinator may parent this clock while asynchronous source
+        // construction is still loading. Its real process phase starts only
+        // after the world-time, rest and effect consumers have been attached.
+        ProcessMode = ProcessModeEnum.Disabled;
         ProcessPriority = int.MinValue;
+    }
+
+    internal void StartSourceGameplayFrames()
+    {
+        if (!IsInsideTree() || IsQueuedForDeletion() || ProcessMode != ProcessModeEnum.Disabled ||
+            _restOwnsClock is null || _restWorldTime is null || _consumeSourceEffectFrame is null || _error is not null)
+            throw new InvalidOperationException("Gameplay frames require the living constructed source clock and its actual consumers.");
+        ProcessMode = ProcessModeEnum.Always;
     }
 
     public override void _Process(double delta)

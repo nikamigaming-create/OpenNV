@@ -20,9 +20,18 @@ internal sealed partial class NativeOwnedInterfaceFadeQuad : Control
     internal int Channel { get; }
     internal long Generation { get; }
     internal long? SubmittedRevision { get; private set; }
-    internal object State => new { Channel, Generation, opacity = _opacity, revision = _revision,
-        SubmittedRevision, native = _nativeId, texture = _textureId, retiring = _retiring,
-        sourceTexture = _texture?.GetMeta("opennv_owned_media_path").AsString() };
+    internal object State => new
+    {
+        Channel,
+        Generation,
+        opacity = _opacity,
+        revision = _revision,
+        SubmittedRevision,
+        native = _nativeId,
+        texture = _textureId,
+        retiring = _retiring,
+        sourceTexture = _texture?.GetMeta("opennv_owned_media_path").AsString()
+    };
 
     private NativeOwnedInterfaceFadeQuad(FalloutInterfaceFadeChannel channel, Texture2D texture, Action<Exception> failed)
     {

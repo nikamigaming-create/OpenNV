@@ -2,12 +2,12 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutCompiledActiveEffectEventState(int Ordinal, ushort Event, int Begin, int End,
     string EventScopeSha256, bool Attempted, FalloutCompiledCursorSnapshot Cursor,
-    FalloutCompiledSliceReceipt? Receipt, int? LastReachedOffset, string? Failure);
+    FalloutCompiledSliceReceipt? Receipt, int? LastReachedOffset, string? Failure, long Cycle = 0, uint SecondsBits = 0);
 
 internal sealed record FalloutCompiledActiveEffectSnapshot(string Schema, FalloutFormKey Target,
     FalloutFormKey Spell, int EffectOrdinal, FalloutFormKey Effect, FalloutFormKey Script,
     long Generation, string Winner, string RecordSha256, string ScopeSha256, string ProgramSha256,
-    IReadOnlyList<FalloutCompiledActiveEffectEventState> Events);
+    IReadOnlyList<FalloutCompiledActiveEffectEventState> Events, FalloutCompiledActiveEffectLifetime? Lifetime = null);
 
 // This invocation retains the actual event-list cells and source program. It
 // cannot select the target actor's attached script as its implicit local owner.
@@ -20,12 +20,14 @@ internal sealed class FalloutCompiledActiveEffectInvocation : IFalloutCompiledEv
     internal FalloutCompiledEvent Block => Program.Events[Ordinal];
     internal FalloutCompiledExecutionCursor Cursor { get; }
     internal int PrefixBefore { get; }
+    internal float Seconds { get; }
+    internal object? Producer { get; }
     internal string EventScopeSha256 => FalloutCompiledSliceReceipt.EventScope(Program, Ordinal);
 
     internal FalloutCompiledActiveEffectInvocation(FalloutCompiledActiveEffectExecution owner,
-        int ordinal, FalloutCompiledExecutionCursor cursor)
+        int ordinal, FalloutCompiledExecutionCursor cursor, float seconds, object? producer)
     {
-        Owner = owner; Ordinal = ordinal; Cursor = cursor;
+        Owner = owner; Ordinal = ordinal; Cursor = cursor; Seconds = seconds; Producer = producer;
         PrefixBefore = cursor.State.CommittedInstructions;
     }
 
@@ -41,7 +43,7 @@ internal sealed class FalloutCompiledActiveEffectInvocation : IFalloutCompiledEv
             throw new InvalidDataException("Compiled active-effect invocation is not a winning magic-effect program.");
         if (records.RuntimeFormId(target) != 0x14 && records.GetEffective(target).Signature is not ("ACHR" or "ACRE"))
             throw new InvalidDataException("Compiled active-effect target has no genuine actor identity.");
-        FalloutCompiledActiveEffectExecution.RequireStart(program, Block);
+        FalloutCompiledActiveEffectExecution.RequireEvent(program, Block);
     }
 
     FalloutScriptEffectLocals IFalloutCompiledEventLocalAuthority.Locals => Owner.Locals;
@@ -50,8 +52,8 @@ internal sealed class FalloutCompiledActiveEffectInvocation : IFalloutCompiledEv
         double seconds, FalloutFormKey? action)
     {
         Require(records, target, program, block);
-        if (!ReferenceEquals(cursor, Cursor) || seconds != 0 || action is not null)
-            throw new NotSupportedException("Magic-effect cursor/time/action differs from its actual Start producer.");
+        if (!ReferenceEquals(cursor, Cursor) || seconds != Seconds || action is not null)
+            throw new NotSupportedException("Magic-effect cursor/time/action differs from its actual lifecycle producer.");
     }
     FalloutScriptValue IFalloutCompiledEventLocalAuthority.Read(FalloutCompiledVariable variable)
     {

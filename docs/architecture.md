@@ -5,8 +5,9 @@ installation in place and publish authoritative state to Godot.
 
 Current campaign saves capture skill pools, advancement and ability scripts from
 the same live player owners before validation. Their source identities and skill
-captures must agree exactly. Cold restore binds the actual ability lifecycle
-before evaluating restored skill formulas. Earlier OpenNV save schemas and empty
+captures must agree exactly. Cold restore prepares stored player vitals, progress
+and skill pools without entering scripts or evaluating dependent formulas, then
+binds the actual ability lifecycle before admission. Earlier OpenNV save schemas and empty
 owner promotion receipts have no admission path.
 
 The product launcher is native Godot UI with original decorative artwork and a
@@ -248,8 +249,14 @@ authored camera mask. Mixed head/body partitions require their own source owner.
 Scripted constant abilities have independent instances keyed by spell and effect
 ordinal, exact winning source identities, ordered SLSD payload cells and retained
 failed prefixes. The shared script executor targets the genuine engine player.
-The admitted lifecycle executes ScriptEffectStart once; Update, Finish and
-unowned local/event types refuse. SCHR fields retain their separate reference,
+The shared lifecycle executes compiled ScriptEffectStart, Update and Finish with
+real instance/local authority and independent retirement. Constant and consumed
+effects share a clock leased from committed source-frame world time; elapsed
+Float32 state, condition polls, failed prefixes and exact cold cursors persist.
+The Godot clock remains disabled during construction and starts only after its
+actual gameplay consumers are attached. Campaign effect/world snapshots require
+the same committed prefix. Rest-hour traversal, other delivery, original native
+event-list projection and unowned local/event types refuse. SCHR fields retain their separate reference,
 compiled-byte and variable counts. Source-text execution does not certify SCDA.
 
 Diagnostic furniture interaction observation follows the actual enabled source

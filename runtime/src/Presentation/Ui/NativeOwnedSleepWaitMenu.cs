@@ -18,9 +18,16 @@ internal sealed partial class NativeOwnedSleepWaitMenu : Control
     private NativeOwnedTileTarget _sliderTarget = null!;
     private bool _faulted, _dragging;
     internal string? Error { get; private set; }
-    internal object State => new { source = FalloutSleepWaitSource.MenuPath, identity = _source.Identity,
-        sourceSha256 = _source.Source.MenuSha256, request = _request, session = _session.State, error = Error,
-        unowned = "matched-retail-pixels,XR-surface,cue-cadence,source-input-joystick-binding" };
+    internal object State => new
+    {
+        source = FalloutSleepWaitSource.MenuPath,
+        identity = _source.Identity,
+        sourceSha256 = _source.Source.MenuSha256,
+        request = _request,
+        session = _session.State,
+        error = Error,
+        unowned = "matched-retail-pixels,XR-surface,cue-cadence,source-input-joystick-binding"
+    };
     private NativeOwnedSleepWaitMenu(NativeSleepWaitMenuSource source, FalloutSleepWait session, Action<Exception> failed)
     {
         _source = source; _session = session; _request = session.RequestOrdinal; _failed = failed;

@@ -43,6 +43,7 @@ internal sealed partial class FalloutReferenceWorld
         try
         {
             fields = new(declaration, stack, ReadCombatActorIdentity, ReadActualProcessGameplay, ReadActualProcessBody, common);
+            fields.BindSource3DInitializer(ReadActualSourceProcess3D);
             var actors = ActorPerception.ConstructedSourceActors;
             if (runtime is null)
                 foreach (var actor in actors)

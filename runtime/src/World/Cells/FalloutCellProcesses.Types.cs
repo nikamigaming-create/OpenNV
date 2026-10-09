@@ -9,8 +9,11 @@ internal sealed record FalloutCellProcessReference(FalloutFormKey Reference, Fal
     string Signature, uint Flags, string Sha256, FalloutFormKey Base, string? BaseSha256);
 internal sealed record FalloutCellProcessData(FalloutCellProcessIdentity Source,
     IReadOnlyList<FalloutCellProcessReference> References, string GraphSha256);
-internal enum FalloutCellProcessOperation { Construct, BeginLoad, CompleteLoad, BeginAttach, CompleteAttach,
-    BeginDetach, CompleteDetach, BeginRelease, CompleteRelease, AttachmentRebind }
+internal enum FalloutCellProcessOperation
+{
+    Construct, BeginLoad, CompleteLoad, BeginAttach, CompleteAttach,
+    BeginDetach, CompleteDetach, BeginRelease, CompleteRelease, AttachmentRebind
+}
 internal sealed record FalloutCellProcessTransition(long Sequence, FalloutFormKey Cell,
     FalloutCellProcessOperation Operation, FalloutCellProcessPhase Before, FalloutCellProcessPhase After,
     long CellEpoch, Guid? Attachment, string Owner);

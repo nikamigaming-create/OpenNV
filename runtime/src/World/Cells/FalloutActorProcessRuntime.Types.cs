@@ -41,7 +41,7 @@ internal enum FalloutProcessCommonPhase { Constructed, Copied, OldRetired, Publi
 internal sealed record FalloutProcessCommonEntry(FalloutCombatActorIdentity Source, long Epoch,
     FalloutDetectionProcessLevel Level, FalloutProcessCommonScalars Scalars,
     FalloutProcessGameplayLease? Gameplay, FalloutProcessCommonPhase Phase, string? Boundary,
-    FalloutActorProcessBodyBinding? Body, long Changed);
+    FalloutActorProcessBodyBinding? Body, long Changed, FalloutActorProcessFact<bool>? Source3D = null);
 internal sealed record FalloutProcessCommonTransfer(FalloutFormKey Actor, long BeforeEpoch, long NewEpoch,
     FalloutDetectionProcessLevel Before, FalloutDetectionProcessLevel After, string Owner,
     Guid GameplayOwnership, FalloutProcessGameplayState ObservedBeforeCopy, string GameplaySha256,

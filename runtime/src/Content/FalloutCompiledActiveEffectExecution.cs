@@ -1,19 +1,16 @@
-using System.Buffers.Binary;
-
 namespace OpenNV.Runtime.Content;
 
-// Start is an actual compiled event, scoped to one spell/effect generation and
-// its ordered raw cells. Update/Finish producers and an effect clock are separate
-// owners; declaring those events still refuses this bounded lifetime.
-internal sealed class FalloutCompiledActiveEffectExecution
+// One source-owned event list, with repeated Update cursors and one genuine
+// Finish closure. Timeline producers retain the instance and actual clock.
+internal sealed partial class FalloutCompiledActiveEffectExecution
 {
-    internal const string Schema = "opennv-compiled-active-effect/v1";
+    internal const string Schema = "opennv-compiled-active-effect/v2";
     private sealed class Event(FalloutCompiledEvent source, FalloutCompiledControlFlow flow,
         FalloutCompiledExecutionCursor cursor, FalloutCompiledActiveEffectEventState state)
     {
         internal FalloutCompiledEvent Source { get; } = source;
         internal FalloutCompiledControlFlow Flow { get; } = flow;
-        internal FalloutCompiledExecutionCursor Cursor { get; } = cursor;
+        internal FalloutCompiledExecutionCursor Cursor { get; set; } = cursor;
         internal FalloutCompiledActiveEffectEventState State { get; set; } = state;
     }
     private readonly FalloutCompiledActiveEffectSnapshot _identity;
@@ -36,15 +33,15 @@ internal sealed class FalloutCompiledActiveEffectExecution
         Program = FalloutCompiledScriptProgram.Read(script, FalloutScriptScope.Standalone(script), standalone: true);
         if (FalloutScriptSourceKinds.Classify(Program.ScriptType) != FalloutScriptSourceKind.MagicEffect || Program.CompiledFlag != 1)
             throw new NotSupportedException("Active effects require their winning compiled magic-effect body.");
-        foreach (var block in Program.Events) RequireStart(Program, block);
+        foreach (var block in Program.Events) RequireEvent(Program, block);
         Locals = locals;
         _identity = new(Schema, target, definition.Spell, definition.EffectOrdinal, definition.Effect,
             definition.Script, generation, script.Plugin.Name, Program.Scope.RecordSha256,
-            Program.Scope.ScopeSha256, Program.ProgramSha256, []);
+            Program.Scope.ScopeSha256, Program.ProgramSha256, [], _lifetime);
         if (restore is not null)
         {
             Validate(restore);
-            var restoredIdentity = restore with { Events = _identity.Events };
+            var restoredIdentity = restore with { Events = _identity.Events, Lifetime = _identity.Lifetime };
             if (restoredIdentity != _identity || restore.Events.Count != Program.Events.Count)
                 throw new InvalidDataException("Saved compiled active effect differs from its winning source/target/generation.");
         }
@@ -54,7 +51,7 @@ internal sealed class FalloutCompiledActiveEffectExecution
             var initial = new FalloutCompiledActiveEffectEventState(ordinal, block.Event, block.Begin, block.End,
                 FalloutCompiledSliceReceipt.EventScope(Program, ordinal), false, flow.InitialCursor, null, null, null);
             var state = restore?.Events[ordinal] ?? initial;
-            var restoredEvent = state with { Attempted = false, Cursor = initial.Cursor, Receipt = null, LastReachedOffset = null, Failure = null };
+            var restoredEvent = state with { Attempted = false, Cursor = initial.Cursor, Receipt = null, LastReachedOffset = null, Failure = null, Cycle = 0, SecondsBits = 0 };
             if (restoredEvent != initial)
                 throw new InvalidDataException("Saved active-effect event differs from its source ordinal/extent/hash.");
             flow.ValidateCursor(state.Cursor);
@@ -71,59 +68,7 @@ internal sealed class FalloutCompiledActiveEffectExecution
                 throw new InvalidDataException("Saved active-effect reached offset is outside its event.");
             return new Event(block, flow, new(state.Cursor), state);
         }).ToArray();
-    }
-
-    internal static void RequireStart(FalloutCompiledScriptProgram program, FalloutCompiledEvent block)
-    {
-        if (!program.Events.Any(row => ReferenceEquals(row, block)))
-            throw new InvalidDataException("Active-effect event belongs to another SCDA owner.");
-        if (block.Event != 17)
-            throw new NotSupportedException($"Compiled active effect {FalloutCompiledScriptEvents.Name(block.Event)} requires its event/timeline owner.");
-        if (block.Parameters.IsEmpty) return;
-        if (block.Parameters.Length == 2 && BinaryPrimitives.ReadUInt16LittleEndian(block.Parameters.Span) == 0) return;
-        throw new NotSupportedException("Compiled ScriptEffectStart parameters have no admitted producer.");
-    }
-
-    internal void ExecuteStart(Func<FalloutCompiledActiveEffectInvocation, FalloutCompiledActiveEffectReceipt> execute)
-    {
-        ArgumentNullException.ThrowIfNull(execute);
-        if (_entered is not null) throw new InvalidOperationException("The actual active-effect Start is reentrant.");
-        if (_events.Any(row => row.State.Failure is not null || row.State.Attempted))
-            throw new NotSupportedException("An attempted active-effect Start cannot replay its compiled prefix.");
-        for (var ordinal = 0; ordinal < _events.Length; ++ordinal)
-        {
-            var row = _events[ordinal];
-            _entered = new(this, ordinal, row.Cursor);
-            row.State = row.State with { Attempted = true };
-            try
-            {
-                var receipt = execute(_entered);
-                if (!ReferenceEquals(receipt.Invocation, _entered))
-                    throw new InvalidDataException("Active-effect execution returned another invocation's receipt.");
-                receipt.Require();
-                if (receipt.Retired.Disposition != "completed" || !row.Cursor.State.Completed)
-                    throw new NotSupportedException("ScriptEffectStart did not retire its complete original SCDA suffix.");
-                row.State = row.State with { Cursor = Copy(row.Cursor.State), Receipt = receipt.Retired,
-                    LastReachedOffset = receipt.LastReachedOffset };
-            }
-            catch (FalloutCompiledActiveEffectFailure failure)
-            {
-                failure.Receipt.Require();
-                if (!ReferenceEquals(failure.Receipt.Invocation, _entered))
-                    throw new InvalidDataException("Failed active-effect receipt belongs to another invocation.", failure);
-                row.State = row.State with { Cursor = Copy(row.Cursor.State), Receipt = failure.Receipt.Retired,
-                    LastReachedOffset = failure.Receipt.LastReachedOffset, Failure = failure.Message };
-                throw;
-            }
-            catch (Exception failure)
-            {
-                // An unbound caller/retirement may have committed a prefix. Keep
-                // its real cursor and error; never invent a native/shared receipt.
-                row.State = row.State with { Cursor = Copy(row.Cursor.State), Failure = failure.Message };
-                throw;
-            }
-            finally { _entered = null; }
-        }
+        RestoreLifecycle(restore);
     }
 
     internal void RequireInvocation(FalloutCompiledActiveEffectInvocation invocation)
@@ -131,23 +76,16 @@ internal sealed class FalloutCompiledActiveEffectExecution
         if (!ReferenceEquals(_entered, invocation) || !ReferenceEquals(invocation.Owner, this) ||
             (uint)invocation.Ordinal >= _events.Length || !ReferenceEquals(invocation.Cursor, _events[invocation.Ordinal].Cursor))
             throw new InvalidOperationException("Compiled active-effect call has no actual entered instance/event-list owner.");
-    }
-
-    internal void RequireLifecycle(bool started, string? error)
-    {
-        if (started && (_events.Any(row => !row.State.Attempted || !row.Cursor.State.Completed ||
-                row.State.Receipt?.Disposition != "completed" || row.State.Failure is not null) || error is not null))
-            throw new InvalidDataException("Started active effect lacks completed original event retirements.");
-        if (!started && error is null && _events.Any(row => row.State.Attempted || row.State.Failure is not null))
-            throw new InvalidDataException("Unstarted active effect has an attempted/failed compiled lifetime without its retained error.");
-        if (error is not null && !_events.Any(row => row.State.Attempted && row.State.Failure is not null))
-            throw new InvalidDataException("Failed active effect lost its actual attempted compiled event.");
+        if (invocation.Producer is OpenNV.Runtime.Gameplay.State.FalloutScriptedEffectUpdate update) update.Require(this);
+        else if (invocation.Producer is OpenNV.Runtime.Gameplay.State.FalloutScriptedEffectFinish finish) finish.Require(this);
+        else if (invocation.Block.Event != StartEvent)
+            throw new InvalidOperationException("Script-effect event has no actual lifecycle producer.");
     }
 
     internal FalloutCompiledActiveEffectSnapshot Capture()
     {
         if (_entered is not null) throw new NotSupportedException("Capturing an entered active-effect instruction requires its suspension owner.");
-        return _identity with { Events = _events.Select(row => row.State with { Cursor = Copy(row.Cursor.State) }).ToArray() };
+        return _identity with { Events = _events.Select(row => row.State with { Cursor = Copy(row.Cursor.State) }).ToArray(), Lifetime = _lifetime };
     }
 
     internal static void Validate(FalloutCompiledActiveEffectSnapshot state)
@@ -157,12 +95,16 @@ internal sealed class FalloutCompiledActiveEffectExecution
             string.IsNullOrWhiteSpace(state.Winner) || !Hash(state.RecordSha256) || !Hash(state.ScopeSha256) ||
             !Hash(state.ProgramSha256) || state.Events is null)
             throw new InvalidDataException("Saved compiled active effect has incomplete source/instance identity.");
+        ValidateLifetime(state.Lifetime);
         for (var ordinal = 0; ordinal < state.Events.Count; ++ordinal)
         {
             var row = state.Events[ordinal];
-            if (row is null || row.Ordinal != ordinal || row.Event != 17 || row.Begin < 0 || row.End < row.Begin ||
+            if (row is null || row.Ordinal != ordinal || row.Event is not (StartEvent or UpdateEvent or FinishEvent) || row.Begin < 0 || row.End < row.Begin ||
                 !Hash(row.EventScopeSha256) || row.Cursor is null || row.Cursor.Branches is null || row.Cursor.NextOffset < 0 ||
                 row.Cursor.CommittedInstructions < 0 || row.Cursor.BudgetSpent < row.Cursor.CommittedInstructions || row.Cursor.BudgetSpent > 100_000 ||
+                row.Cycle < 0 || row.Attempted != (row.Cycle != 0) ||
+                !float.IsFinite(BitConverter.UInt32BitsToSingle(row.SecondsBits)) || BitConverter.UInt32BitsToSingle(row.SecondsBits) < 0 ||
+                row.Event != UpdateEvent && row.SecondsBits != 0 ||
                 row.Failure is not null && string.IsNullOrWhiteSpace(row.Failure) ||
                 !row.Attempted && (row.Receipt is not null || row.LastReachedOffset is not null || row.Failure is not null) ||
                 row.Receipt is { } receipt && (receipt.EventOrdinal != ordinal || receipt.Event != row.Event ||

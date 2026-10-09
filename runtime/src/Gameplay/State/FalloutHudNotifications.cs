@@ -50,7 +50,7 @@ internal sealed class FalloutHudNotifications
             (value.Kind switch
             {
                 FalloutHudEventKind.ItemAdded or FalloutHudEventKind.ItemRemoved => value.Count <= 0 || value.ObjectiveIndex is not null,
-                FalloutHudEventKind.ChallengeProgress or FalloutHudEventKind.ChallengeCompleted => value.Count <= 0 || value.ObjectiveIndex is not null,
+                FalloutHudEventKind.ChallengeProgress or FalloutHudEventKind.ChallengeCompleted => value.ObjectiveIndex is not null,
                 FalloutHudEventKind.Message or FalloutHudEventKind.RadioDiscovered => value.Count != 0 || value.ObjectiveIndex is not null,
                 FalloutHudEventKind.ObjectiveDisplayed or FalloutHudEventKind.ObjectiveCompleted => value.Count != 0 || value.ObjectiveIndex is null,
                 _ => true,

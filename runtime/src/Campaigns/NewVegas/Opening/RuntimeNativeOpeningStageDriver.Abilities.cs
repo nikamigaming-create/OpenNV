@@ -8,6 +8,17 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private FalloutPlayerAbilityScripts _playerAbilities = null!;
+    private bool _playerValueConstructionComplete;
+
+    internal void CompleteCurrentPlayerValueConstruction()
+    {
+        if (_playerValueConstructionComplete)
+            throw new InvalidOperationException("Current player value construction already completed.");
+        _playerAbilities.Synchronize();
+        _playerSkills.CompleteValueConstruction();
+        _ = Vitals;
+        _playerValueConstructionComplete = true;
+    }
 
     private void BindPlayerAbilityState(FalloutNativeCampaignRestore? restore, FalloutGameTime? gameTime)
     {

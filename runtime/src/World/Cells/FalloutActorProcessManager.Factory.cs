@@ -84,8 +84,15 @@ internal sealed partial class FalloutActorProcessManager
             {
                 _perception.PublishSourceHighProcess(_factory);
                 _actors[next.Actor] = RequireActor(next.Actor) with
-                { Epoch = next.NewEpoch, Level = next.After, Boundary = null, DetectionTimer = 0f,
-                    DetectionGeneration = 0, DetectionUpdated = false, LastTimerOwner = "original-high-constructor-positive-zero" };
+                {
+                    Epoch = next.NewEpoch,
+                    Level = next.After,
+                    Boundary = null,
+                    DetectionTimer = 0f,
+                    DetectionGeneration = 0,
+                    DetectionUpdated = false,
+                    LastTimerOwner = "original-high-constructor-positive-zero"
+                };
                 SetFactory(FalloutActorProcessFactoryPhase.PublishedNew);
             }
             if (_factory!.Phase == FalloutActorProcessFactoryPhase.PublishedNew)

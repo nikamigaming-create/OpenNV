@@ -117,8 +117,13 @@ internal sealed partial class NativePluginPrivateIo
         else admitted = false;
         if (admitted && !search.Produced.Add(virtualPath)) admitted = false;
         if (admitted) search.Pending = data;
-        _findReceipts[observation] = _findReceipts[observation] with { Result = admitted ? 1U : 0U, VirtualPath = virtualPath,
-            PhysicalPath = physical, Winner = admitted };
+        _findReceipts[observation] = _findReceipts[observation] with
+        {
+            Result = admitted ? 1U : 0U,
+            VirtualPath = virtualPath,
+            PhysicalPath = physical,
+            Winner = admitted
+        };
         return admitted;
     }
     internal void FindResult(ulong parent, ulong id, uint operation, uint handle, uint result, uint last)

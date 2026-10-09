@@ -57,7 +57,7 @@ internal sealed record FalloutMiscellaneousStatisticSource(string EngineSha256, 
                 throw new InvalidDataException("Statistic string setting has ambiguous winning data/identity.");
         }
         rows = rows.Select(row => overrides.TryGetValue(row.SettingName, out var setting) ? row with
-            { Text = setting.Text, SettingOwner = setting.Owner, SettingOwnerSha256 = setting.Sha256, SettingWinner = setting.Winner } : row).ToArray();
+        { Text = setting.Text, SettingOwner = setting.Owner, SettingOwnerSha256 = setting.Sha256, SettingWinner = setting.Winner } : row).ToArray();
         var declaration = Consumers(runtime.EngineSha256);
         var result = new FalloutMiscellaneousStatisticSource(runtime.EngineSha256, runtime.SourceSha256, Hash(Contract),
             catalogue.StatsMenuId, declaration.ChallengeEvent, declaration.SleepStartIndex, Array.AsReadOnly(rows));

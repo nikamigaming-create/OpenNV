@@ -40,9 +40,19 @@ internal sealed class FalloutPlayerHardcoreNeeds
     private string? _failure;
     internal string? Failure => _failure;
     internal string? SaveBlocker => _busy ? "hardcore-needs-operation-prefix" : null;
-    internal object State => new { source = _source.Identity, initialized = _initialized, currentMinute = _minute,
-        lastDehydrationMinute = _dehydration, lastStarvationMinute = _starvation, lastSleepMinute = _sleep,
-        attempt = _attempt, pools = new Dictionary<int, FalloutHardcoreValue>(_pools), failure = _failure, saveBlocker = SaveBlocker };
+    internal object State => new
+    {
+        source = _source.Identity,
+        initialized = _initialized,
+        currentMinute = _minute,
+        lastDehydrationMinute = _dehydration,
+        lastStarvationMinute = _starvation,
+        lastSleepMinute = _sleep,
+        attempt = _attempt,
+        pools = new Dictionary<int, FalloutHardcoreValue>(_pools),
+        failure = _failure,
+        saveBlocker = SaveBlocker
+    };
 
     internal FalloutPlayerHardcoreNeeds(FalloutSleepWaitSource source, FalloutPluginStack records,
         IReadOnlyDictionary<int, FalloutHardcoreValue>? actualInitialPools, Action<int, FalloutHardcoreValue> publishStageEffects,

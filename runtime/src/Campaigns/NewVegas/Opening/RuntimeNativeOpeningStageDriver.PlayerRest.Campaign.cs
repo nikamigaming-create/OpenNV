@@ -31,12 +31,18 @@ internal partial class RuntimeNativeOpeningStageDriver
             ? "source-hardcore-base-pools-stage-effect-and-reset-producers-unbound" : _hardcoreNeeds?.SaveBlocker);
     internal object CampaignRestState => new
     {
-        rest = PlayerRestState, nativeMenu = PlayerRestNativeState,
-        autosave = _restAutoSave?.Capture(), worldTime = _restWorldTime?.Capture(),
-        sounds = _restInterfaceSounds?.State, interfaceState = SourceRestInterfaceState,
-        hardcore = _hardcoreNeeds?.State, consumersBound = _campaignRestConsumerLease is not null,
-        cuePlaybackPublished = _restInterfaceSounds is not null, retired = _campaignRestRetired,
-        failure = CampaignRestFailure, saveBlocker = CampaignRestSaveBlocker,
+        rest = PlayerRestState,
+        nativeMenu = PlayerRestNativeState,
+        autosave = _restAutoSave?.Capture(),
+        worldTime = _restWorldTime?.Capture(),
+        sounds = _restInterfaceSounds?.State,
+        interfaceState = SourceRestInterfaceState,
+        hardcore = _hardcoreNeeds?.State,
+        consumersBound = _campaignRestConsumerLease is not null,
+        cuePlaybackPublished = _restInterfaceSounds is not null,
+        retired = _campaignRestRetired,
+        failure = CampaignRestFailure,
+        saveBlocker = CampaignRestSaveBlocker,
     };
 
     internal void ConfigureCurrentCampaignRest(RuntimeNativeGameTime actualClock,
@@ -71,6 +77,12 @@ internal partial class RuntimeNativeOpeningStageDriver
             restore is null ? null : restore.RestWorldTime ??
                 throw new InvalidDataException("Current campaign has no cumulative world-time continuation."));
         actualClock.BindSourceCumulativeWorldTime(_restWorldTime);
+        _playerAbilities.BindClock(new(_restWorldTime, PlayerRest.Source, _pluginStack.NumericSettings,
+            actualClock.ObserveCumulativeWorldTimeFrame, restore?.PlayerAbilityScripts?.Clock));
+        _playerAbilities.BindInventory(_inventory);
+        _playerAbilities.BindTargetVitals(_vitals);
+        _ingestibles.BindScriptedEffects(_playerAbilities);
+        actualClock.BindSourceEffectFrame(_playerAbilities.AdvanceFromCurrentSourceFrame);
         _restAutoSave = new(_pluginStack, PlayerRest,
             FalloutRestAutoSavePolicy.Read(PlayerRest.Source, _pluginStack.IniSettings), ManualSourceSaveRequests,
             actualAutoSaveSite, restore is null ? null : restore.RestAutoSave ??

@@ -6,239 +6,142 @@ Complete standalone Fallout: New Vegas, standalone Fallout 3, TTW, every selecte
 DLC/mod and their combined behavior in flat/OpenXR. The requested stack includes
 all nine JAM modules, xNVSE, JIP LN, JohnnyGuitar, JFP and every required dependency.
 JFP's exact package identity remains unresolved. All 36 broad requirements remain
-open. Counts, registration, compilation and earlier footage establish no campaign
-completion percentage. The complete direction is in [implementation-plan.md](implementation-plan.md).
+open. Record counts, registration, compilation and selected footage establish no
+campaign completion percentage. [implementation-plan.md](implementation-plan.md)
+retains the complete user direction.
 
-The user requires substantial greenfield code batches, maximum parallel ownership
-and no earlier OpenNV/save compatibility. Compile during integration; execute
-combined broad/native/owned checks at roughly four-hour intervals and before
-publication. The active ten-minute implementation follow-up checks actual code,
-keeps available slots assigned and resumes substantive work. Recording and trace
-remain off outside a specific visual check. Owned inputs remain read-only/private;
-C# owns formats/gameplay/persistence and Godot adapts presentation/input/OpenXR.
+The user requires substantial greenfield code batches, all available parallel
+owners and no earlier OpenNV/save compatibility. Compile during integration;
+combine broad/native/owned checks roughly every four hours and before publication.
+The active ten-minute follow-up resumes code and reassigns finished owners. One
+primary owns tracked integration, builds, native/game processes, input, saves and
+publication. Recording stays off except a specific visual check. Owned inputs are
+read-only/private; C# owns formats/gameplay/persistence and Godot adapts
+presentation/input/OpenXR.
 
 ## Current owners
 
-| Owner | Active implementation |
+| Owner | Current implementation |
 | --- | --- |
-| Primary | Frozen packet integration, actual driver/coordinator/capture/lifecycle joins, retained source-data failures and combined compilation/publication |
-| active_radio_save | Source miscellaneous statistics, challenge events and Stats-menu consumers; remaining rest/hourly world producers |
-| fo3_special_book | Genuine queued-reference processing tree, CELL ExtraData9 and known-null native-body ownership |
-| scope_plugin_audit | Genuine compiled active-effect event scopes, ordered local cells and mandatory binary continuation |
+| Primary | Ordinary gameplay/input, retail recordings and Godot replay; join broad source-driven fixes and publish usable builds |
+| active_radio_save | Sequential private retail input recording and checkpoint-bound ordinary Godot replay |
+| fo3_special_book | Actual Main/frame dispatch, queued-reference priority and caller-selected inline/queued reads |
+| scope_plugin_audit | General source-indexed interface audio, live playback and independent voice retirement |
 
-The three parallel owners submit immutable first-party source proposals. Primary
-alone controls tracked integration, builds, native/game processes, input, saves
-and publication. A completed owner moves directly to the next missing capability.
+Parallel owners submit immutable first-party source proposals. They do not mutate
+tracked code or run competing builds/game/save/publication sessions. Their next
+proposals remain separate from the integrated candidate until root joins actual
+construction, capture, cold restoration and lifetime owners.
 
-The reported first-person beard and post-trait couch failure are repaired in the
-separate immutable Release `fnv-dev-6c79290edde5`, pinned at
-`local/releases/FNV Test.cmd`. Ordinary test/questionnaire/tag/trait gameplay,
-exit/movement, complete ability save/cold state, selected owned ability and the
-mandatory runtime gate pass. The exported executable also enters/exits the couch,
-moves and quits with exit code 0; the user's original save is unchanged. PR 182
-is merged on origin/main at `4a739468d70a58c5b1db8ab59779a6d0a9c22d09`
-with every CI check passing. Preserve this delivered package while
-integrating the larger current/compiled candidate; it is not campaign completion.
-SourceFiles18 and LoadedFiles13 now share the actual selected contributor parser,
-binary buffer, metadata and retained source lifetime. The integrated binary-member
-owner, selected UCRT streams, all sixteen Windows profile entries and actual
-directory-search handles now use managed/native protocol 12. The profile and
-directory adapters use the actual winning source roots and private write owners.
-C#, x86 Debug and the joined source contract project compile with zero warnings/errors. The separate
-parser-only cache is removed. Native child closure precedes source collection
-retirement, and cleanup failures remain retained on repeated calls. Complete
-BSFile/CRT, original DLL behavior and current native source-topology persistence
-remain unowned; their existing admission refusals remain enabled. Actor detection,
-four-tier process scheduling and source constructor registration are now joined
-to real reference construction, native body leases, frame execution, complete
-current capture and cold validation. Their combined runtime and contract project
-Debug builds pass with zero warnings/errors. Actual Actor AI update state and CELL
-load/attach/detach/release now join genuine native reference construction and
-retirement, current capture and cold validation. Sleep/wait joins source furniture,
-physical state, the real save queue, cumulative world time, source fades and sound
-lifetimes. Exact finite source WAV cues now use the original no-selector/no-RNG
-branch and the actual native sound host. The raw source path keeps directory and
-random requests refused before native allocation; current cold cue state retains
-the source/playback identity without fabricating a random stream. Combined Debug
-runtime compilation and focused Debug/Release cue/rest-host contracts pass. Hourly
-world/effect, console and interface-clock producers remain unowned; ordinary rest
-and real cue audio have not run. Source Main/Player/life state, original Low-to-High
-common transfer, real NIF/BPTD node lookup and native-body leases are integrated
-with fresh/cold coordinator, driver, capture and retirement. Mandatory saves
-retain their actual current owners. Source sleep/wait counting and action/slider
-target writes now publish in original order before the player-hour writes;
-native views read fresh winning declarations and cold state never replays Start.
-Combined runtime Debug and runtime/probe Release compilation pass with zero
-warnings/errors. Focused process-runtime and counting contracts pass in both
-configurations; current sleep/wait and rest-host Release contracts also pass.
-Native process/body and counting publication remain unexecuted. Whole Main,
-general processing-tree/CELL Extra9, travel completion, shared middle fields,
-pair/light and original frame producers remain required.
-Genuine selected-provider UCRT FILE streams, native
-buffers/variadic output, source/private path decisions, actual error results and
-stream/provider retirement are integrated and compile. Protocol-11 authored
-fault/domain/arena execution passes; it exercises no selected CRT file import or
-original DLL compatibility. The actual /MD authored public-NVSE fixture now
-passes Query/Load and six genuine FILE lifetimes in the restricted child. Partial
-reads, native buffers, seek/append, variadic output, configuration copy-on-write,
-tombstones, narrow/wide directories, missing errno/doserrno and orderly
-child/provider retirement execute successfully. Every selected input hash remains
-unchanged. Child-token-only default object security repairs startup; original
-input ACLs and their full AccessCheck remain unchanged. Metadata readers retain
-their own cursor and the mapped provider matches the retained kernel file identity
-across WOW64 path spellings. Long paths and private module CWD are repaired;
-real child exits are retained without inventing retirement failures for an already
-exited process. Profile/directory caller execution, private desktop, the full
-negative CRT matrix and original plugin behavior remain required.
-The source-menu
-shortcut/projection slice has passed its required gate and selected FNV/FO3 source
-audits and is merged as PR 183 on origin/main at
-`1b159f3b9e00333eb926f3d1a7b19cd52f055175` with every CI check passing.
-Local publication main matched origin/main cleanly before the fresh
-`codex/source-menu-live-continuation` block. A bounded ordinary activation retains
-the source-text branch error and absent Vito-Matic menu at stage 60; it is not an
-ordinary menu acceptance result. Quit exits 0 and the original save is unchanged.
-The current pinned repair Release remains unchanged.
-Source-only packets and successful compilation remain distinct from executed gameplay.
+## Delivered test build
+
+The immutable FNV Release is `fnv-dev-6c79290edde5`, source
+`6c79290edde5ca6e2b77a365f9983e27878dd964`, with pushed tag
+`playtest/fnv-dev-6c79290edde5`. `local/releases/FNV Test.cmd` and the desktop
+shortcut point to it. It contains the earlier first-person beard and couch repair.
+The user reports that ordinary questions and departure still failed last night;
+that failure is open. Earlier selected questionnaire/tag/trait gameplay, sofa exit,
+movement, selected ability save/cold state and the exported executable pass;
+the original user save is unchanged. The required gate and PR182 CI pass.
+PR183 source-menu shortcuts and actual clipped camera-projected click targets
+are merged with all checks passing. Preserve this package while the larger
+candidate is integrated. Complete campaign, retail pixels and headset acceptance
+remain open.
 
 ## Integrated candidate
 
-The current feature branch is `codex/full-runtime-owner-integration`, based on
-current origin/main `1b159f3b9e00333eb926f3d1a7b19cd52f055175`. It joins the
-protected candidate `a9fac69ef0e60a5cb79d5d4f2e39d0a45ab0afff` with the merged
-NIF, launcher, couch/head visibility, ability and source-menu slices. Runtime
-Debug compilation passes. Complete current save capture includes live skill and
-ability owners before validation; skill/progress captures must agree exactly.
-Cold formula validation follows actual ability binding. Historical save promotion
-and initial-effect admission receipts are removed. Earlier schema-success fixtures
-are replaced by current refusal and source-clock contracts; complete current
-campaign cold acceptance still requires ordinary gameplay. Compiled magic-effect
-Start now uses original SCDA, raw SCHR kind0x0100 and the actual instance/local
-owner. The mandatory v2 effect ledger retains binary program/event/cursor
-identity and actual shared execution retirement. Text execution and v1 promotion
-are removed. Stored player vitals/progress/skills prepare without entering
-scripts, then final synchronization/formula admission uses their completed
-bindings. Runtime and script-probe Debug compile with zero warnings/errors;
-execution and the owned ability audit remain pending. Update/Finish/effect clocks
-and original native event-list projection remain required.
-The 22-file protocol13 source-delivery packet is integrated; native x86 and managed
-Debug compilation pass. Real native readback and original DLL cold acceptance
-remain unexecuted.
-Source miscellaneous statistics, signed counter mutations, original catalogues
-and compiled commands are integrated. The world retains one actual selected
-player-runtime source before bootstrap and shares it with advancement and the
-living driver; cold restores require its complete counter continuation. Every
-host uses that same statistic owner, and rest commits at the original post-hours
-boundary. Current captures/source checks and independent retirement join the
-same owners. Runtime Debug compiles with zero warnings/errors. Actual CHAL11
-and native Stats-menu consumers remain unowned; reached failures retain their
-real counter prefix. A parallel owner is implementing challenge completion.
-It contains compiled SCDA execution/scheduling and current cursors, result-driven
-startup/control bindings, actual PACK/TERM/quest result scopes and source save
-requester leases. Actor KF/IDLE/ANIO, PACK/IDLM/INFO/controller dependencies,
-LAND/primitive declarations, unsized NIF headers, typed blend/constraint declarations
-and particle color/collision/lifecycle owners are integrated. Actor script-package
-overrides join resident/unloaded selection and genuine lifecycle receipts.
+Root branch: `codex/full-runtime-owner-integration`, based on origin/main
+`1b159f3b9e00333eb926f3d1a7b19cd52f055175`. The protected
+`codex/compiled-authority-world-dependencies` checkpoint `a9fac69e` remains intact.
+Root checkpoints `83628419`, `40aa09b8` and `bce71a62` join that code with merged
+NIF, launcher, source-menu and couch/head repairs. The uncommitted batch now also
+joins challenge transactions, queued references/CELL ExtraData9 and effect
+lifecycles. Combined runtime Debug compilation passes with zero warnings/errors.
+The publication gate has reached general fixture/format integration failures and
+has not passed. This candidate is not yet published or accepted through ordinary
+campaign cold continuation. The full-product goal and ten-minute follow-up are
+active; all four owners are implementing the next shared capabilities.
 
-Persistent player skills, actor-value pools, XP, advancement/menu state and
-acquired PERK ranks share actual gameplay owners. Source PERK/GMST trait selection
-and native level-up presentation use winning source declarations. Numeric entry9/22
-consumers preserve Float32 operations and live conditions; acquired multiple-entry
-ordering remains unowned. The rate selector now uses neutral getter/operand/
-rounding/cadence declarations bound to exact executable/dependency/configuration
-identities. Root binds current native source/activity and XP lifecycle before source
-execution. XP requests retain their real award sequence, distinct wall/pausable
-timers, native draw and audio receipts, selected source declarations and mandatory
-cold state. Flat native HUD publication and retirement are joined; XR HUD surfaces,
-active-meter retargeting and other unowned arms remain
-explicit failures. Original HUD completion/reset and independent container-interface
-frame producers are integrated with actual completed level-menu submission, source
-factory-entry consumption, multi-level notification continuation and mandatory
-current snapshots. Actual lockpick continuation remains unowned. Clock/award-owner
-retirement now completes each cleanup independently and retains original errors.
-Player physical activity is now integrated with the actual player body, live vitals,
-current actor values and source IDLE/KF recovery. Source explosion damage commits
-once; simulation and recovery share the original knocked query value1. Mandatory
-current saves retain furniture reservation/placement, fractional physical clocks,
-complete bones, attempted keys, RNG and sound history. Awake/upright observations
-require actual healthy native body publication before source execution. Independent
-IsPCSleeping, actor sleep and knocked queries bind the same owners; retained physical
-faults stop dependent script execution. Obsolete furniture-body factories are removed.
-The source sleep/wait owner, rest-host admission, save/time/fade/sound continuation
-and mandatory cold state are integrated and compile. Exact nonrandom cue admission
-and current sound-prefix contracts pass; random/folder selection and real
-hourly world/effect producers, active ordinary sleep/wait execution,
-interruption/death and camera/headset acceptance remain open. Player appearance now resolves the canonical
-engine base instead of an editor-name search.
-Required absent physical/frame/native-effect facts never default to Ready.
-Native attachment, mutation, submission and post-completion retirement faults retain
-the actual prefix and cannot replay through a cold publication.
+Current saves require actual live skill, advancement, ability and statistic
+owners before validation. Skill/progress captures agree exactly. Stored vitals,
+progress and skill pools prepare before entering scripts; cold formulas run
+through completed actual bindings. Historical schema promotion and empty-owner
+admission receipts are removed. Quest/reference locals retain every ordered
+UInt64 cell, duplicate IDs and original flag/payload identity.
 
-The one persistent save queue joins distinct SCDA/native/player origins, original
-writer destinations, current capture, source suspension, process identity and
-finite-audio-safe manual preparation. Historical checkpoint/schema promotion is
-removed. Selected executable CommandInfo/ParamInfo owns command names, argument
-types/optional flags and reference requirements. Public API names choose admitted
-shared semantic owners instead of assumed opcode positions. Twenty-eight additional
-existing gameplay consumers now enter compiled dispatch, including ordinary name,
-tag and trait input, activation, sound, detection and recipe/barter/idle effects.
-The tag menu requires its genuine source request. The SPECIAL tester reads the
-actual command-forwarded menu identity, XML/model declarations and attribute
-bounds from the selected executable; source input supplies its allocation total.
-Product launch no longer depends on an authored quest/trigger/stage contract.
+Compiled active-effect Start, Update and Finish use original SCDA with SCHR raw
+kind0x0100, real instance/local authority and shared execution retirement.
+Player-ability schema v3 joins constant and consumed effects, elapsed clocks,
+condition polls, inventory consumption and retained failed prefixes. Compiled
+effect schema v2 retains source/program/event/cursor identity without text
+execution or historical conversion. Prior focused Start warm/cold contracts pass. The actual owned
+Skilled spell executes its winning compiled body: +5 to all 13 skills once,
+16 committed instructions, completed cursor and exact cold restoration without
+replay. All ten selected original plugin hashes remain unchanged. The new lifecycle
+batch is integrated; its ordinary frame/cold execution is pending. The actual
+native clock stays in its construction process phase until gameplay consumers
+are attached, then updates effects within the committed source-frame lease.
+Saved effect/world clocks require the same exact committed prefix. Rest-hour
+effect traversal, original native event-list projection, other delivery and
+effect presentation remain required.
 
-Native NVSE registration/messaging/serialization, expression caller/token utilities
-and all StringVar/ArrayVar callable entries are integrated candidates. Values,
-arrays and typed results join the campaign stores; source-declared heap thunks,
-native Element buffers and borrowed strings retain actual allocation lifetimes.
-Original Script/TESForm projections, original DLL entry, hooks and complete plugin
-behavior remain open. Private I/O now has a candidate restricted child lifetime,
-pre-entry input protection, original import adapters and actual scoped private
-config/state/diagnostic routes. It fixes two concrete callback/module-receipt
-dispatch omissions discovered after value integration. Actual restricted-token,
-ACL, original DLL entry and route execution remain unverified. Genuine quest and
-retained-reference local storage, exact original SCDA caller identity, read-only
-native linked metadata, complete streamed cells, callback mutation/reentry barriers
-and quarantine retirement are integrated. The campaign service now joins real
-selected-module ownership, top-level and nested compiled callers, original payload
-slices, deferred argument decoding, save admission and child-closure-dependent
-retirement. Original Script/TESForm projections and used public methods are
-implemented candidates; absent constructor, ModInfo/Quest, actor, RTTI and
-fixed-address hook owners remain visible failures before original acceptance.
+The source campaign owns one retained advancement/statistic source before
+bootstrap, shared by every script host and living driver. Signed counters,
+compiled type41 parameters, current cold continuation and ordered consumer
+prefixes are integrated. Authored statistic contracts pass. Actual selected FNV
+and FO3 executable catalogue reads pass 43 and 26 rows respectively, both menu
+1003 and unchanged originals. The FNV reader now follows the catalogue argument,
+frame-owned receiver and direct call on instruction boundaries; an operand CALL
+decoy cannot choose a linked formatter. Challenge type11 now joins actual shared
+statistic transactions, source filters, nested dispatch order and compiled
+completion bodies. Current/cold state retains object flags, bucket order, real
+locals/cursors and failed prefixes. Native Stats-menu producers, immediate
+GameMode and general completion audio remain required; ordinary challenge
+gameplay has not accepted this batch.
 
-Quest and reference event lists now own every ordered UInt64 payload directly.
-First-ID lookup is a view of those cells. Original duplicate IDs and mixed numeric/
-reference views are preserved instead of rejected or flattened. Both selected
-original loaders establish the SLSD initial payload; current saves require the
-complete source/order/flag/payload snapshot. Native mutations publish by ordinal
-against the real campaign owner's retained prefix. Cold loading retains original
-script errors without a compatibility retry or silent clearing.
+Managed/native protocol13 joins selected contributor parser, actual binary
+buffer, metadata and source lifetime. Source-coordinate continuation reconstructs
+from unchanged original inputs without saved retail bytes. Focused continuation
+and Loaded contracts pass. End seek retains independent unsigned logical and
+signed backend cursors; both signs, real tail reads and source restore are
+covered. Actual native image/output readback is required after committed
+publication. Shared contributor failures remain visible through child closure.
+Original native class publication, full static CRT/BSFile, original DLL behavior
+and whole native current/cold persistence remain open.
 
-Actual ordered CombatManager lists now join source target acquisition, provocation,
-assistance, player damage, cold state and independent retirement. XP observes the
-personal target count; public player combat queries observe their separately cached
-incoming-member flag at the actual update. Construction precedes bootstrap scripts,
-and cold/driver attachment reuses that same source lifetime. Pause holds the source
-update during finite save drains. Current saves require the real group owner;
-active controller/auxiliary/target-timer continuation, living detection, reactions
-and companion election remain open. Selected native module failures now stop
-dependent gameplay and refuse complete capture with missing module state.
+The genuine restricted-child /MD public-NVSE CRT caller passed Query/Load, six
+FILE lifetimes, native partial reads/buffers, formatted output, seek/append,
+private configuration/tombstones, wide/narrow directories, missing errors and
+orderly child/provider retirement with unchanged original hashes. Selected-provider
+kernel identity, independent metadata cursors, long paths and token-owned default
+object security are integrated. Original input ACLs and full AccessCheck remain
+unchanged. Real Windows profile/directory callers, private desktop, complete
+negative matrix and original DLL compatibility remain required.
 
-## Verified state and limits
+Actor detection, four-tier scheduling, constructor registration, AI/CELL lifecycle,
+Main/Player/life state, Low-to-High common transfer and source NIF/BPTD body leases
+join actual native construction, driver, capture, cold admission and independent
+retirement. Prior focused process contracts pass in Debug/Release. The new batch
+joins genuine source read tasks, queued-reference membership, CELL ExtraData9,
+known-null native-body lifetimes and actual current/cold retirement. Whole Main,
+source priority/frame producers, travel completion and middle/pair/light fields
+remain required; native body presence cannot establish those facts.
 
-The latest combined runtime Debug integration build, ReferenceScriptContractProbe
-compilation, native x86 companion compilation and native-domain probe compilation
-exit zero with no warnings/errors. Source-rate integration and source-name command
-roles, XP/HUD/cold joins, original frame producers, private I/O, genuine source local
-storage, source SPECIAL selection and complete physical-state joins are included.
-The latest runtime Debug and x86 companion Debug builds also include the campaign
-service and complete ordered-local joins, with zero warnings/errors. The current
-script and native-domain probes also compile with zero warnings/errors for that
-follow-on; no original DLL or candidate campaign execution has occurred.
-Broad/native/owned execution of this candidate is outstanding.
-Earlier merged checks and immutable observations do not accept it.
+Player physical/furniture state, finite recovery clocks, source sleep/wait,
+counting and action/slider writes, save queue, cumulative time, interface fades
+and finite source cues share current owners. Focused physical/rest/counting/cue
+contracts pass; raw random/folder requests refuse before allocation. Actual hourly
+world/effect/console/interface producers and ordinary rest audio remain open.
+CombatManager lists, compiled startup/query/result scopes, PACK/TERM/quest
+execution, player skills/XP/advancement, level-menu/HUD lifetimes and ordered
+native NVSE string/array/caller/local interfaces are integrated. Their missing
+native constructors, original hooks, frame owners and consumers remain visible.
 
-The unchanged complete owned corpus and quest lanes have these retained failures:
+## Retained full-source failures
+
+The unchanged full corpus/quest scans retain these failures. These independent
+receipts bind their earlier exact binaries; current integration does not erase
+or convert them into passes.
 
 | Selection | Winning records | Winning resources | Corpus / quest failures |
 | --- | ---: | ---: | ---: |
@@ -247,9 +150,6 @@ The unchanged complete owned corpus and quest lanes have these retained failures
 | TTW | 1,556,615 | 330,173 | 11 / 5 |
 | Combined | 1,556,976 | 330,362 | 17 / 11 |
 
-The immutable full CELL/reference/alternative sweeps have now all finished and
-retired naturally with failed exits. Their original receipts remain unchanged:
-
 | Selection | Selected / completed cells | Winning graph rows | Cell errors / graph failure events | Runtime rows unverified |
 | --- | ---: | ---: | ---: | ---: |
 | FNV | 44,517 / 44,517 | 520,570 | 0 / 895 | 520,503 |
@@ -257,33 +157,22 @@ retired naturally with failed exits. Their original receipts remain unchanged:
 | TTW | 95,381 / 95,360 | 1,391,574 | 21 / 2,052 | 1,391,574 |
 | Combined | 95,382 / 95,361 | 1,391,576 | 21 / 2,052 | 1,391,576 |
 
-All four retain false readiness. These scans bind their earlier unchanged Release
-binaries, independently of this candidate. The configured JAM/TTW/NMC subset lane
-also remains failed; missing JohnnyGuitar/Stewie selections have unknown denominators.
+All four retain false readiness. The configured JAM/TTW/NMC subset remains
+failed; missing JohnnyGuitar/Stewie selections have unknown denominators.
 Arbitrary packages/orders/settings and all ordinary native effects remain scope.
+The shared source-color repair passes original FO3 dialogue/font checks in all
+four selections. Full menu/scene/audio/rendering and matched moving retail/headset
+acceptance are independent open requirements. [status.md](status.md) records
+current capability boundaries.
 
-Earlier ordinary builds reached FNV's farewell/Goodsprings, FO3's birthday/Amata
-stage21 and TTW's vault exit. Those reached states and old cold receipts are
-historical component evidence, not acceptance of the greenfield save schema or
-this branch. The shared source color owner repaired reproduced black FO3 dialogue
-and passed original menu font checks in all four selections. Source physics,
-rendering/audio, later campaigns, every mod outcome and physical headset parity
-remain independent open requirements. [status.md](status.md) retains the detailed
-verified component boundaries and original failures.
+## Next executable outcome
 
-## Next integration and publication
-
-Continue native profile/directory caller execution and missing original plugin
-object/desktop ownership. Integrate the next statistics and queued-reference/CELL9
-owners against the current gameplay checkpoint. Continue original sleep/wait/time/effect ownership, plugin object/method ownership,
-combat-group/XP arbitration and retained general source-data failures
-without named-content shortcuts or fabricated readiness. Replace obsolete authored
-save fixtures with the current unified queue
-in the later combined validation window; do not preserve old owner behavior.
-
-After the combined batch, run the selected owned-data audit, required
-`scripts/Test-GodotRuntime.ps1` with the pinned Godot console executable and
-`git diff --check`. Fix actual failures, then publish a checked PR, merge and
-verify local main equals origin/main before the next fresh branch. Matched retail
-behavior/pixels are additionally required for any parity claim. No current
-candidate publication or full-game readiness claim has been made.
+Run the ordinary retail recording -> shared C# implementation -> ordinary Godot
+replay loop. The existing external capture recipe has no standalone FNV opening
+route; the general input/capture owner is being implemented instead. No fresh
+retail opening take or new ordinary gameplay acceptance exists for this batch.
+Finish Main/priority and indexed audio joins, preserve every reached divergence,
+and repair broad integration failures in the publication batch. Complete selected
+owned audits, required Test-GodotRuntime and diff check before
+pushing. Publish a checked PR, merge, verify clean local main equals origin/main
+and start a fresh codex branch. The original full-product goal remains active.

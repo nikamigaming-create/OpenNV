@@ -27,10 +27,14 @@ internal sealed partial class RuntimeNativeInterfaceFade : Node
     private readonly NativeOwnedInterfaceFadeQuad?[] _quads = new NativeOwnedInterfaceFadeQuad?[3];
     private bool _retired, _subscribed;
     private Exception? _attachmentFailure;
-    internal object State => new { source = _owner.State, retired = _retired,
+    internal object State => new
+    {
+        source = _owner.State,
+        retired = _retired,
         roots = _roots.Values.Select(root => new { root.Role, root.SourceOwner, id = _rootIds[root.Role] }).ToArray(),
         geometry = _quads.Select(quad => quad?.State).ToArray(),
-        unowned = "matched-retail-alpha-pixels,XR-root-surface-and-final-eye" };
+        unowned = "matched-retail-alpha-pixels,XR-root-surface-and-final-eye"
+    };
 
     private RuntimeNativeInterfaceFade(FalloutInterfaceFade owner, RuntimeLiveContentSource source,
         Func<FalloutInterfaceFadeClock> sourceUiClock,

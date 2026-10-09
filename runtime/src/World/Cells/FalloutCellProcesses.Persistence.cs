@@ -11,8 +11,11 @@ internal sealed partial class FalloutCellProcesses
         return new(Schema, _stack, _declaration.Contract, _process, _sequence,
             _cells.Values.Select(cell => cell with { Data = cell.Data is { } data ? data with { References = data.References.ToArray() } : null }).ToArray(),
             _transitions.ToArray(), _attachments.Values.Select(CopyAttachment).ToArray(),
-            _cold is { } cold ? cold with { AwaitingNativeAttachments = cold.AwaitingNativeAttachments.ToArray(),
-                PreviousAttachments = cold.PreviousAttachments.Select(CopyAttachment).ToArray() } : null);
+            _cold is { } cold ? cold with
+            {
+                AwaitingNativeAttachments = cold.AwaitingNativeAttachments.ToArray(),
+                PreviousAttachments = cold.PreviousAttachments.Select(CopyAttachment).ToArray()
+            } : null);
     }
     private void Restore(FalloutCellProcessesSnapshot saved)
     {
@@ -85,10 +88,19 @@ internal sealed partial class FalloutCellProcesses
         foreach (var (cell, state) in cells) _cells.Add(cell, state);
         _transitions.AddRange(saved.Transitions); _sequence = saved.Sequence;
         foreach (var (identity, attachment) in attachments)
-            _attachments.Add(identity, attachment with { Process = _process, NativeRoot = 0, RootPublished = false,
-                Children = attachment.Children.Select(child => child with { Placement = child.Placement.Copy(), NativeObjects = [],
+            _attachments.Add(identity, attachment with
+            {
+                Process = _process,
+                NativeRoot = 0,
+                RootPublished = false,
+                Children = attachment.Children.Select(child => child with
+                {
+                    Placement = child.Placement.Copy(),
+                    NativeObjects = [],
                     Owner = attachment.Retired ? child.Owner : null,
-                    Phase = attachment.Retired ? FalloutCellProcessChildPhase.Retired : FalloutCellProcessChildPhase.Pending }).ToArray() });
+                    Phase = attachment.Retired ? FalloutCellProcessChildPhase.Retired : FalloutCellProcessChildPhase.Pending
+                }).ToArray()
+            });
         _cold = new(saved.CapturedProcess, _process, Next(), attachments.Values.Where(attachment => !attachment.Retired)
             .Select(attachment => attachment.Identity).ToArray(), attachments.Values.Select(CopyAttachment).ToArray());
     }

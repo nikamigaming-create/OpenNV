@@ -46,8 +46,11 @@ internal sealed partial class FalloutNativePluginBinaryFile : IDisposable
     {
         _records = records; _context = context;
         construction.Require();
-        _construction = construction with { InitialFields = construction.InitialFields.Select(field =>
-            new FalloutNativeBinaryInitialField(field.Offset, field.Bytes.ToArray())).ToArray() };
+        _construction = construction with
+        {
+            InitialFields = construction.InitialFields.Select(field =>
+            new FalloutNativeBinaryInitialField(field.Offset, field.Bytes.ToArray())).ToArray()
+        };
         if (!records.Plugins.Contains(context) || !context.Plugin.NativeSourceAvailable)
             throw new InvalidDataException("Binary file is not an actual selected contributor reader.");
         if (context.Bytes is < 0 or > uint.MaxValue || bufferCapacity > int.MaxValue)

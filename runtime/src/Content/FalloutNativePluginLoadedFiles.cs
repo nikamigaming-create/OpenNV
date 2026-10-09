@@ -31,7 +31,8 @@ internal sealed partial class FalloutNativePluginLoadedFiles : IDisposable
     internal FalloutNativePluginLoadedFiles(FalloutPluginStack records)
         : this(records, FalloutExecutableStringTable.ReadBinaryFileConstruction(
             records.OwnedSource?.FalloutExecutablePath ??
-                throw new NotSupportedException("Loaded contributor construction needs the actual selected executable source."))) { }
+                throw new NotSupportedException("Loaded contributor construction needs the actual selected executable source.")))
+    { }
 
     // Authored contracts may provide their own genuine first-party neutral
     // declaration and hashed source. Product graph construction uses the

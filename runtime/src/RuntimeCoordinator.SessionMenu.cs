@@ -221,7 +221,8 @@ public partial class RuntimeCoordinator
     private async Task DrainNativeSourceReaders()
     {
         GetTree().Paused = true;
-        var pending = _nativeGridNpcPreparations.Select(item => item.ReadTask).ToList();
+        var pending = StopActualQueuedSourceReads().ToList();
+        pending.AddRange(_nativeGridNpcPreparations.Select(item => item.ReadTask));
         if (_nativeMenuRead is { } menuRead) pending.Add(menuRead);
         if (_nativePlayerMoveRead is { } moveRead) pending.Add(moveRead);
         if (_nativeDoorRead is { } doorRead) pending.Add(doorRead);
@@ -231,6 +232,7 @@ public partial class RuntimeCoordinator
         CancelNativeGridRead();
         try { await Task.WhenAll(pending); }
         catch (Exception readError) { GD.Print($"OPENNV_SESSION_OLD_READ_FINISHED {readError.Message}"); }
+        RetireReturnedActualQueuedSourceReads();
     }
 
     private void OnNativeCloseRequested() => QuitNativeSession();
