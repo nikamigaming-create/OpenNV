@@ -15,6 +15,10 @@ public partial class RuntimeCoordinator
     private void RetireNativeReferenceWorld()
     {
         if (_nativeReferences is not { } world) return;
+        RequireNativeMainDeliveryClosed();
+        // The actual global property consumer borrows this world's timer.
+        // A failed property restore retains the world/source providers.
+        RetireNativeGlobalTime(world);
         var failures = new List<Exception>();
         try { world.BindPreparedSourceMutableRetirement(this); } catch (Exception failure) { failures.Add(failure); }
         try { world.Dispose(); } catch (Exception failure) { failures.Add(failure); }

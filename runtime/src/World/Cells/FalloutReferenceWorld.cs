@@ -924,6 +924,9 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             return;
         }
         if (_retiring) throw new InvalidOperationException("Campaign world retirement cannot reenter.");
+        // Main can still hold callbacks into any of these source providers.
+        // Refuse before disposing the first provider, retaining all inputs.
+        RequireCampaignMainNativeDeliveryClosed();
         _retiring = true;
         var failures = new List<Exception>();
         void Retire(Action action)
@@ -933,12 +936,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         }
         try
         {
+            Retire(RetireStandaloneTaskManager);
             Retire(RetireSourceProcessQueues);
             Retire(RetireCampaignScriptContexts);
             Retire(RetireCampaignUtilityCommands);
             Retire(RetireCampaignMainPlayerCell);
             Retire(() => _processRuntime?.RetireSourceMainCachedTail());
             Retire(() => _processRuntime?.RetireSourceMainInterface());
+            Retire(RetireCampaignSourceGlobalTime);
             Retire(RetireCampaignCachedSourceTimer);
             Retire(RetireActorProcessGraph);
             Retire(RetireSourceCellLinks);

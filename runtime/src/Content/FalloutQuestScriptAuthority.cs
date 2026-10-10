@@ -51,11 +51,7 @@ internal static class FalloutQuestScriptAuthority
 
     internal static void RequireRecurringEvent(FalloutCompiledScriptProgram program, FalloutCompiledEvent block)
     {
-        if (block.Event is not (0 or 1))
-            throw new NotSupportedException($"Compiled quest event {block.Event:x4} has no recurring dispatch owner.");
-        if (!block.Parameters.IsEmpty && !(block.Parameters.Length == 2 &&
-            System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(block.Parameters.Span) == 0))
-            throw new NotSupportedException("Filtered compiled quest event headers require their independent original argument/filter contract.");
+        _ = FalloutCompiledRecurringEventFilter.Read(block);
         _ = FalloutCompiledControlFlow.Read(program.EventInstructions(block), block.End);
     }
 

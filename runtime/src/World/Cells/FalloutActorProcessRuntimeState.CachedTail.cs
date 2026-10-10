@@ -8,12 +8,12 @@ internal sealed partial class FalloutActorProcessRuntimeState
     private FalloutPluginStack? _mainCachedTailRecords;
     internal object? SourceMainCachedTailState => _mainCachedTail?.State;
     internal string? SourceMainCachedTailSaveBlocker => _mainCachedTail?.SaveBlocker ??
-        (MainScriptCallerConstructed && MainScriptCallerSource().HasNewVegasChildren && _mainCachedTail is null ?
+        (MainScriptCallerConstructed && _mainCachedTail is null ?
             "source-Main-post-sampling-tail-construction-unbound" : null);
     internal void ConfigureSourceMainCachedTail(FalloutPluginStack records, FalloutMainCachedTailSnapshot? saved)
     {
         RequireNotBusy(); var source = MainScriptCallerSource();
-        if (!source.HasNewVegasChildren || _mainCachedTail is not null || _cachedSourceTimer is null ||
+        if (_mainCachedTail is not null || _cachedSourceTimer is null ||
             records.OwnedSource?.StackId != _stack || saved is not null && saved.Source.Main != source)
             throw new InvalidDataException("Main tail must join the actual selected records/cached timer/current process once.");
         _mainCachedTailRecords = records;

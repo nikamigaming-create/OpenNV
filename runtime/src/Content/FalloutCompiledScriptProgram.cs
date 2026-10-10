@@ -13,7 +13,7 @@ internal sealed record FalloutCompiledEvent(ushort Event, int Begin, int End,
 // instructions or operands; an unknown reached instruction remains a failure.
 internal sealed class FalloutCompiledScriptProgram
 {
-    internal const int DecoderVersion = 3;
+    internal const int DecoderVersion = 4;
     internal FalloutScriptScope Scope { get; }
     internal FalloutPluginRecord Source { get; }
     internal string ProgramSha256 { get; }

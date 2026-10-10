@@ -13,7 +13,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         var saved = new FalloutStandalonePlayerSceneSnapshot(Schema, Source, _stack, _process, _constructor, _sequence,
             _scene, _hold, _view, _clockKind, _numerator, _denominator, _bracket, _cameraPosition, _cameraAngles,
             _first, _history.ToArray(), _clock, _camera, _cold, _boundary, _failure, _retired,
-            _viewRequest, _viewRequestArgument, _countdownEnabled, _countdownBits, _referenceScratch, _prelude);
+            _viewRequest, _viewRequestArgument, _countdownEnabled, _countdownBits, _referenceScratch, _prelude, _sceneReference, _sceneReferenceArgument, _referenceQuery);
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -29,6 +29,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _viewRequest = saved.ViewRequest; _viewRequestArgument = saved.ViewRequestArgument;
         _countdownEnabled = saved.CountdownEnabled; _countdownBits = saved.CountdownBits;
         _referenceScratch = saved.ReferenceScratch; _prelude = saved.Prelude;
+        _sceneReference = saved.SceneReference; _sceneReferenceArgument = saved.SceneReferenceArgument;
+        _referenceQuery = saved.ReferenceQuery;
         _cold = new(saved.CapturedProcess, _process, saved.Constructor, _constructor, Next());
         // The old native roots are historical declarations only. A fresh
         // source-role factory must publish on this actual process/thread.
@@ -49,6 +51,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             saved.Failure is not null && string.IsNullOrWhiteSpace(saved.Failure))
             throw new InvalidDataException("Standalone scene omitted or invented its current source constructor/writer/ownership fields.");
         saved.Source.Validate();
+        ValidateSceneReferenceQuery(saved);
         foreach (var owner in saved.FirstPersonHistory)
         {
             var native = owner.Publication;

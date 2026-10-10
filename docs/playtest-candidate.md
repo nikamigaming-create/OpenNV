@@ -19,8 +19,10 @@ folder. Select **Desktop** in the launcher. **Play** opens the original game men
 available only when the selected profile has an OpenNV save, and the game
 validates that save against the selected source stack before loading it.
 
-For VR, start your headset's OpenXR runtime, run **OpenNV VR.cmd**, and select
-**VR**. Flat and OpenXR use the same authoritative gameplay and profile save.
+For VR, start your headset's OpenXR runtime and run **OpenNV VR.cmd**. It selects
+**VR** in the desktop launcher. Click **Play** there to initialize OpenXR, then
+use the original game menu in VR for **New Game** or **Continue**. Flat and
+OpenXR use the same authoritative gameplay and profile save.
 The launcher does not change the system's OpenXR runtime. Close the game before
 switching modes. Physical-headset behavior still requires a user playtest.
 
@@ -30,6 +32,14 @@ package. OpenNV saves live under
 modified. A save from a different source stack can be refused visibly.
 For an independent fresh profile store, pass an absolute directory with
 `OpenNV.exe -- --launcher --profile-root <directory>`.
+
+The current base-game desktop shortcuts **OpenNV Candidate New Vegas VR** and
+**OpenNV Candidate Fallout 3 VR** select that game and VR and disable native
+extension modules. The corresponding **Flat** shortcuts use the same profile
+saves. They launch exported Release with no debug or test harness options.
+The requested outside-Doc/outside-Vault checkpoints are still pending acceptance.
+Create these for a configured profile store with
+`scripts/Set-OpenNVPlayShortcuts.ps1 -ReleaseDirectory <package> -ProfileRoot <profiles>`.
 
 ## Controls
 

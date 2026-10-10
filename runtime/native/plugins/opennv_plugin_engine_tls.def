@@ -1,0 +1,7 @@
+LIBRARY opennv_engine_tls
+EXPORTS
+    OpenNVEngineTlsVersion=OpenNVEngineTlsVersion
+    OpenNVEngineTlsIndex=OpenNVEngineTlsIndex
+    OpenNVEngineTlsExtent=OpenNVEngineTlsExtent
+    OpenNVEngineTlsData=OpenNVEngineTlsData
+    OpenNVEngineTlsRawData=engine_tls_data DATA

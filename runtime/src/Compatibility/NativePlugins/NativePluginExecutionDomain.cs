@@ -35,7 +35,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     internal int ProcessId { get; }
     internal uint NativeThread { get; private set; }
     internal bool NaturallyRetired => _retired;
-    internal bool ResourcesRetired => _disposed && ChildExited && _process.ResourcesRetired && _privateIo is null && ImportProviderSourcesRetired && MutexNamespaceOwnersRetired && WindowProcessOwnersRetired;
+    internal bool ResourcesRetired => _disposed && ChildExited && _process.ResourcesRetired && _privateIo is null && ImportProviderSourcesRetired && MutexNamespaceOwnersRetired && WindowProcessOwnersRetired && EngineGlobalSourcesRetired;
     internal bool ChildExited { get => Volatile.Read(ref _childExited); private set => Volatile.Write(ref _childExited, value); }
     internal int? ChildExitCode { get; private set; }
     internal NativePluginTokenObjectReceipt? ObjectSecurity => _process.ObjectSecurity;
@@ -300,9 +300,19 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                 {
                     var steamSourceCallback = operation == NativePluginDomainOperation.SteamProvider &&
                         frame.Kind == NativePluginDomainMessage.NvseCallback && (frame.Operation == SteamCallbackEvent || frame.Operation == SteamSourceHashEvent);
-                    if (!steamSourceCallback && !IsOriginalLoaderCallback(operation, frame) && operation is not (NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
-                        NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.UnloadNvse or NativePluginDomainOperation.CrtRuntime or NativePluginDomainOperation.WindowProcess))
-                        throw new InvalidDataException("A native callback arrived outside its executable call owner.");
+                    var globalsSourceCallback = operation == NativePluginDomainOperation.SourceGlobals &&
+                        frame.Kind == NativePluginDomainMessage.NvseCallback &&
+                        (IsNvseInputExchangeCallback(frame) ||
+                            (NativeNvseHostCall)frame.Operation is (NativeNvseHostCall.EngineGlobalPublish or NativeNvseHostCall.EngineTlsPublish or
+                                NativeNvseHostCall.EngineGlobalRetire or NativeNvseHostCall.EngineTlsRetire));
+                    var fieldMethodSourceCallback = operation == NativePluginDomainOperation.SourceFieldMethods &&
+                        frame.Kind == NativePluginDomainMessage.NvseCallback &&
+                        (IsNvseInputExchangeCallback(frame) ||
+                            (NativeNvseHostCall)frame.Operation is (NativeNvseHostCall.SourceFieldMethodDeclare or NativeNvseHostCall.SourceFieldMethodPublish or
+                                NativeNvseHostCall.SourceFieldMethodExecute or NativeNvseHostCall.SourceFieldMethodRetire));
+                    if (!steamSourceCallback && !globalsSourceCallback && !fieldMethodSourceCallback && !IsOriginalLoaderCallback(operation, frame) && operation is not (NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
+                        NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.UnloadNvse or NativePluginDomainOperation.CrtRuntime or NativePluginDomainOperation.WindowProcess or NativePluginDomainOperation.SourceCallSites))
+                        throw new InvalidDataException($"A native callback arrived outside its executable call owner: operation={operation}, kind={frame.Kind}, event={frame.Operation}, depth={_callDepth}.");
                     DispatchCallback(frame, request); continue;
                 }
                 if (frame.Kind != NativePluginDomainMessage.Reply || frame.Id != request || frame.Parent != _callbackOwner || frame.Operation != (uint)operation)
@@ -331,6 +341,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         NativePluginDomainOperation.GuestRelease or NativePluginDomainOperation.GuestBindState or
                         NativePluginDomainOperation.GuestStatistics or NativePluginDomainOperation.GuestSeal => NativeModuleCount,
                         NativePluginDomainOperation.WindowProcess => NativeModuleCount,
+                        NativePluginDomainOperation.SourceCallSites or NativePluginDomainOperation.SourceGlobals or NativePluginDomainOperation.SourceFieldMethods => NativeModuleCount,
                         NativePluginDomainOperation.SteamProvider => NativeModuleCount,
                         NativePluginDomainOperation.ImportProviders => _importProvidersRetiring ? 0U : NativeModuleCount,
                         _ => 0U,

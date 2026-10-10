@@ -50,7 +50,7 @@ if (!(Test-Path -LiteralPath $domain -PathType Leaf)) { throw 'Build the first-p
 $domainOutput = Join-Path $output 'generated/native-plugins/Release'
 [IO.Directory]::CreateDirectory($domainOutput) | Out-Null
 Copy-Item -LiteralPath $domain -Destination $domainOutput
-foreach ($nativeOwned in @('opennv_cng_service.exe', 'build-manifest.json')) {
+foreach ($nativeOwned in @('opennv_cng_service.exe', 'opennv_engine_tls.dll', 'build-manifest.json')) {
     $nativeInput = Join-Path ([IO.Path]::GetDirectoryName($domain)) $nativeOwned
     if (!(Test-Path -LiteralPath $nativeInput -PathType Leaf)) { throw "Missing first-party native service/build identity: $nativeOwned" }
     Copy-Item -LiteralPath $nativeInput -Destination $domainOutput
@@ -76,9 +76,9 @@ foreach ($file in @('NOTICE.md')) {
 }
 Copy-Item -LiteralPath (Join-Path $repo 'runtime/THIRD_PARTY.md') -Destination $output
 Copy-Item -LiteralPath (Join-Path $repo 'docs/playtest-candidate.md') -Destination (Join-Path $output 'PLAYTEST.md')
-@('@echo off', 'cd /d "%~dp0"', 'start "OpenNV" "%~dp0OpenNV.exe" --xr-mode off -- --launcher %*') |
+@('@echo off', 'cd /d "%~dp0"', 'start "OpenNV" "%~dp0OpenNV.exe" --xr-mode off -- --launcher --presentation first-person %*') |
     Set-Content -LiteralPath (Join-Path $output 'OpenNV Flat.cmd') -Encoding ascii
-@('@echo off', 'cd /d "%~dp0"', 'start "OpenNV VR" "%~dp0OpenNV.exe" --xr-mode on -- --launcher %*') |
+@('@echo off', 'cd /d "%~dp0"', 'start "OpenNV VR" "%~dp0OpenNV.exe" --xr-mode on -- --launcher --presentation openxr %*') |
     Set-Content -LiteralPath (Join-Path $output 'OpenNV VR.cmd') -Encoding ascii
 $forbidden = @(Get-ChildItem -LiteralPath $output -Recurse -File | Where-Object {
     $_.Extension -match '^\.(esm|esp|bsa|nif|dds|kf|lip|fuz|fos)$' -or $_.Name -match 'Fallout(NV|3)?\.exe|save\.json|courier.*\.json'

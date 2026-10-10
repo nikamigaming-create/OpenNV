@@ -8,7 +8,7 @@ internal sealed partial class FalloutSkyMoonState
     {
         BindThread();
         if (!float.IsFinite(frame.Hour) || !float.IsFinite(frame.NightAlpha) ||
-            !float.IsFinite(frame.NightColor.X) || !float.IsFinite(frame.NightColor.Y) || !float.IsFinite(frame.NightColor.Z) ||
+            !float.IsFinite(frame.UpperSkyColor.X) || !float.IsFinite(frame.UpperSkyColor.Y) || !float.IsFinite(frame.UpperSkyColor.Z) ||
             frame.SkyMode != _sky.Mode || _climate is null || !_factoryEntered)
             throw new InvalidDataException("Moon frame changed actual clock/colour/mode/climate owners.");
         if (_moons.Values.Any(row => !_native.ContainsKey(row.Role)))
@@ -67,7 +67,16 @@ internal sealed partial class FalloutSkyMoonState
                     row = row with { Pending = 0, LastPhaseAttempt = _phase, Native = native.Capture(), Changed = Next() };
                     _moons[role] = row;
                 }
-                native.Apply(frame, angle, primary, shadow);
+                try { native.Apply(frame, angle, primary, shadow); }
+                catch (Exception original)
+                {
+                    try { _moons[role] = row with { Native = native.Capture(), Changed = Next() }; }
+                    catch (Exception capture)
+                    {
+                        throw new AggregateException("Moon retained its original field-consumer and actual prefix-capture failures.", original, capture);
+                    }
+                    throw;
+                }
                 _moons[role] = row with { Native = native.Capture(), Changed = Next() };
             }
         }

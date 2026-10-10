@@ -20,6 +20,21 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--room-portals"])
+            {
+                await ExerciseRoomPortals(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--shaped-phantoms"])
+            {
+                await ExerciseShapePhantoms();
+                await ExerciseSerializedSourceOcclusion();
+                GetTree().Quit();
+                return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--serialized-occlusion"])
+            {
+                await ExerciseSerializedSourceOcclusion(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--compiled-opening-state"])
             {
                 ExerciseCompiledOpeningState(); GetTree().Quit(); return;
@@ -197,6 +212,9 @@ public partial class NativeReferenceEventsAudit : Node
             var triggerState = world.Get(Key(0x900));
             Require(triggerState.ScriptError is null && triggerState.Read(1) == 1 && triggerState.Read(3) > 0,
                 $"Native physical overlap did not execute the model-less trigger: entered={triggerState.Read(1)} contact={triggerState.Read(3)} error={triggerState.ScriptError}; {string.Join("; ", reported)}");
+            Require(events.ObserveContactContinuation(world) == $"source-trigger-contact-membership:{Key(0x900)}" &&
+                triggerState.Read(1) == 1,
+                "Active native contact was admitted for a cold save or observation replayed its source Enter.");
             events.SetResidency(cell, root);
             await Frames();
             Require(root.GetChildren().OfType<Area3D>().Single() == area && triggerState.Read(1) == 1 &&
@@ -205,9 +223,13 @@ public partial class NativeReferenceEventsAudit : Node
             player.Position = new Vector3(10, 0, 0);
             await Frames();
             Require(triggerState.Read(2) == 1, "Native physical departure did not execute OnTriggerLeave.");
+            Require(events.ObserveContactContinuation(world) is null && triggerState.Read(2) == 1,
+                "Actual source Leave did not release the contact save blocker, or observation replayed departure.");
             player.Position = new Vector3(3, 0, 0);
             await Frames();
             Require(triggerState.Read(1) == 2, "Native trigger suppressed ordinary repeated entry.");
+            Require(events.ObserveContactContinuation(world) == $"source-trigger-contact-membership:{Key(0x900)}",
+                "A later genuine contact reused the departed save allowance.");
             Require(events.TryActivate(collider), "Native input did not admit source activation.");
             await Frames();
             Require(world.Get(Key(0x901)).Read(4) == 1 && effects.Count == 0,

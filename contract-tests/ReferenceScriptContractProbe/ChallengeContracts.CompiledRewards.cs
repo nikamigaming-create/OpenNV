@@ -8,6 +8,7 @@ internal static partial class ChallengeContracts
 {
     private static void CompiledRewards(string directory)
     {
+        CompiledRewardReceiptDecisions(directory);
         foreach (var diagnostic in new[] { "absent", "malformed", "contradictory", "duplicate" })
         {
             var diagnosticFields = diagnostic == "absent" ? Array.Empty<byte[]>() :
@@ -84,6 +85,38 @@ internal static partial class ChallengeContracts
             Reject(() => cold.Statistics.Mod(1, 1, "authored-cold-callback-fault"));
             Require(cold.MenuCalls == 0 && cold.Statistics.Read(2) == 5, "Cold callback fault replayed its nested value commit.");
         }
+    }
+
+    private static void CompiledRewardReceiptDecisions(string directory)
+    {
+        var predicate = Encoding.ASCII.GetBytes(" 1");
+        var body = Join(Instruction(0x16, Join(U16(1), U16((ushort)predicate.Length), predicate)),
+            Set(7), Instruction(0x17, U16(1)), Set(9), Instruction(0x19));
+        Write(directory, Challenge(0x100, 11, 1, 0, 1, script: 0x500), Script(0x500, Program(0, body)));
+        using var records = Load(directory); using var warm = new Fixture(records);
+        warm.Statistics.Mod(1, 1, "authored-reward-branch-receipt");
+        var saved = Copy(warm.Challenges.Capture()); var counters = Copy(warm.Statistics.Capture());
+        var dispatch = saved.LastDispatch!; var attempt = dispatch.Attempts.Single();
+        var reward = attempt.Reward!; var row = reward.Events.Single();
+        Require(BitConverter.UInt64BitsToDouble(reward.Locals.Single().Payload) == 7 && row.Cursor.CommittedInstructions == 4 &&
+            row.Cursor.ControlHistory is { Count: 3 } && row.Cursor.ControlHistory[0].Predicate == true,
+            "Authored challenge reward did not retain the selected IF mutation and its decisions.");
+        var opposite = row.Cursor with
+        {
+            ControlHistory = row.Cursor.ControlHistory!.Select((decision, index) => index == 0 ? decision with { Predicate = false } : decision).ToArray()
+        };
+        var source = records.GetEffective(reward.Program);
+        var program = FalloutCompiledScriptProgram.Read(source, FalloutScriptScope.Standalone(source), standalone: true);
+        var oppositeReceipt = row.Receipt! with { Cursor = opposite };
+        oppositeReceipt.Require(program, reward.Target);
+        var drift = saved with { LastDispatch = dispatch with { Attempts = [attempt with
+        { Reward = reward with { Events = [row with { Receipt = oppositeReceipt }] } }] } };
+        using var refused = new Fixture(records, statistics: counters);
+        Reject(() => refused.Challenges.Restore(drift));
+        using var cold = new Fixture(records, statistics: counters, challenges: saved);
+        Require(cold.MenuCalls == 0 && JsonSerializer.Serialize(cold.Challenges.Capture()) == JsonSerializer.Serialize(saved),
+            "Cold reward branch decisions changed or replayed their original mutation.");
+        Console.WriteLine("OPENNV_CHALLENGE_RECEIPT_DECISIONS_PASS oppositeArmRefused=true sourceValidReceipts=true coldNoReplay=true");
     }
 
     private static void UnknownRewardFamilies(string directory)

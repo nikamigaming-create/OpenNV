@@ -76,7 +76,9 @@ internal sealed record FalloutBitmapFont(float SourceSize, string TextureName, I
                 throw new InvalidDataException($"Unsupported bitmap glyph atlas coordinates: {index}.");
             var glyph = new FalloutBitmapGlyph(texture, left, top, right, bottom,
                 Float(entry, 36), Float(entry, 40), Float(entry, 44), Float(entry, 48), Float(entry, 52));
-            if (glyph.Width < 0 || glyph.Height < 0 || glyph.Advance < 0)
+            // Bearings are signed source metrics. Their sum can move the next
+            // glyph to the left; that does not invalidate its atlas rectangle.
+            if (glyph.Width < 0 || glyph.Height < 0 || !float.IsFinite(glyph.Advance))
                 throw new InvalidDataException($"Invalid bitmap glyph dimensions: {index}.");
             glyphs[index] = glyph;
         }

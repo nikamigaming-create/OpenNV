@@ -9,5 +9,6 @@
   <ItemGroup>
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutShaderPackage.cs" Link="FalloutShaderPackage.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutD3D9PixelProgram.cs" Link="FalloutD3D9PixelProgram.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutD3D9MenuSurface.cs" Link="FalloutD3D9MenuSurface.cs" />
   </ItemGroup>
 </Project>

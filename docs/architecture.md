@@ -66,9 +66,20 @@ replaceable pending transfer slot before Steam and the second sample; CELL DATA
 flags and actual Float32 FISTP rounding determine source grid behavior.
 Unavailable children remain refused.
 
+The standalone Player scene-reference query reads its actual forced first-person
+field before testing even a null argument. Its source-selected parent/reference
+walk has separate native graph consumers; a Godot ancestor cannot stand in for
+that source graph. Current/cold state retains the getter and query prefixes,
+including failure and independent native retirement. The following HUD child
+cannot return until its own consumer exists. Active-effect and challenge receipt
+joins also require identical compiled branch histories, not merely equal final
+instruction positions.
+
 Standalone FO3 selects its own executable source family. Its independent Main,
 Player world bracket, pending-transfer replacement and current/cold state do not
-admit FNV-only platform or movement calls. Unowned UI/scene/task/TLS children
+admit FNV-only platform or movement calls. The actual validated Main declaration
+also selects platform construction before an original provider is opened; the
+standalone Main's Player-to-timed-context sequence has no Steam child. Unowned UI/scene/task/TLS children
 remain visible source dispatch failures.
 
 Restricted child creation retains a fresh hidden desktop and only the explicit
@@ -95,10 +106,17 @@ ImageBase/SizeOfImage before resume. The native domain independently adopts and
 verifies that reservation; original module loading requires its actual receipt.
 The first-party helper links outside that fixed source interval. This changes
 the helper's ASLR policy, not the original game or mod files. The reservation
-contains no original bytes and stays inaccessible outside admitted first-party
-callable pages. Nested committed pages share one root allocation/retirement;
-foreign mappings, unread source objects and unknown code never become readable
-through source identity alone.
+is not a mapped original executable. Admitted first-party callable pages and
+source-owned data cells retain independent construction and retirement receipts.
+Nested committed pages share one root allocation/retirement; foreign mappings,
+unread source objects and unknown code never become readable through identity
+alone. Source globals require the actual live word or complete object authority.
+Compiler/static TLS uses a separate first-party entry-free/import-free carrier,
+the real Windows loader index and current-thread allocation. Selected loader
+template data is read privately in place; task/script/scene TLS fields require
+their separate constructed owners. Raw template pointers never substitute for
+current-thread storage. Source CALL failures retain a correlated private prefix
+and delivery failures, without publishing private addresses.
 Diagnostic write routes require an exact source-declared diagnostic input role;
 original files remain read-only while genuine CRT calls use the private copy.
 Terrain resources release when their retained managed binding is the last actual

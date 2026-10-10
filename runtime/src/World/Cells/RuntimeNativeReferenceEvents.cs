@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -18,6 +19,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         internal FalloutActivationRelayDelivery? PendingRelay;
         internal Node3D? Node = Presentation;
         internal bool ActorScriptStarted;
+        internal IReadOnlyList<Area3D> ShapePhantoms = [];
+        internal bool HasContactVolumes => Trigger is not null || ShapePhantoms.Count != 0;
     }
 
     private FalloutPluginStack _records = null!;
@@ -57,6 +60,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         pendingHitEvents = _world.PendingHitEventCount,
         pendingHitReferences = _world.HitEvents.PendingReferences.Select(reference => reference.ToString()).ToArray(),
         triggers = _bindings.Values.Count(value => value.Trigger is not null),
+        shapedPhantoms = _bindings.Values.Sum(value => value.ShapePhantoms.Count),
+        sourceContactSaveBlocker = ContactSaveBlocker,
         activationRelays = _world.ActivationRelayState,
         activationParentIssues = _world.ActivationParentIssues.Select(value => new
         { child = value.Child.ToString(), parent = value.Parent.ToString(), error = value.Error }).ToArray(),
@@ -112,6 +117,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
         foreach (var key in _bindings.Keys.Where(key => !retained.Contains(key)).ToArray())
         {
             var old = _bindings[key];
+            if (old.Contacts.HasAdmittedContacts)
+                throw new NotSupportedException("Source contact residency retirement requires its actual membership/event consumer.");
             if (old.Trigger is { } trigger) { GamebryoReferenceEnableRuntime.Apply(trigger, false); trigger.QueueFree(); }
             _bindings.Remove(key);
         }
@@ -128,14 +135,18 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (node is not null) _nodeReferences.Add(node.GetInstanceId(), reference.FormKey);
             if (_bindings.TryGetValue(reference.FormKey, out var existing))
             {
+                RebindShapeContacts(existing, node);
                 existing.Node = node;
                 continue; // Keep OnLoad, contact membership and source clocks.
             }
             var instance = world.Get(reference.FormKey);
             Area3D? trigger = null;
+            IReadOnlyList<Area3D> shapePhantoms = [];
             try
             {
-                if (instance.Script is not null && FalloutReferencePrimitive.Read(records.GetEffective(reference.FormKey)) is { } primitive)
+                var primitive = ReadContactPrimitive(reference.FormKey, instance, cell.BaseObjects[reference.Base].Signature);
+                shapePhantoms = BindShapeContacts(reference, instance, node, primitive);
+                if (primitive is not null)
                 {
                     trigger = CreateTrigger(primitive, _unitsToMeters, _collisionMask);
                     trigger.Name = $"NativeTrigger_{reference.FormKey}";
@@ -146,10 +157,12 @@ internal partial class RuntimeNativeReferenceEvents : Node
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException)
             {
+                if (trigger is not null) { trigger.Free(); trigger = null; }
                 instance.ScriptError ??= "Contact binding: " + error.Message;
             }
             _bindings.Add(reference.FormKey, new(reference, instance, cell.BaseObjects[reference.Base].Signature,
-                node, trigger, new()));
+                node, trigger, new())
+            { ShapePhantoms = shapePhantoms });
         }
         if (_presentation != presentation)
         {
@@ -178,6 +191,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
 
     private void BindMaterialized(FalloutFormKey reference, Node3D node)
     {
+        RebindShapeContacts(_bindings[reference], node);
         _bindings[reference].Node = node;
         _nodeReferences[node.GetInstanceId()] = reference;
     }
@@ -194,19 +208,32 @@ internal partial class RuntimeNativeReferenceEvents : Node
         if (!float.IsFinite(unitsToMeters) || unitsToMeters <= 0 || collisionMask == 0)
             throw new ArgumentOutOfRangeException(nameof(unitsToMeters));
         var size = new Vector3(primitive.X, primitive.Z, primitive.Y) * (2 * unitsToMeters);
-        if (!size.IsFinite() || size.X <= 0 || size.Y <= 0 || size.Z <= 0)
+        if (!float.IsFinite(primitive.X * unitsToMeters) || primitive.X <= 0 ||
+            primitive.Type != 2 && (!size.IsFinite() || size.X <= 0 || size.Y <= 0 || size.Z <= 0))
             throw new InvalidDataException("Primitive dimensions cannot be represented by the physics owner.");
         if (primitive.CollisionLayer is not (null or 12))
             throw new NotSupportedException($"Script primitive collision layer {primitive.CollisionLayer} has no trigger filter owner.");
         Shape3D shape = primitive.Type switch
         {
             1 => new BoxShape3D { Size = size },
-            2 when primitive.X == primitive.Y && primitive.X == primitive.Z => new SphereShape3D { Radius = primitive.X * unitsToMeters },
+            2 => new SphereShape3D { Radius = primitive.X * unitsToMeters },
             _ => throw new NotSupportedException($"Script primitive shape {primitive.Type}/{primitive.X:R}/{primitive.Y:R}/{primitive.Z:R} has no contact owner."),
         };
-        var area = new Area3D { CollisionLayer = 0, CollisionMask = collisionMask, Monitoring = true, Monitorable = false };
-        area.AddChild(new CollisionShape3D { Shape = shape });
-        return area;
+        Area3D? area = null; CollisionShape3D? child = null;
+        try
+        {
+            area = new Area3D { CollisionLayer = 0, CollisionMask = collisionMask, Monitoring = true, Monitorable = false };
+            child = new CollisionShape3D { Shape = shape };
+            area.AddChild(child);
+            return area;
+        }
+        catch
+        {
+            if (child is not null && child.GetParent() is null) child.Free();
+            area?.Free();
+            throw;
+        }
+        finally { shape.Dispose(); }
     }
 
     internal bool TryActivate(Node collider)
@@ -337,6 +364,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
         {
             if (node is RuntimeNativePlayer) return _records.RuntimeFormKey(0x14);
             if (node is RuntimeNativeNpc actor) return actor.Appearance.Reference;
+            if (node is RuntimeNativeCreature creature) return creature.Appearance.Reference;
             if (body is RigidBody3D && _nodeReferences.TryGetValue(node.GetInstanceId(), out var reference)) return reference;
         }
         return null;
@@ -379,11 +407,11 @@ internal partial class RuntimeNativeReferenceEvents : Node
             var hasHitEvents = hitBatch?.Count > 0;
             var needsAbilities = binding.Signature is "NPC_" or "CREA" && binding.Node is not null &&
                 !_abilityActors.Contains(binding.Reference.FormKey);
-            if (!needsAbilities && !hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
+            if (!needsAbilities && !hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null && !binding.HasContactVolumes) continue;
             if (!IsProcessing() || tree.Paused) break; // An effect can unload this cell or open a modal menu.
             if (needsAbilities && _world.IsEnabled(binding.Reference.FormKey) &&
                 _abilityActors.Add(binding.Reference.FormKey)) StartAbilityScripts(binding);
-            if (!hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null && binding.Trigger is null) continue;
+            if (!hasPackageEvents && !hasHitEvents && binding.Instance.Script is null && binding.PendingActivation is null && !binding.HasContactVolumes) continue;
             var enabled = _world.IsEnabled(binding.Reference.FormKey);
             binding.ActorScriptStarted |= enabled;
             if (binding.Signature is "NPC_" or "CREA" && !binding.ActorScriptStarted) continue;
@@ -409,16 +437,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
                     FalloutGameSettingFloats.Read(_records, "fDyingTimer"),
                     _host.IsTalking?.Invoke(binding.Reference.FormKey) == true))
                 events.Add(new("OnDeath", injury.Killer));
-            if (enabled && binding.Trigger is { } trigger)
-            {
-                var bodies = trigger.GetOverlappingBodies();
-                var areas = trigger.GetOverlappingAreas();
-                using var bodiesOwner = (Godot.Collections.Array)bodies;
-                using var areasOwner = (Godot.Collections.Array)areas;
-                var contacts = bodies.Cast<Node>().Concat(areas).Select(Contact).Where(key => key is not null)
-                    .Select(key => key!.Value).Distinct().ToArray();
-                events.AddRange(binding.Contacts.Advance(contacts));
-            }
+            if (enabled && binding.HasContactVolumes)
+                events.AddRange(binding.Contacts.Advance(SampleShapeContacts(binding)));
             if (hasPackageEvents) events.AddRange(packageBatch!.Events);
             if (hasHitEvents) events.AddRange(hitBatch!.Events);
             events.Add(new("GameMode"));

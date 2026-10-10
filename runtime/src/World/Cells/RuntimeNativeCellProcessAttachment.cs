@@ -117,6 +117,8 @@ internal sealed partial class RuntimeNativeCellProcessAttachment
         foreach (var child in attachment.Children)
         {
             var events = _sourceEvents ?? throw new NotSupportedException("Current CELL capture lost its actual reference-event consumer.");
+            if (events.ContactSaveBlocker is { } contact)
+                throw new NotSupportedException("Actual source contact continuation is unowned: " + contact);
             var current = events.SourceCellNativeConsumers(child.Source.Reference);
             if (current.Any(node => !GodotObject.IsInstanceValid(node) || node.IsQueuedForDeletion() || !node.IsInsideTree() ||
                 node.GetParent() != _root || !child.NativeObjects.Contains(node.GetInstanceId())))

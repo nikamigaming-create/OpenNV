@@ -9,6 +9,8 @@ internal enum NativeNvseHostCall : uint
     DeliveredMessage = 8, DeliveredSerialization = 9, BeginSerialization = 10,
     EngineCommandDeclare = 11, EngineCommandPublish = 12, EngineCommandExecute = 13, EngineCommandRetire = 14,
     SourceCallSiteDeclare = 15, SourceCallSitePublish = 16, SourceCallSiteTransition = 17, SourceCallSiteExecute = 18, SourceCallSiteRetire = 19,
+    EngineGlobalPublish = 20, EngineTlsPublish = 21, EngineGlobalRetire = 22, EngineTlsRetire = 23,
+    SourceFieldMethodDeclare = 24, SourceFieldMethodPublish = 25, SourceFieldMethodExecute = 26, SourceFieldMethodRetire = 27,
 }
 internal enum NativeNvsePhase { Mapped, Querying, QueriedTrue, QueriedFalse, Loading, LoadedTrue, LoadedFalse, Retired, Faulted }
 internal enum NativeNvseSerializationEvent : uint { Save, Load, NewGame, PreLoad }

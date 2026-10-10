@@ -7,7 +7,14 @@ internal partial class RuntimeNativeOpeningStageDriver
 {
     private RuntimeNativeSourceMainScriptCaller? _sourceMainScriptCaller;
     private bool _sourceMainScriptCallerRetired;
-    internal object? SourceMainScriptCallerState => _sourceMainScriptCaller?.State;
+    private Exception? _sourceMainScriptCallerRetirementFailure;
+    private object? _sourceMainScriptCallerRetiredState;
+    internal object SourceMainScriptCallerState => new
+    {
+        native = _sourceMainScriptCaller?.State ?? _sourceMainScriptCallerRetiredState,
+        retired = _sourceMainScriptCallerRetired,
+        retirementFailure = _sourceMainScriptCallerRetirementFailure?.ToString()
+    };
     internal void AttachSourceMainScriptCaller()
     {
         var world = _scripts.References ?? throw new InvalidOperationException("Main caller has no actual campaign world.");
@@ -16,7 +23,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             throw new InvalidOperationException("Source Main native delivery cannot attach twice or before the living driver.");
         _sourceMainScriptCaller = RuntimeNativeSourceMainScriptCaller.Attach(this, world,
             _sourceInterfaceFade ?? throw new NotSupportedException("Actual source Main needs the same constructed rest/interface fade owner."),
-            RetainDriverFailure);
+            RetainDriverFailure, native => _sourceMainScriptCaller = native);
     }
     internal void StartSourceMainScriptCaller()
     {
@@ -27,16 +34,35 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (_sourceMainScriptCallerRetired) return;
         var native = _sourceMainScriptCaller;
-        if (native is null) { _sourceMainScriptCallerRetired = true; return; }
+        if (native is null)
+        {
+            _scripts.References?.RequireCampaignMainNativeDeliveryClosed();
+            _sourceMainScriptCallerRetired = true; return;
+        }
+        if (!GodotObject.IsInstanceValid(native))
+        {
+            _scripts.References?.RequireCampaignMainNativeDeliveryClosed();
+            _sourceMainScriptCaller = null; _sourceMainScriptCallerRetired = true; return;
+        }
         var failures = new List<Exception>();
         try { native.Retire(); } catch (Exception failure) { failures.Add(failure); }
         try
         {
-            if (native.CanDestroyAfterRetirement && GodotObject.IsInstanceValid(native)) native.Free();
+            if (native.CanDestroyAfterRetirement && GodotObject.IsInstanceValid(native))
+            {
+                _sourceMainScriptCallerRetiredState = native.State;
+                native.Free();
+            }
             if (!GodotObject.IsInstanceValid(native)) { _sourceMainScriptCaller = null; _sourceMainScriptCallerRetired = true; }
         }
         catch (Exception failure) { failures.Add(failure); }
-        if (failures.Count != 0) throw new AggregateException("Source Main native retirement retained its actual failure.", failures);
+        if (failures.Count != 0)
+        {
+            var current = new AggregateException("Source Main native retirement retained its actual failure.", failures);
+            _sourceMainScriptCallerRetirementFailure = _sourceMainScriptCallerRetirementFailure is null ? current :
+                new AggregateException("Source Main native retirement retains its earlier failure.", _sourceMainScriptCallerRetirementFailure, current);
+            throw current;
+        }
     }
     internal Task WaitForSourcePlayerCellPreparation(FalloutPlayerCellPreparation prepared) =>
         (_sourceMainScriptCaller ?? throw new NotSupportedException("Initial CELL placement has no actual native Main caller."))

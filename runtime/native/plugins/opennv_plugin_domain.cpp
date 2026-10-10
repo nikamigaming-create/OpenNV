@@ -8,6 +8,8 @@
 #include "opennv_plugin_command_table.h"
 #include "opennv_plugin_engine_commands.h"
 #include "opennv_plugin_source_call_sites.h"
+#include "opennv_plugin_source_globals.h"
+#include "opennv_plugin_source_field_methods.h"
 #include "opennv_plugin_data.h"
 #include "opennv_plugin_expression.h"
 #include "opennv_plugin_values.h"
@@ -422,6 +424,8 @@ void engine_commands_validate_all();
 void engine_commands_retire(const Frame&);
 void* source_call_site_api(const std::string&);
 void source_call_sites_retire(const Frame&);
+void source_globals_retire(const Frame&);
+void source_field_methods_retire(const Frame&);
 void command_table_retire();
 void expression_initialize(void*);
 void expression_retire();
@@ -570,6 +574,8 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_callable_pages.inc"
 #include "opennv_plugin_engine_commands.inc"
 #include "opennv_plugin_source_call_sites.inc"
+#include "opennv_plugin_source_globals.inc"
+#include "opennv_plugin_source_field_methods.inc"
 #include "opennv_plugin_source_publication.inc"
 #include "opennv_plugin_source_files.inc"
 #include "opennv_plugin_binary_files.inc"
@@ -692,6 +698,8 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     case Operation::load_nvse: load_nvse(frame); break;
     case Operation::source_address_space: source_image_address_space(frame); break;
     case Operation::source_call_sites: source_call_sites_operation(frame); break;
+    case Operation::source_globals: source_globals_operation(frame); break;
+    case Operation::source_field_methods: source_field_methods_operation(frame); break;
     case Operation::nvse_query: nvse_stage(frame, false); break;
     case Operation::nvse_load: nvse_stage(frame, true); break;
     case Operation::nvse_message: nvse_message(frame); break;

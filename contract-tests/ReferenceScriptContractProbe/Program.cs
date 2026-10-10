@@ -16,6 +16,60 @@ if (args is ["--test-source-fistp"])
     return;
 }
 
+if (args is ["--source-room-portal-contracts"])
+{
+    CompiledScriptContracts.RunRoomPortals();
+    return;
+}
+
+if (args is ["--source-serialized-occlusion-contracts"])
+{
+    CompiledScriptContracts.RunSerializedOcclusion();
+    return;
+}
+
+if (args is ["--compiled-structure-contracts"])
+{
+    CompiledScriptContracts.RunCompiledStructure();
+    return;
+}
+
+if (args is ["--compiled-bound-query-contracts"])
+{
+    CompiledScriptContracts.RunBoundQueries();
+    return;
+}
+
+if (args is ["--compiled-global-time-contracts"])
+{
+    CompiledScriptContracts.RunGlobalTime();
+    return;
+}
+
+if (args is ["--compiled-source-state-effect-contracts"])
+{
+    CompiledScriptContracts.RunSourceStateEffects();
+    return;
+}
+
+if (args is ["--dialogue-continuation-contracts"])
+{
+    CompiledScriptContracts.RunDialogueContinuations();
+    return;
+}
+
+if (args is ["--utility-startup-envelope-contracts"])
+{
+    SourceMainScriptCallerContracts.RunUtilityStartupEnvelopes();
+    return;
+}
+
+if (args is ["--source-primitive-contracts"])
+{
+    CompiledScriptContracts.RunSourcePrimitives();
+    return;
+}
+
 if (args is ["--source-cell-live-producers-contracts"])
 {
     CompiledScriptContracts.RunSourceCellIngestion();
@@ -32,6 +86,54 @@ if (args is ["--audit-calling-thread-fistp", var firstPartyFloatAdapter])
 if (args is ["--test-source-sky-transfer"])
 {
     SourceSkyTransferContracts.Run();
+    return;
+}
+
+if (args is ["--test-source-player-reference-query"])
+{
+    SourceMainScriptCallerContracts.RunSourceSceneReferenceQueryContracts();
+    return;
+}
+
+if (args is ["--test-source-main-post-null"])
+{
+    SourceMainScriptCallerContracts.RunStandalonePostNullWordContracts();
+    return;
+}
+
+if (args is ["--test-source-main-deferred-release"])
+{
+    SourceMainScriptCallerContracts.RunSourceDeferredReleaseContracts();
+    return;
+}
+
+if (args is ["--test-source-main-product-refusals"])
+{
+    SourceMainScriptCallerContracts.RunProductRefusalContracts();
+    return;
+}
+
+if (args is ["--test-source-main-newvegas-deferred-release"])
+{
+    SourceMainScriptCallerContracts.RunNewVegasDeferredReleaseContracts();
+    return;
+}
+
+if (args is ["--test-source-main-task-manager"])
+{
+    SourceMainScriptCallerContracts.RunSourceTaskManagerContracts();
+    return;
+}
+
+if (args is ["--test-source-main-menu-boundary"])
+{
+    SourceMainScriptCallerContracts.RunMainMenuBoundaryContracts();
+    return;
+}
+
+if (args is ["--test-source-main-native-retirement"])
+{
+    SourceMainScriptCallerContracts.RunNativeMainRetirementContracts();
     return;
 }
 
@@ -1187,6 +1289,9 @@ CompiledScriptContracts.RunSandboxIdles();
 CompiledScriptContracts.RunSandboxActions();
 CompiledScriptContracts.RunSandboxRuntimeProducers();
 CompiledScriptContracts.RunSourceCellIngestion();
+CompiledScriptContracts.RunSourcePrimitives();
+CompiledScriptContracts.RunRoomPortals();
+CompiledScriptContracts.RunSerializedOcclusion();
 ActorScriptPackageContracts.Run();
 NativeSourceConstructionContracts.Run();
 NativeSourceFileContracts.Run();
@@ -1215,9 +1320,14 @@ LevelUpMenuPublicationContracts.Run();
 CompiledScriptContracts.NestedResults();
 CompiledScriptContracts.ResultAuthority();
 CompiledScriptContracts.QuestRecurrence();
+CompiledScriptContracts.RunCompiledStructure();
+CompiledScriptContracts.RunBoundQueries();
+CompiledScriptContracts.RunSourceStateEffects();
+CompiledScriptContracts.RunGlobalTime();
 CompiledScriptContracts.ConsumerAdmission();
 CompiledScriptContracts.OpeningCatalog();
 ConversationContracts.Run();
+CompiledScriptContracts.RunDialogueContinuations();
 ConversationSpeakerAdmissionContracts.Run();
 ActorSourceContracts.Run();
 FactionRelationContracts.Run();

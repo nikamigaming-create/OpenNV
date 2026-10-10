@@ -5,6 +5,7 @@ internal static partial class SourceMainScriptCallerContracts
 {
     private static void RunStandalonePlayerSceneContracts()
     {
+        RunSourceSceneReferenceQueryContracts();
         var immediate = new FalloutImmediateScriptSource(FalloutSourceMainFamily.Fallout3, new('1', 64),
             FalloutImmediateScriptSource.ContractForEngine(FalloutSourceMainFamily.Fallout3));
         var source = FalloutStandalonePlayerSceneSource.Read(FalloutMainScriptCallerSource.Read(immediate));
@@ -63,7 +64,8 @@ internal static partial class SourceMainScriptCallerContracts
         Reject(() => clock.ExecuteInitialVirtualPrefix(main, 7, () => released++));
         var stopped = clock.Capture();
         Require(released == 1 && stopped.SceneBracket == 1 && stopped.Clock?.Step == FalloutStandaloneSceneClockStep.Failed &&
-            stopped.Prelude?.FailedAt == FalloutStandaloneScenePreludeStep.ReferenceQuery,
+            stopped.Prelude?.FailedAt == FalloutStandaloneScenePreludeStep.ReferenceFrame &&
+            stopped.ReferenceQuery is { GetterReturned: true, Returned: true, Input: null, Result: null },
             "Actual shared-child prefix was skipped/repeated or the unreturned virtual fabricated the source decrement.");
         Reject(() => clock.StoreSceneClock(main, 7, 0x3e800000));
         Reject(() => FalloutStandalonePlayerSceneState.RequirePlayable(stopped));

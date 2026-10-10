@@ -21,6 +21,9 @@ public partial class RuntimeCoordinator
     {
         if (_nativePluginCampaign?.ModuleFailure is { } failure)
             throw new NotSupportedException("New Game has unresolved selected native modules: " + failure);
+        var world = _nativeReferences ?? throw new InvalidOperationException("New Game has no actual source world.");
+        world.PublishSourceMutableNativeOwners(this);
+        PublishNativeGlobalTime(world);
         _nativeScriptStorage?.Auxiliary.ResetForNewGame();
         _nativeUi?.Reset();
         _nativeGameTime!.InitializeNewGame();
@@ -41,13 +44,26 @@ public partial class RuntimeCoordinator
         _nativeBootstrap.Start();
         scripts.Bootstrap = _nativeBootstrap;
         GD.Print($"OPENNV_NEW_GAME_QUEST_START source={_nativeStartingQuest!.FormKey} winner={_nativeStartingQuest.Plugin.Name}");
-        while (true)
+        var loading = _loadingScreen;
+        try
         {
-            if (_retiringNativeSession || !IsInsideTree()) throw new OperationCanceledException("New Game session retired during startup.");
-            if (_nativeBootstrapMovieOwner?.Error is { } movieError) throw new NotSupportedException(movieError);
-            if (scripts.StartupError is { } error) throw new NotSupportedException(error);
-            if (!_nativeBootstrapMovie && !scripts.StartupMessagePending && _nativeBootstrap.PreparePlacement() is not null) break;
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            while (true)
+            {
+                if (_retiringNativeSession || !IsInsideTree()) throw new OperationCanceledException("New Game session retired during startup.");
+                if (_nativeBootstrapMovieOwner?.Error is { } movieError) throw new NotSupportedException(movieError);
+                if (scripts.StartupError is { } error) throw new NotSupportedException(error);
+                // Original script presentation owns this interval. The OpenNV
+                // loading panel must not cover a living movie or message while
+                // the same bootstrap waits for ordinary player input.
+                if (loading is not null && ReferenceEquals(_loadingScreen, loading) && GodotObject.IsInstanceValid(loading))
+                    loading.Visible = !_nativeBootstrapMovie && !scripts.StartupMessagePending;
+                if (!_nativeBootstrapMovie && !scripts.StartupMessagePending && _nativeBootstrap.PreparePlacement() is not null) break;
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+        }
+        finally
+        {
+            if (loading is not null && ReferenceEquals(_loadingScreen, loading) && GodotObject.IsInstanceValid(loading)) loading.Show();
         }
     }
 

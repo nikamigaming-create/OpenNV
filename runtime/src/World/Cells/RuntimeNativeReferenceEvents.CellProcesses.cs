@@ -13,8 +13,10 @@ internal partial class RuntimeNativeReferenceEvents
         if (_scripts is null || !_bindings.TryGetValue(reference, out var binding) || binding.Instance.Reference != reference ||
             binding.Reference.FormKey != reference || binding.Instance.Base != binding.Reference.Base)
             throw new NotSupportedException("Actual source reference-event construction has not returned for this CELL child.");
-        var requiredPrimitive = binding.Instance.Script is not null
-            ? FalloutReferencePrimitive.Read(_records.GetEffective(reference)) : null;
+        RequireShapeContacts(binding);
+        if (binding.Node is RuntimeNativeSourceOcclusionPlane plane) plane.RequirePublished();
+        if (binding.Node is RuntimeNativeSourcePortalPrimitive primitive) primitive.RequirePublished();
+        var requiredPrimitive = ReadContactPrimitive(reference, binding.Instance, binding.Signature);
         if (requiredPrimitive is not null && (binding.Trigger is null || !GodotObject.IsInstanceValid(binding.Trigger)))
             throw new NotSupportedException(binding.Instance.ScriptError ?? "Actual source primitive contact factory has no living native result.");
         var nodes = new List<Node>(2);

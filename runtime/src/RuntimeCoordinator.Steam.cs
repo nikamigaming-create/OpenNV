@@ -12,6 +12,12 @@ public partial class RuntimeCoordinator
         if (_nativeSteamCampaign is not null) throw new InvalidOperationException("Actual Main still owns its platform lifetime.");
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Main platform has no current owned source.");
         var world = _nativeReferences ?? throw new InvalidOperationException("Main platform has no actual reference world.");
+        var main = world.CampaignMainScriptSource;
+        main.Validate();
+        // The selected original Main owns this child. The independently
+        // declared standalone Main goes directly from Player to timed script
+        // contexts and has no intervening Steam utility construction.
+        if (!main.HasNewVegasChildren) return;
 #if DEBUG
         const string configuration = "Debug";
 #else
@@ -27,7 +33,7 @@ public partial class RuntimeCoordinator
     private void RetireNativeSteamCampaign()
     {
         if (_nativeSteamCampaign is not { } owner) return;
-        _nativeOpeningStageDriver?.RetireSourceMainScriptCaller();
+        RequireNativeMainDeliveryClosed();
         owner.Dispose();
         if (owner.Retired) _nativeSteamCampaign = null;
     }

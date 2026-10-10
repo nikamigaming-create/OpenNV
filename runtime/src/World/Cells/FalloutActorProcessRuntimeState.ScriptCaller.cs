@@ -82,8 +82,13 @@ internal sealed partial class FalloutActorProcessRuntimeState
         _scriptCallerConsumers = consumers; _scriptCallerLastDeliveredFrame = null; _scriptCallerManagedThread = Environment.CurrentManagedThreadId;
         return new MainScriptCallerLease(this, lease);
     }
-    private sealed class MainScriptCallerLease(FalloutActorProcessRuntimeState owner, Guid lease) : IDisposable
+    private sealed class MainScriptCallerLease(FalloutActorProcessRuntimeState owner, Guid lease) : IFalloutMainNativeDeliveryLease
     {
+        public Guid Process => owner._process;
+        public Guid Identity => lease;
+        public string? SourceIdentity => owner._scriptCallerSource?.Identity;
+        public int ManagedThread { get; } = System.Environment.CurrentManagedThreadId;
+        public FalloutMainNativeLeaseRole Role => FalloutMainNativeLeaseRole.Caller;
         public void Dispose()
         {
             if (owner._scriptCallerLease != lease) return;

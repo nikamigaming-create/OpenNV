@@ -176,6 +176,7 @@ internal static class FalloutNifNodeControllerChain
         FalloutNifMultiTargetTransformController value => value.Time,
         FalloutNifFloatExtraDataController value => value.Time,
         FalloutNifMaterialColorController value => value.Time,
+        FalloutNifLightColorController value => value.Time,
         FalloutNifTextureTransformController value => value.Time,
         FalloutNifAlphaController value => value.Time,
         FalloutNifEmittanceController value => value.Time,

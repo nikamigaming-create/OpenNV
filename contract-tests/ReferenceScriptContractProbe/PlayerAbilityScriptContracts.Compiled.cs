@@ -62,7 +62,48 @@ internal static partial class PlayerAbilityScriptContracts
         CheckCompiledAbilityExternalOwner(directory);
         CheckCompiledAbilityAdmission(directory);
         CheckCompiledAbilityOverride(directory);
+        CheckCompiledAbilityReceiptDecisions(directory);
         Console.WriteLine("OPENNV_COMPILED_ACTIVE_EFFECT_CONTRACT_PASS sourceKind=0100 actualSharedLeases=true implicitEffectCells=true orderedRaw=true sourceTextUnused=true currentCold=true originalEffectNative=UNOWNED parity=UNVERIFIED");
+    }
+
+    private static void CheckCompiledAbilityReceiptDecisions(string directory)
+    {
+        var predicate = Encoding.ASCII.GetBytes(" 1");
+        var body = Join(AbilityInstruction(0x16, Join(AbilityU16(1), AbilityU16((ushort)predicate.Length), predicate)),
+            AbilityActorValue(32, 3, 1), AbilityInstruction(0x17, AbilityU16(1)),
+            AbilityActorValue(32, 7, 1), AbilityInstruction(0x19));
+        File.WriteAllBytes(Path.Combine(directory, Plugin), RewriteAbilityScript(Fixture(false), fields =>
+            ReplaceAbilityCode(fields, Join(AbilityInstruction(0x1d), AbilityBlock(17, body)), 2, 1)));
+        using var records = FalloutPluginStack.Load(directory, [Plugin]);
+        using var world = new FalloutReferenceWorld(records);
+        var actor = new FalloutPlayerActorValues(records); var skills = Skills(records, actor);
+        var effects = Bind(records, world, actor, skills); effects.Synchronize();
+        var saved = JsonSerializer.Deserialize<FalloutPlayerAbilityScriptsSnapshot>(JsonSerializer.Serialize(effects.Capture()))!;
+        var effect = saved.Effects.Single(); var compiled = effect.Compiled!; var row = compiled.Events.Single();
+        Require(skills.CaptureValues().Pools[32].Permanent == 3 && row.Cursor.CommittedInstructions == 4 &&
+            row.Cursor.ControlHistory is { Count: 3 } && row.Cursor.ControlHistory[0].Predicate == true,
+            "Authored active effect did not commit the selected IF arm and its original decisions.");
+        var opposite = row.Cursor with
+        {
+            ControlHistory = row.Cursor.ControlHistory!.Select((decision, index) => index == 0 ? decision with { Predicate = false } : decision).ToArray()
+        };
+        var source = records.GetEffective(effect.Script);
+        var program = FalloutCompiledScriptProgram.Read(source, FalloutScriptScope.Standalone(source), standalone: true);
+        var oppositeReceipt = row.Receipt! with { Cursor = opposite };
+        // Both arms reach the same position, count, budget and empty stack.
+        // Each receipt is independently source-valid; only its exact history
+        // joins it to the effect that actually applied the three-point change.
+        oppositeReceipt.Require(program, compiled.Target);
+        var drift = saved with { Effects = [effect with { Compiled = compiled with
+        { Events = [row with { Receipt = oppositeReceipt }] } }] };
+        Reject(() => FalloutPlayerAbilityScripts.ValidateSource(records, drift));
+        var cold = new FalloutPlayerAbilityScripts(records, skills.SelectedConstantEffects, skills.AbilityCondition, saved);
+        BindAbilityClock(records, cold, saved.Clock);
+        cold.BindExecutor(_ => throw new InvalidOperationException("Cold completed branch cannot execute again."));
+        cold.Synchronize();
+        Require(JsonSerializer.Serialize(cold.Capture()) == JsonSerializer.Serialize(saved) && skills.CaptureValues().Pools[32].Permanent == 3,
+            "Cold active-effect decisions or their real committed mutation changed or replayed.");
+        Console.WriteLine("OPENNV_ACTIVE_EFFECT_RECEIPT_DECISIONS_PASS oppositeArmRefused=true sourceValidReceipts=true coldNoReplay=true");
     }
 
     private static void CheckCompiledAbilityRawViews(string directory)

@@ -5,7 +5,7 @@ internal static partial class SourceMainScriptCallerContracts
 {
     internal static void RunPlayerCellContracts()
     {
-        PendingSlotReplacement(); SourceContainment(); AwaitedPlayerOrder(); AwaitedPlayerFailure(); PlayerCellCurrentAndCold(); RunPendingConsumerContracts();
+        PendingSlotReplacement(); SourceContainment(); AwaitedPlayerOrder(); AwaitedPlayerFailure(); PlayerCellCurrentAndCold(); RunPendingConsumerContracts(); RunNewVegasDeferredReleaseContracts();
         RunStandaloneMainContracts();
         RunPlayerCellPreparationContracts();
         Console.WriteLine("OPENNV_SOURCE_MAIN_PLAYER_CELL_PASS singlePendingSlot=true supersededOwnerRefused=true " +

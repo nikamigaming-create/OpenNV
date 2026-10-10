@@ -36,11 +36,12 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         string edition,
         string engineBuild,
         string contentVersion,
-        FalloutContentLayers layers, IReadOnlyList<FalloutInstallationSetting>? settings)
+        FalloutContentLayers layers, IReadOnlyList<FalloutInstallationSetting>? settings, bool nativePluginsEnabled)
     {
         ContentRoot = contentRoot;
         _layers = layers;
         Settings = settings?.ToArray() ?? [];
+        NativePluginsEnabled = nativePluginsEnabled;
         PluginSources = Array.AsReadOnly(pluginSources.Select(source => source with { OwnedSource = this }).ToArray());
         _archivePaths = archivePaths;
         Game = game;
@@ -75,6 +76,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     internal string Game { get; }
     internal string StackId { get; }
     internal string SaveCompatibilityId { get; }
+    internal bool NativePluginsEnabled { get; }
     internal string Edition { get; }
     internal string EngineBuild { get; }
     internal string ContentVersion { get; }
@@ -131,18 +133,20 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     }
     internal static void Configure(string selectedRoot, string expectedCampaign,
         IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
-        IReadOnlyList<FalloutInstallationSetting>? settings = null)
+        IReadOnlyList<FalloutInstallationSetting>? settings = null, bool nativePluginsEnabled = true)
     {
         Current?.Dispose();
         Current = null;
-        Current = Open(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins, settings: settings);
+        Current = Open(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins, settings: settings,
+            nativePluginsEnabled: nativePluginsEnabled);
     }
 
     // Donor libraries have their own lifetime. Opening another owned game must
     // not dispose the active campaign or change its texture resolution.
     internal static RuntimeLiveContentSource Open(string selectedRoot, string expectedCampaign,
         IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
-        string? archiveIniPath = null, IReadOnlyList<FalloutInstallationSetting>? settings = null)
+        string? archiveIniPath = null, IReadOnlyList<FalloutInstallationSetting>? settings = null,
+        bool nativePluginsEnabled = true)
     {
         var installation = NativeGameInstallation.Detect(selectedRoot);
         if (installation.Game is not (NativeGame.FalloutNewVegas or NativeGame.Fallout3))
@@ -185,6 +189,8 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         var edition = campaign;
         var build = installation.Game == NativeGame.Fallout3 ? "1.7.0.4" : "1.4.0.525";
         var identity = ComputeLiveIdentity(plugins, archives, layers.Roots.Count > 1 ? layers.Roots : []);
+        if (!nativePluginsEnabled)
+            identity = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity + "\0native-plugin-selection:none"))).ToLowerInvariant();
         return new RuntimeLiveContentSource(
             installation.ContentRoot,
             plugins,
@@ -195,7 +201,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
             edition,
             build,
             build,
-            layers, settings);
+            layers, settings, nativePluginsEnabled);
     }
 
     internal static void Clear()

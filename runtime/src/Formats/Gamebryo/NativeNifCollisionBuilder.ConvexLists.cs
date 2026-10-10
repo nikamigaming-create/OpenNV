@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 internal static partial class NativeNifCollisionBuilder
 {
     private static void BuildConvexList(FalloutNifFile source, FalloutNifConvexListShape list, float unitsToMetres,
-        float mass, Transform3D transform, PhysicsBody3D owner, List<CollisionShape3D> output,
+        float mass, Transform3D transform, CollisionObject3D owner, List<CollisionShape3D> output,
         ref int triangles, HashSet<int> active)
     {
         if (list.Children.Length == 0)

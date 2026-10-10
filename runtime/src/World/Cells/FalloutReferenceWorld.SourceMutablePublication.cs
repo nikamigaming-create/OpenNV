@@ -15,7 +15,8 @@ internal sealed partial class FalloutReferenceWorld
         published = _sourceMutableNativeOwner is not null,
         retirementOnly = _sourceMutableRetirementOnly,
         failure = _sourceMutableNativeFailure?.ToString(),
-        timer = _processRuntime?.SourceCachedTimerState
+        timer = _processRuntime?.SourceCachedTimerState,
+        globalTime = _processRuntime?.SourceGlobalTimeState
     };
     internal string? SourceMutableNativePublicationSaveBlocker => _sourceMutableNativeFailure is not null ?
         "source-mutable-native-publication-failed" : _sourceMutableRetirementOnly ?
@@ -27,7 +28,6 @@ internal sealed partial class FalloutReferenceWorld
     private void PrepareCampaignSourceMainTail(FalloutMainCachedTailSnapshot? saved)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!CampaignMainScriptSource.HasNewVegasChildren) return;
         if (_sourceMainTailPrepared || _sourceMutableNativeOwner is not null)
             throw new InvalidOperationException("Source Main tail preparation replaced its current/native lifetime.");
         if ((_processRuntimeRestore is null) != (saved is null))
@@ -50,6 +50,7 @@ internal sealed partial class FalloutReferenceWorld
         try
         {
             _processRuntime?.PublishPreparedSourceCachedTimer(actualNativeRoot);
+            _processRuntime?.PublishPreparedSourceGlobalTime();
             if (_sourceMainTailPrepared)
                 ProcessRuntime.ConfigureSourceMainCachedTail(records, _preparedSourceMainTail);
         }

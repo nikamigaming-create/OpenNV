@@ -151,7 +151,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
         string? preferredTextureArchive = null,
         RuntimeLiveContentSource? contentSource = null,
         Action<FalloutNifGeometry>? unboundPropertyFreeLod = null,
-        IReadOnlySet<string>? externalTransformTargets = null, HashSet<uint>? addonAncestors = null)
+        IReadOnlySet<string>? externalTransformTargets = null, HashSet<uint>? addonAncestors = null,
+        RuntimeNativeNifPointLightOwner? pointLightOwner = null)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0.0f)
             throw new ArgumentOutOfRangeException(
@@ -164,7 +165,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
             root.Name = "NativeNif";
             root.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
             var state = new BuildState(source, unitsToMetres, preferredTextureArchive, externalSkeleton: externalTransformTargets is not null, contentSource: contentSource)
-            { UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [] };
+            { UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [], PointLightOwner = pointLightOwner };
             foreach (var rootIndex in source.Roots)
                 if (unboundPropertyFreeLod is not null && source.Blocks[rootIndex].TypeName is ("NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape") &&
                     source.ReadGeometry(rootIndex) is { } unbound && unbound.Properties.All(index => index == -1))
@@ -172,6 +173,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 else root.AddChild(state.Build(rootIndex));
             state.BuildModelConstraints(root);
             state.BuildControllerPlayers(root);
+            state.RequireModeledLightChannels();
             state.BindEmbeddedSkins();
             return new RuntimeNativeNifScene(root, state.NodeCount, state.SurfaceCount,
                 state.VertexCount, state.TriangleCount, state.CollisionBodyCount,
@@ -689,6 +691,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
 
         private Node3D BuildPointLight(FalloutNifPointLight source)
         {
+            if (PointLightOwner?.Source.Point.Block.Index == source.Block.Index) return BuildOwnedPointLight(source);
             // A NiDynamicEffect is applied through the node effect lists. Mere
             // presence in the visual tree does not light every mesh in a cell.
             // Keep the authored object and its parameters; an actual reference
@@ -1067,6 +1070,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     "NiTransformController" => BuildTransformChannel(
                         sequence, link, multi, targetBlock, targetNode),
                     "NiVisController" => BuildManagedVisibilityChannel(sequence, link, targetBlock, targetNode),
+                    "NiLightColorController" => BuildLightDiffuseChannel(sequence, link, targetBlock, targetNode),
                     "NiMaterialColorController" or "NiTextureTransformController" or
                         "NiAlphaController" or "BSMaterialEmittanceMultController" => BuildManagedMaterialChannel(
                         sequence, link, targetBlock),
@@ -1099,11 +1103,14 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 !multi.ExtraTargets.Contains(targetBlock))
                 throw new NotSupportedException(
                     $"NIF sequence {sequence.Block.Index} transform target is outside its manager binding.");
+            RequireModeledTransformTarget(targetBlock);
             var sourceTransform = _source.ReadObject(targetBlock) switch
             {
                 FalloutNifNode node => node.Transform,
                 FalloutNifGeometry geometry => geometry.Transform,
                 FalloutNifParticleSystem particle => particle.Geometry.Transform,
+                FalloutNifPointLight point => point.Light.Transform,
+                FalloutNifAmbientLight ambient => ambient.Transform,
                 _ => throw new NotSupportedException("Managed transform target has no source-local transform."),
             };
             // Managed NIFs use the same keyed/constant/spline interpolator
@@ -1718,12 +1725,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 return null;
             if (_source.ReadObject(reference) is FalloutNifCollisionObject phantomAttachment &&
                 phantomAttachment.Body >= 0 &&
-                _source.ReadObject(phantomAttachment.Body) is FalloutNifSimpleShapePhantom phantom)
-                throw new NotSupportedException(
-                    $"NIF shaped phantom {phantom.Block.Index} requires a native overlap/contact owner: " +
-                    $"attachment={phantomAttachment.Block.Index} shape={phantom.Shape} " +
-                    $"filter={phantom.Filter.Layer}/{phantom.Filter.Flags}/{phantom.Filter.Group} " +
-                    $"broadPhase={phantom.BroadPhaseType}. Source phantom data is not solid floor collision.");
+                _source.ReadObject(phantomAttachment.Body) is FalloutNifSimpleShapePhantom)
+                return RequireVisualPhantom(owner, phantomAttachment);
             if (_source.ReadObject(reference) is not FalloutNifCollisionObject collision ||
                 collision.Target != owner.Index ||
                 (collision.Flags & ~SupportedCollisionFlags) != 0 ||
@@ -1749,6 +1752,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
         private void AddCollision(Node3D owner, FalloutNifCollisionObject? attachment)
         {
             if (attachment is null)
+                return;
+            if (AddShapePhantom(owner, attachment))
                 return;
             var built = NativeNifCollisionBuilder.Build(_source, attachment, _unitsToMetres);
             owner.AddChild(built.Body);

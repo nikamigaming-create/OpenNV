@@ -32,6 +32,7 @@ internal static class LandscapeSourceDefaultsProbe
         bodies.Add(Record("REFR", 0x910, 0, Field("XPRM", Primitive(0, 0, 0, 0))));
         bodies.Add(Record("REFR", 0x911, 0, Field("XPRM", Primitive(1, 2, 3, 4))));
         bodies.Add(Record("REFR", 0x912, 0, Field("XPRM", Primitive(2, 5, 5, 5))));
+        bodies.Add(Record("REFR", 0x913, 0, Field("XPRM", Primitive(3, 2, -1, 4))));
         Write(file, [], Join(bodies));
         var original = Hash(file);
         using var stack = Load(file);
@@ -49,6 +50,9 @@ internal static class LandscapeSourceDefaultsProbe
         Require(FalloutReferencePrimitive.Read(stack.GetEffective(new("Rectangle.esm", 0x911))) is { Type: 1, X: 2, Y: 3, Z: 4 } &&
             FalloutReferencePrimitive.Read(stack.GetEffective(new("Rectangle.esm", 0x912))) is { Type: 2, X: 5, Y: 5, Z: 5 },
             "Plane admission changed independent box/sphere declarations.");
+        Require(FalloutReferencePrimitive.Read(stack.GetEffective(new("Rectangle.esm", 0x913))) is
+            { Type: 3, X: 2, Y: -1, Z: 4, IsPlanar: true },
+            "Plane admission consumed or rewrote its independent stored middle bound.");
         Require(Hash(file) == original, "Primitive source bytes changed.");
     }
 
@@ -149,7 +153,7 @@ internal static class LandscapeSourceDefaultsProbe
     private static void Malformed(string directory)
     {
         var path = Path.Combine(directory, "Malformed.esm");
-        foreach (var primitive in new[] { Primitive(1, 2, 0, 4), Primitive(3, 0, 0, 4), Primitive(3, 2, -1, 4),
+        foreach (var primitive in new[] { Primitive(1, 2, 0, 4), Primitive(3, 0, 0, 4), Primitive(3, 2, 0, -1),
             Primitive(3, 2, 0, float.NaN), Primitive(3, float.PositiveInfinity, 0, 4), new byte[31] })
         {
             Write(path, [], Record("REFR", 0x900, 0, Field("XPRM", primitive)));

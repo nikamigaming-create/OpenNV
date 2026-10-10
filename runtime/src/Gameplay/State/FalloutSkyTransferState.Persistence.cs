@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutSkyTransferState
 {
-    internal const string Schema = "opennv-source-Sky-transfer/v4";
+    internal const string Schema = "opennv-source-Sky-transfer/v5";
     internal FalloutSkyTransferSnapshot Capture()
     {
         RequireLiving();
@@ -15,7 +15,7 @@ internal sealed partial class FalloutSkyTransferState
         var result = new FalloutSkyTransferSnapshot(Schema, Source, _stack, Identity, _process, _changed, Flags, Mode,
             HourBits, BlendBits, TransitionBits, Climate, TimeCaches, CurrentWeather, PreviousWeather, OverrideWeather, TargetWeather,
             _cloudBinding, _precipitationBinding, OrderedInstances(),
-            _last, _handoff, _modeFailure, _clockFailure, _retired, _retirementFailure, CaptureStandaloneBaseTimes(), _moonHourStore);
+            _last, _handoff, _modeFailure, _clockFailure, _retired, _retirementFailure, CaptureStandaloneBaseTimes(), _moonHourStore, CaptureHdr(), CaptureMode(), CaptureNight());
         Validate(result, Source, _stack, _records); return result;
     }
     internal static void Validate(FalloutSkyTransferSnapshot saved, FalloutSkyTransferDeclaration source,
@@ -33,8 +33,10 @@ internal sealed partial class FalloutSkyTransferState
         // This packet owns the constructor and reset writes. Other weather
         // field writers remain separate; neither a snapshot nor a renderer
         // observation can introduce them as admitted source execution.
-        if (saved.Mode != 4 ||
-            saved.BlendBits != BitConverter.SingleToUInt32Bits(1f) || saved.TransitionBits != 0 ||
+        ValidateMode(saved, records);
+        ValidateHdr(saved, records);
+        ValidateNight(saved);
+        if (saved.BlendBits != BitConverter.SingleToUInt32Bits(1f) || saved.TransitionBits != 0 ||
             saved.CurrentWeather is not null || saved.PreviousWeather is not null || saved.OverrideWeather is not null || saved.TargetWeather is not null)
             throw new InvalidDataException("Saved Sky introduced an unowned constructor/reset field writer.");
         foreach (var bits in new[] { saved.TimeCaches.SunriseStart, saved.TimeCaches.SunriseEnd, saved.TimeCaches.SunsetStart, saved.TimeCaches.SunsetEnd })
@@ -88,6 +90,7 @@ internal sealed partial class FalloutSkyTransferState
         OverrideWeather = saved.OverrideWeather; TargetWeather = saved.TargetWeather;
         _changed = saved.Changed; _modeFailure = saved.ModeFailure; _clockFailure = saved.ClockFailure;
         RestoreMoonHourStore(saved, process);
+        RestoreMode(saved); RestoreHdr(saved); RestoreNight(saved);
         _cloudBinding = saved.Clouds; _precipitationBinding = saved.Precipitation;
         var map = new Dictionary<Guid, Guid>();
         foreach (var slot in ManagerOrder)

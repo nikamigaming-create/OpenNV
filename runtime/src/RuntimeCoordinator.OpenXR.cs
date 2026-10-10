@@ -43,15 +43,19 @@ public partial class RuntimeCoordinator
         _nativeXr.PoseWristDevice = null;
         var layer = _nativePipBoyLayer; var view = _nativePipBoy;
         _nativePipBoyLayer = null; _nativePipBoy = null;
-        if (IsInstanceValid(layer)) layer!.Free();
-        if (IsInstanceValid(view)) view!.Free();
+        try { if (IsInstanceValid(view)) view!.RetireSourcePointerInput(); }
+        finally
+        {
+            try { if (IsInstanceValid(layer)) layer!.Free(); }
+            finally { if (IsInstanceValid(view)) view!.Free(); }
+        }
     }
 
     private void FocusNativeXrPipBoy(bool focused)
     {
         if (_nativeXr is null || _nativePipBoy is null) return;
         var wasFocused = _nativeXr.PointAtPipBoy is not null;
-        focused &= _nativePlayer is { ModalInput: false } && !_nativeDoorLoading && _nativeOpeningStageDriver!.PipBoy.Available;
+        focused &= NativeWristPipBoyInputAccess() == Gameplay.State.FalloutPipBoyInputBlocker.None;
         _nativeOpeningStageDriver!.PipBoy.SetOpen(focused);
         if (focused)
         {
@@ -61,6 +65,6 @@ public partial class RuntimeCoordinator
         }
         _nativePipBoy.SetXrFocus(focused);
         _nativeXr.PointAtPipBoy = focused ? _nativePipBoy.PointFromXr : null;
-        if (wasFocused && !focused) RequestNativePipBoySave();
+        if (wasFocused && !focused && !_retiringNativeSession && !_nativeSessionTransitioning) RequestNativePipBoySave();
     }
 }

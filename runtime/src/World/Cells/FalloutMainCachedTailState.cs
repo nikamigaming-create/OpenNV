@@ -41,7 +41,7 @@ internal sealed class FalloutMainCachedTailState : IDisposable
     private readonly Guid _process;
     private readonly IFalloutSourceTickCounter _counter;
     private readonly int _thread = Environment.CurrentManagedThreadId;
-    private readonly byte[] _requests = new byte[3];
+    private readonly byte[] _requests;
     private readonly uint[] _channels = new uint[4];
     private long _sequence;
     private byte _optionalPlayer, _independentByte, _actorResetPending;
@@ -56,6 +56,7 @@ internal sealed class FalloutMainCachedTailState : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(counter.Owner);
         if (process == Guid.Empty) throw new InvalidDataException("Source Main tail has no real process constructor.");
         Source = source; _stack = stack; _process = process; _counter = counter;
+        _requests = new byte[source.RequestCount];
         _frameCounter = source.InitialFrameCounter; _havokBits = source.InitialHavokTauBits;
         if (saved is null) return;
         Validate(saved);
@@ -107,8 +108,9 @@ internal sealed class FalloutMainCachedTailState : IDisposable
                 else if (!Read(() => children.FadeBlocksRequest(invocation, 1)) && !Read(() => children.FadeBlocksRequest(invocation, 2)) &&
                     !Read(() => children.InterfaceBlocksRequest(invocation)))
                 {
+                    if (Source.ClearRequestBeforeDispatch(request)) { _requests[request] = 0; Next(); }
                     Call(() => children.DispatchRequest(invocation, request));
-                    if (request == 1) { _requests[request] = 0; Next(); }
+                    if (Source.ClearRequestAfterDispatch(request)) { _requests[request] = 0; Next(); }
                 }
                 // The actual source uses priority short-circuiting. A higher
                 // pending field stops this local pass even when fades hold it.
@@ -161,7 +163,13 @@ internal sealed class FalloutMainCachedTailState : IDisposable
             Set(FalloutMainCachedTailPhase.SourceChannels);
             for (var index = 0; index < 4; ++index)
             { var channel = index; _channels[index] = BitConverter.SingleToUInt32Bits(Read(() => children.ReadRegisteredClockChannel(invocation, channel))); Next(); }
-            var delta = cachedMenu ? 0f : (float)((double)scaledSeconds * records.IniSettings.Float("fAnimationMult:General"));
+            var delta = 0f;
+            if (!cachedMenu)
+            {
+                var animationMultiplier = records.IniSettings.Float("fAnimationMult:General");
+                delta = Source.Main.HasNewVegasChildren ?
+                    (float)((double)scaledSeconds * animationMultiplier) : scaledSeconds * animationMultiplier;
+            }
             _gameplayDeltaBits = BitConverter.SingleToUInt32Bits(delta); Set(FalloutMainCachedTailPhase.GameplayDeltaStored);
             Set(FalloutMainCachedTailPhase.LocalReturned);
         }
@@ -202,7 +210,7 @@ internal sealed class FalloutMainCachedTailState : IDisposable
     {
         ArgumentNullException.ThrowIfNull(value);
         if (value.Schema != Schema || value.Source is null || string.IsNullOrWhiteSpace(value.Stack) || value.CapturedProcess == Guid.Empty || value.Sequence < 0 ||
-            value.RequestCountdowns is not { Count: 3 } || value.ChannelBits is not { Count: 4 } || value.OptionalPlayer > 1 || value.ActorResetPending > 1 ||
+            (value.RequestCountdowns is null || value.RequestCountdowns.Count != value.Source.RequestCount) || value.ChannelBits is not { Count: 4 } || value.OptionalPlayer > 1 || value.ActorResetPending > 1 ||
             value.LastAttempt is { } last && (last.Main == Guid.Empty || last.Ordinal < 1 || last.Entered < 1 || last.Changed < last.Entered ||
                 last.Changed > value.Sequence || !Enum.IsDefined(last.Phase) || last.Failure is not null && string.IsNullOrWhiteSpace(last.Failure)))
             throw new InvalidDataException("Main tail omitted its exact fields/source/entered failure prefix.");

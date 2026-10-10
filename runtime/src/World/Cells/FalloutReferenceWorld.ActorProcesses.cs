@@ -133,6 +133,10 @@ internal sealed partial class FalloutReferenceWorld
     {
         foreach (var actor in ActorPerception.ConstructedSourceActors)
             if (!ActorProcesses.HasActor(actor)) ActorProcesses.Construct(actor);
+        // Without bound original clock/random/detection producers the detection
+        // schedule cannot run; it stays idle rather than retaining a failure
+        // that would refuse every later save.
+        if (_actorProcessInputs is null) return;
         ActorProcesses.AdvanceSourceDetection(seconds);
         // Completion above is scoped to this actual scheduler component. It
         // does not certify affecting-light, pair refinement or scene readiness.

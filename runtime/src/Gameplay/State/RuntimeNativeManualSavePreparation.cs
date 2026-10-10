@@ -78,7 +78,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         }
         catch (Exception error)
         {
-            _requests.Fail(error.Message);
+            _requests.Fail(error.GetBaseException() == error ? error.Message : error.Message + " <- " + error.GetBaseException().Message);
             _reportFailure(error);
             Finish();
         }
@@ -103,7 +103,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         catch (FalloutFiniteSoundSaveDrainInvalidatedException error) { _requests.Cancel(error.Message); }
         catch (Exception error)
         {
-            _requests.Fail(error.Message);
+            _requests.Fail(error.GetBaseException() == error ? error.Message : error.Message + " <- " + error.GetBaseException().Message);
             _reportFailure(error);
         }
         finally { if (!_requests.Pending) Finish(); }

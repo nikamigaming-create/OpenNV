@@ -126,7 +126,8 @@ public partial class RuntimeCoordinator
             _nativeGridTarget = target;
             _nativeGridError = null;
             var resident = _nativeWalkableGrid.ToHashSet();
-            var residentModels = _nativeNifPrototypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var residentModels = _nativeNifPrototypes.Keys.Concat(_nativeModeledLightSources.Values.Select(value => value.LogicalPath))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var content = RuntimeLiveContentSource.Current!;
             _nativeGridReadCancellation = new();
             var cancellation = _nativeGridReadCancellation.Token;
@@ -211,6 +212,13 @@ public partial class RuntimeCoordinator
         if (_retiringNativeSession) GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=enter");
         var failures = new List<Exception>();
         void Retire(Action action) { try { action(); } catch (Exception error) { failures.Add(error); } }
+        Retire(RetireNativeMainDelivery);
+        try { RequireNativeMainDeliveryClosed(); }
+        catch (Exception failure)
+        {
+            failures.Add(failure);
+            throw new AggregateException("Native Main remains bound; its scene/platform/source providers stay retained.", failures);
+        }
         Retire(RetireNativePluginCampaign);
         if (_nativePluginCampaign is null && _nativeDirectInput is null && _nativeQuestScripts is { } scripts &&
             GodotObject.IsInstanceValid(scripts) && scripts.GetParent() is null)
@@ -223,6 +231,8 @@ public partial class RuntimeCoordinator
         Retire(() => _nativeBootstrap?.RetirePreparation());
         Retire(RequireNativeSourceCellRetirementBeforeWorldRelease);
         Retire(RetireCurrentImagePhase);
+        Retire(RetireNativeModeledLightSources);
+        Retire(RequireNativeSkyHdrRetired);
         Retire(() => _nativeSkyLighting?.RetireSourceTransfer());
         if (!_retiringNativeSession)
         {
@@ -244,9 +254,7 @@ public partial class RuntimeCoordinator
         if (_nativePluginCampaign is null && _nativeDirectInput is null && _nativeInventoryReferences is null && _nativeQueuedActorCallers.Count == 0 &&
             _nativeGridNpcPreparations.Count == 0 && _nativeGridNpcPublications.Count == 0)
         {
-            Retire(RetireNativeReferenceWorld);
-            Retire(() => _nativePluginStack?.Dispose());
-            GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
+            Retire(RetireNativeCampaignSources);
         }
         else failures.Add(new InvalidOperationException("Native child or queued caller retirement is incomplete; its source/world owners remain retained."));
         if (failures.Count != 0) throw new AggregateException("Native session retirement retained failures.", failures);
@@ -406,6 +414,7 @@ public partial class RuntimeCoordinator
         {
             _nativeNifPrototypes[path].Scene.Root.Free(); _nativeNifPrototypes.Remove(path);
         }
+        PruneNativeModeledLightSources(warmModels);
         Mark("prototype-eviction");
         var textures = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Where(land => !land.IsQueuedForDeletion())
             .SelectMany(land => land.Source.Textures.Values).SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath })

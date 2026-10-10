@@ -124,7 +124,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     sequence.CycleType is not (0U or 2U) ||
                     sequence.ControlledBlocks.Any(link => link.Interpolator == -1 ||
                         link.Controller == -1 || link.Priority != 0 ||
-                        link.ControllerType is not ("NiTransformController" or "NiVisController" or
+                        link.ControllerType is not ("NiTransformController" or "NiVisController" or "NiLightColorController" or
                             "NiTextureTransformController" or "NiMaterialColorController" or "NiAlphaController" or
                             "BSMaterialEmittanceMultController" or "BSRefractionStrengthController" or "BSRefractionFirePeriodController" or
                             "NiGeomMorpherController" or "NiPSysEmitterCtlr" or "NiPSysEmitterSpeedCtlr" or

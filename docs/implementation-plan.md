@@ -2,6 +2,14 @@
 
 ## Complete-game direction and execution
 
+The immediate October 9 delivery is two ordinary open-world checkpoints: FNV
+outside Doc's house and standalone FO3 outside Vault 101, without selected mods.
+Use normal exported Release, one candidate/profile store and clear VR shortcuts
+selecting the same authoritative saves. Dialogue, inventory/Pip-Boy, movement,
+doors, save, normal Quit and cold Continue must work before either is accepted.
+Physical OpenXR remains a real headset exercise. This priority does not close
+complete-game or installed-mod requirements.
+
 The October 9 direction changes the execution priority: recorded retail gameplay
 and the same ordinary input replayed through Godot drive implementation. A
 component-test pass cannot close a user-visible gameplay failure. The reported

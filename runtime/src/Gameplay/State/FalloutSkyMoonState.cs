@@ -24,6 +24,7 @@ internal sealed partial class FalloutSkyMoonState
     internal FalloutMoonSource Source { get; }
     internal int Phase => _phase;
     internal Guid Sky => _sky.Identity;
+    internal Guid ActualProcess => _process;
     internal string? SaveBlocker => _failure ?? (_retired ? "source-Moons-retired" :
         _executing ? "source-Moon-factory-or-frame-entered" :
         _moons.Values.Any(row => row.Native is not null && !_native.ContainsKey(row.Role)) ?
@@ -87,7 +88,13 @@ internal sealed partial class FalloutSkyMoonState
             {
                 if (!declaration.Enabled(role))
                 {
-                    if (_native.TryGetValue(role, out var old)) { old.Retire(); _native.Remove(role); }
+                    if (_native.TryGetValue(role, out var old))
+                    {
+                        old.Retire();
+                        if (_sky.Source.IsStandalone) _sky.RetireActualModeChild(
+                            role == FalloutMoonRole.Masser ? FalloutSkyModeRole.Masser : FalloutSkyModeRole.Secunda, old.Identity);
+                        _native.Remove(role);
+                    }
                     _moons.Remove(role); Next(); continue;
                 }
                 if (_native.ContainsKey(role)) continue;
@@ -110,6 +117,9 @@ internal sealed partial class FalloutSkyMoonState
                     if (row.Native is { } saved && fields != saved)
                         throw new InvalidDataException("Cold Moon factory did not reproduce its retained resource/property fields.");
                     _native.Add(role, candidate);
+                    if (_sky.Source.IsStandalone) _sky.MarkActualModeChild(
+                        role == FalloutMoonRole.Masser ? FalloutSkyModeRole.Masser : FalloutSkyModeRole.Secunda,
+                        candidate.Identity, "source-Moon-mode-texture-and-filename-clear-consumer-unowned");
                     // Both original generated-geometry loaders request the
                     // first phase only inside their mode-two-or-three arm.
                     var pending = row.Native is null && _sky.Mode is 2 or 3 ? 2 : row.Pending;
@@ -149,7 +159,13 @@ internal sealed partial class FalloutSkyMoonState
         var failures = new List<Exception>();
         foreach (var (role, child) in _native.ToArray())
         {
-            try { child.Retire(); _native.Remove(role); }
+            try
+            {
+                child.Retire();
+                if (_sky.Source.IsStandalone) _sky.LoseActualModeChildProjection(
+                    role == FalloutMoonRole.Masser ? FalloutSkyModeRole.Masser : FalloutSkyModeRole.Secunda, child.Identity);
+                _native.Remove(role);
+            }
             catch (Exception error) { failures.Add(error); }
         }
         foreach (var (identity, child) in _failedNative.ToArray())
@@ -178,5 +194,6 @@ internal sealed partial class FalloutSkyMoonState
             !float.IsFinite(BitConverter.UInt32BitsToSingle(fields.PrimaryAlphaBits)) ||
             !float.IsFinite(BitConverter.UInt32BitsToSingle(fields.ShadowAlphaBits)))
             throw new InvalidDataException("Moon native publication omitted an actual parent/child/geometry/property field.");
+        FalloutMoonDrawPersistence.RequireFields(fields);
     }
 }

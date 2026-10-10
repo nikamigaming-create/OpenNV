@@ -53,6 +53,7 @@ public partial class RuntimeCoordinator
             };
             _nativeXr.Modal = () => _nativePlayer.ModalInput || GetTree().Paused || _nativeDoorLoading;
             _nativeXr.SetPipBoyHeld = FocusNativeXrPipBoy;
+            _nativeXr.PipBoyInputAccess = NativeWristPipBoyInputAccess;
             _nativeXr.OpenCombatWheel = OpenNativeCombatWheel;
             _nativeXr.CombatWheelOpen = () => _nativeCombatWheel is not null;
             _nativeXr.CloseCombatWheel = accept => _nativeCombatWheel?.Finish(accept);
@@ -68,13 +69,18 @@ public partial class RuntimeCoordinator
         if (_nativePipBoyLayer is not null || _nativePlayer is not { ModalInput: false } player || _nativeDoorLoading) return;
         var driver = _nativeOpeningStageDriver!;
         var state = driver.PipBoy;
-        if (!state.Available) return;
+        if (NativePipBoySourceInputAccess() != Gameplay.State.FalloutPipBoyInputBlocker.None) return;
         var wasPaused = GetTree().Paused;
         var menu = CreateNativePipBoyMenu(player);
         void Close()
         {
-            state.SetOpen(false); _nativePipBoyLayer?.QueueFree(); _nativePipBoyLayer = null; _nativePipBoy = null;
-            GetTree().Paused = wasPaused; player.SetModalInput(false); Input.MouseMode = Input.MouseModeEnum.Captured;
+            state.SetOpen(false);
+            try { _nativePipBoy?.RetireSourcePointerInput(); }
+            finally
+            {
+                _nativePipBoyLayer?.QueueFree(); _nativePipBoyLayer = null; _nativePipBoy = null;
+                GetTree().Paused = wasPaused; player.SetModalInput(false); Input.MouseMode = Input.MouseModeEnum.Captured;
+            }
             RequestNativePipBoySave();
         }
         try

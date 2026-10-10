@@ -185,6 +185,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     internal void ApplySourceControls(FalloutPlayerControlState state)
     {
+        _sourceControlsPublished = false;
         SourceControls = state;
         _movementEnabled = state.Movement;
         _lookingEnabled = state.Looking;
@@ -198,6 +199,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         SetMeta("opennv_source_pointofview_enabled", state.PointOfView);
         if (!state.Fighting) { _reloadPressed = false; _weaponTriggerHeld = false; _pendingShotCount = 0; CancelWeaponAction(); }
         SetMeta("opennv_source_looking_enabled", state.Looking);
+        _sourceControlsPublished = true;
     }
 
     internal void Configure(RuntimeConfiguration configuration, Transform3D authoredFloorTransform)
@@ -339,9 +341,8 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             {
                 RejectActivation(); GetViewport().SetInputAsHandled(); return;
             }
-            if (_furniturePhase != 0)
+            if (DispatchSourceFurnitureActivation())
             {
-                RequestFurnitureExit();
                 GetViewport().SetInputAsHandled();
                 return;
             }

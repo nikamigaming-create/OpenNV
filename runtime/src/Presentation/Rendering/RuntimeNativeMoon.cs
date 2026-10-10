@@ -4,9 +4,9 @@ using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.Presentation.Rendering;
 
-// The generated meshes and their two original property fields are independent
-// of shader admission. An unbound active draw refuses before either mesh is
-// published; it never becomes a default Godot material or a white Moon.
+// Generated geometry and its independent original property/program fields
+// are source-owned constructor outputs. Pixel publication separately requires
+// actual returned live frame/HDR fields; no default material admits a draw.
 internal sealed partial class RuntimeNativeMoon : IFalloutNativeMoon
 {
     private readonly RuntimeLiveContentSource _source;
@@ -24,18 +24,19 @@ internal sealed partial class RuntimeNativeMoon : IFalloutNativeMoon
     private readonly float _units;
     public Guid Identity { get; }
     public FalloutMoonRole Role { get; }
-    private RuntimeNativeMoon(FalloutMoonSnapshot row, RuntimeLiveContentSource source, Node3D host, float units)
+    private RuntimeNativeMoon(FalloutSkyMoonState state, FalloutMoonSnapshot row, RuntimeLiveContentSource source, Node3D host, float units)
     {
         if (row.CapturedIdentity == Guid.Empty || !float.IsFinite(units) || units <= 0)
             throw new InvalidDataException("Moon scene omitted actual source identity/unit ownership.");
         Identity = row.CapturedIdentity; Role = row.Role; _settings = row.Settings; _source = source; _host = host; _units = units;
+        _declaration = state.Source; _sky = state.Sky; _process = state.ActualProcess;
     }
     internal static IFalloutNativeMoon Create(FalloutSkyMoonState state, FalloutMoonSnapshot row, int mode,
         RuntimeLiveContentSource source, Node3D host, float units,
-        Func<int, ShaderMaterial> constructSourceProperty)
+        Func<int, FalloutSkyCelestialPass> constructSourceProperty)
     {
         ArgumentNullException.ThrowIfNull(constructSourceProperty);
-        var child = new RuntimeNativeMoon(row, source, host, units);
+        var child = new RuntimeNativeMoon(state, row, source, host, units);
         try { child.Construct(row, mode, constructSourceProperty); return child; }
         catch (Exception original)
         {
@@ -54,17 +55,19 @@ internal sealed partial class RuntimeNativeMoon : IFalloutNativeMoon
             !retirement && (!GodotObject.IsInstanceValid(_host) || !_host.IsInsideTree() || _host.IsQueuedForDeletion()))
             throw new InvalidOperationException("Moon scene lost its actual native parent/thread lifetime.");
     }
-    private void Construct(FalloutMoonSnapshot row, int mode, Func<int, ShaderMaterial> constructSourceProperty)
+    private void Construct(FalloutMoonSnapshot row, int mode, Func<int, FalloutSkyCelestialPass> constructSourceProperty)
     {
         Require(); _settings.Validate();
         _parent = new Node3D { Name = Role + "Moon" };
         _primaryChild = new Node3D { Name = "Primary" }; _shadowChild = new Node3D { Name = "Shadow" };
-        _primaryMesh = Geometry(FalloutMoonMath.Geometry(_settings.Size, shadow: false));
-        _shadowMesh = Geometry(FalloutMoonMath.Geometry(_settings.Size, shadow: true));
+        Geometry(FalloutMoonMath.Geometry(_settings.Size, shadow: false), ref _primaryMesh);
+        Geometry(FalloutMoonMath.Geometry(_settings.Size, shadow: true), ref _shadowMesh);
         // Register every resource before the next fallible child. Both original
         // properties have separate native owners and distinct Sky roles.
-        _primaryProperty = constructSourceProperty(6) ?? throw new InvalidDataException("Moon primary property returned no actual source material.");
-        _shadowProperty = constructSourceProperty(7) ?? throw new InvalidDataException("Moon shadow property returned no actual source material.");
+        var primaryPass = constructSourceProperty(6) ?? throw new InvalidDataException("Moon primary omitted its selected source program.");
+        _primaryProgram = new(primaryPass); _primaryProgram.Construct(); _primaryProperty = _primaryProgram.Material;
+        var shadowPass = constructSourceProperty(7) ?? throw new InvalidDataException("Moon shadow omitted its selected source program.");
+        _shadowProgram = new(shadowPass); _shadowProgram.Construct(); _shadowProperty = _shadowProgram.Material;
         if (_primaryProperty.GetInstanceId() == _shadowProperty.GetInstanceId() ||
             !GodotObject.IsInstanceValid(_primaryProperty.Shader) || !GodotObject.IsInstanceValid(_shadowProperty.Shader))
             throw new InvalidDataException("Moon properties alias or omit an actual admitted shader owner.");
@@ -93,6 +96,7 @@ internal sealed partial class RuntimeNativeMoon : IFalloutNativeMoon
         _shadow.Transform = _primary.Transform;
         _shadowChild.AddChild(_shadow); _primaryChild.AddChild(_primary);
         _parent.AddChild(_shadowChild); _parent.AddChild(_primaryChild);
+        InitializeDrawFields(primaryPass, shadowPass);
         if (row.Native is { } saved) RestoreFields(saved);
         else if (mode is 2 or 3)
         {
@@ -109,10 +113,9 @@ internal sealed partial class RuntimeNativeMoon : IFalloutNativeMoon
             !property.HasMeta("opennv_sky_object_type") || property.GetMeta("opennv_sky_object_type").AsInt32() != role)
             throw new NotSupportedException("source-Moon-actual-shader-technique-constant-and-render-state-owner-unbound");
     }
-    private ArrayMesh Geometry(FalloutMoonMeshInputs input)
+    private void Geometry(FalloutMoonMeshInputs input, ref ArrayMesh? retained)
     {
-        var mesh = new ArrayMesh();
-        try
+        var mesh = new ArrayMesh(); retained = mesh;
         {
             using var arrays = new Godot.Collections.Array(); arrays.Resize((int)Mesh.ArrayType.Max);
             arrays[(int)Mesh.ArrayType.Vertex] = input.Vertices.Select(value => new Vector3(value.X, value.Z, -value.Y) * _units).ToArray();
@@ -121,9 +124,8 @@ internal sealed partial class RuntimeNativeMoon : IFalloutNativeMoon
             arrays[(int)Mesh.ArrayType.Index] = input.Triangles;
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
             if (mesh.GetSurfaceCount() != 1) throw new InvalidDataException("Moon generated quad omitted its actual surface.");
-            return mesh;
+            // The Moon retains this actual resource before every fallible surface operation.
         }
-        catch { mesh.Dispose(); throw; }
     }
     public FalloutMoonNativeFields Capture()
     {
@@ -141,7 +143,7 @@ internal sealed partial class RuntimeNativeMoon : IFalloutNativeMoon
         return new(_parent.GetParent() == _host && _parent.IsInsideTree(), _primaryChild.GetParent() == _parent,
             _shadowChild.GetParent() == _parent, _primary.GetParent() == _primaryChild, _shadow.GetParent() == _shadowChild,
             _primaryHasTexture, _shadowHasTexture, _primaryTexture, _shadowTexture, !_parent.Visible,
-            !_primaryChild.Visible, !_shadowChild.Visible, _primaryAlpha, _shadowAlpha);
+            !_primaryChild.Visible, !_shadowChild.Visible, _primaryAlpha, _shadowAlpha, RequireDrawFields());
     }
     private static void RequireAlpha(ShaderMaterial property, uint expected)
     {
@@ -151,8 +153,6 @@ internal sealed partial class RuntimeNativeMoon : IFalloutNativeMoon
     }
     public void Apply(FalloutMoonFrame frame, float angle, float primaryAlpha, float shadowAlpha)
     {
-        Require(); _ = Capture();
-        if (frame.SkyMode is not (2 or 3)) return; // Actual source draw-field early return, not a success receipt.
-        throw new NotSupportedException("source-Moon-active-parent-matrix-shader-constant-and-NightSky-property-writer-unowned");
+        ApplySourceDrawFields(frame, angle, primaryAlpha, shadowAlpha);
     }
 }

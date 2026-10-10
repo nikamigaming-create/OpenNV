@@ -55,6 +55,13 @@ internal partial class RuntimeNativeConversation : Node
         voiceType = _identity?.VoiceType.ToString(),
         choices = _conversation.Choices,
         pending = _pending.Count,
+        responseGeneration = _conversation.ResponseGeneration,
+        nativeResponseGeneration = _nativeResponse?.Generation,
+        beginResultsEntered = _conversation.BeginResultsEntered,
+        endResultsEntered = _conversation.EndResultsEntered,
+        pendingSourceResponse = _conversation.PendingResponse,
+        dialogueInputOwned = _dialogueInput is not null,
+        retirementFailure = _retirementFailure,
         error = Error ?? _conversation.Error
     };
 
@@ -73,8 +80,11 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
         Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
         Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
-        Func<FalloutFormKey, int>? deadCount = null)
+        Func<FalloutFormKey, int>? deadCount = null,
+        Func<FalloutDialogueInfo, FalloutFormKey, bool, FalloutScriptResultReceipt>? ownedResults = null)
     {
+        if (records.OwnedSource is not null && ownedResults is null)
+            throw new NotSupportedException("Owned native conversation requires the actual shared result executor.");
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
         _resolveRunOnCell = resolveRunOnCell;
         _healthPercentage = healthPercentage;
@@ -92,52 +102,32 @@ internal partial class RuntimeNativeConversation : Node
         _referenceInZone = referenceInZone;
         _sitting = sitting;
         _deadCount = deadCount;
-        _conversation = new(records, quests, condition => _conditions!.Evaluate(condition), (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom);
+        _conversation = new(records, quests, condition => _conditions!.Evaluate(condition),
+            (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom,
+            ownedResults is null ? null : (info, begin) => ownedResults(info, _dialogueSubject, begin), () => _dialogueSubject);
     }
 
     internal void Request(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey? topic, Action? completed = null)
     {
         if (_records.RuntimeFormId(target) != 0x14) throw new NotSupportedException("NPC-to-NPC conversation travel is unbound.");
-        if (Error is not null) throw new InvalidOperationException(Error);
+        if (_retired || Error is not null) throw new InvalidOperationException(Error ?? "Conversation native lifetime is retired.");
         if (_pending.Count != 0 || _conversation.Phase != "closed") throw new NotSupportedException("Competing conversation requests require arbitration.");
         _pending.Enqueue((speaker, topic, completed));
     }
 
     public override void _Process(double delta)
     {
-        if (Error is not null) return;
+        if (_retired || Error is not null) return;
         try
         {
             if (_speech.Error is { } error && (_conversation.Phase != "closed" || _pending.Count != 0)) throw new InvalidOperationException(error);
             if (_pending.Count == 0 || _speech.IsDialogueBusy(_pending.Peek().Speaker)) return;
             var request = _pending.Dequeue(); _speaker = request.Speaker; _completed = request.Completed;
-            var actor = _records.GetEffective(_speaker);
-            var npc = _records.GetEffective(FalloutDialogueTopic.RequiredForm(actor, "NAME"));
-            _dialogueSubject = _speech.DialogueSubject(_speaker);
-            var identity = _speech.SpeakerIdentity(_speaker);
-            _identity = identity;
-            var resolveRunOnCell = _resolveRunOnCell;
-            Func<FalloutCondition, FalloutFormKey?>? currentCell = resolveRunOnCell is null ? null :
-                condition => resolveRunOnCell(_dialogueSubject, condition);
-            _conditions = new(_records, _quests, _dialogueSubject, identity,
-                _runtimeConditions, currentCell, _healthPercentage, _actorValue, _talkedToPlayer, _factions, _playerFemale, _actorRace,
-                currentPackage: _currentPackage, vampireQuery: _vampireQuery, itemCount: _itemCount, referenceDistance: _referenceDistance,
-                referenceInZone: _referenceInZone, sitting: _sitting, deadCount: _deadCount);
-            _speakerName = FalloutDialogueTopic.Text(npc.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
-            _speech.BeginPlayerDialogue(_speaker);
-            _layer = new CanvasLayer { Layer = 95 }; AddChild(_layer);
-            _menu = new(() => _speech.SkipResponse(), Fail, _standaloneNativeInterface); _layer.AddChild(_menu);
-            PublishStandaloneDialog();
-            PublishSourceMainDialog();
-            _player.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
-            _conversation.Start(identity.Actor, request.Topic ?? FalloutDialogueTopic.Find(_records, "DIAL", "GREETING").FormKey);
+            BindConversationSource(_speaker);
+            OpenConversationPresentation();
+            _conversation.Start(_identity.Actor, request.Topic ?? FalloutDialogueTopic.Find(_records, "DIAL", "GREETING").FormKey);
             _recordTalkedToPlayer?.Invoke(_dialogueSubject);
-            _facingSpeaker = _speech.ResolveSpeaker(_speaker);
-            var turnSpeed = FalloutGameSettingFloats.Read(_records, "fCharacterDefaultTurningSpeed");
-            if (_facingSpeaker is RuntimeNativeNpc facingNpc)
-                facingNpc.BeginConversationFacing(() => _player.Camera.GlobalPosition, turnSpeed);
-            else if (_facingSpeaker is RuntimeNativeCreature facingCreature)
-                facingCreature.BeginConversationFacing(() => _player.Camera.GlobalPosition, turnSpeed);
+            BindConversationFacing();
             Present();
         }
         catch (Exception error) { Fail(error); }
@@ -147,19 +137,13 @@ internal partial class RuntimeNativeConversation : Node
     {
         if (_conversation.Phase == "closed")
         {
-            CloseStandaloneDialog();
-            CloseSourceMainDialog();
-            ReleaseFacing();
-            _layer?.QueueFree(); _layer = null; _menu = null;
-            _player.SetModalInput(false);
-            Input.MouseMode = _player.ModalInput ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
+            CloseConversationPresentation();
             var completed = _completed; _completed = null; completed?.Invoke();
             return;
         }
         _menu!.Show(_speakerName, _conversation, topic => Guard(() => { _conversation.Choose(topic); Present(); }), _speaker);
         if (_conversation.Phase == "speaking")
-            _speech.StartResponse(_speaker, _conversation.Info!, _conversation.ResponseIndex,
-                () => Guard(() => { _conversation.CompleteResponse(); Present(); }), _dialogueSubject, _identity);
+            StartPresentedResponse();
     }
     private void Guard(Action action) { try { action(); } catch (Exception error) { Fail(error); } }
     private void ReleaseFacing()
@@ -172,15 +156,6 @@ internal partial class RuntimeNativeConversation : Node
         }
         _facingSpeaker = null;
     }
-    public override void _ExitTree() => ReleaseFacing();
-    private void Fail(Exception error)
-    {
-        if (Error is not null) return;
-        Error = error.Message;
-        ReleaseFacing();
-        _layer?.QueueFree(); _layer = null; _menu = null;
-        _player.SetModalInput(false);
-        Input.MouseMode = _player.ModalInput ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Captured;
-        GD.PushError($"OPENNV_NATIVE_CONVERSATION_DIVERGENCE speaker={_speaker}: {error.Message}");
-    }
+    public override void _ExitTree() => RetireConversation();
+    private void Fail(Exception error) => RetainConversationFailure(error);
 }

@@ -9,7 +9,8 @@ internal sealed record FalloutMainInterfaceSource(FalloutMainScriptCallerSource 
 {
     private const string Engine = "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57";
     private const string Rules = "source-interface-Main/v1;enabled-zero-UInt32-mode-one-context-zero;" +
-        "sixty-loader-zero-active-menu-bytes;own-and-alternate-null;ten-zero-stack-slots;" +
+        "independent-loader-zero-active-menu-byte-range-1001-through-1084;" +
+        "own-and-alternate-null;ten-zero-stack-slots;" +
         "actual-FOPipboyManager-returned-before-enabled-one;" +
         "menu-gate-enabled-and-mode-not-one;GUI-mode-two-independent-context-equal-two;" +
         "DialogMenu-loader-zero-constructor-one-close-and-destruction-zero;" +
@@ -29,5 +30,15 @@ internal sealed record FalloutMainInterfaceSource(FalloutMainScriptCallerSource 
         if (this != Read(Main)) throw new InvalidDataException("Main interface changed its selected independent predicates.");
     }
     internal static ReadOnlySpan<uint> OwnSelectorCodes => [1003u, 1002u, 1035u, 1061u, 1023u];
+    internal const uint FirstActiveMenu = 1001;
+    internal const uint LastActiveMenu = 1084;
+    internal const int ActiveMenuCount = (int)(LastActiveMenu - FirstActiveMenu + 1);
+    internal static bool ReadActiveMenu(IReadOnlyList<byte> active, uint code)
+    {
+        ArgumentNullException.ThrowIfNull(active);
+        if (active.Count != ActiveMenuCount)
+            throw new InvalidDataException("Main interface active-menu table lost the independent source query extent.");
+        return code >= FirstActiveMenu && code <= LastActiveMenu && active[(int)(code - FirstActiveMenu)] != 0;
+    }
     internal static int Kind(uint mode) => unchecked((sbyte)mode);
 }

@@ -7,7 +7,7 @@ internal enum FalloutSkyResetStep
     DirtyStore, OverrideNull, PreviousNull, CurrentNull, TransitionFlagClear, TransitionZero,
     Clouds, Precipitation, ImageInstances, CombinedFlagsStore,
 }
-internal enum FalloutSkyResetOrigin { PlayerTransfer, ClimateSelection }
+internal enum FalloutSkyResetOrigin { PlayerTransfer, ClimateSelection, ModeSelection }
 internal enum FalloutSkyChildDisposition { ConstructorNull, Published, Unowned }
 internal sealed record FalloutSkyResetContext(Guid Sky, Guid Process, Guid Call, Guid? Main, Guid? Request,
     long Ordinal, FalloutSkyResetOrigin Origin, string SourceContract);
@@ -43,6 +43,7 @@ internal sealed record FalloutSkyTransferSnapshot(string Schema, FalloutSkyTrans
     FalloutSkyChildBinding Clouds, FalloutSkyChildBinding Precipitation, IReadOnlyList<FalloutSourceSkyImageModifier> Images,
     FalloutSkyResetCall? LastCall, FalloutSkyTransferHandoff? Handoff, string? ModeFailure,
     string? ClockFailure, bool Retired, string? RetirementFailure, FalloutSkyStandaloneBaseTimes? StandaloneBaseTimes,
-    FalloutMoonHourStore? MoonHourStore = null);
+    FalloutMoonHourStore? MoonHourStore = null, FalloutSkyHdrSnapshot? Hdr = null,
+    FalloutSkyModeSnapshot? ModeFields = null, FalloutSkyNightSnapshot? Night = null);
 
 internal readonly record struct FalloutSkyImageWeights(int Primary, int Secondary, float PrimaryWeight, bool Interpolated);

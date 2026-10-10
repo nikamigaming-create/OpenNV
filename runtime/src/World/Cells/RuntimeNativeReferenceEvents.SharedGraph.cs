@@ -19,14 +19,8 @@ internal partial class RuntimeNativeReferenceEvents
         var nodes = SourceCellNativeConsumers(reference);
         if (nodes.Any(node => !GodotObject.IsInstanceValid(node) || !actualObjects.Contains(node.GetInstanceId())))
             throw new InvalidDataException("Shared CELL retirement changed an actual source event consumer without a native lease.");
-        if (binding.Trigger is { } trigger)
-        {
-            var bodies = trigger.GetOverlappingBodies(); var areas = trigger.GetOverlappingAreas();
-            using var bodiesOwner = (Godot.Collections.Array)bodies;
-            using var areasOwner = (Godot.Collections.Array)areas;
-            if (bodies.Cast<Node>().Concat(areas).Any(node => Contact(node) is not null))
-                throw new NotSupportedException("Actual source trigger still owns an unconsumed physical contact at shared CELL retirement.");
-        }
+        if (binding.HasContactVolumes && SampleShapeContacts(binding).Count != 0)
+            throw new NotSupportedException("Actual source volume still owns an unconsumed physical contact at shared CELL retirement.");
     }
     internal void ForgetDestroyedSourceReference(FalloutFormKey reference)
     {

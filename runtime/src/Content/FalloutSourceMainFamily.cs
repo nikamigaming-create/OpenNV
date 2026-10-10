@@ -61,15 +61,15 @@ internal static class FalloutSourceMainFamily
     internal static string PendingRules(string executable, string newVegas) => executable switch
     {
         NewVegas => newVegas,
-        Fallout3 => "source-FO3-Player-pending-tail/v1;constructor-null-child-zero-tail-byte;" +
+        Fallout3 => "source-FO3-Player-pending-tail/v2;constructor-null-child-zero-tail-byte;" +
             "actual-TaskManager-reset-is-distinct-from-NV-exterior-thirty-seven-bucket-map;" +
             "release-old-owned-refcount-before-null;target-reference-then-worldspace-then-CELL;" +
             "no-outer-position-third-cell-to-High-controller-scalar-store;" +
             "nonnull-declared-callback-and-context-before-furniture;reference-arm-skips-both;" +
             "empty-target-reaches-furniture;winning-FURN-first-enabled-unoccupied-marker;" +
             "actual-native-marker-and-physical-publication-required;" +
-            "original-TLS-deferred-manager-before-free-and-null;" +
-            "post-null-manager-word-mask-two-with-no-second-Player-bit-test;whole-Player-byte-store-one;" +
+            "actual-source-global-ordered-deferred-manager-before-free-and-null;" +
+            "post-null-same-constructed-Main-word-mask-two-with-no-second-Player-bit-test;whole-Player-byte-store-one;" +
             "failed-child-ownership-and-fresh-process-cold-binding-retained",
         _ => throw new NotSupportedException("Selected original pending consumer is unowned.")
     };

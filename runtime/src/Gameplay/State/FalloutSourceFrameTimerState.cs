@@ -18,7 +18,7 @@ internal sealed record FalloutSourceFrameTimerSnapshot(FalloutSourceFrameTimer S
 // Raw OS time, the cached UInt32 value, animation delta and game calendar are
 // separate fields. In particular the zero-elapsed and minimum-wait branches
 // do not change the cached UInt32 value into an artificial accumulated delta.
-internal sealed class FalloutSourceFrameTimerState : IDisposable
+internal sealed partial class FalloutSourceFrameTimerState : IDisposable
 {
     private readonly FalloutSourceFrameTimer _source;
     private readonly IFalloutSourceTickCounter _counter;
@@ -113,8 +113,8 @@ internal sealed class FalloutSourceFrameTimerState : IDisposable
     {
         ExecuteWriter("source-rate-target-store", () =>
         {
-            if (!float.IsFinite(target) || target <= 0)
-                throw new NotSupportedException("Source timer rate has no finite positive division owner.");
+            if (!float.IsFinite(target))
+                throw new NotSupportedException("Source timer has no complete nonfinite rate/state consumer.");
             _target = target;
             if (_useRateWrites)
             {
@@ -122,9 +122,9 @@ internal sealed class FalloutSourceFrameTimerState : IDisposable
             }
             else if (_rate != target)
             {
-                _scaled = (float)(_scaled / (double)_rate);
+                _scaled = _source.Divide(_scaled, _rate);
                 _rate = target;
-                _scaled = (float)((double)_scaled * _rate);
+                _scaled = _source.Multiply(_scaled, _rate);
             }
         });
     }
@@ -133,9 +133,9 @@ internal sealed class FalloutSourceFrameTimerState : IDisposable
         ExecuteWriter("source-rate-adjustment", () =>
         {
             if (_target > _rate) _rate = MathF.Min(_target,
-                (float)((1d + _source.InitialRateAdjustment) * _rate));
+                _source.Adjust(_rate, increase: true));
             else if (_target < _rate) _rate = MathF.Max(_target,
-                (float)((1d - _source.InitialRateAdjustment) * _rate));
+                _source.Adjust(_rate, increase: false));
         });
     }
 
@@ -171,15 +171,15 @@ internal sealed class FalloutSourceFrameTimerState : IDisposable
             var now = _counter.Read();
             if (_pause != 0) { _scaled = 0; _updated = Next(); return; }
             var cached = unchecked(now - _origin);
-            if (_fixed > 0)
+            if (_source.Float32Intermediates ? _fixed != 0 : _fixed > 0)
             {
-                _fraction = (float)((double)_fraction + _fixed);
-                if (!float.IsFinite(_fraction) || _fraction >= uint.MaxValue)
+                _fraction = _source.Add(_fraction, _fixed);
+                if (!float.IsFinite(_fraction) || _fraction < 0 || _fraction >= uint.MaxValue)
                     throw new NotSupportedException("Fixed source timer fraction has no owned unsigned conversion.");
                 var whole = (uint)Math.Truncate(_fraction);
-                _fraction = (float)((double)_fraction - whole);
+                _fraction = _source.Float32Intermediates ? _fraction - whole : (float)((double)_fraction - whole);
                 cached = unchecked(_cached + whole);
-                _scaled = (float)(_fixed * _source.MillisecondsToSeconds);
+                _scaled = _source.Milliseconds(_fixed);
             }
             else
             {
@@ -192,10 +192,10 @@ internal sealed class FalloutSourceFrameTimerState : IDisposable
                     _counter.Wait(_source.MinimumFrameMilliseconds - elapsed);
                     elapsed = _source.MinimumFrameMilliseconds;
                 }
-                _scaled = (float)(elapsed * _source.MillisecondsToSeconds);
+                _scaled = _source.Milliseconds(elapsed);
             }
             _cached = cached; _unscaled = _scaled;
-            _scaled = (float)((double)_scaled * _rate);
+            _scaled = _source.Multiply(_scaled, _rate);
             _updated = Next();
         });
     }
@@ -224,9 +224,9 @@ internal sealed class FalloutSourceFrameTimerState : IDisposable
             saved.EnteredOperation is null && (saved.Failure is not null || saved.EnteredAt > saved.ReturnedThrough) ||
             !float.IsFinite(saved.FixedMilliseconds) || saved.FixedMilliseconds >= uint.MaxValue ||
             !float.IsFinite(saved.FractionalMilliseconds) || saved.FractionalMilliseconds is < 0 or >= 1 ||
-            !float.IsFinite(saved.ScaledSeconds) || saved.ScaledSeconds < 0 ||
+            !float.IsFinite(saved.ScaledSeconds) ||
             !float.IsFinite(saved.UnscaledSeconds) || saved.UnscaledSeconds < 0 ||
-            !float.IsFinite(saved.Rate) || saved.Rate <= 0 || !float.IsFinite(saved.TargetRate) || saved.TargetRate <= 0 ||
+            !float.IsFinite(saved.Rate) || !float.IsFinite(saved.TargetRate) ||
             saved.Failure is not null && string.IsNullOrWhiteSpace(saved.Failure))
             throw new InvalidDataException("Saved source cached timer fields/committed update are invalid.");
     }

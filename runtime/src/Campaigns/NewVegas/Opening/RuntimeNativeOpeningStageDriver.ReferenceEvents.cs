@@ -122,7 +122,8 @@ internal partial class RuntimeNativeOpeningStageDriver
                 RewardXp: RewardPlayerExperience, GameTime: _gameTime,
                 Placement: ReferenceScriptPlacement, IsPcSleeping: _player.IsPcSleeping,
                 Sleeping: ActorSleeping, KnockedState: ActorKnockedState,
-                SleepWait: PlayerRest, OpenSleepWaitMenu: OpenCurrentPlayerRest, Statistics: PlayerStatistics));
+                SleepWait: PlayerRest, OpenSleepWaitMenu: OpenCurrentPlayerRest, Statistics: PlayerStatistics,
+                GlobalTime: _scripts.References!.ScriptGlobalTime));
         results.BindCampaignChallengeRewards();
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
@@ -136,7 +137,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             CanContinueCompiled = gameMode => !_moviePlaying && _stageResults?.HasPendingResults != true && (!gameMode || !GetTree().Paused),
             InvokeFunction = results.InvokeFunction,
             TagSkills = _tagSkills,
-            IsInCell = IsInCell
+            IsInCell = IsInCell,
+            GlobalTime = _scripts.References!.ScriptGlobalTime
         };
         _scripts.Host = _scriptHost;
         _speech!.ExecuteOwnedResults = results.ExecuteResultOwned;
@@ -178,7 +180,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
             _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting,
-            _scripts.References!.GetDeadCount);
+            _scripts.References!.GetDeadCount, ownedResults: results.ExecuteResultOwned);
         AddChild(_conversation);
     }
 

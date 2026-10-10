@@ -87,6 +87,7 @@ public partial class RuntimeCoordinator
                 playerStatistics = _nativeReferences.PlayerStatisticState,
                 sourceMutablePublication = _nativeReferences.SourceMutableNativePublicationState,
                 sourceMutableSaveBlocker = _nativeReferences.SourceMutableNativePublicationSaveBlocker,
+                globalTime = NativeGlobalTimeState,
                 retirementFailure = _nativeReferences.WorldRetirementFailure,
                 pendingPackageEvents = _nativeReferences.PendingPackageEventCount,
                 pendingProcedureCaptures = _nativeReferences.PendingProcedureCaptureCount,
@@ -251,11 +252,16 @@ public partial class RuntimeCoordinator
                     scale = new[] { actor.Scale.X, actor.Scale.Y, actor.Scale.Z },
                     animation = actor.Observation,
                 }).ToArray(),
-            lights = cellChildren is null ? null : cellNodes.OfType<OmniLight3D>().Select(light => new
+            lights = cellChildren is null ? null : NativePlacedLightNodes().Select(light => new
             {
                 reference = light.GetMeta("opennv_ligh_reference", "").AsString(),
                 emittance = light.GetMeta("opennv_ligh_emittance", "").AsString(),
                 shaderRgb = light.GetMeta("opennv_ligh_shader_rgb").AsFloat32Array(),
+                modelSha256 = light.GetMeta("opennv_ligh_model_sha256", "").AsString(),
+                sourcePoint = light.GetMeta("opennv_nif_block", -1).AsInt32(),
+                sourceName = light.GetMeta("opennv_nif_source_name", "").AsString(),
+                visible = light.IsVisibleInTree(),
+                renderingBoundary = light.GetMeta("opennv_ligh_rendering_boundary", "calibrated-light-remap;pixels-unverified").AsString(),
                 position = Vector(light.GlobalPosition),
                 light.LightEnergy,
                 light.OmniRange,
@@ -343,6 +349,7 @@ public partial class RuntimeCoordinator
         _nativeGlobals = FalloutGlobalState.Read(_nativePluginStack);
         _nativeGameTime = new(_nativeGlobals, FalloutGameTimeBindings.Read(_nativePluginStack),
             FalloutCalendar.Read(content.FalloutExecutablePath));
+        RequireNativeSkyHdrRetired();
         _nativeSkyLighting?.RetireSourceTransfer();
         _nativeSkyLighting = new(_nativePluginStack, FalloutGameSettingFloats.ReadRetained(_nativePluginStack, "fDaytimeColorExtension", nameof(FalloutSkyLightingState)));
         _nativeSkyLighting.ConfigureSourceTransfer(content.FalloutExecutablePath, content.StackId,
@@ -438,7 +445,7 @@ public partial class RuntimeCoordinator
         {
             if (_nativeSessionTransitioning) return;
             if (action == "sQuit")
-                QuitNativeSession();
+                QuitNativeSession(NativeSessionQuitOrigin.SourceMenu);
             else if (action == "sLoad")
                 OpenNativeSessionMenu(showSaves: true, layer.GetChild<Control>(0));
             else if (action is "sNew" or "sContinue")
@@ -585,6 +592,7 @@ public partial class RuntimeCoordinator
                 FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId,
                 restore.State.ProcessQueues ?? throw new InvalidDataException("Current campaign has no actual process queue continuation."));
             _nativeReferences.PublishSourceMutableNativeOwners(this);
+            PublishNativeGlobalTime(_nativeReferences);
         }
         else if (_nativeBootstrap is null)
         {
@@ -734,6 +742,7 @@ public partial class RuntimeCoordinator
             !ReferenceEquals(_nativeReferences, references) || !ReferenceEquals(_nativeInventory, inventory))
             throw new OperationCanceledException("Script preparation returned after its actual campaign retired.");
         references.PublishSourceMutableNativeOwners(this);
+        PublishNativeGlobalTime(references);
         GD.Print($"OPENNV_NATIVE_SCRIPT_PREPARATION phase=read-returned elapsedMs={preparation.ElapsedMilliseconds}");
         var scripts = new RuntimeNativeQuestScripts(records, inventory, prepared);
         scripts.EvaluateMessageCondition = condition => _nativeOpeningStageDriver is { } driver
@@ -879,6 +888,7 @@ public partial class RuntimeCoordinator
             if (key is { } found) presentation.Register(found, node);
         }
         root.AddChild(presentation);
+        ConstructNativeRoomPortalGraph(root, cell, presentation, _nativeOpeningRestore?.State.RoomPortals);
         var coverage = _parityObservations.Snapshot();
         var missing = coverage.Missing.Count(identity =>
             identity.StartsWith(parityScope + "/", StringComparison.Ordinal));
@@ -912,6 +922,12 @@ public partial class RuntimeCoordinator
                 NativeReferenceState(reference, baseObject, "disabled"));
             return;
         }
+        if (TryPlaceNativeSourcePrimitive(root, reference))
+        {
+            Observe(parityScope, ParityIdentity(reference),
+                NativeReferenceState(reference, baseObject, "source-native-dynamic-primitive"));
+            return;
+        }
         if (FalloutNewVegasBuiltinForms.IsInternalStatic(baseObject.Signature,
                 (_nativePluginStack ?? throw new InvalidOperationException("Native stack is absent."))
                     .RuntimeFormId(baseObject.FormKey)))
@@ -930,7 +946,7 @@ public partial class RuntimeCoordinator
                 NativeReferenceState(reference, baseObject, "internal-static"));
             return;
         }
-        if (baseObject.Light is not null)
+        if (baseObject.Light is not null && baseObject.ModelPath is null)
         {
             AddNativePlacedLight(root, reference, baseObject);
             Observe(
@@ -1052,28 +1068,8 @@ public partial class RuntimeCoordinator
         }
         if (baseObject.ModelPath is null)
             return;
-        if (!_nativeNifPrototypes.TryGetValue(baseObject.ModelPath, out var prototype))
-        {
-            if (!source.TryRead(baseObject.ModelPath, null, out var nif, out var nifSource))
-                throw new FileNotFoundException(
-                    $"Winning model {baseObject.ModelPath} for {baseObject.FormKey} is missing.");
-            GD.Print(
-                $"OPENNV_NATIVE_NIF_LOADING model={baseObject.ModelPath} source={nifSource} " +
-                $"base={baseObject.FormKey}");
-            if (baseObject.ModelPath.EndsWith(".spt", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedException($"Owned SpeedTree model {baseObject.ModelPath} is present at {nifSource}; its procedural geometry decoder is unbound.");
-            prototype = preparedModel is null ? new RuntimeNativeNifPrototype(nif, _configuration.World.GameUnitsToMeters) :
-                new RuntimeNativeNifPrototype(preparedModel, _configuration.World.GameUnitsToMeters);
-            var built = prototype.Scene;
-            prototype.Scene.Root.Name = $"Prototype_{baseObject.FormKey}";
-            _nativeNifPrototypes.Add(baseObject.ModelPath, prototype);
-            GD.Print(
-                $"OPENNV_NATIVE_NIF_READY model={baseObject.ModelPath} source={nifSource} " +
-                $"nodes={built.Nodes} surfaces={built.Surfaces} vertices={built.Vertices} triangles={built.Triangles} " +
-                $"collisionBodies={built.CollisionBodies} collisionShapes={built.CollisionShapes} " +
-                $"collisionTriangles={built.CollisionTriangles}");
-        }
-        var instance = prototype.InstantiatePlaced(ReferenceTransform(reference));
+        var construction = ConstructNativeReferenceModel(reference, baseObject, source, preparedModel);
+        var instance = construction.Instance;
         instance.Name = $"Reference_{reference.FormKey}";
         instance.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
         instance.SetMeta("opennv_source_model", baseObject.ModelPath);
@@ -1081,7 +1077,7 @@ public partial class RuntimeCoordinator
         if (baseObject.Signature == "FURN" && FalloutFurnitureSource.ReadKind(_nativePluginStack!.GetEffective(baseObject.FormKey)) ==
             FalloutPlayerFurnitureKind.Sleeping)
         {
-            try { RuntimeNativeRestFurniturePublication.Attach(_nativePluginStack!, reference, prototype.Source, instance); }
+            try { RuntimeNativeRestFurniturePublication.Attach(_nativePluginStack!, reference, construction.Source, instance); }
             catch (Exception original)
             {
                 try { instance.Free(); }
@@ -1410,6 +1406,11 @@ public partial class RuntimeCoordinator
             restore is null ? _nativeBootstrapCharacter : null);
         _nativeOpeningStageDriver.PrepareSourceIndexedInterfaceSounds();
         AddChild(_nativeOpeningStageDriver);
+        BindCurrentNativeRoomPortalCapture();
+        _nativeOpeningStageDriver.BindSourceContactContinuation(() =>
+            (_nativeReferenceEvents ?? throw new NotSupportedException("Current contact native owner is absent."))
+                .ObserveContactContinuation(_nativeReferences ??
+                    throw new NotSupportedException("Current contact world owner is absent.")));
         _nativeOpeningStageDriver.BindSourceIndexedInterfacePlayback();
         _nativeOpeningStageDriver.AttachExperiencePauseClock();
         AttachCurrentNativePlayerCell();
@@ -1505,9 +1506,22 @@ public partial class RuntimeCoordinator
             _configuration.FalloutEnvironment.ImageSpace, _configuration.Capture,
             _configuration.ActorCompiler.FaceGenMaterial.RuntimeAlbedoTransfer);
         var presenter = new RuntimeNativeImageSpace();
-        presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime,
-            _nativeReferences!.ActualSourceProcessIdentity);
-        root.AddChild(presenter);
+        try
+        {
+            BindNativeSkyHdr(presenter);
+            presenter.Configure(imageSpace, _nativeImageSpaceState, application.Effect, _nativeGameTime,
+                _nativeReferences!.ActualSourceProcessIdentity);
+            root.AddChild(presenter);
+        }
+        catch (Exception original)
+        {
+            var failures = new List<Exception> { original };
+            try { presenter.RetireSkyHdrBorrower(); } catch (Exception failure) { failures.Add(failure); }
+            try { if (GodotObject.IsInstanceValid(presenter)) presenter.Free(); } catch (Exception failure) { failures.Add(failure); }
+            try { application.Effect.ReleaseRenderingResources(); } catch (Exception failure) { failures.Add(failure); }
+            if (failures.Count > 1) throw new AggregateException("Image-space construction retains original and independent cleanup failures.", failures);
+            throw;
+        }
         root.SetMeta("opennv_source_image_space", imageSpace.Form.ToString());
         root.SetMeta("opennv_source_image_space_version", imageSpace.FormVersion);
         root.SetMeta("opennv_source_image_space_dnam_sha256", imageSpace.DnamSha256);

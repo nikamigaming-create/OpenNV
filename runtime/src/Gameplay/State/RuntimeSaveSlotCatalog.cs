@@ -75,7 +75,7 @@ internal sealed class RuntimeSaveSlotCatalog
             List<Exception> rollbackErrors = [];
             try
             {
-                if (previous is null) File.Delete(_canonicalSavePath);
+                if (previous is null) { if (File.Exists(_canonicalSavePath)) File.Delete(_canonicalSavePath); }
                 else
                 {
                     AtomicWrite(_canonicalSavePath, previous);

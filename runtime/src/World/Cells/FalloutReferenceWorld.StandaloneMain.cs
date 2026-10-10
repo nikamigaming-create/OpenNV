@@ -17,10 +17,12 @@ internal sealed partial class FalloutReferenceWorld
             throw new InvalidDataException("Cold FO3 Main cannot turn an omitted owner into a fresh constructor.");
         if (restore is not null) RequireMainPlayerColdSources(restore.PlayerCell);
         ProcessRuntime.ConstructStandaloneMain(source, PlayerMoves.SourcePending, restore, _processRuntimeRestore);
+        PrepareCampaignSourceMainTail(restore?.MainCaller.CachedTail);
+        ConstructStandaloneTaskManager(restore?.PlayerCell);
     }
     private string? StandaloneMainSaveBlocker => _campaignSharedScriptConstructionFailure is not null ?
         "source-FO3-Main-construction-failed:" + _campaignSharedScriptConstructionFailure.Message :
         _processRuntime?.StandaloneMainConstructed != true ? "source-FO3-Main-Player-construction-unbound" :
-        ProcessRuntime.StandaloneInterface.SaveBlocker ?? ProcessRuntime.MainScriptCallerSaveBlocker ??
+        ProcessRuntime.StandaloneInterface.SaveBlocker ?? ProcessRuntime.SourceMainCachedTailSaveBlocker ?? ProcessRuntime.MainScriptCallerSaveBlocker ??
             ProcessRuntime.MainPlayerCellSaveBlocker ?? ProcessRuntime.SourceScriptFrameSaveBlocker ?? ProcessRuntime.StandalonePlayerScene.SaveBlocker;
 }

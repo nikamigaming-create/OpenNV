@@ -184,6 +184,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new InvalidDataException("Current save has no actual file/source queue handoff."));
         _scripts.References!.BindActorAlert(_pluginStack.RuntimeFormKey(0x14), _player.Activity);
         _restoreFinishedSpeech = restore?.State.FinishedSpeech;
+        _restoreConversation = restore?.State.Conversation;
         _restoreFinishedSpeechStage = restore?.State.FinishedSpeechStage;
         _restoreStageResults = restore?.State.QuestStageResults ?? bootstrapStageResults;
         _restoreStageResultFailure = restore?.State.StageResultFailure;
@@ -207,7 +208,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             Inventory: InventoryCommands, ResetPlayerHealth: () => _vitals.ResetHealth(), CurrentPackage: CurrentActorPackage,
             Sitting: ActorSitting, TagSkills: _tagSkills, RewardXp: RewardPlayerExperience, GameTime: gameTime,
             IsPcSleeping: _player.IsPcSleeping, Sleeping: ActorSleeping, KnockedState: ActorKnockedState,
-            OpenSleepWaitMenu: OpenCurrentPlayerRest);
+            OpenSleepWaitMenu: OpenCurrentPlayerRest, GlobalTime: _scripts.References!.ScriptGlobalTime);
         _captureScripts = captureScripts;
         _playerSkills = new(pluginStack, () => Special, IsPlayerTagSkill, () => _traits, globals, inventory,
             raceSexContract.Player, () => _scripts.References!.ActorRace(pluginStack.RuntimeFormKey(0x14)), () => _scripts.Session.Hardcore,

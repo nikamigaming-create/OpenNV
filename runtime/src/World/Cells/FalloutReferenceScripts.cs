@@ -40,7 +40,8 @@ internal sealed record FalloutReferenceScriptHost(Func<FalloutFormKey, FalloutFo
     Func<FalloutFormKey, bool, FalloutReferencePlacement>? Placement = null,
     Func<bool>? IsPcSleeping = null, Func<FalloutFormKey, int>? Sleeping = null,
     Func<FalloutFormKey, int>? KnockedState = null, FalloutSleepWait? SleepWait = null,
-    Action<FalloutRestRequest>? OpenSleepWaitMenu = null, FalloutPlayerStatistics? Statistics = null);
+    Action<FalloutRestRequest>? OpenSleepWaitMenu = null, FalloutPlayerStatistics? Statistics = null,
+    FalloutGlobalTimeState? GlobalTime = null);
 internal sealed record FalloutReferenceScriptEventResult(FalloutFormKey Reference, string Event, int Blocks, string? Error,
     string? RecoveredError = null);
 internal sealed record FalloutReferenceScriptEvent(string Name, FalloutFormKey? ActionReference = null,
@@ -338,6 +339,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
     {
         budget ??= new();
         var valueStore = world.ScriptValues;
+        var functionBindings = new Dictionary<(string Name, FalloutScriptValue? Caller), FalloutScriptFunction>();
         FalloutScriptEvents Events() => host.Events ?? throw new NotSupportedException("Script event has no process owner.");
         FalloutFormKey? CallingReference() => records.RuntimeFormId(source) == 0x14 ||
             records.GetEffective(source).Signature is "REFR" or "ACHR" or "ACRE" ? source : null;
@@ -479,6 +481,33 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         FalloutScriptFunction? Function(string name) => FunctionFor(name, null);
         FalloutScriptFunction? FunctionFor(string name, FalloutScriptValue? caller)
         {
+            var separator = name.LastIndexOf('.');
+            var operation = name[(separator + 1)..].ToLowerInvariant();
+            // These spellings already share the actual function branches below.
+            // Bind their callable once per invocation and receiver syntax. The
+            // function still reads Reference/Target and mutable state when called.
+            var canonical = operation switch
+            {
+                "getselfalt" or "this" => "getself",
+                "getar" => "getactionref",
+                "geteqobj" => "getequippedobject",
+                "auxvargetflt" => "auxiliaryvariablegetfloat",
+                "auxvartype" => "auxiliaryvariablegettype",
+                "auxvargetref" => "auxiliaryvariablegetref",
+                "auxvargetstr" => "auxiliaryvariablegetstring",
+                _ => operation,
+            };
+            if (canonical is not ("getself" or "getactionref" or "getequippedobject" or
+                "auxiliaryvariablegetfloat" or "auxiliaryvariablegettype" or "auxiliaryvariablegetref" or "auxiliaryvariablegetstring"))
+                return BindFunctionFor(name, caller);
+            var key = (name[..(separator + 1)].ToLowerInvariant() + canonical, caller);
+            if (functionBindings.TryGetValue(key, out var bound)) return bound;
+            var function = BindFunctionFor(key.Item1, caller);
+            if (function is not null) functionBindings.Add(key, function);
+            return function;
+        }
+        FalloutScriptFunction? BindFunctionFor(string name, FalloutScriptValue? caller)
+        {
             var parts = name.Split('.');
             var operation = parts[^1].ToLowerInvariant();
             FalloutFormKey? suppliedTarget = null;
@@ -501,6 +530,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 return statisticFunction;
             if (parts.Length == 1 && FalloutSleepWaitCommands.Function(operation, host.SleepWait, host.OpenSleepWaitMenu) is { } restFunction)
                 return restFunction;
+            if (parts.Length == 1 && FalloutGlobalTimeCommands.Function(operation, host.GlobalTime) is { } globalTimeFunction)
+                return globalTimeFunction;
             if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host.GameTime, host.IsHardcore) is { } timeFunction)
                 return timeFunction;
             if (parts.Length == 1 && FalloutModQueryCommands.Function(records, operation) is { } modQueryFunction)
@@ -899,7 +930,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     Function, UserFunction);
                 return;
             }
-            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
+            if (parts.Length == 1 && operation is "setglobaltimemultiplier" or "sgtm" or "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values,
                     Function, UserFunction);

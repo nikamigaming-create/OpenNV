@@ -9,7 +9,8 @@ public partial class RuntimeCoordinator
     private void LoadGodotLauncher()
     {
         var launcher = new NativeGodotLauncher();
-        launcher.Configure(GodotLauncherProfileStore.Load(_options.GetValueOrDefault("profile-root")));
+        launcher.Configure(GodotLauncherProfileStore.Load(_options.GetValueOrDefault("profile-root")),
+            _options.GetValueOrDefault("launcher-game"), _options.GetValueOrDefault("presentation"));
         launcher.LaunchRequested += request => StartInProcessLaunch(launcher, request);
         AddChild(launcher);
         SetMeta("opennv_product_entry", "godot-native-launcher-v1");
@@ -35,7 +36,7 @@ public partial class RuntimeCoordinator
             };
             // These belong to the living application session. A source-menu
             // reload must keep the same profile and diagnostic input recipient.
-            foreach (var name in new[] { "profile-root", "settings-path", "live-harness", "parity-channel", "parity-capture", "perf-report" })
+            foreach (var name in new[] { "profile-root", "settings-path", "live-harness", "parity-channel", "parity-capture", "perf-report", "native-plugins" })
                 if (sessionOptions.TryGetValue(name, out var value)) _options.Add(name, value);
             request.ModSelection?.WriteOptions(_options);
             if (request.EngineCampaign is "fallout-new-vegas" or "fallout-3")
@@ -80,10 +81,14 @@ public partial class RuntimeCoordinator
     private void ConfigureSelectedContent(string baseRoot, string campaign)
     {
         var mod = FalloutModStackSelection.ReadOptions(_options)?.Resolve(baseRoot);
-        RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), mod?.ActivePlugins, mod?.Settings);
+        var nativeSelection = _options.GetValueOrDefault("native-plugins", "installed");
+        if (nativeSelection is not ("installed" or "none"))
+            throw new ArgumentException("Native plugin selection must be installed or none.");
+        RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), mod?.ActivePlugins, mod?.Settings,
+            nativePluginsEnabled: nativeSelection == "installed");
         var dependency = mod?.Dependencies.SingleOrDefault(row =>
             row.LogicalPath.Equals("nvse_1_4.dll", StringComparison.OrdinalIgnoreCase));
-        if (dependency?.SourcePath is { } host)
+        if (nativeSelection == "installed" && dependency?.SourcePath is { } host)
         {
             var source = RuntimeLiveContentSource.Current ??
                 throw new InvalidOperationException("Selected native dependency has no configured content owner.");

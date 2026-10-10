@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
-    internal const string Schema = "opennv-standalone-Player-scene/v1";
+    internal const string Schema = "opennv-standalone-Player-scene/v2";
     internal FalloutStandalonePlayerSceneSource Source { get; }
     internal Guid Process => _process;
     internal string Stack => _stack;
@@ -47,6 +47,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         history = _history.ToArray(),
         clock = _clock,
         camera = _camera,
+        sceneReference = _sceneReference,
+        sceneReferenceArgument = _sceneReferenceArgument,
+        referenceQuery = _referenceQuery,
         cold = _cold,
         boundary = _boundary,
         failure = _failure,

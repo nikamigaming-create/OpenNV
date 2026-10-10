@@ -285,7 +285,7 @@ internal sealed partial class FalloutReferenceScripts
                 throw new NotSupportedException("Compiled command array value has no adapter owner.");
             return FalloutCompiledParameterNames.Read(argument.SourceParameterType, value.Number) ?? value.Number.ToString("R", CultureInfo.InvariantCulture);
         }
-        string Name(FalloutCompiledCommand command)
+        string Name(FalloutCompiledCommand command, string? boundName = null)
         {
             var declaration = FalloutCompiledCommandDeclarations.Get(command.Opcode, records);
             var receiver = command.Receiver is { } reference ? NonNullReference(reference) : (FalloutFormKey?)null;
@@ -295,11 +295,15 @@ internal sealed partial class FalloutReferenceScripts
             if (receiver is null && declaration.RequiresReference && records.RuntimeFormId(caller) != 0x14 &&
                 records.GetEffective(caller).Signature is not ("REFR" or "ACHR" or "ACRE"))
                 throw new InvalidDataException("Compiled reference command has no actual calling reference.");
-            var executionName = FalloutCompiledSemanticBinding.Read(declaration).ExecutionName;
+            var executionName = boundName ?? FalloutCompiledSemanticBinding.Read(declaration).ExecutionName;
             return receiver is { } key ? bindings.BindCompiledForm(key) + "." + executionName : executionName;
         }
         FalloutScriptValue Invoke(FalloutCompiledCommand command, FalloutScriptFunction function)
         {
+            var required = function.Arguments.Count(kind => kind is not (FalloutScriptArgumentKind.OptionalNumber or
+                FalloutScriptArgumentKind.OptionalIdentifier or FalloutScriptArgumentKind.OptionalString or FalloutScriptArgumentKind.OptionalValue));
+            if (command.Arguments.Count < required || command.Arguments.Count > function.Arguments.Count)
+                throw new InvalidDataException("Compiled query argument count differs from its actual shared function.");
             var arguments = command.Arguments.Select((argument, index) =>
             {
                 if (index >= function.Arguments.Count)
@@ -308,6 +312,9 @@ internal sealed partial class FalloutReferenceScripts
                 var identifier = kind is FalloutScriptArgumentKind.Identifier or FalloutScriptArgumentKind.OptionalIdentifier
                     ? Token(argument) : null;
                 var value = argument.Value;
+                if (kind is FalloutScriptArgumentKind.Number or FalloutScriptArgumentKind.OptionalNumber)
+                    if (value.Kind != FalloutScriptValueKind.Number)
+                        throw new InvalidDataException("Compiled query numeric kind differs from its shared owner.");
                 if (kind is FalloutScriptArgumentKind.String or FalloutScriptArgumentKind.OptionalString or FalloutScriptArgumentKind.SourceString)
                     if (value.Kind != FalloutScriptValueKind.String)
                         throw new InvalidDataException("Compiled query string kind differs from its shared owner.");
@@ -317,13 +324,19 @@ internal sealed partial class FalloutReferenceScripts
         }
         FalloutScriptValue Query(FalloutCompiledCommand command)
         {
-            var name = Name(command);
-            if (FalloutCompiledSemanticBinding.Read(FalloutCompiledCommandDeclarations.Get(command.Opcode, records)).Kind !=
-                FalloutCompiledSemanticKind.Query)
-                throw new NotSupportedException($"Compiled query {command.Opcode:x4}/{name} has no admitted authoritative execution owner.");
-            var function = sharedFunction!(name) ?? throw new NotSupportedException(
-                $"Compiled query {command.Opcode:x4}/{name} has no authoritative shared gameplay owner.");
-            return Invoke(command, function);
+            var declaration = FalloutCompiledCommandDeclarations.Get(command.Opcode, records);
+            try
+            {
+                var bound = FalloutCompiledSemanticBinding.ResolveQuery(declaration,
+                    sourceName => sharedFunction!(Name(command, sourceName))) ?? throw new NotSupportedException(
+                    "Query has no authoritative shared gameplay owner.");
+                return Invoke(command, bound.Function);
+            }
+            catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException or OverflowException)
+            {
+                throw new NotSupportedException(
+                    $"Compiled query {command.Opcode:x4}/{declaration.Name}/{declaration.Alias}: {error.Message}", error);
+            }
         }
         FalloutScriptValue? NativeQuery(ushort opcode, ushort? receiver, ReadOnlyMemory<byte> payload)
         {
@@ -362,10 +375,12 @@ internal sealed partial class FalloutReferenceScripts
                 if (NativeQuery(instruction.Opcode, instruction.Receiver, instruction.Payload) is not null) return;
                 var declaration = FalloutCompiledCommandDeclarations.Get(instruction.Opcode, records);
                 var binding = FalloutCompiledSemanticBinding.Read(declaration);
-                var query = binding.Kind == FalloutCompiledSemanticKind.Query;
-                if (binding.Kind == FalloutCompiledSemanticKind.Unowned)
-                    throw new NotSupportedException($"Compiled command {instruction.Opcode:x4}/{declaration.Name}/{declaration.Alias} has no admitted authoritative execution owner.");
                 var command = FalloutCompiledOperands.Command(instruction.Opcode, instruction.Receiver, instruction.Payload, operands);
+                if (binding.Kind is FalloutCompiledSemanticKind.Query or FalloutCompiledSemanticKind.Unowned)
+                {
+                    _ = Query(command);
+                    return;
+                }
                 var name = Name(command);
                 if (binding.Kind == FalloutCompiledSemanticKind.Message)
                 {
@@ -380,7 +395,6 @@ internal sealed partial class FalloutReferenceScripts
                     host.Apply(new(FalloutReferenceEffectKind.Message, caller, target,
                         Message: new(program.Source.FormKey, calling, message.Substitutions)));
                 }
-                else if (query) _ = Query(command);
                 else
                 {
                     RequireCompiledEffectArguments(command, binding.ExecutionName);

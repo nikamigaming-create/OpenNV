@@ -5,7 +5,8 @@ using OpenNV.Runtime.Content;
 if (args is ["--head-persistence-contracts"]) { HeadTrackingProbe.Run(); return; }
 
 BitmapFontEncodingProbe.Run();
-if (args is ["--font-encoding-contracts"]) return;
+BitmapFontMetricContracts.Run();
+if (args is ["--font-encoding-contracts"] or ["--font-metric-contracts"]) return;
 
 if (args is ["--inspect-idle-tree", var treeRoot, var modelPrefix])
 {

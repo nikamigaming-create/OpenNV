@@ -18,8 +18,7 @@ internal static class FalloutNativePluginStartupDeclarations
     {
         var inventory = new List<FalloutNativeModuleSource>();
         var modules = new List<FalloutNativePluginModuleAdmission>();
-        var logicalPaths = source.ResourcePathsUnder("NVSE/Plugins").Where(path =>
-            Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        var logicalPaths = source.NativePluginResourcePaths().Order(StringComparer.OrdinalIgnoreCase).ToArray();
         uint queryHandle = 0;
         foreach (var logical in logicalPaths)
         {
@@ -91,7 +90,9 @@ internal static class FalloutNativePluginStartupDeclarations
         }
         var runtimeHash = Hash(source.FalloutExecutablePath);
         if (modules.Count == 0 && !inventory.Any(row => row.Disposition == FalloutNativeModuleDisposition.SourceFailure))
-            return new(source, runtimeHash, "", "", null, "no-selected-native-images", "source-top-level-selection", []) { Inventory = inventory.AsReadOnly() };
+            return new(source, runtimeHash, "", "", null, "no-selected-native-images",
+                source.NativePluginsEnabled ? "source-top-level-selection" : "explicit-user-native-selection:none", [])
+            { Inventory = inventory.AsReadOnly() };
         if (source.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
             throw new NotSupportedException("The selected native source graph has no standalone FOSE host ABI owner.");
         var host = declaredHost ?? Host(source);

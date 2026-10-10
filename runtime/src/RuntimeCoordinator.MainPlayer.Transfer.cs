@@ -84,6 +84,7 @@ public partial class RuntimeCoordinator
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); Check();
             }
             RequireMainPlayerPublishedTarget(world, _nativeActiveCell!.Cell.FormKey);
+            ConsumeActualCellSkyMode(invocation, world, _nativeActiveCell.Cell.FormKey);
             if (world.SourceLinkedPlayerConstructed)
                 world.CommitSourcePlayerLinkedCell(invocation, _nativeActiveCell.Cell.FormKey, () =>
                     (_nativeOpeningStageDriver ?? throw new InvalidOperationException("Player ParentCELL has no actual source driver."))
@@ -143,6 +144,7 @@ public partial class RuntimeCoordinator
         owner.ObserveForCapture();
         if (world.ReadMainPlayerSourceCell(target.Source.Cell).Source != target.Source)
             throw new InvalidDataException("Player attachment changed winning target CELL/world bytes.");
+        ConsumeActualCellSkyMode(invocation, world, target.Source.Cell);
         var previous = _nativeActiveCell ?? throw new InvalidOperationException("Player attachment has no current source graph.");
         // Retain the exact already-published union. Selecting a different
         // active member must not silently narrow a multi-CELL native root.

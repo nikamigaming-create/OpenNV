@@ -2,7 +2,7 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.World.Cells;
 
-internal sealed class FalloutQueuedTaskPriorities : IDisposable
+internal sealed partial class FalloutQueuedTaskPriorities : IDisposable
 {
     private const string Schema = "opennv-source-task-priority/v1";
     private readonly object _gate = new();

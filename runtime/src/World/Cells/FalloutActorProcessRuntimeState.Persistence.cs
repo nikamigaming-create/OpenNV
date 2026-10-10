@@ -8,9 +8,11 @@ internal sealed partial class FalloutActorProcessRuntimeState
     internal FalloutActorProcessRuntimeSnapshot Capture()
     {
         RequireNotBusy(); RequireMainScriptClosureBoundary(retiring: false); RequireMainUtilityBoundary(retiring: false);
+        var timer = _cachedSourceTimer is null ? null : CaptureSourceCachedTimer();
+        var globalTime = CaptureSourceGlobalTime(timer);
         return new(Schema, _source.Contract, _stack, _player, _process, _sequence, _forced, _travelCounter,
             _main.ToArray(), _travel, _actors.Values.ToArray(), _cold, CaptureMainFrame(), CaptureSourceFistp(), CaptureStandaloneMain(),
-            _cachedSourceTimer is null ? null : CaptureSourceCachedTimer());
+            timer, globalTime);
     }
     private void Restore(FalloutActorProcessRuntimeSnapshot saved)
     {
@@ -51,6 +53,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 FalloutActorProcessRuntimeDeclaration.ForExecutable(timer.Source.EngineSha256).Contract != saved.Contract)
                 throw new InvalidDataException("Cached timer continuation differs from the same captured Main and selected executable.");
         }
+        ValidateGlobalTimeContinuation(saved);
         if (saved.StandaloneMain is { } standalone) ValidateStandaloneMain(standalone, saved);
         var active = 0; long previous = 0; var identities = new HashSet<Guid>();
         foreach (var item in saved.MainOperations)

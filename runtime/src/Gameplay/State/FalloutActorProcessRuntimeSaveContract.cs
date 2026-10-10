@@ -13,6 +13,7 @@ internal static class FalloutActorProcessRuntimeSaveContract
         if (runtime is null || common is null || processes is null)
             throw new InvalidDataException("Current save omitted its actual Main/Player/life/common process ownership.");
         FalloutActorProcessRuntimeState.Validate(runtime); FalloutActorProcessRuntimeState.RequireStandaloneMainPlayable(runtime);
+        FalloutActorProcessRuntimeState.RequireCurrentGlobalTime(runtime);
         FalloutActorProcessCommonState.Validate(common);
         FalloutActorProcessManager.ValidateShape(processes);
         if (runtime.Contract != common.Contract || runtime.Stack != common.Stack || runtime.Stack != processes.Stack ||
@@ -50,6 +51,8 @@ internal static class FalloutActorProcessRuntimeSaveContract
         FalloutStandalonePlayerSceneSaveContract.ValidateSource(records, runtime);
         if (runtime.Contract != selected.Contract || runtime.Stack != source.StackId || runtime.Player != records.RuntimeFormKey(0x14))
             throw new InvalidDataException("Runtime/common cold state changed its selected executable/stack/player declaration.");
+        if (runtime.GlobalTime is { } globalTime && globalTime.Source.Timer.EngineSha256 != selected.ExecutableSha256)
+            throw new InvalidDataException("Global time cold state changed the selected original executable.");
         var references = saved.References ?? throw new InvalidDataException("Process cold state has no real reference graph.");
         FalloutReferenceSnapshot.Validate(references);
         var placed = references.Where(reference => records.GetEffective(reference.Reference).Signature is "ACHR" or "ACRE")

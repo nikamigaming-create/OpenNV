@@ -125,7 +125,7 @@ public partial class RuntimeCoordinator
                 ChangeActorValue: (actor, name, operation, value) => _nativeOpeningStageDriver!.ChangeActorValue(actor, name, operation, value),
                 Inventory: _nativeOpeningStageDriver!.InventoryCommands, Challenges: _nativeQuestScripts!.Scripts.Challenges,
                 HeadingAngle: (caller, target) => _nativeOpeningStageDriver!.ReferenceHeadingAngle(caller, target),
-                TagSkills: _nativeOpeningStageDriver!.PlayerTagSkills),
+                TagSkills: _nativeOpeningStageDriver!.PlayerTagSkills, GlobalTime: _nativeReferences!.ScriptGlobalTime),
             ReferenceTransform, _configuration.World.GameUnitsToMeters, _configuration.Player.CollisionLayer);
         root.AddChild(events);
         _nativeReferenceEvents = events;
