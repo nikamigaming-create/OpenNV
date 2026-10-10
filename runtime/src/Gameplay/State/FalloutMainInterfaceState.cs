@@ -18,7 +18,7 @@ internal sealed class FalloutMainInterfaceState
     private readonly string _stack;
     private readonly Guid _process, _constructor = Guid.NewGuid();
     private readonly uint[] _slots = new uint[10];
-    private readonly byte[] _active = new byte[60];
+    private readonly byte[] _active = new byte[FalloutMainInterfaceSource.ActiveMenuCount];
     private readonly List<FalloutStandaloneInterfaceObject> _objects = [];
     private readonly Dictionary<Guid, Func<bool>> _native = [];
     private FalloutStandaloneInterfaceObject? _manager, _dialog;
@@ -143,7 +143,7 @@ internal sealed class FalloutMainInterfaceState
     }
     private bool Foreign()
     {
-        Guid? selected = FalloutMainInterfaceSource.OwnSelectorCodes.ToArray().Any(code => _active[checked((int)code - 1001)] != 0)
+        Guid? selected = FalloutMainInterfaceSource.OwnSelectorCodes.ToArray().Any(code => FalloutMainInterfaceSource.ReadActiveMenu(_active, code))
             ? _manager?.Identity : _alternate;
         return selected is not null && selected != _manager?.Identity;
     }
@@ -199,7 +199,8 @@ internal sealed class FalloutMainInterfaceState
         ArgumentNullException.ThrowIfNull(value);
         if (value.Schema != Schema || value.Source is null || string.IsNullOrWhiteSpace(value.Stack) || value.CapturedProcess == Guid.Empty ||
             value.Constructor == Guid.Empty || value.Sequence < 0 || value.Enabled > 1 || value.DialogByte > 1 || value.Slots is not { Count: 10 } ||
-            value.ActiveMenus is not { Count: 60 } || value.Objects is null || value.Objects.Any(item => item is null || item.Native is null) ||
+            value.ActiveMenus is null || value.ActiveMenus.Count != FalloutMainInterfaceSource.ActiveMenuCount ||
+            value.Objects is null || value.Objects.Any(item => item is null || item.Native is null) ||
             value.Objects.Select(item => item.Identity).Distinct().Count() != value.Objects.Count ||
             value.Failure is not null && string.IsNullOrWhiteSpace(value.Failure))
             throw new InvalidDataException("Main interface omitted original fields or actual publication/failure history.");

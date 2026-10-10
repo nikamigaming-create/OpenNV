@@ -196,6 +196,7 @@ public:
         catch (...) { faulted_ = true; throw; }
     }
     #include "opennv_plugin_callable_sites.inc"
+    #include "opennv_plugin_global_pages.inc"
 
     void close() {
         // Terminal cleanup still attempts every retained reservation after a
@@ -217,7 +218,7 @@ public:
             }
         }
         if (first) { faulted_ = true; throw CallablePageFailure(first, "Shared callable pages did not all retire."); }
-        pages_.clear(); entries_.clear(); site_entries_.clear(); closed_ = true;
+        pages_.clear(); entries_.clear(); site_entries_.clear(); global_cells_.clear(); global_pages_.clear(); closed_ = true;
     }
 };
 }

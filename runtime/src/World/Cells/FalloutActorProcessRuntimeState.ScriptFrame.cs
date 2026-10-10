@@ -46,8 +46,13 @@ internal sealed partial class FalloutActorProcessRuntimeState : IFalloutChalleng
         _scriptFrameFade = fade; var lease = _scriptFrameLease = Guid.NewGuid();
         return new ScriptFrameFadeLease(this, lease);
     }
-    private sealed class ScriptFrameFadeLease(FalloutActorProcessRuntimeState owner, Guid lease) : IDisposable
+    private sealed class ScriptFrameFadeLease(FalloutActorProcessRuntimeState owner, Guid lease) : IFalloutMainNativeDeliveryLease
     {
+        public Guid Process => owner._process;
+        public Guid Identity => lease;
+        public string? SourceIdentity => owner._scriptCallerSource?.Identity;
+        public int ManagedThread { get; } = System.Environment.CurrentManagedThreadId;
+        public FalloutMainNativeLeaseRole Role => FalloutMainNativeLeaseRole.Fade;
         public void Dispose()
         {
             if (owner._scriptFrameLease != lease) return;

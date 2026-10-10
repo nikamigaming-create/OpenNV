@@ -28,7 +28,10 @@ public partial class RuntimeCoordinator
                 () => driver.ExperienceHudAdmission(_nativeXr is null,
                     _nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession),
                 () => driver.ExperiencePendingLevel, () => driver.ExperienceCharacterGenerationEnded,
-                driver.ReadExperienceUiClock, _nativeUi);
+                driver.ReadExperienceUiClock,
+                () => driver.BlockingExecutionFault ?? _nativeCampaignLoadFailure?.Message ??
+                    (_retiringNativeSession ? "actual-native-session-retirement" :
+                    _nativeSessionTransitioning ? "actual-native-session-transition" : null), _nativeUi);
         }
         catch
         {

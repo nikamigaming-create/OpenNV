@@ -26,9 +26,10 @@ internal sealed partial class NativeOwnedExperienceHud : Control
     internal static NativeOwnedExperienceHud Attach(Node parent, FalloutPluginStack records,
         FalloutExperienceHudSource source, FalloutExperienceNotifications owner,
         Func<FalloutExperienceNotificationAdmission> admission, Func<bool> pendingLevel, Func<bool> characterGenerationEnded,
-        Func<FalloutExperienceClockReading> clock, FalloutUiComponentStore? scriptUi = null)
+        Func<FalloutExperienceClockReading> clock, Func<string?> cancellation, FalloutUiComponentStore? scriptUi = null)
     {
         ArgumentNullException.ThrowIfNull(parent);
+        ArgumentNullException.ThrowIfNull(cancellation);
         NativeOwnedExperienceHud? result = null;
         try
         {
@@ -36,7 +37,7 @@ internal sealed partial class NativeOwnedExperienceHud : Control
             // A rejected font/art/source arm cannot leave a detached Control.
             var prepared = Prepare(records, source, owner, scriptUi);
             result = new(records, source, owner, prepared.Tiles, prepared.Settings, prepared.SafeZoneScale,
-                admission, pendingLevel, characterGenerationEnded, clock);
+                admission, pendingLevel, characterGenerationEnded, clock, cancellation);
             parent.AddChild(result);
             if (result.Error is { } error) throw new InvalidOperationException(error);
             return result;
@@ -84,10 +85,11 @@ internal sealed partial class NativeOwnedExperienceHud : Control
     private NativeOwnedExperienceHud(FalloutPluginStack records, FalloutExperienceHudSource source, FalloutExperienceNotifications owner,
         NativeOwnedMenuTree tiles, FalloutInstallationSettings settings, int safeZoneScale,
         Func<FalloutExperienceNotificationAdmission> admission, Func<bool> pendingLevel, Func<bool> characterGenerationEnded,
-        Func<FalloutExperienceClockReading> clock)
+        Func<FalloutExperienceClockReading> clock, Func<string?> cancellation)
     {
         _records = records; _source = source; _owner = owner; _tiles = tiles; _settings = settings; _safeZoneScale = safeZoneScale;
         _admission = admission; _pendingLevel = pendingLevel; _characterGenerationEnded = characterGenerationEnded; _clock = clock;
+        _cancellation = cancellation;
         Name = "NativeExperienceHud"; MouseFilter = MouseFilterEnum.Ignore; ProcessMode = ProcessModeEnum.Always;
     }
 
@@ -95,6 +97,8 @@ internal sealed partial class NativeOwnedExperienceHud : Control
     {
         try
         {
+            if (_retiring || _view != Guid.Empty || _postDrawBound)
+                throw new InvalidOperationException("Retired or already entered XP presentation cannot reenter its native lifetime.");
             _view = _owner.AttachPresentation(_source.Contract);
             _viewport = new(this, Layout); Layout();
             RenderingServer.FramePostDraw += FramePresented; _postDrawBound = true;
@@ -127,6 +131,7 @@ internal sealed partial class NativeOwnedExperienceHud : Control
         if (Error is not null || _view == Guid.Empty || _retiring) return;
         try
         {
+            if (!ObserveNativeUpdateLifetime()) return;
             var admission = _admission();
             Visible = admission == FalloutExperienceNotificationAdmission.Ready;
             if (admission == FalloutExperienceNotificationAdmission.Ready && !IsVisibleInTree())
@@ -188,6 +193,7 @@ internal sealed partial class NativeOwnedExperienceHud : Control
         if (Error is not null || !Visible || _retiring) return;
         try
         {
+            if (!ObserveNativeUpdateLifetime()) return;
             ValidatePublication(_drawFrame);
             _tiles.Draw(this); _submittedFrame = _drawFrame;
             _submittedIdleRevision = _drawFrame is null ? _owner.IdleRevision(_view) : null;
@@ -202,6 +208,7 @@ internal sealed partial class NativeOwnedExperienceHud : Control
         _submittedIdleRevision = null;
         try
         {
+            if (!ObserveNativeUpdateLifetime()) return;
             if (submitted is { } frame && _owner.CurrentSubmission(frame)) _owner.Presented(frame, _clock());
             else if (idle is { } revision && _owner.CurrentIdleSubmission(_view, revision)) _owner.PresentedIdle(_view, revision);
         }
@@ -232,8 +239,10 @@ internal sealed partial class NativeOwnedExperienceHud : Control
     }
     private void Finished(AudioStreamPlayer player)
     {
+        if (_retiring) return;
         try
         {
+            if (!ObserveNativeUpdateLifetime()) return;
             if (!_voices.TryGetValue(player, out var request)) throw new InvalidOperationException("XP native sound retired twice.");
             _owner.SoundFinished(_view, request.Sequence, request.EditorId); _voices.Remove(player); player.QueueFree();
         }
@@ -251,24 +260,10 @@ internal sealed partial class NativeOwnedExperienceHud : Control
         Error ??= error.Message; _owner.RetainFailure(error); _drawFrame = null; _submittedFrame = null; _submittedIdleRevision = null;
         if (first) GD.PushError($"OPENNV_EXPERIENCE_NOTIFICATION_FAIL {error.Message}");
     }
-    // The actual coordinator session-retirement transaction calls this before
-    // source disposal. Cancellation releases native voices; it never emits a
-    // Finished receipt, retires a UI sequence or makes advancement ready.
-    internal void RetireForSession()
-    {
-        if (_retiring) return;
-        _retiring = true; Visible = false; _drawFrame = null; _submittedFrame = null; _submittedIdleRevision = null;
-        foreach (var player in _voices.Keys.ToArray()) if (GodotObject.IsInstanceValid(player)) player.Stop();
-        _voices.Clear();
-        if (_view != Guid.Empty) { _owner.DetachPresentation(_view); _view = Guid.Empty; }
-    }
     public override void _ExitTree()
     {
-        _viewport?.Dispose(); _viewport = null;
-        if (_postDrawBound) { RenderingServer.FramePostDraw -= FramePresented; _postDrawBound = false; }
-        if (!_retiring && _voices.Count != 0) _owner.RetainFailure(new InvalidOperationException("XP native sound owner exited before its actual finite retirement."));
-        foreach (var player in _voices.Keys) if (GodotObject.IsInstanceValid(player)) player.Stop();
-        _voices.Clear();
-        if (_view != Guid.Empty) { _owner.DetachPresentation(_view); _view = Guid.Empty; }
+        if (!_retiring && _voices.Count != 0)
+            _owner.RetainFailure(new InvalidOperationException("XP native sound owner exited before its actual finite retirement."));
+        _presentationLifetime.Retire("actual-native-view-exit", RetireNativePresentation);
     }
 }

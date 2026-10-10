@@ -9,8 +9,11 @@ internal sealed partial class FalloutActorProcessRuntimeState
         throw new NotSupportedException("Actual selected Main Player child has no constructor.");
     internal FalloutMainPlayerPendingState MainPlayerPendingConsumers => _mainPlayerPendingConsumers ??
         throw new NotSupportedException("Actual Player pending/refcount/loader fields have no source constructor.");
-    private void ConstructMainPlayerPendingConsumers(FalloutMainPlayerCellSource source, FalloutMainPlayerPendingSnapshot? saved) =>
+    private void ConstructMainPlayerPendingConsumers(FalloutMainPlayerCellSource source, FalloutMainPlayerPendingSnapshot? saved)
+    {
         _mainPlayerPendingConsumers = new(FalloutMainPlayerPendingSource.Read(source), _stack, _process, saved);
+        ConstructCurrentDeferredRelease(source, saved);
+    }
     internal static void RequirePendingConsumersContinuation(FalloutMainPlayerCellSnapshot saved)
     {
         FalloutMainPlayerPendingState.Validate(saved.PendingConsumers);

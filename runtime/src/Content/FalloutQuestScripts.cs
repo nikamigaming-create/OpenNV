@@ -224,7 +224,8 @@ internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action
     Func<bool, bool>? CanContinueCompiled = null,
     Func<bool>? IsPcSleeping = null, Func<FalloutFormKey, int>? Sleeping = null,
     Func<FalloutFormKey, int>? KnockedState = null, FalloutSleepWait? SleepWait = null,
-    Action<FalloutRestRequest>? OpenSleepWaitMenu = null, FalloutPlayerStatistics? Statistics = null);
+    Action<FalloutRestRequest>? OpenSleepWaitMenu = null, FalloutPlayerStatistics? Statistics = null,
+    FalloutGlobalTimeState? GlobalTime = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -904,6 +905,8 @@ internal sealed partial class FalloutQuestScripts
                 return statisticFunction;
             if (parts.Length == 1 && FalloutSleepWaitCommands.Function(operation, host?.SleepWait, host?.OpenSleepWaitMenu) is { } restFunction)
                 return restFunction;
+            if (parts.Length == 1 && FalloutGlobalTimeCommands.Function(operation, host?.GlobalTime) is { } globalTimeFunction)
+                return globalTimeFunction;
             if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host?.GameTime, () => Session.Hardcore) is { } timeFunction)
                 return timeFunction;
             if (parts.Length == 1 && FalloutModQueryCommands.Function(_records, operation) is { } modQueryFunction)
@@ -983,7 +986,7 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
-            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
+            if (parts.Length == 1 && operation is "setglobaltimemultiplier" or "sgtm" or "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
                 return;

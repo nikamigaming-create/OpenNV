@@ -10,6 +10,13 @@ internal sealed partial class RuntimeLiveContentSource
     private Task<FalloutNativePluginCampaignSelection>? _nativePluginDeclarationRead;
     private bool _nativePluginDeclarationRetiring;
     private Exception? _nativePluginDeclarationReadFailure;
+
+    // Explicit launch selection is part of this source/save identity. A base
+    // game profile selects no original extension DLLs; an installed-mod profile
+    // retains the complete winning DLL graph and every reached failure.
+    internal IEnumerable<string> NativePluginResourcePaths() => NativePluginsEnabled
+        ? ResourcePathsUnder("NVSE/Plugins").Where(path => Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase))
+        : [];
     internal void BindNativePluginHostDependency(FalloutNativePluginHostDependency dependency)
     {
         lock (_nativePluginDeclarationGate)

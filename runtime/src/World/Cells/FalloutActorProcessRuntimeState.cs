@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.World.Cells;
 // CELL attachment, pause, combat flag or physical query never writes them.
 internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-runtime/v2";
+    internal const string Schema = "opennv-actor-process-runtime/v3";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly FalloutFormKey _player;
@@ -35,6 +35,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         _standaloneInterface?.SaveBlocker is { } ui ? ui :
         SourceMainInterfaceSaveBlocker is { } sourceInterface ? sourceInterface :
         SourceMainCachedTailSaveBlocker is { } tail ? tail :
+        SourceGlobalTimeSaveBlocker is { } globalTime ? globalTime :
         SourceCachedTimerSaveBlocker is { } timer ? timer :
         MainScriptCallerSaveBlocker is { } scripts ? scripts :
         MainPlayerCellSaveBlocker is { } playerCell ? playerCell :
@@ -63,6 +64,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         mainInterface = _sourceMainInterface?.State,
         mainCachedTail = SourceMainCachedTailState,
         cachedTimer = SourceCachedTimerState,
+        globalTime = SourceGlobalTimeState,
         cachedTimerBoundary = SourceCachedTimerRuntimeBoundary,
         playerCell = MainPlayerCellState,
         utilityCommands = MainUtilityCommandState,
@@ -188,7 +190,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         }
         Retire(RetireMainPlayerCell); Retire(RetireStandaloneMain);
         Retire(RetireSourceMainCachedTail); Retire(RetireSourceMainInterface);
-        Retire(RetireSourceCachedTimer); Retire(_sourceFistp.Dispose);
+        Retire(RetireSourceGlobalTime); Retire(RetireSourceCachedTimer); Retire(_sourceFistp.Dispose);
         if (failures.Count != 0) throw new AggregateException("Source process child retirement retained independent failures.", failures);
         _disposed = true; _actors.Clear();
     }

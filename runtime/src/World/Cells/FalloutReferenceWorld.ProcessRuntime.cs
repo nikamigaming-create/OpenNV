@@ -48,8 +48,11 @@ internal sealed partial class FalloutReferenceWorld
                     throw new InvalidDataException("Cold Main omitted its constructed source cached timer.");
                 inputs.PrepareSourceCachedTimer(FalloutSourceFrameTimerConfiguration.Read(campaign.Receipt, records.IniSettings),
                     runtime?.CachedTimer);
+                if (runtime is not null && runtime.GlobalTime is null)
+                    throw new InvalidDataException("Cold Main omitted its global simulation/audio continuation.");
+                inputs.PrepareSourceGlobalTime(FalloutGlobalTimeSource.Read(campaign.Receipt), runtime?.GlobalTime);
             }
-            else if (runtime?.CachedTimer is not null)
+            else if (runtime?.CachedTimer is not null || runtime?.GlobalTime is not null)
                 throw new NotSupportedException("Cold cached timer has no matching selected source constructor.");
             fields = new(declaration, stack, ReadCombatActorIdentity, ReadActualProcessGameplay, ReadActualProcessBody, common);
             fields.BindSource3DInitializer(ReadActualSourceProcess3D);
@@ -67,6 +70,7 @@ internal sealed partial class FalloutReferenceWorld
         {
             var failures = new List<Exception> { original };
             try { fields?.Dispose(); } catch (Exception error) { failures.Add(error); }
+            try { inputs.RetireSourceGlobalTime(); } catch (Exception error) { failures.Add(error); }
             try { inputs.RetireSourceCachedTimer(); } catch (Exception error) { failures.Add(error); }
             try { inputs.Dispose(); } catch (Exception error) { failures.Add(error); }
             if (failures.Count > 1)
@@ -202,6 +206,7 @@ internal sealed partial class FalloutReferenceWorld
     }
     private void RetireActualProcessRuntime()
     {
+        RequireCampaignMainNativeDeliveryClosed();
         if (_rawPlayerPlacementLease is not null) throw new NotSupportedException("Actual Player transfer still owns its native placement consumer.");
         if (_processBodies.Count != 0) throw new NotSupportedException("Actual common process source still owns native body consumers.");
         // The manager retires first. Failed common/runtime retirement retains

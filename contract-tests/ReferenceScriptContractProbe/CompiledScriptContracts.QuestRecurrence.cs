@@ -316,7 +316,7 @@ internal static partial class CompiledScriptContracts
     {
         foreach (var code in new[] { Join(Instruction(0x1d), Block(37, Set('f', 1, " 1"))),
             Join(Instruction(0x1d), Block(0, Instruction(0x16, Join(U16(1), U16(2), new byte[] { 32, 49 })))),
-            Join(Instruction(0x1d), Instruction(0x10, Join(U16(1), U32(4), U16(1), new byte[] { (byte)'n' }, U32(1001))), Instruction(0x11)) })
+            Join(Instruction(0x1d), Instruction(0x10, Join(U16(1), U32(4), U16(1), new byte[] { (byte)'f' }, U16(1))), Instruction(0x11)) })
         {
             var selected = Path.Combine(directory, Guid.NewGuid().ToString("N")); Directory.CreateDirectory(selected);
             File.WriteAllBytes(Path.Combine(selected, "Bytecode.esm"), RecurrenceFixture(null, code));

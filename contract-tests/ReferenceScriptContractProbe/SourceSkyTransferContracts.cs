@@ -13,6 +13,7 @@ internal static partial class SourceSkyTransferContracts
     {
         NativeChildSourceContracts();
         MoonContracts();
+        HdrProducerContracts();
         using var fixture = new SourceFixture();
         var images = new FalloutImageSpaceState(); var process = Guid.NewGuid();
         var sky = new FalloutSkyTransferState(Declaration, fixture.Records, images, Stack, .5f);

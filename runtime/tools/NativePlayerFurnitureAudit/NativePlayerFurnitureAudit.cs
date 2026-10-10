@@ -129,7 +129,7 @@ public partial class NativePlayerFurnitureAudit : Node3D
                         throw new InvalidOperationException("Furniture lost its actual player state/body.");
                     occupied = true;
                     occupiedIndex = state.GetProperty("marker").GetInt32();
-                    if (!player.RequestFurnitureExit()) throw new InvalidOperationException("Occupied furniture did not accept exit.");
+                    CheckActualFurnitureActivation(player);
                 }
                 if (phase == "none" && occupied) break;
             }
@@ -137,7 +137,7 @@ public partial class NativePlayerFurnitureAudit : Node3D
                 throw new InvalidOperationException("Furniture phase or reference lifetime is incomplete.");
             if (occupiedIndex is not { } releasedIndex || !world.ReserveFurnitureSeat(reference.FormKey, releasedIndex, records.RuntimeFormKey(0x14)))
                 throw new InvalidOperationException("Completed player furniture did not release its source reservation.");
-            GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_AUDIT_PASS reference={reference.FormKey} entry=true body=true loop=true exit=true sittingQuery=true sourceCollision={args.Length >= 4} recording=off ordinary-input-and-pixels=unverified");
+            GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_AUDIT_PASS reference={reference.FormKey} entry=true body=true loop=true exit=true sittingQuery=true sourceCollision={args.Length >= 4} modalLease=true sourceControls=true xrExitRequest=true recording=off ordinary-input-and-pixels=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }

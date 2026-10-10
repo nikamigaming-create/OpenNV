@@ -12,6 +12,15 @@ internal sealed partial class NativePluginExecutionDomain
     private readonly List<NativeNvseInventoryPublication> _nvseInventoryPending = [];
     private readonly List<NativeNvseDataCallback> _nvseDataCallbacks = [];
     internal IReadOnlyList<NativeNvseDataCallback> NvseDataCallbacks => _nvseDataCallbacks.AsReadOnly();
+
+    // Every entered native invocation synchronizes an already constructed
+    // DIHookControl before its own host callback. Source memory publication
+    // retains that same device owner rather than skipping the invocation prefix.
+    private bool IsNvseInputExchangeCallback(Frame frame) =>
+        _nvseData is not null && _nvseInputAddress != 0 &&
+        frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == 0x500 &&
+        frame.Payload.Length >= 20 &&
+        System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(16, 4)) == (uint)NativeNvseDataCall.InputExchange;
     internal object NvseDataState => new
     {
         InterfaceVersion = _nvseDataVersion,

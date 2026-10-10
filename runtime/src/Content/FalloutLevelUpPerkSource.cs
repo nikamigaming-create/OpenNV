@@ -5,7 +5,7 @@ using System.Text;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutLevelUpPerkEffect(byte Type, byte Rank, byte Priority, int SourceIndex,
-    FalloutFormKey? Form, byte? QuestStageBits, byte? EntryPoint);
+    FalloutFormKey? Form, byte? QuestStageBits, byte? EntryPoint, bool DataPresent = true);
 internal sealed record FalloutLevelUpPerkSource(FalloutFormKey Form, string SourceSha256, string EditorId,
     string? Name, string? Description, string? Icon, string? SmallIcon, bool Trait, byte MinimumLevel,
     byte MaximumRank, bool Playable, bool Hidden, IReadOnlyList<FalloutCondition> Conditions,
@@ -35,7 +35,18 @@ internal sealed record FalloutLevelUpPerkSource(FalloutFormKey Form, string Sour
                 throw new InvalidDataException("Perk effect is unterminated or overlaps another effect.");
             var group = fields[(index + 1)..end];
             var payloads = group.Where(field => field.Signature == "DATA").ToArray();
-            if (payloads.Length != 1) throw new InvalidDataException("Perk effect has missing or duplicate data.");
+            // A source ability entry can be serialized with only its PRKE and
+            // PRKF. Keep the absent declaration and its real entry index; this
+            // metadata reader does not create a spell or certify its application.
+            if (header[0] == 1 && group.Length == 0)
+            {
+                effects.Add(new(header[0], header[1], header[2], effects.Count, null, null, null, DataPresent: false));
+                index = end;
+                continue;
+            }
+            if (payloads.Length != 1)
+                throw new InvalidDataException($"Perk {form} effect {effects.Count} has {payloads.Length} DATA declarations " +
+                    $"before its terminator ({string.Join(",", group.Select(field => field.Signature + ":" + field.Data.Length))}).");
             var payload = payloads[0].Data.Span;
             FalloutFormKey? effectForm = null; byte? stage = null, entry = null;
             switch (header[0])
@@ -43,7 +54,7 @@ internal sealed record FalloutLevelUpPerkSource(FalloutFormKey Form, string Sour
                 case 0 when payload.Length == 8:
                     effectForm = source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(payload)); stage = payload[4]; break;
                 case 1 when payload.Length == 4:
-                    effectForm = source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(payload)); break;
+                    effectForm = source.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(payload)); break;
                 case 2 when payload.Length == 3:
                     entry = payload[0]; break;
                 case 0 or 1 or 2: throw new InvalidDataException("Perk effect data extent differs from its type.");

@@ -50,6 +50,7 @@ internal sealed partial class NativeXrRig : Node3D
         snapTurns = SnapTurns,
         maximumSnapPivotErrorMeters = MaximumSnapPivotError,
         canvas = _canvas.State,
+        pipBoyInput = PipBoyInputState,
         hands = "owned-gloves-and-hand-skins; analog-grip-trigger-and-thumb-touch",
         physicalAcceptance = "pending"
     };
@@ -79,8 +80,16 @@ internal sealed partial class NativeXrRig : Node3D
         var controller = new XRController3D { Name = name, Tracker = tracker, Pose = pose, ProcessPriority = -200 };
         Origin.AddChild(controller); return controller;
     }
-    public override void _EnterTree() => GetTree().NodeAdded += RouteCanvas;
-    public override void _ExitTree() => GetTree().NodeAdded -= RouteCanvas;
+    public override void _EnterTree()
+    {
+        EnterPipBoyInput();
+        GetTree().NodeAdded += RouteCanvas;
+    }
+    public override void _ExitTree()
+    {
+        try { RetirePipBoyInput(); }
+        finally { GetTree().NodeAdded -= RouteCanvas; }
+    }
     private void RouteCanvas(Node node)
     {
         if (node is not CanvasLayer layer || layer.Name.ToString() is "FirstPersonLayer" or "NativePipBoyLayer") return;
@@ -136,9 +145,8 @@ internal sealed partial class NativeXrRig : Node3D
         Movement = tracked && _calibrated && !modal && stick.Length() >= _configuration.Xr.MovementDeadzone ? stick.LimitLength() : Vector2.Zero;
         Sprint = left && LeftGrip.IsButtonPressed(NativeXrActions.Sprint);
         JumpRequested |= Edge("jump", left && LeftGrip.IsButtonPressed(NativeXrActions.Jump)) && !modal;
-        var pipboy = left && LeftGrip.GetFloat(NativeXrActions.PipBoy) >= _configuration.Xr.ActionThreshold;
-        if (_buttons.GetValueOrDefault("pipboy") != pipboy) SetPipBoyHeld?.Invoke(pipboy);
-        _buttons["pipboy"] = pipboy;
+        var pipboy = LeftGrip.GetFloat(NativeXrActions.PipBoy) >= _configuration.Xr.ActionThreshold;
+        SamplePipBoyInput(left, pipboy);
         WorldPointer = right && !modal && PointAtPipBoy is null && RightGrip.GetFloat(NativeXrActions.Activate) >= _configuration.Xr.ActionThreshold;
         var fire = right && _rightInputReady && RightGrip.GetFloat(NativeXrActions.Fire) >= _configuration.Xr.ActionThreshold;
         _pointerPressed = fire;
@@ -153,8 +161,9 @@ internal sealed partial class NativeXrRig : Node3D
         var reload = right && _rightInputReady && RightGrip.IsButtonPressed(NativeXrActions.Reload);
         if (_buttons.GetValueOrDefault("reload") != reload && PointAtPipBoy is null && !modal) _player?.XrReload(reload);
         _buttons["reload"] = reload;
-        var turn = right && !modal && PointAtPipBoy is null ? RightGrip.GetVector2(NativeXrActions.Turn).X : 0;
-        if (MathF.Abs(turn) <= _configuration.Xr.SnapTurnResetThreshold) _snapReady = true;
+        var rawTurn = RightGrip.GetVector2(NativeXrActions.Turn).X;
+        var turn = right && !modal && PointAtPipBoy is null ? rawTurn : 0;
+        if (right && MathF.Abs(rawTurn) <= _configuration.Xr.SnapTurnResetThreshold) _snapReady = true;
         if (_player is not null && _calibrated && _snapReady && MathF.Abs(turn) >= _configuration.Xr.SnapTurnActivationThreshold)
         {
             var before = Camera.GlobalPosition;
@@ -174,6 +183,7 @@ internal sealed partial class NativeXrRig : Node3D
     internal void PublishWristInput()
     {
         PoseWristDevice?.Invoke(Camera.GlobalTransform);
+        SampleCurrentWristAccess();
         var aim = RightAim.GlobalTransform;
         var tracked = RightGrip.GetHasTrackingData() && RightAim.GetHasTrackingData();
         if (PointAtPipBoy is { } pointAtPipBoy)

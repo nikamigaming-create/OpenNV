@@ -12,10 +12,14 @@ internal sealed partial class NativePluginExecutionDomain
             !ReferenceEquals(script.Code, scriptData) || sourceObjects is null || !sourceObjects.Contains(script) ||
             sourceObjects.Distinct().Count() != sourceObjects.Count)
             throw new InvalidDataException("Original command has no exact Script/code/local/source graph ownership.");
-        RequireNvseLocalCode(locals, scriptData);
+        RequireEngineGlobalsCurrent(plugin); RequireNvseLocalCode(locals, scriptData);
         foreach (var value in sourceObjects) VerifyNvseSourceObject(plugin, value);
         foreach (var value in sourceObjects) ++value.Calls;
-        try { return CallNvseCommand(plugin, command, scriptData, arguments, resultTarget, locals, script, sourceObjects); }
+        try
+        {
+            var receipt = CallNvseCommand(plugin, command, scriptData, arguments, resultTarget, locals, script, sourceObjects);
+            RequireEngineGlobalsCurrent(plugin); return receipt;
+        }
         finally { foreach (var value in sourceObjects) --value.Calls; }
     }
 }

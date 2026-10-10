@@ -35,7 +35,9 @@ public partial class NativeDialogueMenuAudit : Node
             var conditions = new FalloutDialogueConditions(records, quests, speaker.FormKey,
                 FalloutNpcAppearanceResolver.Resolve(records, npc.FormKey, speaker.FormKey));
             var conversation = new FalloutConversation(records, quests, conditions.Evaluate,
-                (info, begin) => scripts.ExecuteResult(info, speaker.FormKey, begin));
+                (info, begin) => scripts.ExecuteResult(info, speaker.FormKey, begin),
+                ownedResults: (info, begin) => scripts.ExecuteResultOwned(info, speaker.FormKey, begin),
+                resultCaller: () => speaker.FormKey);
             Exception? failure = null;
             var menu = new NativeOwnedDialogueMenu(conversation.CompleteResponse, error => failure ??= error);
             AddChild(menu);
@@ -53,7 +55,12 @@ public partial class NativeDialogueMenuAudit : Node
                     buttons.Any(button => button.Size.X <= 0 || button.Size.Y <= 0))
                     throw new InvalidOperationException("Source menu lost an input region or offered choice.");
                 var button = buttons[0];
-                if (conversation.Phase == "speaking") responses++; else selections++;
+                if (conversation.Phase == "speaking")
+                {
+                    responses++;
+                    button.EmitSignal(BaseButton.SignalName.ButtonDown);
+                }
+                else selections++;
                 button.EmitSignal(BaseButton.SignalName.Pressed);
             }
             if (conversation.Phase != "closed" || selections != 14 || failure is not null)

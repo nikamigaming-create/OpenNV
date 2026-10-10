@@ -31,7 +31,11 @@ internal static class LevelUpPerkSourceContracts
                 Record("PERK", 0x01000805, Field("EDID", Text("WrongEffectType")), Field("DATA", [0, 2, 1, 1, 0]),
                     Field("PRKE", [1, 0, 0]), Field("DATA", BitConverter.GetBytes(0x701u)), Field("PRKF", [])),
                 Record("PERK", 0x01000806, Field("EDID", Text("Overlapping")), Field("DATA", [0, 2, 1, 1, 0]),
-                    Field("PRKE", [1, 0, 0]), Field("DATA", BitConverter.GetBytes(0x01000801u)), Field("PRKE", [1, 0, 0]), Field("PRKF", [])));
+                    Field("PRKE", [1, 0, 0]), Field("DATA", BitConverter.GetBytes(0x01000801u)), Field("PRKE", [1, 0, 0]), Field("PRKF", [])),
+                Record("PERK", 0x01000807, Field("EDID", Text("SparseAbility")), Field("DATA", [0, 2, 1, 1, 0]),
+                    Field("PRKE", [1, 0, 7]), Field("PRKF", []),
+                    Field("PRKE", [1, 0, 6]), Field("DATA", new byte[4]), Field("PRKF", []),
+                    Field("PRKE", [2, 0, 5]), Field("DATA", [10, 2, 1]), Field("EPFT", [1]), Field("EPFD", BitConverter.GetBytes(2f)), Field("PRKF", [])));
             File.WriteAllBytes(Path.Combine(directory, "Master.esm"), master);
             File.WriteAllBytes(Path.Combine(directory, "Test.esm"), plugin);
             using var records = FalloutPluginStack.Load(directory, ["Master.esm", "Test.esm"]);
@@ -43,7 +47,12 @@ internal static class LevelUpPerkSourceContracts
                 "Winning override metadata, condition/master context or ranked effect identity was lost.");
             foreach (var id in new uint[] { 0x802, 0x803, 0x804, 0x805, 0x806 })
                 Reject(() => FalloutLevelUpPerkSource.Read(records, new("Test.esm", id)));
-            Console.WriteLine("OPENNV_LEVEL_UP_PERK_SOURCE_CONTRACT_PASS fullReader=true winner=true masters=true rankMetadata=true malformed=true");
+            var sparse = FalloutLevelUpPerkSource.Read(records, new("Test.esm", 0x807));
+            Require(sparse.Effects.Count == 3 && !sparse.Effects[0].DataPresent && sparse.Effects[0].Form is null &&
+                sparse.Effects[0].Type == 1 && sparse.Effects[0].SourceIndex == 0 && sparse.Effects[1].DataPresent &&
+                sparse.Effects[1].Form is null && sparse.Effects[2].SourceIndex == 2 && sparse.Effects[2].EntryPoint == 10,
+                "Sparse and explicit-null ability declarations lost source presence or shifted subsequent numeric effects.");
+            Console.WriteLine("OPENNV_LEVEL_UP_PERK_SOURCE_CONTRACT_PASS fullReader=true winner=true masters=true rankMetadata=true sparseAbilityMetadata=true malformed=true application=unexecuted");
         }
         finally
         {

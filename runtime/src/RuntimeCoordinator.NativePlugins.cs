@@ -74,9 +74,10 @@ public partial class RuntimeCoordinator
     }
     private void RetireNativePluginCampaign()
     {
-        RetireNativeSteamCampaign();
+        RetireNativeMainDelivery();
         var owner = _nativePluginCampaign;
         var failures = new List<Exception>();
+        try { RetireNativeSteamCampaign(); } catch (Exception error) { failures.Add(error); }
         if (owner is not null)
         {
             try { owner.Dispose(); } catch (Exception error) { failures.Add(error); }

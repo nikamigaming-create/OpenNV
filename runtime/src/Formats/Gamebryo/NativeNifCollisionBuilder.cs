@@ -112,7 +112,7 @@ internal static partial class NativeNifCollisionBuilder
         float unitsToMetres,
         float mass,
         Transform3D localTransform,
-        PhysicsBody3D owner,
+        CollisionObject3D owner,
         List<CollisionShape3D> output,
         ref int triangles,
         HashSet<int> active,
@@ -239,7 +239,7 @@ internal static partial class NativeNifCollisionBuilder
     }
 
     private static CollisionShape3D Add(
-        PhysicsBody3D owner, ICollection<CollisionShape3D> output, Shape3D shape, Transform3D transform, int blockIndex, uint? material = null)
+        CollisionObject3D owner, ICollection<CollisionShape3D> output, Shape3D shape, Transform3D transform, int blockIndex, uint? material = null)
     {
         var node = new CollisionShape3D();
         try
@@ -310,9 +310,13 @@ internal static partial class NativeNifCollisionBuilder
             Convert(body.Translation, unitsToMetres));
     }
 
-    internal static Transform3D MatrixTransform(FalloutNifConvexTransformShape shape, float unitsToMetres)
+    internal static Transform3D MatrixTransform(FalloutNifConvexTransformShape shape, float unitsToMetres) =>
+        MatrixTransform(shape.MatrixRowMajor, unitsToMetres, "Havok convex-transform matrix");
+
+    internal static Transform3D MatrixTransform(IReadOnlyList<float> value, float unitsToMetres, string label)
     {
-        var value = shape.MatrixRowMajor;
+        if (value.Count != 16 || !float.IsFinite(unitsToMetres) || unitsToMetres <= 0)
+            throw new InvalidDataException("Havok matrix extent/unit owner is invalid.");
         var rotation = new[]
         {
             value[MatrixM11], value[MatrixM12], value[MatrixM13],
@@ -320,7 +324,7 @@ internal static partial class NativeNifCollisionBuilder
             value[MatrixM31], value[MatrixM32], value[MatrixM33],
         };
         return new Transform3D(
-            GamebryoCoordinate.ConvertBasis(rotation, 1.0f, "Havok convex-transform matrix"),
+            GamebryoCoordinate.ConvertBasis(rotation, 1.0f, label),
             GamebryoCoordinate.ConvertVector(new Vector3(
                 value[MatrixM41], value[MatrixM42], value[MatrixM43])) *
                 (HavokToGameUnits * unitsToMetres));

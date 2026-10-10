@@ -32,18 +32,7 @@ public partial class RuntimeCoordinator
             world.RebindColdMainPlayerRoot(previous, _nativeCurrentCellRoot!.GetInstanceId());
         }
     }
-    private void RetireNativeMainPlayerCell()
-    {
-        // Refusal retains the still-owned native/source lease for a later safe
-        // cleanup attempt. Native caller cancellation/drain happens first.
-        _nativeMainPlayerLease?.Dispose(); _nativeMainPlayerLease = null; _nativeMainPlayerConsumers = null;
-        _nativePlayer?.RetireStandalonePlayerScene();
-        if (_nativeMainPlayerReplacement is not null && _nativeMainPlayerBoundWorld is { } world)
-            world.PlayerMoves.SourcePending.Replaced -= _nativeMainPlayerReplacement;
-        _nativeMainPlayerReplacement = null; _nativeMainPlayerBoundWorld = null;
-        RetireNativeCallingThreadFistp();
-        if (!_nativeMainPlayerCancellationDisposed) { _nativeMainPlayerCancellation.Dispose(); _nativeMainPlayerCancellationDisposed = true; }
-    }
+    private void RetireNativeMainPlayerCell() => RetireActualNativeMainPlayerConsumers();
     private sealed class NativeMainPlayerConsumers(RuntimeCoordinator coordinator, FalloutReferenceWorld world,
         FalloutMainPlayerCellSource source) : IFalloutMainPlayerCellConsumers
     {
@@ -83,12 +72,16 @@ public partial class RuntimeCoordinator
             Require(invocation, FalloutMainPlayerCellStep.PendingFurniture); _ = world.ReadMainPlayerPendingPayload(request);
             coordinator.ConsumeMainPlayerPendingFurniture(invocation, world, request);
         }
-        public void RetirePendingDeferredChildren(FalloutMainPlayerCellInvocation invocation) =>
-            throw Unowned(invocation, FalloutMainPlayerCellStep.PendingDeferredDestruction, "original-TLS-deferred-destruction-manager-unowned");
+        public void RetirePendingDeferredChildren(FalloutMainPlayerCellInvocation invocation)
+        {
+            Require(invocation, FalloutMainPlayerCellStep.PendingDeferredDestruction);
+            world.CampaignPlayerPendingConsumers.RetireDeferredChildren(invocation);
+        }
         public bool PendingFlagQueries(FalloutMainPlayerCellInvocation invocation)
         {
             Require(invocation, FalloutMainPlayerCellStep.PendingFlagQueries);
-            return world.CampaignPlayerPendingConsumers.ReadFinalFlagQueries(invocation, coordinator.ReadSourcePlayerPostNullManagerWord);
+            return world.CampaignPlayerPendingConsumers.ReadFinalFlagQueries(invocation, () => Source.Main.HasNewVegasChildren
+                ? coordinator.ReadSourcePlayerPostNullManagerWord() : world.ReadStandalonePendingPostNullMainWord(invocation));
         }
         public void PendingFlagChild(FalloutMainPlayerCellInvocation invocation)
         { Require(invocation, FalloutMainPlayerCellStep.PendingFlagChild); world.CampaignPlayerPendingConsumers.StoreFinalFlag(invocation); }

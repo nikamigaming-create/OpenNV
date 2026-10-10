@@ -10,8 +10,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         {
             FaultMainScriptReentry(); throw new InvalidOperationException("Actual Main child cannot capture/retire its current source process.");
         }
-        if (retiring && _scriptCallerLease != Guid.Empty)
-            throw new InvalidOperationException("Actual Main native delivery must close before source process retirement.");
+        if (retiring) RequireMainNativeDeliveryClosed();
     }
     private void RequireMainScriptSampleCaller(FalloutMainScriptSampleSite site)
     {
@@ -78,8 +77,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
             if (ui.Source.Main != value.Source || ui.Stack != value.Stack || ui.CapturedProcess != value.CapturedProcess)
                 throw new InvalidDataException("Main interface belongs to another actual caller/source/process.");
         }
-        else if (value.Interface is not null || value.CachedTail is not null)
-            throw new InvalidDataException("Standalone Main cannot adopt the independent FNV interface/timer tail.");
+        else if (value.Interface is not null)
+            throw new InvalidDataException("Standalone Main cannot adopt the independent FNV interface.");
         if (value.CachedTail is { } tail)
         {
             FalloutMainCachedTailState.Validate(tail);

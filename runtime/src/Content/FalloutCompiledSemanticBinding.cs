@@ -1,7 +1,7 @@
 namespace OpenNV.Runtime.Content;
 
 internal enum FalloutCompiledSemanticKind { Unowned, Query, Effect, Message }
-internal sealed record FalloutCompiledSemanticBinding(string SourceName, string SourceAlias,
+internal sealed partial record FalloutCompiledSemanticBinding(string SourceName, string SourceAlias,
     string ExecutionName, FalloutCompiledSemanticKind Kind)
 {
     // Name and alias come from the same selected CommandInfo, with the same

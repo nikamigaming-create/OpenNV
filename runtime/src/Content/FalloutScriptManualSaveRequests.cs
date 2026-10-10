@@ -215,20 +215,20 @@ internal sealed partial class FalloutScriptManualSaveRequests(FalloutPluginStack
                 RetireSuspended(caller, scope, programHash, error.Message, entered!);
                 invocation.Stop(error);
                 _compiledSlices.Add(entered!.Invocation, (entered!, "closed-failure", prefixBefore,
-                    cursor.State with { Branches = cursor.State.Branches.ToArray() }, error.Message)); throw;
+                    cursor.State.Copy(), error.Message)); throw;
             }
             if (suspended)
             {
                 invocation.Suspend();
                 _compiledSlices.Add(entered!.Invocation, (entered!, "suspended", prefixBefore,
-                    cursor.State with { Branches = cursor.State.Branches.ToArray() }, null)); yield break;
+                    cursor.State.Copy(), null)); yield break;
             }
             if (!advanced)
             {
                 RetireSuspended(caller, scope, programHash, null, entered!);
                 invocation.Complete();
                 _compiledSlices.Add(entered!.Invocation, (entered!, "completed", prefixBefore,
-                    cursor.State with { Branches = cursor.State.Branches.ToArray() }, null)); yield break;
+                    cursor.State.Copy(), null)); yield break;
             }
             yield return enumerator.Current;
         }

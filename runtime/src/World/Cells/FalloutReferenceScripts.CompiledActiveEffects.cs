@@ -47,7 +47,7 @@ internal sealed partial class FalloutReferenceScripts
 
         FalloutCompiledActiveEffectReceipt Receipt(string disposition, string? failure)
         {
-            var state = effect.Cursor.State with { Branches = effect.Cursor.State.Branches.ToArray() };
+            var state = effect.Cursor.State.Copy();
             var retired = new FalloutCompiledSliceReceipt(effect.Target, program.Source.FormKey,
                 program.Scope.RecordSha256, program.Scope.ScopeSha256, program.ProgramSha256,
                 effect.EventScopeSha256, effect.Ordinal, block.Event, block.Begin, block.End,

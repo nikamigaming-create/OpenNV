@@ -101,14 +101,25 @@ internal sealed partial class NativeGodotLauncher : Control
 
     internal event Action<NativeGodotLauncherLaunchRequest>? LaunchRequested;
 
-    internal void Configure(GodotLauncherProfileStore? profiles = null)
+    internal void Configure(GodotLauncherProfileStore? profiles = null, string? campaignId = null,
+        string? presentation = null)
     {
         if (_configured)
             return;
         _profiles = profiles ?? GodotLauncherProfileStore.Load();
         _campaigns = LoadManifest(out _launcherManifestSha256);
-        if (_profiles.SelectedGame is { } game && FallbackCampaigns.ContainsKey(game))
+        var game = campaignId ?? _profiles.SelectedGame;
+        if (game is not null && _campaigns.Any(row => row.Id.Equals(game, StringComparison.OrdinalIgnoreCase)))
             _selectedId = _selectedGameId = game;
+        else if (campaignId is not null)
+            throw new ArgumentException("The selected game is absent from the launcher manifest.", nameof(campaignId));
+        if (presentation is not null)
+        {
+            if (!_campaigns.Single(row => row.Id.Equals(_selectedGameId, StringComparison.OrdinalIgnoreCase))
+                .Presentations.ContainsKey(presentation))
+                throw new ArgumentException("The selected presentation is absent from this game's launcher manifest.", nameof(presentation));
+            _selectedPresentation = presentation;
+        }
         _configured = true;
     }
 

@@ -20,7 +20,7 @@ internal sealed record FalloutActorProcessRuntimeSnapshot(string Schema, string 
     IReadOnlyList<FalloutMainProcessReceipt> MainOperations, FalloutPlayerTravelReceipt? Travel,
     IReadOnlyList<FalloutActorNeutralLifeEntry> Actors, FalloutActorProcessRuntimeHandoff? ColdHandoff,
     FalloutMainFrameSnapshot MainFrame, FalloutSourceFistpSnapshot Fistp, FalloutStandaloneMainSnapshot? StandaloneMain = null,
-    FalloutSourceFrameTimerSnapshot? CachedTimer = null);
+    FalloutSourceFrameTimerSnapshot? CachedTimer = null, FalloutGlobalTimeSnapshot? GlobalTime = null);
 
 // One ordered common field copy has an explicit extent even when a constructor
 // leaves a field unwritten. An unwritten lane cannot be consumed as zero.

@@ -50,7 +50,9 @@ internal static partial class CompiledScriptContracts
                 quests.SetVariable(Key(0x20), 1, 9); quests.SetVariable(Key(0x20), 2, 0);
                 var random = JsonSerializer.Serialize(world.ScriptValues.Capture());
                 var fault = Failure(() => stages.Enter(Key(0x20), 120));
-                Require(fault.Contains("102d", StringComparison.Ordinal) && fault.Contains("SCDA offset 35", StringComparison.Ordinal) &&
+                Require(fault.Contains("102d/GetDetected", StringComparison.Ordinal) &&
+                    fault.Contains("Original actor perception process/cache owner is absent.", StringComparison.Ordinal) &&
+                    fault.Contains("SCDA offset 35", StringComparison.Ordinal) &&
                     fault.Contains("SCDA offset 56", StringComparison.Ordinal) &&
                     quests.Variable(Key(0x20), 1) == 0 && quests.Variable(Key(0x20), 2) == 0 &&
                     !world.ActorAlerted(Key(0x901)) &&
@@ -58,7 +60,9 @@ internal static partial class CompiledScriptContracts
                     effects[1] is { Kind: FalloutReferenceEffectKind.HeadTracking, Argument: null } &&
                     effects[1].Target == Key(0x901) && effects[2].Target == Key(0x901) && effects[3].Target == Key(0x902) &&
                     effects[2].Kind == FalloutReferenceEffectKind.EvaluatePackages && effects[3].Kind == FalloutReferenceEffectKind.EvaluatePackages,
-                    "Reached unowned detection query lost its exact binary cursor or replayed/omitted consumed effects.");
+                    $"Reached unowned detection query lost its exact binary cursor or replayed/omitted consumed effects. " +
+                    $"Fault: {fault}; counter={quests.Variable(Key(0x20), 1)}; suffix={quests.Variable(Key(0x20), 2)}; " +
+                    $"alerted={world.ActorAlerted(Key(0x901))}; effects={JsonSerializer.Serialize(effects)}");
                 var quest = quests.Capture().Single();
                 var objectives = quest.Objectives ?? throw new InvalidDataException("Binary quest result lost its objective owner.");
                 Require(objectives.Single(item => item.Index == 40).Completed &&

@@ -23,10 +23,12 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             if (_countdownEnabled != 0) throw new NotSupportedException("source-Player-countdown-independent-cached-menu-and-global-cinematic-query-unowned");
             Changed(FalloutStandaloneScenePreludeStep.ReferenceScratchStore); _referenceScratch = 0; Next();
             Changed(FalloutStandaloneScenePreludeStep.ReferenceQuery);
-            // Even with the constructor-null stored reference, the original
-            // query first enters a Player child before testing that reference.
-            // A null field cannot skip it or complete the full virtual update.
-            throw new NotSupportedException("source-Player-scene-parent-reference-query-before-null-reference-test-unowned");
+            ReadInitialSceneReference(main, ordinal); Check();
+            Changed(FalloutStandaloneScenePreludeStep.ReferenceFrame);
+            // This consumer is called even for a returned null reference. It
+            // owns independent HUD fields and must return before the stored
+            // reference release or the rest of the actual Player virtual.
+            throw new NotSupportedException("source-Player-scene-reference-frame-HUD-consumer-unowned");
         }
         catch (Exception error)
         {

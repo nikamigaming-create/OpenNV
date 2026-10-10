@@ -173,13 +173,7 @@ internal sealed partial class NativePluginExecutionDomain
         VerifyNvseSourceObject(plugin, value);
         var result = method switch
         {
-            0x8c => value.Class switch
-            {
-                NativeNvseSourceClass.Script => 17U,
-                NativeNvseSourceClass.Quest => 71U,
-                _ => throw new NotSupportedException("A ModInfo object is not TESForm.")
-            },
-            0xf0 or 0x100 => 0U,
+            0x8c or 0xf0 or 0x100 => ReadSourceVirtualFieldMethod(plugin, value, method, frame.Id, callerId),
             0x130 => 1U,
             0x138 when value.Class == NativeNvseSourceClass.Quest => 1U,
             _ => throw new NotSupportedException($"Native TESForm virtual method {method:x} has no source engine owner.")

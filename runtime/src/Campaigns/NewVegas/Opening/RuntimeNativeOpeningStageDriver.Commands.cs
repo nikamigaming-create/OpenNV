@@ -29,6 +29,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         SourceIndexedInterfaceSoundSaveBlocker is { } interfaceSound ? interfaceSound :
         ActorUpdateSaveBlocker is { } actorUpdate ? actorUpdate :
         CellProcessSaveBlocker is { } cellProcess ? cellProcess :
+        SourceContactSaveBlocker is { } sourceContact ? sourceContact :
         _skyLighting?.SourceTransferSaveBlocker is { } sourceSky ? sourceSky :
         ActualProcessRuntimeSaveBlocker is { } processRuntime ? processRuntime :
         ActualProcessCommonSaveBlocker is { } processCommon ? processCommon :
@@ -37,7 +38,9 @@ internal partial class RuntimeNativeOpeningStageDriver
         ActorPerceptionSaveBlocker is { } perception ? perception :
         CombatGroupSaveBlocker is { } combat ? combat :
         _moviePlaying ? "movie" :
-        _conversation?.Active == true ? "conversation" : _speech is { CanCaptureState: false } ? "speech" :
+        _conversation is null ? "conversation-unbound" :
+        _conversation.SaveContinuationBlocker is { } conversation ? conversation :
+        _speech is { CanCaptureState: false } ? "speech" :
         _nameEntry is not null ? "name-menu" : _raceSexEntry is not null ? "race-menu" :
         _specialBookEntry is not null ? "special-book-menu" :
         _vigorEntry is not null ? "special-menu" : _tagSkillEntry is not null ? "tag-menu" :
@@ -46,6 +49,40 @@ internal partial class RuntimeNativeOpeningStageDriver
         TerminalSaveBlocker is { } terminal ? terminal :
         _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" :
         StageResultsSaveBlocker;
+    internal IReadOnlyList<string> AllSaveContinuationBlockers()
+    {
+        static string? Name(string owner, Func<string?> read)
+        {
+            try { return read() is { } value ? owner + ": " + value : null; }
+            catch (Exception error) { return owner + ": threw " + error.Message; }
+        }
+        return new[]
+        {
+        Name("_scripts.References!.CampaignSharedScriptSaveBlocker", () => _scripts.References!.CampaignSharedScriptSaveBlocker),
+        Name("PlayerStatisticSaveBlocker", () => PlayerStatisticSaveBlocker),
+        Name("_playerSkills.ValueConstructionSaveBlocker", () => _playerSkills.ValueConstructionSaveBlocker),
+        Name("PlayerProgressSaveBlocker", () => PlayerProgressSaveBlocker),
+        Name("ExperienceNotificationSaveBlocker", () => ExperienceNotificationSaveBlocker),
+        Name("InterfaceActivationFrameSaveBlocker", () => InterfaceActivationFrameSaveBlocker),
+        Name("_player.PlayerPhysicalSaveBlocker", () => _player.PlayerPhysicalSaveBlocker),
+        Name("CampaignRestSaveBlocker", () => CampaignRestSaveBlocker),
+        Name("SourceIndexedInterfaceSoundSaveBlocker", () => SourceIndexedInterfaceSoundSaveBlocker),
+        Name("ActorUpdateSaveBlocker", () => ActorUpdateSaveBlocker),
+        Name("CellProcessSaveBlocker", () => CellProcessSaveBlocker),
+        Name("SourceContactSaveBlocker", () => SourceContactSaveBlocker),
+        Name("_skyLighting?.SourceTransferSaveBlocker", () => _skyLighting?.SourceTransferSaveBlocker),
+        Name("ActualProcessRuntimeSaveBlocker", () => ActualProcessRuntimeSaveBlocker),
+        Name("ActualProcessCommonSaveBlocker", () => ActualProcessCommonSaveBlocker),
+        Name("SourceProcessQueueSaveBlocker", () => SourceProcessQueueSaveBlocker),
+        Name("ActorProcessSaveBlocker", () => ActorProcessSaveBlocker),
+        Name("ActorPerceptionSaveBlocker", () => ActorPerceptionSaveBlocker),
+        Name("CombatGroupSaveBlocker", () => CombatGroupSaveBlocker),
+        Name("_conversation.SaveContinuationBlocker", () => _conversation?.SaveContinuationBlocker),
+        Name("TerminalSaveBlocker", () => TerminalSaveBlocker),
+        Name("StageResultsSaveBlocker", () => StageResultsSaveBlocker),
+        Name("SourceAnimationSoundSaveBlocker", () => SourceAnimationSoundSaveBlocker),
+        }.OfType<string>().ToArray();
+    }
     internal object SaveRequestState => new
     {
         ordered = _scripts.ScriptManualSaves.Order.Requests,
@@ -70,8 +107,10 @@ internal partial class RuntimeNativeOpeningStageDriver
         sourceSky = _skyLighting?.SourceTransferState,
         actorUpdates = ActorUpdateState,
         cellProcesses = CellProcessState,
+        sourceContacts = SourceContactSaveBlocker,
         levelUp = PlayerLevelUpMenuState,
         deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
+        allSaveBlockers = AllSaveContinuationBlockers(),
         activeContinuationSaving = "source-radio-pcm;other-continuations-unbound"
     };
 
@@ -186,6 +225,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
         ObserveCurrentNativeCellProcessesForCapture();
+        RequireSourceContactContinuation();
         _scripts.References?.NativePlugins?.RequireIdleForSave();
         _scripts.ScriptManualSaves.RequireCapture();
         _scripts.References!.PlayerMoves.RequireSettled();
@@ -212,7 +252,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             CaptureSourceActorUpdates(), CaptureSourceCellProcesses(), CaptureCurrentProcessRuntime(), CaptureCurrentProcessCommon(),
             _playerSkills.CaptureValues(), _playerAbilities.Capture(), CaptureCurrentPlayerStatistics(), CaptureCurrentProcessQueues(),
             CaptureSourceIndexedInterfaceSounds(), _scripts.References.CaptureCampaignSharedScripts(),
-            _imageSpaceState.CaptureDoubleVisionClock());
+            _imageSpaceState.CaptureDoubleVisionClock(), CaptureSourceRoomPortals(), _conversation!.CaptureContinuation());
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

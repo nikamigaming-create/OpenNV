@@ -40,7 +40,9 @@ internal sealed partial class FalloutSkyTransferState
     internal FalloutFormKey? TargetWeather { get; private set; }
     internal FalloutSkyTimeCaches TimeCaches { get; private set; } = new(0, 0, 0, 0);
     internal FalloutSkyResetCall? LastCall => _last;
-    internal string? SaveBlocker => _retirementFailure ?? (_retired ? "source-Sky-retired" :
+    internal string? SaveBlocker => _retirementFailure ?? ModeSaveBlocker ?? _hdr?.SaveBlocker ?? _night?.SaveBlocker ??
+        (_coldHdr is not null ? "source-Sky-HDR-cold-actual-owner-pending" :
+         _coldNight is not null ? "source-NightSky-cold-actual-owner-pending" : null) ?? (_retired ? "source-Sky-retired" :
         _last is { Returned: false } ? "source-Sky-reset-entered-prefix/" + (_last.Error ?? _last.EnteredChild.ToString()) :
         _cloudBinding.Disposition == FalloutSkyChildDisposition.Published && _clouds is null ? "source-Sky-cold-Clouds-republication-pending" :
         _precipitationBinding.Disposition == FalloutSkyChildDisposition.Published && _precipitation is null ? "source-Sky-cold-Precipitation-republication-pending" : null);
@@ -69,6 +71,9 @@ internal sealed partial class FalloutSkyTransferState
         lastCall = _last,
         cold = _handoff,
         modeFailure = _modeFailure,
+        modeFields = ModeState,
+        hdr = _hdr?.State,
+        night = _night?.State,
         clockFailure = _clockFailure,
         deferredBy = SaveBlocker,
         pixels = "unverified",

@@ -19,7 +19,7 @@ internal readonly record struct FalloutScriptArgument(FalloutScriptValue Value, 
     internal string Text => Value.Text;
 }
 
-internal sealed class FalloutScriptFunction
+internal sealed partial class FalloutScriptFunction
 {
     private readonly Func<IReadOnlyList<FalloutScriptArgument>, double>? _invoke;
     private readonly Func<IReadOnlyList<FalloutScriptArgument>, FalloutScriptValue>? _invokeValue;

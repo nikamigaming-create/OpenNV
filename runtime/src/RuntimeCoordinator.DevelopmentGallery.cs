@@ -212,6 +212,7 @@ public partial class RuntimeCoordinator
                     _nativeCurrentCellRoot = null; _nativeActiveCell = null;
                     foreach (var prototype in _nativeNifPrototypes.Values) prototype.Scene.Root.Free();
                     _nativeNifPrototypes.Clear();
+                    RetireNativeModeledLightSources();
                 }
                 WriteGalleryReport();
                 GD.Print($"OPENNV_NATIVE_GALLERY_PROGRESS completed={rows.Count} total={requested.Length} status={row["status"]}");

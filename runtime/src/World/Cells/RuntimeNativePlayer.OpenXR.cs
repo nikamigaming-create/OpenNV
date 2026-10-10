@@ -141,13 +141,16 @@ internal partial class RuntimeNativePlayer
         _xr = rig; rig.Attach(this); _camera = rig.Camera;
         ProcessMode = ProcessModeEnum.Always;
         _thirdPersonMode = false;
+        ConfigureSelfCameraVisibility();
         _xrPointer = new(); AddChild(_xrPointer);
         GD.Print("OPENNV_NATIVE_XR_PLAYER_READY state=shared-native-gameplay camera=tracked-head controllers=left_hand,right_hand");
     }
     internal void XrActivate()
     {
-        if (_modalInput || _furniturePhase != 0) return;
-        if (!_activationEnabled || AimedObject() is not { } collider) { RejectActivation(); return; }
+        if (_modalInput) return;
+        if (!_activationEnabled) { RejectActivation(); return; }
+        if (DispatchSourceFurnitureActivation()) return;
+        if (AimedObject() is not { } collider) { RejectActivation(); return; }
         var target = ResolveXrTarget?.Invoke(collider);
         // Comfort pickup reach is an OpenNV option. Doors, conversations and
         // furniture still require the ordinary source activation distance.

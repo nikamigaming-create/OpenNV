@@ -78,6 +78,8 @@ internal sealed partial class FalloutSkyTransferState
             .Concat(_failedNativeFactories.Values).Distinct())
             try { child!.Retire(); }
             catch (Exception failure) { failures.Add(failure); }
+        try { RetireHdr(); } catch (Exception failure) { failures.Add(failure); }
+        try { RetireNight(); } catch (Exception failure) { failures.Add(failure); }
         foreach (var instance in OrderedInstances())
             try { _images.RetireSourceSkyInstance(this, instance.Identity); }
             catch (Exception failure) { failures.Add(failure); }

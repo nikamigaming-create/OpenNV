@@ -118,9 +118,10 @@ internal sealed partial class FalloutCompiledActiveEffectExecution
 
     internal static bool SameCursor(FalloutCompiledCursorSnapshot? a, FalloutCompiledCursorSnapshot? b) =>
         a is not null && b is not null && a.Branches is not null && b.Branches is not null &&
+        a.ControlHistory is not null && b.ControlHistory is not null &&
         a.NextOffset == b.NextOffset && a.CommittedInstructions == b.CommittedInstructions && a.BudgetSpent == b.BudgetSpent &&
-        a.Completed == b.Completed && a.Branches.SequenceEqual(b.Branches);
+        a.Completed == b.Completed && a.Branches.SequenceEqual(b.Branches) && a.ControlHistory.SequenceEqual(b.ControlHistory);
     private static FalloutCompiledCursorSnapshot Copy(FalloutCompiledCursorSnapshot state) =>
-        state with { Branches = state.Branches.ToArray() };
+        state.Copy();
     private static bool Hash(string value) => value is { Length: 64 } && value.All(Uri.IsHexDigit);
 }

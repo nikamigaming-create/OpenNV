@@ -17,7 +17,7 @@ internal enum FalloutStandaloneSceneClockStep { Incremented, ArgumentStored, Vir
 internal sealed record FalloutStandaloneSceneClockCall(Guid Main, long MainOrdinal, byte BeforeBracket,
     byte Bracket, uint DeliveredBits, uint? ArgumentBits, long Entered, long Changed,
     FalloutStandaloneSceneClockStep Step, string? Failure);
-internal enum FalloutStandaloneScenePreludeStep { ViewRequests, OwnedChildRelease, Countdown, ReferenceScratchStore, ReferenceQuery, Failed }
+internal enum FalloutStandaloneScenePreludeStep { ViewRequests, OwnedChildRelease, Countdown, ReferenceScratchStore, ReferenceQuery, ReferenceFrame, Failed }
 internal sealed record FalloutStandaloneScenePreludeCall(Guid Main, long MainOrdinal, long Entered, long Changed,
     FalloutStandaloneScenePreludeStep Step, FalloutStandaloneScenePreludeStep? FailedAt, string? Failure);
 internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, FalloutStandalonePlayerSceneSource Source,
@@ -28,7 +28,8 @@ internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, Fallo
     FalloutStandaloneSceneClockCall? Clock, FalloutStandaloneCameraCall? Camera,
     FalloutStandaloneSceneColdHandoff? ColdHandoff, string? Boundary, string? Failure, bool Retired,
     byte ViewRequest, byte ViewRequestArgument, byte CountdownEnabled, uint CountdownBits, uint ReferenceScratch,
-    FalloutStandaloneScenePreludeCall? Prelude);
+    FalloutStandaloneScenePreludeCall? Prelude, FalloutSourceSceneNode? SceneReference, byte SceneReferenceArgument,
+    FalloutStandaloneSceneReferenceQueryCall? ReferenceQuery);
 
 // These are individual source children. A supplied delegate is not a completion
 // receipt; the source call records its actual returned child and committed prefix.

@@ -9,7 +9,7 @@ internal static partial class ExperienceNotificationContracts
     internal static void Run()
     {
         ActualEventsAndRetirement(); ColdPhaseAndMissingCue(); PausedLevelClock();
-        LostEventAndUnownedRetarget(); ClockLeaseAndEpoch(); SourceFrameProducers();
+        LostEventAndUnownedRetarget(); ClockLeaseAndEpoch(); SourceFrameProducers(); PresentationCancellation();
         Require(FalloutExperienceHudSource.Integer("+%i", 35, 16) == "+35", "Source integer formatting changed.");
         Reject(() => FalloutExperienceHudSource.Integer("%i", 100, 3));
         Console.WriteLine("OPENNV_EXPERIENCE_NOTIFICATION_CONTRACT_PASS actualXpEvent=true queuedDelta=true " +

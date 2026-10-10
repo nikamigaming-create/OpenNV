@@ -42,6 +42,7 @@ internal sealed partial class RuntimeNativeMoon
         _primaryAlpha = saved.PrimaryAlphaBits; _shadowAlpha = saved.ShadowAlphaBits;
         _primaryProperty!.SetShaderParameter("source_Moon_alpha", BitConverter.UInt32BitsToSingle(_primaryAlpha));
         _shadowProperty!.SetShaderParameter("source_Moon_alpha", BitConverter.UInt32BitsToSingle(_shadowAlpha));
+        RestoreDrawFields(saved.Draw ?? throw new InvalidDataException("Cold Moon omitted its source draw fields."));
     }
     public FalloutMoonNativeTextureReturn LoadPhase(string? path)
     {
@@ -56,7 +57,7 @@ internal sealed partial class RuntimeNativeMoon
         if (_retired) return; Require(retirement: true);
         var failures = new List<Exception>();
         void Attempt(Action action) { try { action(); } catch (Exception failure) { failures.Add(failure); } }
-        foreach (var property in new[] { _primaryProperty, _shadowProperty }.Where(value => value is not null))
+        foreach (var property in new[] { _primaryProperty, _shadowProperty }.Where(value => value is not null && GodotObject.IsInstanceValid(value)))
             Attempt(() => { property!.SetShaderParameter("source_Moon_sampler", default(Variant)); RequireSampler(property, null); });
         // Retire the actual node borrowers before releasing resources. Detached
         // partial constructors and a whole-root Free follow the same owner.
@@ -69,7 +70,8 @@ internal sealed partial class RuntimeNativeMoon
                 throw new InvalidOperationException("Moon resource retains an actual native/foreign borrower.");
             resource.Dispose(); resource = null;
         }
-        Attempt(() => Release(ref _primaryProperty)); Attempt(() => Release(ref _shadowProperty));
+        Attempt(() => RetireSourceProperty(ref _primaryProgram, ref _primaryProperty));
+        Attempt(() => RetireSourceProperty(ref _shadowProgram, ref _shadowProperty));
         Attempt(() => Release(ref _primaryMesh)); Attempt(() => Release(ref _shadowMesh));
         foreach (var (path, owned) in _textures.ToArray())
             Attempt(() =>

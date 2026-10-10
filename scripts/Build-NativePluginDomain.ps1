@@ -46,6 +46,14 @@ try {
         "/OUT:$output/opennv_plugin_domain.exe")
     Invoke-Compile @('/DOPENNV_SYSTEM_CNG_SERVICE', (Join-Path $repository 'runtime/native/plugins/opennv_plugin_domain.cpp'),
         "/Fo$output/opennv_cng_service.obj", '/link', '/MACHINE:X86', "/OUT:$output/opennv_cng_service.exe")
+    # Entry/import-free authored compiler/static TLS carrier; Windows owns its actual index/storage.
+    $tlsArguments = @($common | Where-Object { $_ -notin @('/MT', '/EHsc') }) + @('/GS-', '/Zl', '/LD',
+        (Join-Path $repository 'runtime/native/plugins/opennv_plugin_engine_tls.cpp'),
+        "/Fo$output/engine-tls.obj", '/link', '/MACHINE:X86', '/NOENTRY', '/NODEFAULTLIB',
+        "/DEF:$repository/runtime/native/plugins/opennv_plugin_engine_tls.def",
+        "/OUT:$output/opennv_engine_tls.dll", "/IMPLIB:$output/engine-tls.lib", 'libcmt.lib')
+    & $compiler @tlsArguments
+    if ($LASTEXITCODE -ne 0) { throw 'First-party compiler/static TLS carrier compilation failed.' }
     Invoke-Compile @('/LD', (Join-Path $repository 'runtime/native/plugins/opennv_plugin_cng_import_provider.cpp'),
         "/Fo$output/cng-import-provider.obj", '/link', '/MACHINE:X86',
         "/DEF:$repository/runtime/native/plugins/opennv_plugin_cng_import_provider.def",
@@ -96,6 +104,7 @@ try {
     $files += 'fixtures/opennv_cng_shared_fixture.dll'
     $files += 'fixtures/opennv_mutex_fixture.dll'
     $files += 'providers/cng/bcrypt.dll'
+    $files += 'opennv_engine_tls.dll'
     $manifest = [ordered]@{ authoredOnly = $true; configuration = $Configuration; machine = 'I386'; executionVerified = $false; files = @() }
     foreach ($file in $files) {
         $built = Join-Path $output $file

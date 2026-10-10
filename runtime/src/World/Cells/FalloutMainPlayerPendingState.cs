@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutMainPlayerPendingState
 {
-    internal const string Schema = "opennv-source-Player-pending-consumers/v2";
+    internal const string Schema = "opennv-source-Player-pending-consumers/v5";
     private readonly FalloutMainPlayerPendingSource _source;
     private readonly string _stack;
     private readonly Guid _process;
@@ -25,7 +25,9 @@ internal sealed partial class FalloutMainPlayerPendingState
         _error is not null ? "source-Player-pending-tail:" + _error :
         _ownedChild is not null ? "source-Player-refcount-child-cold-rebind-unowned" :
         _scalar is not null && _characterController is null ? "source-Player-character-controller-field-owner-absent" :
-        CharacterControllerSaveBlocker ?? _exteriorLoaders?.SaveBlocker;
+        DeferredReleaseSaveBlocker ?? CharacterControllerSaveBlocker ?? _exteriorLoaders?.SaveBlocker ??
+            (_source.Player.Main.HasNewVegasChildren ? null : _standaloneTaskManager is null ?
+                "actual-source-standalone-task-manager-construction-and-current-cohort-unbound" : _standaloneTaskManager.SaveBlocker);
     internal object State => new
     {
         source = _source,
@@ -46,7 +48,10 @@ internal sealed partial class FalloutMainPlayerPendingState
         retired = _retired,
         cold = _cold,
         exteriorLoaders = _exteriorLoaders?.State,
-        pendingWorldPrelude = _exteriorLoaders is null ? "source-FO3-TaskManager-reset-consumers-unowned" : "source-NV-exterior-map-cancellation",
+        taskManager = _standaloneTaskManager?.State,
+        deferredRelease = DeferredReleaseState,
+        pendingWorldPrelude = _source.Player.Main.HasNewVegasChildren ? "source-NV-exterior-map-cancellation" :
+            _standaloneTaskManager is null ? "actual-source-standalone-task-manager-construction-and-current-cohort-unbound" : "source-FO3-task-manager-reset",
         blocker = SaveBlocker
     };
     internal FalloutMainPlayerPendingState(FalloutMainPlayerPendingSource source, string stack, Guid process,
@@ -61,7 +66,7 @@ internal sealed partial class FalloutMainPlayerPendingState
         if (restore is not null) Restore(restore);
     }
     internal void ResetExteriorLoaders(FalloutMainPlayerCellInvocation invocation) =>
-        Run(invocation, FalloutMainPlayerCellStep.PendingWorldPrelude, () => ExteriorLoaders.CancelAll(invocation));
+        Run(invocation, FalloutMainPlayerCellStep.PendingWorldPrelude, () => ResetSourceTaskManager(invocation));
     internal void ReleaseOwnedChild(FalloutMainPlayerCellInvocation invocation) =>
         Run(invocation, FalloutMainPlayerCellStep.PendingOwnedChildRelease, () => AssignOwnedChild(null, "actual-Player-pending-null-owned-child-store"));
     internal void PublishOwnedChild(IFalloutPlayerOwnedChild child, string sourceWriter)

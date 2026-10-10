@@ -35,6 +35,7 @@ internal static class FalloutCompiledSemanticOwners
         "SetPCYoung", "SexChange", "ResetInventory", "ResetAI", "PlayMusic",
         "SetLocationSpecificLoadScreensOnly", "ResetPipboyManager", "SetPCToddler", "ForceSave",
         "PipBoyRadioOff", "ClearScreenSplatter", "Activate", "PlaySound", "CreateDetectionEvent",
+        "SetGlobalTimeMultiplier", "SetPlayerTagSkill", "SetNoActivationSound", "ClearNoActivationSound",
         "GetPlayerName", "SetTagSkills", "TraitMenu", "PlayIdle", "ShowRecipeMenu", "ShowBarterMenu",
         "RestoreActorValue", "IgnoreCrime", "SetIgnoreFriendlyHits", "ForceActiveQuest", "SetHardcore",
         "AutoDisplayObjectives", "AddAchievement", "SetTalkingActivatorActor", "SwapTexture", "SwapTextureOnRef",

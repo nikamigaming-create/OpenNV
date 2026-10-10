@@ -11,8 +11,12 @@ internal static partial class SourceMainScriptCallerContracts
     private const string Engine = "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57";
     internal static void Run()
     {
+        RunNativeMainRetirementContracts();
+        RunMainMenuBoundaryContracts();
+        RunProductRefusalContracts();
         SuccessfulOrderAndCold(); FailedSteamPrefixAndCold(); ShortCircuitAndForbiddenReentry(); ActualMissingHost();
         SourceMainUtilityCases();
+        RunUtilityStartupEnvelopes();
         RunPlayerCellContracts();
         SourceSkyTransferContracts.Run(); SourceFistpContracts.Run();
         RunRawPlayerTransferContracts();
@@ -126,6 +130,7 @@ internal static partial class SourceMainScriptCallerContracts
         internal readonly FalloutInterfaceFade Fade;
         internal readonly Host Host;
         private readonly IDisposable _fadeLease;
+        internal IDisposable ActualFadeLease => _fadeLease;
         internal Fixture(FalloutActorProcessRuntimeSnapshot? runtime = null, FalloutMainScriptFrameSnapshot? field = null,
             FalloutMainScriptCallerSnapshot? caller = null, FalloutInterfaceFadeSnapshot? fade = null)
         {
@@ -153,6 +158,10 @@ internal static partial class SourceMainScriptCallerContracts
         internal bool Tab, Alt, Menu;
         internal int RealChildMutations;
         internal Action<FalloutMainScriptInvocation>? DuringPlayer, DuringSteam, DuringPrologue;
+        internal Action<FalloutMainScriptInvocation>? DuringKindThree;
+        internal Func<FalloutMainScriptInvocation, bool>? ReadHold;
+        internal Action<FalloutMainScriptInvocation, bool>? DuringContexts;
+        internal int ContextKind = 2;
         internal Func<FalloutMainScriptInvocation, Task>? AwaitPlayer;
         public bool AsyncKeyHighBit(FalloutMainScriptInvocation invocation, int key)
         { invocation.Require(key == 9 ? FalloutMainScriptCallerStep.TabKey : FalloutMainScriptCallerStep.AltKey); Log.Add(key == 9 ? "Tab" : "Alt"); return key == 9 ? Tab : Alt; }
@@ -162,15 +171,23 @@ internal static partial class SourceMainScriptCallerContracts
         public bool FirstInterfacePredicate(FalloutMainScriptInvocation invocation) { Log.Add("First"); return false; }
         public bool FinalInterfacePredicate(FalloutMainScriptInvocation invocation) { Log.Add("Final"); return false; }
         public bool ForeignActiveMenu(FalloutMainScriptInvocation invocation) { Log.Add("Foreign"); return false; }
-        public int InterfaceContextKind(FalloutMainScriptInvocation invocation) { Log.Add("Kind"); return 2; }
-        public void KindThreePrelude(FalloutMainScriptInvocation invocation) => throw new InvalidOperationException("Excluded authored kind-three branch was invoked.");
+        public int InterfaceContextKind(FalloutMainScriptInvocation invocation) { Log.Add("Kind"); return ContextKind; }
+        public void KindThreePrelude(FalloutMainScriptInvocation invocation)
+        {
+            if (DuringKindThree is not null) DuringKindThree(invocation);
+            else throw new InvalidOperationException("Excluded authored kind-three branch was invoked.");
+        }
         public Task Player(FalloutMainScriptInvocation invocation)
         { invocation.Require(FalloutMainScriptCallerStep.Player); Log.Add("Player"); RealChildMutations++; DuringPlayer?.Invoke(invocation); return AwaitPlayer?.Invoke(invocation) ?? Task.CompletedTask; }
         public void SteamCallbacks(FalloutMainScriptInvocation invocation)
         { invocation.Require(FalloutMainScriptCallerStep.SteamCallbacks); Log.Add("Steam"); RealChildMutations++; DuringSteam?.Invoke(invocation); }
-        public bool MainHold(FalloutMainScriptInvocation invocation) { Log.Add("Hold"); return false; }
+        public bool MainHold(FalloutMainScriptInvocation invocation) { Log.Add("Hold"); return ReadHold?.Invoke(invocation) ?? false; }
         public void TimedContexts(FalloutMainScriptInvocation invocation, bool advanceTimer)
-        { invocation.Require(FalloutMainScriptCallerStep.TimedContexts); Log.Add("Timed"); RealChildMutations++; if (advanceTimer) invocation.AdvanceContextTime(.125f); }
+        {
+            invocation.Require(FalloutMainScriptCallerStep.TimedContexts); Log.Add("Timed");
+            if (DuringContexts is not null) { DuringContexts(invocation, advanceTimer); return; }
+            RealChildMutations++; if (advanceTimer) invocation.AdvanceContextTime(.125f);
+        }
     }
     private static void Require(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
     private static void Reject(Action action)

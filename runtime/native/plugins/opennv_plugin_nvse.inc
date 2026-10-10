@@ -484,6 +484,8 @@ void unload_nvse(const Frame& frame) {
     state->data.reset();
     engine_commands_retire(frame);
     source_call_sites_retire(frame);
+    source_field_methods_retire(frame);
+    source_globals_retire(frame);
     command_table_retire(); expression_retire(); array_objects_retire(frame); values_heap_retire(); values_retire(); source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
     Bytes data; nvse_counters(data); data.put(0U); data.put(0U);
     state->nvse.reset(); state->module = nullptr; state->module_id = 0;

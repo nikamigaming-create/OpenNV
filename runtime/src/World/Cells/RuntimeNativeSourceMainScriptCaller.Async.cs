@@ -55,6 +55,7 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller
     }
     internal async Task StopAndDrain()
     {
+        RequireDeliveryThread();
         _stopMainDelivery = true; ProcessMode = ProcessModeEnum.Disabled;
         // The real coordinator requests/cancels actual native reads first.
         // This only awaits the entered source invocation and observes its
@@ -63,7 +64,11 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller
         {
             try { await call; }
             catch (Exception failure) { PublishMainFailure(failure); }
-            finally { if (ReferenceEquals(_activeMainCall, call)) _activeMainCall = null; }
+            finally
+            {
+                RequireDeliveryThread();
+                if (ReferenceEquals(_activeMainCall, call)) _activeMainCall = null;
+            }
         }
     }
     private void RequireMainCallDrained()

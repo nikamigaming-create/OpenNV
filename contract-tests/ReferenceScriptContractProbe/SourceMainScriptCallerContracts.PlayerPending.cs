@@ -50,15 +50,18 @@ internal static partial class SourceMainScriptCallerContracts
     {
         using var fixture = new Fixture();
         var source = FalloutMainPlayerPendingSource.Read(FalloutMainPlayerCellSource.Read(fixture.Host.Source));
-        var process = Guid.NewGuid(); var state = new FalloutMainPlayerPendingState(source, "authored-refcount-owner", process);
+        var process = Guid.NewGuid(); var state = ConstructAuthoredNewVegasPendingOwner(source, "authored-refcount-owner", process);
         var log = new List<string>(); var a = new AuthoredOwnedChild(source, process, "a", log); var b = new AuthoredOwnedChild(source, process, "b", log);
         state.PublishOwnedChild(a, "authored-source-writer-a"); state.PublishOwnedChild(a, "authored-identical-pointer-noop");
         state.PublishOwnedChild(b, "authored-source-writer-b");
         Require(log.SequenceEqual(new[] { "acquire:a", "release:a", "acquire:b" }) && a.References == 0 && b.References == 1,
             "Source smart pointer changed release/store/acquire order or incremented an identical pointer.");
-        state.Retire(); Require(b.References == 0 && state.Capture().ChildMutation is { After: null, Returned: true },
+        state.Retire(); var retired = System.Text.Json.JsonSerializer.SerializeToElement(state.State).GetProperty("childMutation");
+        Require(b.References == 0 && retired.GetProperty("After").ValueKind == System.Text.Json.JsonValueKind.Null &&
+            retired.GetProperty("Returned").GetBoolean(),
             "Actual source destructor did not release its still-owned successful child independently.");
-        var failed = new FalloutMainPlayerPendingState(source, "authored-failed-refcount", process);
+        Reject(() => state.Capture());
+        var failed = ConstructAuthoredNewVegasPendingOwner(source, "authored-failed-refcount", process);
         var old = new AuthoredOwnedChild(source, process, "old", log) { RefuseRelease = true };
         var next = new AuthoredOwnedChild(source, process, "unpublished", log);
         failed.PublishOwnedChild(old, "authored-retained-old-owner");
@@ -68,6 +71,18 @@ internal static partial class SourceMainScriptCallerContracts
         RejectPendingRetirement(failed.Retire);
         Require(old.ReleaseAttempts == 1 && next.References == 0,
             "Retirement blindly repeated an opaque failed refcount release or pretended a null-store completion.");
+    }
+    private static FalloutMainPlayerPendingState ConstructAuthoredNewVegasPendingOwner(
+        FalloutMainPlayerPendingSource source, string stack, Guid process)
+    {
+        Require(source.Player.Main.HasNewVegasChildren, "Authored refcount fixture must select its actual New Vegas constructors.");
+        var state = new FalloutMainPlayerPendingState(source, stack, process);
+        // This isolated authored owner has no bound native Main delivery. Its
+        // real source queue/lock constructor is still mandatory, and retirement
+        // cannot turn that retired constructor into a playable cold snapshot.
+        state.BindNewVegasDeferredRelease(new FalloutNewVegasDeferredRelease(source.Player, stack, process), () => { });
+        FalloutMainPlayerPendingState.Validate(state.Capture());
+        return state;
     }
     private static void EmptyPendingFurnitureAndCold()
     {
@@ -191,9 +206,14 @@ internal static partial class SourceMainScriptCallerContracts
         public void PendingFurniture(FalloutMainPlayerCellInvocation invocation, FalloutPlayerPendingRequest request) =>
             state.ConsumeFurniture(invocation, request, _ => FurnitureCalls++);
         public void RetirePendingDeferredChildren(FalloutMainPlayerCellInvocation invocation)
-        { invocation.Require(FalloutMainPlayerCellStep.PendingDeferredDestruction); DeferredCalls++; }
+        {
+            invocation.Require(FalloutMainPlayerCellStep.PendingDeferredDestruction);
+            state.RetireDeferredChildren(invocation);
+            DeferredCalls++;
+        }
         public bool PendingFlagQueries(FalloutMainPlayerCellInvocation invocation) =>
-            state.ReadFinalFlagQueries(invocation, () => 2u); // Independently authored held manager word; not a production producer.
+            state.ReadFinalFlagQueries(invocation, () => Source.Main.HasNewVegasChildren ? 2u :
+                invocation.Owner.ReadStandalonePendingPostNullMainWord(invocation)); // FNV manager remains independently authored here.
         public void PendingFlagChild(FalloutMainPlayerCellInvocation invocation) => state.StoreFinalFlag(invocation);
         public void StorePendingSceneScalar(FalloutMainPlayerCellInvocation invocation, FalloutPlayerPendingRequest request) => throw new InvalidOperationException("Excluded authored scalar arm.");
         public void InvokePendingCallback(FalloutMainPlayerCellInvocation invocation, FalloutPlayerPendingRequest request) => throw new InvalidOperationException("Excluded authored callback arm.");

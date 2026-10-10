@@ -41,6 +41,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
         openingSeconds = _openSeconds,
         durationSeconds = _player.PipBoyDuration,
         closing = _closing,
+        pointerInput = new { retired = _sourcePointerRetired, failure = _sourcePointerFailure, flatCaptured = _flatPointerPressed, xrCaptured = _xrPressed },
         camera = _device?.Camera.Transform.ToString(),
         screen = _screen.GlobalTransform.ToString(),
         xr = !_worldSpace ? null : new
@@ -215,9 +216,9 @@ internal sealed partial class NativeOwnedPipBoy : Control
     }
     public override void _Input(InputEvent input)
     {
-        if (_worldSpace) return;
+        if (_worldSpace || _sourcePointerRetired || _sourcePointerFailure is not null) return;
         if (input.IsActionPressed(_toggleAction) || input is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Escape })
-        { _closing = true; GetViewport().SetInputAsHandled(); return; }
+        { RequestClose(); GetViewport().SetInputAsHandled(); return; }
         if (_closing || _openSeconds < _player.PipBoyDuration) { GetViewport().SetInputAsHandled(); return; }
         if (input is InputEventMouse mouse)
         {
@@ -229,15 +230,28 @@ internal sealed partial class NativeOwnedPipBoy : Control
             if (uv is null && mouse is InputEventMouseMotion drag && (drag.ButtonMask & MouseButtonMask.Left) != 0)
             { GetViewport().SetInputAsHandled(); return; }
             var point = uv is { } value ? value * new Vector2(1280, 960) : new Vector2(-1, -1);
+            if (uv is null && _flatPointerPressed && mouse is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false })
+            { CancelFlatPointer(); GetViewport().SetInputAsHandled(); return; }
+            if (mouse is InputEventMouseButton { ButtonIndex: MouseButton.Left } leftButton)
+                _flatPointerPressed = leftButton.Pressed && uv is not null;
             using var copy = (InputEventMouse)mouse.Duplicate(); copy.Position = copy.GlobalPosition = point;
             if (copy is InputEventMouseMotion motion) motion.Relative = _lastPointer is { } previous ? point - previous : Vector2.Zero;
-            _lastPointer = point; _canvas.PushInput(copy, true); GetViewport().SetInputAsHandled();
+            _lastPointer = point; DeliverSourcePointer(copy); GetViewport().SetInputAsHandled();
         }
         else if (input is InputEventKey)
-        { _canvas.PushInput(input, true); GetViewport().SetInputAsHandled(); }
+        { DeliverSourcePointer(input); GetViewport().SetInputAsHandled(); }
     }
-    internal void RequestClose() => _closing = true;
-    public override void _ExitTree() => RestoreScreenMaterial();
+    internal void RequestClose()
+    {
+        _closing = true;
+        CancelFlatPointer();
+        ReleaseXrPointer();
+    }
+    public override void _ExitTree()
+    {
+        try { RetireSourcePointerInput(); }
+        finally { RestoreScreenMaterial(); }
+    }
     private void RestoreScreenMaterial()
     {
         if (_worldSpace && IsInstanceValid(_screen))
@@ -249,6 +263,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
     internal void PoseXrDevice(Transform3D head) => _xrDevice?.Publish(head);
     internal Vector3? PointFromXr(Transform3D aim, bool tracked, bool pressed)
     {
+        if (_sourcePointerRetired || _sourcePointerFailure is not null) return null;
         if (_closing || !_xrFocused) { ReleaseXrPointer(); return null; }
         if (!tracked) { ReleaseXrPointer(); _xrAwaitTriggerRelease = true; return null; }
         if (_xrAwaitTriggerRelease)
@@ -268,7 +283,7 @@ internal sealed partial class NativeOwnedPipBoy : Control
                 Relative = _lastPointer is { } previous ? point - previous : Vector2.Zero,
                 ButtonMask = _xrPressed ? MouseButtonMask.Left : 0
             };
-            _canvas.PushInput(motion, true); _lastPointer = point;
+            DeliverSourcePointer(motion); _lastPointer = point;
         }
         if (_xrCursor is not null) { _xrCursor.Visible = uv is not null; _xrCursor.Position = point - _xrCursor.Size / 2; }
         if (_xrPressed != pressed)
@@ -288,7 +303,11 @@ internal sealed partial class NativeOwnedPipBoy : Control
             }
             else
             {
-                if (!_xrButtonPressed) PushXrClick(false, point);
+                if (!_xrButtonPressed)
+                {
+                    if (uv is null) CancelSourcePointer();
+                    else PushXrClick(false, point);
+                }
                 _xrButtonPressed = false;
             }
             _xrPressed = pressed;
@@ -303,20 +322,23 @@ internal sealed partial class NativeOwnedPipBoy : Control
     }
     private void ReleaseXrPointer()
     {
-        if (_xrPressed && !_xrButtonPressed) PushXrClick(false, _lastPointer ?? Vector2.Zero);
-        if (_xrCursor is not null) _xrCursor.Visible = false;
+        var captured = _xrPressed && !_xrButtonPressed;
         _xrPressed = false; _xrButtonPressed = false;
+        if (_xrCursor is not null) _xrCursor.Visible = false;
+        try { if (captured) CancelSourcePointer(); }
+        finally { _lastPointer = null; }
     }
     private void PushXrClick(bool pressed, Vector2 point)
     {
         using var click = new InputEventMouseButton
         {
-            Position = _lastPointer ?? point,
-            GlobalPosition = _lastPointer ?? point,
+            Position = point,
+            GlobalPosition = point,
             ButtonIndex = MouseButton.Left,
+            ButtonMask = pressed ? MouseButtonMask.Left : 0,
             Pressed = pressed
         };
-        _canvas.PushInput(click, true);
+        DeliverSourcePointer(click);
     }
     internal void RefreshWorld(FalloutFormKey? world, Vector3 player, float heading) => _menu.RefreshWorld(world, player, heading);
 }

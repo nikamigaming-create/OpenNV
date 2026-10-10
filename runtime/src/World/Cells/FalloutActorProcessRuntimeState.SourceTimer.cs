@@ -84,7 +84,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
     internal string? SourceCachedTimerSaveBlocker => _cachedTimerConstructionFailure is not null ?
         "source-cached-timer-construction-failed" : _cachedSourceTimer?.SaveBlocker;
     internal string? SourceCachedTimerRuntimeBoundary => _cachedSourceTimer is null ?
-        _cachedTimerPrepared ? "source-cached-timer-native-factory-publication-pending" : "selected-cached-timer-constructor-unowned" :
+        _cachedTimerPrepared ? "source-cached-timer-native-factory-publication-pending" : null :
         !_cachedSourceTimer.HasReturnedUpdate ? "original-Main-tail-cached-timer-writer-unbound" : null;
     internal object? SourceCachedTimerState => _cachedTimerConfiguration is null ? null : new
     {
@@ -98,6 +98,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
     internal void RetireSourceCachedTimer()
     {
         RequireMainScriptClosureBoundary(retiring: true);
+        if (_globalTime is not null)
+            throw new InvalidOperationException("Main timer cannot retire before its global simulation/audio source and native consumer.");
         _cachedSourceTimer?.Dispose(); _cachedSourceTimer = null; _cachedTimerConfiguration = null;
         _preparedCachedTimerSnapshot = null; _cachedTimerNativeOwner = null; _cachedTimerNativeThread = null; _cachedTimerPrepared = false;
     }

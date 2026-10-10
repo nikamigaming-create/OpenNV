@@ -5,6 +5,7 @@ internal static partial class SourceSkyTransferContracts
 {
     private static void MoonContracts()
     {
+        CelestialContracts();
         var fnv = FalloutMoonSource.Read(Declaration);
         var fo3 = FalloutMoonSource.Read(new(FalloutSourceMainFamily.Fallout3,
             FalloutSkyTransferDeclaration.StandaloneContractSha256));

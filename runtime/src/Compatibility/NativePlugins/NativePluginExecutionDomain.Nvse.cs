@@ -108,6 +108,7 @@ internal sealed partial class NativePluginExecutionDomain
         VerifyNvse(plugin); RequireNvseEmptyCall();
         if (!(plugin.Phase == NativeNvsePhase.LoadedTrue || plugin.Phase == NativeNvsePhase.QueriedTrue && type == 23 && payload.IsEmpty))
             throw new InvalidOperationException("Original message lacks its actual queried/loaded source phase.");
+        RequireEngineGlobalsCurrent(plugin);
         if (payload.Length > MaximumPayload - 256) throw new ArgumentOutOfRangeException(nameof(payload));
         var data = payload.ToArray(); ++_callDepth;
         try
@@ -118,7 +119,7 @@ internal sealed partial class NativePluginExecutionDomain
             var delivered = reader.ReadUInt32(); var counts = ReadNvseCounts(reader); Finish(reader); CheckNvseCounts(plugin, counts);
             if (delivered != plugin.Registry.MessageCompletions.Count - previous)
                 throw new InvalidDataException("Original NVSE event lacks its actual callback delivery cardinality.");
-            VerifyOwner(); return delivered;
+            RequireEngineGlobalsCurrent(plugin); VerifyOwner(); return delivered;
         }
         catch (NativePluginDomainRefusal) { throw; }
         catch (Exception error) { plugin.Phase = NativeNvsePhase.Faulted; throw Fatal(error); }
@@ -126,7 +127,7 @@ internal sealed partial class NativePluginExecutionDomain
     }
     internal void DeliverNvseNewGame(NativeNvsePlugin plugin)
     {
-        VerifyNvse(plugin); RequireNvseLoaded(plugin); RequireNvseEmptyCall(); ++_callDepth;
+        VerifyNvse(plugin); RequireNvseLoaded(plugin); RequireNvseEmptyCall(); RequireEngineGlobalsCurrent(plugin); ++_callDepth;
         try
         {
             using var reader = Exchange(NativePluginDomainOperation.NvseSerialization, Payload(writer =>
@@ -151,6 +152,8 @@ internal sealed partial class NativePluginExecutionDomain
             if (image != 0 || interfaces != 0) throw new InvalidDataException("Original NVSE image/interface mapping remains after retirement.");
             RequireEngineCommandRetirement();
             RequireSourceCallSiteRetirement();
+            RequireSourceFieldMethodsRetired();
+            RequireEngineGlobalsRetired();
             RequirePrivateIoRetired();
             RetireNativeImportProviders();
             RequireNvseHeapRetired();
@@ -221,6 +224,16 @@ internal sealed partial class NativePluginExecutionDomain
             case NativeNvseHostCall.SourceCallSiteExecute:
             case NativeNvseHostCall.SourceCallSiteRetire:
                 value = DispatchNvseCallSite((NativeNvseHostCall)frame.Operation, frame, parent, reader); break;
+            case NativeNvseHostCall.EngineGlobalPublish:
+            case NativeNvseHostCall.EngineTlsPublish:
+            case NativeNvseHostCall.EngineGlobalRetire:
+            case NativeNvseHostCall.EngineTlsRetire:
+                value = DispatchNvseEngineGlobal((NativeNvseHostCall)frame.Operation, frame, parent, reader); break;
+            case NativeNvseHostCall.SourceFieldMethodDeclare:
+            case NativeNvseHostCall.SourceFieldMethodPublish:
+            case NativeNvseHostCall.SourceFieldMethodExecute:
+            case NativeNvseHostCall.SourceFieldMethodRetire:
+                value = DispatchNvseFieldMethod((NativeNvseHostCall)frame.Operation, frame, parent, reader); break;
             default: throw new InvalidDataException("Unknown NVSE interface callback operation.");
         }
         Finish(reader); return value;
@@ -230,6 +243,8 @@ internal sealed partial class NativePluginExecutionDomain
         if (!ChildExited) throw new InvalidOperationException("Native source/capability owners require verified exact child closure.");
         ClearEngineCommandsAfterChildExit();
         ClearSourceCallSitesAfterChildExit();
+        ClearSourceFieldMethodsAfterChildExit();
+        ClearEngineGlobalsAfterChildExit();
         ClearNvseBinaryAfterChildClosure();
         ClearNvseData();
         ClearNvseCommandTable();

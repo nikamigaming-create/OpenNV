@@ -25,7 +25,8 @@ internal static partial class FalloutNativeCampaignSave
             state.RestInterfaceSounds is null || state.InterfaceFades is null ||
             state.ActorUpdates is null || state.CellProcesses is null || state.ActorProcessRuntime is null || state.ActorProcessCommon is null ||
             state.PlayerSkillValues is null || state.PlayerAbilityScripts is null || state.PlayerStatistics is null || state.ProcessQueues is null ||
-            state.Scripts.Challenges is null || state.IndexedInterfaceSounds is null || state.ImagePhaseClock is null)
+            state.Scripts.Challenges is null || state.IndexedInterfaceSounds is null || state.ImagePhaseClock is null || state.RoomPortals is null ||
+            state.Conversation is null)
             throw new InvalidDataException("Campaign state is missing an authoritative runtime owner.");
         if (state.IndexedInterfaceSounds.Schema != FalloutIndexedInterfaceSounds.Schema ||
             state.IndexedInterfaceSounds.Selection is null ||
@@ -68,6 +69,8 @@ internal static partial class FalloutNativeCampaignSave
         ValidateActorProcessContinuation(state);
         ValidateActualProcessRuntimeContinuation(state);
         ValidateProcessQueueContinuation(state);
+        ValidateRoomPortals(state.RoomPortals, state.CellProcesses);
+        ValidateConversationShape(state.Conversation);
         if (state.Special.Values.Count != FalloutNativeVigorResolver.AttributeNames.Count ||
             state.Special.Values.Where((value, index) => state.PlayerActorValues.Values[index + 5].Base != (float)value).Any())
             throw new InvalidDataException("Saved SPECIAL view differs from the player BASE pools.");

@@ -21,6 +21,9 @@ internal sealed record FalloutStandalonePlayerSceneSource(FalloutMainScriptCalle
         "Player-constructor-countdown-disabled-five-and-null-scene-reference;" +
         "virtual-releases-shared-owned-child-before-countdown;" +
         "reference-scratch-zero-store-before-Player-query-before-null-reference-test;" +
+        "reference-query-force-first-person-field-before-null-and-every-parent-recursion;" +
+        "node-reference-virtual-before-parent-walk-player-root-identity-special-base-parent-preference;" +
+        "reference-frame-consumer-before-stored-reference-release-remains-independent;" +
         "unknown-POV-and-full-virtual-children-retain-entered-prefix;" +
         "current-native-factory-and-source-resource-identity-fresh-cold-rebind";
     internal string Identity => FalloutAdvancementRuntimeReceipt.Hash(Main.Identity + "\0" + Contract);

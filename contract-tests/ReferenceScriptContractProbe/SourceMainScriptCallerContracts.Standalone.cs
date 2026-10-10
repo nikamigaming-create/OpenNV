@@ -9,9 +9,12 @@ internal static partial class SourceMainScriptCallerContracts
         RunStandaloneInterfaceContracts();
         RunStandalonePlayerSceneContracts();
         StandaloneDeclarations(); StandaloneCurrentAndCold(); StandalonePendingRefusal();
+        RunSourceTaskManagerContracts();
+        RunSourceDeferredReleaseContracts();
+        RunStandalonePostNullWordContracts();
         Console.WriteLine("OPENNV_FO3_SOURCE_MAIN_PLAYER_PASS authoredOnly=true independentMain=true noSteam=true " +
             "interiorSkipsFistp=true coldNoReplay=true mandatoryCurrentOwner=true " +
-            "sourcePendingDifferences=true taskUiSceneTls=UNOWNED nativeGameplay=UNEXECUTED");
+            "sourcePendingDifferences=true activeTaskUiSceneTls=UNOWNED nativeGameplay=UNEXECUTED");
     }
     private static void StandaloneDeclarations()
     {
@@ -91,22 +94,16 @@ internal static partial class SourceMainScriptCallerContracts
     }
     private static void StandalonePendingRefusal()
     {
-        using var fixture = new StandaloneFixture();
-        var state = fixture.Owner.MainPlayerPendingConsumers;
-        var source = FalloutMainPlayerPendingSource.Read(fixture.Owner.MainPlayerCellSource);
-        fixture.Slot.StoreSource(FalloutPlayerPendingKind.Empty, null, null, "authored-FO3-empty-pending-allocation",
-            new(source.Contract, "authored-complete-raw-empty-payload", null, null, null, 0, 0, 0, 0, 0, 0, 0, null, null, SourceTailWord: 0));
-        var consumers = new AuthoredPendingTail(source.Player, state);
-        using (fixture.Owner.BindMainPlayerCell(consumers, "authored-FO3-pending-refusal"))
-        using (fixture.Owner.BindMainScriptCaller(fixture.Host, "authored-FO3-main-refusal"))
-            Reject(() => fixture.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult());
-        var captured = fixture.Owner.Capture(); var player = captured.StandaloneMain!.PlayerCell;
-        Require(player.LastCall is { Disposition: FalloutMainPlayerCellDisposition.Failed } &&
-            player.LastCall.Children.Last() is { Step: FalloutMainPlayerCellStep.PendingWorldPrelude, Returned: null } &&
-            player.Pending.Pending is not null && player.PendingConsumers.ExteriorLoaders is null &&
-            player.PendingConsumers.Error!.Contains("FO3-TaskManager", StringComparison.Ordinal),
+        using var fixture = new StandaloneFixture(bindTaskManager: false);
+        StoreStandaloneEmptyTransfer(fixture);
+        var pending = fixture.Slot.Next!;
+        Reject(() => ExecuteStandalonePending(fixture));
+        var failed = fixture.Slot.Capture();
+        Require(fixture.Slot.Pending && fixture.Slot.Next is null && failed.Pending == pending &&
+            failed.Completion is null && failed.Error is not null && fixture.Owner.MainPlayerCellSaveBlocker is { } blocker &&
+            blocker.Contains("task-manager-construction", StringComparison.Ordinal),
             "Missing FO3 TaskManager was replaced by an empty FNV map or falsely returned/null-stored work.");
-        Reject(() => FalloutActorProcessRuntimeState.RequireStandaloneMainPlayable(captured));
+        Reject(() => fixture.Owner.Capture());
         Reject(() => fixture.Owner.ExecuteMainScriptCaller(2, .02f).GetAwaiter().GetResult());
     }
     private sealed class StandaloneFixture : IDisposable
@@ -115,10 +112,14 @@ internal static partial class SourceMainScriptCallerContracts
         internal readonly FalloutPlayerPendingSlot Slot = new();
         internal readonly FalloutInterfaceFade Fade;
         internal readonly Host Host;
+        internal readonly FalloutQueuedReferences SourceQueue;
+        internal readonly FalloutSourceTaskManager? TaskManager;
         private readonly IDisposable _fadeLease;
+        internal IDisposable ActualFadeLease => _fadeLease;
         private readonly AuthoredPlayerCell _player;
         private readonly AuthoredInterfaceObject _interface;
-        internal StandaloneFixture(FalloutActorProcessRuntimeSnapshot? saved = null, FalloutInterfaceFadeSnapshot? fade = null)
+        internal StandaloneFixture(FalloutActorProcessRuntimeSnapshot? saved = null, FalloutInterfaceFadeSnapshot? fade = null,
+            bool bindTaskManager = true)
         {
             const string engine = FalloutSourceMainFamily.Fallout3;
             var field = new FalloutImmediateScriptSource(engine, new('1', 64), FalloutImmediateScriptSource.ContractForEngine(engine));
@@ -127,6 +128,14 @@ internal static partial class SourceMainScriptCallerContracts
             FalloutCombatActorIdentity Identity(FalloutFormKey key) => new(key, Key(7), "ENGINE_PLAYER", 0, engine, "NPC_", 0, new('4', 64), true);
             Owner = new(FalloutActorProcessRuntimeDeclaration.ForExecutable(engine), "authored-FO3-Main", Key(0x14), Identity, saved);
             Owner.ConstructStandaloneMain(main, Slot, saved?.StandaloneMain, saved);
+            SourceQueue = new(FalloutActorProcessQueueDeclaration.ForExecutable(engine), "authored-FO3-Main", key =>
+                new(key, "REFR", new('2', 64), Key(7), "STAT", new('3', 64), FalloutQueuedReferenceKind.Reference, false));
+            if (bindTaskManager)
+            {
+                TaskManager = new(Owner.MainPlayerCellSource, "authored-FO3-Main", Owner.ReadMainNativeDeliveryBindings().Process,
+                    SourceQueue.ReadSourceTaskManagerCohort, saved?.StandaloneMain?.PlayerCell.PendingConsumers.TaskManager);
+                Owner.MainPlayerPendingConsumers.BindStandaloneTaskManager(TaskManager, Owner.RequireMainNativeDeliveryClosed);
+            }
             _interface = PublishAuthoredStandaloneInterface(Owner);
             var rows = new[] { new FalloutInterfaceFadeCatalogRow(0, FalloutInterfaceFadeRoot.Primary, "textures/interface/faders/a.dds"),
                 new FalloutInterfaceFadeCatalogRow(1, FalloutInterfaceFadeRoot.Secondary, "textures/interface/faders/a.dds"),
@@ -140,7 +149,7 @@ internal static partial class SourceMainScriptCallerContracts
         }
         internal IDisposable Bind() => new StandaloneLeases(Owner.BindMainPlayerCell(_player, "authored-FO3-player"),
             Owner.BindMainScriptCaller(Host, "authored-FO3-main"));
-        public void Dispose() { _fadeLease.Dispose(); Owner.Dispose(); _interface.Retire(); }
+        public void Dispose() { _fadeLease.Dispose(); Owner.Dispose(); SourceQueue.Dispose(); _interface.Retire(); }
     }
     private sealed class StandaloneLeases(IDisposable player, IDisposable main) : IDisposable
     {

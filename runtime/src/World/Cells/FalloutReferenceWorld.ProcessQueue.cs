@@ -223,6 +223,7 @@ internal sealed partial class FalloutReferenceWorld
     {
         // All native read/assembly consumers retire before their C# provider.
         // An exception retains the failed owner and every dependent provider.
+        RequireStandaloneTaskManagerRetiredBeforeQueueProviders();
         _queuedReferenceWork?.Dispose(); _queuedReferenceWork = null;
         _queuedReferences?.Dispose(); _queuedReferences = null;
         RetireSourceFrameDispatch();

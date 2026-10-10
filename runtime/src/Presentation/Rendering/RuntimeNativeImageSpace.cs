@@ -42,7 +42,7 @@ internal partial class RuntimeNativeImageSpace : Node
 
     public override void _Notification(int what)
     {
-        if (what == NotificationPredelete) _effect?.ReleaseRenderingResources();
+        if (what == NotificationPredelete) RetireIndependentImageChildren();
     }
 
     internal IDisposable BeginMenuBackground(FalloutPluginStack records, FalloutMenuBackgroundKind kind)
@@ -81,6 +81,7 @@ internal partial class RuntimeNativeImageSpace : Node
     private void Publish(double delta)
     {
         var gameplay = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase);
+        PublishCurrentSkyHdr(gameplay);
         Frame = _menuBackground ?? gameplay;
         _effect.SetSourceFrame(gameplay, (float)delta);
         SetMeta("opennv_image_space_operational", _effect.Operational);

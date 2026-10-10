@@ -33,13 +33,11 @@ internal partial class RuntimeNativeSkyLayers
         sky.SourceMoons.SynchronizeFactories(this, climate, (row, mode) => RuntimeNativeMoon.Create(sky.SourceMoons,
             row, mode, source, this, _moonUnits, ConstructSourceMoonProperty));
     }
-    private static ShaderMaterial ConstructSourceMoonProperty(int role)
+    private FalloutSkyCelestialPass ConstructSourceMoonProperty(int role)
     {
-        if (role is not (6 or 7)) throw new InvalidDataException("Moon factory requested a foreign source Sky property role.");
-        // The actual constructor/resource/phase fields are owned. The selected
-        // program-to-technique and live constant providers are a distinct next
-        // owner: never publish these quads with a default material.
-        throw new NotSupportedException("source-Moon-actual-shader-technique-constant-and-render-state-owner-unbound");
+        var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Moon property lost its selected source lifetime.");
+        var sky = _moonSky ?? throw new InvalidOperationException("Moon property lost its actual Sky scene owner.");
+        return FalloutSkyCelestialPrograms.Read(source, sky.SourceMoons.Source, role);
     }
     private void ProcessSourceMoonCalendar()
     {

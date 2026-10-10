@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutSkyMoonState
 {
-    internal const string Schema = "opennv-source-Moons/v1";
+    internal const string Schema = "opennv-source-Moons/v2";
     internal FalloutSkyMoonSnapshot Capture()
     {
         Require();
@@ -39,6 +39,13 @@ internal sealed partial class FalloutSkyMoonState
         if (climate is null && saved.Moons.Count != 0 || climate is not null &&
             !saved.Moons.Select(row => row.Role).ToHashSet().SetEquals(Enum.GetValues<FalloutMoonRole>().Where(climate.Enabled)))
             throw new InvalidDataException("Saved Moon fields omitted or introduced a climate-enabled source child.");
+        FalloutSkyCelestialPass? primaryProgram = null, shadowProgram = null;
+        if (saved.Moons.Count != 0)
+        {
+            var owned = records.OwnedSource ?? throw new NotSupportedException("Moon program validation needs the actual selected source lifetime.");
+            primaryProgram = FalloutSkyCelestialPrograms.Read(owned, source, 6);
+            shadowProgram = FalloutSkyCelestialPrograms.Read(owned, source, 7);
+        }
         foreach (var row in saved.Moons)
         {
             if (!Enum.IsDefined(row.Role) || row.CapturedIdentity == Guid.Empty || row.Changed < 1 || row.Changed > saved.Changed ||
@@ -48,10 +55,8 @@ internal sealed partial class FalloutSkyMoonState
                 !float.IsFinite(BitConverter.UInt32BitsToSingle(row.LastHourBits)))
                 throw new InvalidDataException("Saved Moon introduced unowned settings, field values or a missing native construction return.");
             RequireNativeFields(row.Native);
-            if (row.Native.ParentHidden || row.Native.PrimaryHidden || row.Native.ShadowHidden ||
-                row.Native.PrimaryAlphaBits != BitConverter.SingleToUInt32Bits(1f) ||
-                row.Native.ShadowAlphaBits != BitConverter.SingleToUInt32Bits(1f))
-                throw new InvalidDataException("Saved Moon introduced an unowned active draw/opacity writer into the admitted constructor fields.");
+            FalloutMoonDrawPersistence.Validate(row.Native, source, row.Settings, saved.CapturedSky, saved.CapturedProcess,
+                primaryProgram!.Declaration, shadowProgram!.Declaration);
             Texture(row.Native.PrimaryTexture, row.Role, shadow: false);
             Texture(row.Native.ShadowTexture, row.Role, shadow: true);
             if (row.Native.PrimaryHasTexture && row.LastPhaseAttempt is null ||
@@ -82,7 +87,12 @@ internal sealed partial class FalloutSkyMoonState
         _phase = saved.Phase; _storedDays = saved.StoredDays; _climate = saved.Climate;
         _factoryEntered = saved.FactoryEntered; _changed = saved.Changed;
         foreach (var row in saved.Moons)
-            _moons.Add(row.Role, row with { CapturedIdentity = Guid.NewGuid(), Changed = Next() });
+            _moons.Add(row.Role, row with
+            {
+                CapturedIdentity = Guid.NewGuid(),
+                Changed = Next(),
+                Native = row.Native is { } fields ? FalloutMoonDrawPersistence.PrepareCold(fields) : null
+            });
         // No previous native handle or thread is promoted. Retained resource
         // fields must be recreated by the genuine scene factory before capture.
         Next();

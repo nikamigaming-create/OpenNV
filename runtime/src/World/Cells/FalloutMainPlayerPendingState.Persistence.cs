@@ -11,7 +11,8 @@ internal sealed partial class FalloutMainPlayerPendingState
             throw new NotSupportedException("Source Player refcounted child requires its real typed native cold reconstruction owner.");
         var result = new FalloutMainPlayerPendingSnapshot(Schema, _source, _stack, _process, _sequence, null,
             _flags, _childMutation, _scalar, _callbacks, _lastCallback, _lastFurniture, _flagStores,
-            _failureType, _error, _cold, _exteriorLoaders?.Capture(), CaptureCharacterController());
+            _failureType, _error, _cold, _exteriorLoaders?.Capture(), CaptureCharacterController(), CaptureStandaloneTaskManager(), CaptureDeferredRelease(),
+            _source.Player.Main.HasNewVegasChildren ? CurrentNewVegasDeferredRelease.Capture() : null);
         Validate(result); return result;
     }
     private void Restore(FalloutMainPlayerPendingSnapshot saved)
@@ -36,6 +37,8 @@ internal sealed partial class FalloutMainPlayerPendingState
             saved.Callbacks > 0 && saved.LastCallbackRequest is null)
             throw new InvalidDataException("Player pending snapshot omitted mandatory source field/lifetime state.");
         saved.Source.Validate();
+        ValidateStandaloneTaskManager(saved);
+        ValidateDeferredRelease(saved);
         if (saved.Source.Player.Main.HasNewVegasChildren)
         {
             var loaders = saved.ExteriorLoaders ?? throw new InvalidDataException("Source NV pending reset omitted its actual loader map.");
@@ -76,9 +79,13 @@ internal sealed partial class FalloutMainPlayerPendingState
             }
             catch (Exception failure) { failures.Add(failure); }
         }
+        try { RetireStandaloneTaskManager(); }
+        catch (Exception failure) { failures.Add(failure); }
         try { _exteriorLoaders?.Retire(); }
         catch (Exception failure) { failures.Add(failure); }
         try { _characterController?.Retire(); }
+        catch (Exception failure) { failures.Add(failure); }
+        try { RetireCurrentDeferredRelease(); }
         catch (Exception failure) { failures.Add(failure); }
         if (failures.Count != 0)
             throw new AggregateException("Player pending retirement retains every independent still-owned child.", failures);

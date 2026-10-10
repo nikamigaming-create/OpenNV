@@ -11,12 +11,12 @@ internal sealed record FalloutCompiledQuestSnapshot(string Schema, int DecoderVe
     string QuestSha256, string RecordSha256, string ScopeSha256, string ProgramSha256,
     long InitializationOrdinal, uint InitialPhaseBits, uint IntervalBits, bool Claimed,
     ulong Dispatches, ulong CompletedDispatches, bool? LastCompletedGameMode, IReadOnlyList<FalloutCompiledSliceReceipt> LastCompletedEvents,
-    FalloutCompiledQuestPending? Pending);
+    FalloutCompiledQuestPending? Pending, IReadOnlyList<uint>? LastCompletedMenus = null);
 
 internal sealed partial class FalloutQuestScripts
 {
-    internal const int CompiledSchedulingVersion = 1;
-    internal const string CompiledSchedulingSchema = "opennv-compiled-quest-recurrence/v1";
+    internal const int CompiledSchedulingVersion = 2;
+    internal const string CompiledSchedulingSchema = "opennv-compiled-quest-recurrence/v2";
     private sealed class CompiledInstance(FalloutPluginRecord quest, FalloutCompiledScriptProgram program,
         FalloutQuestScriptDefinition definition, FalloutQuestScriptClock clock, bool claimed)
     {
@@ -29,6 +29,7 @@ internal sealed partial class FalloutQuestScripts
         internal string? Error;
         internal ulong Dispatches, CompletedDispatches;
         internal bool? LastCompletedGameMode;
+        internal IReadOnlyList<uint>? LastCompletedMenus;
         internal IReadOnlyList<FalloutCompiledSliceReceipt> LastCompleted = [];
         internal FalloutCompiledQuestPending? Pending;
         internal string? UnownedFailure;
@@ -48,7 +49,7 @@ internal sealed partial class FalloutQuestScripts
     private static uint Bits(float value) => unchecked((uint)BitConverter.SingleToInt32Bits(value));
     private static string QuestHash(FalloutPluginRecord quest) => Convert.ToHexString(SHA256.HashData(quest.ReadData())).ToLowerInvariant();
     private static FalloutCompiledCursorSnapshot CopyCursor(FalloutCompiledCursorSnapshot cursor) =>
-        cursor with { Branches = cursor.Branches.ToArray() };
+        cursor.Copy();
     private static FalloutCompiledSliceReceipt CopyReceipt(FalloutCompiledSliceReceipt receipt) => receipt with { Cursor = CopyCursor(receipt.Cursor) };
     private static FalloutCompiledQuestPending? CopyPending(FalloutCompiledQuestPending? pending) => pending is null ? null : pending with
     {
@@ -62,7 +63,7 @@ internal sealed partial class FalloutQuestScripts
         CompiledSchedulingSchema, FalloutCompiledScriptProgram.DecoderVersion, QuestHash(instance.Quest),
         instance.Program.Scope.RecordSha256, instance.Program.Scope.ScopeSha256, instance.Program.ProgramSha256,
         instance.Definition.InitializationOrdinal, Bits(instance.Definition.InitialPhase), Bits(instance.Clock.Interval), instance.Claimed,
-        instance.Dispatches, instance.CompletedDispatches, instance.LastCompletedGameMode, instance.LastCompleted.Select(CopyReceipt).ToArray(), CopyPending(instance.Pending));
+        instance.Dispatches, instance.CompletedDispatches, instance.LastCompletedGameMode, instance.LastCompleted.Select(CopyReceipt).ToArray(), CopyPending(instance.Pending), instance.LastCompletedMenus?.ToArray());
 
     private IReadOnlyList<FalloutQuestScriptSnapshot> CaptureSchedule()
     {
@@ -116,8 +117,15 @@ internal sealed partial class FalloutQuestScripts
         if (instance.Pending is null)
         {
             if (!immediateMenu && !instance.Clock.Advance((float)seconds)) return;
-            var events = Enumerable.Range(0, instance.Program.Events.Count).Where(index =>
-                instance.Program.Events[index].Event == (gameMode ? 0 : 1)).ToArray();
+            IReadOnlyList<int> events;
+            try { events = FalloutCompiledRecurringEventFilter.Select(instance.Program, Menus); }
+            catch (Exception error)
+            {
+                // A missing actual filter producer owns no executable cursor.
+                // Keep the consumed clock/error visible and refuse cold capture.
+                instance.Error = instance.UnownedFailure = error.Message;
+                _unbound[instance.Quest.FormKey] = error.Message; return;
+            }
             instance.Dispatches = checked(instance.Dispatches + 1);
             instance.Pending = new(instance.Dispatches, !immediateMenu,
                 checked(instance.Clock.Invocations + (immediateMenu ? 0 : 1)), gameMode, Menus.Codes?.ToArray(),
@@ -192,6 +200,7 @@ internal sealed partial class FalloutQuestScripts
             }
             instance.LastCompleted = pending.CompletedEvents.ToArray();
             instance.LastCompletedGameMode = pending.GameMode;
+            instance.LastCompletedMenus = pending.Menus?.ToArray();
             instance.CompletedDispatches = checked(instance.CompletedDispatches + 1);
             instance.Pending = null;
         }
@@ -228,10 +237,13 @@ internal sealed partial class FalloutQuestScripts
             if (receipt.Disposition != "completed") throw new InvalidDataException("Completed quest dispatch contains an unfinished event.");
         }
         if ((saved.CompletedDispatches > 0) != (saved.LastCompletedGameMode is not null) ||
-            saved.CompletedDispatches == 0 && saved.LastCompletedEvents.Count != 0)
+            saved.CompletedDispatches == 0 && (saved.LastCompletedEvents.Count != 0 || saved.LastCompletedMenus is not null) ||
+            saved.LastCompletedGameMode == true && saved.LastCompletedMenus is { Count: > 0 } ||
+            saved.LastCompletedMenus is { } lastMenus && (lastMenus.Any(code => code == 0) ||
+                !lastMenus.SequenceEqual(lastMenus.Distinct().Order())))
             throw new InvalidDataException("Saved last dispatch mode has no actual completed scheduling decision.");
         if (saved.LastCompletedGameMode is { } lastMode && !saved.LastCompletedEvents.Select(receipt => receipt.EventOrdinal).SequenceEqual(
-            Enumerable.Range(0, instance.Program.Events.Count).Where(index => instance.Program.Events[index].Event == (lastMode ? 0 : 1))))
+            FalloutCompiledRecurringEventFilter.Select(instance.Program, lastMode, saved.LastCompletedMenus)))
             throw new InvalidDataException("Saved completed recurrence differs from its original event selection/order.");
         if (saved.Pending is not { } pending)
         {
@@ -247,8 +259,7 @@ internal sealed partial class FalloutQuestScripts
             pending.CompletedEvents.Count != pending.EventIndex || pending.GameMode && pending.Menus is { Count: > 0 } ||
             pending.Menus is { } menus && (menus.Any(code => code == 0) || !menus.SequenceEqual(menus.Distinct().Order())))
             throw new InvalidDataException("Saved compiled dispatch context/cadence/prefix is invalid.");
-        var events = Enumerable.Range(0, instance.Program.Events.Count).Where(index =>
-            instance.Program.Events[index].Event == (pending.GameMode ? 0 : 1));
+        var events = FalloutCompiledRecurringEventFilter.Select(instance.Program, pending.GameMode, pending.Menus);
         if (!events.SequenceEqual(pending.Events)) throw new InvalidDataException("Saved compiled event selection differs from its original ordinal order.");
         for (var index = 0; index < pending.EventIndex; ++index)
         {
@@ -278,7 +289,8 @@ internal sealed partial class FalloutQuestScripts
         var saved = state.Compiled!;
         instance.Clock.Restore(state.Clock!); instance.Executions = state.Executions; instance.Error = state.Error;
         instance.Dispatches = saved.Dispatches; instance.CompletedDispatches = saved.CompletedDispatches;
-        instance.LastCompleted = saved.LastCompletedEvents.Select(CopyReceipt).ToArray(); instance.LastCompletedGameMode = saved.LastCompletedGameMode; instance.Pending = CopyPending(saved.Pending);
+        instance.LastCompleted = saved.LastCompletedEvents.Select(CopyReceipt).ToArray(); instance.LastCompletedGameMode = saved.LastCompletedGameMode;
+        instance.LastCompletedMenus = saved.LastCompletedMenus?.ToArray(); instance.Pending = CopyPending(saved.Pending);
         if (state.Error is not null) _unbound[instance.Quest.FormKey] = state.Error;
     }
 }

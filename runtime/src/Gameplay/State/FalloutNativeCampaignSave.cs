@@ -71,7 +71,9 @@ internal sealed record FalloutNativeCampaignState(
     FalloutPlayerStatisticsSnapshot? PlayerStatistics = null, FalloutProcessQueueSnapshots? ProcessQueues = null,
     FalloutIndexedInterfaceSoundSnapshot? IndexedInterfaceSounds = null,
     FalloutSharedScriptRuntimeSnapshot? SharedScriptState = null,
-    FalloutImageSpacePhaseClockSnapshot? ImagePhaseClock = null);
+    FalloutImageSpacePhaseClockSnapshot? ImagePhaseClock = null,
+    IReadOnlyList<FalloutRoomPortalSnapshot>? RoomPortals = null,
+    FalloutPlayerConversationSnapshot? Conversation = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -142,7 +144,9 @@ internal static partial class FalloutNativeCampaignSave
         FalloutPlayerStatisticsSnapshot? playerStatistics = null, FalloutProcessQueueSnapshots? processQueues = null,
         FalloutIndexedInterfaceSoundSnapshot? indexedInterfaceSounds = null,
         FalloutSharedScriptRuntimeSnapshot? sharedScriptState = null,
-        FalloutImageSpacePhaseClockSnapshot? imagePhaseClock = null)
+        FalloutImageSpacePhaseClockSnapshot? imagePhaseClock = null,
+        IReadOnlyList<FalloutRoomPortalSnapshot>? roomPortals = null,
+        FalloutPlayerConversationSnapshot? conversation = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         ArgumentException.ThrowIfNullOrWhiteSpace(questEditorId);
@@ -195,11 +199,13 @@ internal static partial class FalloutNativeCampaignSave
             RestInterfaceSounds: restInterfaceSounds, InterfaceFades: interfaceFades, HardcoreNeeds: hardcoreNeeds,
             ActorUpdates: actorUpdates, CellProcesses: cellProcesses, ActorProcessRuntime: actorProcessRuntime, ActorProcessCommon: actorProcessCommon,
             PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts, PlayerStatistics: playerStatistics, ProcessQueues: processQueues,
-            IndexedInterfaceSounds: indexedInterfaceSounds, SharedScriptState: sharedScriptState, ImagePhaseClock: imagePhaseClock);
+            IndexedInterfaceSounds: indexedInterfaceSounds, SharedScriptState: sharedScriptState, ImagePhaseClock: imagePhaseClock, RoomPortals: roomPortals,
+            Conversation: conversation);
         Validate(state, saveCompatibilityId);
         ValidateSaveOrderSource(records, state);
         ValidateExperienceNotificationSource(records, state);
         ValidatePlayerPhysicalSource(records, state);
+        ValidateConversationSource(records, state);
         ValidateCurrentRestSource(records, state);
         ValidateCurrentPlayerAbilitySource(records, state);
         ValidateCurrentPlayerStatisticSource(records, state);
@@ -232,6 +238,7 @@ internal static partial class FalloutNativeCampaignSave
         ValidateCompiledScriptStorage(stack, state);
         ValidateExperienceNotificationSource(stack, state);
         ValidatePlayerPhysicalSource(stack, state);
+        ValidateConversationSource(stack, state);
         ValidateCurrentRestSource(stack, state);
         ValidateCurrentPlayerAbilitySource(stack, state);
         ValidateCurrentPlayerStatisticSource(stack, state);

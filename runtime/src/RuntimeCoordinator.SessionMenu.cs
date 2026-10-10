@@ -10,6 +10,7 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator
 {
+    private enum NativeSessionQuitOrigin { SourceMenu, SessionMenu, WindowClose }
     private static Dictionary<string, string>? _nextSessionOptions;
     private static bool _nextSessionContinue;
     private static bool _nextSessionPauseAfterCheckpointLoad;
@@ -116,7 +117,7 @@ public partial class RuntimeCoordinator
         _nativeSessionLayer = new CanvasLayer { Name = "NativeSessionLayer", Layer = 150, ProcessMode = ProcessModeEnum.Always };
         _nativeSessionMenu = new(NativeSaveSlots(), _nativePlayer is not null, showSaves, _nativeOpeningStageDriver?.Vitals.HitPoints == 0,
             CloseNativeSessionMenu, SaveNativeMenuSlot, CancelNativeManualSaveFromInput, LoadNativeSelectedSlot,
-            () => RestartNativeSession(false), () => QuitNativeSession(), DescribeNativeSave);
+            () => RestartNativeSession(false), () => QuitNativeSession(NativeSessionQuitOrigin.SessionMenu), DescribeNativeSave);
         AddChild(_nativeSessionLayer); _nativeSessionLayer.AddChild(_nativeSessionMenu);
         _nativePlayer?.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
         GetTree().Paused = true;
@@ -156,9 +157,10 @@ public partial class RuntimeCoordinator
 
     private string RejectNativePendingLoad(Exception failure)
     {
-        try { _pendingSaveActivation?.Dispose(); }
+        failure = RetainNativeCampaignLoadFailure(failure);
+        try { _pendingSaveActivation?.Dispose(); _pendingSaveActivation = null; }
         catch (Exception rollback) { failure = new AggregateException("Load failed and Continue recovery also failed.", failure, rollback); }
-        _pendingSaveActivation = null;
+        failure = RetainNativeCampaignLoadFailure(failure);
         _pendingCheckpointRestore = null;
         _continueAfterRestart = false;
         GD.PushError($"OPENNV_NATIVE_LOAD_REJECTED {failure}");
@@ -198,7 +200,7 @@ public partial class RuntimeCoordinator
             _nativeScriptStorage?.Controls?.Flush();
             RetireNativeExperienceHud();
             RetireCurrentImagePhase();
-            RetireNativeSourceCellAttachments();
+            await RetireNativeCellAndHdrConsumers();
             GetTree().Paused = false;
             var error = GetTree().ReloadCurrentScene();
             if (error != Error.Ok) throw new InvalidOperationException($"Session reload failed: {error}.");
@@ -212,43 +214,23 @@ public partial class RuntimeCoordinator
             var failure = RejectNativePendingLoad(error);
             _retiringNativeSession = false;
             _nativeSessionTransitioning = false;
-            GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {error}");
+            GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {_nativeCampaignLoadFailure ?? error}");
             DismissLoadingScreen();
             GetTree().Paused = true;
             _nativeSessionMenu?.ShowFailure(failure);
         }
     }
 
-    private async Task DrainNativeSourceReaders()
-    {
-        GetTree().Paused = true;
-        RequestNativeMainPlayerRetirement();
-        var pending = StopActualQueuedSourceReads().ToList();
-        if (_nativeOpeningStageDriver is { } actualDriver) pending.Add(actualDriver.StopAndDrainSourceMainScriptCaller());
-        pending.AddRange(RequestNativeQueuedActorCallerRetirement());
-        pending.AddRange(_nativeGridNpcPreparations.Select(item => item.ReadTask));
-        if (_nativeMenuRead is { } menuRead) pending.Add(menuRead);
-        if (_nativePlayerMoveRead is { } moveRead) pending.Add(moveRead);
-        if (_nativeDoorRead is { } doorRead) pending.Add(doorRead);
-        if (_nativeGridRead is { } gridRead) pending.Add(gridRead);
-        foreach (var lod in FindChildren("*", "", true, false).OfType<RuntimeNativeExteriorLod>())
-            pending.Add(lod.StopSourceReads());
-        CancelNativeGridRead();
-        try { await Task.WhenAll(pending); }
-        catch (Exception readError) { GD.Print($"OPENNV_SESSION_OLD_READ_FINISHED {readError.Message}"); }
-        ReapExteriorQueuedNpcRetirements();
-        // Transferred bodies retire through their actual CELL root below.
-        // Registry destruction cannot precede those native consumers.
-        if (_nativeQueuedActorCallers.Count == 0) RetireReturnedActualQueuedSourceReads();
-    }
+    private Task DrainNativeSourceReaders() => DrainActualCampaignReadersAndMainDelivery();
 
-    private void OnNativeCloseRequested() => QuitNativeSession();
+    private void OnNativeCloseRequested() => QuitNativeSession(NativeSessionQuitOrigin.WindowClose);
 
-    private async void QuitNativeSession()
+    private async void QuitNativeSession(NativeSessionQuitOrigin origin)
     {
         if (_nativeSessionTransitioning) return;
         CancelNativeManualSave("Native session transition started before the pending manual save could commit.", allQueued: true);
         _nativeSessionTransitioning = true;
+        GD.Print($"OPENNV_NATIVE_SESSION_QUIT_REQUESTED origin={origin}");
         try
         {
             await DrainNativeSourceReaders();
@@ -258,7 +240,7 @@ public partial class RuntimeCoordinator
             _retiringNativeSession = true;
             RetireNativeExperienceHud();
             RetireCurrentImagePhase();
-            RetireNativeSourceCellAttachments();
+            await RetireNativeCellAndHdrConsumers();
             StopNativeOpenXr();
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
             GetTree().Quit();

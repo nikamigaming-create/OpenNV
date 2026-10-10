@@ -4,9 +4,11 @@ internal sealed record FalloutConversationChoice(FalloutFormKey Topic, FalloutFo
 
 // The dialogue owner decides which authored responses and choices are active.
 // Audio and menus report completion/input; they never choose the next INFO.
-internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQuestState quests,
+internal sealed partial class FalloutConversation(FalloutPluginStack records, FalloutQuestState quests,
     Func<FalloutCondition, float> evaluate, Action<FalloutDialogueInfo, bool> results, HashSet<FalloutFormKey>? saidInfos = null,
-    Func<uint, uint>? random = null)
+    Func<uint, uint>? random = null,
+    Func<FalloutDialogueInfo, bool, FalloutScriptResultReceipt>? ownedResults = null,
+    Func<FalloutFormKey>? resultCaller = null)
 {
     private readonly Dictionary<FalloutFormKey, FalloutDialogueTopic> _topics = [];
     private readonly FalloutDialogueQuestSelection _selection = new(records, quests);
@@ -37,9 +39,10 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
         if (Phase != "speaking") throw new InvalidOperationException("No dialogue response is playing.");
         Mutate(() =>
         {
-            if (++ResponseIndex < Info!.Responses.Count) return;
+            RetireResponsePublication();
+            if (++ResponseIndex < Info!.Responses.Count) { PublishResponse(); return; }
             Phase = "results";
-            if ((Info.Flags & 8) == 0) results(Info, false);
+            if ((Info.Flags & 8) == 0) ExecuteConversationResult(Info, false);
             foreach (var topic in Info.AddedTopics) _added.Add(topic);
             if (_ending) { Phase = "closed"; Choices = []; return; }
             foreach (var follow in Info.FollowUps)
@@ -83,10 +86,11 @@ internal sealed class FalloutConversation(FalloutPluginStack records, FalloutQue
     private void Begin(FalloutDialogueInfo info)
     {
         Info = info; Choices = []; ResponseIndex = 0; Phase = "results";
+        _beginReceipt = _endReceipt = null; BeginResultsEntered = EndResultsEntered = false;
         if ((info.Flags & 4) != 0) _said.Add(info.Record.FormKey);
-        results(info, true);
-        if ((info.Flags & 8) != 0) results(info, false);
-        Phase = "speaking";
+        ExecuteConversationResult(info, true);
+        if ((info.Flags & 8) != 0) ExecuteConversationResult(info, false);
+        Phase = "speaking"; PublishResponse();
     }
 
     private FalloutDialogueTopic Topic(FalloutFormKey form)

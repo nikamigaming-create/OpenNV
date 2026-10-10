@@ -12,7 +12,9 @@ internal sealed partial class FalloutReferenceWorld
     { links = _sourceCellLinks?.State, constructionFailure = _sourceCellLinksConstructionFailure?.ToString() };
     internal string? SourceCellLinkSaveBlocker => _sourceCellLinksConstructionFailure is not null ?
         "source-CELL-reference-link-construction-failed" : _sourceCellLinks?.SaveBlocker ??
-        (_sourceCellLinks is null ? "selected-source-CELL-linked-reference-constructor-unowned" : null);
+        (_sourceCellLinks is null && _processRuntimeDeclaration is { } selected &&
+            FalloutSourceCellReferenceLinksDeclaration.Supports(selected.ExecutableSha256) ?
+            "selected-source-CELL-linked-reference-constructor-unowned" : null);
 
     internal void ConfigureSourceCellLinks(string stack, IFalloutSourceCellReferenceIngestion? actualIngestion = null,
         FalloutSourceCellReferenceLinksSnapshot? saved = null)

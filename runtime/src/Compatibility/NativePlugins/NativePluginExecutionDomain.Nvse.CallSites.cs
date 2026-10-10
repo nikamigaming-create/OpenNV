@@ -121,7 +121,13 @@ internal sealed partial class NativePluginExecutionDomain
         catch (Exception failure)
         {
             if (site is not null) site.Failure ??= failure.Message;
-            Record(failure.Message); throw;
+            Record(failure.Message);
+            try { RetainSourceCallSiteFailure(); }
+            catch (Exception delivery)
+            {
+                throw new AggregateException("Source CALL failed and private diagnostic publication failed.", failure, delivery);
+            }
+            throw;
         }
         void Record(string? failure = null) => _sourceCallSiteEvents.Add(new(Generation, plugin.Module, NativeThread,
             frame.Id, parent, operation, site?.Id ?? 0, address, host.RuntimeSha256,

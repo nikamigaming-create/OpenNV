@@ -59,8 +59,10 @@ internal static partial class CompiledScriptContracts
         Require(deadline.Elapsed(10.5f, 10.75f) == 15 && deadline.Elapsed(10.5f, 11.5f) == 61,
             "Sandbox source hour comparator was replaced with seconds or a normalized calendar difference.");
         var foreign = SandboxRuntimeReceipt("c3f97c2255fa041a851c17cf372d69aaadd8694e2dc4230ba556001bbfbd2f3e");
-        try { _ = FalloutSourceFrameTimer.Read(foreign); throw new Exception("Unowned FO3 clock became the selected FNV clock."); }
-        catch (NotSupportedException) { }
+        var standaloneTimer = FalloutSourceFrameTimer.Read(foreign);
+        Require(standaloneTimer.EngineSha256 == foreign.EngineSha256 && standaloneTimer.ContractSha256 != timerSource.ContractSha256 &&
+            standaloneTimer.Float32Intermediates && !timerSource.Float32Intermediates,
+            "FO3 timer adopted the distinct FNV arithmetic/declaration.");
         try { _ = FalloutSandboxActionDeadline.Read(foreign); throw new Exception("Unowned FO3 deadline became an admitted source comparator."); }
         catch (NotSupportedException) { }
 

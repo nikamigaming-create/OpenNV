@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutActiveImageModifier(FalloutImageSpaceModifier Source, double ElapsedSeconds);
 internal sealed record FalloutImageSpaceFrame(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade,
     IReadOnlyList<FalloutActiveImageModifier> Active, IReadOnlyList<string> UnboundChannels, float BlurRadius = 0,
-    Vector2 DoubleVisionOffset = default, IReadOnlyList<FalloutSourceSkyImageContribution>? SourceSky = null);
+    Vector2 DoubleVisionOffset = default, IReadOnlyList<FalloutSourceSkyImageContribution>? SourceSky = null,
+    FalloutImageSpaceSkyHdr? SkyHdr = null);
 
 /// <summary>Gameplay-clock IMAD lifetime and source IMGS/IMAD composition, independent of captured state.</summary>
 internal sealed partial class FalloutImageSpaceState
@@ -117,6 +118,7 @@ internal sealed partial class FalloutImageSpaceState
         var angle = phase is null ? 0 : DoubleVisionAngle(phase, gameHour.GetValueOrDefault());
         var doubleVisionOffset = phase?.Offset(angle, doubleVision) ?? Vector2.Zero;
         return new(traits[4], new Vector4(traits[25], traits[26], traits[27], traits[28]), finalTint, finalFade,
-            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset, sourceSky);
+            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset, sourceSky,
+            ReadSkyHdrComposition(traits[8], activeModifiers, sourceSky));
     }
 }

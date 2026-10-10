@@ -53,8 +53,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         _selection = selection; _dataBindings = dataBindings;
         if (!ReferenceEquals(_world.NativeSourceRecords, records) || !ReferenceEquals(quests.NativeSourceRecords, records))
             throw new InvalidDataException("Native campaign world/quest/selected records differ.");
-        var paths = _source.ResourcePathsUnder("NVSE/Plugins").Where(path =>
-            Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase) &&
+        var paths = _source.NativePluginResourcePaths().Where(path =>
             path.Replace('/', '\\').Split('\\').Length == 3 && _source.TryResolve(path, null, out var winner) &&
             !winner.Contains("::", StringComparison.Ordinal)).ToArray();
         if (paths.Length == 0) return;
@@ -101,6 +100,8 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
                     _ = module.Domain.InitializeNvse(module.Plugin, actualHandle); return 0;
                 });
             }
+            foreach (var module in _modules.Where(module => module.Plugin.Phase == NativeNvsePhase.LoadedTrue && module.ObjectFailure is null))
+                InitializeStage(module, "Source static TLS loader construction", () => { PrepareEngineLoaderSource(module, companion); return 0; });
             foreach (var message in new uint[] { 0, 9 })
                 foreach (var module in _modules.Where(module => module.Plugin.Phase == NativeNvsePhase.LoadedTrue && module.ObjectFailure is null))
                     InitializeStage(module, $"NVSE message {message}", () => module.Domain.DeliverNvseMessage(module.Plugin, message, []));
@@ -270,6 +271,8 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             module.Domain.RequirePrivateCrtSaveOwned(); module.Domain.RequirePrivateProfileDirectorySaveOwned();
             module.Domain.RequirePrivateCryptoMappingSaveOwned(); module.Domain.RequirePrivateMutexSaveOwned();
             module.Domain.RequireWindowProcessColdCapture();
+            module.Domain.RequireNvseEngineGlobalsSaveOwned();
+            module.Domain.RequireSourceFieldMethodsColdCapture();
         }
         if (_modules.Any(module => module.Plugin.Registry.SerializationHistory.Count != 0))
             throw new NotSupportedException("Original plugin co-save callback state has no current unified campaign writer/reader owner.");

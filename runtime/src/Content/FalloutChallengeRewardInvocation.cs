@@ -183,7 +183,7 @@ internal sealed class FalloutChallengeRewardInvocation : IFalloutCompiledEventLo
         var row = _events[_activeOrdinal];
         _events[_activeOrdinal] = row with
         {
-            Cursor = _activeCursor.State with { Branches = _activeCursor.State.Branches.ToArray() },
+            Cursor = _activeCursor.State.Copy(),
             FailureType = failure is null ? row.FailureType : failure.GetType().FullName ?? failure.GetType().Name,
             Error = failure?.Message ?? row.Error
         };
@@ -225,5 +225,6 @@ internal sealed class FalloutChallengeRewardInvocation : IFalloutCompiledEventLo
     { Owner.RequireReward(this); Locals.WriteCompiled(variable, value); }
     internal static bool SameCursor(FalloutCompiledCursorSnapshot left, FalloutCompiledCursorSnapshot right) =>
         left.NextOffset == right.NextOffset && left.CommittedInstructions == right.CommittedInstructions &&
-        left.BudgetSpent == right.BudgetSpent && left.Completed == right.Completed && left.Branches.SequenceEqual(right.Branches);
+        left.BudgetSpent == right.BudgetSpent && left.Completed == right.Completed && left.Branches.SequenceEqual(right.Branches) &&
+        left.ControlHistory is not null && right.ControlHistory is not null && left.ControlHistory.SequenceEqual(right.ControlHistory);
 }

@@ -12,6 +12,12 @@ internal static class FalloutCompiledCommandDeclarations
     private static readonly IReadOnlyDictionary<ushort, FalloutCompiledCommandDeclaration> Commands =
         new Dictionary<ushort, FalloutCompiledCommandDeclaration>
         {
+            [0x1221] = new("Abs", false, 1, [2], true),
+            [0x11ce] = new("IsPlayerTagSkill", false, 1, [5], true),
+            [0x11cd] = new("SetPlayerTagSkill", false, 2, [5, 1], true),
+            [0x11fc] = new("SetNoActivationSound", false, 1, [12], true),
+            [0x11fd] = new("ClearNoActivationSound", false, 0, [], true),
+            [0x1186] = new("SetGlobalTimeMultiplier", false, 1, [2, 1], true, "sgtm"),
             [0x1137] = new("ModPCMiscStat", false, 2, [41, 1], true),
             [0x1138] = new("GetPCMiscStat", false, 1, [41], true),
             [0x1001] = new("GetDistance", true, 1, [4], true),
@@ -86,8 +92,8 @@ internal static class FalloutCompiledCommandDeclarations
             [0x10b1] = new("SetCombatStyle", true, 0, [30], true),
             [0x10c0] = new("GetIgnoreCrime", false, 0, [], true),
             [0x10cc] = new("SetDestroyed", true, 1, [1], true),
-            [0x10cd] = new("GetActionRef", true, 0, [], true),
-            [0x10ce] = new("GetSelf", true, 0, [], true),
+            [0x10cd] = new("GetActionRef", true, 0, [], true, "getAR"),
+            [0x10ce] = new("GetSelf", true, 0, [], true, "this"),
             [0x10da] = new("ShowRaceMenu", false, 0, [], true),
             [0x10dd] = new("SetOpenState", true, 1, [1], true),
             [0x10e7] = new("SetInChargen", false, 1, [1], true),

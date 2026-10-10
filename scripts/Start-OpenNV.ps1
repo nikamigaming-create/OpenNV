@@ -4,7 +4,8 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
     [switch]$ValidateOnly,
-    [switch]$Vr
+    [switch]$Vr,
+    [ValidateSet('installed', 'none')][string]$NativePlugins = 'installed'
 )
 
 $ErrorActionPreference = "Stop"
@@ -98,7 +99,15 @@ if ($Configuration -eq "Release") {
     $exportRoot = Join-Path $repoRoot "tmp\development-runtime\windows"
     [IO.Directory]::CreateDirectory($exportRoot) | Out-Null
     $exportExecutable = Join-Path $exportRoot "OpenNV.exe"
-    & $versionCheckPath --headless --path $runtimeRoot --xr-mode off --export-release "Windows Experimental" $exportExecutable
+    # The Windows console wrapper waits for inherited output handles. A compiler
+    # server spawned by the export can retain them after the editor exits.
+    $exportSharedCompilation = [Environment]::GetEnvironmentVariable('UseSharedCompilation', 'Process')
+    try {
+        [Environment]::SetEnvironmentVariable('UseSharedCompilation', 'false', 'Process')
+        & $versionCheckPath --headless --path $runtimeRoot --xr-mode off --export-release "Windows Experimental" $exportExecutable
+    } finally {
+        [Environment]::SetEnvironmentVariable('UseSharedCompilation', $exportSharedCompilation, 'Process')
+    }
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exportExecutable -PathType Leaf)) {
         throw "OpenNV release export failed. Install the matching Godot 4.7.2 Mono export templates."
     }
@@ -126,9 +135,9 @@ if ($ValidateOnly) {
 if ($Configuration -eq "Release") {
     # The exported Godot runtime is now the product launcher and game. The
     # selected world is entered in this same process.
-    & $exportExecutable --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher
+    & $exportExecutable --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher --presentation $(if ($Vr) { 'openxr' } else { 'first-person' }) --native-plugins $NativePlugins
 } else {
-    & $godotPath --path $runtimeRoot --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher
+    & $godotPath --path $runtimeRoot --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher --presentation $(if ($Vr) { 'openxr' } else { 'first-person' }) --native-plugins $NativePlugins
 }
 if ($LASTEXITCODE -ne 0) {
     throw "OpenNV Godot launcher exited with code $LASTEXITCODE."

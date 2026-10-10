@@ -51,7 +51,7 @@ internal partial class RuntimeNativeSkyLayers
         // visibly unowned; they are not inferred from this registration.
         _sourceCloudBlend[layer] = 0;
     }
-    private sealed class SourceCloudResetChild(RuntimeNativeSkyLayers node, FalloutSkyTransferState sky,
+    private sealed partial class SourceCloudResetChild(RuntimeNativeSkyLayers node, FalloutSkyTransferState sky,
         FalloutSkyCloudResource source) : IFalloutSkyResetChild
     {
         private readonly int _thread = System.Environment.CurrentManagedThreadId;

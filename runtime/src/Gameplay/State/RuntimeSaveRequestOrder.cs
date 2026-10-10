@@ -145,7 +145,7 @@ internal sealed partial class RuntimeSaveRequestOrder
                 Invocation = row.Invocation! with
                 {
                     Disposition = RuntimeSaveInvocationDisposition.Suspended,
-                    SuspendedSlice = actual with { Cursor = actual.Cursor with { Branches = actual.Cursor.Branches.ToArray() } }
+                    SuspendedSlice = actual with { Cursor = actual.Cursor.Copy() }
                 }
             });
         }

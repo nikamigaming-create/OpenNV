@@ -27,31 +27,26 @@ internal sealed partial class RuntimeNativeMainInterface : Node
         _menus = actualMenus; _failed = failed; Name = "SourceMainFOPipboyManager"; ProcessMode = ProcessModeEnum.Disabled;
     }
     internal static RuntimeNativeMainInterface Attach(Node parent, FalloutReferenceWorld world, FalloutPipBoyState pipBoy,
-        NativeOwnedGameplayHud hud, RuntimeLiveContentSource source, Func<IEnumerable<uint>?> actualMenus, Action<Exception> failed)
+        NativeOwnedGameplayHud hud, RuntimeLiveContentSource source, Func<IEnumerable<uint>?> actualMenus,
+        Action<RuntimeNativeMainInterface> retain, Action<Exception> failed)
     {
-        ArgumentNullException.ThrowIfNull(actualMenus); ArgumentNullException.ThrowIfNull(failed);
+        ArgumentNullException.ThrowIfNull(actualMenus); ArgumentNullException.ThrowIfNull(retain); ArgumentNullException.ThrowIfNull(failed);
         if (!world.HasSourceMainInterface || !parent.IsInsideTree() || parent.IsQueuedForDeletion() ||
             !hud.IsInsideTree() || hud.IsQueuedForDeletion() || hud.Error is not null || !ReferenceEquals(source, RuntimeLiveContentSource.Current) ||
             hud.StandaloneHudStack != source.StackId || parent.GetViewport() != hud.GetViewport())
             throw new InvalidOperationException("Source Main interface requires the actual current driver/source/native HUD root.");
         var node = new RuntimeNativeMainInterface(world, pipBoy, hud, source, actualMenus, failed);
-        try
-        {
-            parent.AddChild(node);
-            if (!node.IsInsideTree() || node.GetParent() != parent)
-                throw new InvalidOperationException("Main source manager native attachment did not return.");
-            node._state.PublishOwnManager(node.Publication(node, FalloutStandaloneInterfaceObjectRole.PipBoyManager,
-                "menus/main/hud_main_menu.xml", hud.StandaloneHudSha256), node.LivingManager);
-            return node;
-        }
-        catch (Exception original)
-        {
-            var errors = new List<Exception> { original };
-            try { node.Retire(); } catch (Exception cleanup) { errors.Add(cleanup); }
-            try { node.Free(); } catch (Exception cleanup) { errors.Add(cleanup); }
-            if (errors.Count != 1) throw new AggregateException("Main native interface construction and retirement failed.", errors);
-            throw;
-        }
+        // Retain partial construction in the actual driver before entering the
+        // native factory. Failed publication still needs its enclosing Main
+        // caller drained before interface retirement; child-local cleanup cannot
+        // close a dependent owner while that caller/fade remains alive.
+        retain(node);
+        parent.AddChild(node);
+        if (!node.IsInsideTree() || node.GetParent() != parent)
+            throw new InvalidOperationException("Main source manager native attachment did not return.");
+        node._state.PublishOwnManager(node.Publication(node, FalloutStandaloneInterfaceObjectRole.PipBoyManager,
+            "menus/main/hud_main_menu.xml", hud.StandaloneHudSha256), node.LivingManager);
+        return node;
     }
     private bool LivingManager()
     {

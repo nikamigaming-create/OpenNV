@@ -9,6 +9,7 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private FalloutNativeFinishedSpeechSnapshot? _restoreFinishedSpeech;
+    private FalloutPlayerConversationSnapshot? _restoreConversation;
     private FalloutFinishedSpeechStageScope? _restoreFinishedSpeechStage;
     private FalloutFinishedSpeechStageScope? CaptureFinishedSpeechStage()
     {
@@ -34,6 +35,11 @@ internal partial class RuntimeNativeOpeningStageDriver
             if (result.Error is { } error) throw new NotSupportedException($"Source SayToDone actor {receipt.Speaker} failed: {error}");
         };
         _speech.RestoreState(_restoreFinishedSpeech);
+        if (_restoreConversation is { } conversation)
+        {
+            _conversation!.RestoreContinuation(conversation);
+            _restoreConversation = null;
+        }
         if (_restoreFinishedSpeechStage is { } stage)
         {
             var fields = _pluginStack.GetEffective(stage.Quest).ReadSubrecords().Where(field => field.Signature == "EDID").ToArray();

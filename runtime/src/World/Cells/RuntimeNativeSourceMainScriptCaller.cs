@@ -11,14 +11,16 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
 {
     private readonly FalloutReferenceWorld _world;
     private readonly Action<Exception> _failed;
+    private readonly int _deliveryThread = System.Environment.CurrentManagedThreadId;
     private IDisposable? _callerLease, _fadeLease;
-    private bool _started, _retired;
+    private bool _started, _retired, _nativeDeliveryClosed;
     private Exception? _failure, _retirementFailure;
     internal object State => new
     {
         source = _world.CampaignMainScriptCallerState,
         started = _started,
         retired = _retired,
+        deliveryClosed = _nativeDeliveryClosed,
         failure = _failure?.ToString(),
         retirementFailure = _retirementFailure?.ToString()
     };
@@ -32,15 +34,19 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
         ProcessPriority = int.MinValue + 1;
     }
     internal static RuntimeNativeSourceMainScriptCaller Attach(Node parent, FalloutReferenceWorld world,
-        FalloutInterfaceFade actualFade, Action<Exception> failed)
+        FalloutInterfaceFade actualFade, Action<Exception> failed, Action<RuntimeNativeSourceMainScriptCaller> retainConstruction)
     {
         ArgumentNullException.ThrowIfNull(failed); ArgumentNullException.ThrowIfNull(actualFade);
+        ArgumentNullException.ThrowIfNull(retainConstruction);
         if (!OperatingSystem.IsWindows() || !parent.IsInsideTree() || parent.IsQueuedForDeletion() || !world.CampaignMainRuntimeConfigured)
             throw new NotSupportedException("Original Main caller needs its actual selected Windows/native/source construction lifetime.");
         var source = world.CampaignMainScriptSource; source.Validate();
         var result = new RuntimeNativeSourceMainScriptCaller(world, failed);
         try
         {
+            // The actual driver retains even a partially attached owner before
+            // source leases or native child publication can fail.
+            retainConstruction(result);
             parent.AddChild(result);
             if (!result.IsInsideTree() || result.GetParent() != parent) throw new InvalidOperationException("Native Main caller was not attached to its actual campaign.");
             result._fadeLease = world.BindCampaignScriptFrameFade(actualFade);
@@ -52,7 +58,8 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
         {
             var failures = new List<Exception> { original };
             try { result.Retire(); } catch (Exception cleanup) { failures.Add(cleanup); }
-            try { result.Free(); } catch (Exception cleanup) { failures.Add(cleanup); }
+            if (result.CanDestroyAfterRetirement)
+                try { result.Free(); } catch (Exception cleanup) { failures.Add(cleanup); }
             if (failures.Count != 1) throw new AggregateException("Main native attachment and retirement failed.", failures);
             throw;
         }
@@ -78,20 +85,25 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
     }
     internal void Retire()
     {
+        RequireDeliveryThread();
         RequireMainCallDrained();
+        if (_nativeDeliveryClosed) return;
         _retired = true; ProcessMode = ProcessModeEnum.Disabled;
-        var failures = new List<Exception>();
-        if (_retirementFailure is { } prior) failures.Add(prior);
-        // Native delivery closes before the source fade. A refused entered
-        // release keeps its actual lease for a later safe cleanup attempt;
-        // the first retirement failure remains visible even after cleanup.
-        try { _callerLease?.Dispose(); _callerLease = null; } catch (Exception error) { failures.Add(error); }
-        try { _fadeLease?.Dispose(); _fadeLease = null; } catch (Exception error) { failures.Add(error); }
-        if (failures.Count != 0)
+        try { _world.CloseCampaignMainNativeDeliveryLeases(ref _callerLease, ref _fadeLease); }
+        catch (Exception failure)
         {
-            _retirementFailure = failures.Count == 1 ? failures[0] : new AggregateException("Main native/source lifetime retirement failed.", failures);
-            throw _retirementFailure;
+            _retirementFailure = _retirementFailure is null ? failure :
+                new AggregateException("Main native retirement retains earlier and current failures.", _retirementFailure, failure);
+            throw;
         }
+        _nativeDeliveryClosed = true;
+        // Historical failures stay visible. Only this attempt's actual returned
+        // closure permits destruction; old errors do not recreate live handles.
+    }
+    private void RequireDeliveryThread()
+    {
+        if (_deliveryThread != System.Environment.CurrentManagedThreadId)
+            throw new InvalidOperationException("Actual native Main delivery retirement changed its presentation thread.");
     }
     public override void _ExitTree()
     {

@@ -63,7 +63,7 @@ internal sealed partial class FalloutReferenceScripts
                     new(reward.Target, program.Source.FormKey, program.Scope.RecordSha256, program.Scope.ScopeSha256,
                         program.ProgramSha256, FalloutCompiledSliceReceipt.EventScope(program, ordinal), ordinal,
                         block.Event, block.Begin, block.End, entered?.Session ?? Guid.Empty, entered?.Invocation ?? 0,
-                        0, cursor.State with { Branches = cursor.State.Branches.ToArray() }, disposition, failure);
+                        0, cursor.State.Copy(), disposition, failure);
             }
             reward.Completed();
             context.Returned();

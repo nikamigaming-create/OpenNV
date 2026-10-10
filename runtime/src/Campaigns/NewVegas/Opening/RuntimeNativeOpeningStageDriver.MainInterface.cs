@@ -15,7 +15,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (_sourceMainNativeInterface is not null) throw new InvalidOperationException("Source Main native manager already published.");
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Main interface has no selected resource lifetime.");
         _sourceMainNativeInterface = RuntimeNativeMainInterface.Attach(this, world, PipBoy, actualHud, source,
-            actualNativeMenus, RetainDriverFailure);
+            actualNativeMenus, native => _sourceMainNativeInterface = native, RetainDriverFailure);
         (_conversation ?? throw new InvalidOperationException("Main interface has no actual dialog factory owner."))
             .BindSourceMainInterface(_sourceMainNativeInterface);
     }
