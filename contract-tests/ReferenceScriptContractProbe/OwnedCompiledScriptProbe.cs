@@ -150,7 +150,16 @@ internal static class OwnedCompiledScriptProbe
         Framing(content, path);
     }
 
-    private static void Framing(RuntimeLiveContentSource content, string path)
+    internal static void FramingOffline(string dataRoot, string game)
+    {
+        if (RuntimeLiveContentSource.Current is not null)
+            throw new InvalidOperationException("Offline compiled framing cannot replace an active content owner.");
+        RuntimeLiveContentSource.Configure(dataRoot, game);
+        try { Framing(RuntimeLiveContentSource.Current!, null); }
+        finally { RuntimeLiveContentSource.Clear(); }
+    }
+
+    private static void Framing(RuntimeLiveContentSource content, string? path)
     {
         using var records = FalloutPluginStack.Load(content.PluginSources);
         var scopes = 0; var nonempty = 0; var noSource = 0; var framed = 0;
@@ -209,9 +218,7 @@ internal static class OwnedCompiledScriptProbe
                     failures.Add(new { lane = "unowned-original-result-family", source = record.FormKey.ToString(), record.Signature,
                         sourceFieldStart = index, error = "Original script field has no admitted canonical record result scope." });
         }
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        JsonSerializer.Serialize(stream, new
+        var report = new
         {
             schema = "opennv-owned-compiled-framing/v2", capturedUtc = DateTime.UtcNow,
             runtimeMvid = typeof(FalloutCompiledScriptProgram).Module.ModuleVersionId,
@@ -222,9 +229,17 @@ internal static class OwnedCompiledScriptProbe
             instructionOccurrences = instructions.OrderBy(pair => pair.Key).Select(pair => new { opcode = pair.Key.ToString("x4"), count = pair.Value }),
             readerOwnedRangesAndOrdinals = true, gameplayApplied = false, nativeLaunched = false, sourceExpressionsParsed = false,
             boundary = "Layout and unchanged source-scope binding only; instruction occurrence/declaration is not command support or campaign parity."
-        }, new JsonSerializerOptions { WriteIndented = true });
+        };
+        if (path is null)
+            Console.WriteLine("OPENNV_OWNED_COMPILED_FRAMING_OFFLINE " + JsonSerializer.Serialize(report));
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            JsonSerializer.Serialize(stream, report, new JsonSerializerOptions { WriteIndented = true });
+        }
         Console.WriteLine($"OPENNV_OWNED_COMPILED_FRAMING_RESULT scopes={scopes} nonempty={nonempty} SCTXAbsent={noSource} framed={framed} failed={failures.Count} semanticExecution=false");
-        if (failures.Count != 0) throw new InvalidDataException("Compiled layout audit retained an issue inventory at the selected output.");
+        if (failures.Count != 0) throw new InvalidDataException("Compiled layout audit retained an issue inventory in its output.");
     }
 
     private static bool Failure(Exception error) => error is IOException or InvalidDataException or InvalidOperationException or

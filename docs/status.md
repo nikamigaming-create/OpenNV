@@ -1,9 +1,29 @@
 # Product status
 
-Published main remains checked PR189 at c29f5cd4. The protocol36 scene/startup
-integration on codex/scene-native-consumers passes its final combined local gate
-and remains under checked publication. docs/current-work.md owns current verified results, blockers
+The prior published baseline is checked PR190 at 6b00011e. The source now
+integrates standalone Main images, valid short image profiles and offline
+production startup checks. Release/Debug, analyzers, contracts, launcher and
+headless Godot checks pass for this slice. The FO3 offline readiness run remains
+blocked by actual production and owned layout failures.
+docs/current-work.md owns current verified results, blockers
 and executable next work. The stable FNV Test pin remains fnv-windows-03c3d23a.
+
+October 11 user direction focuses exclusively on standalone FO3 and discards
+current saves. The user deleted the repository tmp directory, including its old
+candidate and private diagnostic saves/proposals. A fresh diagnostic export is
+rebuilt under local/fo3-recovery using the normal OpenNV user-profile save folder.
+The owned Main image-profile audit now passes all 74 winning FO3 records,
+including eleven valid short 132-byte records previously rejected by the native
+profile owner. Explicit unwritten-cell state survives serialization and fresh
+cold bindings; source arithmetic cannot turn it into invented values. Focused
+Debug image contracts pass. Ordinary New Game passes the image owner and fails
+at the separate renderer-clock publication child. The game is closed. A new
+offline runner reproduces that failure using production Main consumers, the
+owned source timer and configured cached tail; native/Player fixture boundaries
+remain explicit. Independent save/current/cold and all winning compiled layout
+checks run without launching Godot. The latter retains a genuine reference-call
+header refusal and unowned result families. Ordinary gameplay and save/reload
+remain unaccepted; the required combined component gate passes for these changes.
 
 Full 1:1 FNV, FO3, TTW, selected DLC/mod behavior and flat/OpenXR remain unfinished.
 All 36 broad requirements are open; no completion percentage or matched-retail
@@ -25,7 +45,7 @@ reads the actual forced first-person field before null reference input and
 preserves the next independent HUD-child refusal. Nonnull production scene
 reference factories remain unbound. The integrated query, branch-history cold
 receipt comparisons and native contact regressions pass the combined checks.
-Actual FO3 exported New Game stops at an earlier unowned timed-context child;
+Actual FO3 exported New Game now stops at the separate renderer-clock child;
 the scene query has not been reached through this ordinary replay.
 
 False-success shortcuts found in the inherited unpublished batch are removed:
@@ -37,19 +57,19 @@ through those shortcuts establishes current acceptance.
 
 FNV's pending post-null query requires its separate save/load manager and actual
 load/reset writers; returning a constructor constant is insufficient. Actual
-FO3 startup first refuses the missing Main timed-context prelude/list, retirement
-and final child producer. Its later Player HUD/reference-frame consumer and real
+FO3 startup now refuses the separate renderer-clock publication and registered
+clock-channel producers. Its later Player HUD/reference-frame consumer and real
 menu/device writers remain separate implementation owners. Installed native-module failures remain independent:
 JIP's reached clock/actor body, FNVXR interfaces/unload EOF, and ShowOff Load are
 not closed by choosing vanilla.
 
-Candidate New Vegas/Fallout 3 Flat/VR shortcuts launch exported Release against
+The deleted earlier New Vegas/Fallout 3 Flat/VR candidate shortcuts launched exported Release against
 one profile store with native modules disabled. User shortcuts have no debug or
 harness arguments. The export was built from unchanged compiler inputs. Actual
 ordinary no-mod Play/New/Yes in both games reaches initial player preparation,
 then rejects the missing owners above and recovers to the source menu. Normal
 source Quit returns exact process exit code zero in both games. No campaign save
-was created and frame recording remained off. The candidate is unusable for the
+was created and frame recording remained off. That candidate was unusable for the
 requested fresh gameplay; do not hand off a replacement until New Game works.
 The additional broad compiled-field audit remains incomplete, with unowned
 scope selection families and one genuine FO3 reference-call header refusal.

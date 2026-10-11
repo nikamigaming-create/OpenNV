@@ -10,13 +10,23 @@ internal sealed partial class FalloutImageSpaceState
         if (instance == Guid.Empty || ordinal is < 0 or > 3 || _sourceSkyInstances.ContainsKey(instance) ||
             _sourceSkyInstances.Values.Any(row => row.Sky.Identity == sky.Identity && row.Ordinal == ordinal))
             throw new InvalidDataException("Source image manager repeated or aliased a Sky instance/registration ordinal.");
+        RegisterSourceImageSky(sky.Identity, instance, ordinal);
         _sourceSkyInstances.Add(instance, (sky, instance, ordinal));
     }
     internal void RetireSourceSkyInstance(FalloutSkyTransferState sky, Guid instance)
     {
         if (!_sourceSkyInstances.TryGetValue(instance, out var registered)) return;
         if (!ReferenceEquals(registered.Sky, sky)) throw new InvalidOperationException("Another Sky owns the image manager registration.");
+        RetireSourceImageSky(instance);
         _sourceSkyInstances.Remove(instance);
+    }
+    internal void RebindSourceSkyInstance(FalloutSkyTransferState sky, Guid previous, Guid current, int ordinal)
+    {
+        if (current == Guid.Empty || _sourceSkyInstances.ContainsKey(current) ||
+            _sourceSkyInstances.Values.Any(row => row.Sky.Identity == sky.Identity && row.Ordinal == ordinal))
+            throw new InvalidDataException("Cold Sky repeated its actual native image registration.");
+        RebindSourceImageSky(previous, sky.Identity, current, ordinal);
+        _sourceSkyInstances.Add(current, (sky, current, ordinal));
     }
     private IReadOnlyList<FalloutSourceSkyImageContribution> ReadSourceSkyContributions()
     {

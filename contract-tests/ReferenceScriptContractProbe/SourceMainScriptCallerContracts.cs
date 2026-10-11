@@ -11,6 +11,7 @@ internal static partial class SourceMainScriptCallerContracts
     private const string Engine = "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57";
     internal static void Run()
     {
+        RunSourceMainImageContracts();
         RunNativeMainRetirementContracts();
         RunMainMenuBoundaryContracts();
         RunProductRefusalContracts();

@@ -35,6 +35,7 @@ internal static partial class FalloutNativeCampaignSave
             state.IndexedInterfaceSounds.LastOrdinal != state.IndexedInterfaceSounds.Voices.Count ||
             state.IndexedInterfaceSounds.Voices.Any(voice => voice is null || voice.Pending))
             throw new InvalidDataException("Current indexed audio has no settled source/native continuation.");
+        ValidateSourceMainImageShape(state);
         ValidateResultAuthorityVersion(state);
         state.PlayerPackageAudio.Events.Validate();
         if (state.Scripts.Session?.PlayerPackage?.SoundRandomState is { } packageRandom &&

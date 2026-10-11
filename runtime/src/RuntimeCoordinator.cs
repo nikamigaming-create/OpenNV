@@ -86,6 +86,7 @@ public partial class RuntimeCoordinator : Node3D
             _pendingCheckpointRestore = _nextSessionCheckpoint;
             _pendingSaveActivation = _nextSessionActivation; _nextSessionActivation = null;
             _sessionLoadFailure = _nextSessionLoadFailure; _nextSessionLoadFailure = null;
+            _nativeLoadFailureDiagnostic = _nextSessionLoadFailureDiagnostic; _nextSessionLoadFailureDiagnostic = null;
             _nextSessionOptions = null; _nextSessionContinue = false; _nextSessionPauseAfterCheckpointLoad = false;
             _nextSessionCheckpoint = null;
             if (_options.TryGetValue("parity-channel", out var parityChannel))

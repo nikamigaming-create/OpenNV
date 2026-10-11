@@ -25,13 +25,18 @@ internal partial class RuntimeNativeImageSpace
             if (!native.Returned)
             {
                 _hdrUnowned = "source-Sky-HDR-native-format-query-entered-not-returned";
-                SetMeta("opennv_source_sky_hdr_unowned", _hdrUnowned); return;
+                SetMeta("opennv_source_sky_hdr_unowned", _hdrUnowned);
+                if (UsesSourceMain) throw new NotSupportedException(_hdrUnowned);
+                return;
             }
             if (!hdr.RendererBoundTo(native))
             {
                 if (hdr.NeedsRendererHandoff) hdr.RebindRenderer(native); else hdr.SelectRenderer(native);
             }
-            var input = _state.ReadCurrentSkyHdrInput(_source, gameplay, hdr, alternate: false);
+            var input = UsesSourceMain
+                ? _state.ReadSourceMainSkyHdrInput(_sourceNativeEffects ??
+                    throw new InvalidOperationException("Source Main HDR has no actual same-call effect publication."), hdr, alternate: false)
+                : _state.ReadCurrentSkyHdrInput(_source, gameplay, hdr, alternate: false);
             if (input.Unowned is { } unowned)
             {
                 _hdrUnowned = unowned; SetMeta("opennv_source_sky_hdr_unowned", unowned);
@@ -57,6 +62,7 @@ internal partial class RuntimeNativeImageSpace
     private void RetireIndependentImageChildren()
     {
         var failures = new List<Exception>();
+        try { RetireSourceMainOutput(); } catch (Exception failure) { failures.Add(failure); }
         try { RetireSkyHdrBorrower(); } catch (Exception failure) { failures.Add(failure); }
         try { _effect?.ReleaseRenderingResources(); } catch (Exception failure) { failures.Add(failure); }
         if (failures.Count != 0) throw new AggregateException("Image-space retains independent source-HDR/effect cleanup failures.", failures);

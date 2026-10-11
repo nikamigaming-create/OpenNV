@@ -163,6 +163,7 @@ public partial class RuntimeCoordinator
         failure = RetainNativeCampaignLoadFailure(failure);
         _pendingCheckpointRestore = null;
         _continueAfterRestart = false;
+        RetainNativeLoadFailureDiagnostic(failure);
         GD.PushError($"OPENNV_NATIVE_LOAD_REJECTED {failure}");
         return failure.Message;
     }

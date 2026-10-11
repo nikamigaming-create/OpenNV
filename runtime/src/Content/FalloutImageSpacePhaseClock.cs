@@ -20,6 +20,7 @@ internal sealed class FalloutImageSpacePhaseClock
     private bool _retired;
     private string? _failure;
     internal Guid Identity { get; } = Guid.NewGuid();
+    internal Guid Process { get { Require(); return _process; } }
     internal FalloutDoubleVisionPhase Source { get; }
     internal float Seconds { get { Require(); return BitConverter.UInt32BitsToSingle(_seconds); } }
     internal FalloutImageSpacePhaseClock(FalloutDoubleVisionPhase source, FalloutGameTime time, Guid process)
