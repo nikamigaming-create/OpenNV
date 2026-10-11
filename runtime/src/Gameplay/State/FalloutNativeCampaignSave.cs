@@ -73,7 +73,7 @@ internal sealed record FalloutNativeCampaignState(
     FalloutSharedScriptRuntimeSnapshot? SharedScriptState = null,
     FalloutImageSpacePhaseClockSnapshot? ImagePhaseClock = null,
     IReadOnlyList<FalloutRoomPortalSnapshot>? RoomPortals = null,
-    FalloutPlayerConversationSnapshot? Conversation = null);
+    FalloutPlayerConversationSnapshot? Conversation = null, FalloutSourceImageSpaceMainSnapshot? SourceMainImages = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -146,7 +146,7 @@ internal static partial class FalloutNativeCampaignSave
         FalloutSharedScriptRuntimeSnapshot? sharedScriptState = null,
         FalloutImageSpacePhaseClockSnapshot? imagePhaseClock = null,
         IReadOnlyList<FalloutRoomPortalSnapshot>? roomPortals = null,
-        FalloutPlayerConversationSnapshot? conversation = null)
+        FalloutPlayerConversationSnapshot? conversation = null, FalloutSourceImageSpaceMainSnapshot? sourceMainImages = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         ArgumentException.ThrowIfNullOrWhiteSpace(questEditorId);
@@ -200,7 +200,7 @@ internal static partial class FalloutNativeCampaignSave
             ActorUpdates: actorUpdates, CellProcesses: cellProcesses, ActorProcessRuntime: actorProcessRuntime, ActorProcessCommon: actorProcessCommon,
             PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts, PlayerStatistics: playerStatistics, ProcessQueues: processQueues,
             IndexedInterfaceSounds: indexedInterfaceSounds, SharedScriptState: sharedScriptState, ImagePhaseClock: imagePhaseClock, RoomPortals: roomPortals,
-            Conversation: conversation);
+            Conversation: conversation, SourceMainImages: sourceMainImages);
         Validate(state, saveCompatibilityId);
         ValidateSaveOrderSource(records, state);
         ValidateExperienceNotificationSource(records, state);
@@ -210,6 +210,7 @@ internal static partial class FalloutNativeCampaignSave
         ValidateCurrentPlayerAbilitySource(records, state);
         ValidateCurrentPlayerStatisticSource(records, state);
         ValidateCurrentImagePhase(records, state);
+        ValidateCurrentSourceMainImages(records, state);
         return state;
     }
 
@@ -244,6 +245,7 @@ internal static partial class FalloutNativeCampaignSave
         ValidateCurrentPlayerStatisticSource(stack, state);
         ValidateCurrentSourceSky(stack, state);
         ValidateCurrentImagePhase(stack, state);
+        ValidateCurrentSourceMainImages(stack, state);
         if (state.PlayerPackageAudio is { } playerAudio)
             FalloutAnimationSoundEvents.ValidateSource(playerAudio.Events, stack, stack.RuntimeFormKey(0x14));
         var activeCell = stack.GetEffective(state.ActiveCell);

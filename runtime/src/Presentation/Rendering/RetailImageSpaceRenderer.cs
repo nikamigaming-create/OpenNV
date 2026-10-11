@@ -5,7 +5,7 @@ using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.Presentation.Rendering;
 
-internal static class RetailImageSpaceRenderer
+internal static partial class RetailImageSpaceRenderer
 {
     internal static Application CreateFromSource(FalloutImageSpace source,
         RetailImageSpaceConfiguration configuration, CaptureConfiguration capture,
@@ -302,7 +302,8 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
 
     private readonly float _matchedAdaptationSum;
     private sealed record FrameParameters(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade,
-        float DeltaSeconds, float BlurRadius = 0, Vector2 DoubleVisionOffset = default);
+        float DeltaSeconds, float BlurRadius = 0, Vector2 DoubleVisionOffset = default,
+        SourceImageNativeFields? SourceFields = null);
     private FrameParameters _parameters;
     private FrameParameters _renderParameters;
     private sealed record MenuBackgroundRequest(long Serial, FrameParameters Parameters);
@@ -471,6 +472,7 @@ internal partial class RetailHdrCompositorEffect : CompositorEffect
         }
         catch (Exception exception)
         {
+            RetainSourceDrawFailure(exception);
             Volatile.Write(ref _operational, 0);
             if (Interlocked.Exchange(ref _failureReported, 1) == 0)
                 GD.PushError($"OpenNV retail HDR compositor failed: {exception.Message}");

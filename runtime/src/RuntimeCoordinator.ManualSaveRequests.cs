@@ -151,6 +151,8 @@ public partial class RuntimeCoordinator
 
     private string? NativeSourceManualSaveBlocker()
     {
+        if (_nativeMainImageApplication?.Effect.SourceDrawFailure is not null) return "source-image-space-native-draw-failed";
+        if (_nativeImageSpaceState.SourceMainImageSaveBlocker is { } images) return images;
         if (_nativeSessionTransitioning || _retiringNativeSession) return "session-transition";
         if (_nativeDoorLoading || _nativeLoadingLayer is not null) return "loading";
         if (_nativeManualSavePreparation?.PermitsOriginalSourceDrain() == true) return null;

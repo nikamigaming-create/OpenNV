@@ -35,6 +35,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         _standaloneInterface?.SaveBlocker is { } ui ? ui :
         SourceMainInterfaceSaveBlocker is { } sourceInterface ? sourceInterface :
         SourceMainCachedTailSaveBlocker is { } tail ? tail :
+        SourceMainImageSaveBlocker is { } images ? images :
         SourceGlobalTimeSaveBlocker is { } globalTime ? globalTime :
         SourceCachedTimerSaveBlocker is { } timer ? timer :
         MainScriptCallerSaveBlocker is { } scripts ? scripts :

@@ -128,12 +128,16 @@ internal sealed partial class FalloutSkyHdrState
             input.EngineSha256 != Source.EngineSha256 || input.Contract != Source.Contract || input.DnamSha256.Length != 64 ||
             !input.DnamSha256.All(Uri.IsHexDigit) || !float.IsFinite(BitConverter.UInt32BitsToSingle(input.ScalarBits)))
             throw new InvalidDataException("HDR image publication changed its actual source/form/frame/Float32 owner.");
+        if ((input.Form is null) != (input.FormVersion is null) ||
+            (input.Form is null) != (input.AnonymousImageSource is not null) ||
+            input.AnonymousImageSource is { } anonymous && (anonymous != input.DnamSha256 || !FalloutSourceMainFamily.IsFallout3(Source.EngineSha256)))
+            throw new InvalidDataException("HDR image input changed its winning or actual anonymous source constructor.");
         if (input.Unowned is { } unowned) throw new NotSupportedException(unowned);
         if (_imageOrdinals.TryGetValue(input.ImageOwner, out var previous) && input.Ordinal <= previous)
             throw new InvalidOperationException("HDR image writer replayed or overtook its actual publication ordinal.");
         var write = new FalloutSkyHdrWrite(Next(), input.Alternate ? FalloutSkyHdrWriteKind.AlternateImage : FalloutSkyHdrWriteKind.OrdinaryImage,
             input.ScalarBits, input.Frame, input.ImageOwner, input.Form, input.DnamSha256, _selection!.Identity,
-            input.Ordinal, input.FormVersion);
+            input.Ordinal, input.FormVersion, input.AnonymousImageSource);
         _imageOrdinals[input.ImageOwner] = input.Ordinal;
         if (input.Alternate) _secondary = write;
         else

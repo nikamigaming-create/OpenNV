@@ -15,13 +15,20 @@ internal sealed partial class FalloutImageSpaceState
     // cinematic order is saturation, contrast, average luminance, brightness.
     private static readonly int[] TraitIndices = [0, 1, 14, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 25, 27, 26, 28];
     private readonly Dictionary<FalloutFormKey, FalloutActiveImageModifier> _active = [];
-    internal IReadOnlyCollection<FalloutActiveImageModifier> Active => _active.Values;
+    internal IReadOnlyCollection<FalloutActiveImageModifier> Active => !HasSourceMainImages ? _active.Values :
+        _sourceImageList.Where(identity => _sourceImageInstances[identity].Form is not null)
+            .Select(identity => new FalloutActiveImageModifier(RequireSourceImageProgram(_sourceImageInstances[identity]),
+                _sourceImageLast is null ? 0 : FalloutSourceImageSpaceFloat.Subtract(BitConverter.UInt32BitsToSingle(_sourceImageLast.ClockAfter),
+                    BitConverter.UInt32BitsToSingle(_sourceImageInstances[identity].Start)))).ToArray();
 
-    internal void Apply(FalloutImageSpaceModifier modifier) => _active[modifier.Form] = new(modifier, 0);
-    internal void Remove(FalloutFormKey form) => _active.Remove(form);
+    internal void Apply(FalloutImageSpaceModifier modifier)
+    { if (HasSourceMainImages) ApplySourceImageModifier(modifier); else _active[modifier.Form] = new(modifier, 0); }
+    internal void Remove(FalloutFormKey form)
+    { if (HasSourceMainImages) RemoveSourceImageModifier(form); else _active.Remove(form); }
 
     internal IReadOnlyList<FalloutImageSpaceModifier> Advance(double seconds)
     {
+        if (HasSourceMainImages) throw new InvalidOperationException("Source Main owns image-instance clocks and retirement.");
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
         var expired = new List<FalloutImageSpaceModifier>();
         foreach (var (form, active) in _active.ToArray())
@@ -40,6 +47,7 @@ internal sealed partial class FalloutImageSpaceState
     internal FalloutImageSpaceFrame Compose(FalloutImageSpace source, float? gameHour = null, FalloutDoubleVisionPhase? phase = null,
         FalloutImageSpaceModifier? presentationModifier = null)
     {
+        if (HasSourceMainImages) throw new NotSupportedException("Source Main owns image composition; a menu capture requires its actual source temporary-instance owner.");
         if (gameHour is { } hour && !float.IsFinite(hour)) throw new ArgumentOutOfRangeException(nameof(gameHour));
         // Static menu backgrounds temporarily apply an IMAD while drawing the
         // captured world. That request must never enter saved gameplay state.

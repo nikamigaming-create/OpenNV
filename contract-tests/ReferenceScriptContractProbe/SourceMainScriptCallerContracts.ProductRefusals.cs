@@ -38,7 +38,7 @@ internal static partial class SourceMainScriptCallerContracts
             Require(call.Disposition == FalloutMainScriptCallerDisposition.Failed &&
                 call.FailureType == typeof(NotSupportedException).FullName &&
                 call.Children.Last() is { Returned: null, Error: not null } child && child.Step == step &&
-                child.Error.StartsWith("source-Main-", StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(child.Error) && child.Error == call.Error &&
                 !call.Children.Any(child => child.Step == FalloutMainScriptCallerStep.SecondSample) &&
                 owner.MainScriptCallerSaveBlocker is not null && saved.ContextTimeWrites == 0,
                 "The product's unavailable Main child fabricated a result, completed a later sample, or admitted saving.");

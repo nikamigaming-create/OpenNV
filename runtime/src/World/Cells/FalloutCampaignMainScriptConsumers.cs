@@ -60,7 +60,11 @@ internal sealed class FalloutCampaignMainScriptConsumers(FalloutMainScriptCaller
         throw Unowned("independent-held-byte-query");
     }
     public void TimedContexts(FalloutMainScriptInvocation invocation, bool advanceTimer)
-    { invocation.Require(FalloutMainScriptCallerStep.TimedContexts); throw Unowned("timed-context-prelude-list-update-retirement-and-final-children"); }
+    {
+        invocation.Require(FalloutMainScriptCallerStep.TimedContexts);
+        if (!Source.HasNewVegasChildren) { invocation.Owner.ExecuteSourceMainImages(invocation, advanceTimer); return; }
+        throw Unowned("timed-context-prelude-list-update-retirement-and-final-children");
+    }
     public void OptionalPlayer(FalloutMainScriptInvocation invocation)
     { invocation.Require(FalloutMainScriptCallerStep.CachedTailBefore); throw Unowned("optional-Player-tail-writer-and-virtual-child"); }
     public bool FadeBlocksRequest(FalloutMainScriptInvocation invocation, int index)

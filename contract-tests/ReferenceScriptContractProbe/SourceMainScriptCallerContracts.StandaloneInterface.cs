@@ -83,11 +83,12 @@ internal static partial class SourceMainScriptCallerContracts
                 NativeInstance, role == FalloutStandaloneInterfaceObjectRole.DialogMenu ? "menus/dialog/dialog_menu.xml" : "menus/main/hud_main_menu.xml",
                 new('a', 64), "actual-authored-object-lifetime");
     }
-    private static AuthoredInterfaceObject PublishAuthoredStandaloneInterface(FalloutActorProcessRuntimeState runtime)
+    private static AuthoredInterfaceObject PublishAuthoredStandaloneInterface(FalloutActorProcessRuntimeState runtime,
+        string stack = "authored-FO3-Main")
     {
         var native = new AuthoredInterfaceObject();
         var owner = runtime.StandaloneInterface;
-        owner.PublishManager(native.Publication(owner, FalloutStandaloneInterfaceObjectRole.PipBoyManager, "authored-FO3-Main"), native.ReadLiving);
+        owner.PublishManager(native.Publication(owner, FalloutStandaloneInterfaceObjectRole.PipBoyManager, stack), native.ReadLiving);
         return native;
     }
 }

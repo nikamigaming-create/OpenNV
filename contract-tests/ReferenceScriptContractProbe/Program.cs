@@ -4,6 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--audit-owned-compiled-framing-offline", var framingData, var framingGame])
+{
+    OwnedCompiledScriptProbe.FramingOffline(framingData, framingGame);
+    return;
+}
+
+if (args is ["--audit-owned-production-main-tail", var productionTailData])
+{
+    Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedProductionMainTail(productionTailData);
+    return;
+}
+
 if (args is ["--audit-owned-advancement", var advancementData, var advancementCampaign])
 {
     OwnedAdvancementRuntimeProbe.Run(advancementData, advancementCampaign);
@@ -86,6 +98,18 @@ if (args is ["--audit-calling-thread-fistp", var firstPartyFloatAdapter])
 if (args is ["--test-source-sky-transfer"])
 {
     SourceSkyTransferContracts.Run();
+    return;
+}
+
+if (args is ["--test-source-main-images"])
+{
+    SourceMainScriptCallerContracts.RunSourceMainImageContracts();
+    return;
+}
+
+if (args is ["--audit-source-main-images", var imageData, var imageCampaign])
+{
+    OwnedSourceMainImagesAudit.Run(imageData, imageCampaign);
     return;
 }
 

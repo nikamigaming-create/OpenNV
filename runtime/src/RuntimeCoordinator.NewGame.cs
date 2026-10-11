@@ -27,6 +27,7 @@ public partial class RuntimeCoordinator
         _nativeScriptStorage?.Auxiliary.ResetForNewGame();
         _nativeUi?.Reset();
         _nativeGameTime!.InitializeNewGame();
+        ConfigureSourceMainImageAuthority(null);
         _nativeBootstrapCharacter = (_nativeRaceSexContract ?? throw new InvalidOperationException("New Game has no player appearance owner.")).Initial;
         var scripts = _nativeQuestScripts ?? throw new InvalidOperationException("New Game has no quest clock owner.");
         var content = RuntimeLiveContentSource.Current!;

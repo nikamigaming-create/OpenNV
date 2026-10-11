@@ -99,7 +99,7 @@ internal sealed partial class FalloutSkyTransferState
             if (previous is null) continue;
             var identity = Guid.NewGuid(); map.Add(previous.Identity, identity);
             var current = previous with { Identity = identity, Sky = Identity, Changed = Next() };
-            _images.RegisterSourceSkyInstance(this, identity, current.ManagerOrdinal!.Value); _instances.Add(slot, current);
+            _images.RebindSourceSkyInstance(this, previous.Identity, identity, current.ManagerOrdinal!.Value); _instances.Add(slot, current);
         }
         _handoff = new(saved.CapturedSky, Identity, saved.CapturedProcess, process, map);
         // A previous return remains evidence in the saved receipt. It is not

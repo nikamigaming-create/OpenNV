@@ -43,7 +43,7 @@ internal sealed record FalloutSkyHdrIni(FalloutIniDeclaration Declaration, bool 
 internal enum FalloutSkyHdrWriteKind { Constructor, RendererSelection, OrdinaryImage, AlternateImage, SkyResourceLoad, ShaderCopy }
 internal sealed record FalloutSkyHdrWrite(long Ordinal, FalloutSkyHdrWriteKind Kind, uint ValueBits,
     Guid? Frame, Guid? ImageOwner, FalloutFormKey? ImageForm, string? ImageSha256, Guid? Capability,
-    long? ImageOrdinal = null, ushort? ImageFormVersion = null);
+    long? ImageOrdinal = null, ushort? ImageFormVersion = null, string? AnonymousImageSource = null);
 
 internal sealed record FalloutSkyHdrCapability(Guid Identity, Guid Process, string EngineSha256, string Contract,
     long Returned, bool HalfFloatRgbaBlendSupported, bool NativeResourcesCurrent, string Producer);
@@ -54,8 +54,8 @@ internal interface IFalloutSkyHdrCapability
 }
 
 internal sealed record FalloutSkyHdrImageInput(Guid ImageOwner, Guid Process, Guid Frame, long Ordinal,
-    FalloutFormKey Form, ushort FormVersion, string DnamSha256, uint ScalarBits, string EngineSha256,
-    string Contract, bool Alternate, string? Unowned);
+    FalloutFormKey? Form, ushort? FormVersion, string DnamSha256, uint ScalarBits, string EngineSha256,
+    string Contract, bool Alternate, string? Unowned, string? AnonymousImageSource = null);
 
 internal sealed record FalloutSkyHdrShaderRead(Guid Hdr, Guid Shader, long CopiedAt, long ReadAt,
     FalloutSkyHdrWrite Copy, FalloutSkyHdrCapability Capability);

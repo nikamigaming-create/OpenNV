@@ -2,6 +2,15 @@
 
 ## Complete-game direction and execution
 
+October 11 direction focuses only on standalone FO3. The user discarded current
+saves and requires offline production checks before another gameplay run.
+scripts/Test-Fallout3OfflineStartup.ps1 aggregates source data, persistence/cold
+contracts and the actual configured Main clock tail without launching Godot.
+Fixture boundaries and unexecuted whole-game behavior remain explicit; a green
+isolated contract never overrides a failing production owner. Repair the first
+production failure offline, then use ordinary exported input for final gameplay
+and save/Quit/cold Continue acceptance. Broader game and OpenXR requirements stay open.
+
 The immediate October 9 delivery is two ordinary open-world checkpoints: FNV
 outside Doc's house and standalone FO3 outside Vault 101, without selected mods.
 Use normal exported Release, one candidate/profile store and clear VR shortcuts

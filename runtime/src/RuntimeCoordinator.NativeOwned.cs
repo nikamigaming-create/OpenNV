@@ -74,6 +74,14 @@ public partial class RuntimeCoordinator
             referenceEvents = _nativeReferenceEvents?.State,
             rigidBodies = detailed ? CaptureNativeRigidBodies() : null,
             nativePluginRetirementFailure = _nativePluginRetirementFailure,
+            loadFailure = _nativeLoadFailureDiagnostic,
+            inputAdmission = _nativeDirectInput is null ? null : new
+            {
+                _nativeDirectInput.State.Sample,
+                _nativeDirectInput.State.Revision,
+                _nativeDirectInput.State.Failure,
+                _nativeDirectInput.State.NativeReaders
+            },
             nativeData = _nativePluginCampaign?.DataExecutionState,
             nativeSteam = _nativeSteamCampaign?.State,
             modelConstraints = detailed ? _nativeReferencePresentation?.Nodes.SelectMany(reference =>
@@ -220,19 +228,24 @@ public partial class RuntimeCoordinator
             levelUpMenu = playerDriver?.PlayerLevelUpMenuState,
             vigor = playerDriver?.VigorState,
             specialBook = playerDriver?.SpecialBookState,
-            imageSpace = cellChildren is null ? null : cellNodes.OfType<RuntimeNativeImageSpace>().Select(presenter => new
-            {
-                active = presenter.Frame?.Active.Select(modifier => new
+            imageSpace = cellNodes.OfType<RuntimeNativeImageSpace>()
+                .Concat(_nativeMainImagePresenter is { } mainImage ? [mainImage] : [])
+                .Distinct().Select(presenter => new
                 {
-                    form = modifier.Source.Form.ToString(),
-                    modifier.Source.EditorId,
-                    modifier.Source.SourceSha256,
-                    modifier.ElapsedSeconds,
-                    modifier.Source.Duration,
+                    sourceMain = presenter.UsesSourceMain,
+                    nativeFields = detailed ? presenter.SourceFields : null,
+                    drawFailure = presenter.Effect.SourceDrawFailure,
+                    active = presenter.Frame?.Active.Select(modifier => new
+                    {
+                        form = modifier.Source.Form.ToString(),
+                        modifier.Source.EditorId,
+                        modifier.Source.SourceSha256,
+                        modifier.ElapsedSeconds,
+                        modifier.Source.Duration,
+                    }).ToArray(),
+                    unbound = presenter.Frame?.UnboundChannels,
+                    finalStageOperational = presenter.GetMeta("opennv_image_space_operational", false).AsBool(),
                 }).ToArray(),
-                unbound = presenter.Frame?.UnboundChannels,
-                finalStageOperational = presenter.GetMeta("opennv_image_space_operational", false).AsBool(),
-            }).ToArray(),
             actors = _nativeReferencePresentation?.Actors
                 .Select(actor =>
                 {
@@ -495,6 +508,7 @@ public partial class RuntimeCoordinator
         catch (Exception error)
         {
             _nextSessionLoadFailure = RejectNativePendingLoad(error);
+            _nextSessionLoadFailureDiagnostic = _nativeLoadFailureDiagnostic;
             // Reload from clean owners before offering another load. This task
             // cannot await itself while retiring the failed partial world.
             _nativeMenuRead = null;
@@ -601,6 +615,7 @@ public partial class RuntimeCoordinator
             _nativeScriptStorage?.Auxiliary.ResetForNewGame();
             _nativeUi?.Reset();
         }
+        ConfigureSourceMainImageAuthority(restore?.State.SourceMainImages);
         {
             if (restore is not null)
             {
@@ -1397,7 +1412,7 @@ public partial class RuntimeCoordinator
             _nativeGlobals,
             _nativeGameTime,
             _nativeSkyLighting,
-            () => _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeImageSpace>().SingleOrDefault() ??
+            () => _nativeMainImagePresenter ?? _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeImageSpace>().SingleOrDefault() ??
                 throw new InvalidOperationException("Rendered creation has no world image-space owner."),
             _nativeStartingQuest?.ReadSubrecords().Where(field => field.Signature == "EDID")
                 .Select(field => FalloutDialogueTopic.Text(field.Data.Span)).Single() ??
@@ -1501,6 +1516,7 @@ public partial class RuntimeCoordinator
 
     private Compositor? AddNativeImageSpace(Node3D root, FalloutImageSpace? imageSpace)
     {
+        if (_nativeImageSpaceState.HasSourceMainImages) return AddSourceMainImageSpace(root, imageSpace);
         if (imageSpace is null) return null;
         var application = RetailImageSpaceRenderer.CreateFromSource(imageSpace,
             _configuration.FalloutEnvironment.ImageSpace, _configuration.Capture,

@@ -420,6 +420,26 @@ internal static partial class FalloutExecutableStringTable
             throw new InvalidDataException("Owned executable resource is not backed by file bytes.");
         }
 
+        // PE loader data includes the declared zero-filled virtual tail. This
+        // is a constructor input, not a read of current process memory.
+        internal byte[] ReadLoaderData(uint address, int count)
+        {
+            if (address < Base || count is <= 0 or > 64 * 1024 * 1024)
+                throw new InvalidDataException("Owned loader data extent is invalid.");
+            var rva = address - Base;
+            foreach (var section in headers.SectionHeaders)
+            {
+                if (rva < section.VirtualAddress || (ulong)rva + (uint)count >
+                    (ulong)section.VirtualAddress + (uint)Math.Max(section.VirtualSize, section.SizeOfRawData)) continue;
+                var relative = checked((int)(rva - section.VirtualAddress));
+                var result = new byte[count];
+                var backed = Math.Min(count, Math.Max(0, section.SizeOfRawData - relative));
+                if (backed != 0) Read(address, backed).CopyTo(result, 0);
+                return result;
+            }
+            throw new InvalidDataException("Owned loader data is outside every declared section extent.");
+        }
+
         internal bool IsWritableObject(uint address) => IsWritableExtent(address, 12);
 
         internal bool IsFileExtent(uint address, int count) => count > 0 && address >= Base && headers.SectionHeaders.Any(section =>

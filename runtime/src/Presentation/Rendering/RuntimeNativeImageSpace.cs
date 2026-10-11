@@ -38,7 +38,17 @@ internal partial class RuntimeNativeImageSpace : Node
 
     // Menus pause simulation, but must still present the latest committed IMAD
     // state. Otherwise a fade applied on the menu-opening frame is never drawn.
-    public override void _Process(double delta) => Publish(GetTree().Paused ? 0 : delta);
+    public override void _Process(double delta)
+    {
+        if (UsesSourceMain)
+        {
+            // Main owns the source list, clock and publication. Presentation
+            // processing cannot run a second independent composition.
+            if (_sourceNativeFrame is not null) PublishObservation();
+            return;
+        }
+        Publish(GetTree().Paused ? 0 : delta);
+    }
 
     public override void _Notification(int what)
     {
@@ -47,6 +57,8 @@ internal partial class RuntimeNativeImageSpace : Node
 
     internal IDisposable BeginMenuBackground(FalloutPluginStack records, FalloutMenuBackgroundKind kind)
     {
+        if (UsesSourceMain)
+            throw new NotSupportedException("source-image-space-menu-temporary-instance-factory-and-isolated-update-unowned");
         if (_menuBackground is not null) throw new InvalidOperationException("Another static menu background already owns the world capture.");
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Menu background has no owned content source.");
         var declarations = FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(source.FalloutExecutablePath);
@@ -84,6 +96,12 @@ internal partial class RuntimeNativeImageSpace : Node
         PublishCurrentSkyHdr(gameplay);
         Frame = _menuBackground ?? gameplay;
         _effect.SetSourceFrame(gameplay, (float)delta);
+        PublishObservation();
+    }
+
+    private void PublishObservation()
+    {
+        if (Frame is null) return;
         SetMeta("opennv_image_space_operational", _effect.Operational);
         SetMeta("opennv_image_space_blur_radius", Frame.BlurRadius);
         SetMeta("opennv_image_space_double_vision_offset", new Vector2(Frame.DoubleVisionOffset.X, Frame.DoubleVisionOffset.Y));
@@ -92,6 +110,6 @@ internal partial class RuntimeNativeImageSpace : Node
         if (unbound == _unbound) return;
         _unbound = unbound;
         SetMeta("opennv_unbound_image_space_channels", unbound);
-        GD.Print($"OPENNV_NATIVE_IMAGE_SPACE_COVERAGE source={_source.Form} unbound={unbound} parity=unmeasured");
+        GD.Print($"OPENNV_NATIVE_IMAGE_SPACE_COVERAGE source={(UsesSourceMain ? SourceIdentity : _source.Form.ToString())} unbound={unbound} parity=unmeasured");
     }
 }

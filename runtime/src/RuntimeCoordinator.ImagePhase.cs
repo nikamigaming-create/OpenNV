@@ -19,6 +19,7 @@ public partial class RuntimeCoordinator
     }
     private void RetireCurrentImagePhase()
     {
+        RetireSourceMainImageAuthority();
         // No presentation producer may sample a replacement campaign cache
         // through a previous process' still-living node.
         if (GodotObject.IsInstanceValid(_nativeImageSpaceClock)) _nativeImageSpaceClock!.ProcessMode = ProcessModeEnum.Disabled;

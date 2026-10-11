@@ -49,7 +49,7 @@ internal sealed partial class FalloutSkyHdrState
             {
                 if (row.Ordinal != 1 || row.ValueBits != 0x3f800000 || row.Frame is not null || row.ImageOwner is not null ||
                     row.ImageForm is not null || row.ImageSha256 is not null || row.Capability is not null ||
-                    row.ImageOrdinal is not null || row.ImageFormVersion is not null)
+                    row.ImageOrdinal is not null || row.ImageFormVersion is not null || row.AnonymousImageSource is not null)
                     throw new InvalidDataException("Saved HDR constructor has a fabricated producer/value.");
                 return;
             }
@@ -60,13 +60,16 @@ internal sealed partial class FalloutSkyHdrState
                 throw new InvalidDataException("Saved HDR field was written by another source branch or capability.");
             if (row.ImageOwner is { } image)
             {
-                if (image == Guid.Empty || row.ImageForm is null || row.ImageSha256 is null || row.ImageSha256.Length != 64 ||
+                if (image == Guid.Empty || (row.ImageForm is null) != (row.ImageFormVersion is null) ||
+                    (row.ImageForm is null) != (row.AnonymousImageSource is not null) ||
+                    row.AnonymousImageSource is { } anonymous && (anonymous != row.ImageSha256 || !FalloutSourceMainFamily.IsFallout3(source.EngineSha256)) ||
+                    row.ImageSha256 is null || row.ImageSha256.Length != 64 ||
                     !row.ImageSha256.All(Uri.IsHexDigit) || row.ImageOrdinal is not { } publication || publication < 1 ||
-                    row.ImageFormVersion is null || !saved.ImageOrdinals.TryGetValue(image, out var highest) || publication > highest ||
+                    !saved.ImageOrdinals.TryGetValue(image, out var highest) || publication > highest ||
                     secondary && row.Kind == FalloutSkyHdrWriteKind.OrdinaryImage && row.ValueBits != 0x3f800000)
                     throw new InvalidDataException("Saved HDR image writer lost its actual source identity/ordinary-secondary store.");
             }
-            else if (row.ImageForm is not null || row.ImageSha256 is not null || row.ImageOrdinal is not null || row.ImageFormVersion is not null ||
+            else if (row.ImageForm is not null || row.ImageSha256 is not null || row.ImageOrdinal is not null || row.ImageFormVersion is not null || row.AnonymousImageSource is not null ||
                 row.Kind is not (FalloutSkyHdrWriteKind.SkyResourceLoad or FalloutSkyHdrWriteKind.ShaderCopy) || row.ValueBits != 0x3f800000)
                 throw new InvalidDataException("Saved HDR scalar has no source image or resource-loader writer.");
         }
