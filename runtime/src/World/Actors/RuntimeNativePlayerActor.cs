@@ -100,12 +100,12 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     {
         Name = firstPerson ? "NativeFirstPersonBody" : "NativeThirdPersonBody";
         _records = records; _content = content; _first = firstPerson;
-        _directory = firstPerson ? "meshes/characters/_1stperson" : appearance.SkeletonPath[..appearance.SkeletonPath.LastIndexOf('/')];
-        var models = firstPerson ? appearance.Models.Where(part => part.Role is "body" or "hand-left" or "hand-right" or "armor" or "armor-addon")
-            .Select(FirstPersonPart).ToArray() : appearance.Models;
+        var selected = FalloutPlayerSourceAppearance.Select(appearance, content, firstPerson);
+        _directory = selected.SkeletonPath[..selected.SkeletonPath.LastIndexOf('/')];
+        var models = selected.Models;
         try
         {
-            Actor = RuntimeNativeNpc.Create(appearance with { Models = models, SkeletonPath = firstPerson ? _directory + "/skeleton.nif" : appearance.SkeletonPath }, content, units,
+            Actor = RuntimeNativeNpc.Create(selected, content, units,
                 (npc, part, nif, geometry) => NativeNpcMaterial.Resolve(npc, part, nif, geometry, records, ambient));
             AddChild(Actor); Actor.SetProcess(false);
             var pipBoy = appearance.EquippedArmor.Any(key => (records.GetEffective(key).ReadSubrecords()
@@ -113,6 +113,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             for (var index = 0; index < Actor.Parts.Count; index++)
             {
                 var part = models[index]; var source = FalloutNifFile.Read(Read(part.ModelPath!));
+                _sourceBoundParts.Add(source);
                 foreach (var mesh in Actor.Parts[index].Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>())
                 {
                     if (!mesh.HasMeta("opennv_nif_geometry_block")) continue;
@@ -150,14 +151,6 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     }
 
     private byte[] Read(string path) => _content.TryRead(path, null, out var bytes, out _) ? bytes : throw new FileNotFoundException($"Player source resource is missing: {path}", path);
-    private FalloutNpcAppearancePart FirstPersonPart(FalloutNpcAppearancePart part)
-    {
-        if ((part.BipedSlots & 0x18) == 0 || part.ModelPath is not { } path || !path.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)) return part;
-        // Owned hand variants carry inverse binds for the first-person finger
-        // hierarchy. Keeping the third-person inverse binds distorts the grip.
-        var candidate = path[..^4] + "1st.nif";
-        return _content.TryRead(candidate, null, out _, out _) ? part with { ModelPath = candidate } : part;
-    }
     internal bool ClipExists(string name)
     {
         if (!_availableClips.TryGetValue(name, out var exists))

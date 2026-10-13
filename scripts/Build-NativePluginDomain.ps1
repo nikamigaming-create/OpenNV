@@ -81,6 +81,12 @@ try {
         "/OUT:$fixtures/opennv_crt_fixture.dll", "/IMPLIB:$output/crt-fixture.lib")
     & $compiler @crtArguments
     if ($LASTEXITCODE -ne 0) { throw 'Authored public-ABI CRT fixture compilation failed.' }
+    $crtPureArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/GS-', '/Oi-', '/fp:strict', '/LD',
+        (Join-Path $fixtureSource 'NativeCrtPureFixture.cpp'), "/Fo$output/crt-pure-fixture.obj", '/link',
+        '/MACHINE:X86', '/ENTRY:DllMain@12', 'ucrt.lib', 'kernel32.lib', "/DEF:$fixtureSource/NativeCrtFixture.def",
+        "/OUT:$fixtures/opennv_crt_pure_fixture.dll", "/IMPLIB:$output/crt-pure-fixture.lib")
+    & $compiler @crtPureArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Authored genuine pure CRT fixture compilation failed.' }
     $cppArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/LD',
         (Join-Path $fixtureSource 'NativeCppStreamsFixture.cpp'),
         "/Fo$output/cpp-streams-fixture.obj", '/link', '/MACHINE:X86',
@@ -96,13 +102,24 @@ try {
         "/Fo$output/mutex-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
         "/DEF:$fixtureSource/NativeCrtFixture.def",
         "/OUT:$fixtures/opennv_mutex_fixture.dll", "/IMPLIB:$output/mutex-fixture.lib", 'kernel32.lib')
+    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeNvseLoggingFixture.cpp'),
+        "/Fo$output/logging-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
+        "/DEF:$fixtureSource/NativeCrtFixture.def",
+        "/OUT:$fixtures/opennv_logging_fixture.dll", "/IMPLIB:$output/logging-fixture.lib", 'kernel32.lib')
+    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeSourceSuppressionFixture.cpp'),
+        "/Fo$output/source-suppression-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
+        "/DEF:$fixtureSource/NativeCrtFixture.def", "/OUT:$fixtures/opennv_source_suppression_fixture.dll",
+        "/IMPLIB:$output/source-suppression-fixture.lib", 'kernel32.lib')
     $files = @('opennv_plugin_domain.exe', 'opennv_cng_service.exe', 'fixtures/opennv_domain_fixture.dll',
         'fixtures/opennv_domain_fixture_dependency.dll', 'fixtures/opennv_domain_fixture_reject.dll', 'missing-import/opennv_domain_fixture.dll')
     $files += @(0..6 | ForEach-Object { "protocol-fixtures/opennv_fault_envelope_$_.exe" })
     $files += 'fixtures/opennv_crt_fixture.dll'
+    $files += 'fixtures/opennv_crt_pure_fixture.dll'
     $files += 'fixtures/opennv_cpp_streams_fixture.dll'
     $files += 'fixtures/opennv_cng_shared_fixture.dll'
     $files += 'fixtures/opennv_mutex_fixture.dll'
+    $files += 'fixtures/opennv_logging_fixture.dll'
+    $files += 'fixtures/opennv_source_suppression_fixture.dll'
     $files += 'providers/cng/bcrypt.dll'
     $files += 'opennv_engine_tls.dll'
     $manifest = [ordered]@{ authoredOnly = $true; configuration = $Configuration; machine = 'I386'; executionVerified = $false; files = @() }

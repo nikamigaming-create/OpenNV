@@ -38,6 +38,7 @@ internal partial class NativeOwnedGameplayHud : Control
         error = Error,
         scriptUiRevision = _uiRevision,
         sourceControls = _lastControls,
+        referenceFrame = _referenceHud?.State,
         hitPointsVisible = _hp is not null && _tiles.Number(_hp, "visible") > 0,
         actionPointsVisible = _ap is not null && _tiles.Number(_ap, "visible") > 0,
         reticleVisible = _tiles.Number(_reticle, "visible") > 0,
@@ -114,7 +115,11 @@ internal partial class NativeOwnedGameplayHud : Control
     public override void _Ready() { Layout(); }
     private NativeViewportLayout? _viewportLayout;
     public override void _EnterTree() => _viewportLayout = new(this, Layout);
-    public override void _ExitTree() => _viewportLayout?.Dispose();
+    public override void _ExitTree()
+    {
+        try { _referenceHud?.Retire(); }
+        finally { _viewportLayout?.Dispose(); }
+    }
     private void Layout()
     {
         var scale = GetViewportRect().Size.Y / 960;

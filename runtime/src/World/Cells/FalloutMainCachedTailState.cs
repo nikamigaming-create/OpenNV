@@ -15,7 +15,8 @@ internal sealed record FalloutMainCachedTailSnapshot(string Schema, FalloutMainC
     Guid CapturedProcess, long Sequence, byte OptionalPlayer, IReadOnlyList<byte> RequestCountdowns,
     byte IndependentByte, uint IndependentFloatBits, byte ActorResetPending, uint DelayRequest,
     uint FrameCounter, uint MainWord, uint GameplayFrameCounter, uint HavokTauBits,
-    IReadOnlyList<uint> ChannelBits, uint GameplayDeltaBits, FalloutMainCachedTailAttempt? LastAttempt);
+    IReadOnlyList<uint> ChannelBits, uint GameplayDeltaBits, FalloutMainCachedTailAttempt? LastAttempt,
+    FalloutRendererClockSnapshot? RendererClock = null);
 
 internal interface IFalloutMainCachedTailChildren
 {
@@ -35,13 +36,14 @@ internal interface IFalloutMainCachedTailChildren
 // fields. Its empty constructor return does not complete pending saves.
 internal sealed class FalloutMainCachedTailState : IDisposable
 {
-    internal const string Schema = "opennv-source-Main-cached-tail/v1";
+    internal const string Schema = "opennv-source-Main-cached-tail/v2";
     internal FalloutMainCachedTailSource Source { get; }
     private readonly string _stack;
     private readonly Guid _process;
     private readonly IFalloutSourceTickCounter _counter;
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private readonly byte[] _requests;
+    private readonly FalloutRendererClockState? _rendererClock;
     private readonly uint[] _channels = new uint[4];
     private long _sequence;
     private byte _optionalPlayer, _independentByte, _actorResetPending;
@@ -50,7 +52,8 @@ internal sealed class FalloutMainCachedTailState : IDisposable
     private Guid _active;
     private bool _disposed, _callback, _reentry;
     internal FalloutMainCachedTailState(FalloutMainCachedTailSource source, string stack, Guid process,
-        IFalloutSourceTickCounter counter, FalloutMainCachedTailSnapshot? saved = null)
+        IFalloutSourceTickCounter counter, FalloutMainCachedTailSnapshot? saved = null,
+        FalloutRendererClockConfiguration? renderer = null)
     {
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack); ArgumentNullException.ThrowIfNull(counter);
         ArgumentException.ThrowIfNullOrWhiteSpace(counter.Owner);
@@ -58,6 +61,14 @@ internal sealed class FalloutMainCachedTailState : IDisposable
         Source = source; _stack = stack; _process = process; _counter = counter;
         _requests = new byte[source.RequestCount];
         _frameCounter = source.InitialFrameCounter; _havokBits = source.InitialHavokTauBits;
+        if (renderer is not null)
+        {
+            if (renderer.Source.Main != source.Main || saved is not null && saved.RendererClock is null)
+                throw new InvalidDataException("Main tail omitted or changed its actual renderer clock owner.");
+            _rendererClock = new(renderer, process, saved?.RendererClock);
+        }
+        else if (saved?.RendererClock is not null)
+            throw new InvalidDataException("Cold Main renderer clock cannot lose its actual selected configuration.");
         if (saved is null) return;
         Validate(saved);
         if (saved.Source != source || saved.Stack != stack || saved.CapturedProcess == process)
@@ -72,7 +83,7 @@ internal sealed class FalloutMainCachedTailState : IDisposable
     }
     internal string? SaveBlocker => _active != Guid.Empty ? "source-Main-cached-tail-entered" :
         _last?.Failure is { } failure ? "source-Main-cached-tail-failed:" + failure :
-        _last is { Phase: not FalloutMainCachedTailPhase.LocalReturned } ? "source-Main-cached-tail-unreturned" : null;
+        _last is { Phase: not FalloutMainCachedTailPhase.LocalReturned } ? "source-Main-cached-tail-unreturned" : _rendererClock?.SaveBlocker;
     internal object State => new
     {
         source = Source,
@@ -83,11 +94,30 @@ internal sealed class FalloutMainCachedTailState : IDisposable
         gameplayFrameCounter = _gameFrameCounter,
         pendingActorReset = _actorResetPending,
         requestCountdowns = _requests.ToArray(),
+        rendererClock = _rendererClock?.State,
         delayRequest = _delayRequest,
         sourceChannels = _channels.ToArray(),
         gameplayDeltaBits = _gameplayDeltaBits,
         saveBlocker = SaveBlocker
     };
+    internal void PublishRendererClock(FalloutMainScriptInvocation invocation, float seconds, float rate,
+        float maximumTime, bool sceneIsComplex)
+    {
+        invocation.Require(FalloutMainScriptCallerStep.CachedTailAfter);
+        if (_active != invocation.Identity || _last?.Phase != FalloutMainCachedTailPhase.RendererEntered)
+            throw new InvalidOperationException("Renderer clock publication escaped its actual entered Main tail.");
+        (_rendererClock ?? throw new NotSupportedException("Source renderer clock has no actual current/cold construction."))
+            .Publish(invocation.Identity, invocation.Ordinal, seconds, rate, maximumTime, sceneIsComplex);
+    }
+    internal FalloutRendererClockSource ReadReturnedRendererClock(FalloutMainScriptInvocation invocation)
+    {
+        invocation.Require(FalloutMainScriptCallerStep.CachedTailAfter);
+        if (_active != invocation.Identity || _last?.Phase != FalloutMainCachedTailPhase.SourceChannels ||
+            _rendererClock?.Capture().LastPublication is not { Prefix: FalloutRendererClockPrefix.Returned, Failure: null } publication ||
+            publication.Main != invocation.Identity || publication.Ordinal != invocation.Ordinal)
+            throw new InvalidOperationException("Registered clock channel has no immediately returned renderer/Main publication.");
+        return _rendererClock.Configuration.Source;
+    }
 
     internal void BeforeTimer(FalloutMainScriptInvocation invocation, bool cachedMenu, IFalloutMainCachedTailChildren children)
     {
@@ -203,7 +233,7 @@ internal sealed class FalloutMainCachedTailState : IDisposable
         Require();
         var value = new FalloutMainCachedTailSnapshot(Schema, Source, _stack, _process, _sequence, _optionalPlayer, _requests.ToArray(),
             _independentByte, _independentFloatBits, _actorResetPending, _delayRequest, _frameCounter, _mainWord, _gameFrameCounter,
-            _havokBits, _channels.ToArray(), _gameplayDeltaBits, _last);
+            _havokBits, _channels.ToArray(), _gameplayDeltaBits, _last, _rendererClock?.Capture());
         Validate(value); return value;
     }
     internal static void Validate(FalloutMainCachedTailSnapshot value)
@@ -215,6 +245,14 @@ internal sealed class FalloutMainCachedTailState : IDisposable
                 last.Changed > value.Sequence || !Enum.IsDefined(last.Phase) || last.Failure is not null && string.IsNullOrWhiteSpace(last.Failure)))
             throw new InvalidDataException("Main tail omitted its exact fields/source/entered failure prefix.");
         value.Source.Validate();
+        if (value.RendererClock is { } renderer)
+        {
+            FalloutRendererClockState.Validate(renderer);
+            if (renderer.Configuration.Source.Main != value.Source.Main || renderer.CapturedProcess != value.CapturedProcess ||
+                renderer.LastPublication is { } publication && (value.LastAttempt is not { } attempt || publication.Ordinal > attempt.Ordinal ||
+                    publication.Ordinal == attempt.Ordinal && publication.Main != attempt.Main))
+                throw new InvalidDataException("Main renderer clock changed its actual source/process/publication order.");
+        }
         // These external writers are not yet admitted. A cold blob cannot
         // manufacture their input merely by supplying source-shaped fields.
         if (value.OptionalPlayer != 0 || value.RequestCountdowns.Any(count => count != 0) || value.DelayRequest != 0)
@@ -227,6 +265,6 @@ internal sealed class FalloutMainCachedTailState : IDisposable
     }
     public void Dispose()
     {
-        if (_disposed) return; Require(); _disposed = true;
+        if (_disposed) return; Require(); _rendererClock?.Dispose(); _disposed = true;
     }
 }

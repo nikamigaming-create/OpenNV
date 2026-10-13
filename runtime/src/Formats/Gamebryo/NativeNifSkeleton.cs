@@ -16,8 +16,12 @@ internal sealed class RuntimeNativeNifSkeleton
     internal NativeNifAnimationBlend AnimationBlend => _animationBlend ??= new(Node.GetBoneCount());
 
     internal RuntimeNativeNifSkeleton(FalloutNifFile source, float unitsToMetres)
+        : this(FalloutNifPhysicalModel.Read(source), unitsToMetres) { }
+
+    internal RuntimeNativeNifSkeleton(FalloutNifPhysicalModel physicalModel, float unitsToMetres)
     {
-        Source = source;
+        PhysicalModel = physicalModel;
+        var source = Source = physicalModel.Source;
         UnitsToMetres = unitsToMetres;
         Node = new Skeleton3D { Name = "NativeSkeleton" };
         Node.TreeEntered += PublishRetainedPoses;
@@ -44,6 +48,7 @@ internal sealed class RuntimeNativeNifSkeleton
     }
 
     internal FalloutNifFile Source { get; }
+    internal FalloutNifPhysicalModel PhysicalModel { get; }
     internal Skeleton3D Node { get; }
     internal float UnitsToMetres { get; }
     internal FalloutNifFloatExtraDataState FloatExtraData { get; } = new();

@@ -9,7 +9,7 @@ internal static class FalloutDoorDestinationResolver
     {
         var teleport = source.Teleport ?? throw new InvalidDataException("Door has no XTEL destination.");
         if (records.GetEffective(source.Base).Signature != "DOOR") throw new InvalidDataException("XTEL source is not a door.");
-        if (teleport.Flags != 0) throw new NotSupportedException($"XTEL flags {teleport.Flags:x8} have no transition owner.");
+        _ = teleport.NoAlarm;
         var destinationRecord = records.GetEffective(teleport.Door);
         var cell = FalloutCellSceneReader.ParentCell(destinationRecord) ?? throw new InvalidDataException("XTEL destination has no CELL.");
         var scene = FalloutCellSceneReader.Read(records, cell);

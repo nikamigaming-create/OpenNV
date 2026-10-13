@@ -1,12 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/World/Physics/FalloutPhysicalConstructorInputs.cs" Link="FalloutPhysicalConstructorInputs.cs" />
+    <Compile Include="../../runtime/src/World/Physics/FalloutCharacterControllerTransformState.cs" Link="FalloutCharacterControllerTransformState.cs" />
+    <Compile Include="../../runtime/src/World/Physics/FalloutCharacterCollisionGroups.cs" Link="FalloutCharacterCollisionGroups.cs" />
+    <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifPhysicalModel.cs" Link="FalloutNifPhysicalModel.cs" />
     <Compile Include="../../runtime/tools/NativeNifInstanceAudit/FalloutConvexListFixture.cs" Link="FalloutConvexListFixture.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifFile.ConvexLists.cs" Link="FalloutNifFile.ConvexLists.cs" />
     <Compile Include="../../runtime/src/Formats/Gamebryo/FalloutNifHingeConstraint.cs" Link="FalloutNifHingeConstraint.cs" />

@@ -9,6 +9,7 @@ internal sealed partial class NativePluginPrivateIo
     private readonly List<(NativePluginCrtProviderSelection Selection, FileStream Lease)> _crtProviderLeases = [];
     private readonly List<NativePluginCrtReceipt> _crtReceipts = [];
     private readonly List<NativePluginCrtReceipt> _crtFailures = [];
+    private readonly Dictionary<string, IReadOnlyDictionary<string, uint>> _crtPureExports = new(StringComparer.OrdinalIgnoreCase);
     internal IReadOnlyList<NativePluginCrtProviderSelection> CrtProviders => _crtProviderLeases.Select(row => row.Selection).ToArray();
     internal IReadOnlyList<NativePluginCrtReceipt> CrtReceipts => _crtReceipts.AsReadOnly();
     private void InitializeCrtProviders()
@@ -17,8 +18,8 @@ internal sealed partial class NativePluginPrivateIo
         {
             if (selected is null || string.IsNullOrWhiteSpace(selected.SourceOwner) || selected.Sha256.Length != 64 ||
                 !selected.Sha256.All(Uri.IsHexDigit) || selected.Imports.Count == 0 || selected.Imports.Any(pair => pair.Value.Count == 0 ||
-                    !NativePluginCrtExtendedImports.Libraries.Contains(pair.Key) ||
-                    pair.Value.Any(name => !NativePluginCrtImports.Owned.Contains(name))) ||
+                    pair.Value.Any(name => !(NativePluginCrtExtendedImports.Libraries.Contains(pair.Key) && NativePluginCrtImports.Owned.Contains(name)) &&
+                        !NativePluginCrtPureImports.Owns(pair.Key, name))) ||
                 _crtProviderLeases.Any(row => StringComparer.OrdinalIgnoreCase.Equals(Canonical(row.Selection.Path), Canonical(selected.Path))))
                 throw new InvalidDataException("CRT provider has an absent/duplicate source identity or unowned callable declaration.");
             NoReparse(selected.Path); var input = new FileStream(selected.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -30,6 +31,10 @@ internal sealed partial class NativePluginPrivateIo
                 input.Position = 0;
                 if (!StringComparer.OrdinalIgnoreCase.Equals(Convert.ToHexString(SHA256.HashData(input)), selected.Sha256))
                     throw new InvalidDataException("CRT export provider changed source architecture/hash before process entry.");
+                var declaration = NativePluginImageDeclarations.Read(selected.Path, dll: true);
+                if (!declaration.Sha256.Equals(selected.Sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Pure CRT exports changed their retained provider source hash.");
+                _crtPureExports.Add(Canonical(selected.Path), NativePluginCrtPureImports.SelectExports(selected, declaration.Exports));
                 _crtProviderLeases.Add((selected, input));
             }
             catch { input.Dispose(); throw; }
@@ -41,6 +46,12 @@ internal sealed partial class NativePluginPrivateIo
         return _crtProviderLeases.Select(row => row.Selection).SingleOrDefault(row =>
             StringComparer.OrdinalIgnoreCase.Equals(Canonical(row.Path), Canonical(path)) &&
             StringComparer.OrdinalIgnoreCase.Equals(row.Sha256, sha)) ?? throw new InvalidDataException("Actual CRT provider is not the exact retained selected source.");
+    }
+    internal void RequireCrtPureBinding(NativePluginCrtProviderSelection selection, string library, string name,
+        uint module, uint address, uint rva)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        NativePluginCrtPureImports.RequireBinding(selection, _crtPureExports[Canonical(selection.Path)], library, name, module, address, rva);
     }
     internal string CrtAbsentRead(NativePluginIoRoute route)
     {

@@ -116,8 +116,8 @@ internal sealed partial class NativePluginExecutionDomain
     internal void RequirePrivateCrtSaveOwned()
     {
         VerifyOwner(); RequireNativeEnvironmentSaveOwned(); RequireNativeFileMetadataSaveOwned();
-        if (_crtStreams.Count != 0 || _crtRoutes.Count != 0 || NvseCrtReceipts.Count != 0 || _crtDescriptorReceipts.Count != 0 || _cppRuntimePublished)
-            throw new NotSupportedException("Original CRT current/cold stream/caller/error-state construction has no unified source save owner.");
+        if (_crtStreams.Count != 0 || _crtRoutes.Count != 0 || NvseCrtReceipts.Count != 0 || _crtDescriptorReceipts.Count != 0 || _cppRuntimePublished || _crtPureBindings.Count != 0)
+            throw new NotSupportedException("Original CRT current/cold stream/caller/error/floating-state construction has no unified source save owner.");
     }
     private void ClearPrivateCrt()
     {

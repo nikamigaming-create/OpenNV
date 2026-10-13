@@ -164,6 +164,7 @@ internal static class OwnedCompiledScriptProbe
         using var records = FalloutPluginStack.Load(content.PluginSources);
         var scopes = 0; var nonempty = 0; var noSource = 0; var framed = 0;
         var instructions = new Dictionary<ushort, int>(); var failures = new List<object>();
+        var uncompiled = new List<object>();
         foreach (var record in records.EffectiveRecords())
         {
             FalloutPluginSubrecord[] fields;
@@ -174,6 +175,17 @@ internal static class OwnedCompiledScriptProbe
             try
             {
                 if (record.Signature == "SCPT") selectedScopes.Add(FalloutScriptScope.Standalone(record));
+                else if (record.Signature == "PACK")
+                    foreach (var marker in fields.Where(field => field.Signature is "POBA" or "POEA" or "POCA").Select(field => field.Signature))
+                        selectedScopes.Add(FalloutScriptScope.PackageEvent(record, marker));
+                else if (record.Signature == "TERM")
+                    foreach (var entry in Enumerable.Range(0, fields.Count(field => field.Signature == "ITXT")))
+                        selectedScopes.Add(FalloutScriptScope.TerminalResult(record, entry));
+                else if (record.Signature is "REFR" or "ACHR" or "ACRE" && fields.Any(field => field.Signature == "XPPA"))
+                    selectedScopes.Add(FalloutScriptScope.PatrolResult(record));
+                else if (record.Signature == "PERK")
+                    foreach (var entry in Enumerable.Range(0, fields.Count(field => field.Signature == "PRKE")))
+                        selectedScopes.Add(FalloutScriptScope.PerkResult(record, entry));
                 else if (record.Signature == "INFO")
                 {
                     selectedScopes.Add(FalloutScriptScope.Dialogue(record, true));
@@ -199,7 +211,17 @@ internal static class OwnedCompiledScriptProbe
                 foreach (var index in Enumerable.Range(selected.FieldStart, selected.FieldCount)) covered.Add(index);
                 if (!selected.Any(field => field.Signature == "SCHR") && !selected.Compiled) continue;
                 ++scopes;
-                if (!selected.Compiled) continue;
+                if (!selected.Compiled)
+                {
+                    try
+                    {
+                        if (selected.ValidateAbsentBody()) uncompiled.Add(new
+                        { source = record.FormKey.ToString(), record.Signature, selected.Kind, selected.FieldStart });
+                    }
+                    catch (Exception error) when (Failure(error))
+                    { failures.Add(new { lane = "declared-empty-body", source = record.FormKey.ToString(), record.Signature, error = error.Message }); }
+                    continue;
+                }
                 if (FalloutCompiledScriptProgram.HasInstructions(selected)) ++nonempty;
                 if (!selected.Any(field => field.Signature == "SCTX")) ++noSource;
                 try
@@ -225,7 +247,7 @@ internal static class OwnedCompiledScriptProbe
             saveCompatibilityId = content.SaveCompatibilityId, game = content.Game, stack = content.StackId,
             sourceContentRoots = content.ContentRoots, orderedPlugins = content.PluginSources.Select(source => source.Name).ToArray(),
             winningRecords = records.EffectiveRecordCount,
-            scopes, nonempty, noSource, framed, failures,
+            scopes, nonempty, noSource, framed, failures, uncompiledScopes = uncompiled,
             instructionOccurrences = instructions.OrderBy(pair => pair.Key).Select(pair => new { opcode = pair.Key.ToString("x4"), count = pair.Value }),
             readerOwnedRangesAndOrdinals = true, gameplayApplied = false, nativeLaunched = false, sourceExpressionsParsed = false,
             boundary = "Layout and unchanged source-scope binding only; instruction occurrence/declaration is not command support or campaign parity."

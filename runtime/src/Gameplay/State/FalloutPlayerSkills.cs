@@ -75,6 +75,7 @@ internal sealed partial class FalloutPlayerSkills
     {
         SynchronizeAbilityScripts();
         if (value is >= 5 and <= 11 && _actorValues is not null) return _actorValues.ReadBoundedCurrent(value);
+        if (_actorValues?.IsStatusValue(value) == true) return _actorValues.ReadCurrent(value);
         if (_skills.Any(skill => skill.Value == value)) return Math.Clamp(ReadSkill(value, FalloutActorValueRead.Current), 0, 100);
         if (!_evaluating.Add(value)) throw new NotSupportedException("Actor ability conditions have a recursive value dependency.");
         try

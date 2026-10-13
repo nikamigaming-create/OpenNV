@@ -118,7 +118,8 @@ internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisp
     bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false,
     FalloutPlayerScriptPackageSnapshot? PlayerPackage = null, FalloutNoActivationSoundSnapshot? NoActivationSound = null,
     bool PlayerYoung = false, bool PlayerToddler = false, float PlayerScale = 1,
-    IReadOnlyList<FalloutQuestObjectFlagSnapshot>? QuestObjects = null, FalloutFormKey? SourceMusic = null);
+    IReadOnlyList<FalloutQuestObjectFlagSnapshot>? QuestObjects = null, FalloutFormKey? SourceMusic = null,
+    bool SceneIsComplex = false);
 internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivationSound = null,
     FalloutQuestObjectFlags? questObjects = null)
 {
@@ -132,6 +133,9 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         SourceMusic = music;
     }
     internal bool InCharGen { get; private set; }
+    internal bool SceneIsComplex { get; private set; }
+    internal void SetSceneIsComplex(bool enabled) => SceneIsComplex = enabled;
+    internal static bool SceneComplexityFlag(double value) => FalloutPlayerActorValues.SignedInteger(value) != 0;
     internal bool PlayerYoung { get; private set; }
     internal bool PlayerToddler { get; private set; }
     internal float PlayerScale { get; private set; } = 1;
@@ -184,7 +188,7 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung, PlayerToddler, PlayerScale, questObjects?.Capture(), SourceMusic);
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung, PlayerToddler, PlayerScale, questObjects?.Capture(), SourceMusic, SceneIsComplex);
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
@@ -200,6 +204,7 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
         LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
         InCharGen = state.InCharGen;
+        SceneIsComplex = state.SceneIsComplex;
         SetPlayerYoung(state.PlayerYoung);
         SetPlayerToddler(state.PlayerToddler);
         SetPlayerScale(state.PlayerScale);
@@ -1152,6 +1157,12 @@ internal sealed partial class FalloutQuestScripts
                 if (arguments.Count != 1) throw new InvalidDataException("Character-generation policy requires one flag.");
                 var enabled = FalloutScriptSession.CharacterGenerationFlag(NumberArgument(arguments[0]));
                 Session.SetInCharGen(enabled);
+                return;
+            }
+            if (parts.Length == 1 && operation == "setsceneiscomplex")
+            {
+                if (arguments.Count != 1) throw new InvalidDataException("SetSceneIsComplex requires one integer flag.");
+                Session.SetSceneIsComplex(FalloutScriptSession.SceneComplexityFlag(NumberArgument(arguments[0])));
                 return;
             }
             if (parts.Length == 1 && operation == "setlocationspecificloadscreensonly")

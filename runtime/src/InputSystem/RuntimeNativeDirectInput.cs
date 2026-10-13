@@ -4,17 +4,23 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.InputSystem;
 
 // Polls before script/physics consumers on the actual product thread. A failed
-// sample remains unavailable; no synthetic Godot event certifies device bytes.
+// sample remains unavailable. An explicitly selected command provider adapts
+// Godot command input; its samples never certify Windows device acquisition.
 internal sealed partial class RuntimeNativeDirectInput : Node
 {
-    private readonly WindowsDirectInputDevice _device;
+    private readonly WindowsDirectInputDevice? _device;
+    private readonly FalloutHeadlessInput? _headless;
     internal FalloutDirectInputState State { get; }
     private bool _retired;
     private RuntimeNativeDirectInput(FalloutDirectInputState state, WindowsDirectInputDevice device)
     { State = state; _device = device; }
-    internal static RuntimeNativeDirectInput Create(string source, FalloutInputControls controls)
+    private RuntimeNativeDirectInput(FalloutDirectInputState state)
+    { State = state; _headless = new(state); }
+    internal static RuntimeNativeDirectInput Create(string source, FalloutInputControls controls, bool commandInput = false)
     {
-        if (DisplayServer.GetName() == "headless") throw new NotSupportedException("Headless has no complete native DirectInput product-window owner.");
+        var provider = RuntimeInputPresentationSelection.SelectInputProvider(commandInput, DisplayServer.GetName());
+        if (provider == RuntimeNativeInputProvider.CommandInput)
+            return new(FalloutDirectInputState.CreateHeadless(source, controls));
         var window = (nint)DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle);
         var device = new WindowsDirectInputDevice(window);
         try
@@ -27,13 +33,31 @@ internal sealed partial class RuntimeNativeDirectInput : Node
     public override void _EnterTree() { ProcessMode = ProcessModeEnum.Always; ProcessPriority = int.MinValue; }
     public override void _Process(double delta)
     {
+        if (_retired) return;
+        if (_headless is { } commands) { commands.Publish(); return; }
         (byte[] Keyboard, byte[] MouseButtons, int X, int Y, int Wheel) sample;
-        try { sample = _device.Read(); }
+        try { sample = _device!.Read(); }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or DirectInputUnavailableException)
         { State.DeviceUnavailable(error.Message); return; }
         // A reached script/event failure is not a failed device acquisition.
         // Keep the committed sample and let the real callback error propagate.
         State.Publish(sample.Keyboard, sample.MouseButtons, sample.X, sample.Y, sample.Wheel);
+    }
+    public override void _Input(InputEvent input)
+    {
+        if (_headless is not { } commands || _retired) return;
+        if (input is InputEventMouseMotion motion)
+        {
+            if (!motion.Relative.IsFinite()) throw new InvalidDataException("Command relative mouse input is nonfinite.");
+            commands.Mouse(checked((int)Math.Round(motion.Relative.X)), checked((int)Math.Round(motion.Relative.Y)));
+        }
+        foreach (var (key, down) in NativeScriptKeys.Read(input))
+            if (key < FalloutInputLayout.WheelUp) commands.Key(key, down);
+            else if (down) commands.Mouse(0, 0,
+                key == FalloutInputLayout.WheelUp ? FalloutInputLayout.WheelStep : -FalloutInputLayout.WheelStep);
+        // Commit command edges before GUI/unhandled gameplay consumers see
+        // the same event. They must observe the source hold/disable filtering.
+        if (input is InputEventKey { Echo: false } or InputEventMouseButton) commands.Publish();
     }
     internal async Task WaitForFirstSample(Func<bool> cancelled)
     {
@@ -56,7 +80,14 @@ internal sealed partial class RuntimeNativeDirectInput : Node
     internal void Poll()
     {
         if (_retired) throw new ObjectDisposedException(nameof(RuntimeNativeDirectInput));
-        var snapshot = _device.Read(); State.Publish(snapshot.Keyboard, snapshot.MouseButtons, snapshot.X, snapshot.Y, snapshot.Wheel);
+        if (_headless is { } commands) { commands.Publish(); return; }
+        var snapshot = _device!.Read(); State.Publish(snapshot.Keyboard, snapshot.MouseButtons, snapshot.X, snapshot.Y, snapshot.Wheel);
+    }
+    internal FalloutDirectInputState PlayerManager()
+    {
+        if (_retired || !IsInsideTree() || GetParent() is null)
+            throw new InvalidOperationException("Player input-manager getter requires the attached living product device owner.");
+        return State.ReadManagerOwner();
     }
     public override void _ExitTree()
     {
@@ -71,7 +102,7 @@ internal sealed partial class RuntimeNativeDirectInput : Node
     {
         if (_retired) return;
         if (State.NativeReaders != 0) throw new InvalidOperationException("Native child readers still retain the actual product input owner.");
-        _device.Dispose(); State.Retire(); _retired = true;
+        _device?.Dispose(); State.Retire(); _retired = true;
         State.NativeReadersRetired -= Retire;
     }
 }

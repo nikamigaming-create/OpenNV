@@ -45,7 +45,7 @@ internal sealed partial class ClassicInventoryModels : Control
             }
         }
         else foreach (var render in _renders.Values)
-                if (render.View is { } view) view.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
+            if (render.View is { } view) view.RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled;
         SetMeta("represented_models", _renders.Where(row => row.Value.Model is not null).Select(row => row.Key).ToArray());
         SetMeta("missing_models", _renders.Where(row => row.Value.Failure is not null).Select(row => row.Key + ": " + row.Value.Failure).ToArray());
         QueueRedraw();

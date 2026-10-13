@@ -1,3 +1,5 @@
+using OpenNV.Runtime.Content;
+
 namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 internal sealed partial class NativePluginExecutionDomain
@@ -132,14 +134,16 @@ internal sealed partial class NativePluginExecutionDomain
     }
     private NativeNvseInputSnapshot RequireInput(NativeNvseInputSnapshot input)
     {
-        if (!StringComparer.OrdinalIgnoreCase.Equals(input.Source, _nvseHostSource!.StackIdentity) || input.Window == 0 || input.Sample == 0 ||
+        if (!StringComparer.OrdinalIgnoreCase.Equals(input.Source, _nvseHostSource!.StackIdentity) || !FalloutDirectInputState.ValidProvider(input.Provider, input.Window) || input.Sample == 0 ||
             input.Revision <= 0 || input.Keys.Count != NativeNvseInputSnapshot.KeyCount)
-            throw new InvalidDataException("DIHookControl has no complete actual product-window/device sample.");
+            throw new InvalidDataException("DIHookControl has no complete declared input-provider sample.");
+        if (_nvseInputSnapshot is { } prior && (prior.Provider != input.Provider || prior.Window != input.Window))
+            throw new InvalidDataException("Native input exchange changed its living provider/window identity.");
         return input;
     }
     private static byte[] InputReply(NativeNvseInputSnapshot input) => Payload(writer =>
     {
-        writer.Write(input.Window); writer.Write(input.Sample); writer.Write(input.Revision); writer.Write((uint)input.Keys.Count);
+        writer.Write((uint)input.Provider); writer.Write(input.Window); writer.Write(input.Sample); writer.Write(input.Revision); writer.Write((uint)input.Keys.Count);
         foreach (var value in input.Keys)
         { writer.Write(value.Raw); writer.Write(value.Game); writer.Write(value.Inserted); writer.Write(value.Hold); writer.Write(value.Tap); writer.Write(value.UserDisabled); writer.Write(value.ScriptDisabled); }
     });

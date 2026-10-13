@@ -17,12 +17,13 @@ internal sealed partial class FalloutReferenceWorld
         if (ActorPerception.RequiresNativePublication(actor))
             return new(actor, new(null, "actual-required-current-or-cold-body-not-rebound",
                 "The real source 3D lifetime requires an independent native body publication."), null, "actual-High-process-3D-getter");
-        var current = ReadPerceptionObservation(actor);
-        if (current.HasSource3D || _nativePerception.ContainsKey(actor))
+        if (_nativePerception.ContainsKey(actor))
             return new(actor, new(null, "actual-perception-body-has-no-source-common-binding",
                 "Published source 3D has no exact common NIF/BPTD provider."), null, "actual-High-process-3D-getter");
         // This actual source-constructed or truly retired 3D reference is
         // known null. An absent callback/cold lease never reaches this arm.
-        return new(actor, new(false, current.Owner + "/actual-source-3D-null"), null, "actual-High-process-3D-getter");
+        // The independent constructed/retired source-3D field is sufficient.
+        // A null model getter never reads position, facing or detection inputs.
+        return new(actor, new(false, "actual-source-constructed-or-retired-3D-null"), null, "actual-High-process-3D-getter");
     }
 }

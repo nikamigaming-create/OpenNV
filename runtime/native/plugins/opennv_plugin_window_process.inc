@@ -119,7 +119,8 @@ void window_process_dispatch(const Frame& frame) {
         auto owner = std::make_unique<WindowProcessRuntime>(); owner->window = reader.get<std::uint32_t>();
         owner->thread = reader.get<std::uint32_t>(); owner->process = reader.get<std::uint32_t>(); owner->source = reader.text(); reader.finish();
         const auto no_window = !owner->window && !owner->thread && !owner->process;
-        if ((!no_window && (!owner->window || !owner->thread || !owner->process)) || owner->source.size() != 64 || !state->io)
+        const auto headless_thread = !owner->window && owner->thread && owner->process;
+        if ((!no_window && !headless_thread && (!owner->window || !owner->thread || !owner->process)) || owner->source.size() != 64 || !state->io)
             throw Fatal(ERROR_INVALID_DATA, "Source/window producer lacks exact living product identities.");
         owner->bound = true; Bytes receipt; receipt.put(owner->window); receipt.put(owner->thread); receipt.put(owner->process);
         state->window_process = std::move(owner); reply(frame, ERROR_SUCCESS, "", receipt); return;

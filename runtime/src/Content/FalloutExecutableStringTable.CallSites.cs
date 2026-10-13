@@ -6,9 +6,24 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutEnginePointerGetter(uint Entry, int MemberOffset, int BodyBytes,
     string BodySha256, IReadOnlyList<FalloutEnginePointerGetter> Children);
 internal sealed record FalloutEngineCallSite(string RuntimeSha256, uint ImageBase, uint Address,
-    string DeclarationSha256, FalloutEnginePointerGetter Getter);
+    string DeclarationSha256, uint OriginalTarget, FalloutEnginePointerGetter? Getter = null)
+{
+    internal string Identity
+    {
+        get
+        {
+            var bytes = new byte[72];
+            Convert.FromHexString(RuntimeSha256).CopyTo(bytes, 0);
+            Convert.FromHexString(DeclarationSha256).CopyTo(bytes, 32);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(64), checked(Address - ImageBase));
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(68), checked(OriginalTarget - ImageBase));
+            return Convert.ToHexString(SHA256.HashData(bytes));
+        }
+    }
+}
 
-internal sealed class FalloutEngineCallSiteSource(string identity, Func<uint, FalloutEngineCallSite> inspect)
+internal sealed class FalloutEngineCallSiteSource(string identity, Func<uint, FalloutEngineCallSite> inspect,
+    Func<FalloutEngineCallSite, FalloutEnginePointerGetter> inspectGetter)
 {
     private readonly Dictionary<uint, FalloutEngineCallSite> _sites = [];
     internal string RuntimeSha256 { get; } = identity;
@@ -19,6 +34,13 @@ internal sealed class FalloutEngineCallSiteSource(string identity, Func<uint, Fa
         if (source.Address != address || !StringComparer.OrdinalIgnoreCase.Equals(source.RuntimeSha256, RuntimeSha256))
             throw new InvalidDataException("Source call site changed its retained executable identity.");
         _sites.Add(address, source); return source;
+    }
+    internal FalloutEngineCallSite ReadGetter(uint address)
+    {
+        var source = Read(address);
+        if (source.Getter is not null) return source;
+        var complete = source with { Getter = inspectGetter(source) };
+        _sites[address] = complete; return complete;
     }
 }
 
@@ -31,11 +53,13 @@ internal static partial class FalloutExecutableStringTable
             throw new InvalidDataException("Source call-site executable changed before declaration admission.");
         var (code, image) = Load(raw);
         return new(identity, address => ReadEngineCallSite(code, image.CodeBase, image.Base,
-            identity, address, image.IsExecutableExtent));
+            identity, address, image.IsExecutableExtent), source =>
+            ReadEnginePointerGetter(code, image.CodeBase, source.OriginalTarget, image.IsExecutableExtent, [], 0));
     }
 
-    // Inspect a declared near CALL and its complete pure, zero-argument thiscall
-    // pointer getter. The result is a neutral field-read contract. Source bytes
+    // Declaration owns the original near CALL independently of its target's
+    // semantics. A genuine pointer invocation requests its getter separately;
+    // source suppression neither decodes nor executes the suppressed body. Bytes
     // never become executable host instructions or a persistent launch asset.
     internal static FalloutEngineCallSite ReadEngineCallSite(byte[] code, uint codeBase, uint imageBase,
         string runtimeSha256, uint address, Func<uint, bool> executable)
@@ -49,9 +73,9 @@ internal static partial class FalloutExecutableStringTable
         if (code[at] != 0xe8)
             throw new NotSupportedException("Source mutation is not an admitted near CALL with a typed pointer-getter owner.");
         var target = unchecked(address + 5U + (uint)BinaryPrimitives.ReadInt32LittleEndian(code.AsSpan(at + 1)));
-        var getter = ReadEnginePointerGetter(code, codeBase, target, executable, [], 0);
+        if (!executable(target)) throw new InvalidDataException("Source CALL target leaves the selected executable extent.");
         return new(runtimeSha256, imageBase, address,
-            Convert.ToHexString(SHA256.HashData(code.AsSpan(at, 5))), getter);
+            Convert.ToHexString(SHA256.HashData(code.AsSpan(at, 5))), target);
     }
 
     private readonly record struct CallSiteSymbol(bool PointerRead, int Offset);

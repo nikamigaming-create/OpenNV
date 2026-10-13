@@ -38,7 +38,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     IReadOnlyList<FalloutPackageResultSnapshot>? PackageResults = null,
     FalloutActorScriptPackageSnapshot? ScriptPackage = null,
     FalloutActorPackageChoice? PendingPackageChoice = null,
-    FalloutScriptLocalStorageSnapshot? LocalStorage = null, FalloutActorPackageCollectionContinuation? PackageCollection = null)
+    FalloutScriptLocalStorageSnapshot? LocalStorage = null, FalloutActorPackageCollectionContinuation? PackageCollection = null,
+    FalloutTriggerContactsSnapshot? TriggerContacts = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -78,6 +79,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 }
             }
             snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations);
+            snapshot.TriggerContacts?.Validate();
+            if (snapshot.TriggerContacts is { } contacts && contacts.Reference != snapshot.Reference)
+                throw new InvalidDataException("Saved trigger membership belongs to a different reference.");
             snapshot.ActivationRelay?.Validate();
             snapshot.LockState?.Validate();
             snapshot.OwnershipOverride?.Validate();
@@ -160,6 +164,7 @@ internal sealed class FalloutReferenceInstance
     internal FalloutFormKey Cell { get; }
     internal FalloutFormKey Base { get; }
     internal FalloutReferenceScriptDefinition? Script { get; private set; }
+    internal FalloutTriggerContacts TriggerContacts { get; }
     internal FalloutActorTemplateSelection? Templates { get; set; }
     internal FalloutScriptLocalStorage? LocalStorage { get; private set; }
     internal IReadOnlyDictionary<uint, double> Variables => LocalStorage is null ? EmptyVariables : LocalStorage;
@@ -311,11 +316,12 @@ internal sealed class FalloutReferenceInstance
     }
 
     internal FalloutReferenceInstance(FalloutPluginRecord reference, FalloutReferenceScriptDefinition? script,
-        Func<bool>? referenceEnabled = null)
+        Action<FalloutFormKey> requireTriggerReference, Func<bool>? referenceEnabled = null)
     {
-        if (reference.Signature is not ("REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS"))
+        if (!IsPlacedReferenceSignature(reference.Signature))
             throw new InvalidDataException($"{reference.FormKey} is not a placed reference.");
         Reference = reference.FormKey;
+        TriggerContacts = new(reference, requireTriggerReference);
         _referenceEnabled = referenceEnabled;
         Cell = FalloutCellSceneReader.ParentCell(reference) ??
             throw new InvalidDataException($"Reference {Reference} has no source CELL.");
@@ -326,6 +332,9 @@ internal sealed class FalloutReferenceInstance
         EnableParent = FalloutReferenceEnableParent.Read(reference);
         if (script is not null) LocalStorage = new(script.Record, FalloutScriptLocalStorage.ReadInitialPayloads(script.Record));
     }
+
+    internal static bool IsPlacedReferenceSignature(string signature) =>
+        signature is "REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS";
 
     internal double Read(uint index) => Variables.TryGetValue(index, out var value) ? value :
         throw new NotSupportedException($"Reference {Reference} has no declared variable {index}.");
@@ -406,7 +415,8 @@ internal sealed class FalloutReferenceInstance
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
             DeferredPackageContinuation: DeferredPackageContinuation, ScriptPackage: ScriptPackage,
             PendingPackageChoice: PendingPackageChoice, LocalStorage: LocalStorage?.Capture(),
-            PackageCollection: CapturePackageCollection is { } captureCollection ? captureCollection() : PackageCollection?.Copy());
+            PackageCollection: CapturePackageCollection is { } captureCollection ? captureCollection() : PackageCollection?.Copy(),
+            TriggerContacts: TriggerContacts.Capture());
     }
 }
 
@@ -537,7 +547,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         FalloutReferenceScriptDefinition? definition = null;
         if (script is not null && !_definitions.TryGetValue(script.FormKey, out definition))
             _definitions.Add(script.FormKey, definition = new(script));
-        instance = new(record, definition, () => IsEnabled(key));
+        instance = new(record, definition, contact => FalloutTriggerContacts.RequireReference(records, contact), () => IsEnabled(key));
         _instances.Add(key, instance);
         BindCombatGroupInstance(instance);
         ConstructActualActorUpdate(instance);
@@ -646,6 +656,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 snapshot.ScriptSha256 != instance.Script?.Sha256 || snapshot.Variables is null ||
                 !snapshot.Variables.Keys.Order().SequenceEqual(instance.Variables.Keys.Order()))
                 throw new InvalidDataException($"Saved reference {snapshot.Reference} differs from its winning source declaration.");
+            instance.TriggerContacts.Restore(snapshot.TriggerContacts);
             if (instance.Script is { } compiled && FalloutCompiledScriptProgram.HasProgram(compiled.Record.ReadSubrecords().ToArray()))
             {
                 if (snapshot.ScriptStoppedFrame is not null || snapshot.CompletedScriptContinuation is not null)

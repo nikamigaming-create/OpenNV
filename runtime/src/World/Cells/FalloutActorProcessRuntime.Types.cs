@@ -43,7 +43,8 @@ internal enum FalloutProcessCommonPhase { Constructed, Copied, OldRetired, Publi
 internal sealed record FalloutProcessCommonEntry(FalloutCombatActorIdentity Source, long Epoch,
     FalloutDetectionProcessLevel Level, FalloutProcessCommonScalars Scalars,
     FalloutProcessGameplayLease? Gameplay, FalloutProcessCommonPhase Phase, string? Boundary,
-    FalloutActorProcessBodyBinding? Body, long Changed, FalloutActorProcessFact<bool>? Source3D = null);
+    FalloutActorProcessBodyBinding? Body, long Changed, FalloutActorProcessFact<bool>? Source3D = null,
+    FalloutProcessSceneFields? SceneFields = null);
 internal sealed record FalloutProcessCommonTransfer(FalloutFormKey Actor, long BeforeEpoch, long NewEpoch,
     FalloutDetectionProcessLevel Before, FalloutDetectionProcessLevel After, string Owner,
     Guid GameplayOwnership, FalloutProcessGameplayState ObservedBeforeCopy, string GameplaySha256,
@@ -51,7 +52,7 @@ internal sealed record FalloutProcessCommonTransfer(FalloutFormKey Actor, long B
 internal sealed record FalloutProcessCommonSnapshot(string Schema, string Contract, string Stack, Guid CapturedProcess,
     long Sequence, IReadOnlyList<FalloutProcessCommonEntry> Current,
     IReadOnlyList<FalloutProcessCommonEntry> Retired, FalloutProcessCommonEntry? Pending, FalloutProcessCommonTransfer? Transfer,
-    FalloutActorProcessRuntimeHandoff? ColdHandoff);
+    FalloutActorProcessRuntimeHandoff? ColdHandoff, string ExecutableSha256);
 
 internal sealed record FalloutActorProcessNodeBinding(byte PartType, string SourceNode, int? Block);
 internal sealed record FalloutActorProcessBodyBinding(FalloutFormKey Actor, string SkeletonPath,

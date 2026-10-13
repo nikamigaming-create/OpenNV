@@ -5,7 +5,7 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
-internal static class SourceArchiveRegistryContracts
+internal static partial class SourceArchiveRegistryContracts
 {
     internal static void Run()
     {

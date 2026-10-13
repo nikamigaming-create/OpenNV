@@ -41,9 +41,10 @@ public partial class RuntimeCoordinator
         {
             var controls = scripts.Controls ?? throw new InvalidOperationException("Actual source controls are unbound.");
             GD.Print("OPENNV_NATIVE_INPUT_ADMISSION phase=device-construction-entered");
-            var input = RuntimeNativeDirectInput.Create(source.StackId, controls);
+            var input = RuntimeNativeDirectInput.Create(source.StackId, controls,
+                RuntimeInputPresentationSelection.UsesCommandInput(_options));
             _nativeDirectInput = input;
-            GD.Print("OPENNV_NATIVE_INPUT_ADMISSION phase=device-constructed");
+            GD.Print("OPENNV_NATIVE_INPUT_ADMISSION phase=device-constructed provider=" + input.State.Provider);
             AddChild(input);
             if (!input.IsInsideTree() || input.GetParent() != this)
                 throw new InvalidOperationException("Actual DirectInput owner was not attached to its product lifetime.");

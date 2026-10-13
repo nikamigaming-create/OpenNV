@@ -108,8 +108,11 @@ public partial class NativeRenderedMenuAudit
                 // the two input races differ; only exact same-race input is a no-op.
                 if (!world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)) ||
                     !actor.SynchronizeAppearance(world, records, content, Material) || actor.Appearance.Race != expected ||
-                    priorParts.SequenceEqual(actor.Parts) || !changed.SequenceEqual(await Pixels()))
+                    priorParts.SequenceEqual(actor.Parts))
                     throw new InvalidDataException("A changed race-family request lost its native invalidation when the age tier resolved to the current race.");
+                var ageTierPixels = await Pixels();
+                if (!changed.SequenceEqual(ageTierPixels))
+                    throw new InvalidDataException("A changed race-family request changed pixels when the age tier resolved to the current race.");
                 var parts = actor.Parts.ToArray(); var state = actor.AnimationState;
                 player = player with { Race = expected };
                 if (world.MatchRace(reference.FormKey, records.RuntimeFormKey(0x14)) ||
@@ -127,13 +130,15 @@ public partial class NativeRenderedMenuAudit
             actor.BindSourceBehavior(records, cold.Get(reference.FormKey).Templates);
             view.AddChild(actor); actor.SetProcess(false); actor.SetPhysicsProcess(false);
             actor.PlayIdle(records, idleId); actor._Process(.125);
-            if (!changed.SequenceEqual(await Pixels())) throw new InvalidDataException("Cold race body did not restore identical owned pixels.");
+            var coldPixels = await Pixels();
+            if (!changed.SequenceEqual(coldPixels)) throw new InvalidDataException("Cold race body did not restore identical owned pixels.");
             // Restore the original base snapshot. Existing resident and warm
             // bodies must also follow removal of an override, not just additions.
             cold.RestoreActorOverrides([]);
             if (!actor.SynchronizeAppearance(cold, records, content, Material) || actor.Appearance.Race != appearance.Race)
                 throw new InvalidDataException("Removing the race override did not restore source appearance.");
-            if (!original.SequenceEqual(await Pixels())) throw new InvalidDataException("Source race restoration did not restore baseline pixels.");
+            var restoredPixels = await Pixels();
+            if (!original.SequenceEqual(restoredPixels)) throw new InvalidDataException("Source race restoration did not restore baseline pixels.");
             if (!SHA256.HashData(records.GetEffective(instance.Base).ReadData()).AsSpan().SequenceEqual(sourceHash))
                 throw new InvalidDataException("Appearance mutation wrote into owned source bytes.");
             GD.Print($"{(matchFace ? "OPENNV_NATIVE_ACTOR_FACE_PASS" : "OPENNV_NATIVE_ACTOR_RACE_PASS")} reference={reference.FormKey} race={expected} bodyIdentity=true animationPhase=true skeletonPoseOwner=true " +

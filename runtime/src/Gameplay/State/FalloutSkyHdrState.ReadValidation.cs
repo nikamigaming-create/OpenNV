@@ -16,7 +16,7 @@ internal sealed partial class FalloutSkyHdrState
             copy.Frame is null || copy.Frame == Guid.Empty || copy.Capability != capability.Identity ||
             capability.Process != sample.Process || capability.EngineSha256 != sample.EngineSha256 ||
             capability.Contract != expected.Contract || !float.IsFinite(BitConverter.UInt32BitsToSingle(copy.ValueBits)) ||
-            capability.Returned < 1 || !capability.NativeResourcesCurrent || string.IsNullOrWhiteSpace(capability.Producer))
+            capability.Returned < 1 || !capability.NativeResourcesCurrent || capability.Provider != FalloutSkyHdrCapabilityProvider.NativeDevice || string.IsNullOrWhiteSpace(capability.Producer))
             throw new InvalidDataException("Sky shader read lost its actual current copy/read/capability association.");
         if (sample.HdrEnabled && copy.Frame != sample.Frame)
             throw new InvalidDataException("Enabled HDR did not copy its actual main scalar on this shader call.");

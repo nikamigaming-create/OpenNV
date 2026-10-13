@@ -63,6 +63,8 @@ internal sealed record FalloutSourceImageSpaceProfile(FalloutFormKey? Form, stri
 // rendering parameters. NaN/unordered predicates follow the source branch.
 internal static class FalloutSourceImageSpaceFloat
 {
+    internal const float InitialStart = -10001f;
+    internal const float UnsetStartBoundary = -10000f;
     [MethodImpl(MethodImplOptions.NoInlining)] internal static float Add(float left, float right) => left + right;
     [MethodImpl(MethodImplOptions.NoInlining)] internal static float Subtract(float left, float right) => left - right;
     [MethodImpl(MethodImplOptions.NoInlining)] internal static float Multiply(float left, float right) => left * right;

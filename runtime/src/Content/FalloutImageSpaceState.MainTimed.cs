@@ -9,12 +9,13 @@ internal sealed record FalloutSourceImageSpaceMainChild(string Name, Guid? Insta
     string? Failure, FalloutSourceImageSpaceAccumulatorSnapshot Fields);
 internal sealed record FalloutSourceImageSpaceMainCall(Guid Invocation, Guid Process, Guid Native, long Ordinal,
     uint ClockBefore, uint ClockAfter, uint Delta, bool Advance, IReadOnlyList<FalloutSourceImageSpaceMainChild> Children,
-    bool Returned, string? Failure);
+    bool Returned, string? Failure, FalloutSourceImageSpaceCaller Caller = FalloutSourceImageSpaceCaller.Main);
 internal sealed record FalloutSourceImageSpaceMainSnapshot(string Source, Guid Process, long Changed,
     FalloutSourceImageSpaceProfile Default, FalloutSourceImageSpaceProfile? Primary, FalloutSourceImageSpaceProfile? Override,
     IReadOnlyList<FalloutSourceImageSpaceInstance> Instances, IReadOnlyList<Guid> List, bool UpdatesEnabled,
     FalloutSourceImageSpaceAccumulatorSnapshot Fields, FalloutSourceImageSpaceMainCall? Last, FalloutSourceImageSpaceOutput? Output,
-    IReadOnlyList<Guid> Processes, IReadOnlyList<FalloutSourceImageCurveCache> Curves, FalloutSourceImageSpaceDofConstructor DofConstructor);
+    IReadOnlyList<Guid> Processes, IReadOnlyList<FalloutSourceImageCurveCache> Curves, FalloutSourceImageSpaceDofConstructor DofConstructor,
+    FalloutSourceImageSpaceMenuCall? Menu = null);
 
 internal sealed partial class FalloutImageSpaceState
 {
@@ -38,6 +39,8 @@ internal sealed partial class FalloutImageSpaceState
         : throw new InvalidOperationException("Image manager has no actual selected Main/default constructor.");
     internal string? SourceMainImageSaveBlocker => _sourceImageBusy ? "source-image-space-Main-entered" :
         _sourceImageLast?.Failure is not null ? "source-image-space-Main-failed" :
+        _sourceImageMenuBusy ? "source-image-space-menu-capture-entered" :
+        _sourceImageMenuLast?.Failure is not null ? "source-image-space-menu-capture-failed" :
         _sourceImageMain is not null && _sourceImageNative is null ? "source-image-space-native-factory-unbound" : null;
 
     internal void ConfigureSourceMainImages(FalloutMainScriptCallerSource main, Guid process, FalloutSourceImageSpaceDefaults defaults,
@@ -59,6 +62,7 @@ internal sealed partial class FalloutImageSpaceState
         _sourceImageUpdates = saved.UpdatesEnabled; _sourceImageFields.Restore(saved.Fields);
         foreach (var row in saved.Instances) _sourceImageInstances.Add(row.Identity, row);
         _sourceImageList.AddRange(saved.List); _sourceImageLast = saved.Last; _sourceImageOutput = saved.Output;
+        _sourceImageMenuLast = saved.Menu;
         _sourceImageProcesses.Clear(); _sourceImageProcesses.AddRange(saved.Processes); _sourceImageProcesses.Add(process);
         foreach (var curve in saved.Curves) _sourceImageCurves.Add((curve.Program, curve.Channel), curve with { Value = (uint[])curve.Value.Clone() });
         // Native association deliberately remains absent. A fresh current
@@ -138,10 +142,18 @@ internal sealed partial class FalloutImageSpaceState
         invocation.Require(FalloutMainScriptCallerStep.TimedContexts); RequireImageWriter();
         if (invocation.Process != _sourceImageProcess || _sourceImageMain is null || _sourceImageLast?.Invocation == invocation.Identity)
             throw new InvalidOperationException("Image Main entry changed its actual process or replayed a call.");
+        ExecuteSourceImageUpdate(invocation.Identity, invocation.Ordinal, FalloutSourceImageSpaceCaller.Main,
+            advance, delta, clockBefore, readClockAfter, () => invocation.AdvanceContextTime(delta));
+    }
+
+    private void ExecuteSourceImageUpdate(Guid callIdentity, long ordinal, FalloutSourceImageSpaceCaller caller,
+        bool advance, float delta, uint clockBefore, Func<uint> readClockAfter, Action advanceClock)
+    {
+        RequireImageWriter();
         var native = RequireImageNative(); var children = new List<FalloutSourceImageSpaceMainChild>();
         _sourceImageBusy = true;
-        _sourceImageLast = new(invocation.Identity, invocation.Process, native.NativeIdentity, invocation.Ordinal,
-            clockBefore, clockBefore, BitConverter.SingleToUInt32Bits(delta), advance, [], false, null);
+        _sourceImageLast = new(callIdentity, _sourceImageProcess, native.NativeIdentity, ordinal,
+            clockBefore, clockBefore, BitConverter.SingleToUInt32Bits(delta), advance, [], false, null, caller);
         void Child(string name, Guid? instance, Action action)
         {
             var entered = ++_sourceImageChanged;
@@ -163,7 +175,7 @@ internal sealed partial class FalloutImageSpaceState
                 native.ResetOutputScalars();
             });
             Child("accumulator-reset", null, _sourceImageFields.Reset);
-            if (advance) Child("context-clock-store", null, () => invocation.AdvanceContextTime(delta));
+            if (advance) Child("context-clock-store", null, advanceClock);
             var clock = readClockAfter(); _sourceImageLast = _sourceImageLast with { ClockAfter = clock };
             var enabled = 0; var cumulativeActive = 0; var index = 0;
             while (index < _sourceImageList.Count)
@@ -198,7 +210,7 @@ internal sealed partial class FalloutImageSpaceState
             Child("final-effect-fields", null, () =>
             {
                 _sourceImageFields.FinishColors();
-                _sourceImageOutput = ReadSourceImageOutput(invocation);
+                _sourceImageOutput = ReadSourceImageOutput(callIdentity, caller);
                 native.PublishEffects(_sourceImageOutput);
             });
             Child("final-profile-and-globals", null, () => native.PublishProfile(_sourceImageOutput!));
@@ -223,14 +235,14 @@ internal sealed partial class FalloutImageSpaceState
         if (row.Form is null) return false;
         var source = RequireSourceImageProgram(row);
         return FalloutSourceImageSpaceFloat.Retire(source.Animated, BitConverter.UInt32BitsToSingle(row.Start),
-            BitConverter.UInt32BitsToSingle(now), source.Duration, -9999f);
+            BitConverter.UInt32BitsToSingle(now), source.Duration, FalloutSourceImageSpaceFloat.UnsetStartBoundary);
     }
     private void UpdateSourceImageInstance(Guid identity, uint now)
     {
         var row = _sourceImageInstances[identity]; var weight = BitConverter.UInt32BitsToSingle(row.Weight);
         if (!(weight > 0) && !(BitConverter.UInt32BitsToSingle(row.PriorWeight) > 0)) return;
         if (row.Program is null && row.Form is null) return;
-        if (-9999f > BitConverter.UInt32BitsToSingle(row.Start))
+        if (FalloutSourceImageSpaceFloat.UnsetStartBoundary > BitConverter.UInt32BitsToSingle(row.Start))
         { row = row with { Start = now, Changed = ++_sourceImageChanged }; _sourceImageInstances[identity] = row; }
         if (row.PriorProgram is not null) throw new NotSupportedException("source-image-space-form-crossfade-program-consumer-unowned");
         if (row.Form is not null)
@@ -268,12 +280,12 @@ internal sealed partial class FalloutImageSpaceState
             FalloutSourceImageSpaceFloat.Multiply(scalar, weight), _sourceImageFields.ScalarBatch);
         else if (scalar > _sourceImageFields.Scalar) _sourceImageFields.Scalar = scalar;
     }
-    private FalloutSourceImageSpaceOutput ReadSourceImageOutput(FalloutMainScriptInvocation invocation)
+    private FalloutSourceImageSpaceOutput ReadSourceImageOutput(Guid identity, FalloutSourceImageSpaceCaller caller)
     {
         static uint Bits(float value) => BitConverter.SingleToUInt32Bits(value);
         static uint[] Vector(System.Numerics.Vector4 value) => [Bits(value.X), Bits(value.Y), Bits(value.Z), Bits(value.W)];
         var source = (_sourceImageOverride ?? _sourceImagePrimary ?? _sourceImageDefault)!;
-        return new(invocation.Identity, invocation.Process, ++_sourceImageChanged, _sourceImageLast!.Delta,
+        return new(identity, _sourceImageProcess, ++_sourceImageChanged, _sourceImageLast!.Delta,
             new(source.Form, source.Source, (uint[])_sourceImageFields.Profile.Clone(), source.FormVersion,
                 _sourceImageFields.DefinedWords, source.SourceByteLength),
             Bits(_sourceImageFields.Blur), Bits(_sourceImageFields.DoubleVision),
@@ -281,7 +293,7 @@ internal sealed partial class FalloutImageSpaceState
                 [Bits(_sourceImageFields.RadialCenter.X), Bits(_sourceImageFields.RadialCenter.Y)]),
             new(Bits(_sourceImageFields.OptionStrength), Bits(_sourceImageFields.OptionFirst), Bits(_sourceImageFields.OptionSecond),
                 Bits(_sourceImageFields.OptionThird), _sourceImageFields.OptionMode, _sourceImageFields.OptionAlternate),
-            new(Bits(_sourceImageFields.DofStrength), null, null, null, null, null), Bits(_sourceImageFields.Scalar));
+            new(Bits(_sourceImageFields.DofStrength), null, null, null, null, null), Bits(_sourceImageFields.Scalar), caller);
     }
     private IFalloutSourceImageSpaceNative RequireImageNative()
     {
@@ -296,6 +308,7 @@ internal sealed partial class FalloutImageSpaceState
     private void RequireImageWriter()
     {
         RequireImageThread();
-        if (_sourceImageBusy || _sourceImageLast?.Failure is not null) throw new InvalidOperationException("Image manager retains an entered or failed source child.");
+        if (_sourceImageBusy || _sourceImageLast?.Failure is not null || _sourceImageMenuLast?.Failure is not null)
+            throw new InvalidOperationException("Image manager retains an entered or failed source child.");
     }
 }

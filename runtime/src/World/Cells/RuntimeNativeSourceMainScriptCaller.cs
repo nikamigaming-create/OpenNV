@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Godot;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -34,10 +35,11 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
         ProcessPriority = int.MinValue + 1;
     }
     internal static RuntimeNativeSourceMainScriptCaller Attach(Node parent, FalloutReferenceWorld world,
-        FalloutInterfaceFade actualFade, Action<Exception> failed, Action<RuntimeNativeSourceMainScriptCaller> retainConstruction)
+        FalloutInterfaceFade actualFade, FalloutScriptSession actualSession, Action<Exception> failed, Action<RuntimeNativeSourceMainScriptCaller> retainConstruction)
     {
         ArgumentNullException.ThrowIfNull(failed); ArgumentNullException.ThrowIfNull(actualFade);
         ArgumentNullException.ThrowIfNull(retainConstruction);
+        ArgumentNullException.ThrowIfNull(actualSession);
         if (!OperatingSystem.IsWindows() || !parent.IsInsideTree() || parent.IsQueuedForDeletion() || !world.CampaignMainRuntimeConfigured)
             throw new NotSupportedException("Original Main caller needs its actual selected Windows/native/source construction lifetime.");
         var source = world.CampaignMainScriptSource; source.Validate();
@@ -50,7 +52,7 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
             parent.AddChild(result);
             if (!result.IsInsideTree() || result.GetParent() != parent) throw new InvalidOperationException("Native Main caller was not attached to its actual campaign.");
             result._fadeLease = world.BindCampaignScriptFrameFade(actualFade);
-            result._callerLease = world.BindCampaignMainScriptCaller(new FalloutCampaignMainScriptConsumers(source, ReadOsKeyHighBit),
+            result._callerLease = world.BindCampaignMainScriptCaller(new FalloutCampaignMainScriptConsumers(source, ReadOsKeyHighBit, actualSession),
                 "actual-native-Main-adapter/" + result.GetInstanceId());
             return result;
         }

@@ -5,13 +5,13 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 internal sealed partial class NativePluginExecutionDomain
 {
     private const uint WindowProcessCallback = 29;
-    private NativePluginProductWindow? _productWindow;
-    private IDisposable? _productWindowLease;
+    private INativePluginProductUser32? _productUser32;
+    private IDisposable? _productUser32Lease;
     private string? _windowProcessSource;
     private bool _windowBindEntered, _windowNativeRetired, _windowEnumeration;
     private readonly List<NativePluginWindowReceipt> _windowReceipts = [];
     internal IReadOnlyList<NativePluginWindowReceipt> NvseWindowReceipts => _windowReceipts.AsReadOnly();
-    internal bool WindowProcessOwnersRetired => _windowProcessSource is null && _productWindow is null && _productWindowLease is null &&
+    internal bool WindowProcessOwnersRetired => _windowProcessSource is null && _productUser32 is null && _productUser32Lease is null &&
         _windowProcessHandles.Count == 0 && _windowProcessPending is null && _process.WindowProcessReferencesRetired;
     internal void BindChildProcessImports()
     {
@@ -26,16 +26,20 @@ internal sealed partial class NativePluginExecutionDomain
         Finish(reader);
     }
     internal void BindProductWindow(FalloutDirectInputState input)
+        => BindProductUser32(input, new NativePluginProductWindow(input));
+    internal void BindHeadlessUser32(FalloutDirectInputState input)
+        => BindProductUser32(input, new NativePluginHeadlessUser32(input));
+    private void BindProductUser32(FalloutDirectInputState input, INativePluginProductUser32 capability)
     {
         VerifyOwner(); var io = _privateIo ?? throw new InvalidOperationException("Window producer requires its selected restricted source domain.");
         if (_windowBindEntered || _callDepth != 0 || NativeModuleCount != 0 ||
             !input.Source.Equals(io.Selection.StackSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Window producer repeated or differs from the exact selected source/call lifetime.");
-        _windowBindEntered = true; _windowProcessSource = input.Source; _productWindow = new(input); _productWindowLease = _productWindow.Retain();
+        _windowBindEntered = true; _windowProcessSource = input.Source; _productUser32 = capability; _productUser32Lease = capability.Retain();
         using var reader = Exchange(NativePluginDomainOperation.WindowProcess, Payload(writer =>
-        { writer.Write(1U); writer.Write(_productWindow.Window); writer.Write(_productWindow.Thread); writer.Write(_productWindow.Process); WriteText(writer, input.Source); }));
-        if (reader.ReadUInt32() != _productWindow.Window || reader.ReadUInt32() != _productWindow.Thread || reader.ReadUInt32() != _productWindow.Process)
-            throw new InvalidDataException("Actual source window binding did not return its exact HWND/thread/process identity.");
+        { writer.Write(1U); writer.Write(capability.Window); writer.Write(capability.Thread); writer.Write(capability.Process); WriteText(writer, input.Source); }));
+        if (reader.ReadUInt32() != capability.Window || reader.ReadUInt32() != capability.Thread || reader.ReadUInt32() != capability.Process)
+            throw new InvalidDataException("Actual source USER32 binding did not return its exact HWND/thread/process identity.");
         Finish(reader);
     }
     private byte[] DispatchPrivateWindowProcess(ulong parent, uint thread, ulong module, BinaryReader reader)
@@ -47,7 +51,7 @@ internal sealed partial class NativePluginExecutionDomain
         _privateIo!.CheckModule(plugin.Path, plugin.Sha256, source);
         var category = reader.ReadUInt32();
         if (category == 2) return DispatchWindowProcessSdk(parent, thread, module, reader);
-        var window = _productWindow ?? throw new NotSupportedException("Original USER32 import has no actual product-window/message-thread producer.");
+        var window = _productUser32 ?? throw new NotSupportedException("Original USER32 import has no actual product-thread capability producer.");
         window.Require();
         if (category != 1 || _windowNativeRetired) throw new InvalidDataException("Window callback category or native lifetime is invalid.");
         var operation = (NativePluginWindowOperation)reader.ReadUInt32(); var target = reader.ReadUInt32(); var incoming = reader.ReadUInt32();
@@ -76,14 +80,14 @@ internal sealed partial class NativePluginExecutionDomain
     {
         VerifyOwner(); if (_windowProcessSource is null || _windowNativeRetired) return;
         if (_callDepth != 0 || NativeModuleCount != 0) throw new InvalidOperationException("Original image/call remains before window SDK retirement.");
-        _productWindow?.RetireBeforeChildExit(NativeThread);
+        _productUser32?.RetireBeforeChildExit(NativeThread);
         if (_windowProcessHandles.Count != 0 || _windowProcessPending is not null)
             throw new InvalidDataException("Original process query resources remain at actual native retirement.");
         _windowNativeRetired = true;
     }
     internal void RequireWindowProcessColdCapture()
     {
-        VerifyOwner(); _productWindow?.RequireColdCapture();
+        VerifyOwner(); _productUser32?.RequireColdCapture();
         if (_windowEnumeration || _windowProcessPending is not null || _windowProcessHandles.Count != 0)
             throw new NotSupportedException("Original process/query/Toolhelp pointers lack an admitted current-source cold continuation.");
     }
@@ -97,8 +101,8 @@ internal sealed partial class NativePluginExecutionDomain
             catch (Exception error) { failures.Add(error); }
         }
         if (_windowProcessHandles.Count == 0) _windowProcessPending = null;
-        try { _productWindowLease?.Dispose(); _productWindowLease = null; } catch (Exception error) { failures.Add(error); }
-        try { _productWindow?.RetireAfterChildExit(); _productWindow = null; } catch (Exception error) { failures.Add(error); }
+        try { _productUser32Lease?.Dispose(); _productUser32Lease = null; } catch (Exception error) { failures.Add(error); }
+        try { _productUser32?.RetireAfterChildExit(); _productUser32 = null; } catch (Exception error) { failures.Add(error); }
         try { _process.CloseFailedWindowProcessReferencesAfterChildExit(); _process.RequireWindowProcessReferencesRetired(); }
         catch (Exception error) { failures.Add(error); }
         if (failures.Count != 0) throw new AggregateException("Independent original window/process owners failed retirement.", failures);

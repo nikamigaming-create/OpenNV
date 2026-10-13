@@ -19,7 +19,8 @@ internal sealed record FalloutAnimationSoundBoneEmitterSnapshot(FalloutFormKey R
     }
 }
 internal sealed record FalloutAnimationSoundPlaybackSnapshot(FalloutPcmPlaybackSnapshot Samples, string EmitterPath,
-    bool FollowEmitter, FalloutAnimationSoundBoneEmitterSnapshot? SourceBone = null);
+    bool FollowEmitter, FalloutAnimationSoundBoneEmitterSnapshot? SourceBone = null,
+    FalloutAnimationSoundNodeEmitterSnapshot? SourceNode = null);
 internal sealed record FalloutAnimationSoundFault(string TextKey, string Error);
 
 internal sealed record FalloutAnimationSoundEvent(long Generation, FalloutFormKey Sound, string SoundSha256,
@@ -71,6 +72,9 @@ internal sealed record FalloutAnimationSoundEventsSnapshot(FalloutFormKey Refere
                     throw new InvalidDataException("Active sound has no complete PCM/emitter continuation.");
                 playback.Samples.Validate();
                 playback.SourceBone?.Validate(Reference);
+                playback.SourceNode?.Validate(Reference);
+                if (playback.SourceBone is not null && playback.SourceNode is not null)
+                    throw new InvalidDataException("Saved sound emitter has two independent source owners.");
             }
             else if (entry.Playback is not null) throw new InvalidDataException("Ended sound retains active PCM continuation.");
         }
@@ -94,9 +98,9 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
     internal void RequireEnabledSourceEmitter()
     {
         if (referenceEnabled is null)
-            throw new NotSupportedException("Source sound bone has no authoritative reference enable owner.");
+            throw new NotSupportedException("Source sound emitter has no authoritative reference enable owner.");
         if (!referenceEnabled())
-            throw new NotSupportedException("Disabled source sound bone requires its independent emitter continuation.");
+            throw new NotSupportedException("Disabled source sound emitter requires its independent continuation.");
     }
     internal FalloutAnimationSoundHistoryDiagnostic CaptureDiagnostic => new(reference, _generation, CanCapture, _opaqueError,
         _events.Where(entry => entry.End is not (FalloutAnimationSoundEnd.NativeFinished or FalloutAnimationSoundEnd.SourceStopped or FalloutAnimationSoundEnd.ChanceSkipped or FalloutAnimationSoundEnd.SourceUnloaded))

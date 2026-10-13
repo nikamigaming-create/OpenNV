@@ -17,11 +17,26 @@ internal static class PlayerScriptPackageContracts
                 Package(0x101, 0x201, 5), Package(0x102, 0x201, 5, BitConverter.GetBytes(1u)),
                 Package(0x103, 0x201, 5, [1, 0]), Package(0x104, 0x201, 5, BitConverter.GetBytes(uint.MaxValue)),
                 Package(0x105, 0x201, 5, BitConverter.GetBytes(2u)),
+                Record("PACK", 0x106, Field("EDID", Text("EmptyIdleCollection")), Field("PKDT", new byte[12]), Field("IDLC", [0])),
+                Record("PACK", 0x107, Field("EDID", Text("AbsentIdleCollection")), Field("PKDT", new byte[8])),
+                Record("PACK", 0x108, Field("EDID", Text("TimerOnlyIdleCollection")), Field("PKDT", new byte[12]), Field("IDLT", BitConverter.GetBytes(1f))),
                 Record("REFR", 0x200), Record("REFR", 0x201), Record("IDLE", 0x300)));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Packages.esm"), Package(0x100, 0x201, 3)));
             using var records = FalloutPluginStack.Load(directory, ["Packages.esm", "Patch.esp"]);
             var package = FalloutScriptPackage.Read(records.GetEffective(Key(0x100)));
             var exact = FalloutScriptPackage.Read(records.GetEffective(Key(0x101))) with { LocationRadius = 0 };
+            var empty = FalloutScriptPackage.Read(records.GetEffective(Key(0x106)));
+            var absent = FalloutScriptPackage.Read(records.GetEffective(Key(0x107)));
+            var timerOnly = FalloutScriptPackage.Read(records.GetEffective(Key(0x108)));
+            Require(package.HasIdleCollection && empty.HasIdleCollection && empty.Idles.Count == 0 &&
+                !absent.HasIdleCollection && timerOnly.HasIdleCollection && timerOnly.Idles.Count == 0,
+                "Idle collection pointer presence was guessed from the nonempty animation count.");
+            var packageSource = new FalloutIdlePackageSource(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Key(0x14),
+                new string('a', 64), empty.Form, Convert.ToHexString(SHA256.HashData(records.GetEffective(empty.Form).ReadData())), 4);
+            Require(FalloutIdlePackageSelection.From(empty, packageSource) is { HasExtra: true, Kind: 0, Source.Revision: 4 },
+                "Winning idle package descriptor lost its raw kind, empty collection or assignment scope.");
+            Reject(() => FalloutIdlePackageSelection.From(empty, packageSource with { Package = absent.Form }));
+            Reject(() => FalloutIdlePackageSelection.From(empty, packageSource with { Factory = Guid.Empty }));
             Require(package is { Procedure: 6, LocationType: 0, LocationRadius: 3 } && package.LocationReference == Key(0x201),
                 "Winning master-adjusted player package location was lost.");
             Require(FalloutScriptPackage.Read(records.GetEffective(Key(0x102))).Idles.SequenceEqual(package.Idles),

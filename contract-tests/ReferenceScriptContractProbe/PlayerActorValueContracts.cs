@@ -6,7 +6,7 @@ using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
-internal static class PlayerActorValueContracts
+internal static partial class PlayerActorValueContracts
 {
     internal static void Run()
     {
@@ -58,6 +58,7 @@ internal static class PlayerActorValueContracts
             VerifyScripts(records);
             VerifyCold(records, owner, inventory, globals, vitals);
             VerifyTemplate(directory);
+            VerifyStatusValues(records);
             Console.WriteLine("OPENNV_PLAYER_ACTOR_VALUES_CONTRACT_PASS enginePlayer=true sourceTemplate=true pools=true sourceConditions=true immediateBase=true scriptAuthority=true derivedConsumers=true cold=true legacy=true atomic=true parity=unverified");
         }
         finally { foreach (var file in Directory.EnumerateFiles(directory)) File.Delete(file); Directory.Delete(directory); }

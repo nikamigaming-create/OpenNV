@@ -101,14 +101,29 @@ decoded by the runtime from the selected installation.
 
 ## Build and verify
 
-Requirements are .NET 9, Godot 4.7.2 Mono, and PowerShell 7. Node.js 22 is only
+Requirements are .NET 10, Godot 4.8-dev7 Mono, and PowerShell 7. Node.js 22 is only
 needed when running the retained JavaScript compatibility tests.
 
+The official engine archive and C# SDK are pinned together in
+`runtime/godot-toolchain.json`. The installer verifies the archive SHA256;
+launcher and validation scripts reject a different engine version. Install the
+.NET SDK selected by `global.json`; `OPENNV_DOTNET` can select a private SDK.
+The scripts also discover a workspace-local SDK under `../gd/dotnet`.
+
 ```powershell
+$godot = .\scripts\Install-GodotToolchain.ps1 -IncludeExportTemplates
+. .\scripts\ManagedToolchain.ps1
+Initialize-OpenNVManagedToolchain
 dotnet build .\runtime\OpenNV.sln -c Release
 npm test --prefix .\desktop
-.\scripts\Test-GodotRuntime.ps1 -Godot 'C:\Path\To\Godot_console.exe'
+.\scripts\Test-GodotRuntime.ps1 -Godot $godot
 ```
+
+4.8-dev7 is the current development snapshot, rather than a stable release.
+Its mip-level texture streaming is enabled in the project. Owned DDS textures
+still use direct resident uploads; the new setting does not stream that route.
+See [runtime performance](docs/runtime-performance.md) for the integration gap
+and measured scheduling boundaries.
 
 Launch the Godot launcher/game with `scripts/Start-OpenNV.ps1`. For direct
 diagnostic routes, pass a selected installation to Godot through the
@@ -116,7 +131,7 @@ launcher-owned `--data-root`, `--campaign`, and `--save-path` arguments.
 
 For normal Windows play, `scripts/Start-OpenNV.ps1` defaults to a native release
 export and starts that exported Godot executable directly with `--launcher`.
-Install matching Godot 4.7.2 Mono export templates first. `-ValidateOnly` builds
+Install matching Godot 4.8-dev7 Mono export templates first. `-ValidateOnly` builds
 and checks without starting the product; `-Configuration Debug` uses the Godot
 project runner for debugging. A plain `dotnet build -c Release` does not make
 Godot's `--path` runner load release assemblies. The local export contains OpenNV code and

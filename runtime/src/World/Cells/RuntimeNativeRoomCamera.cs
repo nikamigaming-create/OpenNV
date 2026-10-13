@@ -11,7 +11,7 @@ internal static class RuntimeNativeRoomCamera
             !GodotObject.IsInstanceValid(camera) || !camera.IsInsideTree() || camera.IsQueuedForDeletion() ||
             !float.IsFinite(camera.Near) || !float.IsFinite(camera.Far) || camera.Near <= 0 || camera.Far <= camera.Near)
             throw new NotSupportedException("Room graph has no actual current native camera/viewport publication.");
-        if (camera is XRCamera3D)
+        if (camera is XRCamera3D xrCamera)
         {
             // This is the borrowed application interface. The XR owner, not
             // a per-draw camera observer, owns its managed/native retirement.
@@ -27,12 +27,19 @@ internal static class RuntimeNativeRoomCamera
             var size = xr.GetRenderTargetSize();
             if (size.X <= 0 || size.Y <= 0)
                 throw new NotSupportedException("Portal XR projection has no current source render-target extent.");
+            // Read the same tracker projections/eye offsets published by the
+            // 4.8 XRCamera3D. Offsets are relative to the tracked camera, whose
+            // transform already includes the actual head pose and XR origin.
+            var offsets = XRServer.GetCameraOffsets(xrCamera.Tracker);
+            var projections = XRServer.GetCameraProjections(xrCamera.Tracker,
+                (double)size.X / size.Y, camera.Near, camera.Far);
+            if (offsets.Count != count || projections.Count != count)
+                throw new NotSupportedException("Portal XR tracker has no complete current per-view offsets/projections.");
+            var cameraTransform = camera.GetCameraTransform();
             var result = new List<FalloutRoomCamera>();
-            for (uint view = 0; view < count; view++)
+            for (var view = 0; view < offsets.Count; view++)
             {
-                var transform = xr.GetTransformForView(view, origin.GlobalTransform);
-                var projection = xr.GetProjectionForView(view, (double)size.X / size.Y, camera.Near, camera.Far);
-                result.Add(Observe(transform, camera.Near, projection));
+                result.Add(Observe(cameraTransform * offsets[view], camera.Near, projections[view]));
             }
             return result.AsReadOnly();
         }

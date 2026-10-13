@@ -103,6 +103,8 @@ try
     catch (ArgumentException) { }
     if (emptyCalled) throw new Exception("Rejected empty checkpoint called its writer.");
 
+    if (OperatingSystem.IsWindows()) CheckWindowsSaveReplacement(directory);
+
     var native = new RuntimeSaveSlotCatalog(Path.Combine(directory, "native.json"), root =>
     {
         if (root.GetProperty("Schema").GetString() != "opennv-native-fnv-campaign-save/v18")
@@ -121,6 +123,48 @@ finally
 {
     if (Directory.Exists(directory))
         Directory.Delete(directory, recursive: true);
+}
+
+static void CheckWindowsSaveReplacement(string directory)
+{
+    var canonical = Path.Combine(directory, "sharing-rollback.json");
+    var prior = "{\"schema\":\"sharing-save/v1\",\"value\":17}"u8.ToArray();
+    File.WriteAllBytes(canonical, prior);
+    var written = File.GetLastWriteTimeUtc(canonical);
+    var catalog = new RuntimeSaveSlotCatalog(canonical, root =>
+    {
+        if (root.GetProperty("schema").GetString() != "sharing-save/v1")
+            throw new InvalidDataException("Sharing save changed schema.");
+    });
+    FileStream? reader = null;
+    Task? release = null;
+    try
+    {
+        try
+        {
+            catalog.Create(() =>
+            {
+                File.WriteAllText(canonical, "invalid partial writer");
+                reader = new FileStream(canonical, FileMode.Open, FileAccess.Read, FileShare.Read);
+                release = Task.Run(() => { Thread.Sleep(100); reader.Dispose(); });
+                throw new IOException("Authored writer failure with a briefly held current file.");
+            });
+            throw new InvalidDataException("Failed writer was accepted as a completed save.");
+        }
+        catch (IOException error) when (error.Message == "Authored writer failure with a briefly held current file.") { }
+    }
+    finally { release?.GetAwaiter().GetResult(); reader?.Dispose(); }
+    if (!File.ReadAllBytes(canonical).SequenceEqual(prior) || File.GetLastWriteTimeUtc(canonical) != written ||
+        catalog.ReadSlots().Count != 0 || Directory.EnumerateFiles(directory, "*.tmp").Any())
+        throw new InvalidDataException("Brief file sharing left a damaged Continue, a new slot or scratch files after failed writing.");
+    using (var held = new FileStream(canonical, FileMode.Open, FileAccess.Read, FileShare.Read))
+    {
+        try { RuntimeAtomicSaveFile.Write(canonical, "replacement"u8); throw new InvalidDataException("Held destination was replaced."); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+    }
+    if (!File.ReadAllBytes(canonical).SequenceEqual(prior) || Directory.EnumerateFiles(directory, "*.tmp").Any())
+        throw new InvalidDataException("Unreleased file sharing changed the prior complete save or leaked write scratch.");
+    Console.WriteLine("OPENNV_WINDOWS_SAVE_REPLACEMENT_PASS briefSharingRollback=true permanentSharingRefused=true priorBytesAndTimestamp=true scratchClean=true");
 }
 
 void Write(int hitPoints, string name)

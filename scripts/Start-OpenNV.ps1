@@ -10,6 +10,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'GodotToolchain.ps1')
+. (Join-Path $PSScriptRoot 'ManagedToolchain.ps1')
+Initialize-OpenNVManagedToolchain
+$toolchain = Get-OpenNVGodotToolchain
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $runtimeRoot = Join-Path $repoRoot "runtime"
@@ -29,10 +33,10 @@ function Resolve-GodotExecutable {
         $candidates += $env:OPENNV_GODOT
     }
     $workspaceRoot = Split-Path $repoRoot -Parent
-    $bundledToolRoot = Join-Path $workspaceRoot "gd\Godot_v4.7.2-stable_mono_win64"
+    $bundledToolRoot = Join-Path (Join-Path $workspaceRoot 'gd') $toolchain.windowsDirectory
     $candidates += @(
-        (Join-Path $bundledToolRoot "Godot_v4.7.2-stable_mono_win64_console.exe"),
-        (Join-Path $bundledToolRoot "Godot_v4.7.2-stable_mono_win64.exe")
+        (Join-Path $bundledToolRoot $toolchain.windowsConsole),
+        (Join-Path $bundledToolRoot $toolchain.windowsConsole.Replace('_console.exe', '.exe'))
     )
 
     foreach ($candidate in $candidates) {
@@ -49,7 +53,7 @@ function Resolve-GodotExecutable {
         }
     }
 
-    throw "Godot 4.7.2 Mono was not found. Pass its executable with -Godot."
+    throw "Godot $($toolchain.release) Mono was not found. Run scripts/Install-GodotToolchain.ps1 or pass -Godot."
 }
 
 $godotPath = Resolve-GodotExecutable -ExplicitPath $Godot
@@ -62,15 +66,7 @@ if (-not $versionCheckPath.EndsWith("_console.exe", [StringComparison]::OrdinalI
         $versionCheckPath = $consoleCandidate
     }
 }
-$versionOutput = & $versionCheckPath --version 2>&1
-$versionExitCode = if (Test-Path Variable:\LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-if ($versionExitCode -ne 0) {
-    throw "Godot version check failed for: $godotPath"
-}
-$version = ($versionOutput | Out-String).Trim()
-if ($version -notmatch '(?i)^4\.7\.2(?:[.-]|$).*mono') {
-    throw "OpenNV requires Godot 4.7.2 Mono; '$godotPath' reports '$version'."
-}
+$version = Assert-OpenNVGodotVersion -Executable $versionCheckPath
 
 $runtimeProject = Join-Path $runtimeRoot "OpenNV.csproj"
 if (-not (Test-Path -LiteralPath $runtimeProject -PathType Leaf)) {
@@ -109,7 +105,7 @@ if ($Configuration -eq "Release") {
         [Environment]::SetEnvironmentVariable('UseSharedCompilation', $exportSharedCompilation, 'Process')
     }
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exportExecutable -PathType Leaf)) {
-        throw "OpenNV release export failed. Install the matching Godot 4.7.2 Mono export templates."
+        throw "OpenNV release export failed. Install the matching Godot $($toolchain.release) Mono export templates."
     }
     if (-not (Test-Path -LiteralPath (Join-Path $exportRoot 'opennv_audio.dll') -PathType Leaf)) {
         throw 'Godot did not export the native audio extension.'

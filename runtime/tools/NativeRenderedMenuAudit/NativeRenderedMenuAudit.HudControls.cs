@@ -50,15 +50,18 @@ public partial class NativeRenderedMenuAudit
                 state.GetProperty("rolloverVisible").GetBoolean() || !controls.RolloverText)
                 throw new InvalidDataException("Movement disable retained vitals/reticle or advertised unavailable activation.");
             controls = new FalloutPlayerControlCommand(true, [true]).Apply(controls);
-            if (!baseline.SequenceEqual(await Pixels())) throw new InvalidDataException("Movement enable did not restore source HUD pixels.");
+            var movementEnabled = await Pixels();
+            if (!baseline.SequenceEqual(movementEnabled)) throw new InvalidDataException("Movement enable did not restore source HUD pixels.");
             controls = new FalloutPlayerControlCommand(false, [false, false, false, false, false, true]).Apply(controls);
             var rollover = await Pixels();
             if (baseline.AsSpan().SequenceEqual(rollover) || !Bottom(baseline).AsSpan().SequenceEqual(Bottom(rollover)))
                 throw new InvalidDataException("Rollover disable removed vitals or retained source target text.");
             controls = new FalloutPlayerControlCommand(true, []).Apply(controls);
-            if (!baseline.SequenceEqual(await Pixels())) throw new InvalidDataException("Source enable failed to restore the complete HUD.");
+            var allEnabled = await Pixels();
+            if (!baseline.SequenceEqual(allEnabled)) throw new InvalidDataException("Source enable failed to restore the complete HUD.");
             controls = new FalloutPlayerControlCommand(false, [false, true]).Apply(controls);
-            if (!baseline.SequenceEqual(await Pixels())) throw new InvalidDataException("Unrelated Pip-Boy disable hid the HUD.");
+            var pipBoyDisabled = await Pixels();
+            if (!baseline.SequenceEqual(pipBoyDisabled)) throw new InvalidDataException("Unrelated Pip-Boy disable hid the HUD.");
             controls = new FalloutPlayerControlCommand(false, [true, false, false, false, false, true]).Apply(controls);
             if (Painted(await Pixels())) throw new InvalidDataException("Disabled movement and rollover retained HUD pixels.");
             GD.Print("OPENNV_NATIVE_HUD_CONTROLS_PASS ownedXmlFontAtlas=true movementHidesHpApReticle=true unavailableActivationHidden=true rolloverIndependent=true unrelatedControlsPreserved=true enabledPixelsRestored=true recording=false retainedFrames=0 fixture=true parity=unverified");

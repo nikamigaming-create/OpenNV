@@ -71,8 +71,18 @@ public partial class RuntimeCoordinator : Node3D
     private async void StartRuntimeAfterLoadingFrame()
     {
         if (_loadingScreen is not null)
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await WaitForHostFrame();
         StartRuntime();
+    }
+
+    // Presentation can yield for a visible frame. A headless host advances on
+    // its process signal and never requires a renderer to complete that wait.
+    private async Task WaitForHostFrame()
+    {
+        if (DisplayServer.GetName() == "headless")
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        else
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
     }
 
     private void StartRuntime()
@@ -81,6 +91,8 @@ public partial class RuntimeCoordinator : Node3D
         {
             _configuration = RuntimeConfiguration.Load();
             _options = _nextSessionOptions ?? ParseOptions(OS.GetCmdlineUserArgs());
+            RuntimeLaunchValidator.ValidatePreflight(_options);
+            RuntimeInputPresentationSelection.ValidateBackend(_options, DisplayServer.GetName());
             _continueAfterRestart = _nextSessionContinue;
             _pauseAfterCheckpointLoad = _nextSessionPauseAfterCheckpointLoad;
             _pendingCheckpointRestore = _nextSessionCheckpoint;
@@ -152,7 +164,7 @@ public partial class RuntimeCoordinator : Node3D
             RuntimeLaunchValidator.ValidatePreflight(_options);
             if (_options.ContainsKey("vr"))
                 EnableOpenXr();
-            if (_options.ContainsKey("launcher"))
+            if (launch.OpensLauncher)
             {
                 LoadGodotLauncher();
                 return;
@@ -172,9 +184,7 @@ public partial class RuntimeCoordinator : Node3D
             if (TryDispatchLaunch(launch))
                 return;
 
-            throw new ArgumentException(
-                "OpenNV requires a live --data-root and --campaign. " +
-                "OpenNV requires a live --data-root and --campaign.");
+            throw new ArgumentException("OpenNV requires a live --data-root and --campaign.");
         }
         catch (Exception exception)
         {

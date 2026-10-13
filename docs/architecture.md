@@ -3,6 +3,23 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+The presentation toolchain is selected through runtime/godot-toolchain.json,
+currently official Godot 4.8-dev7 Mono with the matching managed SDK and .NET 10.
+Launcher, installer and gate reject engine/SDK drift. Godot's new mip-level
+texture streamer is a presentation residency owner, independent of C# CELL and
+gameplay streaming. The current direct owned DDS uploads remain resident; an
+enabled project setting is not a streaming-capability receipt.
+
+[Runtime ownership and engineering requirements](runtime-boundaries.md) gives the
+short dependency guide, headless/rendered adapter boundaries, complexity budgets
+and current implementation gaps. It is the starting point for reading the
+runtime; the detailed source contracts below retain their separate evidence.
+
+The executable's empty user-argument vector opens the same native Godot launcher
+as explicit --launcher. Nonempty source/proof requests retain their validation;
+partial game arguments do not silently select a different route. The launcher
+entry is tested through the real main scene, independently of campaign admission.
+
 Executable instruction and embedded-data readers share one in-process decoded
 section image. Packed source sections decode before table reads; original file
 bytes remain unchanged and no decoded launch asset is persisted. PE declaration
@@ -45,8 +62,21 @@ actor-value queries therefore see the complete current selection without
 manufacturing a completed Start. Source order governs actual lifecycle entry;
 failure and current/cold prefixes retain the same live owners.
 
-Native Data uses the selected public interface revision, actual foreground
-DirectInput device state and the same C# control/inventory owners as gameplay.
+Native Data uses the selected public interface revision and the same C#
+control/inventory owners as gameplay. Desktop play uses actual foreground
+DirectInput; explicit --command-input owns windowless command samples independently
+of renderer selection. --headless-play uses that same provider and additionally
+requires the actual headless backend. OpenXR selection retains its real device
+initialization; command samples do not supply headset poses or controller tracking. Provider
+identity travels through Player receipts and native input exchange. Headless
+samples do not certify a Windows device or USER32 window. Both adapters apply
+the existing hold/tap/disable rules and script callbacks. A shared named input
+layout retains the fixed protocol extent. Host-frame waits use process signals
+for command input. Separate injected native/headless HDR capability providers retain
+their own lifecycles; the headless provider has no render callback or resources
+and takes the unsupported-format branch. Shader draws refuse. Cold rendering rebinds the
+current device. GPU availability must not gate authoritative gameplay or saves;
+remaining model/physics/presentation dependencies still require separation.
 New/Continue attaches and waits for the first actual acquired sample; background
 menu indexing cannot create device bytes or reject a campaign for lost focus.
 Native reader leases survive node exit until exact child closure. The current
@@ -70,8 +100,129 @@ The standalone Player scene-reference query reads its actual forced first-person
 field before testing even a null argument. Its source-selected parent/reference
 walk has separate native graph consumers; a Godot ancestor cannot stand in for
 that source graph. Current/cold state retains the getter and query prefixes,
-including failure and independent native retirement. The following HUD child
-cannot return until its own consumer exists. Active-effect and challenge receipt
+including failure and independent native retirement. Its HUD child owns three
+source-template instances in the shared C# UI tree; Godot projects those same
+traits. Ordered color equality, independent byte writers and missing-component
+prefixes stay separate from actor/dead/hostility consumers. The following four
+Actor scalar resets and current-thread context stores have typed C# owners.
+The pure current input-manager getter binds the existing actual DirectInput
+owner, preserves cached observations and never polls or aliases script-loop Main.
+Cold receipts retain history without promoting an old device or thread factory.
+The actual common Actor process retains its independently constructed nullable
+weapon-entry and animation-context fields. Getter dispatch preserves current
+class, epoch, gameplay lease and the same player inventory; an equipment list
+cannot replace the process entry. Partial child returns and cold history do not
+replay a source writer or bind an old native object. Nonnull replacement writers
+and remaining full Player virtual services refuse visibly.
+Player scalar updates keep independent Actor time/word, cached Player word and
+scratch stores. Positive source time subtracts the actual Main scaled timer with
+Float32 overshoot retained; the following nonpositive/unordered arm clears only
+the word. The source reference queue preserves inline-head semantics, prepend
+load order, duplicates and first-match removal after current node callbacks.
+Portable saves retain canonical order and cold history without native callback
+replay. Actual constructor-empty startup skips node consumers; nonempty queues
+require their own living source node, retention and update bindings. The real
+High process zero-mask scene path owns its independent clear store. Dirty flags
+cannot reuse that path; their model/controller writers remain separate owners.
+Two later Actor wrapper calls read a third independently constructed nullable
+process field. They share a current typed context getter, not the earlier
+animation-context result. Their separate null branches and cold no-replay history
+are retained; nonnull factories and consumers remain independent.
+Player timed actions have their own nullable list allocation, item identities,
+kind/time/context cells and suppression byte. Refresh reuses the first same-kind
+item and prepends it; optional-context removal affects the first match. Ordered
+expiry exempts kinds five/eight and restarts the actual list, before every
+survivor consumes the current Main scaled timer without clamping. The current
+common process supplies independently constructed condition bytes and preserves
+the short-circuit second query. Actual empty startup never allocates a list or
+reads a timer; nonzero writers, nonnull context acquisition and other producer
+paths remain separate. Cold history restores canonical state without native
+replay and refuses unowned scene producer history.
+The following actual process owns separate High post-action value/timer cells
+and a nullable context. Positive or unordered time subtracts the current Main
+timer; the other arm stores a clamped context result then the double-to-Float32
+timer transform. Two subsequent current context calls independently remove an
+action and clear a Player byte. Detection-action time has its own ordered-positive
+branch and winning-setting reset; Player's two later timers consume the actual
+scene argument. Current and cold receipts preserve these distinct stores and
+never rebind an old process or replay a getter.
+The shared interface has fifty inline actor slots and an independent signed
+count. Full-tail insertion/removal preserves inactive slots, source Shell sorting
+queries candidate distance before the previous entry, and the winning signed
+actor limit trims only after sorting. Source context/cohort producers remain
+separate from winning record enumeration. Cold state preserves the whole array
+without reconstructing native callbacks or replaying a sort.
+Player sorting uses the same live interface and current authoritative positions;
+its independent cooldown subtracts the scene argument or resets after sorting.
+The distance primitive rounds Float32 subtractions, products and Y+X+Z sums
+before a double square root. Interface lifetime or mutation during a query fails
+with the committed prefix. The retail timer has no constructor store: OpenNV
+explicitly initializes its own managed cell to zero and reports this intentional
+initialization difference, without claiming retail initial-byte parity.
+The following High idle-animation child selects the actual Player model using
+its separate first-person field/current factory, with independent fallback and
+animation context owners. A source-constructed or retired null 3D field does not
+query position, facing or detection inputs. A rendered model cannot be inferred
+from the common third-person skeleton, and cannot imply an animation context.
+Fallback first checks the current thread's independently loaded null reference
+and model cache cells. Their typed owner and query receipt share the actual thread
+scope; direct first-person selection bypasses them. Cache writers remain separate
+unowned producers, and cold reconstruction does not replay the historical query.
+The update re-queries its selected model before bounds, uses the source-scaled
+radius and winning distance setting, and retains asymmetric pending-action
+predicates. Its separate wait timer uses the current Main clock; an unequal or
+unordered setting enters the idle child and is re-read after that child returns.
+Current/cold receipts preserve committed stores and actual model ownership;
+native factory failures and unreturned source scopes remain visible. The
+verified successful thread epilogue restores the invocation's captured prior
+kind on the actual calling thread and admits later initialized invocations.
+Failure and retirement never issue that store. The production Player body
+still fails before reaching it.
+
+The following process movement word has its own High constructor and read/clear
+virtuals. C# retains the clear before selected flag children and across cold
+construction. Actor's PlayerMover is a separate source owner from the physical
+controller and presentation locomotion. Its vector, flags and timer retain their
+constructor bytes; repeated getters and the independent Actor movement byte
+precede the next current Actor field child. Missing movement/control writers and
+that child fail visibly. Unchanged New Vegas common v7 state remains readable
+when v8 introduces only the FO3 movement fields.
+
+Atomic save publication flushes a complete candidate before replacement. Bounded
+Windows destination-sharing retries repeat only the rename; neither gameplay
+effects nor the authoritative writer replay. Failed writing and brief sharing
+restore the prior Continue and its timestamp. Persistent sharing and permanent
+I/O errors still refuse; they cannot publish an incomplete slot.
+
+The real first-person assembly binds its animation context independently from
+its model field. Its two constructor-null pending-action slots have selected
+executable proof; active transition writers remain separate and refuse. Current
+posed bounds use the owned NIF skin bone spheres and native skeleton poses.
+The binding checks source, stack, process, root, factory and thread lifetime;
+cold or retired roots cannot be borrowed. The idle Actor state predicate reads
+the real current package independently of its earlier selected-package query.
+Only kind three enters the still-unowned action-state table. Other rendered
+idle pending-animation consumers and the full Player continuation remain open.
+The independent idle class predicate follows the selected Player primary virtual
+and secondary current-value getter. Its process cache has its own null constructor;
+allocated cache writers remain unbound. The current getter reads the real shared
+Player actor-value owner, not a predicate constant. Named status descriptors are
+admitted only with actual NPC zero-default dispatch and null formula association.
+Separate mutable base and three modifier pools survive cold reconstruction;
+source effects contribute without being serialized into those pools again. The
+selected standalone getter snapshots modifier pools before its base read and
+rounds each addition to Float32. The existing New Vegas getter retains its separate
+wider arithmetic. Unbound descriptor command callbacks refuse before pool mutation.
+
+Offline qualification reports the exact expected absence of a desktop product
+input window separately from a production engine failure. Explicit headless
+input has its own contract and actual native Godot checks. Owned headless FO3
+reaches the incomplete Player body. Ordinary character creation reaches CG00
+stage 100, with zero state-publication loss and normal Quit retirement in the
+fresh product repeat. Complete saves remain deferred by the unreturned source
+invocation; this does not qualify playable state. Authored input bytes
+can expose the next failed child but cannot qualify physical input or gameplay.
+Active-effect and challenge receipt
 joins also require identical compiled branch histories, not merely equal final
 instruction positions.
 
@@ -452,6 +603,12 @@ ownership query for route admission and final interaction. Exact NPC/base
 ownership admits the actor without unlocking the door for another caller.
 Actor route refinement shares the complete capsule query with player navigation.
 
+The last XTEL uint retains its source No Alarm boolean. Destination resolution,
+portal indexing and linked-door access accept both declared boolean values and
+preserve the original target and landing pose. This field does not declare a
+transition mode. Unknown values remain visible; accepting its source data does
+not certify trespass or alarm event behavior.
+
 Executable defaults admit either constructor associations or preinitialized
 Win32 setting descriptors. Static descriptors require backed writable storage,
 read-only virtual tables/locators, executable virtual methods and an exact typed
@@ -676,6 +833,15 @@ canonical BoneAttachment before a sound key or RNG draw. Applied enable state is
 queried from the current authoritative world, including XESP parents and world
 transfer. Disabled, anonymous legacy and independent ANIO emitter lifetimes keep
 their own refusal boundaries; persistence does not invent a stop or new pose.
+
+Static NIF emitters retain the qualified reference, original model path/hash and
+optional source block/name independently of bone emitters. A fresh adapter indexes
+the parsed model once, validates current ancestry and binds source blocks without
+using anonymous Godot names as persistence identity. Raw NPC KF keys and typed
+NIF keys share one declaration/emitter/StopSounds path. Cold voices reconstruct
+without replaying the key, selection history or random draw. Applied source disable
+remains a separate continuation requirement; a valid source identity does not
+invent the missing disabled lifetime.
 
 [Activation dispatch](activation-lifecycle.md) retains the complete reverse XAPR
 graph and explicit invalid winning endpoints. Validation follows the reached

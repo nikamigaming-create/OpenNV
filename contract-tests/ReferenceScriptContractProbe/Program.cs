@@ -4,6 +4,78 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args.Length >= 3 && args[0] == "--audit-owned-sound-startup")
+{
+    Environment.ExitCode = OwnedSoundStartupProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
+
+if (args.Length >= 3 && args[0] == "--audit-owned-compiled-trigger-headers")
+{
+    Environment.ExitCode = OwnedCompiledTriggerProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
+
+if (args.Length >= 3 && args[0] == "--audit-owned-compiled-package-headers")
+{
+    Environment.ExitCode = OwnedCompiledPackageProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
+
+if (args.Length >= 3 && args[0] == "--audit-owned-headless-screen-blood")
+{
+    Environment.ExitCode = OwnedScreenBloodHeadlessProbe.Run(args[1], args[2], args[3..]);
+    return;
+}
+
+if (args is ["--compiled-trigger-contracts"])
+{
+    CompiledScriptContracts.RunTriggerCallbacks();
+    return;
+}
+
+if (args is ["--trigger-membership-contracts"])
+{
+    CompiledScriptContracts.RunTriggerMembership();
+    return;
+}
+
+if (args is ["--compiled-package-contracts"])
+{
+    CompiledScriptContracts.RunPackageCallbacks();
+    return;
+}
+
+if (args is ["--compiled-event-index-contracts"])
+{
+    CompiledScriptContracts.RunEventIndexing();
+    return;
+}
+
+if (args is ["--compiled-headless-screen-blood-contracts"])
+{
+    ScreenBloodContracts.RunCompiledHeadless();
+    return;
+}
+
+if (args is ["--headless-input-contracts"])
+{
+    HeadlessInputContracts.Run();
+    return;
+}
+
+if (args is ["--audit-owned-player-status-values", var statusData])
+{
+    OwnedPlayerStatusValuesProbe.Run(statusData);
+    return;
+}
+
+if (args is ["--audit-owned-fo3-playable-route", var fo3RouteData])
+{
+    Environment.ExitCode = OwnedFallout3PlayableRouteProbe.Run(fo3RouteData);
+    return;
+}
+
 if (args is ["--audit-owned-compiled-framing-offline", var framingData, var framingGame])
 {
     OwnedCompiledScriptProbe.FramingOffline(framingData, framingGame);
@@ -13,6 +85,46 @@ if (args is ["--audit-owned-compiled-framing-offline", var framingData, var fram
 if (args is ["--audit-owned-production-main-tail", var productionTailData])
 {
     Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedProductionMainTail(productionTailData);
+    return;
+}
+if (args is ["--renderer-clock-contracts"])
+{
+    SourceMainScriptCallerContracts.RunRendererClockContracts();
+    return;
+}
+if (args is ["--player-reference-hud-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerReferenceHudContracts();
+    return;
+}
+if (args is ["--player-thread-context-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerThreadContextContracts();
+    return;
+}
+if (args is ["--player-process-query-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerProcessQueryContracts();
+    return;
+}
+if (args is ["--audit-owned-player-scene-entry", var playerSceneData])
+{
+    Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedPlayerSceneEntry(playerSceneData);
+    return;
+}
+if (args is ["--audit-owned-idle-package-fields", var idlePackageData])
+{
+    OwnedIdlePackageFieldsProbe.Run(idlePackageData);
+    return;
+}
+if (args is ["--audit-owned-player-scene-entry-with-input-fixture", var playerSceneFixtureData])
+{
+    Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedPlayerSceneEntry(playerSceneFixtureData, inputBytesFixture: true);
+    return;
+}
+if (args is ["--inspect-owned-compiled-script", var inspectData, var inspectGame, var inspectPlugin, var inspectId])
+{
+    OwnedCompiledScriptInspection.Run(inspectData, inspectGame, inspectPlugin, Convert.ToUInt32(inspectId, 16));
     return;
 }
 
@@ -104,6 +216,12 @@ if (args is ["--test-source-sky-transfer"])
 if (args is ["--test-source-main-images"])
 {
     SourceMainScriptCallerContracts.RunSourceMainImageContracts();
+    return;
+}
+
+if (args is ["--source-image-menu-contracts"])
+{
+    SourceMainScriptCallerContracts.RunSourceImageMenuContracts();
     return;
 }
 
@@ -226,6 +344,11 @@ if (args is ["--test-source-rest-cues"])
 if (args is ["--source-archive-registry-contracts"])
 {
     SourceArchiveRegistryContracts.Run();
+    return;
+}
+if (args is ["--sound-search-namespace-contracts"])
+{
+    SourceArchiveRegistryContracts.RunLayeredNamespace();
     return;
 }
 
@@ -977,6 +1100,12 @@ if (args.Length >= 5 && args[0] == "--audit-numeric-settings")
     OwnedNumericGameSettingProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
     return;
 }
+if (args.Length != 0 && args[0].StartsWith("--", StringComparison.Ordinal))
+{
+    Console.Error.WriteLine("OPENNV_REFERENCE_PROBE_ARGUMENT_REFUSED unknown option or missing arguments: " + args[0]);
+    Environment.ExitCode = 2;
+    return;
+}
 Directory.CreateDirectory(directory);
 try
 {
@@ -1309,6 +1438,10 @@ finally
 
 CompiledScriptContracts.Run();
 CompiledScriptContracts.RunCompanionCallbacks();
+CompiledScriptContracts.RunTriggerCallbacks();
+CompiledScriptContracts.RunTriggerMembership();
+CompiledScriptContracts.RunPackageCallbacks();
+CompiledScriptContracts.RunEventIndexing();
 CompiledScriptContracts.RunSandboxIdles();
 CompiledScriptContracts.RunSandboxActions();
 CompiledScriptContracts.RunSandboxRuntimeProducers();
@@ -1335,6 +1468,7 @@ RestWorldConsumerContracts.Run();
 SourceRestCueContracts.Run();
 SourceMenuSoundSelectionContracts.Run();
 SourceArchiveFileManagerContracts.Run();
+SourceArchiveRegistryContracts.RunLayeredNamespace();
 SourceArchiveRegistryContracts.Run();
 IndexedInterfaceSoundContracts.Run();
 PlayerAdvancementContracts.Run();
@@ -1386,6 +1520,7 @@ PlayerTagSkillContracts.Run();
 PlayerActorValueContracts.Run();
 PerkParameterContracts.Run();
 InputControlContracts.Run();
+HeadlessInputContracts.Run();
 PlayerMoveContracts.Run();
 LoadingScreenContracts.Run();
 CharacterGenerationContracts.Run();
@@ -1411,6 +1546,7 @@ SayToContracts.Run();
 SpeechCompletionContracts.Run();
 RadioConversationContracts.Run();
 ScreenBloodContracts.Run();
+ScreenBloodContracts.RunCompiledHeadless();
 QuestMenuContracts.Run();
 QuestUpdateContracts.Run();
 IngestibleContracts.Run();

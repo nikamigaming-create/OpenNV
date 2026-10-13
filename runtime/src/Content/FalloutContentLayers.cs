@@ -20,13 +20,16 @@ internal sealed class FalloutContentLayers
     // Later roots override earlier roots. A selected folder is never copied into the game.
     internal IReadOnlyList<string> Roots { get; }
 
-    internal string? ResolveFile(string logicalPath)
+    internal string? ResolveFile(string logicalPath) => Resolve(logicalPath, requireFile: true);
+    internal string? ResolveEntry(string logicalPath) => Resolve(logicalPath, requireFile: false);
+
+    private string? Resolve(string logicalPath, bool requireFile)
     {
         var canonical = FalloutBsaArchive.CanonicalPath(logicalPath);
         for (var index = Roots.Count - 1; index >= 0; --index)
         {
             var path = ResolveIn(Roots[index], canonical);
-            if (path is not null && File.Exists(path)) return path;
+            if (path is not null && (!requireFile || File.Exists(path))) return path;
         }
         return null;
     }

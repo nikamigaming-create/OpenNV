@@ -8,6 +8,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'ManagedToolchain.ps1')
+Initialize-OpenNVManagedToolchain
 $taskRepository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $taskCommit = (& git -C $taskRepository rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot identify the source commit.' }

@@ -73,7 +73,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             throw new InvalidDataException("Scene reference continuation has no actual writer/native cold factory.");
         if (saved.ReferenceQuery is not { } query)
         {
-            if (saved.Prelude?.FailedAt is FalloutStandaloneScenePreludeStep.ReferenceQuery or FalloutStandaloneScenePreludeStep.ReferenceFrame)
+            if (saved.Prelude?.FailedAt is FalloutStandaloneScenePreludeStep.ReferenceQuery or FalloutStandaloneScenePreludeStep.ReferenceFrame or
+                FalloutStandaloneScenePreludeStep.ReferenceRelease or FalloutStandaloneScenePreludeStep.ActorScalarReset or FalloutStandaloneScenePreludeStep.ThreadContext or FalloutStandaloneScenePreludeStep.InputManagerQuery or FalloutStandaloneScenePreludeStep.ActorProcessQuery or FalloutStandaloneScenePreludeStep.ActorSceneContinuation or FalloutStandaloneScenePreludeStep.QueuedSceneNodes or FalloutStandaloneScenePreludeStep.ProcessSceneUpdate or FalloutStandaloneScenePreludeStep.PostProcessContext or FalloutStandaloneScenePreludeStep.TimedActions or FalloutStandaloneScenePreludeStep.PlayerSceneContinuation)
                 throw new InvalidDataException("The entered source reference-query child lost its retained prefix.");
             return;
         }
@@ -86,7 +87,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             !query.GetterReturned && query.FirstPerson is not null ||
             query.Failure is { Length: 0 } || query.Failure is not null && query.Failure != saved.Failure ||
             query.FirstPerson is { } node && (node.Process != query.Process || node.Factory == Guid.Empty || node.NativeRoot == 0) ||
-            query.Returned && prefix.FailedAt != FalloutStandaloneScenePreludeStep.ReferenceFrame ||
+            query.Returned && prefix.FailedAt is not (FalloutStandaloneScenePreludeStep.ReferenceFrame or
+                FalloutStandaloneScenePreludeStep.ReferenceRelease or FalloutStandaloneScenePreludeStep.ActorScalarReset or FalloutStandaloneScenePreludeStep.ThreadContext or FalloutStandaloneScenePreludeStep.InputManagerQuery or FalloutStandaloneScenePreludeStep.ActorProcessQuery or FalloutStandaloneScenePreludeStep.ActorSceneContinuation or FalloutStandaloneScenePreludeStep.QueuedSceneNodes or FalloutStandaloneScenePreludeStep.ProcessSceneUpdate or FalloutStandaloneScenePreludeStep.PostProcessContext or FalloutStandaloneScenePreludeStep.TimedActions or FalloutStandaloneScenePreludeStep.PlayerSceneContinuation) ||
             !query.Returned && prefix.FailedAt != FalloutStandaloneScenePreludeStep.ReferenceQuery ||
             clock.Step != FalloutStandaloneSceneClockStep.Failed)
             throw new InvalidDataException("Scene reference query lost its actual getter, source return or following failed child.");

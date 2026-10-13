@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
-    internal const string Schema = "opennv-standalone-Player-scene/v2";
+    internal const string Schema = "opennv-standalone-Player-scene/v15";
     internal FalloutStandalonePlayerSceneSource Source { get; }
     internal Guid Process => _process;
     internal string Stack => _stack;
@@ -23,6 +23,10 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     private FalloutStandaloneSceneClockCall? _clock;
     private FalloutStandaloneCameraCall? _camera;
     private FalloutStandaloneSceneColdHandoff? _cold;
+    private readonly FalloutPlayerThreadContextState _threadContext;
+    private FalloutPlayerThreadContextEntry? _threadContextEntry;
+    private FalloutDirectInputState? _inputManager;
+    private FalloutStandaloneInputManagerQuery? _inputManagerQuery;
     private string? _boundary, _failure;
     internal string? SaveBlocker => _retired ? "source-Player-scene-retired" : _failure ?? _boundary ??
         (_clock is { Step: not FalloutStandaloneSceneClockStep.Returned } ? "source-Player-scene-clock-entered" :
@@ -50,6 +54,31 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         sceneReference = _sceneReference,
         sceneReferenceArgument = _sceneReferenceArgument,
         referenceQuery = _referenceQuery,
+        referenceHudCall = _referenceHudCall,
+        actorScalarReset = _actorScalarReset,
+        threadContext = _threadContext.State,
+        threadContextEntry = _threadContextEntry,
+        inputManagerQuery = _inputManagerQuery,
+        actorProcessQuery = _actorProcessQuery,
+        sceneScalars = _sceneScalars,
+        sceneScalarCall = _sceneScalarCall,
+        queuedReferences = _queuedReferences.References,
+        sceneQueueCall = _sceneQueueCall,
+        processSceneUpdate = _processSceneUpdate,
+        postProcessContext = _postProcessContext,
+        timedActions = _timedActions.Capture(),
+        timedActionsSuppressed = _timedActionsSuppressed,
+        timedActionsCall = _timedActionsCall,
+        postActionFields = _postActionFields,
+        postActionsCall = _postActionsCall,
+        actorDistanceTimer = _actorDistanceTimer,
+        actorDistanceInitialization = FalloutPlayerActorDistanceTimer.Initialization,
+        actorDistanceCall = _actorDistanceCall,
+        idleAnimationCall = _idleAnimationCall,
+        moverFields = _moverFields,
+        movementCall = _movementCall,
+        actorMovementFlag = _actorMovementFlag,
+        prelude = _prelude,
         cold = _cold,
         boundary = _boundary,
         failure = _failure,
@@ -62,6 +91,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack);
         if (process == Guid.Empty) throw new ArgumentException("Player scene requires its real current Main process.", nameof(process));
         Source = source; _stack = stack; _process = process;
+        _threadContext = new(FalloutPlayerThreadContextSource.Reviewed(source.Main), process);
         if (saved is not null) Restore(saved);
     }
     private long Next() => _sequence = checked(_sequence + 1);
@@ -95,7 +125,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     }
     internal FalloutStandaloneFirstPersonOwner PublishFirstPerson(FalloutStandaloneFirstPersonPublication publication, Func<bool> living)
     {
-        RequireIdle(); ArgumentNullException.ThrowIfNull(living); ValidatePublication(publication);
+        RequireFirstPersonReplacement(); ArgumentNullException.ThrowIfNull(living); ValidatePublication(publication);
         if (_first is { Released: null } && _livingFirst is not null)
             throw new InvalidOperationException("The old Player first-person owner must release before the returned child is stored.");
         if (_history.Any(owner => owner.Publication.Factory == publication.Factory) || !ReadLiving(living))
@@ -107,6 +137,12 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _thread ??= Environment.CurrentManagedThreadId;
         _first = new(Guid.NewGuid(), Next(), publication, null); _history.Add(_first); _livingFirst = living;
         return _first;
+    }
+    internal void RequireFirstPersonReplacement()
+    {
+        // This field can release and replace its actual model after Main has
+        // unwound. Keep every failed source prefix and save refusal intact.
+        RequireIdle(allowFailure: true);
     }
     internal void ReleaseFirstPerson(FalloutStandaloneFirstPersonOwner owner)
     {
@@ -209,6 +245,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         RequireIdle(allowFailure: true);
         if (_first is { Released: null } && _livingFirst is not null)
             throw new InvalidOperationException("Actual first-person source field must release before Main scene retirement.");
+        _threadContext.Retire();
+        _inputManager = null;
+        _readProcessQueries = null;
         _retired = true; Next();
         // Entered clock/free-camera prefixes and failures remain captured. A
         // session retirement never emits a fabricated virtual-child return.

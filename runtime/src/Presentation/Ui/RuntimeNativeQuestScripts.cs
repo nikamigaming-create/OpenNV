@@ -15,6 +15,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private string? _error;
     private readonly FalloutPlayerInventory _inventory;
     private NativeOwnedHudMessages? _hud;
+    private Rendering.RuntimeHeadlessScreenBlood? _headlessScreenBlood;
     private bool _worldActive;
     private readonly InputSystem.RuntimeNativeScriptEvents _events;
     private readonly RuntimeNativeUiClock _uiClock;
@@ -37,6 +38,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         worldActive = _worldActive,
         message = _current,
         hud = _hud?.State,
+        screenBloodHeadless = _headlessScreenBlood?.State,
         error = _error,
         startupMenuExecution = _worldActive ? "world-host" : Bootstrap is null ? "unbound-bootstrap-host" : "source-bootstrap-host",
         bootstrap = Bootstrap?.State
@@ -79,7 +81,12 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
                     source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
             AddChild(new NativeOwnedScriptSoundPlayer(Scripts.Sounds, source, Scripts.Menus,
                 reference => SoundReference(reference), SoundUnitsToMetres));
-            AddChild(new Rendering.NativeOwnedScreenBlood(Scripts.ScreenBlood, source, Scripts.Menus));
+            if (DisplayServer.GetName() == "headless")
+            {
+                _headlessScreenBlood = new(Scripts.ScreenBlood, source, Scripts.Menus);
+                AddChild(_headlessScreenBlood);
+            }
+            else AddChild(new Rendering.NativeOwnedScreenBlood(Scripts.ScreenBlood, source, Scripts.Menus));
         }
         try
         {

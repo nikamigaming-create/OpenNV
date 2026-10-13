@@ -19,29 +19,42 @@ bool source_call_site_image_range(const void* pointer, SIZE_T length) {
 }
 void source_call_site_require(SourceCallSite& site, bool retired = false, bool require_target = true) {
     if (!state || GetCurrentThreadId() != state->thread || site.generation != state->generation ||
-        site.module != state->module_id || !site.published || site.failed || site.retired != retired || site.writable)
+        site.module != state->module_id || !site.published || site.failed || site.retired != retired)
         throw Fatal(ERROR_INVALID_STATE, "Source CALL has no current module/thread/publication owner.");
     const auto image = original_callable_pages->source_image_identity();
-    const auto end = static_cast<std::uint64_t>(site.address) + 6;
+    const auto protection = original_callable_pages->source_code_protection(site.address, site.extent());
+    const auto end = static_cast<std::uint64_t>(site.address) + site.extent();
     for (auto cursor = static_cast<std::uint64_t>(site.address); cursor < end;) {
         MEMORY_BASIC_INFORMATION memory{};
         if (!VirtualQuery(reinterpret_cast<void*>(static_cast<std::uintptr_t>(cursor)), &memory, sizeof(memory)) ||
             memory.AllocationBase != reinterpret_cast<void*>(image[0]) || memory.State != MEM_COMMIT ||
-            memory.Type != MEM_PRIVATE || memory.Protect != PAGE_EXECUTE_READ)
+            memory.Type != MEM_PRIVATE || memory.Protect != protection)
             throw Fatal(ERROR_INVALID_DATA, "Source CALL changed its shared selected-image page/protection.");
         const auto next = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(memory.BaseAddress)) + memory.RegionSize;
         if (next <= cursor) throw Fatal(ERROR_INVALID_DATA, "Source CALL memory observation made no progress.");
         cursor = std::min(next, end);
     }
     std::array<std::uint8_t, 6> bytes{}; SIZE_T read = 0;
-    if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(site.address), bytes.data(), bytes.size(), &read) || read != bytes.size())
+    if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<void*>(site.address), bytes.data(), site.extent(), &read) || read != site.extent())
         throw Fatal(GetLastError(), "Source CALL has no complete native byte readback.");
     if (retired) {
-        for (const auto value : bytes) if (value != 0xcc) throw Fatal(ERROR_INVALID_DATA, "Retired source CALL is not its actual trap extent.");
+        for (std::uint32_t index = 0; index < site.extent(); ++index) if (bytes[index] != 0xcc) throw Fatal(ERROR_INVALID_DATA, "Retired source CALL is not its actual trap extent.");
+        return;
+    }
+    if (site.flushed && !std::equal(bytes.begin(), bytes.begin() + site.extent(), site.flushed_code.begin()))
+        throw Fatal(ERROR_INVALID_DATA, "Source code changed outside its recorded instruction-cache publication.");
+    if (site.kind == SourceCodeKind::unbound && !site.getter && !site.restored && !site.flushed) {
+        for (std::uint32_t index = 0; index < 5; ++index) if (bytes[index] != 0xcc) throw Fatal(ERROR_INVALID_DATA, "Unbound code site changed before its write lease.");
+        return;
+    }
+    if (site.kind == SourceCodeKind::suppressed) {
+        constexpr std::array<std::uint8_t, 5> nop{0x0f, 0x1f, 0x44, 0, 0};
+        if (!std::equal(nop.begin(), nop.end(), bytes.begin()) || site.current != 0 || (site.getter && bytes[5] != 0xc3))
+            throw Fatal(ERROR_INVALID_DATA, "Source suppression changed outside its exact five-byte instruction publication.");
         return;
     }
     std::uint32_t displacement = 0; std::memcpy(&displacement, bytes.data() + 1, 4);
-    if (bytes[0] != 0xe8 || bytes[5] != 0xc3 || site.address + 5U + displacement != site.current)
+    if (site.kind != SourceCodeKind::call || bytes[0] != 0xe8 || (site.getter && bytes[5] != 0xc3) || site.address + 5U + displacement != site.current)
         throw Fatal(ERROR_INVALID_DATA, "Source CALL changed outside its exact first-party/installed target publication.");
     if (require_target) {
         if (site.current == site.target) {
@@ -79,7 +92,7 @@ template<std::size_t... Slots> constexpr std::array<SourceGetterFunction, sizeof
 }
 const auto source_getter_functions = source_getter_entries(std::make_index_sequence<source_call_site_limit>{});
 
-SourceCallSite& source_call_site_prepare(std::uint32_t address_value) {
+SourceCallSite& source_call_site_prepare(std::uint32_t address_value, bool getter = false) {
     auto& owner = nvse_owner();
     if (state->calls.size() != 1 || owner.invocation_depth > 1 ||
         !(owner.phase == NvsePhase::loading || owner.phase == NvsePhase::loaded_true))
@@ -87,11 +100,11 @@ SourceCallSite& source_call_site_prepare(std::uint32_t address_value) {
     if (source_call_sites && (source_call_sites->failed ||
         std::any_of(source_call_sites->sites.begin(), source_call_sites->sites.end(), [](const auto& site) { return site->busy || site->writable; })))
         throw Fatal(ERROR_BUSY, "Source CALL declaration overlaps an entered/failed mutation or invocation.");
-    Bytes declaration; declaration.put(address_value); declaration.put(5U);
+    Bytes declaration; declaration.put(address_value); declaration.put(5U); declaration.put(getter ? 1U : 0U);
     const auto id = nvse_host(NvseHostCall::source_call_site_declare, declaration);
     if (!id) throw Fatal(ERROR_NOT_SUPPORTED, "Selected source CALL/getter declaration has no C# semantic owner.");
     if (auto* retained = source_call_site_find(address_value)) {
-        if (retained->id != id || retained->retired) throw Fatal(ERROR_INVALID_DATA, "Source CALL replayed a retired/foreign declaration.");
+        if (retained->id != id || retained->retired || retained->getter != getter) throw Fatal(ERROR_INVALID_DATA, "Source CALL replayed a retired/foreign declaration.");
         source_call_site_require(*retained); return *retained;
     }
     if (!source_call_sites) source_call_sites = std::make_unique<SourceCallSites>();
@@ -100,14 +113,18 @@ SourceCallSite& source_call_site_prepare(std::uint32_t address_value) {
     auto site = std::make_unique<SourceCallSite>(); site->id = id; site->address = address_value;
     site->generation = state->generation; site->module = state->module_id;
     site->slot = static_cast<std::uint32_t>(source_call_sites->sites.size());
-    site->target = owned_thunk(reinterpret_cast<void*>(source_getter_functions[site->slot])); site->current = site->target;
+    site->getter = getter;
+    site->target = getter ? owned_thunk(reinterpret_cast<void*>(source_getter_functions[site->slot])) : 0U;
+    site->current = site->target; site->kind = getter ? SourceCodeKind::call : SourceCodeKind::unbound;
     source_call_sites->sites.push_back(std::move(site)); auto& retained = *source_call_sites->sites.back();
     try {
         if (!original_callable_pages) throw Fatal(ERROR_INVALID_STATE, "Source CALL has no actual pre-entry image reservation.");
-        retained.lease = original_callable_pages->acquire_site(retained.address, retained.target);
+        retained.lease = original_callable_pages->acquire_site(retained.address, retained.target, retained.getter);
         retained.published = true; source_call_site_require(retained);
         Bytes publication; publication.put(retained.id); publication.put(retained.address);
         publication.put(retained.lease); publication.put(retained.target);
+        const auto range = original_callable_pages->source_code_range(retained.address, retained.extent(), true);
+        publication.put(range[0]); publication.put(range[1]); publication.put(static_cast<std::uint32_t>(PAGE_EXECUTE_READ));
         if (nvse_host(NvseHostCall::source_call_site_publish, publication) != 1)
             throw Fatal(ERROR_INVALID_DATA, "Source CALL first-party publication lacks its actual parent native readback.");
         return retained;
@@ -117,17 +134,44 @@ SourceCallSite& source_call_site_prepare(std::uint32_t address_value) {
     }
     catch (...) { retained.failed = source_call_sites->failed = true; throw; }
 }
+void source_call_site_read_mutation(SourceCallSite& site) {
+    const auto* code = reinterpret_cast<const std::uint8_t*>(site.address); nvse_readable(code, site.extent());
+    constexpr std::array<std::uint8_t, 5> nop{0x0f, 0x1f, 0x44, 0, 0};
+    if (std::equal(nop.begin(), nop.end(), code)) { site.kind = SourceCodeKind::suppressed; site.current = 0; }
+    else if (code[0] == 0xe8) {
+        site.kind = SourceCodeKind::call;
+        site.current = site.address + 5U + nvse_copy(reinterpret_cast<const std::uint32_t*>(site.address + 1));
+    }
+    else { site.kind = SourceCodeKind::unbound; site.current = 0; }
+}
 void source_call_site_transition(SourceCallSite& site, std::uint32_t action, DWORD requested,
-    BOOL result, DWORD last_error, DWORD previous) {
+    BOOL result, DWORD last_error, DWORD previous, const void* requested_pointer, SIZE_T bytes) {
     Bytes receipt; receipt.put(site.id); receipt.put(site.address); receipt.put(action); receipt.put(requested);
     receipt.put(static_cast<std::uint32_t>(result)); receipt.put(last_error); receipt.put(previous);
+    receipt.put(address(requested_pointer)); receipt.put(static_cast<std::uint32_t>(bytes));
+    const auto changed = result && (action == 1 || action == 2);
+    const auto range = changed ? original_callable_pages->source_code_range(site.address, 5, false) : std::array<std::uint32_t, 2>{0, 0};
+    receipt.put(range[0]); receipt.put(range[1]); receipt.put(changed ? requested : 0U);
+    receipt.put(original_callable_pages->source_code_protection(site.address, site.extent()));
     if (nvse_host(NvseHostCall::source_call_site_transition, receipt) != 1)
         throw Fatal(ERROR_INVALID_DATA, "Source CALL SDK result lacks its exact C# entered-prefix receipt.");
 }
 BOOL WINAPI source_call_site_protect(LPVOID pointer, SIZE_T bytes, DWORD access, PDWORD old_access) {
     const auto incoming = GetLastError();
     return nvse_adapter([&]() -> BOOL {
-        if (!source_call_site_image_range(pointer, bytes)) { SetLastError(incoming); return VirtualProtect(pointer, bytes, access, old_access); }
+        if (!source_call_site_image_range(pointer, bytes)) {
+            SourceCallSite* attempted = nullptr;
+            if (source_call_sites) for (const auto& site : source_call_sites->sites)
+                if (site->writable && !site->failed && !site->retired && bytes == 5 && access == site->previous_protection) {
+                    if (attempted) throw Fatal(ERROR_BUSY, "Foreign protection attempt has more than one entered source mutation.");
+                    attempted = site.get();
+                }
+            if (attempted) { nvse_owner(); (void)original_callable_pages->source_code_protection(attempted->address, attempted->extent()); }
+            SetLastError(incoming); const auto result = VirtualProtect(pointer, bytes, access, old_access); const auto last = GetLastError();
+            if (attempted) source_call_site_transition(*attempted, 4U, access, result, last,
+                result && old_access ? nvse_copy(old_access) : 0U, pointer, bytes);
+            SetLastError(last); return result;
+        }
         nvse_owner();
         if (bytes != 5) throw Fatal(ERROR_NOT_SUPPORTED, "Source image protection requires its exact typed code-site extent; other mutations remain unowned.");
         auto* retained = source_call_site_find(address(pointer));
@@ -139,23 +183,24 @@ BOOL WINAPI source_call_site_protect(LPVOID pointer, SIZE_T bytes, DWORD access,
         try {
             if (site.failed || site.retired || site.busy || source_call_sites->failed)
                 throw Fatal(ERROR_INVALID_STATE, "Source CALL protection escaped its current healthy lifetime.");
-            const auto restoring = site.writable;
-            if (restoring ? access != site.previous_protection : access != PAGE_EXECUTE_READWRITE)
+            const auto restoring = access != PAGE_EXECUTE_READWRITE;
+            if (restoring && (access != PAGE_EXECUTE_READ || access != site.previous_protection))
                 throw Fatal(ERROR_NOT_SUPPORTED, "Source CALL protection has no exact prior-access restoration owner.");
-            if (!restoring) source_call_site_require(site);
+            (void)original_callable_pages->source_code_protection(site.address, site.extent());
+            if (!site.writable) source_call_site_require(site);
             SetLastError(incoming); const auto result = VirtualProtect(pointer, bytes, access, old_access); const auto last = GetLastError();
             const auto previous = result && old_access ? nvse_copy(old_access) : 0U;
             if (result) {
+                original_callable_pages->source_code_protection_changed(site.address, 5, previous, access);
                 if (!restoring) {
                     site.previous_protection = previous; site.writable = true; site.restored = site.flushed = false;
                 }
                 else {
                     site.writable = false; site.restored = true;
-                    const auto displacement = nvse_copy(reinterpret_cast<const std::uint32_t*>(site.address + 1));
-                    site.current = site.address + 5U + displacement;
+                    source_call_site_read_mutation(site);
                 }
             }
-            source_call_site_transition(site, restoring ? 2U : 1U, access, result, last, previous);
+            source_call_site_transition(site, restoring ? 2U : 1U, access, result, last, previous, pointer, bytes);
             if (result && restoring) source_call_site_require(site);
             SetLastError(last); return result;
         }
@@ -172,12 +217,18 @@ BOOL WINAPI source_call_site_flush(HANDLE process, LPCVOID pointer, SIZE_T bytes
             throw Fatal(ERROR_NOT_SUPPORTED, "Source CALL cache flush has no exact current-process/source-site capability.");
         auto& site = *retained;
         try {
-            if (site.failed || site.busy || !site.restored || site.flushed || source_call_sites->failed)
-                throw Fatal(ERROR_INVALID_STATE, "Source CALL cache flush replayed or escaped its restored mutation prefix.");
-            source_call_site_require(site); SetLastError(incoming);
+            if (site.failed || site.busy || (!site.writable && !site.restored && !site.flushed) || source_call_sites->failed)
+                throw Fatal(ERROR_INVALID_STATE, "Source CALL cache flush escaped its actual source mutation prefix.");
+            (void)original_callable_pages->source_code_protection(site.address, site.extent());
+            if (site.flushed) source_call_site_require(site);
+            else source_call_site_read_mutation(site);
+            SetLastError(incoming);
             const auto result = FlushInstructionCache(process, pointer, bytes); const auto last = GetLastError();
-            source_call_site_transition(site, 3U, 0, result, last, 0);
-            if (result) site.flushed = true;
+            source_call_site_transition(site, 3U, 0, result, last, 0, pointer, bytes);
+            if (result) {
+                std::memcpy(site.flushed_code.data(), reinterpret_cast<void*>(site.address), site.extent());
+                site.flushed = true; site.writable = false; source_call_site_require(site);
+            }
             SetLastError(last); return result;
         }
         catch (...) { site.failed = source_call_sites->failed = true; throw; }
@@ -197,7 +248,7 @@ void source_call_sites_operation(const Frame& frame) {
     try {
         NvseInvocation invocation(*state->nvse); Bytes result;
         if (action == 0) {
-            const auto pointer = request.get<std::uint32_t>(); request.finish(); auto& site = source_call_site_prepare(pointer);
+            const auto pointer = request.get<std::uint32_t>(); request.finish(); auto& site = source_call_site_prepare(pointer, true);
             if (site.current != site.target || site.flushed) throw Fatal(ERROR_INVALID_STATE, "Typed preparation cannot replay an original installed hook.");
             result.put(site.id); result.put(site.address);
         }
@@ -208,7 +259,7 @@ void source_call_sites_operation(const Frame& frame) {
             if (!retained || retained->id != id || retained->busy || retained->failed || source_call_sites->failed)
                 throw Fatal(ERROR_INVALID_HANDLE, "Typed source CALL has no genuine bound site capability.");
             auto& site = *retained; source_call_site_require(site);
-            if (site.current != site.target)
+            if (!site.getter || site.kind != SourceCodeKind::call || site.current != site.target)
                 throw Fatal(ERROR_NOT_SUPPORTED, "Installed original hook still needs its complete typed runtime-global/object/behavior consumer.");
             if (source_object(object_id).pointer != receiver)
                 throw Fatal(ERROR_INVALID_HANDLE, "Typed getter receiver changed its actual complete native object.");
@@ -223,6 +274,17 @@ void source_call_sites_operation(const Frame& frame) {
             catch (...) { site.failed = source_call_sites->failed = true; throw; }
             result.put(frame.header.id); result.put(receipt.result); result.put(receipt.stack_delta);
             result.put(receipt.preserved_registers); result.put(site.getter_calls - previous_calls);
+        }
+        else if (action == 2) {
+            const auto id = request.get<std::uint32_t>(), pointer = request.get<std::uint32_t>(); request.finish();
+            auto* retained = source_call_site_find(pointer);
+            if (!retained || retained->id != id || retained->busy || retained->failed || source_call_sites->failed ||
+                !retained->flushed || retained->kind != SourceCodeKind::suppressed)
+                throw Fatal(ERROR_INVALID_STATE, "Source suppression observation has no exact healthy flushed publication.");
+            source_call_site_require(*retained);
+            // Observe only. No target, receiver, CALL/RET producer or source
+            // ABI return is manufactured for a source-suppressed instruction.
+            result.put(frame.header.id); result.put(static_cast<std::uint32_t>(retained->kind)); result.put(0U);
         }
         else throw Fatal(ERROR_NOT_SUPPORTED, "Unknown typed source CALL operation.");
         state->calls.pop_back(); owned_call = false; reply(frame, ERROR_SUCCESS, "", result);
@@ -240,10 +302,12 @@ void source_call_sites_retire(const Frame& frame) {
             // The actual DLL has already detached. Read the retained CALL bytes
             // without pretending that its retired image target is executable.
             source_call_site_require(*site, false, false); original_callable_pages->release_site(site->lease);
-            site->retired = true; source_call_site_require(*site, true, false);
+            site->retired = true; site->kind = SourceCodeKind::retired; site->current = 0; source_call_site_require(*site, true, false);
             state->calls.push_back(frame.header.id);
             try {
                 Bytes receipt; receipt.put(site->id); receipt.put(site->address); receipt.put(site->lease);
+                const auto range = original_callable_pages->source_code_range(site->address, site->extent(), true);
+                receipt.put(range[0]); receipt.put(range[1]); receipt.put(static_cast<std::uint32_t>(PAGE_EXECUTE_READ));
                 if (nvse_host(NvseHostCall::source_call_site_retire, receipt) != 1)
                     throw Fatal(ERROR_INVALID_DATA, "Source CALL trap retirement lacks its independent actual C# readback.");
                 state->calls.pop_back();

@@ -15,7 +15,8 @@ enum class NvseHostCall : std::uint32_t {
     engine_command_declare = 11, engine_command_publish = 12, engine_command_execute = 13, engine_command_retire = 14,
     source_call_site_declare = 15, source_call_site_publish = 16, source_call_site_transition = 17, source_call_site_execute = 18, source_call_site_retire = 19,
     engine_global_publish = 20, engine_tls_publish = 21, engine_global_retire = 22, engine_tls_retire = 23,
-    source_field_method_declare = 24, source_field_method_publish = 25, source_field_method_execute = 26, source_field_method_retire = 27
+    source_field_method_declare = 24, source_field_method_publish = 25, source_field_method_execute = 26, source_field_method_retire = 27,
+    logging_get_path = 28
 };
 enum class NvsePhase : std::uint32_t { mapped, querying, queried_true, queried_false, loading, loaded_true, loaded_false };
 enum class NvseSerializationEvent : std::uint32_t { save, load, new_game, pre_load };
@@ -81,7 +82,8 @@ struct NvseSerializationInterface {
     void (__cdecl* read64)(void*);
     void (__cdecl* skip)(std::uint32_t);
 };
-struct NvseTables { NvseCoreInterface core; NvseMessagingInterface messaging; NvseSerializationInterface serialization; };
+struct NvseLoggingInterface { const char* (__fastcall* get_plugin_log_path)(); };
+struct NvseTables { NvseCoreInterface core; NvseMessagingInterface messaging; NvseSerializationInterface serialization; NvseLoggingInterface logging; };
 #pragma pack(pop)
 static_assert(sizeof(NvseParamInfo) == 12);
 static_assert(sizeof(NvseCommandInfo) == 40);
@@ -90,6 +92,7 @@ static_assert(sizeof(NvseCoreInterface) == 52);
 static_assert(sizeof(NvseMessage) == 16);
 static_assert(sizeof(NvseMessagingInterface) == 12);
 static_assert(sizeof(NvseSerializationInterface) == 88);
+static_assert(sizeof(NvseLoggingInterface) == 4);
 
 struct NvseListener { std::uint32_t sender, function; };
 struct NvseRegisteredParameter {
@@ -113,6 +116,8 @@ struct NvseRuntime {
     NvseTables* tables = nullptr;
     std::uint32_t tables_extent = 0;
     const char* directory = nullptr;
+    const char* logging_path = nullptr;
+    std::uint32_t logging_path_length = 0;
     NvsePluginInfo info{};
     std::string name;
     std::vector<NvseListener> listeners;

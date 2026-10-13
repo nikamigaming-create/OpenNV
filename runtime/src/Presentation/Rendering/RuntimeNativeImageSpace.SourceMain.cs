@@ -13,20 +13,25 @@ internal partial class RuntimeNativeImageSpace : IFalloutSourceImageSpaceNative
     private bool _sourceNativeConstructionEntered, _sourceNativeConstructed, _sourceNativeBound, _sourceNativeRetired;
     private FalloutSourceImageSpaceOutput? _sourceNativeEffects;
     private FalloutImageSpaceFrame? _sourceNativeFrame;
-    public Guid NativeIdentity => _sourceNativeIdentity;
+    private FalloutHeadlessImageSpaceOutput? _headlessSourceOutput;
+    private Func<uint>? _sourceMenuClock;
+    public Guid NativeIdentity => _headlessSourceOutput?.NativeIdentity ?? _sourceNativeIdentity;
     public Guid Process => _sourceNativeProcess;
     public string SourceIdentity => _sourceNativeSource ??
         throw new InvalidOperationException("Native image output has no actual selected source manager.");
     internal bool UsesSourceMain => _sourceNativeConstructed;
-    internal SourceImageNativeFields? SourceFields => _effect.SourceNativeFields;
+    internal SourceImageNativeFields? SourceFields => _headlessSourceOutput?.Fields ?? _effect.SourceNativeFields;
+    internal object? HeadlessSourceState => _headlessSourceOutput?.State;
+    internal object? SourceMenuState => _state.SourceImageMenuLast;
 
     internal void ConfigureSourceMain(FalloutImageSpaceState state, RetailHdrCompositorEffect effect,
-        FalloutGameTime time, Guid process)
+        FalloutGameTime time, Guid process, Func<uint> menuClock)
     {
         if (_sourceNativeConstructed || _sourceNativeRetired || _state is not null)
             throw new InvalidOperationException("Image-space presenter configuration cannot replace living source fields.");
         Name = "NativeImageSpace"; ProcessMode = ProcessModeEnum.Always; ProcessPriority = 100;
         _state = state; _effect = effect; _gameTime = time;
+        _sourceMenuClock = menuClock ?? throw new ArgumentNullException(nameof(menuClock));
         if (effect.DoubleVisionPhase is not null) BindCurrentPhaseClock(time, process);
         ConstructSourceMainOutput(process);
         SetMeta("opennv_image_space_program_source", effect.SourceProgramIdentity);
@@ -41,7 +46,13 @@ internal partial class RuntimeNativeImageSpace : IFalloutSourceImageSpaceNative
             throw new InvalidOperationException("Image native factory changed its actual construction thread.");
         _sourceNativeProcess = process; _sourceNativeSource = _state.SourceMainImageIdentity;
         _sourceNativeConstructionEntered = true;
-        _effect.ConstructSourceReceiverFields(_state.SourceMainImageDofConstructor);
+        if (DisplayServer.GetName() == "headless")
+        {
+            if (RenderingServer.GetRenderingDevice() is not null)
+                throw new InvalidOperationException("Headless image output cannot own a rendering device.");
+            _headlessSourceOutput = new(SourceIdentity, process, _state.SourceMainImageDofConstructor, CommitSourceOutput);
+        }
+        else _effect.ConstructSourceReceiverFields(_state.SourceMainImageDofConstructor);
         _sourceNativeConstructed = true;
     }
 
@@ -49,7 +60,7 @@ internal partial class RuntimeNativeImageSpace : IFalloutSourceImageSpaceNative
     {
         RequireCurrentFactory();
         if (_sourceNativeBound) throw new InvalidOperationException("Image native association cannot replay its current binding.");
-        _state.BindSourceMainImageNative(this); _sourceNativeBound = true;
+        _state.BindSourceMainImageNative(_headlessSourceOutput is { } headless ? headless : this); _sourceNativeBound = true;
     }
 
     public void RequireCurrentFactory()
@@ -58,7 +69,8 @@ internal partial class RuntimeNativeImageSpace : IFalloutSourceImageSpaceNative
             !GodotObject.IsInstanceValid(_effect) || System.Environment.CurrentManagedThreadId != _sourceNativeThread ||
             SourceIdentity != _state.SourceMainImageIdentity)
             throw new InvalidOperationException("Image output requires its actual living current native factory/thread/tree.");
-        _effect.RequireSourceReceiverFactory();
+        if (_headlessSourceOutput is { } headless) headless.RequireCurrentFactory();
+        else _effect.RequireSourceReceiverFactory();
     }
 
     public IDisposable EnterSourceImageContext()
@@ -76,9 +88,16 @@ internal partial class RuntimeNativeImageSpace : IFalloutSourceImageSpaceNative
         if (!ReferenceEquals(_sourceNativeEffects, value))
             throw new InvalidOperationException("Image native profile did not follow its actual same-call effect writes.");
         _effect.StoreSourceProfileGlobals(value);
+        CommitSourceOutput(value);
+    }
+    private void CommitSourceOutput(FalloutSourceImageSpaceOutput value)
+    {
+        RequireCurrentFactory(); RequireOutput(value);
+        _sourceNativeEffects = value;
         _sourceNativeFrame = _state.ReadSourceMainImageFrame(value);
         PublishCurrentSkyHdr(_sourceNativeFrame);
-        _effect.SetSourceMainFrame(_sourceNativeFrame, BitConverter.UInt32BitsToSingle(value.Delta));
+        if (_headlessSourceOutput is null)
+            _effect.SetSourceMainFrame(_sourceNativeFrame, BitConverter.UInt32BitsToSingle(value.Delta));
         Frame = _menuBackground ?? _sourceNativeFrame;
     }
     private void RequireOutput(FalloutSourceImageSpaceOutput value)
@@ -90,7 +109,10 @@ internal partial class RuntimeNativeImageSpace : IFalloutSourceImageSpaceNative
     internal void RetireSourceMainOutput()
     {
         if (!_sourceNativeConstructionEntered || _sourceNativeRetired) return;
-        if (_sourceNativeBound) { _state.RetireSourceMainImageNative(this); _sourceNativeBound = false; }
-        _effect.RetireSourceReceiverFields(); _sourceNativeRetired = true;
+        if (_sourceNativeBound)
+        { _state.RetireSourceMainImageNative(_headlessSourceOutput is { } headless ? headless : this); _sourceNativeBound = false; }
+        if (_headlessSourceOutput is { } output) output.Dispose();
+        else _effect.RetireSourceReceiverFields();
+        _sourceNativeRetired = true;
     }
 }

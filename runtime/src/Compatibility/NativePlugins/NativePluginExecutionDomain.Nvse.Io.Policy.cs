@@ -312,6 +312,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
     }
     internal void RequireRetired()
     {
+        if (_nvseLoggingPath is { } logging) RequireNvseLogging(_generation!.Value, logging);
         if (HasFailedChildConstruction) throw new InvalidOperationException("Native I/O retains an unfinished child construction.");
         if (_routes.Count != 0 || _fileRoutes.Count != 0) throw new InvalidDataException("Native private I/O retains unfinished route/file results.");
         foreach (var (path, lease) in _reads)
@@ -326,6 +327,7 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
         if (_disposed) { if (_ioDisposeFailure is not null) throw _ioDisposeFailure; return; }
         RetireFailedChildConstructions();
         var failures = new List<Exception>();
+        try { DisposeNvseLoggingSource(); } catch (Exception error) { failures.Add(error); }
         try { DisposeCryptoSource(); } catch (Exception error) { failures.Add(error); }
         try { DisposeCppSources(); } catch (Exception error) { failures.Add(error); }
         try { DisposeCrtProviderLeases(); } catch (Exception error) { failures.Add(error); }

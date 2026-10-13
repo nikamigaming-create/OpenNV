@@ -376,11 +376,13 @@ void io_bind_imports(HMODULE image) {
             const auto name = nvse_string(reinterpret_cast<const char*>(base + original.u1.AddressOfData + sizeof(WORD)), false);
             auto** slot = reinterpret_cast<void**>(const_cast<std::uint8_t*>(base) + item.FirstThunk + static_cast<std::size_t>(relative));
             const auto prior = nvse_copy(slot); const auto crt_file = crt_io_import_name(library, name);
+            const auto crt_pure = crt_pure_import_name(library, name);
             auto* window_bound = window_process_import_entry(library, name, prior);
             auto* cpp_bound = cpp_import_entry(library, name, prior);
-            auto* replacement = window_bound ? window_bound : cpp_bound ? cpp_bound : platform ? io_entry(name) : crt_file ? crt_import_entry(library, name, prior) : cng_client_import_entry(library, name, prior);
+            auto* replacement = window_bound ? window_bound : cpp_bound ? cpp_bound : platform ? io_entry(name) :
+                crt_file || crt_pure ? crt_import_entry(library, name, prior) : cng_client_import_entry(library, name, prior);
             if (!replacement) {
-                if (crt_file || !owner.non_io_imports.count(library + "!" + name)) throw Fatal(ERROR_NOT_SUPPORTED, "Imported function has neither actual native I/O nor selected non-I/O ownership.");
+                if (crt_file || crt_pure || !owner.non_io_imports.count(library + "!" + name)) throw Fatal(ERROR_NOT_SUPPORTED, "Imported function has neither actual native I/O nor selected non-I/O ownership.");
                 continue;
             }
             if (replacement == prior) continue; // Exact real C++ code/global address already occupies this original slot.

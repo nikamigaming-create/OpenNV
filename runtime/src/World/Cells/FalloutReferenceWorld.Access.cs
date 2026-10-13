@@ -148,8 +148,7 @@ internal sealed partial class FalloutReferenceWorld
         for (var offset = 4; offset < 28; offset += sizeof(float))
             if (!float.IsFinite(BinaryPrimitives.ReadSingleLittleEndian(field.Span[offset..])))
                 throw new InvalidDataException("XTEL access link has a non-finite transform.");
-        if (BinaryPrimitives.ReadUInt32LittleEndian(field.Span[28..]) != 0)
-            throw new NotSupportedException("XTEL access flags require their transition owner.");
+        _ = FalloutTeleportDestination.ReadNoAlarm(BinaryPrimitives.ReadUInt32LittleEndian(field.Span[28..]));
         return source.Record.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Span)) ??
             throw new InvalidDataException("XTEL access link has a null destination.");
     }

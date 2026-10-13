@@ -28,6 +28,7 @@ internal partial class RuntimeNativeNpc
             {
                 Name = appearance.Reference is { } reference ? $"Reference_{reference}" : $"Actor_{appearance.Npc}",
                 Appearance = appearance,
+                SourceModel = prepared.SourceModel.Instantiate(),
             };
         }
 
@@ -38,7 +39,7 @@ internal partial class RuntimeNativeNpc
             var appearance = _prepared.Appearance;
             if (_stage < 0)
             {
-                actor.Skeleton = NativeNifMeshBuilder.BuildActorSkeleton(_prepared.Skeleton, _units);
+                actor.Skeleton = new RuntimeNativeNifSkeleton(_prepared.SourceModel.Skeleton, _units);
                 actor.Skeleton.Node.SetMeta("opennv_source_model", appearance.SkeletonPath);
                 actor.AddChild(actor.Skeleton.Node);
                 actor.Skeleton.Node.Scale = Vector3.One * appearance.Height;

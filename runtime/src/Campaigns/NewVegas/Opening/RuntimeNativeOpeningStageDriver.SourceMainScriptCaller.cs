@@ -23,7 +23,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             throw new InvalidOperationException("Source Main native delivery cannot attach twice or before the living driver.");
         _sourceMainScriptCaller = RuntimeNativeSourceMainScriptCaller.Attach(this, world,
             _sourceInterfaceFade ?? throw new NotSupportedException("Actual source Main needs the same constructed rest/interface fade owner."),
-            RetainDriverFailure, native => _sourceMainScriptCaller = native);
+            _scripts.Session, RetainDriverFailure, native => _sourceMainScriptCaller = native);
     }
     internal void StartSourceMainScriptCaller()
     {

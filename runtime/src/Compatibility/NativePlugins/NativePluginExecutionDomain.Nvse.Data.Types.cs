@@ -1,3 +1,5 @@
+using OpenNV.Runtime.Content;
+
 namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 internal readonly record struct NativeNvseInputKey(bool Raw, bool Game, bool Inserted,
@@ -8,9 +10,10 @@ internal readonly record struct NativeNvseInputKey(bool Raw, bool Game, bool Ins
 }
 internal readonly record struct NativeNvseInputControlChange(int Key, NativeNvseInputKey Before, NativeNvseInputKey After);
 internal sealed record NativeNvseInputSnapshot(string Source, ulong Window, ulong Sample,
-    long Revision, IReadOnlyList<NativeNvseInputKey> Keys, bool Acquired, string? AcquisitionFailure)
+    long Revision, IReadOnlyList<NativeNvseInputKey> Keys, bool Acquired, string? AcquisitionFailure,
+    FalloutInputProvider Provider = FalloutInputProvider.WindowsDirectInput)
 {
-    internal const int KeyCount = 266;
+    internal const int KeyCount = FalloutInputLayout.KeyCount;
 }
 internal enum NativeNvseDataCall : uint
 {

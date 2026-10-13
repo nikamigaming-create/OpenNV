@@ -6,6 +6,7 @@ internal static partial class SourceMainScriptCallerContracts
     private static void RunStandalonePlayerSceneContracts()
     {
         RunSourceSceneReferenceQueryContracts();
+        RunPlayerReferenceHudContracts();
         var immediate = new FalloutImmediateScriptSource(FalloutSourceMainFamily.Fallout3, new('1', 64),
             FalloutImmediateScriptSource.ContractForEngine(FalloutSourceMainFamily.Fallout3));
         var source = FalloutStandalonePlayerSceneSource.Read(FalloutMainScriptCallerSource.Read(immediate));
@@ -70,6 +71,20 @@ internal static partial class SourceMainScriptCallerContracts
         Reject(() => clock.StoreSceneClock(main, 7, 0x3e800000));
         Reject(() => FalloutStandalonePlayerSceneState.RequirePlayable(stopped));
         Reject(() => FalloutStandalonePlayerSceneState.Validate(stopped with { SceneBracket = 0 }));
+        var failedFirst = new AuthoredPlayerSceneObject();
+        var failedOwner = clock.PublishFirstPerson(failedFirst.Publication(clock), failedFirst.ReadLiving);
+        clock.ReleaseFirstPerson(failedOwner); failedFirst.Retire();
+        var replacementFirst = new AuthoredPlayerSceneObject();
+        var replacementOwner = clock.PublishFirstPerson(replacementFirst.Publication(clock), replacementFirst.ReadLiving);
+        var afterReplacement = clock.Capture();
+        Require(afterReplacement.Failure == stopped.Failure && afterReplacement.Boundary == stopped.Boundary &&
+            afterReplacement.Clock == stopped.Clock && afterReplacement.SceneBracket == stopped.SceneBracket &&
+            afterReplacement.FirstPerson?.Identity == replacementOwner.Identity &&
+            afterReplacement.FirstPersonHistory.Single(owner => owner.Identity == failedOwner.Identity).Released is not null,
+            "First-person replacement erased a failed scene prefix, reused its factory or lost the old field release.");
+        Reject(() => FalloutStandalonePlayerSceneState.RequirePlayable(afterReplacement));
+        FalloutStandalonePlayerSceneState.Validate(afterReplacement);
+        clock.ReleaseFirstPerson(replacementOwner); replacementFirst.Retire();
         clock.Retire();
         var reentry = new FalloutStandalonePlayerSceneState(source, saved.Stack, Guid.NewGuid());
         var objectWithCallback = new AuthoredPlayerSceneObject();

@@ -4,6 +4,11 @@
 #include <memory>
 
 namespace opennv_domain {
+enum class NvseInputProvider : std::uint32_t {
+    unbound = 0, windows_direct_input = 1, headless_commands = 2
+};
+// Complete public DIHookControl key extent; keep the native layout assertion.
+constexpr std::uint32_t nvse_input_key_count = 266;
 enum class NvseDataCall : std::uint32_t {
     input_create = 1, input_exchange = 2, function = 3, inventory_create = 4,
     inventory_get = 5, inventory_self = 6, lambda_save = 7, lambda_unsave = 8,
@@ -17,7 +22,7 @@ static_assert(sizeof(NvseDiKey) == 7);
 // this first-party constructor. Native buffered-device queues are not exposed.
 struct NvseDiObject {
     virtual ~NvseDiObject() = default;
-    std::array<NvseDiKey, 266> keys{};
+    std::array<NvseDiKey, nvse_input_key_count> keys{};
 };
 static_assert(sizeof(NvseDiObject) == 0x74c);
 struct NvseDataInterface {
@@ -33,6 +38,7 @@ struct NvseDataRuntime {
     std::unique_ptr<NvseDiObject> input;
     std::uint64_t window = 0, sample = 0, sequence = 0;
     std::uint32_t input_vtable = 0;
+    NvseInputProvider input_provider = NvseInputProvider::unbound;
     std::int64_t revision = 0;
     bool synchronizing = false;
 };

@@ -13,23 +13,37 @@ internal sealed partial class FalloutImageSpaceState
         // Actual ApplyImageSpaceModifier uses the duplicate-admitting form
         // factory with a null target. Each invocation appends a real instance.
         _sourceImageInstances.Add(identity, new(identity, null, null, source.Form, source.SourceSha256, 0,
-            BitConverter.SingleToUInt32Bits(strength), BitConverter.SingleToUInt32Bits(-10001), null, 0, 0, changed, changed, null));
+            BitConverter.SingleToUInt32Bits(strength), BitConverter.SingleToUInt32Bits(FalloutSourceImageSpaceFloat.InitialStart), null, 0, 0, changed, changed, null));
         _sourceImagePrograms.Add(identity, source); _sourceImageList.Add(identity); ConstructSourceImageCurves(ImageProgram(source));
     }
     internal void RemoveSourceImageModifier(FalloutFormKey form)
     {
         RequireImageWriter();
-        foreach (var identity in _sourceImageList.Where(identity => _sourceImageInstances[identity].Form == form).ToArray())
-            RetireSourceImageInstance(identity);
+        // RemoveAll performs one stable compaction. Retire metadata in the
+        // original list order; no callback can observe a partly compacted
+        // list because these stores are synchronous on this owner thread.
+        _sourceImageList.RemoveAll(identity =>
+        {
+            var row = _sourceImageInstances[identity];
+            if (row.Form != form) return false;
+            RetireSourceImageInstanceFields(row);
+            return true;
+        });
     }
     private void RetireSourceImageInstance(Guid identity)
     {
         var row = _sourceImageInstances[identity];
         if (row.Retired is not null || !_sourceImageList.Remove(identity))
             throw new InvalidOperationException("Source image list released another or already retired instance.");
+        RetireSourceImageInstanceFields(row);
+    }
+    private void RetireSourceImageInstanceFields(FalloutSourceImageSpaceInstance row)
+    {
+        if (row.Retired is not null)
+            throw new InvalidOperationException("Source image list released an already retired instance.");
         var changed = ++_sourceImageChanged;
-        _sourceImageInstances[identity] = row with { Retired = changed, Changed = changed };
-        _sourceImagePrograms.Remove(identity);
+        _sourceImageInstances[row.Identity] = row with { Retired = changed, Changed = changed };
+        _sourceImagePrograms.Remove(row.Identity);
         // A Sky field is a separate retained reference. Its lifetime is not
         // erased by removing the manager's reference or by cold reattachment.
     }

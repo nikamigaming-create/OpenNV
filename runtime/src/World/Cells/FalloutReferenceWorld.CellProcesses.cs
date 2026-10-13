@@ -15,6 +15,7 @@ internal sealed partial class FalloutReferenceWorld
         throw new NotSupportedException("Actual source CELL load/attachment/retirement owner is absent.");
     internal string? CellProcessSaveBlocker => _cellProcesses is null ? "source-cell-process-owner-absent" : CellProcesses.SaveBlocker;
     internal object? CellProcessState => _cellProcesses?.State;
+    internal FalloutCellProcessesSummary? CellProcessSummary => _cellProcesses?.Summary;
 
     internal void ConfigureCellProcesses(FalloutCellProcessDeclaration declaration, string stack,
         FalloutCellProcessesSnapshot? restore = null)

@@ -2,10 +2,153 @@
 
 ## Complete-game direction and execution
 
-October 11 direction focuses only on standalone FO3. The user discarded current
-saves and requires offline production checks before another gameplay run.
+Finish all three campaigns and their selected mod stacks. Treat the recorded
+opening routes below as the first acceptance milestone. Inventory native modules
+by the selected edition; never silently omit a FOSE/NVSE module. Exercise original
+compiled scopes through their actual shared gameplay owners, track branch and
+failure coverage separately from binary framing, and preserve complete state
+across saves and cold reconstruction. Unknown behavior stays visible.
+
+Current user acceptance is three independently recorded ordinary product runs:
+New Vegas completes the Goodsprings opening quest and leaves town; standalone
+Fallout 3 completes the Vault 101 opening and exits; TTW progresses through the
+Vault, reaches Megaton and completes a Megaton quest. Each run must demonstrate
+complete saving, normal Quit and cold Continue. Deliver a phone-friendly
+H.264/AAC fast-start MP4 from those real takes with readable labels and visible
+edit markers. Remaining levels follow these accepted routes. This direction
+supersedes the earlier FO3-only priority without waiving source, persistence or
+gameplay gates. The latest user direction authorizes publishing the source
+recovery through checked PRs, merging main and verifying its GitHub backup while
+continuing gameplay repair. Source publication does not establish game support.
+
+Headless play must execute the same quests, movement, combat, transitions and
+persistent state as visible play, from beginning to end. Desktop lock is not a
+headless prerequisite. Rendering consumes authoritative simulation state; GPU
+availability must not gate gameplay or save eligibility. The explicit command
+adapter and unsupported HDR capability let owned FO3 headless New Game reach
+the Vault birth cell and expose the shared unfinished Player body. Repair that
+body, NPC/trigger owners, initial HDR-selection telemetry loss and native teardown.
+Separate headless HDR construction now returns synchronously, and the latest
+owned birth-cell repeat reaches CG00 stage 100 after ordinary character creation,
+has zero telemetry loss and exits zero through normal
+Quit. Retain the previous crash diagnostic and verify repeatability with complete
+gameplay and cold state; this repeat does not close the route.
+Complete saves remain refused for incomplete gameplay frames. Verify headless
+progress through state and cold Continue; the requested video separately requires
+real rendered gameplay. Neither acceptance lane is complete.
+
+The explicit --command-input selection now works independently of renderer
+choice. Actual locked-session FO3 Vulkan readback shows its source character
+creation and ordinary page input, while the headless route uses the same controls.
+The 4.8 Vulkan repeat now finishes character creation at CG00 stage 100 and
+quits without the earlier replacement/null-multimesh errors. Main still refuses
+the actual Player physical child, and saving remains deferred; the opening
+route is incomplete. Typed live status removes duplicated process bundles and now
+allows the bounded frame client to complete. Continue reducing snapshot cost
+before continuous capture; detailed state and complete-save refusal retain all failures.
+
+The user additionally requires current Godot and measured CPU/texture/world
+streaming performance. The selected official toolchain is now 4.8-dev7 Mono,
+Godot.NET.Sdk 4.8.0-dev.7 and .NET 10, with shared archive/version checks and
+matching Windows x64 export templates. The complete runtime gate passes; the
+repeated owned FO3 audit retains its one actual physical-Player failure.
+Qualify direct owned DDS mip residency separately:
+4.8's enabled streaming flag alone does not register resident uploads with its
+GPU-feedback streamer. Preserve authored mip/alpha bytes, bounded source reads,
+actual native lifetime and the direct-owned-data launch boundary. Measure frame
+intervals, memory and content-worker demand before changing thread budgets or
+the renderer thread mode; the calendar year is not a concurrency policy.
+
+The recovery batch preserves the current source and existing New Vegas save,
+adds the verified Player prior-kind epilogue operation, binds the real
+first-person animation/posed-bound factories, High process movement clear and
+independent PlayerMover constructor/getters, and separates expected headless
+desktop-input factory absence from explicit command input and engine failures.
+Bounded Windows save publication now
+preserves a prior Continue through a failed writer and brief destination sharing;
+source effects and the authoritative writer do not replay. The rendered idle
+class predicate now reads the real current status-value owner, with eight
+source-proven defaults, separate mutable/effect pools, Float32 getter order and
+cold identity checks. Unbound descriptor command callbacks refuse before mutation.
+Its expanded combined offline run has 33 passes among 35 checks,
+one expected live-input boundary and one failed Player continuation. The body
+still fails at the next current Actor field child; balanced repeated frames,
+completed saves and the ordinary
+FO3 route remain implementation work. This batch does not close the recovery
+plan or qualify gameplay acceptance while the engine check fails. Fresh product
+runs continue to expose the next actual failure; they are diagnostic until all
+authoritative frame and save owners return.
+
+The current cohesive batch adds the shared C# menu-image capture/restoration and
+GPU-free receiver, source physical model factories and ordered graph extraction,
+headless native USER32 import dispatch, and selected sound DATA namespace. Focused
+and owned source checks pass, as does their required combined gate. Fresh FO3,
+FNV and TTW retries reach their independent retained gameplay/native failures.
+The reached compiled package callback and PCM observation repairs now pass the
+FO3 product repeat and complete required runtime gate. Native Logging passes the
+real authored native caller and fresh selected FNV/TTW product retries. ShowOff's
+previous null dereference is removed; its next Data function 1 producer is missing.
+Logical trigger membership, typed static NIF sound continuation, physical
+constructor inputs and native CALL suppression pass the next required gate.
+The actual FNV/TTW suppression retry exposes the source helper's independent
+protection/cache sequence. The raw NPC KF repair passes native cold sample,
+source-stop and retirement checks and actual opening NPC continuation observation.
+JIP, XR and the remaining selected TTW modules retain independent source failures.
+Six selected JohnnyGuitar CRT entries now pass the genuine x86 provider/IAT,
+error/floating ABI and natural-retirement fixture. This does not close the
+remaining native imports, interfaces or campaign execution.
+Original physical declarations cannot stand in for a
+live utility/world, and native mod targets retain their actual missing owners.
+
+Standalone FO3 requires offline production checks before another gameplay run.
+Its discarded save does not authorize replacing the preserved New Vegas save.
+Working gameplay remains the objective. The latest user direction supersedes
+the earlier source-publication deferral: preserve the complete source recovery,
+run its checks, publish a checked PR, merge and synchronize main. No PR or
+synchronization work replaces local gameplay acceptance. Continue
+through fresh birth, Vault 101 progression and exit, ordinary travel and a
+fully loaded Megaton with its source-selected people performing activities,
+including complete new saves, normal Quit and cold Continue along the route.
 scripts/Test-Fallout3OfflineStartup.ps1 aggregates source data, persistence/cold
-contracts and the actual configured Main clock tail without launching Godot.
+contracts, compiled result scopes, the configured Main clock tail and the C#
+production Main/Player CELL callers and Player scene virtual without a game
+launch. The optional pinned Godot argument checks the actual HUD projection
+headlessly, with source art/fonts and the same C# traits. A live window and
+DirectInput acquisition remain explicit product boundaries; authored input
+bytes only prove the pure getter and expose the following Player services.
+The current common-process getters now use their actual nullable constructor
+fields, class, epoch, gameplay lease and inventory guard. An owned caller with
+authored device bytes returns the following scalar stores, source empty queue
+and actual High zero-mask clear plus two independent post-process context
+queries and the actual empty timed-action update. The following process
+post-action update, two later context queries, separate detection-action timer
+and two Player scene-argument timers also return. Actor sorting and its independent
+timer reset now return before the High idle-animation update. The managed timer
+starts at zero with the deliberate retail-unwritten initialization difference
+reported; later source arithmetic and raw cold state are preserved. The shared
+interface actor list preserves its actual
+inline extent, inactive slots, nonempty insertion/removal/source sorting and
+cold state. The High idle child now owns its source constructor cells, repeated
+Player model selection, independent animation predicates and wait timer. Its actual
+constructor-null model arm returns in the owned prefix without a position query.
+The actual rendered first-person context/bound factories and current status-value
+predicate now have owned component proof. Nonnull pending-action/cache writers,
+the separate actor collision-body utility and its real body registration, later
+movement services, and runtime cohort/context producers still require binding.
+Other nonnull idle paths remain authored fixtures. Nonempty sorted fixtures and empty startup do not
+prove Megaton's loaded people or AI.
+Nonempty timed-action contracts preserve identity, refresh/prepend order,
+contextual removal and ordered expiry before source timer subtraction; other
+production writers and nonnull context acquisition remain independent.
+Resolved queue loads preserve order and duplicates; nonempty
+native node bindings and dirty mask model/controller writers remain independent
+owners. The requested
+route preflight includes Vault 101, the exterior and the real Megaton entrance;
+source topology and shared cold components cannot close ordinary travel or saves.
+The shared door handlers now admit and preserve source XTEL No Alarm instead
+of rejecting it as an unknown transition flag. Lock, destination and topology
+contracts cover both booleans, retained landing poses and cold restoration;
+crime/alarm gameplay remains independent and unaccepted.
 Fixture boundaries and unexecuted whole-game behavior remain explicit; a green
 isolated contract never overrides a failing production owner. Repair the first
 production failure offline, then use ordinary exported input for final gameplay
@@ -360,6 +503,13 @@ location-specific success paths.
 
 ## Performance, quality and evidence
 
+Apply [runtime ownership and engineering requirements](runtime-boundaries.md) to
+each repair: constructor dependencies for stable owners, explicit adapter
+lifecycles, shared protocol constants, typed configuration for tunable settings,
+indexed lookup and bounded per-frame work. Preserve source order and measure
+necessary higher-cost algorithms. Do not claim whole-engine compliance from a
+local cleanup or component pass.
+
 Keep cohesive owners and small files. Measure frame time, allocations, loading
 and repeated travel. Bound in-process source/decoded reuse by winning identity
 and lifetime; world/save owners retain state when presentation is evicted.
@@ -374,7 +524,7 @@ moving retail evidence. Simulator proof cannot establish hardware acceptance.
 Before pushing a runtime or claim change, run the selected owned-data audit and:
 
 ```powershell
-.\scripts\Test-GodotRuntime.ps1 -Godot 'D:\code\gd\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe'
+.\scripts\Test-GodotRuntime.ps1 -Godot 'D:\code\gd\Godot_v4.8-dev7_mono_win64\Godot_v4.8-dev7_mono_win64_console.exe'
 git diff --check
 ```
 

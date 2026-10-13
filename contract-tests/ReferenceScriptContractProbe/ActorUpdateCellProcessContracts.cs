@@ -5,7 +5,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
-internal static class ActorUpdateCellProcessContracts
+internal static partial class ActorUpdateCellProcessContracts
 {
     private const string Selection = "authored-actor-update-cell-process";
     private static readonly string[] Images =
@@ -25,6 +25,7 @@ internal static class ActorUpdateCellProcessContracts
             {
                 ActorByte(records, image); CellPhases(records, image); SourcePlacement(records, image);
                 ScriptAndCurrentCell(records, image);
+                LiveSummary(records, image);
             }
         }
         finally
@@ -32,7 +33,8 @@ internal static class ActorUpdateCellProcessContracts
             File.Delete(Path.Combine(directory, "StatePatch.esp")); File.Delete(Path.Combine(directory, "State.esm")); Directory.Delete(directory);
         }
         ExteriorSharedCellGraphContracts.Run();
-        Console.WriteLine("OPENNV_ACTOR_UPDATE_CELL_PROCESS_CONTRACT_PASS actualReader=true bothSelectedContracts=true actorByteIndependentOfEnable=true signedIntToggleQuery=true scriptConsumerJoined=true winnerMasterBound=true sourcePhaseOrder=true incompleteRootHeld=true coldRequiresNewNativeAttachment=true priorIdsNotAuthority=true sourcePlacementDistinctFromAncestry=true retirementPrefixRetained=true native=unexecuted");
+        SaveRequestSummary();
+        Console.WriteLine("OPENNV_ACTOR_UPDATE_CELL_PROCESS_CONTRACT_PASS actualReader=true bothSelectedContracts=true actorByteIndependentOfEnable=true signedIntToggleQuery=true scriptConsumerJoined=true winnerMasterBound=true sourcePhaseOrder=true incompleteRootHeld=true coldRequiresNewNativeAttachment=true priorIdsNotAuthority=true sourcePlacementDistinctFromAncestry=true retirementPrefixRetained=true liveSummaryRetainsFailures=true detailedStateUnchanged=true native=unexecuted");
     }
     private static void ActorByte(FalloutPluginStack records, string image)
     {

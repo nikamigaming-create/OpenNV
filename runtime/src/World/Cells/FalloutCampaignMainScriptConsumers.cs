@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.World.Cells;
 // missing original child retains its own boundary. Real tile animations,
 // source queue windows, published bodies and Menus.GameMode are not aliases.
 internal sealed class FalloutCampaignMainScriptConsumers(FalloutMainScriptCallerSource source,
-    Func<int, bool> actualOsKeyHighBit) : IFalloutMainScriptCallerConsumers, IFalloutMainCachedTailChildren
+    Func<int, bool> actualOsKeyHighBit, FalloutScriptSession? actualSession = null) : IFalloutMainScriptCallerConsumers, IFalloutMainCachedTailChildren
 {
     public FalloutMainScriptCallerSource Source { get; } = source;
     public string Owner => "actual-campaign-Main-script-children/" + Source.Identity;
@@ -76,7 +76,16 @@ internal sealed class FalloutCampaignMainScriptConsumers(FalloutMainScriptCaller
     public void ResetPublishedActorsAndPlayer(FalloutMainScriptInvocation invocation)
     { invocation.Require(FalloutMainScriptCallerStep.CachedTailBefore); throw Unowned("ordered-actor-registry-native-reset-and-Player-reset"); }
     public void PublishRendererClock(FalloutMainScriptInvocation invocation, float scaledSeconds)
-    { invocation.Require(FalloutMainScriptCallerStep.CachedTailAfter); throw Unowned("separate-renderer-scaled-clock-consumer"); }
+    {
+        invocation.Require(FalloutMainScriptCallerStep.CachedTailAfter);
+        if (Source.HasNewVegasChildren) throw Unowned("separate-renderer-scaled-clock-consumer");
+        invocation.Owner.PublishSourceRendererClock(invocation, scaledSeconds,
+            actualSession ?? throw Unowned("renderer-clock-actual-script-session"));
+    }
     public float ReadRegisteredClockChannel(FalloutMainScriptInvocation invocation, int index)
-    { invocation.Require(FalloutMainScriptCallerStep.CachedTailAfter); throw Unowned("registered-source-clock-channel-" + index); }
+    {
+        invocation.Require(FalloutMainScriptCallerStep.CachedTailAfter);
+        if (Source.HasNewVegasChildren) throw Unowned("registered-source-clock-channel-" + index);
+        return invocation.Owner.ReadSourceRegisteredClock(invocation, index);
+    }
 }

@@ -12,6 +12,14 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
+            if (OS.GetCmdlineUserArgs() is ["--node-emitter-persistence"])
+            {
+                await ExerciseNodeEmitterPersistence(); GetTree().Quit(); return;
+            }
+            if (OS.GetCmdlineUserArgs() is ["--unowned-pcm-observation"])
+            {
+                await ExerciseUnownedPcmObservation(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--modeled-light-contracts"])
             {
                 ExerciseModeledLights(); GetTree().Quit(); return;

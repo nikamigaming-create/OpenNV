@@ -1,29 +1,198 @@
 # Product status
 
-The prior published baseline is checked PR190 at 6b00011e. The source now
-integrates standalone Main images, valid short image profiles and offline
-production startup checks. Release/Debug, analyzers, contracts, launcher and
-headless Godot checks pass for this slice. The FO3 offline readiness run remains
-blocked by actual production and owned layout failures.
+Current work is recovery of New Vegas, standalone FO3 and TTW, with actual
+opening-route gameplay, persistent saves and a phone-friendly video required
+before proceeding through the remaining levels. No accepted video exists yet.
+The latest user direction authorizes publishing all source recovery through a
+checked PR and synchronizing main with GitHub. Source backup and integration do
+not establish working campaigns or qualify a release.
+The selected engine/SDK/launcher/CI pin has moved to official Godot 4.8-dev7 Mono
+and .NET 10. Matching export templates and the complete combined runtime gate
+pass, including Release/Debug, analyzers, native domains and Godot loading.
+4.8 texture streaming is enabled, but direct owned DDS uploads are still
+resident. Actual FO3 Vulkan diagnostics show 1.37-1.68 GB total texture memory
+and zero streamed/budget bytes through birth and character creation. Neither
+complete texture-streaming integration nor whole-game performance is accepted.
+The no-argument executable entry now opens the actual launcher. Its full runtime
+gate and controlled Vulkan/D3D12 ten-frame startup checks pass. The current
+native 1280x720 viewport readback shows the launcher; temporary frames were
+removed. The development export remains unaccepted; live Windows activation/capture fails
+with "failed to activate captured window" and ordinary input is unexecuted.
+A direct Windows session API check confirms that the game's session is locked.
+Foreground desktop and retail input require it to be unlocked; headless simulation
+work continues independently. Engine-owned launcher viewport readback has worked
+while locked. The new --command-input route also loads actual FO3 through Vulkan
+while locked, shows the source character-creation screen and accepts ordinary page
+controls. The fresh 4.8 Vulkan replay reaches CG00 stage 100 through ordinary
+Boy/name/page/Done/Yes input, clearing the earlier stage-65 presentation failure.
+One actual 1280x720 frame was inspected and deleted in finally. Normal Quit
+completes source-owner retirement without creation-replacement or null-multimesh
+errors. Player physics still refuses Main; Create New Save remains pending and
+Cancel Save leaves no complete save. Live status uses typed save-queue/CELL
+summaries, and the bounded viewport client completes readback. Detailed state and
+save refusals remain intact; a final Debug sample still costs 35.93 ms to
+construct its snapshot and 4.74 ms to serialize. Continuous gameplay capture
+remains unaccepted. The 4.8 owned FO3 audit retains 33 passes, one expected
+desktop-input boundary and one real Player movement failure among 35 checks.
+Fresh 4.8 headless FNV/TTW retries retain all 10/18 selected plugins, pass the
+previous JIP protocol-38 failure and stop at its actual callback-50 mutation;
+TTW also retains missing native callable imports. Both exit one without a save.
+Input selection is independent of the rendering backend. The explicit headless route feeds the same control,
+script/native input and persistence owners without a HWND. Actual FO3 New Game
+reaches the Vault birth cell, then fails at the independent Actor collision-body
+utility. Ordinary Boy/name confirmation in the latest repeat reaches CG00 stage
+100 after ordinary character creation, with the same retained Main failure. Compiled screen blood runs through
+the shared effect with two original DDS inputs and no GPU resources. The next
+stage-result menu image capture now returns through the shared C# manager/receiver.
+Compiled package callbacks return in the fresh product run; owned winning header
+audits pass independently for all three selected sources. PCM observations retain
+unsupported emitter reasons without losing telemetry or admitting complete saves.
+Raw KF sound keys now use the typed NIF emitter resolver. A fresh actual opening
+NPC reports ready PCM continuations; native cold playback retains the exact sample
+suffix, random state and source stopping. Logical trigger membership cold restore
+also passes, while physical contact production and source order remain divergent.
+Separate synchronous
+headless HDR construction removes the initial selection loss in that repeat;
+state-publication failures remain zero. Pause/Quit Game/Yes use the real UI and
+the process exits zero after reader/resource retirement. The prior native crash
+remains a diagnostic; repeatable complete-game teardown is not established.
+Ordinary Create New Save remains deferred by the incomplete source invocation;
+Cancel Save and normal Quit finish with no complete save. Complete headless
+gameplay, saves and cold Continue remain unaccepted.
+Rendering must consume simulation state
+without making GPU availability a gameplay prerequisite. No footage exists.
+The refreshed Release development export contains the status-value/callback
+guard repair and passes its headless default-entry check.
+TTW's owned source setup resolves 18 plugins with no missing dependency packages.
+Its latest product launch passes layered sound startup and reaches native module
+admission; the shared selected DATA namespace passes owned startup/cold checks
+for all three games. Actual FNV selected native admission passes USER32 import
+binding and passes JIP's repaired source cache-flush/protection sequence. The next
+typed source-image mutation refuses; the selected stack also retains unowned
+Console/PlayerControls interfaces.
+The source-backed Logging owner passes its real authored native caller, selected
+config bytes, private diagnostic output and retirement checks. Fresh selected
+FNV/TTW retries pass the previous Logging null dereference; ShowOff now refuses
+Data function 1's missing native class/cache/extra-data producer. Selected TTW
+JohnnyGuitar, Stewie and TTW NVSE imports retain independent callable-owner failures;
+the six selected string/conversion/math CRT imports pass exact original-provider,
+IAT, native ABI/error and natural-retirement checks. Remaining import owners and
+native CRT thread-state cold persistence still refuse complete compatibility.
+The XR plugin rejects this source version. No selected module is omitted.
+Headless USER32 layout/conversion contracts pass after removing the unconditional
+window requirement at import binding. Reached window/message-queue operations
+still refuse. Launcher TTW selection and campaign acceptance remain pending. The mobile
+MP4 converter passes media-format checks only; no gameplay take was recorded.
+The constructor-input, trigger-membership, native CALL suppression and static
+NIF sound-emitter batch passes the required combined runtime gate. Raw KF dispatch
+passes a later Debug build and native sound/cold/retirement focus. Protocol 38
+suppression focus now preserves actual failed SDK restoration, RWX/shared-page
+protection, genuine cache flushes, fresh cold domains and natural retirement.
+All six CRT native focuses also pass at protocol 38. The coordinated gate passes;
+fresh FNV/TTW retries preserve their next actual native refusals, including the
+nine remaining JohnnyGuitar imports. The eighteen-point standard convex
+projection is an input contract; canonical hulls, state behavior, real bodies,
+world admission and source contact production still require implementation.
+
+The immediate engine repair is standalone FO3. The source integrates Main
+images, valid short image profiles, the independent renderer clock, all four
+registered clock channels and qualified compiled assignments. The owned layout
+audit frames every nonempty compiled scope with zero failures; one uncompiled
+terminal entry remains explicit. The source Player HUD/reference-frame, scalar
+cache reset and current-thread initializer now pass focused checks; the real
+native HUD projection passes headlessly. Production binds the existing actual
+input owner. The actual common process's nullable weapon-entry and animation
+getters now return in the owned caller with authored device bytes. Following
+scalar stores, the actual empty reference queue and the High process zero-mask
+clear, two independent post-process context queries and the following real
+empty timed-action update also return. Timed-action refresh/prepend, contextual
+removal, ordered expiry and timer overshoot pass focused checks; other producers
+remain unbound. The next process post-action update, two later context queries,
+independent detection-action timer and two Player scene-argument timers now
+return in the owned prefix. Current/cold state preserves their independent
+cells and stores without replay. The shared interface actor-distance list owns
+nonempty insertion, source sorting, first removal and full inactive slot state;
+focused and owned-source checks pass. The Player distance-sort/reset now returns
+in the owned prefix, with actual scene timing and source-rounded distance math.
+Managed zero initialization intentionally differs from the retail constructor's
+unwritten timer and is reported; initial-byte parity remains unaccepted. Its
+production cohort/context producers remain unbound. The High idle-animation
+update now returns the actual null-model constructor arm in the owned prefix.
+Focused checks cover source timer/predicate behavior, first-person model selection,
+mid-call retirement, committed failures and cold history. The rendered first-person
+assembly now binds independent animation and posed-bound factories, with actual
+headless owned-body proof, fresh identities and retirement checks. The idle class
+predicate now reads the actual Player current status value through its selected
+virtual/getter. Eight source-declared status defaults, separate mutable/effect
+pools, Float32 addition order and cold reconstruction pass owned/focused checks.
+Unbound descriptor change callbacks refuse before script mutation. Nonnull cache
+writers and pending action transitions remain unbound. The real
+current package supplies the independent state predicate's null/non-kind-three
+arms; kind three's action-state table stays unbound. The successful thread
+epilogue restores the prior kind and passes repeated-call contracts, but the
+production body still never reaches it. High process movement read/clear and the
+independent PlayerMover constructor/getters now return. Current/cold state retains
+the clear and distinct Actor movement byte, while the next current Actor field
+child and later movement services remain open. Windows atomic save publication
+now retries brief destination sharing without replaying a writer or effects.
+Controlled failure preserves Continue bytes/timestamp; persistent sharing refuses
+and cleans scratch. New Vegas common v7 cold state remains readable. Queue load order/duplicates,
+callback removals and cold history pass focused checks; nonempty native node
+bindings remain unbound. The following full Player scene continuation,
+nonnull context/equipment writers and the headless device boundary
+remain open. The route preflight checks Vault/Megaton source doors, persistent
+exterior cells and shared cold state. Fallout 3 is not accepted as playable.
+The expanded combined FO3 offline run with the pinned Godot has 33 passes among 35 checks, one exact
+expected desktop-input factory boundary and one failed engine continuation. It
+still refuses gameplay acceptance and complete save/Quit/cold Continue. No new
+playable candidate or publication is claimed. The complete required runtime
+gate passes for the image-menu, physical-model, native USER32 and selected sound
+namespace batch and the subsequent package/PCM/native Logging batch, including
+Release/Debug builds, analyzers and native sound continuation checks.
+docs/current-work.md owns the latest result.
+
+Actual actor source assemblies now own C# factories and original ordered physical
+graphs. Owned third-person skeletons have 18 bodies and 17 registrations; the
+first-person skeleton has no bodies. The authored graph checks pass independently
+for all three sources. These declarations do not supply the living dynamic world,
+utility body registration, contact/constraint callbacks or cold physical state.
+The current pinned static-body/Area3D presentation cannot qualify that utility.
+The route audit found and repaired the shared XTEL No Alarm rejection affecting
+Megaton doors. Destination, route and lock consumers retain that boolean and
+the source landing pose; this is not acceptance of crime/alarm gameplay.
 docs/current-work.md owns current verified results, blockers
 and executable next work. The stable FNV Test pin remains fnv-windows-03c3d23a.
 
-October 11 user direction focuses exclusively on standalone FO3 and discards
-current saves. The user deleted the repository tmp directory, including its old
-candidate and private diagnostic saves/proposals. A fresh diagnostic export is
-rebuilt under local/fo3-recovery using the normal OpenNV user-profile save folder.
+October 11's standalone-FO3 direction is superseded by the three-profile recovery
+priority above. The user deleted the repository tmp directory, including its old
+candidate and private diagnostic saves/proposals. The earlier diagnostic export
+under local/fo3-recovery predates the current repairs; it is not a playable
+delivery. The FO3 user profile has no current save; the existing New Vegas save
+is preserved unchanged.
 The owned Main image-profile audit now passes all 74 winning FO3 records,
 including eleven valid short 132-byte records previously rejected by the native
 profile owner. Explicit unwritten-cell state survives serialization and fresh
 cold bindings; source arithmetic cannot turn it into invented values. Focused
-Debug image contracts pass. Ordinary New Game passes the image owner and fails
-at the separate renderer-clock publication child. The game is closed. A new
-offline runner reproduces that failure using production Main consumers, the
-owned source timer and configured cached tail; native/Player fixture boundaries
+Debug image contracts pass. The earlier ordinary New Game refusal was at the
+renderer-clock publication child. That source owner and current/serialized/cold
+production-tail checks now pass locally. Ordinary gameplay remains unaccepted. The offline
+runner additionally enters the production C# Main/Player CELL callers and Player
+scene virtual. Source HUD, four scalar resets and thread entry return before the
+headless input-manager factory boundary. An authored input-state fixture retains
+the following unowned Player continuation after real common-process queries,
+scalar stores, the source empty queue and a returned actual process clear.
+Native/Player fixture boundaries
 remain explicit. Independent save/current/cold and all winning compiled layout
-checks run without launching Godot. The latter retains a genuine reference-call
-header refusal and unowned result families. Ordinary gameplay and save/reload
-remain unaccepted; the required combined component gate passes for these changes.
+checks run without Godot; the optional actual HUD projection uses headless Godot.
+Ordinary gameplay and save/reload remain unaccepted.
+
+The October 9-10 integration made the unfinished standalone Player scene
+update mandatory. Older evidence establishes bounded Vault 101 interactions
+and limited cold checkpoints before this current startup refusal; it does not
+establish a completed Megaton route. The user requires continuing locally
+through ordinary fresh birth, Vault progression/exit, travel and fully populated
+Megaton, with normal saving/Quit/cold Continue. Origin publication waits for
+gameplay acceptance.
 
 Full 1:1 FNV, FO3, TTW, selected DLC/mod behavior and flat/OpenXR remain unfinished.
 All 36 broad requirements are open; no completion percentage or matched-retail
@@ -42,11 +211,11 @@ audits pass; their counts establish metadata only.
 
 FO3's post-null pending query now uses its genuine Main word. Its scene query
 reads the actual forced first-person field before null reference input and
-preserves the next independent HUD-child refusal. Nonnull production scene
-reference factories remain unbound. The integrated query, branch-history cold
+calls its independently owned HUD child even for a null reference. Nonnull
+production scene reference factories remain unbound. The integrated query, branch-history cold
 receipt comparisons and native contact regressions pass the combined checks.
-Actual FO3 exported New Game now stops at the separate renderer-clock child;
-the scene query has not been reached through this ordinary replay.
+The previous exported New Game stopped at the renderer-clock child; that export
+predates the local fix. Its replacement is not accepted without ordinary replay.
 
 False-success shortcuts found in the inherited unpublished batch are removed:
 unowned Main/Player children, missing menu writers, driver failures, incomplete
@@ -57,9 +226,10 @@ through those shortcuts establishes current acceptance.
 
 FNV's pending post-null query requires its separate save/load manager and actual
 load/reset writers; returning a constructor constant is insufficient. Actual
-FO3 startup now refuses the separate renderer-clock publication and registered
-clock-channel producers. Its later Player HUD/reference-frame consumer and real
-menu/device writers remain separate implementation owners. Installed native-module failures remain independent:
+FO3's local renderer clock and registered channels now pass their component
+contracts. Its Player HUD/reference-frame consumer now shares source traits with
+the actual native HUD. Remaining actor branches and real menu/device writers
+stay separate implementation owners. Installed native-module failures remain independent:
 JIP's reached clock/actor body, FNVXR interfaces/unload EOF, and ShowOff Load are
 not closed by choosing vanilla.
 
@@ -71,8 +241,9 @@ then rejects the missing owners above and recovers to the source menu. Normal
 source Quit returns exact process exit code zero in both games. No campaign save
 was created and frame recording remained off. That candidate was unusable for the
 requested fresh gameplay; do not hand off a replacement until New Game works.
-The additional broad compiled-field audit remains incomplete, with unowned
-scope selection families and one genuine FO3 reference-call header refusal.
+The broad compiled layout audit now includes package, terminal, patrol and perk
+result scopes and accepts the original reference-qualified Set header. Semantic
+execution of every reached result family remains independently unverified.
 Physical headset, complete Pip-Boy/fast travel,
 opening completion, broader campaigns, mods, audio/rendering and final pixels
 remain unaccepted. Owned inputs and private observations never enter publication.

@@ -14,8 +14,14 @@ internal sealed partial class RuntimeLiveContentSource
     // Explicit launch selection is part of this source/save identity. A base
     // game profile selects no original extension DLLs; an installed-mod profile
     // retains the complete winning DLL graph and every reached failure.
+    internal string NativePluginDirectory => Game switch
+    {
+        FalloutNewVegasGame => "NVSE/Plugins",
+        Fallout3Game => "FOSE/Plugins",
+        _ => throw new NotSupportedException("Selected game has no native plugin directory owner."),
+    };
     internal IEnumerable<string> NativePluginResourcePaths() => NativePluginsEnabled
-        ? ResourcePathsUnder("NVSE/Plugins").Where(path => Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase))
+        ? ResourcePathsUnder(NativePluginDirectory).Where(path => Path.GetExtension(path).Equals(".dll", StringComparison.OrdinalIgnoreCase))
         : [];
     internal void BindNativePluginHostDependency(FalloutNativePluginHostDependency dependency)
     {

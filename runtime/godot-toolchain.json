@@ -1,0 +1,14 @@
+{
+  "release": "4.8-dev7",
+  "sdk": "4.8.0-dev.7",
+  "versionPrefix": "4.8.dev7.mono.official.",
+  "windowsArchive": "Godot_v4.8-dev7_mono_win64.zip",
+  "windowsDirectory": "Godot_v4.8-dev7_mono_win64",
+  "windowsConsole": "Godot_v4.8-dev7_mono_win64_console.exe",
+  "downloadUrl": "https://github.com/godotengine/godot-builds/releases/download/4.8-dev7/Godot_v4.8-dev7_mono_win64.zip",
+  "archiveSha256": "f323707065ce30525b0d7d303b027552007d752e38fb802e9c0c7d42cc57d627",
+  "exportTemplatesArchive": "Godot_v4.8-dev7_mono_export_templates.tpz",
+  "exportTemplatesVersion": "4.8.dev7.mono",
+  "exportTemplatesUrl": "https://github.com/godotengine/godot-builds/releases/download/4.8-dev7/Godot_v4.8-dev7_mono_export_templates.tpz",
+  "exportTemplatesSha256": "19b9558f646addde1e081f8298f3f314e0d53a78fd3a770fe3110e0cafa3cec6"
+}

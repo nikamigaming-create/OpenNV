@@ -446,6 +446,11 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     }
     private NativePluginDomainFaultException Fatal(Exception error)
     {
+        // Cancellation callbacks run in reverse registration order. Pending
+        // pipe I/O can therefore wake this caller before the earlier watchdog
+        // records its timeout. Both paths must retain the same deadline fault.
+        if (error is OperationCanceledException && _transaction?.IsCancellationRequested == true)
+            error = new TimeoutException("Native transaction exceeded its complete call/callback deadline.", error);
         error = RetainIncompleteSourceFilePrefixes(error);
         MarkFault(error, null); StopOwnedChild(); return FaultException(error);
     }

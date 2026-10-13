@@ -461,6 +461,7 @@ bool mapping_close_handle(HANDLE, BOOL&);
 void mapping_flush_detach();
 void mapping_retire();
 void* crt_import_entry(const std::string&, const std::string&, void*);
+bool crt_pure_import_name(const std::string&, const std::string&);
 bool crt_io_import_name(const std::string&, const std::string&);
 void* crt_dynamic_entry(HMODULE, const std::string&);
 void crt_flush_detach();

@@ -10,8 +10,9 @@ namespace OpenNV.Runtime.World.Cells;
 internal partial class RuntimeNativeReferenceEvents : Node
 {
     private sealed record Binding(FalloutPlacedReference Reference, FalloutReferenceInstance Instance, string Signature,
-        Node3D? Presentation, Area3D? Trigger, FalloutTriggerContacts Contacts)
+        Node3D? Presentation, Area3D? Trigger)
     {
+        internal FalloutTriggerContacts Contacts => Instance.TriggerContacts;
         internal bool Loaded;
         internal bool ReportedError;
         internal FalloutFormKey? PendingActivation;
@@ -62,6 +63,9 @@ internal partial class RuntimeNativeReferenceEvents : Node
         triggers = _bindings.Values.Count(value => value.Trigger is not null),
         shapedPhantoms = _bindings.Values.Sum(value => value.ShapePhantoms.Count),
         sourceContactSaveBlocker = ContactSaveBlocker,
+        logicalTriggerMembership = _bindings.Values.Where(binding => binding.HasContactVolumes || binding.Contacts.HasAdmittedContacts)
+            .Select(binding => binding.Contacts.Capture()).ToArray(),
+        logicalTriggerMembershipBoundary = "retained C# admission history; source contact producer and native cold continuation remain unowned",
         activationRelays = _world.ActivationRelayState,
         activationParentIssues = _world.ActivationParentIssues.Select(value => new
         { child = value.Child.ToString(), parent = value.Parent.ToString(), error = value.Error }).ToArray(),
@@ -161,7 +165,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
                 instance.ScriptError ??= "Contact binding: " + error.Message;
             }
             _bindings.Add(reference.FormKey, new(reference, instance, cell.BaseObjects[reference.Base].Signature,
-                node, trigger, new())
+                node, trigger)
             { ShapePhantoms = shapePhantoms });
         }
         if (_presentation != presentation)

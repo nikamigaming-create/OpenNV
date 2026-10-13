@@ -48,7 +48,7 @@ public static partial class HarnessProcessAudio
         {
             instance = IntPtr.Zero;
             if (iid != new Guid("00000003-0000-0000-C000-000000000046")) return CustomQueryInterfaceResult.NotHandled;
-            return Marshal.QueryInterface(_marshaler, ref iid, out instance) == 0
+            return Marshal.QueryInterface(_marshaler, in iid, out instance) == 0
                 ? CustomQueryInterfaceResult.Handled : CustomQueryInterfaceResult.Failed;
         }
         public void Dispose() { if (_marshaler != IntPtr.Zero) { Marshal.Release(_marshaler); _marshaler = IntPtr.Zero; } }

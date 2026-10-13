@@ -4,7 +4,7 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
-internal static class ScreenBloodContracts
+internal static partial class ScreenBloodContracts
 {
     private sealed class Presentation
     {

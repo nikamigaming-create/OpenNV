@@ -34,6 +34,20 @@ internal static class SoundEmitterPersistenceContracts
             bone with { SkeletonPath = "meshes\\..\\skeleton.nif" }, bone with { SkeletonPath = "sound\\skeleton.nif" },
             bone with { SkeletonSha256 = "missing" }, bone with { Block = -1 }, bone with { Name = "" }
         }) Reject(() => (saved with { Events = [saved.Events[0] with { Playback = playback with { SourceBone = invalid } }] }).Validate());
+        var node = new FalloutAnimationSoundNodeEmitterSnapshot(reference, "meshes\\fixture\\object.nif", new string('c', 64), 3, "");
+        var nodePlayback = playback with { SourceBone = null, SourceNode = node, EmitterPath = "@Node3D@1/Emitter" };
+        var nodeSaved = saved with { Events = [saved.Events[0] with { Playback = nodePlayback }] };
+        nodeSaved.Validate();
+        Require(JsonSerializer.Deserialize<FalloutAnimationSoundEventsSnapshot>(JsonSerializer.Serialize(nodeSaved))!.Events[0].Playback == nodePlayback,
+            "Typed source node identity changed across serialized sound continuation.");
+        foreach (var invalid in new[]
+        {
+            node with { Reference = new("Pose.esm", 0x902) }, node with { ModelPath = "meshes/fixture/object.nif" },
+            node with { ModelPath = "sound\\object.nif" }, node with { ModelSha256 = "missing" },
+            node with { Block = -1 }, node with { Name = null }, node with { Block = null }
+        }) Reject(() => (nodeSaved with { Events = [nodeSaved.Events[0] with { Playback = nodePlayback with { SourceNode = invalid } }] }).Validate());
+        (nodeSaved with { Events = [nodeSaved.Events[0] with { Playback = nodePlayback with { SourceNode = node with { Block = null, Name = null } } }] }).Validate();
+        Reject(() => (nodeSaved with { Events = [nodeSaved.Events[0] with { Playback = nodePlayback with { SourceBone = bone } }] }).Validate());
         // Old stable root/node paths keep their old schema shape. Anonymous
         // legacy history can still be read; its native binding stays refused.
         (saved with { Events = [saved.Events[0] with { Playback = playback with { SourceBone = null, EmitterPath = "." } }] }).Validate();

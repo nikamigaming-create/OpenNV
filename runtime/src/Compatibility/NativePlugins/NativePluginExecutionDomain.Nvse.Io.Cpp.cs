@@ -30,8 +30,10 @@ internal sealed partial class NativePluginExecutionDomain
         ++_callDepth;
         try
         {
+            var publicationCall = checked(_nextRequest + 1);
             using var reader = Exchange(NativePluginDomainOperation.CrtRuntime, Payload(writer => writer.Write(plugin.Module)));
-            var standardCount = reader.ReadUInt32(); var cppCount = reader.ReadUInt32(); Finish(reader);
+            var standardCount = reader.ReadUInt32(); var cppCount = reader.ReadUInt32();
+            ReadCrtPureBindings(reader, owner, publicationCall); Finish(reader);
             if (standardCount != _crtStandardStreams.Count || cppCount != _cppRuntimeBindings.Count ||
                 (owner.CppProvider is not null) != _cppRuntimePublished)
                 throw new InvalidDataException("Actual CRT runtime publication lost an independently retained provider/standard stream.");

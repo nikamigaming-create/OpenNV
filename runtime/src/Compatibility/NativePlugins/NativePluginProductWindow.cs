@@ -7,32 +7,34 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 // Lives on the actual Godot window/message thread. USER32 virtual-key bytes
 // are never derived from DirectInput scan codes, Godot edges or guessed zeros.
-internal sealed partial class NativePluginProductWindow
+internal sealed partial class NativePluginProductWindow : INativePluginProductUser32
 {
     private readonly int _managedThread = Environment.CurrentManagedThreadId;
     private readonly FalloutDirectInputState _input;
-    internal string SourceIdentity => _input.Source;
-    internal uint Window { get; }
-    internal uint Thread { get; }
-    internal uint Process { get; }
-    private readonly HashSet<uint> _layouts = [];
+    public string SourceIdentity => _input.Source;
+    public uint Window { get; }
+    public uint Thread { get; }
+    public uint Process { get; }
+    private readonly NativePluginUser32Keyboard _keyboard;
     private readonly HashSet<uint> _enumerating = [];
     private readonly Dictionary<(uint, uint), bool> _attachments = [];
     private Rect? _previousClip, _currentClip;
     private int _readers;
     private bool _retired;
     private bool _enumerationEntered;
-    private bool _keyboardConversionEntered;
 
     internal NativePluginProductWindow(FalloutDirectInputState input)
     {
+        if (input.Provider != FalloutInputProvider.WindowsDirectInput)
+            throw new NotSupportedException("Window SDK imports require the Windows input provider; headless input owns no HWND.");
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Original window imports require real Windows.");
         _input = input; input.RequireCurrent(); Window = HandleBits((nint)input.Window);
         Thread = GetWindowThreadProcessId(Pointer(Window), out var process); Process = process;
         if (Window == 0 || Thread == 0 || process != Environment.ProcessId || Thread != GetCurrentThreadId() || !IsWindow(Pointer(Window)))
             throw new InvalidDataException("Native window is not the actual living Godot product/message thread.");
+        _keyboard = new(input, Thread);
     }
-    internal IDisposable Retain()
+    public IDisposable Retain()
     {
         Require(); var inputLease = _input.RetainNativeReader(); ++_readers;
         return new ReaderLease(this, inputLease);
@@ -47,7 +49,7 @@ internal sealed partial class NativePluginProductWindow
             input.Dispose(); --owner._readers; _released = true;
         }
     }
-    internal void Require()
+    public void Require()
     {
         RequireThread(); ObjectDisposedException.ThrowIf(_retired, this);
         _input.RequireCurrent();
@@ -75,16 +77,12 @@ internal sealed partial class NativePluginProductWindow
         if (window != Pointer(Window) && !IsChild(Pointer(Window), window))
             throw new InvalidOperationException("Original input mutation requires the actual foreground product window.");
     }
-    private nint Layout(uint value)
-    {
-        if (value == 0) return 0;
-        if (!_layouts.Contains(value)) throw new NotSupportedException("Keyboard layout has no actual source/thread SDK observation.");
-        return Pointer(value);
-    }
-    internal NativePluginWindowResult Execute(NativePluginWindowOperation operation, uint target, uint incoming,
+    public NativePluginWindowResult Execute(NativePluginWindowOperation operation, uint target, uint incoming,
         uint childThread, ReadOnlySpan<byte> payload, Func<uint, (int Result, uint LastError)>? enumerate = null)
     {
-        Require(); var bytes = payload.ToArray(); uint result; uint? observedError = null;
+        Require();
+        if (NativePluginUser32Keyboard.Handles(operation)) return _keyboard.Execute(operation, incoming, childThread, payload);
+        var bytes = payload.ToArray(); uint result; uint? observedError = null;
         uint Read(int at) => BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(at));
         void Extent(int expected) { if (bytes.Length != expected) throw new InvalidDataException("Window call has an incomplete/extra public ABI extent."); }
         var handle = target == 0 ? 0 : Pointer(target);
@@ -163,30 +161,6 @@ internal sealed partial class NativePluginProductWindow
                 using (var buffer = new Pinned(bytes)) { SetLastError(incoming); result = unchecked((uint)ClipCursor(bytes.Length == 0 ? 0 : buffer.Pointer)); observedError = GetLastError(); }
                 if (result != 0) { if (!GetClipCursor(out var current)) throw new System.ComponentModel.Win32Exception(unchecked((int)GetLastError())); _currentClip = current; }
                 bytes = []; break;
-            case NativePluginWindowOperation.GetKeyboardLayout:
-                Extent(4); var queriedThread = Read(0);
-                if (queriedThread != 0 && queriedThread != Thread && queriedThread != childThread)
-                    throw new NotSupportedException("Keyboard layout targets an unowned thread.");
-                SetLastError(incoming); result = HandleBits(GetKeyboardLayout(queriedThread == 0 ? Thread : queriedThread)); observedError = GetLastError();
-                if (result != 0) _layouts.Add(result); bytes = []; break;
-            case NativePluginWindowOperation.GetKeyboardState:
-                Extent(256);
-                using (var buffer = new Pinned(bytes)) { SetLastError(incoming); result = unchecked((uint)GetKeyboardState(buffer.Pointer)); observedError = GetLastError(); }
-                break;
-            case NativePluginWindowOperation.MapVirtualKey:
-                Extent(12); var layout = Layout(Read(8)); SetLastError(incoming); result = MapVirtualKeyExA(Read(0), Read(4), layout); bytes = []; break;
-            case NativePluginWindowOperation.ToUnicode:
-                if (bytes.Length < 280 || Read(8) != 0 || Read(12) > int.MaxValue || bytes.Length != 280L + Read(12) * 2L)
-                    throw new InvalidDataException("Unicode conversion lacks its exact virtual-key/input/output capacity.");
-                var keyLayout = Layout(Read(20));
-                using (var buffer = new Pinned(bytes))
-                {
-                    if ((Read(16) & 4U) == 0) _keyboardConversionEntered = true;
-                    SetLastError(incoming); result = unchecked((uint)ToUnicodeEx(Read(0), Read(4), buffer.Pointer + 24,
-                        buffer.Pointer + 280, checked((int)Read(12)), Read(16), keyLayout));
-                    observedError = GetLastError();
-                }
-                break;
             case NativePluginWindowOperation.PostMessage:
                 handle = Owned(target); Extent(12); Foreground(); var message = Read(0);
                 if (!(message is 0 or 0x10 or 0x1f or 0x112 || message is >= 0x100 and <= 0x109 || message is >= 0x200 and <= 0x20e))

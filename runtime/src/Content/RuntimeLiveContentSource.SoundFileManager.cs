@@ -8,6 +8,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed partial class RuntimeLiveContentSource
 {
     private FalloutArchiveFileManager? _soundFileManager;
+    private FalloutSoundSearchNamespace? _soundSearchNamespace;
     private readonly List<FileStream> _soundInvalidationLeases = [];
 
     internal FalloutMenuSoundDirectory ObserveSourceMenuDirectory(FalloutPluginStack records,
@@ -48,7 +49,7 @@ internal sealed partial class RuntimeLiveContentSource
             StackId + "\0" + JsonSerializer.Serialize(_layers.Roots));
         try
         {
-            var roots = RequireStartupSoundSearchRoots(modes);
+            var search = RequireStartupSoundNamespace(modes);
             var name = modes.InvalidationFile.Value;
             FalloutArchiveNameHash.RequireAscii(name);
             if (string.IsNullOrEmpty(name) || Path.GetFileName(name) != name || name.IndexOfAny(['\\', '/', ':']) >= 0)
@@ -56,18 +57,14 @@ internal sealed partial class RuntimeLiveContentSource
             // The pre-registration source lookup tries its direct installation
             // namespace first, then the actual startup DATA prefix. It does
             // not merge files or reuse a later archive resource winner.
-            foreach (var root in roots)
+            if (search.FindStartupFile(name) is { } found)
             {
-                var found = Directory.EnumerateFileSystemEntries(root).Where(path =>
-                    Path.GetFileName(path).Equals(name, StringComparison.OrdinalIgnoreCase)).ToArray();
-                if (found.Length > 1) throw new InvalidDataException("Actual invalidation input has ambiguous source spelling.");
-                if (found.Length == 0) continue;
-                var file = new FileStream(found[0], FileMode.Open, FileAccess.Read, FileShare.Read);
+                var file = new FileStream(found, FileMode.Open, FileAccess.Read, FileShare.Read);
                 _soundInvalidationLeases.Add(file);
                 if (file.Length > 1024 * 1024)
                     throw new NotSupportedException("Source invalidation input exceeds the bounded inspected list extent.");
                 var hash = Convert.ToHexString(SHA256.HashData(file)).ToLowerInvariant();
-                return new(FalloutAdvancementRuntimeReceipt.Hash(scope + "\0" + found[0]), true, file.Length, hash);
+                return new(FalloutAdvancementRuntimeReceipt.Hash(scope + "\0" + found), true, file.Length, hash);
             }
             return new(scope, false, 0, null);
         }
@@ -79,19 +76,12 @@ internal sealed partial class RuntimeLiveContentSource
         }
     }
 
-    private IReadOnlyList<string> RequireStartupSoundSearchRoots(FalloutArchiveStartupModes modes)
+    private FalloutSoundSearchNamespace RequireStartupSoundNamespace(FalloutArchiveStartupModes modes)
     {
         var installation = Path.GetDirectoryName(FalloutExecutablePath) ?? throw new InvalidDataException("Selected image lost its installation root.");
-        var data = Path.GetFullPath(Path.Combine(installation, "Data"));
-        var local = modes.LocalMasterPath.Value.Replace('\\', Path.DirectorySeparatorChar);
-        if (string.IsNullOrWhiteSpace(local) || Path.IsPathRooted(local) ||
-            !Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(installation, local))).Equals(
-                data, StringComparison.OrdinalIgnoreCase) ||
-            _layers.Roots.Count != 1 || !Path.TrimEndingDirectorySeparator(ContentRoot).Equals(data, StringComparison.OrdinalIgnoreCase))
-            throw new NotSupportedException("Source startup search roots require the actual single installation DATA registration; additional/changed roots need their real setter/merge owner.");
-        if (!Directory.Exists(installation) || !Directory.Exists(data))
-            throw new DirectoryNotFoundException("Actual selected startup search root is missing.");
-        return Array.AsReadOnly(new[] { installation, data });
+        var search = _soundSearchNamespace ??= new(installation, ContentRoot, _layers);
+        search.RequireLocalMasterPath(modes.LocalMasterPath.Value);
+        return search;
     }
 
     private void RetireSoundFileManager()

@@ -12,6 +12,7 @@ internal static partial class SourceMainScriptCallerContracts
     internal static void Run()
     {
         RunSourceMainImageContracts();
+        RunSourceImageMenuContracts();
         RunNativeMainRetirementContracts();
         RunMainMenuBoundaryContracts();
         RunProductRefusalContracts();

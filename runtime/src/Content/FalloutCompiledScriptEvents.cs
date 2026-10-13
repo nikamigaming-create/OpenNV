@@ -2,6 +2,16 @@ namespace OpenNV.Runtime.Content;
 
 internal static partial class FalloutCompiledScriptEvents
 {
+    internal const ushort PackageStart = 15;
+    internal const ushort PackageDone = 16;
+    internal const ushort PackageChange = 20;
+    internal static bool IsPackage(ushort opcode) => opcode is PackageStart or PackageDone or PackageChange;
+
+    internal const ushort Trigger = 24;
+    internal const ushort TriggerEnter = 26;
+    internal const ushort TriggerLeave = 27;
+    internal static bool IsTrigger(ushort opcode) => opcode is Trigger or TriggerEnter or TriggerLeave;
+
     // Original event declaration identities. This table supplies admission
     // identity only; it does not claim their filter or callback semantics.
     private static readonly string[] Names =

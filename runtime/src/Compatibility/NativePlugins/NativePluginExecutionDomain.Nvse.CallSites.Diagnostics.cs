@@ -1,8 +1,9 @@
 namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
+internal enum NativeSourceCallSiteFailureScope { SemanticPrefix, SdkFailureTail }
 internal sealed record NativeSourceCallSiteFailureReceipt(ulong Generation, int ProcessId, ulong Module,
     uint Thread, string ModulePath, string ModuleSha256, string StackSha256,
-    IReadOnlyList<NativeSourceCallSiteEvent> Events);
+    IReadOnlyList<NativeSourceCallSiteEvent> Events, NativeSourceCallSiteFailureScope Scope, int StartEvent);
 
 internal sealed partial class NativePluginExecutionDomain
 {
@@ -15,31 +16,36 @@ internal sealed partial class NativePluginExecutionDomain
     internal string? PrivateSourceCallSiteDeliveryFailure
     { get { lock (_faultGate) return _sourceCallSiteDeliveryFailure; } }
 
-    private void RetainSourceCallSiteFailure()
+    private void RetainSourceCallSiteFailure(int? sdkFailureStart = null)
     {
         var plugin = _nvsePlugin ?? throw new InvalidDataException("Source CALL failure lost its original module.");
-        var events = _sourceCallSiteEvents.ToArray();
-        if (events.Length == 0 || events[^1].Failure is null ||
+        var start = sdkFailureStart ?? 0;
+        if (start < 0 || start >= _sourceCallSiteEvents.Count)
+            throw new InvalidDataException("Source CALL diagnostic lost its exact event range.");
+        var events = _sourceCallSiteEvents.GetRange(start, _sourceCallSiteEvents.Count - start).ToArray();
+        if ((sdkFailureStart is null ? events[^1].Failure is null : events[0].SdkResult != 0 || events.Any(row => row.Site != events[0].Site)) ||
             events.Any(row => row.Generation != Generation || row.Module != plugin.Module ||
                 row.Thread != NativeThread || row.Callback == 0))
             throw new InvalidDataException("Source CALL failure lost its correlated callback prefix.");
         var receipt = new NativeSourceCallSiteFailureReceipt(Generation, ProcessId, plugin.Module,
-            NativeThread, plugin.Path, plugin.Sha256, _privateIo?.Selection.StackSha256 ?? "", events);
+            NativeThread, plugin.Path, plugin.Sha256, _privateIo?.Selection.StackSha256 ?? "", events,
+            sdkFailureStart is null ? NativeSourceCallSiteFailureScope.SemanticPrefix : NativeSourceCallSiteFailureScope.SdkFailureTail, start);
         lock (_faultGate)
         {
-            if (_sourceCallSiteFailure is not null) return;
             _sourceCallSiteFailure = receipt;
         }
         if (_privateIo is null)
         {
-            AppendDiagnostic(" Source CALL failure retained in memory; this domain has no private diagnostic owner.");
+            if (receipt.Scope == NativeSourceCallSiteFailureScope.SemanticPrefix)
+                AppendDiagnostic(" Source CALL failure retained in memory; this domain has no private diagnostic owner.");
             return;
         }
         try
         {
             var path = _privateIo.PublishSourceCallSiteFailure(receipt);
             lock (_faultGate) _sourceCallSiteFailureFile = path;
-            AppendDiagnostic(" Source CALL failure saved to the selected module's private latest receipt.");
+            if (receipt.Scope == NativeSourceCallSiteFailureScope.SemanticPrefix)
+                AppendDiagnostic(" Source CALL failure saved to the selected module's private latest receipt.");
         }
         catch (Exception delivery)
         {

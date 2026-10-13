@@ -13,7 +13,10 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         var saved = new FalloutStandalonePlayerSceneSnapshot(Schema, Source, _stack, _process, _constructor, _sequence,
             _scene, _hold, _view, _clockKind, _numerator, _denominator, _bracket, _cameraPosition, _cameraAngles,
             _first, _history.ToArray(), _clock, _camera, _cold, _boundary, _failure, _retired,
-            _viewRequest, _viewRequestArgument, _countdownEnabled, _countdownBits, _referenceScratch, _prelude, _sceneReference, _sceneReferenceArgument, _referenceQuery);
+            _viewRequest, _viewRequestArgument, _countdownEnabled, _countdownBits, _referenceScratch, _prelude, _sceneReference, _sceneReferenceArgument, _referenceQuery, _referenceHudCall, _actorScalarReset, _threadContextEntry, _inputManagerQuery, _actorProcessQuery,
+            _sceneScalars, _sceneScalarCall, _queuedReferences.References, _sceneQueueCall, _processSceneUpdate, _postProcessContext,
+            _timedActions.Capture(), _timedActionsSuppressed, _timedActionsCall, _postActionFields, _postActionsCall,
+            _actorDistanceTimer, _actorDistanceCall, _idleAnimationCall, _moverFields, _movementCall, _actorMovementFlag);
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -31,6 +34,22 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _referenceScratch = saved.ReferenceScratch; _prelude = saved.Prelude;
         _sceneReference = saved.SceneReference; _sceneReferenceArgument = saved.SceneReferenceArgument;
         _referenceQuery = saved.ReferenceQuery;
+        _referenceHudCall = saved.ReferenceHudCall;
+        _actorScalarReset = saved.ActorScalarReset;
+        _threadContextEntry = saved.ThreadContextEntry;
+        _inputManagerQuery = saved.InputManagerQuery;
+        _actorProcessQuery = saved.ActorProcessQuery;
+        _sceneScalars = saved.SceneScalars!; _sceneScalarCall = saved.SceneScalarCall;
+        _queuedReferences.Restore(saved.QueuedReferences!); _sceneQueueCall = saved.SceneQueueCall;
+        _processSceneUpdate = saved.ProcessSceneUpdate;
+        _postProcessContext = saved.PostProcessContext;
+        _timedActions.Restore(saved.TimedActions!); _timedActionsSuppressed = saved.TimedActionsSuppressed;
+        _timedActionsCall = saved.TimedActionsCall;
+        _postActionFields = saved.PostActionFields!; _postActionsCall = saved.PostActionsCall;
+        _actorDistanceTimer = saved.ActorDistanceTimer!; _actorDistanceCall = saved.ActorDistanceCall;
+        _idleAnimationCall = saved.IdleAnimationCall;
+        _moverFields = saved.MoverFields!; _movementCall = saved.MovementCall;
+        _actorMovementFlag = saved.ActorMovementFlag;
         _cold = new(saved.CapturedProcess, _process, saved.Constructor, _constructor, Next());
         // The old native roots are historical declarations only. A fresh
         // source-role factory must publish on this actual process/thread.
@@ -52,6 +71,20 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             throw new InvalidDataException("Standalone scene omitted or invented its current source constructor/writer/ownership fields.");
         saved.Source.Validate();
         ValidateSceneReferenceQuery(saved);
+        ValidateReferenceHud(saved);
+        ValidateActorScalarReset(saved);
+        ValidateThreadContextEntry(saved);
+        ValidateInputManagerQuery(saved);
+        ValidateActorProcessQuery(saved);
+        ValidateSceneScalars(saved);
+        ValidateQueuedSceneReferences(saved);
+        ValidateProcessSceneUpdate(saved);
+        ValidatePostProcessContext(saved);
+        ValidateTimedActions(saved);
+        ValidatePostActions(saved);
+        ValidateActorDistanceCall(saved);
+        ValidateIdleAnimationCall(saved);
+        ValidateMovementCall(saved);
         foreach (var owner in saved.FirstPersonHistory)
         {
             var native = owner.Publication;

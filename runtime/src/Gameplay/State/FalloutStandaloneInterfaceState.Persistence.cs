@@ -14,7 +14,8 @@ internal sealed partial class FalloutStandaloneInterfaceState
             throw new NotSupportedException("Current interface object omitted an actual native retirement callback.");
         var snapshot = new FalloutStandaloneInterfaceSnapshot(Schema, Source, _stack, _process, _constructor, _sequence,
             _enabled, _mode, _context, _slots.ToArray(), _active.ToArray(), _dialogByte, _console, _consoleCounter,
-            _manager, _managerFields, _dialog, _objects.ToArray(), _alternate, _cold, _boundary, _failure, _retired, CaptureDialogMenus());
+            _manager, _managerFields, _dialog, _objects.ToArray(), _alternate, _cold, _boundary, _failure, _retired, CaptureDialogMenus(),
+            _actorDistances.Capture(), _actorDistanceSort);
         Validate(snapshot); return snapshot;
     }
     internal static void Validate(FalloutStandaloneInterfaceSnapshot saved)
@@ -30,6 +31,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
             saved.Failure is not null && string.IsNullOrWhiteSpace(saved.Failure))
             throw new InvalidDataException("Standalone interface omitted a complete source constructor/current object lifetime.");
         saved.Source.Validate();
+        ValidateActorDistances(saved);
         // Original stack writes preserve entered failures independently of
         // quiet construction. Active bytes/context/console have separate writers.
         if (saved.Context != 0 ||
@@ -75,7 +77,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
     {
         Validate(saved);
         if (saved.Retired || saved.Enabled != 1 || saved.OwnManager is not { Retired: null } || saved.Dialog is { Retired: null } ||
-            saved.DialogByte != 0 || saved.Boundary is not null || saved.Failure is not null || saved.Mode != 1 ||
+            saved.DialogByte != 0 || saved.Boundary is not null || saved.Failure is not null || saved.ActorDistances?.Failure is not null || saved.Mode != 1 ||
             saved.MenuSlots.Any(value => value != 0) || saved.Menus.Transitions.Count != 0 ||
             saved.Menus.Dialogs.Any(row => row.Retired is null))
             throw new NotSupportedException("Playable interface capture requires its genuine returned manager and completed native menu lifetimes.");
@@ -90,5 +92,6 @@ internal sealed partial class FalloutStandaloneInterfaceState
         // values agree, but no old native pointer/lease becomes a current one.
         _cold = new(saved.CapturedProcess, _process, saved.Constructor, _constructor, Next());
         _enabled = saved.Enabled; _mode = saved.Mode; _context = saved.Context;
+        _actorDistances.Restore(saved.ActorDistances!); _actorDistanceSort = saved.ActorDistanceSort;
     }
 }

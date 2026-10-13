@@ -127,6 +127,7 @@ void nvse_load_only() {
     if (nvse_owner().phase != NvsePhase::loading)
         throw Fatal(ERROR_INVALID_STATE, "NVSE command registration is outside actual NVSEPlugin_Load.");
 }
+#include "opennv_plugin_nvse_logging.inc"
 bool nvse_register(NvseCommandInfo* pointer, std::uint8_t return_type, std::uint32_t required_version) {
     nvse_load_only();
     const auto raw = nvse_copy(pointer);
@@ -185,6 +186,7 @@ void* __cdecl nvse_query_interface(std::uint32_t id) {
         if ((id == 4 && admitted == 1) || (id == 5 && admitted == 2)) return values_interface(id);
         if (id == 6 && admitted == 1) return source_script_interface_address();
         if (id == 7 && (admitted == 3 || admitted == 4)) return data_interface_address(admitted);
+        if (id == 9 && admitted == 1) return &owner.tables->logging;
         throw Fatal(ERROR_INVALID_DATA, "NVSE interface reply has no first-party native owner.");
     });
 }
@@ -325,7 +327,12 @@ void load_nvse(const Frame& frame) {
     const auto directory = path_from_utf8(reader.text());
     const auto nvse_version = reader.get<std::uint32_t>(), runtime_version = reader.get<std::uint32_t>();
     const auto no_gore = reader.get<std::uint32_t>(), budget = reader.get<std::uint32_t>();
-    const auto source_handle = reader.get<std::uint32_t>(); reader.finish();
+    const auto source_handle = reader.get<std::uint32_t>();
+    const auto logging_length = reader.get<std::uint32_t>();
+    if (logging_length > 255U) throw Fatal(ERROR_INVALID_DATA, "Logging source exceeded its original character extent.");
+    const auto* logging = static_cast<const unsigned char*>(reader.bytes(logging_length)); reader.finish();
+    if (logging_length && (std::memchr(logging, 0, logging_length) || logging[logging_length - 1] != '\\'))
+        throw Fatal(ERROR_INVALID_DATA, "Logging source lost its selected relative directory/NUL extent.");
     if (state->module || state->nvse_image_attempted) { reply(frame, ERROR_BUSY, "This generation already owns or attempted its one NVSE image lifetime."); return; }
     if (!nvse_version || !runtime_version || no_gore > 1 || !budget || budget > 1048576 || !source_handle || source_handle == nvse_invalid_handle) {
         reply(frame, ERROR_INVALID_DATA, "NVSE source ABI fields or work budget are invalid."); return;
@@ -342,15 +349,20 @@ void load_nvse(const Frame& frame) {
     used_default = FALSE;
     if (!WideCharToMultiByte(code_page, flags, directory.data(), static_cast<int>(directory.size()), native_directory.data(), count, nullptr, default_pointer) || used_default)
         throw Fatal(ERROR_NO_UNICODE_TRANSLATION, "Owned runtime directory changed its ANSI representation.");
-    owner->tables_extent = static_cast<std::uint32_t>(sizeof(NvseTables) + native_directory.size() + 1);
+    owner->tables_extent = static_cast<std::uint32_t>(sizeof(NvseTables) + native_directory.size() + 1 + logging_length + 1);
     owner->tables = static_cast<NvseTables*>(VirtualAlloc(nullptr, owner->tables_extent, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
     if (!owner->tables) { reply(frame, GetLastError(), "NVSE interface pages could not be allocated."); return; }
     owner->directory = reinterpret_cast<char*>(owner->tables + 1);
     std::memcpy(const_cast<char*>(owner->directory), native_directory.c_str(), native_directory.size() + 1);
+    owner->logging_path = owner->directory + native_directory.size() + 1;
+    owner->logging_path_length = logging_length;
+    if (logging_length) std::memcpy(const_cast<char*>(owner->logging_path), logging, logging_length);
+    const_cast<char*>(owner->logging_path)[logging_length] = '\0';
     owner->tables->core = {nvse_version, runtime_version, 0, 0, nvse_register_plain, nvse_set_opcode,
         nvse_query_interface, nvse_plugin_handle, nvse_register_typed, nvse_runtime_directory, no_gore,
         nvse_expression_utils, nvse_register_versioned};
     owner->tables->messaging = {4, nvse_listen, nvse_dispatch};
+    owner->tables->logging = {nvse_plugin_log_path};
     owner->tables->serialization = {2, nvse_save, nvse_load_save, nvse_new, nvse_write_record, nvse_open_record,
         nvse_write_data, nvse_next_record, nvse_read_data, nvse_resolve_form, nvse_preload, nvse_save_path,
         nvse_peek, nvse_write8, nvse_write16, nvse_write32, nvse_write64, nvse_read8, nvse_read16,

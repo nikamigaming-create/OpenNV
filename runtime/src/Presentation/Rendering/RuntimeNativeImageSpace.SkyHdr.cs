@@ -6,16 +6,30 @@ internal partial class RuntimeNativeImageSpace
 {
     private readonly Guid _hdrPresenterIdentity = Guid.NewGuid();
     private FalloutSkyHdrState? _sourceHdr;
-    private RuntimeNativeSkyHdrCapability? _hdrCapability;
+    private IRuntimeSkyHdrCapability? _hdrCapability;
     private bool _hdrBorrowed;
     private string? _hdrUnowned;
-    internal void BindCurrentSkyHdr(FalloutSkyHdrState source, RuntimeNativeSkyHdrCapability native)
+    internal void BindCurrentSkyHdr(FalloutSkyHdrState source, IRuntimeSkyHdrCapability native)
     {
         if (_sourceHdr is not null || _hdrCapability is not null)
             throw new InvalidOperationException("Image-space already has a real source HDR capability owner.");
         _sourceHdr = source;
         _hdrCapability = native;
         source.AttachImageBorrower(_hdrPresenterIdentity); _hdrBorrowed = true;
+        // A synchronous provider has already returned its actual capability.
+        // Publish that source store before telemetry can observe this binding.
+        if (native.Returned) SelectCurrentSkyHdrCapability(source, native);
+    }
+
+    private static void SelectCurrentSkyHdrCapability(FalloutSkyHdrState source, IRuntimeSkyHdrCapability native)
+    {
+        if (source.RendererBoundTo(native)) return;
+        try
+        {
+            if (source.NeedsRendererHandoff) source.RebindRenderer(native);
+            else source.SelectRenderer(native);
+        }
+        catch (Exception failure) { source.RetainFailure(failure); throw; }
     }
     private void PublishCurrentSkyHdr(OpenNV.Runtime.Content.FalloutImageSpaceFrame gameplay)
     {
@@ -29,10 +43,7 @@ internal partial class RuntimeNativeImageSpace
                 if (UsesSourceMain) throw new NotSupportedException(_hdrUnowned);
                 return;
             }
-            if (!hdr.RendererBoundTo(native))
-            {
-                if (hdr.NeedsRendererHandoff) hdr.RebindRenderer(native); else hdr.SelectRenderer(native);
-            }
+            SelectCurrentSkyHdrCapability(hdr, native);
             var input = UsesSourceMain
                 ? _state.ReadSourceMainSkyHdrInput(_sourceNativeEffects ??
                     throw new InvalidOperationException("Source Main HDR has no actual same-call effect publication."), hdr, alternate: false)

@@ -232,9 +232,9 @@ internal static class ManualSavePreparationContracts
     {
         var before = File.ReadAllBytes(canonical); var slots = catalog.ReadSlots().Count;
         var writtenUtc = File.GetLastWriteTimeUtc(canonical);
-        Reject(() => catalog.Create(Guid.NewGuid(), () => { File.WriteAllText(canonical, "invalid"); throw new IOException("Actual writer failure."); }));
+        var writerFailure = Reject(() => catalog.Create(Guid.NewGuid(), () => { File.WriteAllText(canonical, "invalid"); throw new IOException("Actual writer failure."); }));
         Require(File.ReadAllBytes(canonical).SequenceEqual(before) && catalog.ReadSlots().Count == slots,
-            "Writer failure replaced the prior complete Continue save or published a slot.");
+            "Writer failure replaced the prior complete Continue save or published a slot. Cause: " + writerFailure);
         Reject(() => catalog.Create(Guid.NewGuid(), () => File.WriteAllText(canonical, "{}")));
         Require(File.ReadAllBytes(canonical).SequenceEqual(before) && catalog.ReadSlots().Count == slots,
             "Invalid candidate replaced Continue before its complete slot committed.");
@@ -285,10 +285,10 @@ internal static class ManualSavePreparationContracts
         Require(root.GetProperty("Schema").GetString() == Schema && root.GetProperty("SaveCompatibilityId").GetString() == source &&
             root.GetProperty("References").ValueKind == JsonValueKind.Array, "Component capture lacks its strict source/world identity.");
     }
-    private static void Reject(Action action)
+    private static Exception Reject(Action action)
     {
         try { action(); }
-        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or NotSupportedException or JsonException or KeyNotFoundException) { return; }
+        catch (Exception error) when (error is IOException or InvalidDataException or InvalidOperationException or NotSupportedException or JsonException or KeyNotFoundException) { return error; }
         throw new InvalidDataException("Invalid save preparation/capture was admitted.");
     }
     private static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }

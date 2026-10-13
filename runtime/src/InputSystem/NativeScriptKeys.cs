@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.InputSystem;
 
@@ -8,18 +9,18 @@ internal static class NativeScriptKeys
 {
     internal static InputEvent Create(int code)
     {
-        if (code >= 256)
+        if (code >= FalloutInputLayout.FirstMouseButton)
             return new InputEventMouseButton
             {
                 ButtonIndex = code switch
                 {
-                    256 => MouseButton.Left,
-                    257 => MouseButton.Right,
-                    258 => MouseButton.Middle,
-                    259 => MouseButton.Xbutton1,
-                    260 => MouseButton.Xbutton2,
-                    264 => MouseButton.WheelUp,
-                    265 => MouseButton.WheelDown,
+                    FalloutInputLayout.MouseLeft => MouseButton.Left,
+                    FalloutInputLayout.MouseRight => MouseButton.Right,
+                    FalloutInputLayout.MouseMiddle => MouseButton.Middle,
+                    FalloutInputLayout.MouseExtra1 => MouseButton.Xbutton1,
+                    FalloutInputLayout.MouseExtra2 => MouseButton.Xbutton2,
+                    FalloutInputLayout.WheelUp => MouseButton.WheelUp,
+                    FalloutInputLayout.WheelDown => MouseButton.WheelDown,
                     _ => throw new NotSupportedException($"DirectInput mouse binding {code} has no native button."),
                 }
             };
@@ -37,18 +38,18 @@ internal static class NativeScriptKeys
         if (input is not InputEventMouseButton mouse) yield break;
         var button = mouse.ButtonIndex switch
         {
-            MouseButton.Left => 256,
-            MouseButton.Right => 257,
-            MouseButton.Middle => 258,
-            MouseButton.Xbutton1 => 259,
-            MouseButton.Xbutton2 => 260,
-            MouseButton.WheelUp => 264,
-            MouseButton.WheelDown => 265,
+            MouseButton.Left => FalloutInputLayout.MouseLeft,
+            MouseButton.Right => FalloutInputLayout.MouseRight,
+            MouseButton.Middle => FalloutInputLayout.MouseMiddle,
+            MouseButton.Xbutton1 => FalloutInputLayout.MouseExtra1,
+            MouseButton.Xbutton2 => FalloutInputLayout.MouseExtra2,
+            MouseButton.WheelUp => FalloutInputLayout.WheelUp,
+            MouseButton.WheelDown => FalloutInputLayout.WheelDown,
             _ => 0,
         };
         if (button == 0) yield break;
         yield return (button, mouse.Pressed);
-        if (button >= 264 && mouse.Pressed) yield return (button, false);
+        if (button >= FalloutInputLayout.WheelUp && mouse.Pressed) yield return (button, false);
     }
 
     internal static int? Code(Key key, KeyLocation location = KeyLocation.Unspecified) => key switch

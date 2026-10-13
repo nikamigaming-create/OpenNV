@@ -35,10 +35,12 @@ internal sealed class NativeNvseRegistry(NativeNvsePlugin plugin)
     internal NativeNvseRegistryCounts Counts => new(_commandAttempts, checked((uint)_listenerHistory.Count),
         checked((uint)_serializationHistory.Count), checked((uint)_commands.Count), checked((uint)_listeners.Count));
 
-    internal uint QueryInterface(ulong callback, uint id, bool valuesAvailable = false, bool scriptAvailable = false, bool commandTableAvailable = false, uint dataVersion = 0)
+    internal uint QueryInterface(ulong callback, uint id, bool valuesAvailable = false, bool scriptAvailable = false, bool commandTableAvailable = false, uint dataVersion = 0, bool loggingAvailable = false)
     {
         RequireLive();
-        var version = id switch { 0 => 2U, 2 => 4U, 3 when commandTableAvailable => 2U, 4 when valuesAvailable => 1U, 5 when valuesAvailable => 2U, 6 when scriptAvailable => 1U, 7 when dataVersion is 3 or 4 => dataVersion, _ => 0U };
+        // Logging has one function pointer and no version field. The internal
+        // token 1 admits that exact layout; it is never inserted into its ABI.
+        var version = id switch { 0 => 2U, 2 => 4U, 3 when commandTableAvailable => 2U, 4 when valuesAvailable => 1U, 5 when valuesAvailable => 2U, 6 when scriptAvailable => 1U, 7 when dataVersion is 3 or 4 => dataVersion, 9 when loggingAvailable => 1U, _ => 0U };
         var missing = version == 0 ? $"NVSE interface {id} has no native C# runtime owner." : null;
         _queries.Add(new(callback, id, version, missing));
         if (missing is not null) Missing(callback, missing);

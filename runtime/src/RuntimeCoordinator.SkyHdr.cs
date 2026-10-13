@@ -1,3 +1,4 @@
+using Godot;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Cells;
@@ -6,7 +7,7 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator
 {
-    private RuntimeNativeSkyHdrCapability? _nativeSkyHdrCapability;
+    private IRuntimeSkyHdrCapability? _nativeSkyHdrCapability;
     private FalloutSkyHdrState? _nativeSkyHdrSource;
     private bool _nativeSkyHdrRetiring;
     private FalloutSkyHdrState BindNativeSkyHdr(RuntimeNativeImageSpace presenter)
@@ -15,7 +16,9 @@ public partial class RuntimeCoordinator
         var source = sky.ConstructHdr(_nativePluginStack?.IniSettings ?? throw new InvalidOperationException("HDR has no selected typed INI owner."));
         if (_nativeSkyHdrCapability is null)
         {
-            var native = new RuntimeNativeSkyHdrCapability(source.Source, source.Process);
+            IRuntimeSkyHdrCapability native = RuntimeInputPresentationSelection.UsesHeadlessPresentation(DisplayServer.GetName())
+                ? new RuntimeHeadlessSkyHdrCapability(source.Source, source.Process)
+                : new RuntimeNativeSkyHdrCapability(source.Source, source.Process);
             _nativeSkyHdrCapability = native; _nativeSkyHdrSource = source;
             source.EnterRendererCapability(native);
             try { native.Begin(); }

@@ -8,6 +8,8 @@ internal static partial class SourceMainScriptCallerContracts
     {
         RunStandaloneInterfaceContracts();
         RunStandalonePlayerSceneContracts();
+        RunPlayerProcessQueryContracts();
+        RunRendererClockContracts();
         StandaloneDeclarations(); StandaloneCurrentAndCold(); StandalonePendingRefusal();
         RunSourceTaskManagerContracts();
         RunSourceDeferredReleaseContracts();
@@ -112,12 +114,14 @@ internal static partial class SourceMainScriptCallerContracts
         internal readonly FalloutPlayerPendingSlot Slot = new();
         internal readonly FalloutInterfaceFade Fade;
         internal readonly Host Host;
+        internal readonly FalloutScriptSession Session = new();
         internal readonly FalloutQueuedReferences SourceQueue;
         internal readonly FalloutSourceTaskManager? TaskManager;
         private readonly IDisposable _fadeLease;
         internal IDisposable ActualFadeLease => _fadeLease;
         private readonly AuthoredPlayerCell _player;
         private readonly AuthoredInterfaceObject _interface;
+        private IDisposable? _globalTimeLease;
         internal StandaloneFixture(FalloutActorProcessRuntimeSnapshot? saved = null, FalloutInterfaceFadeSnapshot? fade = null,
             bool bindTaskManager = true, FalloutPluginStack? selectedRecords = null, FalloutAdvancementRuntimeReceipt? selectedRuntime = null)
         {
@@ -153,15 +157,35 @@ internal static partial class SourceMainScriptCallerContracts
             _player = new(Owner.MainPlayerCellSource);
             if (selectedRecords is not null)
             {
-                Owner.ConfigureSourceCachedTimer(FalloutSourceFrameTimerConfiguration.Read(selectedRuntime!, selectedRecords.IniSettings));
-                Owner.ConfigureSourceMainCachedTail(selectedRecords, null);
+                Owner.PrepareSourceCachedTimer(FalloutSourceFrameTimerConfiguration.Read(selectedRuntime!, selectedRecords.IniSettings), saved?.CachedTimer);
+                Owner.PrepareSourceGlobalTime(FalloutGlobalTimeSource.Read(selectedRuntime!), saved?.GlobalTime);
+                Owner.PublishPreparedSourceCachedTimer(this); Owner.PublishPreparedSourceGlobalTime();
+                var nativeRate = new FalloutGlobalTimeNativeValues(1, 1);
+                var nativeRetired = false;
+                _globalTimeLease = Owner.RequireSourceGlobalTime().BindPresentation(new(this, "authored-native-simulation-and-audio",
+                    () => !nativeRetired ? nativeRate : throw new InvalidOperationException("Authored rate consumer retired."),
+                    publication => nativeRate = new(publication.CurrentRate, publication.AudioRate), () => nativeRetired = true));
+                Owner.ConfigureSourceMainCachedTail(selectedRecords, saved?.StandaloneMain?.MainCaller.CachedTail);
             }
         }
         internal IDisposable Bind() => new StandaloneLeases(Owner.BindMainPlayerCell(_player, "authored-FO3-player"),
             Owner.BindMainScriptCaller(Host, "authored-FO3-main"));
         internal IDisposable BindProduction() => new StandaloneLeases(Owner.BindMainPlayerCell(_player, "authored-FO3-player"),
-            Owner.BindMainScriptCaller(new FalloutCampaignMainScriptConsumers(Host.Source, _ => false), "offline-production-Main-consumers"));
-        public void Dispose() { _fadeLease.Dispose(); Owner.Dispose(); SourceQueue.Dispose(); _interface.Retire(); }
+            Owner.BindMainScriptCaller(new FalloutCampaignMainScriptConsumers(Host.Source, _ => false, Session), "offline-production-Main-consumers"));
+        internal void BindActualScenePrefix(FalloutPlayerReferenceHudState hud)
+        {
+            _player.SceneAvailable = true; // Explicit native Player getter/factory boundary.
+            _player.DuringSceneClock = Owner.StoreStandalonePlayerSceneClock;
+            _player.DuringSceneChild = (invocation, alternate) =>
+            {
+                if (alternate) throw new InvalidOperationException("Fixture entered the excluded source free-camera arm.");
+                Owner.EnterStandalonePlayerSceneVirtual(invocation);
+                Owner.StandalonePlayerScene.ExecuteInitialVirtualPrefix(invocation.Main.Identity, invocation.Main.Ordinal,
+                    () => Owner.MainPlayerPendingConsumers.ReleaseSceneOwnedChild(invocation), hud,
+                    () => Owner.ReadStandalonePlayerScaledSeconds(invocation));
+            };
+        }
+        public void Dispose() { _globalTimeLease?.Dispose(); _fadeLease.Dispose(); Owner.Dispose(); SourceQueue.Dispose(); _interface.Retire(); }
     }
     private sealed class StandaloneLeases(IDisposable player, IDisposable main) : IDisposable
     {

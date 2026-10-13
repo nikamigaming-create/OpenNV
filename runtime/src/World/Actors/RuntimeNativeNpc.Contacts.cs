@@ -20,12 +20,13 @@ internal static class RuntimeNativeActorContacts
         var contacts = new List<Area3D>();
         try
         {
-            foreach (var block in source.Blocks.Where(block => block.TypeName is "NiNode" or "NiBone" or "BSFadeNode"))
+            foreach (var entry in skeleton.PhysicalModel.Scene)
             {
-                var node = source.ReadNode(block.Index);
-                if (node.CollisionObject < 0) continue;
-                if (source.ReadObject(node.CollisionObject) is not FalloutNifCollisionObject collision || collision.Target != node.Block.Index)
-                    throw new NotSupportedException("Actor contact attachment has no matching source bone.");
+                if (entry.Collision is not { } collision) continue;
+                if (entry.Declaration is not FalloutNifNode node)
+                    throw new NotSupportedException("Actor contact attachment requires its actual source scene pose owner.");
+                if (skeleton.PhysicalModel.FindAttachedBody(collision.Body) is null)
+                    throw new NotSupportedException("Actor contact attachment has no authored rigid body; nullable and phantom wrappers are independent.");
                 var built = NativeNifCollisionBuilder.Build(source, collision, skeleton.UnitsToMetres, collisionLayer);
                 try
                 {

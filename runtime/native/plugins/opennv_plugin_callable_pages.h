@@ -6,6 +6,7 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace opennv_domain {
@@ -37,11 +38,14 @@ inline void retain_callable_page_collision(const CallableEntry& call,
 // Pages are shared by disjoint seven-byte entries. Removed entries become
 // traps; their address reservations and identities stay retired until closure.
 class OriginalCallablePages final {
-    struct Page { void* base; std::uint32_t extent; bool executable; bool source_image; };
+    struct Page {
+        void* base; std::uint32_t extent; bool executable; bool source_image;
+        std::vector<DWORD> protections;
+    };
     struct Entry { std::uint64_t owner; CallableEntry call; bool live; };
     std::vector<Page> pages_;
     std::vector<Entry> entries_;
-    std::uint32_t granularity_;
+    std::uint32_t granularity_, page_bytes_;
     std::uint64_t next_owner_ = 0;
     bool faulted_ = false;
     bool closed_ = false;
@@ -51,12 +55,29 @@ class OriginalCallablePages final {
     void healthy() const {
         if (faulted_ || closed_) throw CallablePageFailure(ERROR_INVALID_STATE, "Callable generation is closed or retains a failed publication/retirement.");
     }
+    void require_page(const Page& page) const {
+        if (!page.base || page.protections.size() != page.extent / page_bytes_)
+            throw CallablePageFailure(ERROR_INVALID_DATA, "Callable page lost its SDK-page protection ledger.");
+        for (std::size_t index = 0; index < page.protections.size(); ++index) {
+            const auto pointer = reinterpret_cast<std::uintptr_t>(page.base) + index * page_bytes_;
+            MEMORY_BASIC_INFORMATION memory{};
+            if (!VirtualQuery(reinterpret_cast<void*>(pointer), &memory, sizeof(memory)) ||
+                memory.AllocationBase != (page.source_image ? source_image_base_ : page.base) ||
+                memory.State != MEM_COMMIT || memory.Type != MEM_PRIVATE || memory.Protect != page.protections[index] ||
+                reinterpret_cast<std::uintptr_t>(memory.BaseAddress) > pointer ||
+                static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(memory.BaseAddress)) + memory.RegionSize < pointer + page_bytes_)
+                throw CallablePageFailure(ERROR_INVALID_DATA, "Callable SDK page changed outside its recorded actual owner.");
+        }
+    }
     void protect(Page& page, DWORD access) {
+        require_page(page);
+        const auto expected = page.protections.front();
         DWORD previous = 0;
         if (!VirtualProtect(page.base, page.extent, access, &previous))
             throw CallablePageFailure(GetLastError(), "Callable page protection transition failed.");
-        if (previous != static_cast<DWORD>(page.executable ? PAGE_EXECUTE_READ : PAGE_READWRITE))
+        if (previous != expected)
             throw CallablePageFailure(ERROR_INVALID_DATA, "Callable page protection changed outside its owner.");
+        std::fill(page.protections.begin(), page.protections.end(), access); require_page(page);
         page.executable = access == PAGE_EXECUTE_READ;
     }
     Page& page(std::uint32_t entry) {
@@ -87,8 +108,9 @@ class OriginalCallablePages final {
     }
 public:
     OriginalCallablePages() {
-        SYSTEM_INFO system{}; GetSystemInfo(&system); granularity_ = system.dwAllocationGranularity;
-        if (!granularity_ || (granularity_ & (granularity_ - 1)) || granularity_ > 1024 * 1024)
+        SYSTEM_INFO system{}; GetSystemInfo(&system); granularity_ = system.dwAllocationGranularity; page_bytes_ = system.dwPageSize;
+        if (!granularity_ || (granularity_ & (granularity_ - 1)) || granularity_ > 1024 * 1024 ||
+            !page_bytes_ || (page_bytes_ & (page_bytes_ - 1)) || granularity_ % page_bytes_)
             throw CallablePageFailure(ERROR_INVALID_DATA, "Callable mapping granularity is unowned.");
     }
     OriginalCallablePages(const OriginalCallablePages&) = delete;
@@ -170,6 +192,7 @@ public:
                         retain_callable_page_collision(call, base, granularity_, queried, query_error, observed);
                         throw CallablePageFailure(ERROR_INVALID_ADDRESS, "Source callable page overlaps a mapping outside the shared first-party owner.");
                     }
+                    std::vector<DWORD> protections(granularity_ / page_bytes_, PAGE_READWRITE);
                     auto* actual = VirtualAlloc(reinterpret_cast<void*>(base), granularity_,
                         source_image ? MEM_COMMIT : MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
                     if (actual != reinterpret_cast<void*>(base)) {
@@ -177,7 +200,7 @@ public:
                             throw CallablePageFailure(GetLastError(), "Unexpected callable reservation could not retire.");
                         throw CallablePageFailure(GetLastError(), "Source callable reservation failed at its exact declared address.");
                     }
-                    pages_.push_back({actual, granularity_, false, source_image}); std::memset(actual, 0xcc, granularity_);
+                    pages_.push_back({actual, granularity_, false, source_image, std::move(protections)}); std::memset(actual, 0xcc, granularity_);
                 }
                 entries_.push_back({owner, call, true}); install(entries_.back(), false);
             }

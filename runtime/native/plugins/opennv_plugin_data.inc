@@ -16,18 +16,21 @@ Bytes data_request(NvseDataCall call, const Bytes& arguments) {
     return result;
 }
 void data_input_read(NvseDataRuntime& owner, const Bytes& bytes) {
-    Reader reader{bytes.data}; const auto window = reader.get<std::uint64_t>(), sample = reader.get<std::uint64_t>();
+    Reader reader{bytes.data}; const auto provider = reader.get<NvseInputProvider>();
+    const auto window = reader.get<std::uint64_t>(), sample = reader.get<std::uint64_t>();
     const auto revision = reader.get<std::int64_t>(); const auto count = reader.get<std::uint32_t>();
-    if (!window || !sample || revision <= 0 || count != 266 || !owner.input ||
-        (owner.window && owner.window != window) || sample < owner.sample || revision < owner.revision)
-        throw Fatal(ERROR_INVALID_DATA, "DIHookControl has no current complete product-window/device extent.");
-    std::array<NvseDiKey, 266> keys{};
+    // Headless commands never publish an invented product HWND.
+    if (!((provider == NvseInputProvider::windows_direct_input && window) ||
+        (provider == NvseInputProvider::headless_commands && !window)) || !sample || revision <= 0 || count != nvse_input_key_count || !owner.input ||
+        (owner.input_provider != NvseInputProvider::unbound && (owner.input_provider != provider || owner.window != window)) || sample < owner.sample || revision < owner.revision)
+        throw Fatal(ERROR_INVALID_DATA, "DIHookControl has no current complete declared input-provider extent.");
+    std::array<NvseDiKey, nvse_input_key_count> keys{};
     for (auto& key : keys) {
         key = reader.get<NvseDiKey>();
         if (key.raw > 1 || key.game > 1 || key.inserted > 1 || key.hold > 1 || key.tap > 1 || key.user_disabled > 1 || key.script_disabled > 1)
             throw Fatal(ERROR_INVALID_DATA, "DIHookControl boolean extent is invalid.");
     }
-    reader.finish(); owner.input->keys = keys; owner.window = window; owner.sample = sample; owner.revision = revision;
+    reader.finish(); owner.input->keys = keys; owner.input_provider = provider; owner.window = window; owner.sample = sample; owner.revision = revision;
 }
 void data_sync_if_bound() {
     if (!state || !state->data || !state->data->input || state->data->synchronizing) return;
@@ -36,7 +39,7 @@ void data_sync_if_bound() {
     if (state->calls.empty()) throw Fatal(ERROR_INVALID_STATE, "DIHookControl exchange escaped its actual native invocation.");
     owner.synchronizing = true;
     try {
-        Bytes payload; payload.put(address(owner.input.get())); payload.put(owner.sequence + 1); payload.put(266U);
+        Bytes payload; payload.put(address(owner.input.get())); payload.put(owner.sequence + 1); payload.put(nvse_input_key_count);
         for (const auto& key : owner.input->keys) payload.put(key);
         const auto output_bytes = data_request(NvseDataCall::input_exchange, payload);
         data_input_read(owner, output_bytes); ++owner.sequence; owner.synchronizing = false;
