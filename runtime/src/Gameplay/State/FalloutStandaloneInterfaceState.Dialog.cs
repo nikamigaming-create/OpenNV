@@ -6,7 +6,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
 {
     private readonly List<FalloutStandaloneDialogState> _dialogMenus = [];
     private readonly List<FalloutStandaloneMenuStackWrite> _menuWrites = [];
-    private readonly List<FalloutStandaloneMenuTransition> _menuTransitions = [];
+    private readonly LinkedList<FalloutStandaloneMenuTransition> _menuTransitions = [];
     private readonly Dictionary<Guid, Func<bool>> _menuRoots = [];
     private Guid? _selectedMenu, _selectedTile;
     private FalloutStandaloneDialogInvocation? _dialogInvocation;

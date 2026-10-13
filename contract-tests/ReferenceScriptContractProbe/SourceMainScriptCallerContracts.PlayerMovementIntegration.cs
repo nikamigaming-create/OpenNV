@@ -14,7 +14,7 @@ internal static partial class SourceMainScriptCallerContracts
         var stack = new string('2', 64); var player = new FalloutFormKey("MovementIntegrationFixture.esm", 0x14);
         FalloutCombatActorIdentity Identity(FalloutFormKey actor) => new(actor, new("MovementIntegrationFixture.esm", 7),
             "ENGINE_PLAYER", 0, main.EngineSha256, "NPC_", 0, new('4', 64), true);
-        foreach (var failure in new[] { "none", "update", "current", "reentry", "capture", "observed", "post-observed" })
+        foreach (var failure in new[] { "none", "update", "current", "reentry", "capture", "observed", "post-observed", "returned" })
         {
             using var common = new FalloutActorProcessCommonState(declaration, stack, Identity,
                 _ => throw new InvalidOperationException("Movement integration copied gameplay."),
@@ -36,7 +36,8 @@ internal static partial class SourceMainScriptCallerContracts
                 "Movement integration did not prepare its source scene on an independent loading worker.");
             var scene = prepared!;
             var input = FalloutDirectInputState.CreateHeadless(stack, new(_ => null));
-            input.Publish(new byte[256], new byte[8], 9, -13, -120);
+            input.Publish(new byte[256], new byte[8], failure == "returned" ? 0 : 9,
+                failure == "returned" ? 0 : -13, failure == "returned" ? 0 : -120);
             var inputBefore = input.Capture();
             var beforePublication = scene.Capture();
             Require(OnMovementFixtureThread(() => scene.BindInputManager(input)) is InvalidOperationException &&
@@ -49,7 +50,7 @@ internal static partial class SourceMainScriptCallerContracts
             manager.PublishManager(native.Publication(manager, FalloutStandaloneInterfaceObjectRole.PipBoyManager, stack), native.ReadLiving);
             var idle = new AuthoredIdleConsumers { ModelOverride = () => scene.ReadSelectedIdleModel(() => null) };
             scene.BindInputManager(input); scene.BindActorProcessQueries(() => common.ReadSceneQueries(player, 1));
-            if (failure is "observed" or "post-observed")
+            if (failure is "observed" or "post-observed" or "returned")
             {
                 scene.BindMovementControlConfiguration(new(
                     [new(FalloutPlayerControlConfiguration.InvertYName, FalloutIniCollection.Prefs, 0),
@@ -71,6 +72,7 @@ internal static partial class SourceMainScriptCallerContracts
             scene.BindActorDistances(manager, () => 20, _ => throw new InvalidOperationException("Empty distance list queried a body."), () => 3);
             scene.BindIdleAnimation(_ => common.UpdateIdleAnimation(player, 1, idle), () => common.LastIdleAnimationUpdate);
             scene.BindMovementFlags(() => common.ReadAndClearPlayerMovementFlags(player, 1));
+            var orientation = failure == "returned" ? BindMovementIntegrationOrientation(scene, player) : null;
             var admission = FalloutActorPhysicalRegistrationPredicate.Execute(uint.MaxValue,
                 new PhysicalRegistrationFixture(FalloutActorPhysicalAdmissionSource.Reviewed(main), player,
                     common.ReadPhysicalActivity(player, 1))
@@ -96,7 +98,7 @@ internal static partial class SourceMainScriptCallerContracts
                 "authored-actual-shared-script-host-effect", Guid.NewGuid(), true, [true, false, false]));
             var saved = scene.Capture(); var call = saved.MovementCall!;
             Require(call.Physics is { } physical && physical.Factory == physics.Factory && physical.CapturedProcess == scene.Process &&
-                physical.Admission == admission && call.Returned == false && saved.SceneBracket == 1 &&
+                physical.Admission == admission && call.Returned == (failure == "returned") && saved.SceneBracket == 1 &&
                 saved.ThreadContextEntry is { CurrentKind: 52, ScopeEntered: true },
                 "Player movement lost its physical child history or falsely closed its unfinished frame/thread scope.");
             Require(input.Sample == inputBefore.Sample && input.Revision == inputBefore.Revision,
@@ -117,6 +119,18 @@ internal static partial class SourceMainScriptCallerContracts
                 { MovementCall = call with { Physics = call.Physics! with { Utility = call.Physics.Utility with { Phase = "constructed" } } } }));
                 Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
                 { MovementCall = call with { Physics = call.Physics! with { Frame = call.Physics.Frame! with { Main = Guid.NewGuid() } } } }));
+            }
+            else if (failure == "returned")
+            {
+                Require(call is { Step: "returned", Returned: true, Failure: null,
+                    Physics.Frame.Returned: true, Control: { Failure: null, Call: { Returned: true, Result: false,
+                        Step: FalloutPlayerMovementControlStep.Returned, MouseReads.Count: 3 } } } &&
+                    saved.Failure == "source-Player-following-movement-frame-services-unbound",
+                    "Returned movement children were relabeled as failed or promoted the unfinished whole Player frame.");
+                Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
+                { MovementCall = call with { Returned = false } }));
+                Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
+                { MovementCall = call with { Control = call.Control! with { Call = call.Control.Call! with { Returned = false } } } }));
             }
             else if (failure == "post-observed")
             {
@@ -165,10 +179,37 @@ internal static partial class SourceMainScriptCallerContracts
             Reject(() => cold.BindMovementPhysics(physics));
             Reject(() => FalloutStandalonePlayerSceneState.RequirePlayable(cold.Capture()));
             cold.Retire(); scene.Retire(); input.Retire(); hud.Retire(); manager.Retire(); native.Retire();
+            orientation?.RetireCurrent();
         }
         Console.WriteLine("OPENNV_PLAYER_MOVEMENT_INTEGRATION_PASS physicsBeforeControls=true failedPhysicalPrefix=true " +
             "sameMainInputAndClock=true workerPreparationThenGameplayPublication=true foreignThreadRefused=true " +
-            "coldHistoryOnly=true unfinishedFrameRefused=true nativePhysics=AUTHORED_TRANSPORT gameplay=UNEXECUTED");
+            "returnedChildrenRetained=true coldHistoryOnly=true unfinishedFrameRefused=true nativePhysics=AUTHORED_TRANSPORT gameplay=UNEXECUTED");
+    }
+
+    private static FalloutWorldProjectionPublication BindMovementIntegrationOrientation(
+        FalloutStandalonePlayerSceneState scene, FalloutFormKey player)
+    {
+        var source = FalloutPlayerWorldOrientationSource.Reviewed(FalloutPlayerMovementControlSource.Reviewed(scene.Source.Main));
+        var settings = new FalloutNumericIniSettings(
+            [new(FalloutPlayerWorldOrientationSource.ConstructorFovName, FalloutIniCollection.Main, 0x42960000),
+                new(FalloutPlayerControlConfiguration.WorldFovName, FalloutIniCollection.Main, 0x42960000),
+                new(FalloutWorldProjectionInputs.MinimumName, FalloutIniCollection.Main, 0x44d48000),
+                new(FalloutWorldProjectionInputs.MaximumName, FalloutIniCollection.Main, 0x46200000),
+                new(FalloutWorldProjectionInputs.FractionName, FalloutIniCollection.Main, 0x3f800000),
+                new(FalloutWorldProjectionInputs.NearName, FalloutIniCollection.Main, 0x40a00000)], [],
+            scene.Stack + ":authored-current-movement-projection:" + scene.Source.Main.EngineSha256);
+        var world = Guid.NewGuid(); var target = Guid.NewGuid();
+        var root = new FalloutWorldProjectionOwner(source, scene.Stack, world, () => true);
+        var consumers = new FalloutWorldProjectionConsumers(root, FalloutWorldProjectionInputs.Read(source, scene.Stack, settings),
+            () => new(source.Identity, scene.Stack, world, target, false, null, null, "authored-current-absent-renderer"));
+        root.ConstructOrdinary(settings, consumers);
+        var publication = new FalloutWorldProjectionPublication(source, scene.Stack, world, () => true);
+        publication.PublishReturned(root);
+        var reference = new FalloutPlayerReferenceOrientationOwner(source, scene.Stack, scene.Process,
+            new(player, new(player.OwnerPlugin, 7), "NPC_", 0, true), publication, scene.ControlFields,
+            () => true, scene.RequireMovementOrientationInvocation);
+        reference.InitializePlayerFov(settings); scene.BindPlayerReferenceOrientation(reference);
+        return publication;
     }
 
     private static Exception? OnMovementFixtureThread(Action action)

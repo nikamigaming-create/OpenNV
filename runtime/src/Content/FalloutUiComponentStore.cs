@@ -10,6 +10,8 @@ namespace OpenNV.Runtime.Content;
 // the source menu lifetime.
 internal sealed partial class FalloutUiComponentStore
 {
+    internal Guid Factory { get; } = Guid.NewGuid();
+    internal long Epoch { get; private set; }
     private sealed class Tile
     {
         internal readonly XElement Source;
@@ -190,6 +192,7 @@ internal sealed partial class FalloutUiComponentStore
 
     internal void Reset()
     {
+        Epoch = checked(Epoch + 1);
         _floatOverrides.Clear();
         _stringOverrides.Clear();
         _detachedPaths.Clear();

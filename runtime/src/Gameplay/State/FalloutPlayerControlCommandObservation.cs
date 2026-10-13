@@ -17,4 +17,5 @@ internal sealed record FalloutPlayerControlCommandObservation(FalloutFormKey Sou
         Producer == other.Producer && Observation == other.Observation && Enable == other.Enable && Arguments.SequenceEqual(other.Arguments);
 }
 internal sealed record FalloutPlayerControlCommandReceipt(FalloutPlayerControlCommandObservation Command,
-    Guid Process, Guid Constructor, long Retained);
+    Guid Process, Guid Constructor, long Retained, bool WriterEntered = false,
+    FalloutPlayerControlFlagCall? Writer = null);

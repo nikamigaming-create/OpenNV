@@ -17,6 +17,7 @@ internal static partial class SourceMainScriptCallerContracts
         RunPlayerMovementFlags();
         RunPlayerPhysicalAdmission();
         RunPlayerMovementControl();
+        RunPlayerControlHudContracts();
         RunPlayerMovementIntegration();
         var main = FalloutMainScriptCallerSource.Read(new(FalloutSourceMainFamily.Fallout3, new('1', 64),
             FalloutImmediateScriptSource.ContractForEngine(FalloutSourceMainFamily.Fallout3)));
@@ -176,7 +177,10 @@ internal static partial class SourceMainScriptCallerContracts
         var currentSerialized = JsonSerializer.Deserialize<FalloutProcessCommonSnapshot>(JsonSerializer.Serialize(common.Capture()))!;
         using var currentCold = new FalloutActorProcessCommonState(source, stack, Identity, Gameplay, _ => null, currentSerialized);
         var restoredCurrent = currentCold.Capture().Current.Single(item => item.Source.EnginePlayer);
-        Require(restoredCurrent.SceneFields == currentSerialized.Current.Single(item => item.Source.EnginePlayer).SceneFields && postRead == 1,
+        var expectedCurrent = currentSerialized.Current.Single(item => item.Source.EnginePlayer);
+        Require(JsonSerializer.Serialize(restoredCurrent.SceneFields) == JsonSerializer.Serialize(expectedCurrent.SceneFields) &&
+            restoredCurrent.Changed == expectedCurrent.Changed && restoredCurrent.Epoch == expectedCurrent.Epoch &&
+            restoredCurrent.Gameplay == expectedCurrent.Gameplay && postRead == 1,
             "Cold common restoration replayed timer stores or lost dynamic process cells.");
         Reject(() => common.UpdatePostActions(player, 2, () => 1));
         var lowPost = common.UpdatePostActions(npc, 1, () => throw new InvalidOperationException("Low post-action virtual polled a timer."));

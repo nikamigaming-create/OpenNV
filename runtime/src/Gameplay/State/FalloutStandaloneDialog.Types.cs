@@ -18,7 +18,7 @@ internal sealed record FalloutStandaloneMenuStackWrite(Guid Dialog, long Changed
     IReadOnlyList<uint> After, uint BeforeMode, uint AfterMode, int Slot, bool Returned,
     bool RequiresSceneByte, string? Failure);
 internal sealed record FalloutStandaloneMenuTransition(Guid Identity, Guid Menu, long Requested,
-    uint ElapsedBits, uint DurationBits, long Changed);
+    uint ElapsedBits, uint DurationBits, long Changed, uint ProgressBits = 0);
 internal sealed record FalloutStandaloneMenuTransitionSample(Guid Identity, string Owner, uint Kind,
     uint DeltaBits, uint? DivisorBits);
 internal sealed record FalloutStandaloneMenusSnapshot(IReadOnlyList<FalloutStandaloneDialogState> Dialogs,

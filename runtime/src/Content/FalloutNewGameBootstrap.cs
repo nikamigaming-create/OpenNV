@@ -113,9 +113,13 @@ internal sealed class FalloutNewGameBootstrap
                     var controls = new FalloutPlayerControlCommand(change.Enable, change.Controls ??
                         throw new InvalidDataException("Startup controls have no mask."));
                     if (world.HasStandalonePlayerScene)
-                        world.CampaignStandalonePlayerScene.ObserveSourceControlCommand(new(change.Source,
-                            "actual-new-game-bootstrap-PlayerControls-effect", Guid.NewGuid(), controls.Enable, controls.Arguments));
-                    Controls = controls.Apply(Controls);
+                    {
+                        var observation = new FalloutPlayerControlCommandObservation(change.Source,
+                            "actual-new-game-bootstrap-PlayerControls-effect", Guid.NewGuid(), controls.Enable, controls.Arguments);
+                        if (world.StandalonePlayerControlEffectsAttempted) world.ApplyStandalonePlayerControlCommand(observation);
+                        else world.CampaignStandalonePlayerScene.ObserveSourceControlCommand(observation);
+                    }
+                    Controls = world.HasStandalonePlayerScene ? controls.ApplyStandalone(Controls) : controls.Apply(Controls);
                     break;
                 case FalloutReferenceEffectKind.LoadingScreenPolicy:
                     scripts.Session.LocationSpecificLoadScreensOnly = change.Enable;

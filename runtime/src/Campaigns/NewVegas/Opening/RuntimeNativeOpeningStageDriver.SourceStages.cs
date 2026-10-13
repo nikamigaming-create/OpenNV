@@ -28,9 +28,14 @@ internal partial class RuntimeNativeOpeningStageDriver
         var command = new FalloutPlayerControlCommand(effect.Enable, effect.Controls ??
             throw new InvalidDataException("Player controls are absent."));
         if (_scripts.References is { HasStandalonePlayerScene: true } world)
-            world.CampaignStandalonePlayerScene.ObserveSourceControlCommand(new FalloutPlayerControlCommandObservation(effect.Source,
-                "actual-shared-script-host-PlayerControls-effect", Guid.NewGuid(), command.Enable, command.Arguments));
-        _sourceControls = command.Apply(_sourceControls);
+        {
+            var observation = new FalloutPlayerControlCommandObservation(effect.Source,
+                "actual-shared-script-host-PlayerControls-effect", Guid.NewGuid(), command.Enable, command.Arguments);
+            if (world.StandalonePlayerControlEffectsAttempted) world.ApplyStandalonePlayerControlCommand(observation);
+            else world.CampaignStandalonePlayerScene.ObserveSourceControlCommand(observation);
+        }
+        _sourceControls = _scripts.References is { HasStandalonePlayerScene: true }
+            ? command.ApplyStandalone(_sourceControls) : command.Apply(_sourceControls);
         _player.ApplySourceControls(PlayerControls);
     }
 

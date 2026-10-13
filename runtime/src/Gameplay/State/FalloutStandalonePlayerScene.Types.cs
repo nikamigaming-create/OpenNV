@@ -51,7 +51,12 @@ internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, Fallo
     FalloutPlayerIdleAnimationCall? IdleAnimationCall = null,
     FalloutPlayerMoverFields? MoverFields = null, FalloutPlayerMovementCall? MovementCall = null,
     byte ActorMovementFlag = 0,
-    IReadOnlyList<FalloutPlayerControlCommandReceipt>? ControlObservations = null);
+    IReadOnlyList<FalloutPlayerControlCommandReceipt>? ControlObservations = null,
+    FalloutPlayerControlFieldsSnapshot? ControlFields = null,
+    IReadOnlyList<FalloutSourceThreadKindScope>? MenuKindScopes = null,
+    FalloutPlayerControlHudSnapshot? ControlHud = null, FalloutPlayerControlDisplaySnapshot? ControlDisplay = null,
+    FalloutPlayerReferenceOrientationSnapshot? ReferenceOrientation = null,
+    FalloutPlayerPointOfViewSnapshot? PointOfView = null);
 
 // These are individual source children. A supplied delegate is not a completion
 // receipt; the source call records its actual returned child and committed prefix.

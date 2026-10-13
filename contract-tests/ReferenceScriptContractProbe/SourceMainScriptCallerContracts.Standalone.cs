@@ -123,7 +123,8 @@ internal static partial class SourceMainScriptCallerContracts
         private readonly AuthoredInterfaceObject _interface;
         private IDisposable? _globalTimeLease;
         internal StandaloneFixture(FalloutActorProcessRuntimeSnapshot? saved = null, FalloutInterfaceFadeSnapshot? fade = null,
-            bool bindTaskManager = true, FalloutPluginStack? selectedRecords = null, FalloutAdvancementRuntimeReceipt? selectedRuntime = null)
+            bool bindTaskManager = true, FalloutPluginStack? selectedRecords = null, FalloutAdvancementRuntimeReceipt? selectedRuntime = null,
+            string? authoredStack = null)
         {
             const string engine = FalloutSourceMainFamily.Fallout3;
             if ((selectedRecords is null) != (selectedRuntime is null))
@@ -132,7 +133,7 @@ internal static partial class SourceMainScriptCallerContracts
                 new FalloutImmediateScriptSource(engine, new('1', 64), FalloutImmediateScriptSource.ContractForEngine(engine)) :
                 FalloutImmediateScriptSource.Read(selectedRuntime);
             var main = FalloutMainScriptCallerSource.Read(field);
-            var stack = selectedRecords?.OwnedSource?.StackId ?? "authored-FO3-Main";
+            var stack = selectedRecords?.OwnedSource?.StackId ?? authoredStack ?? "authored-FO3-Main";
             FalloutFormKey Key(uint id) => new("Authored.esm", id);
             FalloutCombatActorIdentity Identity(FalloutFormKey key) => new(key, Key(7), "ENGINE_PLAYER", 0, engine, "NPC_", 0, new('4', 64), true);
             Owner = new(FalloutActorProcessRuntimeDeclaration.ForExecutable(engine), stack, Key(0x14), Identity, saved);

@@ -120,6 +120,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             {
                 _movementCall = _movementCall with { Control = controls.Capture(), Changed = Next() };
             }
+            _movementCall = _movementCall with { Step = "returned", Returned = true, Changed = Next() };
         }
         catch (Exception error)
         {
@@ -156,8 +157,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (saved.IdleAnimationCall is not { Returned: true, Result: { } idle } parent ||
             parent.Main != call.Main || parent.MainOrdinal != call.MainOrdinal || call.Entered <= parent.Changed ||
             call.Changed <= call.Entered || call.Changed > saved.Sequence || call.MoverReads is null || call.MoverReads.Count > 2 ||
-            call.MoverReads.Any(flags => flags != 0) || call.Returned || string.IsNullOrWhiteSpace(call.Failure) ||
-            call.Failure != saved.Failure)
+            call.MoverReads.Any(flags => flags != 0) || call.Returned != (call.Failure is null) ||
+            call.Failure is { } movementFailure && (string.IsNullOrWhiteSpace(movementFailure) || movementFailure != saved.Failure) ||
+            call.Returned != (call.Step == "returned"))
             throw new InvalidDataException("Player movement prefix lost its actual invocation, mover factory or retained failure.");
         if (call.ProcessFlags is not { } update)
         {
@@ -170,7 +172,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (!SameProcess(update.Before, idle.Before) || update.Before.Changed < idle.Changed || !update.Returned ||
             update.Flags != 0 || (high ? update.Stores != 1 || update.AfterFlags != 0 || update.Changed <= update.Before.Changed
                 : update.Stores != 0 || update.AfterFlags is not null || update.Changed != update.Before.Changed) ||
-            call.Step is not ("movement-current-actor-field-child" or "movement-control-child") ||
+            call.Step is not ("movement-current-actor-field-child" or "movement-control-child" or "returned") ||
             call.MoverReads.Count != 2 || call.InitialLowWord != 0 || call.ActorFlag != 0)
             throw new InvalidDataException("Movement prefix changed its independent flag clear or repeated source mover reads.");
         if (call.Physics is not { } physics)
@@ -195,7 +197,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (control.Source != FalloutPlayerMovementControlSource.Reviewed(saved.Source.Main) || control.Stack != saved.Stack ||
             control.CapturedProcess != input.Process || control.Retired || child.Main != call.Main || child.MainOrdinal != call.MainOrdinal ||
             child.ArgumentBits != argument || child.MoverWord != (ushort)(saved.MoverFields.Flags & FalloutPlayerMovementControlSource.MoverMask) ||
-            control.Failure != call.Failure || child.InputFactory is { } factory && (factory != input.Factory ||
+            control.Failure != call.Failure || child.Returned != call.Returned || child.InputFactory is { } factory && (factory != input.Factory ||
                 child.InputWindow != input.Window || child.InputProvider != input.Provider) ||
             child.MouseReads.Any(read => read.Sample != input.Sample || read.Revision != input.Revision))
             throw new InvalidDataException("Player controls changed their actual input/source owner, scene argument or masked mover word.");

@@ -15,6 +15,9 @@ internal sealed record FalloutSourceFrameTimerSnapshot(FalloutSourceFrameTimer S
     float Rate, float TargetRate, bool UseRateWrites, bool ZeroElapsed, long Updated, string? Failure,
     string? EnteredOperation, long EnteredAt, long ReturnedThrough);
 
+internal sealed record FalloutSourceFrameDeltaRead(string Source, Guid Process, long Epoch, long Sequence,
+    uint ScaledSecondsBits, bool HasReturnedUpdate);
+
 // Raw OS time, the cached UInt32 value, animation delta and game calendar are
 // separate fields. In particular the zero-elapsed and minimum-wait branches
 // do not change the cached UInt32 value into an artificial accumulated delta.
@@ -87,6 +90,14 @@ internal sealed partial class FalloutSourceFrameTimerState : IDisposable
         return new(_source.EngineSha256, _epoch, _cached);
     }
     internal float ScaledSeconds { get { RequireHealthy(); return _scaled; } }
+    internal FalloutSourceFrameDeltaRead ReadControlDelta()
+    {
+        RequireHealthy();
+        // The source HUD directly reads the retained scalar, including its
+        // genuine constructor-zero phase before the first returned update.
+        // A host delta or an entered/failed timer cannot supply this field.
+        return new(_source.EngineSha256, _process, _epoch, _sequence, BitConverter.SingleToUInt32Bits(_scaled), HasReturnedUpdate);
+    }
     internal void UpdateFromMain(FalloutSourceFrameTimerConfiguration configuration, bool cachedMainMenuGate)
     {
         configuration.Validate();

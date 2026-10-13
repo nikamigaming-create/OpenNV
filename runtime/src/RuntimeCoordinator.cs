@@ -24,6 +24,7 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator : Node3D
 {
+    private Diagnostics.Parity.RuntimeLiveHarness? _runtimeLiveHarness;
     private const string DefaultNewVegasOpeningSavePath =
         "user://saves/new-vegas-opening-v1.json";
 
@@ -130,6 +131,7 @@ public partial class RuntimeCoordinator : Node3D
             if (_options.TryGetValue("live-harness", out var harnessDirectory))
             {
                 var harness = new Diagnostics.Parity.RuntimeLiveHarness();
+                _runtimeLiveHarness = harness;
                 harness.Configure(harnessDirectory, CaptureParityFrame, () => CaptureNativeDriveState(), () => _nativePluginStack,
                     () => CaptureNativeDriveState(false), () => (ParityStateKey, _parityObservations.Coverage().EventOrdinal));
                 harness.ConfigureBot(ObserveNativeBot, FindNativeNavigationRoute, _configuration.Player.MouseSensitivityRadiansPerPixel,

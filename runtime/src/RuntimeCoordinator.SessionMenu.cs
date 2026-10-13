@@ -200,6 +200,7 @@ public partial class RuntimeCoordinator
             _retiringNativeSession = true;
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
             _nativeScriptStorage?.Controls?.Flush();
+            _runtimeLiveHarness?.Retire();
             RetireNativeExperienceHud();
             RetireCurrentImagePhase();
             await RetireNativeCellAndHdrConsumers();
@@ -240,6 +241,7 @@ public partial class RuntimeCoordinator
             if (_pendingSaveActivation is not null) RejectNativePendingLoad(new OperationCanceledException("Selected load was cancelled by quitting."));
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
+            _runtimeLiveHarness?.Retire();
             RetireNativeExperienceHud();
             RetireCurrentImagePhase();
             await RetireNativeCellAndHdrConsumers();

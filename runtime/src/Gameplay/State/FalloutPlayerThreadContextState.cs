@@ -12,7 +12,7 @@ internal sealed record FalloutPlayerThreadModelCacheRead(string Source, Guid Pro
 // Typed C# ownership of these two current-thread fields. Original DLLs still
 // require a complete independent x86 TLS image; this state never supplies a
 // partial native buffer or substitutes a copied loader image for that owner.
-internal sealed class FalloutPlayerThreadContextState
+internal sealed partial class FalloutPlayerThreadContextState
 {
     [ThreadStatic] private static Dictionary<Guid, FalloutPlayerThreadContextState>? _current;
     private readonly FalloutPlayerThreadContextSource _source;
@@ -62,8 +62,11 @@ internal sealed class FalloutPlayerThreadContextState
         _current[_process] = this; _thread = Environment.CurrentManagedThreadId;
         // The selected on-demand source initializer sets this byte first and
         // has a proven empty initializer range. It allocates no proxy objects.
-        if (_initialized == 0) _initialized = 1;
-        var before = _kind; _kind = _source.PlayerKind;
+        var fields = CurrentKindFields();
+        if (fields.Entered is not null)
+            throw new InvalidOperationException("Player cannot enter across an unreturned source menu allocation.");
+        fields.Initialized = _initialized = 1;
+        var before = fields.Kind; fields.Kind = _kind = _source.PlayerKind;
         Entry = new(_source.Identity, _process, _factory, main, ordinal, _thread.Value,
             before, _kind, _initialized, true, true);
         Exit = null;
@@ -73,13 +76,13 @@ internal sealed class FalloutPlayerThreadContextState
     {
         if (_retired || Exit is not null || Entry is not { ScopeEntered: true, InitializerReturned: true } entry ||
             entry.Main != main || entry.MainOrdinal != ordinal || _thread != Environment.CurrentManagedThreadId ||
-            _kind != entry.CurrentKind || _initialized != 1 || _current is null ||
+            _kind != entry.CurrentKind || _initialized != 1 || CurrentKindFields().Entered is not null || _current is null ||
             !_current.TryGetValue(_process, out var current) || !ReferenceEquals(current, this))
             throw new InvalidOperationException("Player context exit lost its entered source call, current thread or prior kind.");
         // The epilogue restores the value captured by this invocation. It is
         // reached only after the Player body returns; failure and retirement
         // preserve an entered scope rather than issuing this store in finally.
-        var before = _kind; _kind = entry.BeforeKind;
+        var before = _kind; CurrentKindFields().Kind = _kind = entry.BeforeKind;
         Exit = new(_source.Identity, _process, _factory, main, ordinal, _thread.Value,
             before, _kind, _initialized);
         return Exit;
@@ -96,6 +99,7 @@ internal sealed class FalloutPlayerThreadContextState
         }
         // Retirement releases the C# current owner. It never invents the
         // original scope-exit store or marks the failed Player virtual returned.
+        _kindFields.Clear();
         _retired = true;
     }
     internal FalloutPlayerThreadModelCacheRead ReadPlayerModelCache(FalloutFormKey actor)

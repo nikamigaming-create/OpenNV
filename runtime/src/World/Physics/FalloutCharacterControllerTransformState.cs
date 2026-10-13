@@ -79,4 +79,6 @@ internal static class FalloutPhysicalFloat32
     internal static float Subtract(float left, float right) => left - right;
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal static float Multiply(float left, float right) => left * right;
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static float Divide(float left, float right) => left / right;
 }

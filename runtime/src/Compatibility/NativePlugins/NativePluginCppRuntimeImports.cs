@@ -13,9 +13,26 @@ internal static class NativePluginCppRuntimeImports
     internal const string OpenWide = "?_Fiopen@std@@YAPAU_iobuf@@PB_WHH@Z";
     internal const string OpenNarrow = "?_Fiopen@std@@YAPAU_iobuf@@PBDHH@Z";
     internal const string ErrorStream = "?cerr@std@@3V?$basic_ostream@DU?$char_traits@D@std@@@1@A";
+    // unsigned int __cdecl(void). The actual Microsoft provider retains its
+    // entropy source and C++ failure path; no native or managed shim replaces it.
+    internal const string RandomDevice = "?_Random_device@std@@YAIXZ";
+    internal const string ClearInputState = "?clear@?$basic_ios@DU?$char_traits@D@std@@@std@@QAEXH_N@Z";
+    internal const string SeekInputPosition = "?seekg@?$basic_istream@DU?$char_traits@D@std@@@std@@QAEAAV12@V?$fpos@U_Mbstatet@@@2@@Z";
+    internal const string SeekInputOffset = "?seekg@?$basic_istream@DU?$char_traits@D@std@@@std@@QAEAAV12@_JH@Z";
+    internal const string TellInputPosition = "?tellg@?$basic_istream@DU?$char_traits@D@std@@@std@@QAE?AV?$fpos@U_Mbstatet@@@2@XZ";
+    internal const string StreamEndOfFile = "?eof@ios_base@std@@QBE_NXZ";
+    internal const string StreamFailed = "?fail@ios_base@std@@QBE_NXZ";
+    internal const string StreamBad = "?bad@ios_base@std@@QBE_NXZ";
+    internal const string SetStreamExceptions = "?exceptions@ios_base@std@@QAEXH@Z";
+    internal const string StreamVirtualBaseDestructor = "??_D?$basic_istream@DU?$char_traits@D@std@@@std@@QAEXXZ";
+    internal const string LocaleWideMonths = "?_W_Getmonths@_Locinfo@std@@QBEPBGXZ";
+    internal const string LocaleWideDays = "?_W_Getdays@_Locinfo@std@@QBEPBGXZ";
     internal static readonly IReadOnlySet<string> Names = new HashSet<string>(StringComparer.Ordinal)
     {
-        OpenWide, OpenNarrow, ErrorStream,
+        OpenWide, OpenNarrow, ErrorStream, RandomDevice,
+        ClearInputState, SeekInputPosition, SeekInputOffset, TellInputPosition,
+        StreamEndOfFile, StreamFailed, StreamBad, SetStreamExceptions,
+        StreamVirtualBaseDestructor, LocaleWideMonths, LocaleWideDays,
         "??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QAE@PAV?$basic_streambuf@DU?$char_traits@D@std@@@1@_N@Z",
         "?flush@?$basic_ostream@DU?$char_traits@D@std@@@std@@QAEAAV12@XZ",
         "?in@?$codecvt@DDU_Mbstatet@@@std@@QBEHAAU_Mbstatet@@PBD1AAPBDPAD3AAPAD@Z",
@@ -81,7 +98,7 @@ internal static class NativePluginCppRuntimeImports
         "??1?$basic_istream@DU?$char_traits@D@std@@@std@@UAE@XZ",
         "?read@?$basic_istream@DU?$char_traits@D@std@@@std@@QAEAAV12@PAD_J@Z",
         "?gcount@?$basic_istream@DU?$char_traits@D@std@@@std@@QBE_JXZ",
-        "?classic@locale@std@@SAABV12@XZ", "?_Xlength_error@std@@YAXPBD@Z", "?_Xbad_alloc@std@@YAXXZ",
+        "?classic@locale@std@@SAABV12@XZ", "?_Xlength_error@std@@YAXPBD@Z", "?_Xout_of_range@std@@YAXPBD@Z", "?_Xbad_alloc@std@@YAXXZ",
         "?uncaught_exception@std@@YA_NXZ", "??1_Lockit@std@@QAE@XZ",
         "?_Pnavail@?$basic_streambuf@DU?$char_traits@D@std@@@std@@IBE_JXZ", "??0_Lockit@std@@QAE@H@Z",
     };

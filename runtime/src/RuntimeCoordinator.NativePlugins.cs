@@ -78,6 +78,12 @@ public partial class RuntimeCoordinator
         RetireNativeMainDelivery();
         var owner = _nativePluginCampaign;
         var failures = new List<Exception>();
+        try
+        {
+            if (_nativeReferences is { StandalonePlayerControlEffectsAttempted: true } world)
+                world.RetireStandalonePlayerControlEffects();
+        }
+        catch (Exception error) { failures.Add(error); }
         try { RetireNativeSteamCampaign(); } catch (Exception error) { failures.Add(error); }
         if (owner is not null)
         {

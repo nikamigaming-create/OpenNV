@@ -26,6 +26,7 @@ public partial class RuntimeCoordinator
         PublishNativeGlobalTime(world);
         _nativeScriptStorage?.Auxiliary.ResetForNewGame();
         _nativeUi?.Reset();
+        PrepareStandalonePlayerOwners(world);
         _nativeGameTime!.InitializeNewGame();
         ConfigureSourceMainImageAuthority(null);
         _nativeBootstrapCharacter = (_nativeRaceSexContract ?? throw new InvalidOperationException("New Game has no player appearance owner.")).Initial;

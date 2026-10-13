@@ -69,16 +69,14 @@ internal sealed partial class FalloutStandaloneInterfaceState
         }
         if (!saved.MenuSlots.SequenceEqual(slots) || saved.Mode != mode || saved.ActiveMenus.Any(value => value != 0))
             throw new InvalidDataException("Interface mode/slots/active bytes have no matching original writer.");
-        // Allocation/TLS and the original interface clock have not returned in
-        // this packet. An empty constructor queue does not claim inspection of
-        // those independently implemented value-transport algorithms.
-        if (menus.Transitions.Count != 0)
-            throw new NotSupportedException("Original menu transition allocation/TLS/current-frame producer is unowned.");
+        // Source HUD transitions share this actual queue. Their independent
+        // allocator/TLS and current clock are validated by the HUD owner and
+        // the retained source menu-factory graph.
     }
     private void RestoreDialogMenus(FalloutStandaloneMenusSnapshot menus)
     {
         _dialogMenus.AddRange(menus.Dialogs); _menuWrites.AddRange(menus.StackWrites);
-        _menuTransitions.AddRange(menus.Transitions);
+        foreach (var transition in menus.Transitions) _menuTransitions.AddLast(transition);
         // Historical source control identities do not become current native
         // roots. A new menu requires its actual new returned factory/closure.
     }

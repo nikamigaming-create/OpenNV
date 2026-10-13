@@ -11,10 +11,10 @@ internal static class NativePluginPlatformImports
         "GetTickCount", "GetTickCount64", "QueryPerformanceCounter", "QueryPerformanceFrequency",
         "EnterCriticalSection", "LeaveCriticalSection", "InitializeCriticalSection", "InitializeCriticalSectionEx",
         "InitializeCriticalSectionAndSpinCount", "DeleteCriticalSection", "TryEnterCriticalSection", "InitializeSListHead",
-        "AcquireSRWLockExclusive", "AcquireSRWLockShared", "ReleaseSRWLockExclusive", "ReleaseSRWLockShared",
+        "AcquireSRWLockExclusive", "AcquireSRWLockShared", "TryAcquireSRWLockShared", "ReleaseSRWLockExclusive", "ReleaseSRWLockShared",
         "SleepConditionVariableSRW", "WakeAllConditionVariable", "WakeConditionVariable", "Sleep",
-        "GetModuleHandleA", "GetModuleHandleW", "GetModuleFileNameA", "GetModuleFileNameW", "DisableThreadLibraryCalls",
-        "GetLastError", "SetLastError", "IsDebuggerPresent", "IsProcessorFeaturePresent", "SetUnhandledExceptionFilter",
+        "GetModuleHandleA", "GetModuleHandleW", "GetModuleFileNameA", "GetModuleFileNameW", "DisableThreadLibraryCalls", "GetStartupInfoW", "GetStdHandle",
+        "GetLastError", "SetLastError", "IsDebuggerPresent", "IsProcessorFeaturePresent", "SetUnhandledExceptionFilter", "DebugBreak",
         "UnhandledExceptionFilter", "TerminateProcess", "LocalFree", "LocalAlloc", "FormatMessageA", "FormatMessageW",
         "AreFileApisANSI", "MultiByteToWideChar", "WideCharToMultiByte", "GetLocaleInfoEx", "GetACP", "GetCPInfo", "GetStringTypeW",
     };

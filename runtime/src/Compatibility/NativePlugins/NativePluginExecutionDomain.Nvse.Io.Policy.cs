@@ -5,7 +5,11 @@ using Microsoft.Win32;
 namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 internal enum NativePluginIoRole : uint { Configuration = 1, State = 2, CoSave = 3, Diagnostic = 4 }
-internal enum NativePluginIoAction : uint { Read = 1, Write = 2, Directory = 3, Delete = 4, Attributes = 5, ProfileRead = 6, ProfileWrite = 7 }
+internal enum NativePluginIoAction : uint
+{
+    Read = 1, Write = 2, Directory = 3, Delete = 4, Attributes = 5, ProfileRead = 6, ProfileWrite = 7,
+    MoveSource = 8, MoveDestination = 9
+}
 internal sealed record NativePluginIoWriteScope(string VirtualPath, bool Directory, NativePluginIoRole Role, string DeclarationOwner);
 internal sealed record NativePluginIoReadWinner(string PhysicalPath, string Sha256, string SourceOwner, bool Configuration, bool Diagnostic = false);
 internal sealed record NativePluginIoSelection(string StackSha256, string ModuleSha256, string ModulePath,
@@ -162,7 +166,8 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
         if (!(api == 1 && (action is NativePluginIoAction.Read or NativePluginIoAction.Write) ||
             api == 5 && action == NativePluginIoAction.Directory || api == 6 && action == NativePluginIoAction.Delete ||
             api == 7 && action == NativePluginIoAction.Attributes || api == 8 && action == NativePluginIoAction.ProfileRead ||
-            api == 9 && action == NativePluginIoAction.ProfileWrite))
+            api == 9 && action == NativePluginIoAction.ProfileWrite ||
+            api == MoveFileApi && (action is NativePluginIoAction.MoveSource or NativePluginIoAction.MoveDestination)))
             throw new InvalidDataException("Native route changed its callable API/action contract.");
         var generation = _generation ?? throw new InvalidOperationException("Private I/O has no process generation.");
         var path = Virtual(declared); string? physical = null, hash = null; NativePluginIoRole? role = null; uint error = 0;
@@ -206,7 +211,8 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
                 else if (!Within(scope.Private, parentDirectory)) Directory.CreateDirectory(parentDirectory);
             }
             else Directory.CreateDirectory(Path.GetDirectoryName(physical)!);
-            if ((action is NativePluginIoAction.Write or NativePluginIoAction.ProfileWrite or NativePluginIoAction.Delete) &&
+            if ((action is NativePluginIoAction.Write or NativePluginIoAction.ProfileWrite or NativePluginIoAction.Delete or
+                NativePluginIoAction.MoveSource or NativePluginIoAction.MoveDestination) &&
                 error == 0 && !File.Exists(physical) && !_deleted.Contains(path))
             {
                 if (Selection.ResolveWinningRead(path) is { } winner)
@@ -314,7 +320,8 @@ internal sealed partial class NativePluginPrivateIo : IDisposable
     {
         if (_nvseLoggingPath is { } logging) RequireNvseLogging(_generation!.Value, logging);
         if (HasFailedChildConstruction) throw new InvalidOperationException("Native I/O retains an unfinished child construction.");
-        if (_routes.Count != 0 || _fileRoutes.Count != 0) throw new InvalidDataException("Native private I/O retains unfinished route/file results.");
+        if (_routes.Count != 0 || _fileRoutes.Count != 0 || _moves.Count != 0)
+            throw new InvalidDataException("Native private I/O retains unfinished route/file/move results.");
         foreach (var (path, lease) in _reads)
         {
             lease.Position = 0;

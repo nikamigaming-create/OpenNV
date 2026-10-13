@@ -59,6 +59,8 @@ internal static partial class FalloutExecutableStringTable
                 0x88, 0x86, 0xdc, 5, 0, 0, 0xa8, 1, 0xb9, 1, 0, 0, 0,
                 0xb8, 0x0c, 0, 0, 0, 0x0f, 0x44, 0xc1, 0x50, 0xe8]))
             throw new NotSupportedException("Player flag setter changed its ordered stores, full-disable exception or mandatory input-type child.");
+        RequirePlayerControlHud(code, image, Call(setter + 0x2b));
+        RequirePlayerPointOfViewFields(code, image, setter);
         foreach (var command in new[] { disabled + 0x6c, enabled + 0x7c })
         {
             if (!Match(code, command, [0x39, 0x75, 0xfc, 0xb8, 1, 0, 0, 0, 0x0f, 0x45, 0xf0]))

@@ -84,6 +84,14 @@ internal sealed class FalloutMainCachedTailState : IDisposable
     internal string? SaveBlocker => _active != Guid.Empty ? "source-Main-cached-tail-entered" :
         _last?.Failure is { } failure ? "source-Main-cached-tail-failed:" + failure :
         _last is { Phase: not FalloutMainCachedTailPhase.LocalReturned } ? "source-Main-cached-tail-unreturned" : _rendererClock?.SaveBlocker;
+    internal FalloutRendererClockState RequireControlModeOwner(Guid process)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_thread != Environment.CurrentManagedThreadId || process != _process)
+            throw new InvalidOperationException("Source controls changed their actual Main control-mode owner.");
+        var clock = _rendererClock ?? throw new NotSupportedException("source-Player-controls-current-Main-control-mode-owner-unbound");
+        _ = clock.ReadMainControlMode(process); return clock;
+    }
     internal object State => new
     {
         source = Source,

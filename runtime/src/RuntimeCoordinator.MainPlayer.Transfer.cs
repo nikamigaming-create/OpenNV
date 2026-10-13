@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime;
@@ -61,6 +62,10 @@ public partial class RuntimeCoordinator
                         throw new InvalidDataException("Pending door request has no exact active winning source reference.");
                     _ = FalloutDoorDestinationResolver.Resolve(_nativePluginStack!, door);
                     var doorPlacement = ReadSourcePlayerRawPlacement(invocation, request);
+                    if (world.HasStandalonePlayerScene)
+                        world.CampaignStandalonePlayerScene.PublishPlayerReferencePlacement(request.Identity,
+                            "actual-source-Main-Player-directed-door-rotation-store", FalloutReferencePlacementIngress.DirectedDoor,
+                            raw.RotationX, raw.RotationY, raw.RotationZ);
                     await StreamNativeDoorTransition(door, doorPlacement);
                     Check(); RequireMainPlayerPublishedTarget(world, doorPlacement.Cell);
                     break;

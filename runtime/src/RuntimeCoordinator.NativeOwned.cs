@@ -119,6 +119,8 @@ public partial class RuntimeCoordinator
             playerSetup = new { phase = _nativePlayerSetupPhase.ToString(), failure = _nativePlayerSetupFailure },
             terminalSessions = NativePlayerSetupPrepared ? playerDriver?.TerminalState : null,
             bootstrap = _nativeBootstrap?.State,
+            playerControlEffects = _nativeReferences?.StandalonePlayerControlEffectsState,
+            worldProjection = _nativeReferences?.StandaloneWorldProjectionState,
             loading = _nativeLoadingScreens?.State,
             loadingFeedback = _loadingScreen?.State ?? _nativeLoadingProgress?.State,
             cell = _nativeActiveCell?.Cell.FormKey.ToString(),
@@ -620,8 +622,11 @@ public partial class RuntimeCoordinator
             _nativeReferences.ConfigureSourceProcessQueues(FalloutActorProcessQueueDeclaration.ForExecutable(
                 FalloutActorProcessDeclaration.Read(content.FalloutExecutablePath).ExecutableSha256), content.StackId,
                 restore.State.ProcessQueues ?? throw new InvalidDataException("Current campaign has no actual process queue continuation."));
+            if (_nativeReferences.HasStandalonePlayerScene)
+                _nativeReferences.PrepareStandaloneWorldProjectionRestore(restore.State.WorldProjection);
             _nativeReferences.PublishSourceMutableNativeOwners(this);
             PublishNativeGlobalTime(_nativeReferences);
+            PrepareStandalonePlayerOwners(_nativeReferences);
         }
         else if (_nativeBootstrap is null)
         {

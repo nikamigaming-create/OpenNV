@@ -7,8 +7,9 @@ internal sealed partial class FalloutActorProcessCommonState
     internal FalloutProcessCommonSnapshot Capture()
     {
         RequireNotBusy();
-        return new(Schema, _source.Contract, _stack, _process, _sequence, _current.Values.ToArray(),
-            _retired.ToArray(), _pending, _transfer, _cold, _source.ExecutableSha256);
+        return new(Schema, _source.Contract, _stack, _process, _sequence, _current.Values.Select(CaptureWeaponObservationHistory).ToArray(),
+            _retired.Select(CaptureWeaponObservationHistory).ToArray(), _pending is null ? null : CaptureWeaponObservationHistory(_pending),
+            _transfer, _cold, _source.ExecutableSha256);
     }
     private void Restore(FalloutProcessCommonSnapshot saved)
     {
