@@ -1,5 +1,36 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args is ["--test-source-suppression"])
+{
+    NativeSourceSuppressionContracts.Run();
+    return;
+}
+if (args.Length is 6 or 7 && args[0] == "--test-source-suppression")
+{
+    NativeSourceSuppressionContracts.RunNative(args[1], args[2], args[3], args[4],
+        uint.Parse(args[5], System.Globalization.CultureInfo.InvariantCulture),
+        args.Length == 7 ? uint.Parse(args[6], System.Globalization.CultureInfo.InvariantCulture) : null);
+    return;
+}
+
+if (args is ["--test-nvse-logging"])
+{
+    NativeNvseLoggingContracts.Run();
+    return;
+}
+
+if (args.Length == 5 && args[0] == "--test-nvse-logging")
+{
+    NativeNvseLoggingContracts.RunNative(args[1], args[2], args[3], args[4]);
+    return;
+}
+
+if (args is ["--test-headless-user32"])
+{
+    NativeHeadlessUser32Contracts.Run();
+    return;
+}
+
 if (args is ["--test-native-array-source"])
 {
     NativeArrayObjectContracts.Run();
@@ -36,6 +67,22 @@ if (args.Length == 5 && args[0] == "--test-native-crt")
     return;
 }
 
+if (args.Length == 1 && args[0] == "--test-crt-pure")
+{
+    NativeCrtPureContracts.Run();
+    return;
+}
+if (args.Length == 5 && args[0] == "--test-native-crt-pure")
+{
+    NativeCrtPureContracts.RunNative(args[1], args[2], args[3], args[4]);
+    return;
+}
+if (args.Length == 2 && args[0] == "--audit-owned-crt-pure")
+{
+    NativeCrtPureContracts.RunOwned(args[1]);
+    return;
+}
+
 if (args.Length == 5 && args[0] == "--test-native-cpp-streams")
 {
     NativeCppStreamsContracts.Run(args[1], args[2], args[3], args[4]);
@@ -63,6 +110,10 @@ if (args.Length != 0)
 }
 
 NativeEngineCommandLeafContracts.Run();
+NativeHeadlessUser32Contracts.Run();
+NativeNvseLoggingContracts.Run();
+NativeCrtPureContracts.Run();
+NativeSourceSuppressionContracts.Run();
 NativeExpressionLocalContracts.Run();
 OwnershipAndEndian();
 NativeArrayObjectContracts.Run();

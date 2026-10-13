@@ -32,6 +32,7 @@ internal sealed partial class NativePluginExecutionDomain
             NativeNvseHostSource.RequirePluginExports(source);
             RequireSourceAddressSpace(host);
             PrepareOriginalImportProviders(path, expectedSha256);
+            var logging = PrepareNvseLogging(host, io);
             host.Claim(Generation); _nvseHostSource = host; _nvseCallbackBudget = maximumInterfaceCallbacks;
             started = true; _nvseImageAttempted = true;
             EnterOriginalLoaderAttempt();
@@ -39,6 +40,7 @@ internal sealed partial class NativePluginExecutionDomain
             {
                 WriteText(writer, path); WriteText(writer, host.RuntimeDirectory);
                 writer.Write(host.NvseVersion); writer.Write(host.RuntimeVersion); writer.Write(host.NoGore); writer.Write(maximumInterfaceCallbacks); writer.Write(sourcePluginHandle);
+                writer.Write(checked((uint)logging.ReturnedBytes.Length)); writer.Write(logging.ReturnedBytes.AsSpan());
             }));
             var module = reader.ReadUInt64(); var image = reader.ReadUInt32(); var handle = reader.ReadUInt32();
             var nativeInterface = reader.ReadUInt32(); var query = reader.ReadUInt32(); var load = reader.ReadUInt32(); Finish(reader);
@@ -180,7 +182,8 @@ internal sealed partial class NativePluginExecutionDomain
         uint value;
         switch ((NativeNvseHostCall)frame.Operation)
         {
-            case NativeNvseHostCall.QueryInterface: value = registry.QueryInterface(frame.Id, reader.ReadUInt32(), _nvseValues is not null, _nvseScriptInterface, _nvseCommandTable is not null, _nvseData is null ? 0 : _nvseDataVersion); break;
+            case NativeNvseHostCall.QueryInterface: value = registry.QueryInterface(frame.Id, reader.ReadUInt32(), _nvseValues is not null, _nvseScriptInterface, _nvseCommandTable is not null, _nvseData is null ? 0 : _nvseDataVersion, _nvseLogging is not null); break;
+            case NativeNvseHostCall.LoggingGetPath: value = DispatchNvseLogging(frame, parent, reader, plugin); break;
             case NativeNvseHostCall.SetOpcode: value = registry.SetOpcode(frame.Id, reader.ReadUInt32()); break;
             case NativeNvseHostCall.RegisterCommand:
                 {
@@ -247,6 +250,7 @@ internal sealed partial class NativePluginExecutionDomain
         ClearEngineGlobalsAfterChildExit();
         ClearNvseBinaryAfterChildClosure();
         ClearNvseData();
+        _nvseLogging = null; _nvseLoggingAddress = 0;
         ClearNvseCommandTable();
         ClearNvseLocalCapabilities(); ClearNvseValueCapabilities(); _nvseHeapDeclaration = null;
         ClearNvseExpressionCapabilities(); ClearNvseSourceObjects();

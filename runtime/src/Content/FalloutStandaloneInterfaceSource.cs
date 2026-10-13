@@ -18,7 +18,12 @@ internal sealed record FalloutStandaloneInterfaceSource(FalloutMainScriptCallerS
         "nonnull-selected-object-and-reference-inequality-to-own;" +
         "menu-mode-three-push-four-empty-remove-ordered-slots;" +
         "tile-transitions-source-manager-and-input-manager-children-independent;" +
-        "current-native-publication-and-fresh-cold-rebind-not-restored-pointers";
+        "current-native-publication-and-fresh-cold-rebind-not-restored-pointers;" +
+        "independent-inline-fifty-actor-slots-and-signed-count-constructor-zero;" +
+        "nonnull-current-process-context-before-membership-and-ordered-context-value-insertion;" +
+        "full-tail-slot-moves-preserve-inactive-entries-first-removal-clears-former-last-count;" +
+        "Shell-sort-source-gap-sequence-candidate-distance-before-previous-ordered-greater-shift;" +
+        "signed-winning-actor-limit-trims-tail-after-sort-cold-never-replays-producers";
     internal string Identity => FalloutAdvancementRuntimeReceipt.Hash(Main.Identity + "\0" + Contract);
     internal static FalloutStandaloneInterfaceSource Read(FalloutMainScriptCallerSource main)
     {

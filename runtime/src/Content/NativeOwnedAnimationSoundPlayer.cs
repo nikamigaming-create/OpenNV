@@ -12,6 +12,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     private readonly float _unitsToMetres;
     private readonly FalloutSoundRandomState _random;
     private readonly FalloutAnimationSoundEvents? _events;
+    private readonly RuntimeNativeNifSoundEmitterBinding? _sourceNodes;
     private readonly Dictionary<string, (FalloutSoundRecord Source, IReadOnlyList<string> Variants, long Revision)> _descriptors = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AudioStream> _streams = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<AudioStreamPlayer3D, FalloutAnimationSoundSelection> _spatial = [];
@@ -43,6 +44,12 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         unbound = _unbound.ToArray(),
         last = LastEvent,
         sourceEvents = _events?.Events,
+        pcmContinuations = _voices.Where(pair => pair.Value.Pcm is not null).Select(pair => new
+        {
+            nativeVoice = pair.Key.GetInstanceId(),
+            generation = pair.Value.Generation,
+            continuation = ObservePcmContinuation(pair.Key, pair.Value)
+        }).ToArray(),
         finiteLifetime = _voices.Values.Where(voice => voice.Attachment is not null).Select(voice => new
         {
             generation = voice.Generation,
@@ -55,10 +62,14 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     };
 
     internal NativeOwnedAnimationSoundPlayer(FalloutPluginStack records, RuntimeLiveContentSource content,
-        Node3D actor, float unitsToMetres, FalloutSoundRandomState random, FalloutAnimationSoundEvents? events = null)
+        Node3D actor, float unitsToMetres, FalloutSoundRandomState random, FalloutAnimationSoundEvents? events = null,
+        RuntimeNativeNifSoundEmitterBinding? sourceNodes = null)
     {
         if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0) throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
         _records = records; _content = content; _actor = actor; _unitsToMetres = unitsToMetres; _random = random; _events = events;
+        if (sourceNodes is not null)
+            sourceNodes.RequireOwner(actor, events?.Reference ?? throw new InvalidDataException("Source NIF sound binding has no reference ledger."));
+        _sourceNodes = sourceNodes;
         _nativeOwner = actor.GetInstanceId();
         if (_events is not null)
         {
@@ -68,7 +79,19 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         Name = "OwnedAnimationSounds";
     }
 
-    internal string Dispatch(string textKey) => Dispatch(textKey, this, ownsLoopStop: true);
+    internal string Dispatch(string textKey) => DispatchDeclarations(FalloutNifTextKeyDeclarations.Read(textKey));
+
+    private string DispatchDeclarations(IReadOnlyList<FalloutNifTextKeyDeclaration> declarations)
+    {
+        var dispositions = new List<string>();
+        foreach (var declaration in declarations)
+        {
+            if (declaration.DispatchOrdinal is null) continue;
+            var structural = declaration.Kind == FalloutNifTextKeyDeclarationKind.SequenceBoundary;
+            dispositions.Add(structural ? "source-sequence-boundary" : DispatchNifEvent(declaration));
+        }
+        return string.Join(';', dispositions);
+    }
 
     internal string DispatchSound(FalloutFormKey form, Node3D? emitter = null, Action? completed = null) =>
         Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: true, form, completed);
@@ -158,17 +181,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         }
     }
 
-    internal string Dispatch(FalloutNifTextKeyEvent key)
-    {
-        var dispositions = new List<string>();
-        foreach (var declaration in FalloutNifTextKeyDeclarations.Read(key.Text))
-        {
-            if (declaration.DispatchOrdinal is null) continue;
-            var structural = declaration.Kind == FalloutNifTextKeyDeclarationKind.SequenceBoundary;
-            dispositions.Add(structural ? "source-sequence-boundary" : DispatchNifEvent(declaration));
-        }
-        return string.Join(';', dispositions);
-    }
+    internal string Dispatch(FalloutNifTextKeyEvent key) => DispatchDeclarations(FalloutNifTextKeyDeclarations.Read(key.Text));
 
     private void ObserveEvent() => SoundObserver?.Invoke(new
     {

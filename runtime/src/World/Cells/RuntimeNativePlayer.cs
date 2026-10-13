@@ -28,6 +28,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     }
     private float _jumpHeightMeters;
     private FalloutInputControls? _inputControls;
+    private FalloutDirectInputState? _gameplayInput;
 
     internal void ConfigureInputControls(FalloutInputControls controls, Func<int, bool> physicalKeyPressed, FalloutDirectInputState? directInput = null)
     {
@@ -38,6 +39,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             directInput.RequireCurrent();
         }
         _inputControls = controls;
+        _gameplayInput = directInput;
         var adapter = new RuntimeNativeInputControls(controls, _configuration.Player.DesktopInput, physicalKeyPressed);
         adapter.Remapped += changed =>
         {
@@ -296,6 +298,11 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         ObserveSaveInput(inputEvent, "unhandled");
         if (_xr is not null) return;
+        if (_gameplayInput is { Provider: FalloutInputProvider.HeadlessCommands } commands &&
+            NativeScriptKeys.Read(inputEvent).Any(value => value.Down && !commands.Pressed((uint)value.Key)))
+        {
+            GetViewport().SetInputAsHandled(); return;
+        }
         var input = _configuration.Player.DesktopInput;
         if (_inputControls is null && !_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Q or Key.H } wheel)

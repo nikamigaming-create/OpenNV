@@ -5,6 +5,7 @@ internal static partial class SourceSkyTransferContracts
 {
     private static void HdrProducerContracts()
     {
+        HeadlessHdrContracts();
         foreach (var declaration in new[] { Declaration, StandaloneDeclaration })
         {
             var ini = new FalloutNumericIniSettings([new(FalloutSkyHdrSource.SettingName, FalloutIniCollection.Main, 1)], [], "authored-HDR-INI");
@@ -59,5 +60,33 @@ internal static partial class SourceSkyTransferContracts
         public Guid Identity { get; } = Guid.NewGuid();
         public FalloutSkyHdrCapability Read() => new(Identity, owner.Process, owner.Source.EngineSha256,
             owner.Source.Contract, 1, supported, true, "authored-pure-field-contract;not-native-GPU-evidence");
+    }
+
+    private static void HeadlessHdrContracts()
+    {
+        var ini = new FalloutNumericIniSettings([new(FalloutSkyHdrSource.SettingName, FalloutIniCollection.Main, 1)], [], "authored-HDR-INI");
+        var owner = new FalloutSkyHdrState(StandaloneDeclaration, Guid.NewGuid(), Guid.NewGuid(), ini);
+        var headless = new AuthoredHeadlessHdrCapability(owner);
+        owner.EnterRendererCapability(headless); owner.SelectRenderer(headless);
+        var saved = owner.Capture();
+        Require(owner.EnabledByte == 0 && saved.Selection is { Provider: FalloutSkyHdrCapabilityProvider.HeadlessNoRenderer, NativeResourcesCurrent: false },
+            "Headless HDR invented a GPU format/resource receipt.");
+        Reject(() => owner.ReadShader(Guid.NewGuid()));
+        Reject(() => FalloutSkyHdrState.Validate(saved with { Selection = saved.Selection! with { HalfFloatRgbaBlendSupported = true } }, owner.Source, saved.Ini));
+        Reject(() => FalloutSkyHdrState.Validate(saved with { Selection = saved.Selection! with { NativeResourcesCurrent = true } }, owner.Source, saved.Ini));
+        var cold = new FalloutSkyHdrState(StandaloneDeclaration, Guid.NewGuid(), Guid.NewGuid(), ini);
+        cold.Restore(saved);
+        var native = new AuthoredHdrCapability(cold, true);
+        cold.EnterRendererCapability(native); cold.RebindRenderer(native);
+        Require(cold.EnabledByte == 1 && cold.Capture().Selection!.Provider == FalloutSkyHdrCapabilityProvider.NativeDevice,
+            "Cold headless state pinned its absent renderer into the next native session.");
+        owner.BeginCapabilityRetirement(headless); owner.CompleteCapabilityRetirement(headless, () => { }); owner.Retire();
+        cold.BeginCapabilityRetirement(native); cold.CompleteCapabilityRetirement(native, () => { }); cold.Retire();
+    }
+    private sealed class AuthoredHeadlessHdrCapability(FalloutSkyHdrState owner) : IFalloutSkyHdrCapability
+    {
+        public Guid Identity { get; } = Guid.NewGuid();
+        public FalloutSkyHdrCapability Read() => new(Identity, owner.Process, owner.Source.EngineSha256, owner.Source.Contract,
+            1, false, false, FalloutSkyHdrCapability.HeadlessProducer, FalloutSkyHdrCapabilityProvider.HeadlessNoRenderer);
     }
 }

@@ -1,23 +1,46 @@
 namespace OpenNV.Runtime.Content;
 
+internal enum FalloutInputProvider { WindowsDirectInput = 1, HeadlessCommands = 2 }
+
+// Published keyboard/mouse layout shared by device, command and script adapters.
+// These are fixed protocol values, not player preferences or tunable settings.
+internal static class FalloutInputLayout
+{
+    internal const int KeyboardKeyCount = 256;
+    internal const int MouseButtonCount = 8;
+    internal const int FirstMouseButton = KeyboardKeyCount;
+    internal const int MouseLeft = FirstMouseButton;
+    internal const int MouseRight = FirstMouseButton + 1;
+    internal const int MouseMiddle = FirstMouseButton + 2;
+    internal const int MouseExtra1 = FirstMouseButton + 3;
+    internal const int MouseExtra2 = FirstMouseButton + 4;
+    internal const int WheelUp = FirstMouseButton + MouseButtonCount;
+    internal const int WheelDown = WheelUp + 1;
+    internal const int KeyCount = WheelDown + 1;
+    internal const byte ButtonDown = 0x80;
+    internal const int WheelStep = 120;
+}
+
 internal readonly record struct FalloutDirectInputKey(bool Raw, bool Game, bool Inserted,
     bool Hold, bool Tap, bool UserDisabled, bool ScriptDisabled);
 internal readonly record struct FalloutDirectInputControlChange(int Key,
     FalloutDirectInputKey Before, FalloutDirectInputKey After);
 internal sealed record FalloutDirectInputSnapshot(string Source, ulong Window, ulong Sample,
     long Revision, IReadOnlyList<FalloutDirectInputKey> Keys, int MouseX, int MouseY, int MouseWheel,
-    bool Acquired, string? AcquisitionFailure);
+    bool Acquired, string? AcquisitionFailure, FalloutInputProvider Provider = FalloutInputProvider.WindowsDirectInput);
 
-// The device supplies a complete keyboard and DIMOUSESTATE2 sample. Godot key
-// edges, script observations and acknowledged replay events are separate inputs.
+// Each declared provider supplies the complete keyboard and mouse extent to
+// one control/script owner. Headless samples do not certify Windows acquisition.
 internal sealed class FalloutDirectInputState
 {
-    internal const int KeyCount = 266;
+    internal const int KeyCount = FalloutInputLayout.KeyCount;
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private readonly FalloutDirectInputKey[] _keys = new FalloutDirectInputKey[KeyCount];
     internal string Source { get; }
+    internal Guid Factory { get; } = Guid.NewGuid();
     internal FalloutInputControls Controls { get; }
     internal ulong Window { get; }
+    internal FalloutInputProvider Provider { get; }
     internal ulong Sample { get; private set; }
     internal long Revision { get; private set; }
     private bool _acquired, _retired;
@@ -28,21 +51,37 @@ internal sealed class FalloutDirectInputState
     internal event Action<IReadOnlyList<(int Key, bool Down)>>? GameEdges;
 
     internal FalloutDirectInputState(string source, ulong window, FalloutInputControls controls)
+        : this(source, window, controls, FalloutInputProvider.WindowsDirectInput) { }
+
+    private FalloutDirectInputState(string source, ulong window, FalloutInputControls controls, FalloutInputProvider provider)
     {
-        if (source.Length != 64 || !source.All(Uri.IsHexDigit) || window == 0)
-            throw new InvalidDataException("DirectInput state requires its exact selected source and actual product window.");
-        Source = source; Window = window; Controls = controls;
+        if (source.Length != 64 || !source.All(Uri.IsHexDigit) || !ValidProvider(provider, window))
+            throw new InvalidDataException("Input state requires its exact selected source and explicit provider/window identity.");
+        ArgumentNullException.ThrowIfNull(controls);
+        Source = source; Window = window; Controls = controls; Provider = provider;
     }
+
+    internal static FalloutDirectInputState CreateHeadless(string source, FalloutInputControls controls) =>
+        new(source, 0, controls, FalloutInputProvider.HeadlessCommands);
+
+    internal static bool ValidProvider(FalloutInputProvider provider, ulong window) => provider switch
+    {
+        FalloutInputProvider.WindowsDirectInput => window != 0,
+        FalloutInputProvider.HeadlessCommands => window == 0,
+        _ => false,
+    };
 
     internal void Publish(ReadOnlySpan<byte> keyboard, ReadOnlySpan<byte> mouse, int x, int y, int wheel)
     {
         RequireOwner();
-        if (keyboard.Length != 256 || mouse.Length != 8)
+        if (keyboard.Length != FalloutInputLayout.KeyboardKeyCount || mouse.Length != FalloutInputLayout.MouseButtonCount)
             throw new InvalidDataException("DirectInput publication lacks the complete original keyboard/mouse extent.");
         var edges = new List<(int Key, bool Down)>();
         for (var key = 0; key < KeyCount; ++key)
         {
-            var raw = key < 256 ? keyboard[key] != 0 : key < 264 ? mouse[key - 256] != 0 : key == 264 ? wheel > 0 : wheel < 0;
+            var raw = key < FalloutInputLayout.FirstMouseButton ? keyboard[key] != 0 :
+                key < FalloutInputLayout.WheelUp ? mouse[key - FalloutInputLayout.FirstMouseButton] != 0 :
+                key == FalloutInputLayout.WheelUp ? wheel > 0 : wheel < 0;
             var before = _keys[key];
             var inserted = !before.ScriptDisabled && (before.Hold || before.Tap);
             var game = raw && !before.UserDisabled || inserted;
@@ -71,7 +110,7 @@ internal sealed class FalloutDirectInputState
     internal FalloutDirectInputSnapshot Capture()
     {
         RequireCurrent();
-        return new(Source, Window, Sample, Revision, _keys.ToArray(), _x, _y, _wheel, _acquired, Failure);
+        return new(Source, Window, Sample, Revision, _keys.ToArray(), _x, _y, _wheel, _acquired, Failure, Provider);
     }
     internal bool Pressed(uint key, uint flags = 0)
     {
@@ -131,6 +170,12 @@ internal sealed class FalloutDirectInputState
         // Public DIHookControl caches the last successful device update. Failed
         // acquisition does not rewrite those observations or imply new input.
         if (Sample == 0) throw new InvalidOperationException("Complete DirectInput device state has never been published: " + Failure);
+    }
+    internal FalloutDirectInputState ReadManagerOwner()
+    {
+        // The source singleton getter reads its current object. It neither
+        // polls a device nor rewrites cached bytes after lost acquisition.
+        RequireOwner(); return this;
     }
     internal IDisposable RetainNativeReader()
     {

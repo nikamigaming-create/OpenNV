@@ -108,7 +108,7 @@ internal sealed partial class FalloutSkyHdrState
     private void RequireCapability(FalloutSkyHdrCapability capability)
     {
         if (capability.Identity == Guid.Empty || capability.Process != Process || capability.EngineSha256 != Source.EngineSha256 ||
-            capability.Contract != Source.Contract || capability.Returned < 1 || !capability.NativeResourcesCurrent ||
+            capability.Contract != Source.Contract || capability.Returned < 1 || !capability.Current ||
             string.IsNullOrWhiteSpace(capability.Producer))
             throw new InvalidDataException("HDR selection borrowed a missing, foreign or retired actual format-query return.");
     }
@@ -117,7 +117,7 @@ internal sealed partial class FalloutSkyHdrState
         if (!_selected || _nativeCapability is null) throw new NotSupportedException("source-Sky-HDR-actual-renderer-format-query-not-returned");
         var result = _nativeCapability.Read(); RequireCapability(result);
         if (_selection is null || result.Identity != _selection.Identity || result.HalfFloatRgbaBlendSupported != _selection.HalfFloatRgbaBlendSupported ||
-            result.Returned != _selection.Returned || Source.ReadSetting(_settings) != _ini)
+            result.Returned != _selection.Returned || result.Provider != _selection.Provider || Source.ReadSetting(_settings) != _ini)
             throw new InvalidDataException("HDR capability or typed setting changed without the original renderer-selection writer.");
         return result;
     }
@@ -157,6 +157,8 @@ internal sealed partial class FalloutSkyHdrState
     internal FalloutMoonShaderFieldSample ReadShader(Guid actualFrame)
     {
         Require(); var capability = CurrentCapability();
+        if (capability.Provider == FalloutSkyHdrCapabilityProvider.HeadlessNoRenderer)
+            throw new NotSupportedException("Headless simulation has no returned Sky shader draw.");
         if (actualFrame == Guid.Empty) throw new InvalidDataException("Sky shader has no actual calling frame.");
         if (EnabledByte != 0) _copy = _main with { Ordinal = Next(), Kind = FalloutSkyHdrWriteKind.ShaderCopy, Frame = actualFrame };
         var copy = _copy ?? throw new NotSupportedException("source-Sky-HDR-disabled-shader-field-has-no-returned-prior-writer");

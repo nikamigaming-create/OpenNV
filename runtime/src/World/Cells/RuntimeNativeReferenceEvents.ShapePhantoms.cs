@@ -10,8 +10,10 @@ internal partial class RuntimeNativeReferenceEvents
     // prefix. Keep active contacts refused until that independent save producer
     // is owned; rebuilding a volume is not a synthetic cold Enter receipt.
     internal string? ContactSaveBlocker => _bindings.Values.FirstOrDefault(binding =>
-        binding.Contacts.HasAdmittedContacts) is { } active
-        ? $"source-trigger-contact-membership:{active.Reference.FormKey}" : null;
+        binding.Contacts.HasAdmittedContacts || binding.HasContactVolumes && binding.Contacts.LegacyMembershipMissing) is { } active
+        ? active.Contacts.LegacyMembershipMissing
+            ? $"source-trigger-contact-membership-legacy-snapshot-missing:{active.Reference.FormKey}"
+            : $"source-trigger-contact-membership:{active.Reference.FormKey}" : null;
 
     internal string? ObserveContactContinuation(FalloutReferenceWorld world)
     {

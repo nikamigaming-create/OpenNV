@@ -211,6 +211,7 @@ internal partial class RuntimeNativePlayer
 
     private void RebuildPresentation(uint[] equipped)
     {
+        RequireStandaloneFirstPersonSceneReplacement();
         RequirePhysicalPresentationReplacement();
         var records = _presentationRecords!; var content = RuntimeLiveContentSource.Current!;
         var appearance = _appearance!();

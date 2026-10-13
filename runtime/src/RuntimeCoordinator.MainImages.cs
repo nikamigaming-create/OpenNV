@@ -29,6 +29,8 @@ public partial class RuntimeCoordinator
         _nativeImageSpaceState.ConfigureSourceMainImages(main, world.ActualSourceProcessIdentity,
             FalloutExecutableStringTable.ReadStandaloneImageSpaceDefaults(source.FalloutExecutablePath),
             FalloutExecutableStringTable.ReadStandaloneImageSpaceDofConstructor(source.FalloutExecutablePath, FalloutInstallationSettings.Read(source)), saved);
+        _nativeImageSpaceState.ConfigureSourceImageMenu(
+            FalloutExecutableStringTable.ReadStandaloneImageSpaceMenu(source.FalloutExecutablePath));
         _nativeImageSpaceState.RebindSourceImagePrograms(_nativePluginStack!);
         _nativeMainImageAuthority = world.BindCampaignSourceMainImages(_nativeImageSpaceState);
     }
@@ -47,7 +49,8 @@ public partial class RuntimeCoordinator
             BindNativeSkyHdr(presenter);
             presenter.ConfigureSourceMain(_nativeImageSpaceState, application.Effect,
                 _nativeGameTime ?? throw new NotSupportedException("Source image factory has no real calendar owner."),
-                _nativeReferences!.ActualSourceProcessIdentity);
+                _nativeReferences!.ActualSourceProcessIdentity,
+                () => _nativeReferences!.ReadCampaignSourceImageMenuClock(_nativeImageSpaceState));
             AddChild(presenter); presenter.BindSourceMainOutput();
         }
         _nativeMainImagePresenter.RequireCurrentFactory();

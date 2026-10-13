@@ -21,5 +21,7 @@ internal sealed partial class FalloutReferenceWorld
     internal bool ReadStandaloneMainHold(FalloutMainScriptInvocation invocation) => ProcessRuntime.ReadStandaloneMainHold(invocation);
     internal void StoreStandalonePlayerSceneClock(FalloutMainPlayerCellInvocation invocation) => ProcessRuntime.StoreStandalonePlayerSceneClock(invocation);
     internal uint EnterStandalonePlayerSceneVirtual(FalloutMainPlayerCellInvocation invocation) => ProcessRuntime.EnterStandalonePlayerSceneVirtual(invocation);
+    internal float ReadStandalonePlayerScaledSeconds(FalloutMainPlayerCellInvocation invocation) => ProcessRuntime.ReadStandalonePlayerScaledSeconds(invocation);
     internal void RequireStandalonePlayerSceneRetirement() => ProcessRuntime.RequireStandaloneSceneNativeRetirement();
+    internal void RequireStandalonePlayerSceneReplacement() => ProcessRuntime.RequireStandaloneSceneReplacement();
 }

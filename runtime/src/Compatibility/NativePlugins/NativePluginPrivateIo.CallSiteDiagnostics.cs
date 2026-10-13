@@ -9,7 +9,11 @@ internal sealed partial class NativePluginPrivateIo
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_generation is not { } generation || receipt.Generation != generation || receipt.ProcessId <= 0 ||
             receipt.Module == 0 || receipt.Thread == 0 || receipt.Events.Count == 0 ||
-            receipt.Events[^1].Failure is null ||
+            receipt.StartEvent < 0 ||
+            (receipt.Scope == NativeSourceCallSiteFailureScope.SemanticPrefix
+                ? receipt.StartEvent != 0 || receipt.Events[^1].Failure is null
+                : receipt.Scope != NativeSourceCallSiteFailureScope.SdkFailureTail || receipt.Events[0].SdkResult != 0 ||
+                    receipt.Events.Any(row => row.Site != receipt.Events[0].Site)) ||
             receipt.Events.Any(row => row.Generation != generation || row.Module != receipt.Module ||
                 row.Thread != receipt.Thread || row.Callback == 0) ||
             !StringComparer.OrdinalIgnoreCase.Equals(Canonical(receipt.ModulePath), Canonical(Selection.ModulePath)) ||
@@ -35,6 +39,8 @@ internal sealed partial class NativePluginPrivateIo
             receipt.ModulePath,
             receipt.ModuleSha256,
             receipt.StackSha256,
+            Scope = receipt.Scope.ToString(),
+            receipt.StartEvent,
             Events = receipt.Events.Select(row => new
             {
                 row.Generation,
@@ -54,7 +60,15 @@ internal sealed partial class NativePluginPrivateIo
                 row.PreviousProtection,
                 row.Receiver,
                 row.PointerResult,
-                row.Failure
+                row.Failure,
+                row.CodeKind,
+                row.CodeSha256,
+                row.RequestedAddress,
+                row.RequestedExtent,
+                row.RequestedProtection,
+                row.Protection,
+                row.CohortAddress,
+                row.CohortExtent
             }).ToArray()
         });
         var pendingCreated = false;

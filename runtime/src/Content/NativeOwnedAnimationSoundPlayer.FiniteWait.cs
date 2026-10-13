@@ -87,7 +87,11 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             var voices = new List<FalloutFiniteSoundVoice>();
             foreach (var (node, voice) in _voices)
             {
-                if (voice.Pcm is not null && CapturePcmVoice(node, voice).Samples is not null) continue;
+                if (voice.Pcm is not null)
+                {
+                    if (!ObservePcmContinuation(node, voice).Ready) return null;
+                    continue;
+                }
                 if (ReadFiniteVoice(node, voice) is not { } proof) return null;
                 voices.Add(proof);
             }

@@ -41,6 +41,12 @@ internal static partial class SourceMainScriptCallerContracts
         var before = fixture.Owner.ReadMainNativeDeliveryBindings();
         Require(!fixture.Host.Source.HasNewVegasChildren && before.SourceIdentity == fixture.Host.Source.Identity &&
             before.Caller != Guid.Empty && before.Fade != Guid.Empty, "Standalone Main lost its independently constructed delivery lifetime.");
+        var initial = fixture.Owner.Capture();
+        fixture.Owner.RequireStandaloneSceneReplacement();
+        Task.Run(() => Reject(fixture.Owner.RequireStandaloneSceneReplacement)).GetAwaiter().GetResult();
+        Require(fixture.Owner.ReadMainNativeDeliveryBindings() == before && SameRetirementSnapshot(initial, fixture.Owner.Capture()),
+            "Quiescent model replacement changed Main/fade delivery, source state or admitted another thread.");
+        Reject(fixture.Owner.RequireStandaloneSceneNativeRetirement);
         Reject(() => fixture.Owner.Dispose());
         fixture.Owner.CloseMainNativeDeliveryLeases(ref caller, ref fade);
         Require(fixture.Owner.ReadMainNativeDeliveryBindings().Closed && fixture.Host.Log.Count == 0 &&
@@ -56,6 +62,7 @@ internal static partial class SourceMainScriptCallerContracts
         var call = fixture.Owner.ExecuteMainScriptCaller(1, .02f);
         var entered = fixture.Owner.ReadMainNativeDeliveryBindings();
         Require(!call.IsCompleted && entered.EnteredMain is not null, "Actual awaited source child did not retain its invocation.");
+        Reject(fixture.Owner.RequireStandaloneSceneReplacement);
         Reject(() => fixture.Owner.CloseMainNativeDeliveryLeases(ref caller, ref fade));
         Require(fixture.Owner.ReadMainNativeDeliveryBindings() == entered && caller is not null && fade is not null,
             "Entered retirement changed source fields, retired providers or erased actual handles.");

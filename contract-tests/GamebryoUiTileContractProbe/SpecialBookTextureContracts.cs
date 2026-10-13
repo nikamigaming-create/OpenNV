@@ -170,9 +170,9 @@ internal static class SpecialBookTextureContracts
                         Bytes(0xba); Dword(Pc); Bytes(0xb9); Dword(xbox); Bytes(0x8d, 0x45, 0xf4, 0x0f, 0x44, 0xca, 0x51, 0x6a, 5, 0x50); Call(3);
                     }
                     else foreach (var pointer in new[] { xbox, Pc })
-                        {
-                            Bytes(0x68); Dword(pointer); Bytes(0x6a, 5); Address(-0x220); Bytes(0x50); Call(3);
-                        }
+                    {
+                        Bytes(0x68); Dword(pointer); Bytes(0x6a, 5); Address(-0x220); Bytes(0x50); Call(3);
+                    }
                 }
                 var indexSlot = index == 0 ? -0x224 : -0x228;
                 if (numeric)

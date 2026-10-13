@@ -62,6 +62,9 @@ internal sealed partial class FalloutActorProcessRuntimeState
         ValidateStandaloneMain(saved, runtime);
         OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceState.RequirePlayable(saved.Interface);
         OpenNV.Runtime.Gameplay.State.FalloutStandalonePlayerSceneState.RequirePlayable(saved.Scene);
+        if (saved.MainCaller.CachedTail is { } tail && tail.RendererClock is not
+            { LastPublication: { Prefix: OpenNV.Runtime.Gameplay.State.FalloutRendererClockPrefix.Returned, Failure: null } })
+            throw new NotSupportedException("FO3 current save omitted its returned authoritative renderer clock.");
         if (saved.MainField.Error is not null || saved.MainCaller.LastCall is { Disposition: FalloutMainScriptCallerDisposition.Failed } ||
             saved.PlayerCell.LastCall is { Disposition: FalloutMainPlayerCellDisposition.Failed } ||
             saved.PlayerCell.Pending.Error is not null || saved.PlayerCell.PendingConsumers.Error is not null ||

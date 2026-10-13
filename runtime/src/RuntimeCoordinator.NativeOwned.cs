@@ -77,6 +77,8 @@ public partial class RuntimeCoordinator
             loadFailure = _nativeLoadFailureDiagnostic,
             inputAdmission = _nativeDirectInput is null ? null : new
             {
+                provider = _nativeDirectInput.State.Provider.ToString(),
+                _nativeDirectInput.State.Window,
                 _nativeDirectInput.State.Sample,
                 _nativeDirectInput.State.Revision,
                 _nativeDirectInput.State.Failure,
@@ -161,7 +163,7 @@ public partial class RuntimeCoordinator
                 error = playerDriver.ExecutionError,
                 blockingError = playerDriver.BlockingExecutionError,
                 stageResults = playerDriver.StageResultState,
-                saveRequest = playerDriver.SaveRequestState,
+                saveRequest = detailed ? playerDriver.SaveRequestState : playerDriver.SaveRequestStatus,
                 playerProgress = playerDriver.PlayerProgressState,
                 playerStatistics = playerDriver.PlayerStatisticState,
                 experienceNotifications = playerDriver.ExperienceNotificationState,
@@ -172,7 +174,7 @@ public partial class RuntimeCoordinator
                 actualProcessRuntime = playerDriver.ActualProcessRuntimeState,
                 actualProcessCommon = playerDriver.ActualProcessCommonState,
                 actorUpdates = playerDriver.ActorUpdateState,
-                cellProcesses = playerDriver.CellProcessState,
+                cellProcesses = detailed ? playerDriver.CellProcessState : playerDriver.CellProcessSummary,
                 advancementRuntime = playerDriver.PlayerAdvancementRuntimeState,
                 playerPhysical = _nativePlayer?.PlayerPhysicalState,
                 nativePlugins = playerDriver.NativePluginExecutionState,
@@ -234,6 +236,9 @@ public partial class RuntimeCoordinator
                 {
                     sourceMain = presenter.UsesSourceMain,
                     nativeFields = detailed ? presenter.SourceFields : null,
+                    headlessOutput = presenter.HeadlessSourceState,
+                    menuImageCall = detailed ? presenter.SourceMenuState : null,
+                    menuAuxiliaryInterfaceGate = presenter.UsesSourceMain ? "UNOWNED" : null,
                     drawFailure = presenter.Effect.SourceDrawFailure,
                     active = presenter.Frame?.Active.Select(modifier => new
                     {
@@ -313,12 +318,22 @@ public partial class RuntimeCoordinator
         var source = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was not configured.");
         SetLoadingStatus("Reading game data");
-        if (DisplayServer.GetName() == "headless" || _options.ContainsKey("new-game"))
+        var commandInput = RuntimeInputPresentationSelection.UsesCommandInput(_options);
+        var commandContinue = commandInput && (_options.ContainsKey("continue-game") || _continueAfterRestart);
+        if (DisplayServer.GetName() == "headless" && !commandInput || _options.ContainsKey("new-game") || commandContinue)
         {
             _nativeMenuRead = Task.Run(() => IndexNativeLiveStack(source.PluginSources));
             await _nativeMenuRead;
             BindActualNativeQueuedCallerThread();
-            if (_options.ContainsKey("new-game"))
+            if (commandContinue)
+            {
+                if (_nativeOpeningRestore is null)
+                    throw new InvalidDataException("Command Continue requires a valid complete save for the selected source.");
+                _continueAfterRestart = false; _nativeContinueOpening = true;
+                _nativeMenuRead = LoadNativeInitialCell();
+                await _nativeMenuRead;
+            }
+            else if (_options.ContainsKey("new-game"))
             {
                 InitializeNativePlayerInventory();
                 await CreateNativeQuestScripts();
@@ -326,7 +341,7 @@ public partial class RuntimeCoordinator
                 _nativeMenuRead = LoadNativeInitialCell();
                 await _nativeMenuRead;
             }
-            if (DisplayServer.GetName() == "headless")
+            if (DisplayServer.GetName() == "headless" && !commandInput)
                 GetTree().Quit(0);
             return;
         }
@@ -491,7 +506,7 @@ public partial class RuntimeCoordinator
         {
             // Publish the loading state in flat and the shared XR menu surface
             // before synchronous native scene publication starts.
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await WaitForHostFrame();
             // The accepted New/Continue action transfers input to this game
             // window. Background indexing never takes foreground ownership.
             if (DisplayServer.GetName() != "headless") GetWindow().GrabFocus();
@@ -527,7 +542,7 @@ public partial class RuntimeCoordinator
         {
             SetLoadingStatus(_nativeContinueOpening ? "Restoring saved game" : "Preparing the world");
             if (DisplayServer.GetName() != "headless")
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await WaitForHostFrame();
             await PopulateNativeInitialCell();
             completed = true;
         }
@@ -682,7 +697,7 @@ public partial class RuntimeCoordinator
         _nativePrewarmedInitialCellRoot = null;
         SetLoadingStatus("Preparing characters and controls");
         if (DisplayServer.GetName() != "headless")
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await WaitForHostFrame();
         if (_nativeSessionTransitioning || _retiringNativeSession)
         {
             FreeNativeSourceCellRoot(root);
@@ -714,7 +729,6 @@ public partial class RuntimeCoordinator
         if (startup is not null) _nativeBootstrap!.TransferPlacementToMain(startup);
         AddNativePlayer(activeScene, startupPlacement);
         _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
-        AddNativeGameplayHud();
         if (grid is not null)
         {
             SetLoadingStatus("Preparing the distant world");
@@ -837,7 +851,7 @@ public partial class RuntimeCoordinator
                 // only after all references finish, while letting loading UI draw.
                 if (slice.Elapsed.TotalMilliseconds >= 8 && DisplayServer.GetName() != "headless")
                 {
-                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    await WaitForHostFrame();
                     slice.Restart();
                     yields++;
                 }
@@ -1113,7 +1127,8 @@ public partial class RuntimeCoordinator
         {
             var sounds = new NativeOwnedAnimationSoundPlayer(_nativePluginStack!, source, instance,
                 _configuration.World.GameUnitsToMeters, _nativeReferences!.Get(reference.FormKey).SoundRandom,
-                _nativeReferences.Get(reference.FormKey).AnimationSoundEvents);
+                _nativeReferences.Get(reference.FormKey).AnimationSoundEvents,
+                new RuntimeNativeNifSoundEmitterBinding(instance, reference.FormKey, construction.Source));
             instance.AddChild(sounds);
             foreach (var controller in controllers.Where(controller => controller.HasTextKeys))
                 controller.TextKeyHandler = sounds.Dispatch;
@@ -1443,6 +1458,10 @@ public partial class RuntimeCoordinator
         // This owner is part of the load transaction. Native bridge dispatch
         // logs _Ready exceptions without propagating them to that transaction.
         _nativeOpeningStageDriver.InitializeOwnedState();
+        // Main's Player scene borrows the living HUD and its source interface.
+        // Construct them while Player callbacks are still disabled, before
+        // binding or starting any Main child that consumes those owners.
+        AddNativeGameplayHud();
         BindNativeMainPlayerCell();
         BindNativeSteamCampaign();
         _nativeOpeningStageDriver.AttachSourceMainScriptCaller();

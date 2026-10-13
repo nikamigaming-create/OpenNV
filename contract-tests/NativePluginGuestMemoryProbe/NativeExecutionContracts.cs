@@ -36,6 +36,7 @@ internal static class NativeExecutionContracts
             ReentrantDepthRefusal(companion, fixture);
             CallbackBudgetRefusal(companion, fixture);
             NativeCallbackBudgetClassification(companion, fixture);
+            DeadlineCancellationOrder(companion, fixture);
             DeadlineRefusal(companion, fixture);
             ManagedCallbackDeadline(companion, fixture);
             NativeExceptionContracts.Run(companion, fixture);
@@ -217,13 +218,46 @@ internal static class NativeExecutionContracts
             "Native callback quota lost its original code, reason or exact accepted extent.");
         RequireFaultRetirement(domain, nested);
     }
+    private static void DeadlineCancellationOrder(string companion, string fixture)
+    {
+        using var domain = new NativePluginExecutionDomain(companion, TimeSpan.FromMilliseconds(750));
+        var module = domain.LoadAuthoredModule(fixture, Hash(fixture));
+        var function = domain.Resolve(module, "OpenNvCallbackCdecl", NativePluginAbi.Cdecl);
+        using var canceled = new ManualResetEventSlim();
+        CancellationTokenRegistration lateCancellation = default;
+        var callerPublishedFault = false;
+        domain.Callback = _ =>
+        {
+            // Read the actual active exchange token without replacing it or
+            // inventing a call. Hold a later cancellation callback so the
+            // caller necessarily records its cancellation before the watchdog.
+            var field = typeof(NativePluginExecutionDomain).GetField("_transaction",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var transaction = (CancellationTokenSource)field.GetValue(domain)!;
+            var token = transaction.Token;
+            lateCancellation = token.Register(() =>
+            {
+                canceled.Set();
+                callerPublishedFault = SpinWait.SpinUntil(() => domain.Fault is not null, TimeSpan.FromSeconds(2));
+            });
+            Require(canceled.Wait(TimeSpan.FromSeconds(3)), "The actual callback transaction did not expire.");
+            throw new OperationCanceledException(token);
+        };
+        NativePluginDomainFaultException failure;
+        try { failure = Reject<NativePluginDomainFaultException>(() => domain.Call(function, 1, 2)); }
+        finally { lateCancellation.Dispose(); }
+        Require(callerPublishedFault && failure.Fault.Reason.Contains("deadline", StringComparison.Ordinal) &&
+            failure.Fault.Operation == "Call" && failure.Fault.Call != 0 && failure.Fault.NativeCode is null,
+            "Caller-first cancellation changed the real deadline fault or waiting native request.");
+        RequireFaultRetirement(domain, function);
+    }
     private static void DeadlineRefusal(string companion, string fixture)
     {
         using var domain = new NativePluginExecutionDomain(companion, TimeSpan.FromMilliseconds(750));
         var module = domain.LoadAuthoredModule(fixture, Hash(fixture)); var function = domain.Resolve(module, "OpenNvHang", NativePluginAbi.Cdecl);
         var clock = Stopwatch.StartNew(); var failure = Reject<NativePluginDomainFaultException>(() => domain.Call(function, 1, 2));
         Require(failure.Fault.Reason.Contains("deadline", StringComparison.Ordinal) && clock.Elapsed < TimeSpan.FromSeconds(5),
-            "Native blocked code did not fault under its complete transaction deadline.");
+            $"Native blocked code did not fault under its complete transaction deadline: elapsed={clock.Elapsed.TotalMilliseconds:F0}ms, reason={failure.Fault.Reason}.");
         Require(failure.Fault.Operation == "Call" && failure.Fault.Call != 0 && failure.Fault.NativeCode is null,
             "The watchdog fault lost its actual waiting native request.");
         RequireFaultRetirement(domain, function);

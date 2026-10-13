@@ -30,7 +30,7 @@ internal sealed partial class FalloutSkyHdrState
             throw new InvalidDataException("Saved HDR omitted its exact current source, settings or constructor/selection writer.");
         if (saved.Selection is { } capability && (capability.Identity == Guid.Empty || capability.Process != saved.CapturedProcess ||
             capability.EngineSha256 != source.EngineSha256 || capability.Contract != source.Contract || capability.Returned < 1 ||
-            !capability.NativeResourcesCurrent || string.IsNullOrWhiteSpace(capability.Producer) ||
+            !capability.Current || string.IsNullOrWhiteSpace(capability.Producer) ||
             saved.EnabledByte != (ini.Requested && capability.HalfFloatRgbaBlendSupported ? 1 : 0)))
             throw new InvalidDataException("Saved HDR enable byte has no actual source renderer-selection return.");
         Write(saved.Main, secondary: false); Write(saved.Secondary, secondary: true);

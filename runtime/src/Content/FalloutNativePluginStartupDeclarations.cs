@@ -18,6 +18,9 @@ internal static class FalloutNativePluginStartupDeclarations
     {
         var inventory = new List<FalloutNativeModuleSource>();
         var modules = new List<FalloutNativePluginModuleAdmission>();
+        var nvse = source.Game == RuntimeLiveContentSource.FalloutNewVegasGame;
+        var queryExport = nvse ? "NVSEPlugin_Query" : "FOSEPlugin_Query";
+        var loadExport = nvse ? "NVSEPlugin_Load" : "FOSEPlugin_Load";
         var logicalPaths = source.NativePluginResourcePaths().Order(StringComparer.OrdinalIgnoreCase).ToArray();
         uint queryHandle = 0;
         foreach (var logical in logicalPaths)
@@ -28,14 +31,15 @@ internal static class FalloutNativePluginStartupDeclarations
             if (logical.Replace('/', '\\').Split('\\').Length != 3)
             { inventory.Add(new(logical, physical, Hash(physical), FalloutNativeModuleDisposition.AvailableNested, null, null, [], [], null)); continue; }
             // xNVSE ranks every top-level DLL before deciding whether its Query
-            // export makes it a plugin. Preserve gaps created by helper DLLs.
-            var handle = checked(++queryHandle);
+            // export makes it a plugin. FOSE discovery does not own its loader
+            // and cannot manufacture a Query handle from this scan order.
+            uint? handle = nvse ? checked(++queryHandle) : null;
             NativePluginImageDeclaration? image = null;
             try
             {
                 image = NativePluginImageDeclarations.Read(physical, true, requireX86: false);
-                var query = image.Exports.SingleOrDefault(row => row.Name == "NVSEPlugin_Query");
-                if (query is null || image.Exports.Count > 50)
+                var query = image.Exports.SingleOrDefault(row => row.Name == queryExport);
+                if (query is null || nvse && image.Exports.Count > 50)
                 {
                     inventory.Add(new(logical, physical, image.Sha256, FalloutNativeModuleDisposition.LoaderNotPlugin,
                         handle, null, image.Imports, [], null)); continue;
@@ -43,9 +47,11 @@ internal static class FalloutNativePluginStartupDeclarations
                 if (image.Machine != System.Reflection.PortableExecutable.Machine.I386 ||
                     image.Magic != System.Reflection.PortableExecutable.PEMagic.PE32 || image.Managed)
                     throw new NotSupportedException("Selected original Query image has no unmanaged x86 native execution owner.");
-                var load = image.Exports.SingleOrDefault(row => row.Name == "NVSEPlugin_Load");
+                var load = image.Exports.SingleOrDefault(row => row.Name == loadExport);
                 if (!query.Executable || query.Forwarded || load is null || !load.Executable || load.Forwarded)
                     throw new InvalidDataException("Selected plugin lacks its genuine direct executable Query/Load exports.");
+                if (!nvse)
+                    throw new NotSupportedException("Selected original FOSEPlugin_Query/FOSEPlugin_Load module has no standalone FOSE host ABI owner.");
                 var unowned = new List<string>(); var nonIo = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var import in image.Imports)
                 {
@@ -77,7 +83,7 @@ internal static class FalloutNativePluginStartupDeclarations
                 modules.Add(new(logical, physical, image.Sha256, writes, reads, inputs, owner,
                     nonIo, expression, null)
                 {
-                    QueryHandle = handle,
+                    QueryHandle = handle!.Value,
                     PreEntryFailure = unowned.Count == 0 ? null :
                         "Original imported operations have no actual callable source owner: " + string.Join(", ", unowned),
                     ExpressionDeclarationFailure = expressionFailure
@@ -94,7 +100,9 @@ internal static class FalloutNativePluginStartupDeclarations
                 source.NativePluginsEnabled ? "source-top-level-selection" : "explicit-user-native-selection:none", [])
             { Inventory = inventory.AsReadOnly() };
         if (source.Game != RuntimeLiveContentSource.FalloutNewVegasGame)
-            throw new NotSupportedException("The selected native source graph has no standalone FOSE host ABI owner.");
+            return new(source, runtimeHash, "", "", null, "standalone-FOSE-host-unbound",
+                "standalone-FOSE/source-inventory-only/no-loader-execution", [])
+            { Inventory = inventory.AsReadOnly() };
         var host = declaredHost ?? Host(source);
         var nvseHash = Hash(host.PhysicalPath); var edition = Edition(source.FalloutExecutablePath);
         // Validate the exact existing host owner now, before a child exists.
@@ -157,6 +165,11 @@ internal static class FalloutNativePluginStartupDeclarations
             {
                 var path = Path.Combine(root, logical);
                 result.Add(path, new(path, physical, hash, "selected-native-configuration-winner:" + source.StackId, true));
+            }
+            if (logical.Replace('/', '\\').Equals("NVSE\\nvse_config.ini", StringComparison.OrdinalIgnoreCase))
+            {
+                var path = Path.Combine(runtime, "Data", logical);
+                result.TryAdd(path, new(path, physical, hash, "selected-xNVSE-logging-configuration-winner:" + source.StackId, true));
             }
         }
         foreach (var path in Directory.EnumerateFiles(runtime).Where(path => Path.GetExtension(path).ToLowerInvariant() is ".ini" or ".cfg"))

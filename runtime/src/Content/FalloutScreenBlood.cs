@@ -14,7 +14,8 @@ internal sealed record FalloutScreenBloodPresentation(IReadOnlyList<FalloutScree
 // random state, or a source command's suffix.
 internal sealed class FalloutScreenBlood(FalloutPluginStack records, ulong? seed = null)
 {
-    private sealed record Binding(bool Enabled, Func<FalloutScreenBloodRequest, FalloutScreenBloodPresentation> Prepare);
+    private sealed record Binding(bool Enabled, Func<FalloutScreenBloodRequest, FalloutScreenBloodPresentation> Prepare,
+        Func<object>? Observe);
     private sealed class Group(FalloutScreenBloodRequest request, FalloutScreenBloodPresentation presentation)
     {
         internal readonly FalloutScreenBloodRequest Request = request;
@@ -36,6 +37,7 @@ internal sealed class FalloutScreenBlood(FalloutPluginStack records, ulong? seed
     {
         bound = _binding is not null,
         enabled = _binding?.Enabled,
+        output = _binding?.Observe?.Invoke(),
         requests = _requests,
         completed = _completed,
         cancelled = _cancelled,
@@ -61,11 +63,12 @@ internal sealed class FalloutScreenBlood(FalloutPluginStack records, ulong? seed
         value >= int.MinValue && value <= int.MaxValue ? unchecked((uint)(int)value) :
         throw new InvalidDataException("TriggerScreenBlood count must be a signed integer.");
 
-    internal IDisposable Bind(bool enabled, Func<FalloutScreenBloodRequest, FalloutScreenBloodPresentation> prepare)
+    internal IDisposable Bind(bool enabled, Func<FalloutScreenBloodRequest, FalloutScreenBloodPresentation> prepare,
+        Func<object>? observe = null)
     {
         if (_binding is not null) throw new InvalidOperationException("Screen blood already has a presentation owner.");
         ArgumentNullException.ThrowIfNull(prepare);
-        var binding = new Binding(enabled, prepare); _binding = binding;
+        var binding = new Binding(enabled, prepare, observe); _binding = binding;
         return new Scope(() => { if (_binding == binding) Clear(); });
     }
 

@@ -10,7 +10,8 @@ internal sealed partial class FalloutNativePluginCampaign
         var input = _dataBindings?.Input ?? throw new NotSupportedException("Original window/process imports lack the actual product-window input lifetime.");
         if (!input.Source.Equals(_source.StackId, StringComparison.OrdinalIgnoreCase) || !ReferenceEquals(input.Controls, _scripts.Controls))
             throw new InvalidDataException("Native window producer belongs to another source/control authority.");
-        domain.BindProductWindow(input);
+        if (input.Provider == FalloutInputProvider.HeadlessCommands) domain.BindHeadlessUser32(input);
+        else domain.BindProductWindow(input);
     }
     private void RequireNativeWindowProcessColdCapture()
     {

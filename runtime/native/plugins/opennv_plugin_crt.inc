@@ -4,6 +4,13 @@
 constexpr std::uint32_t crt_provider_event = 5, crt_route_event = 6, crt_opened_event = 7,
     crt_stream_event = 8, crt_path_event = 9;
 void* crt_entry(const std::string&);
+bool crt_pure_import_name(const std::string& library, const std::string& name) {
+    if (library == "api-ms-win-crt-string-l1-1-0.dll") return name == "strncat_s";
+    if (library == "api-ms-win-crt-convert-l1-1-0.dll") return name == "atoi";
+    if (library != "ucrtbase.dll" && library != "api-ms-win-crt-math-l1-1-0.dll") return false;
+    if (name == "fmaxf" || name == "floor" || name == "round" || name == "_libm_sse2_tan_precise") return true;
+    return library == "ucrtbase.dll" && (name == "strncat_s" || name == "atoi");
+}
 bool crt_io_import_name(const std::string& library, const std::string& name) {
     if (library == "api-ms-win-crt-environment-l1-1-0.dll") return name == "getenv_s" || name == "_putenv_s";
     if (library == "api-ms-win-crt-stdio-l1-1-0.dll") {
@@ -112,16 +119,23 @@ void crt_prepare(PluginIoRuntime& io, Reader& reader) {
     if (provider->path.empty() || provider->sha.size() != 64 || provider->declaration.empty())
         throw Fatal(ERROR_INVALID_DATA, "CRT source provider lacks its exact path/hash/declaration.");
     const auto libraries = reader.get<std::uint32_t>();
-    if (!libraries || libraries > 4) throw Fatal(ERROR_INVALID_DATA, "CRT source provider has no exact declared import-library set.");
+    static const std::set<std::string> supported_libraries {
+        "ucrtbase.dll", "api-ms-win-crt-stdio-l1-1-0.dll", "api-ms-win-crt-filesystem-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll", "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll", "api-ms-win-crt-math-l1-1-0.dll"
+    };
+    if (!libraries || libraries > supported_libraries.size()) throw Fatal(ERROR_INVALID_DATA, "CRT source provider has no exact declared import-library set.");
     for (std::uint32_t at = 0; at < libraries; ++at) {
         const auto library = reader.text(); const auto names = reader.get<std::uint32_t>();
-        if ((library != "ucrtbase.dll" && library != "api-ms-win-crt-stdio-l1-1-0.dll" && library != "api-ms-win-crt-filesystem-l1-1-0.dll" && library != "api-ms-win-crt-environment-l1-1-0.dll") ||
+        if (!supported_libraries.count(library) ||
             !names || names > 128 || provider->imports.count(library))
             throw Fatal(ERROR_INVALID_DATA, "CRT source library has an unknown/duplicate declaration.");
         auto& declared = provider->imports[library];
         for (std::uint32_t index = 0; index < names; ++index) {
-            const auto name = reader.text(); if (!crt_entry(name) || !declared.insert(name).second)
+            const auto name = reader.text();
+            if (!(crt_entry(name) && crt_io_import_name(library, name)) && !crt_pure_import_name(library, name))
                 throw Fatal(ERROR_NOT_SUPPORTED, "CRT declared import lacks an actual first-party callable owner.");
+            if (!declared.insert(name).second) throw Fatal(ERROR_INVALID_DATA, "CRT source import repeats its declaration.");
         }
     }
     owner->providers.push_back(std::move(provider)); io.crt = std::move(owner);
@@ -159,7 +173,9 @@ void* crt_import_entry(const std::string& library, const std::string& name, void
     if (!io_owner().crt) return nullptr;
     auto& provider = *crt_owner().providers.at(0); const auto declaration = provider.imports.find(library);
     if (declaration == provider.imports.end() || !declaration->second.count(name)) return nullptr;
-    auto* replacement = crt_entry(name); if (!replacement) throw Fatal(ERROR_NOT_SUPPORTED, "CRT source import has no owned actual entry.");
+    const auto pure = crt_pure_import_name(library, name);
+    auto* replacement = pure ? actual_import : crt_entry(name);
+    if (!replacement) throw Fatal(ERROR_NOT_SUPPORTED, "CRT source import has no owned actual entry.");
     HMODULE actual_module = nullptr;
     const auto reference_flags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | (provider.retained ? GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT : 0);
     if (!actual_import || !GetModuleHandleExW(reference_flags,
@@ -174,6 +190,14 @@ void* crt_import_entry(const std::string& library, const std::string& name, void
         const auto failure = GetLastError();
         throw Fatal(failure ? failure : ERROR_INVALID_DATA, "CRT import export/pointer differs from its exact retained provider image.");
     }
+    if (pure) {
+        const auto key = std::make_pair(library, name);
+        const auto existing = provider.pure_bindings.find(key);
+        if (existing != provider.pure_bindings.end() && existing->second != actual_import)
+            throw Fatal(ERROR_INVALID_DATA, "Pure CRT source import changed its retained original entry.");
+        provider.pure_bindings.emplace(key, actual_import);
+        return actual_import; // Preserve original cdecl/ST0 and XMM0 ABIs exactly.
+    }
     // Resolve genuine status/lifetime exports before any original FILE is
     // returned. The caller-selected provider is never substituted with our CRT.
     (void)crt_export<int (__cdecl*)(int*)>(provider, "_get_errno");
@@ -184,6 +208,27 @@ void* crt_import_entry(const std::string& library, const std::string& name, void
     (void)crt_export<int (__cdecl*)(void*)>(provider, "feof");
     (void)crt_export<int (__cdecl*)(void*)>(provider, "ferror");
     return replacement;
+}
+void crt_write_pure_bindings(Bytes& result) {
+    std::size_t count = 0;
+    if (io_owner().crt) for (const auto& provider : crt_owner().providers) count += provider->pure_bindings.size();
+    result.put(static_cast<std::uint32_t>(count));
+    if (!count) return;
+    if (state->calls.empty()) throw Fatal(ERROR_INVALID_STATE, "Pure CRT publication has no entered actual native call.");
+    for (auto& provider : crt_owner().providers) {
+        if (provider->pure_bindings.empty()) continue;
+        const auto incoming = GetLastError(); const auto status = crt_status(*provider);
+        crt_register(*provider);
+        for (const auto& binding : provider->pure_bindings) {
+            const auto actual = crt_export<void*>(*provider, binding.first.second.c_str());
+            if (actual != binding.second || address(actual) < address(provider->retained))
+                throw Fatal(ERROR_INVALID_DATA, "Pure CRT binding lost its exact current original export pointer.");
+            result.put(provider->id); result.put(state->calls.back()); result.put(address(provider->retained)); result.put(GetCurrentThreadId());
+            result.text(binding.first.first); result.text(binding.first.second); result.put(address(actual));
+            result.put(address(actual) - address(provider->retained));
+        }
+        crt_restore_error(*provider, status); SetLastError(incoming);
+    }
 }
 void* crt_dynamic_entry(HMODULE module, const std::string& name) {
     if (!io_owner().crt) return nullptr;

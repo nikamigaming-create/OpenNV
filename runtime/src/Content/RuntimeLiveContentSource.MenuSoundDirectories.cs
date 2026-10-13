@@ -62,14 +62,14 @@ internal sealed partial class RuntimeLiveContentSource
     {
         if (!OperatingSystem.IsWindows() || GetACP() != 1252)
             throw new NotSupportedException("Source directory order requires its actual Windows ANSI file enumerator.");
-        var roots = RequireStartupSoundSearchRoots(modes);
+        var root = RequireStartupSoundNamespace(modes).RequirePhysicalDirectoryRoot();
         var prefix = FalloutMenuSoundSelectionSource.LogicalPath(raw).TrimEnd('\\') + "\\";
-        var directory = FindActualDirectory(roots[1], prefix.TrimEnd('\\'));
+        var directory = FindActualDirectory(root, prefix.TrimEnd('\\'));
         IReadOnlyList<string> names = directory is null ? [] : ReadNativeNames(Path.Combine(directory, "*" + extension));
         var paths = names.Reverse().Select(name => FalloutBsaArchive.CanonicalPath(prefix + name)).ToArray();
         var producer = FalloutAdvancementRuntimeReceipt.Hash("Win32-FindFirstFileA-FindNextFileA-FindClose;1252;direct-child;prepend;" +
-            StackId + "\0" + roots[1]);
-        return new(roots[1], Array.AsReadOnly(paths), producer);
+            StackId + "\0" + root);
+        return new(root, Array.AsReadOnly(paths), producer);
     }
 
     private void RequireActualMenuSoundDirectory(FalloutMenuSoundDirectory saved)

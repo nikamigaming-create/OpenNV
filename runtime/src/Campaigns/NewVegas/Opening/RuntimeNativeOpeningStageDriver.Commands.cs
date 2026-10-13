@@ -83,6 +83,15 @@ internal partial class RuntimeNativeOpeningStageDriver
         Name("SourceAnimationSoundSaveBlocker", () => SourceAnimationSoundSaveBlocker),
         }.OfType<string>().ToArray();
     }
+    internal RuntimeSaveRequestStatusView SaveRequestStatus => new(
+        _scripts.ScriptManualSaves.Order.Requests.Select(RuntimeSaveRequestStatus.Read).ToArray(),
+        FalloutScriptManualSaveStatus.Read(_scripts.ScriptManualSaves.Receipt),
+        _scripts.ScriptManualSaves.DeferredBy, _scripts.ScriptManualSaves.EnteredInvocations,
+        _scripts.ScriptManualSaves.WritingRequestedSlot, _scripts.ScriptManualSaves.Error,
+        SaveRequestDeferredBy, AllSaveContinuationBlockers(), "source-radio-pcm;other-continuations-unbound",
+        SourceMainScriptCallerState, _scripts.References!.MainUtilityState);
+    private string? SaveRequestDeferredBy => _scripts.References!.PlayerMoves.Pending ? "player-move" :
+        SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker;
     internal object SaveRequestState => new
     {
         ordered = _scripts.ScriptManualSaves.Order.Requests,
@@ -109,7 +118,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         cellProcesses = CellProcessState,
         sourceContacts = SourceContactSaveBlocker,
         levelUp = PlayerLevelUpMenuState,
-        deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
+        deferredBy = SaveRequestDeferredBy,
         allSaveBlockers = AllSaveContinuationBlockers(),
         activeContinuationSaving = "source-radio-pcm;other-continuations-unbound"
     };

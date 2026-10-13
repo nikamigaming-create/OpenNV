@@ -119,6 +119,9 @@ internal sealed class FalloutNewGameBootstrap
                 case FalloutReferenceEffectKind.CharacterGeneration:
                     scripts.Session.SetInCharGen(change.Enable);
                     break;
+                case FalloutReferenceEffectKind.SceneComplexity:
+                    scripts.Session.SetSceneIsComplex(change.Enable);
+                    break;
                 case FalloutReferenceEffectKind.PlayerToddler:
                     scripts.Session.SetPlayerToddler(change.Enable);
                     break;

@@ -1,6 +1,12 @@
 using OpenNV.Runtime;
 using OpenNV.Runtime.Content;
 
+if (!RuntimeLaunchRequest.Create(new Dictionary<string, string>()).OpensLauncher ||
+    !RuntimeLaunchRequest.Create(new Dictionary<string, string> { ["launcher"] = "true" }).OpensLauncher ||
+    RuntimeLaunchRequest.Create(new Dictionary<string, string> { ["xr-rig-proof"] = "true" }).OpensLauncher ||
+    RuntimeLaunchRequest.Create(new Dictionary<string, string> { ["campaign"] = "fallout-3" }).OpensLauncher)
+    throw new InvalidOperationException("Ordinary executable startup must open the picker; incomplete explicit requests must retain their validation.");
+
 var campaigns = new Dictionary<NativeGame, string>
 {
     [NativeGame.Fallout1] = "fallout-1",
@@ -17,7 +23,9 @@ foreach (var (game, campaign) in campaigns)
         ["save-path"] = $"isolated/{campaign}/player.json",
     };
     var installation = new NativeGameInstallation(game, options["data-root"], options["data-root"]);
-    RuntimeLaunchValidator.ValidateContent(options, RuntimeLaunchRequest.Create(options));
+    var request = RuntimeLaunchRequest.Create(options);
+    if (request.OpensLauncher) throw new InvalidOperationException("An explicit owned installation was replaced by the launcher.");
+    RuntimeLaunchValidator.ValidateContent(options, request);
     RuntimeLaunchValidator.ValidateInstallation(options, installation);
     foreach (var other in campaigns.Values.Where(value => value != campaign))
     {
@@ -40,7 +48,8 @@ foreach (var (game, campaign) in campaigns)
     options["fo1-start-presentation"] = "first-person";
     MustReject<ArgumentException>(() => RuntimeLaunchValidator.ValidateInstallation(options, installation));
 }
-Console.WriteLine("OPENNV_RUNTIME_LAUNCH_CONTRACT_PASS campaigns=4 wrongCampaign=rejected unsupportedViews=rejected");
+InputPresentationContracts.Run();
+Console.WriteLine("OPENNV_RUNTIME_LAUNCH_CONTRACT_PASS campaigns=4 wrongCampaign=rejected unsupportedViews=rejected headlessSelection=true commandSelection=true rendererIndependent=true");
 
 static void MustReject<TException>(Action action) where TException : Exception
 {

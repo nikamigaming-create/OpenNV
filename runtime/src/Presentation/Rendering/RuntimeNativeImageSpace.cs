@@ -58,7 +58,7 @@ internal partial class RuntimeNativeImageSpace : Node
     internal IDisposable BeginMenuBackground(FalloutPluginStack records, FalloutMenuBackgroundKind kind)
     {
         if (UsesSourceMain)
-            throw new NotSupportedException("source-image-space-menu-temporary-instance-factory-and-isolated-update-unowned");
+            return BeginSourceMenuBackground(records, kind);
         if (_menuBackground is not null) throw new InvalidOperationException("Another static menu background already owns the world capture.");
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Menu background has no owned content source.");
         var declarations = FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(source.FalloutExecutablePath);
@@ -83,10 +83,12 @@ internal partial class RuntimeNativeImageSpace : Node
         {
             var target = _owner; _owner = null;
             if (target is null || !GodotObject.IsInstanceValid(target) || serial != target._menuSerial) return;
-            target._effect.ClearMenuBackground(serial);
+            if (target._headlessSourceOutput is null) target._effect.ClearMenuBackground(serial);
             target._menuBackground = null;
             target.SetMeta("opennv_menu_background_active", false);
-            target.Publish(0);
+            if (target.UsesSourceMain)
+            { target.Frame = target._sourceNativeFrame; target.PublishObservation(); }
+            else target.Publish(0);
         }
     }
 

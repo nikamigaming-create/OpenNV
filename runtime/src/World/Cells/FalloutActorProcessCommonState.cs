@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // reselects a package, replays an event or recreates modifier pools.
 internal sealed partial class FalloutActorProcessCommonState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-common/v1";
+    internal const string Schema = "opennv-actor-process-common/v8";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;
@@ -67,7 +67,8 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
             throw new InvalidDataException("Actual source common constructor lost the original Player/nonplayer factory class.");
         var sequence = Next();
         _current.Add(actor, new(source, epoch, level, FalloutProcessCommonScalars.Constructed,
-            new(source, Guid.NewGuid(), epoch, sequence, false), FalloutProcessCommonPhase.Constructed, null, null, sequence));
+            new(source, Guid.NewGuid(), epoch, sequence, false), FalloutProcessCommonPhase.Constructed, null, null, sequence,
+            SceneFields: ConstructSceneFields(level)));
     }
     internal void Copy(FalloutActorProcessFactorySnapshot factory) => Operation(factory, () =>
     {
@@ -80,7 +81,8 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         var gameplay = ReadGameplay(old.Source.Reference);
         var ownership = Guid.NewGuid(); var sequence = Next();
         _pending = new(old.Source, factory.NewEpoch, factory.After, old.Scalars,
-            new(old.Source, ownership, factory.NewEpoch, sequence, false), FalloutProcessCommonPhase.Copied, null, null, sequence);
+            new(old.Source, ownership, factory.NewEpoch, sequence, false), FalloutProcessCommonPhase.Copied, null, null, sequence,
+            SceneFields: ConstructSceneFields(factory.After));
         // The selected Low constructors own null in both move-and-clear child
         // slots. Any reached creation of such a child must first bind its own
         // typed owner, or retain a common boundary. A nonnull opaque pointer is

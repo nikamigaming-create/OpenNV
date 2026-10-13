@@ -11,7 +11,7 @@ internal sealed partial class NativePluginExecutionDomain
     internal IReadOnlyList<NativePluginProcessReceipt> NvseProcessReceipts => _windowProcessReceipts.AsReadOnly();
     private byte[] DispatchWindowProcessSdk(ulong parent, uint thread, ulong module, BinaryReader reader)
     {
-        var window = _productWindow; var stage = reader.ReadUInt32();
+        var capability = _productUser32; var stage = reader.ReadUInt32();
         if (stage == 1)
         {
             var api = reader.ReadUInt32(); var handle = reader.ReadUInt32(); var first = reader.ReadUInt32();
@@ -21,7 +21,7 @@ internal sealed partial class NativePluginExecutionDomain
             switch (api)
             {
                 case 1: // OpenThread: actual query access, actual SDK can deny it.
-                    if (handle != 0 || (first & ~0x00100840U) != 0 || second != 0 || (third != thread && (window is null || third != window.Thread)) || count != 0)
+                    if (handle != 0 || (first & ~0x00100840U) != 0 || second != 0 || (third != thread && (capability is null || third != capability.Thread)) || count != 0)
                         throw new NotSupportedException("OpenThread has unowned access/inheritance/foreign-thread semantics.");
                     break;
                 case 2: // GetProcessTimes: child process pseudo handle only.
@@ -34,7 +34,7 @@ internal sealed partial class NativePluginExecutionDomain
                     break;
                 case 4: // Toolhelp32 module snapshot.
                     if (handle != 0 || (first & ~0x18U) != 0 || (first & 0x18U) == 0 ||
-                        (second != 0 && second != (uint)ProcessId && (window is null || second != window.Process)) || third != 0 || count != 0)
+                        (second != 0 && second != (uint)ProcessId && (capability is null || second != capability.Process)) || third != 0 || count != 0)
                         throw new NotSupportedException("Toolhelp requests an unowned process/global/heap/thread enumeration.");
                     break;
                 case 5 or 6: // Actual MODULEENTRY32W.

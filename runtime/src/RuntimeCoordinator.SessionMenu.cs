@@ -187,15 +187,16 @@ public partial class RuntimeCoordinator
         try
         {
             BeginLoadingScreen(continueSave ? "Preparing saved game" : "Returning to the main menu");
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await WaitForHostFrame();
             await DrainNativeSourceReaders();
             _nextSessionOptions = new(_options, StringComparer.OrdinalIgnoreCase);
             _nextSessionOptions.Remove("launcher"); _nextSessionOptions.Remove("new-game");
+            _nextSessionOptions.Remove("continue-game");
             _nextSessionContinue = continueSave;
             _nextSessionPauseAfterCheckpointLoad = continueSave && pauseAfterLoad;
             _nextSessionCheckpoint = continueSave ? checkpoint : null;
             _nextSessionActivation = continueSave ? _pendingSaveActivation : null;
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await WaitForHostFrame();
             _retiringNativeSession = true;
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
             _nativeScriptStorage?.Controls?.Flush();
@@ -235,7 +236,7 @@ public partial class RuntimeCoordinator
         try
         {
             await DrainNativeSourceReaders();
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            await WaitForHostFrame();
             if (_pendingSaveActivation is not null) RejectNativePendingLoad(new OperationCanceledException("Selected load was cancelled by quitting."));
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
@@ -254,4 +255,5 @@ public partial class RuntimeCoordinator
             _nativeSessionMenu?.ShowFailure(error.Message);
         }
     }
+
 }

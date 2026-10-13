@@ -96,10 +96,6 @@ internal sealed partial class NativePluginProductWindow
     [DllImport("user32.dll")] private static extern int ClipCursor(nint rectangle);
     [DllImport("user32.dll", EntryPoint = "ClipCursor")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool ClipCursor(ref Rect rectangle);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetClipCursor(out Rect rectangle);
-    [DllImport("user32.dll")] private static extern nint GetKeyboardLayout(uint thread);
-    [DllImport("user32.dll")] private static extern int GetKeyboardState(nint bytes);
-    [DllImport("user32.dll", ExactSpelling = true)] private static extern uint MapVirtualKeyExA(uint code, uint type, nint layout);
-    [DllImport("user32.dll")] private static extern int ToUnicodeEx(uint key, uint scan, nint state, nint characters, int count, uint flags, nint layout);
     [DllImport("user32.dll", ExactSpelling = true)] private static extern int PostMessageA(nint window, uint message, nuint first, nint second);
     [DllImport("user32.dll")] private static extern int AttachThreadInput(uint first, uint second, [MarshalAs(UnmanagedType.Bool)] bool attach);
     [DllImport("user32.dll")] private static extern int EnumWindows(EnumWindow callback, nint parameter);

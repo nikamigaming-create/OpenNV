@@ -13,7 +13,8 @@ internal sealed record FalloutCompiledEvent(ushort Event, int Begin, int End,
 // instructions or operands; an unknown reached instruction remains a failure.
 internal sealed class FalloutCompiledScriptProgram
 {
-    internal const int DecoderVersion = 4;
+    private readonly Dictionary<FalloutCompiledEvent, IReadOnlyList<FalloutCompiledInstruction>> _eventInstructions;
+    internal const int DecoderVersion = 5;
     internal FalloutScriptScope Scope { get; }
     internal FalloutPluginRecord Source { get; }
     internal string ProgramSha256 { get; }
@@ -33,6 +34,7 @@ internal sealed class FalloutCompiledScriptProgram
         bool standalone, FalloutScriptScope scope, ReadOnlyMemory<byte> header)
     {
         Source = source; References = references; Instructions = instructions; Events = events;
+        _eventInstructions = IndexEventInstructions(instructions, events);
         CodeBytes = code.Length; Standalone = standalone; Scope = scope; ScopeStart = scope.FieldStart;
         ScriptType = BinaryPrimitives.ReadUInt16LittleEndian(header.Span[16..]);
         CompiledFlag = header.Span[18]; LocalCount = BinaryPrimitives.ReadUInt32LittleEndian(header.Span[12..]);
@@ -117,7 +119,10 @@ internal sealed class FalloutCompiledScriptProgram
                 opcode = BinaryPrimitives.ReadUInt16LittleEndian(code.Span[offset..]);
                 extent = BinaryPrimitives.ReadUInt16LittleEndian(code.Span[(offset + 2)..]);
                 offset += 4;
-                if (opcode < 0x1000)
+                // The same source reference prefix qualifies Set as well as
+                // commands. Its implicit locals belong to the selected
+                // reference's attached script, not the enclosing result.
+                if (opcode < 0x1000 && opcode != 0x15)
                     throw new InvalidDataException("Compiled reference-call header targets a non-command instruction.");
             }
             if (extent > code.Length - offset)
@@ -125,7 +130,7 @@ internal sealed class FalloutCompiledScriptProgram
             result.Add(new(start, offset + extent, opcode, receiver, code.Slice(offset, extent)));
             offset += extent;
         }
-        return result;
+        return result.AsReadOnly();
     }
 
     private static IReadOnlyList<FalloutCompiledEvent> DecodeEvents(
@@ -172,8 +177,29 @@ internal sealed class FalloutCompiledScriptProgram
             events.Add(new(type, instruction.End, last.Offset, instruction.Payload[6..]));
             index = cursor + 1;
         }
-        return events;
+        return events.AsReadOnly();
     }
+
+    // Source blocks are ordered and disjoint. Walk the decoded instructions
+    // once when constructing their owner, rather than scanning all SCDA on
+    // every event invocation. Membership is the actual block identity.
+    private static Dictionary<FalloutCompiledEvent, IReadOnlyList<FalloutCompiledInstruction>> IndexEventInstructions(
+        IReadOnlyList<FalloutCompiledInstruction> instructions, IReadOnlyList<FalloutCompiledEvent> events)
+    {
+        var result = new Dictionary<FalloutCompiledEvent, IReadOnlyList<FalloutCompiledInstruction>>(ReferenceEqualityComparer.Instance);
+        var cursor = 0;
+        foreach (var block in events)
+        {
+            while (cursor < instructions.Count && instructions[cursor].Offset < block.Begin) ++cursor;
+            var body = new List<FalloutCompiledInstruction>();
+            while (cursor < instructions.Count && instructions[cursor].End <= block.End)
+                body.Add(instructions[cursor++]);
+            result.Add(block, body.AsReadOnly());
+        }
+        return result;
+    }
+
+    internal bool OwnsEvent(FalloutCompiledEvent block) => _eventInstructions.ContainsKey(block);
 
     internal IEnumerable<FalloutCompiledInstruction> ResultInstructions() => !Standalone
         ? Instructions
@@ -181,8 +207,8 @@ internal sealed class FalloutCompiledScriptProgram
 
     internal IEnumerable<FalloutCompiledInstruction> EventInstructions(FalloutCompiledEvent block)
     {
-        if (!Events.Contains(block)) throw new InvalidDataException("Compiled event belongs to another source program.");
-        return Instructions.Where(instruction => instruction.Offset >= block.Begin && instruction.End <= block.End);
+        return _eventInstructions.TryGetValue(block, out var instructions) ? instructions :
+            throw new InvalidDataException("Compiled event belongs to another source program.");
     }
 
     internal FalloutCompiledReference Reference(ushort index) =>

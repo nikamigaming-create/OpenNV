@@ -41,6 +41,23 @@ internal sealed partial class FalloutActorProcessRuntimeState
         RequireMainPlayerCellChild(invocation, FalloutMainPlayerCellStep.SceneChild);
         return StandalonePlayerScene.EnterSceneVirtual(invocation.Main.Identity, invocation.Main.Ordinal);
     }
+    internal float ReadStandalonePlayerScaledSeconds(FalloutMainPlayerCellInvocation invocation)
+    {
+        RequireMainPlayerCellChild(invocation, FalloutMainPlayerCellStep.SceneChild);
+        _ = (_mainCachedTail ?? throw new InvalidOperationException("Player scalar update lost its actual Main tail."))
+            .ReadReturnedRendererClock(invocation.Main);
+        var timer = _cachedSourceTimer ?? throw new InvalidOperationException("Player scalar update lost its actual Main timer.");
+        if (!timer.HasReturnedUpdate) throw new InvalidOperationException("Player scalar update read an unreturned source timer.");
+        return timer.ScaledSeconds;
+    }
     internal void RequireStandaloneSceneNativeRetirement() => RequireMainScriptClosureBoundary(retiring: true);
+    internal void RequireStandaloneSceneReplacement()
+    {
+        if (_scriptCallerManagedThread is { } thread && thread != Environment.CurrentManagedThreadId)
+            throw new InvalidOperationException("Player scene replacement changed its actual Main constructor thread.");
+        RequireNotBusy();
+        RequireMainScriptClosureBoundary(retiring: false);
+        StandalonePlayerScene.RequireFirstPersonReplacement();
+    }
     private void RetireStandalonePlayerScene() => _standalonePlayerScene?.Retire();
 }

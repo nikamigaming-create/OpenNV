@@ -10,7 +10,9 @@ internal static partial class CorpusInventoryContracts
     {
         var game = Game(directory, "compressed-member-ledger");
         var archivePath = Path.Combine(game, "Data", "FalloutNV.bsa");
-        var genuineEmpty = CorpusCompressedFrame([]);
+        // Pin the RFC 1950 header/checksum and a final fixed-Huffman block
+        // containing only EOB. Empty-stream output varies across SDK codecs.
+        byte[] genuineEmpty = [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01];
         Require(genuineEmpty.Length >= 8 && (genuineEmpty[2] & 1) != 0,
             "The authored empty compression control has no first final block.");
         var nonfinal = (byte[])genuineEmpty.Clone();

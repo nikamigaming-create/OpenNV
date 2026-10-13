@@ -9,7 +9,7 @@ internal enum FalloutReferenceEffectKind
     Conversation, PlayerControls, Message, DefaultActivate, SetStage, SpecialMenu, ReferenceEnable, Texture,
     SayTo, HeadTracking, EvaluatePackages, ScriptPackage, ImageSpace, AddItem, EquipItem, AddNote, RemoveItem,
     ScriptActivate, PipBoyReset, Hardcore, AutoDisplayObjectives, Achievement, LoadingScreenPolicy, CharacterGeneration, Say, PlayerYouth,
-    PlayerToddler, PlayerScale, DoorOpenState, PackageEventTopic
+    PlayerToddler, PlayerScale, DoorOpenState, PackageEventTopic, SceneComplexity
 }
 internal sealed record FalloutReferenceScriptEffect(FalloutReferenceEffectKind Kind, FalloutFormKey Source,
     FalloutFormKey? Target = null, FalloutFormKey? Argument = null, IReadOnlyList<bool>? Controls = null,
@@ -99,6 +99,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             var name = FalloutReferencePackageEvents.CanonicalName(item.Name);
             if (!admitted.TryAdd(name, item))
                 throw new InvalidDataException("A reference frame has absent or duplicate event admission.");
+            if (IsTriggerEvent(name)) admitted[name] = AdmitTriggerEvent(item);
             if (IsHitEvent(name)) admitted[name] = AdmitHitEvent(reference, item);
             else if (item.HitWeapons is not null || item.HitAttackers is not null)
                 throw new InvalidDataException("Hit identities belong to a typed source hit event.");
@@ -1294,6 +1295,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     break;
                 case "setinchargen" when parts.Length == 1 && arguments.Count == 1:
                     host.Apply(new(FalloutReferenceEffectKind.CharacterGeneration, source, Enable: FalloutScriptSession.CharacterGenerationFlag(Number(arguments[0]))));
+                    break;
+                case "setsceneiscomplex" when parts.Length == 1 && arguments.Count == 1:
+                    host.Apply(new(FalloutReferenceEffectKind.SceneComplexity, source, Enable: FalloutScriptSession.SceneComplexityFlag(Number(arguments[0]))));
                     break;
                 case "setscale" when parts.Length == 2 && arguments.Count == 1 && records.RuntimeFormId(target) == 0x14:
                     host.Apply(new(FalloutReferenceEffectKind.PlayerScale, source, Target: target,

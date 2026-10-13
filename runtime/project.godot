@@ -12,7 +12,7 @@ config_version=5
 
 config/name="OpenNV"
 run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+config/features=PackedStringArray("4.8", "C#", "Forward Plus")
 
 [dotnet]
 
@@ -26,6 +26,7 @@ jolt_physics_3d/queries/enable_ray_cast_face_index=true
 [rendering]
 
 driver/threads/thread_model=1
+textures/streaming/enabled=true
 limits/global_shader_variables/buffer_size=1048576
 
 [shader_globals]

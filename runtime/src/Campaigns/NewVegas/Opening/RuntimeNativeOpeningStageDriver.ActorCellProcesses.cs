@@ -8,6 +8,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     private Action? _observeCurrentNativeCellProcesses;
     internal object? ActorUpdateState => _scripts.References?.ActorUpdateState;
     internal object? CellProcessState => _scripts.References?.CellProcessState;
+    internal FalloutCellProcessesSummary? CellProcessSummary => _scripts.References?.CellProcessSummary;
     internal string? ActorUpdateSaveBlocker => _scripts.References is { } world ? world.ActorUpdateSaveBlocker : "source-actor-update-world-absent";
     internal string? CellProcessSaveBlocker => _scripts.References is { } world ? world.CellProcessSaveBlocker : "source-CELL-process-world-absent";
     internal void ConfigureSourceActorCellProducers(FalloutActorUpdateSnapshot? actors, FalloutCellProcessesSnapshot? cells)

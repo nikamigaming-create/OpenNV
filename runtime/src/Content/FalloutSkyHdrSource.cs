@@ -45,8 +45,19 @@ internal sealed record FalloutSkyHdrWrite(long Ordinal, FalloutSkyHdrWriteKind K
     Guid? Frame, Guid? ImageOwner, FalloutFormKey? ImageForm, string? ImageSha256, Guid? Capability,
     long? ImageOrdinal = null, ushort? ImageFormVersion = null, string? AnonymousImageSource = null);
 
+internal enum FalloutSkyHdrCapabilityProvider { NativeDevice = 1, HeadlessNoRenderer = 2 }
 internal sealed record FalloutSkyHdrCapability(Guid Identity, Guid Process, string EngineSha256, string Contract,
-    long Returned, bool HalfFloatRgbaBlendSupported, bool NativeResourcesCurrent, string Producer);
+    long Returned, bool HalfFloatRgbaBlendSupported, bool NativeResourcesCurrent, string Producer,
+    FalloutSkyHdrCapabilityProvider Provider = FalloutSkyHdrCapabilityProvider.NativeDevice)
+{
+    internal const string HeadlessProducer = "Godot-headless/backend-no-rendering-device";
+    internal bool Current => Provider switch
+    {
+        FalloutSkyHdrCapabilityProvider.NativeDevice => NativeResourcesCurrent,
+        FalloutSkyHdrCapabilityProvider.HeadlessNoRenderer => !NativeResourcesCurrent && !HalfFloatRgbaBlendSupported && Producer == HeadlessProducer,
+        _ => false,
+    };
+}
 internal interface IFalloutSkyHdrCapability
 {
     Guid Identity { get; }

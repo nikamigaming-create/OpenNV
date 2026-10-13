@@ -30,9 +30,11 @@ internal static partial class QuestGraphAuditContracts
         var maximumExpected = maximumHistory.Concat(Enumerable.Repeat((byte)0x5a, 258)).ToArray();
         var maximumFrame = MaximumDistanceFrame(maximumHistory);
         positives.Add(new("maximum-window-and-match", maximumFrame, maximumExpected, 2));
-        // Public framework outputs supplement the independent bit writers;
-        // they do not choose which block families the authored cases cover.
-        foreach (var data in new[] { Array.Empty<byte>(), alphabet, maximumExpected })
+        // Public nonempty framework outputs supplement the independent bit
+        // writers. The lazy .NET 10 encoder produces no stream for an empty
+        // write; the explicit fixed/stored/dynamic empty controls above retain
+        // complete block-family and malformed-envelope coverage.
+        foreach (var data in new[] { alphabet, maximumExpected })
         {
             using var output = new MemoryStream();
             using (var compressor = new ZLibStream(output, CompressionLevel.Optimal, leaveOpen: true)) compressor.Write(data);

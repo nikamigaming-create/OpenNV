@@ -45,7 +45,7 @@ internal sealed class FalloutInputControls(Func<string, string?> source, string?
         ValidateType(type);
         if (control >= Count) return;
         // xNVSE accepts both raw mouse bytes and the published 256-based codes.
-        var scan = key >= 256 ? key - 256 : key;
+        var scan = key >= FalloutInputLayout.FirstMouseButton ? key - FalloutInputLayout.FirstMouseButton : key;
         if (scan > byte.MaxValue) throw new InvalidDataException("Control binding is outside the byte-sized input domain.");
         var previous = Load(); var next = previous.ToArray();
         var old = type == 0 ? previous[control].Keyboard : previous[control].Mouse;
@@ -107,7 +107,8 @@ internal sealed class FalloutInputControls(Func<string, string?> source, string?
 
     private static FalloutControlBinding With(FalloutControlBinding value, byte scan, uint type) =>
         type == 0 ? value with { Keyboard = scan } : value with { Mouse = scan };
-    private static int Code(byte scan, uint type) => scan == byte.MaxValue ? -1 : scan + (type == 1 ? 256 : 0);
+    private static int Code(byte scan, uint type) => scan == byte.MaxValue ? -1 :
+        scan + (type == 1 ? FalloutInputLayout.FirstMouseButton : 0);
     private static void ValidateType(uint type)
     {
         if (type is 2 or 3) throw new NotSupportedException("Joystick/gamepad control bindings have no admitted input adapter.");

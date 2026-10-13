@@ -70,7 +70,7 @@ internal sealed partial class RuntimeNifParticleSystem
         catch
         {
             if (visual is not null) { visual.Multimesh = null; visual.Free(); }
-            if (draw is not null) { draw.Mesh = null; draw.Dispose(); }
+            if (draw is not null) ReleaseParticleMultiMesh(draw);
             quad.Material = null; quad.Dispose();
             throw;
         }
@@ -90,9 +90,19 @@ internal sealed partial class RuntimeNifParticleSystem
             _visual.Multimesh = null;
             if (freeVisual) _visual.Free();
         }
-        if (_draw is not null) { _draw.Mesh = null; _draw.Dispose(); }
+        if (_draw is not null) ReleaseParticleMultiMesh(_draw);
         if (_particleQuad is not null) { _particleQuad.Material = null; _particleQuad.Dispose(); }
         _draw = null!; _visual = null!; _particleQuad = null;
+    }
+
+    private static void ReleaseParticleMultiMesh(MultiMesh draw)
+    {
+        // The native renderer rebuilds bounds when the mesh changes. Retire
+        // the instance buffer first so that rebuild cannot read a missing mesh.
+        draw.VisibleInstanceCount = 0;
+        draw.InstanceCount = 0;
+        draw.Mesh = null;
+        draw.Dispose();
     }
 
     public override void _Notification(int what)

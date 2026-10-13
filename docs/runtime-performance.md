@@ -1,5 +1,48 @@
 # Runtime performance and CPU scheduling
 
+## Current engine and streaming boundary
+
+The selected engine is official Godot 4.8-dev7 Mono
+(`4.8.dev7.mono.official.c971f93e7`), with Godot.NET.Sdk 4.8.0-dev.7 and .NET 10.
+`runtime/godot-toolchain.json` is the shared engine/archive/SDK pin. Installation
+verifies the official archive SHA256; launch and gate scripts reject a stale
+engine or SDK mismatch. The 4.8 snapshot is a development release. The earlier
+measurements below do not qualify this engine's performance.
+
+4.8 adds GPU-feedback-driven mip-level texture streaming through
+StreamedTexture2D and TextureStreaming. The project enables the feature. Its
+official public API currently loads imported `.stex` resources; it does not
+expose the internal RID/format/reload-callback registration to C# or GDExtension.
+NativeDdsTexture continues to upload direct owned DDS bytes, preserving authored
+levels and BC1 alpha; NativePartialMipTexture preserves incomplete authored
+pyramids. These uploads are resident and are not registered with the new engine
+streamer. Enabling the project flag alone does not close that integration.
+
+The live harness reports the actual engine counters for total texture bytes,
+streamed texture bytes and the streaming budget's current usage. Zero streamed
+bytes must remain visible. A complete owned-data integration still needs actual
+camera/GPU demand, bounded asynchronous source reads, compatible texture
+replacement, source alpha/mip fidelity, native lifetime and cancellation, and
+measured memory/frame behavior. Persistent transformed assets cannot become
+launch inputs. C# CELL/reference/LAND streaming remains independent of texture
+residency and authoritative gameplay.
+
+The actual 4.8 Vulkan FO3 Debug run uses the RTX 4070 SUPER, 28 available logical
+processors and the shared four-worker content budget. The birth-cell sample
+reports 1,373,634,048 total texture bytes; the final CG00 stage-100 sample reports
+1,679,149,568 bytes. Both report zero streamed and budget-used bytes. The final
+live snapshot costs 35.93 ms to construct and 4.74 ms to serialize, with a
+selected 512-interval window at 26.99 ms median and 82.94 ms p95. These are
+unoptimized Debug diagnostics with the live harness enabled, not Release or
+moving-campaign performance. No matched retail or before/after timing claim
+follows from them. Recording was off apart from one inspected-and-deleted frame.
+
+Primary references: [4.8 texture-streaming release notes](https://godotengine.org/article/dev-snapshot-godot-4-8-dev-5/),
+[TextureStreaming API](https://docs.godotengine.org/en/latest/classes/class_texturestreaming.html),
+and [the selected engine's registration implementation](https://github.com/godotengine/godot/blob/c971f93e7/modules/texture_streaming/texture_streaming.cpp).
+
+## Scheduling and previous measurements
+
 Native bot capsule refinement now uses the actor navigation owner's shared
 two-millisecond physics-thread budget. Pending requests release ordinary input;
 changed player poses, cells, source-scaled bodies and target goals invalidate
@@ -45,12 +88,14 @@ instance values. Direct3D 12 and Vulkan pixel checks verify equal local/shared
 lighting, weather updates and interior rebinding. HDR texture names are reused.
 Diagnostic render timing is collected asynchronously on the render thread.
 
-Separate rendering was exercised with actual flat and OpenXR gameplay. This
-Godot build reports a render-thread `finalize` error on shutdown in both D3D12
+Separate rendering was exercised with actual flat and OpenXR gameplay on the
+earlier engine. That build reports a render-thread `finalize` error on shutdown in both D3D12
 and Vulkan, including the small pixel fixture. The safe renderer shuts that
 fixture down cleanly and remains the release default. Engine argument
 `--render-thread separate` is available for explicit development comparisons;
 it is not a supported-performance claim for another graphics driver or platform.
+4.8 needs its own repeated native shutdown and frame measurements before changing
+the renderer default.
 
 The live harness reports process CPU/memory availability, OS, architecture,
 renderer, graphics adapter, content budget, frame intervals and asynchronous

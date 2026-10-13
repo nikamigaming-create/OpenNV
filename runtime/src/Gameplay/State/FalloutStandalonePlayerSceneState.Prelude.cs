@@ -7,7 +7,10 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     private byte _viewRequest, _viewRequestArgument, _countdownEnabled;
     private uint _countdownBits = 0x40a00000, _referenceScratch;
     private FalloutStandaloneScenePreludeCall? _prelude;
-    internal void ExecuteInitialVirtualPrefix(Guid main, long ordinal, Action releaseSharedOwnedChild)
+    private FalloutPlayerReferenceHudCall? _referenceHudCall;
+    private FalloutStandaloneActorScalarReset? _actorScalarReset;
+    internal void ExecuteInitialVirtualPrefix(Guid main, long ordinal, Action releaseSharedOwnedChild,
+        FalloutPlayerReferenceHudState? hud = null, Func<float>? readScaledTimer = null)
     {
         RequireIdle(); ArgumentNullException.ThrowIfNull(releaseSharedOwnedChild);
         if (_clock is not { Step: FalloutStandaloneSceneClockStep.VirtualEntered, ArgumentBits: not null } clock ||
@@ -28,7 +31,50 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             // This consumer is called even for a returned null reference. It
             // owns independent HUD fields and must return before the stored
             // reference release or the rest of the actual Player virtual.
-            throw new NotSupportedException("source-Player-scene-reference-frame-HUD-consumer-unowned");
+            if (hud is null) throw new NotSupportedException("source-Player-scene-reference-frame-HUD-consumer-unowned");
+            if (hud.Process != _process || hud.Stack != _stack || hud.Source.Main != Source.Main)
+                throw new InvalidOperationException("Player HUD child changed its actual Main/source/process owner.");
+            try { hud.Update(main, ordinal, _referenceQuery!.Result, _sceneReferenceArgument); }
+            finally
+            {
+                if (hud.LastCall is { } call && call.Main == main && call.MainOrdinal == ordinal)
+                { _referenceHudCall = call; Next(); }
+            }
+            Check(); Changed(FalloutStandaloneScenePreludeStep.ReferenceRelease);
+            if (_sceneReference is not null)
+                throw new NotSupportedException("source-Player-scene-reference-node-actual-refcount-release-unowned");
+            _sceneReference = null; Next();
+            Changed(FalloutStandaloneScenePreludeStep.ActorScalarReset);
+            _actorScalarReset = new(main, ordinal, Next(), _sequence, new uint?[4], 0, false);
+            for (var index = 0; index < 4; ++index)
+            {
+                var fields = _actorScalarReset.Fields.ToArray();
+                fields[index] = OpenNV.Runtime.Content.FalloutStandalonePlayerSceneSource.ActorSceneResetBits;
+                _actorScalarReset = _actorScalarReset with { Fields = fields, Stores = index + 1, Changed = Next() };
+            }
+            _actorScalarReset = _actorScalarReset with { Returned = true, Changed = Next() };
+            Changed(FalloutStandaloneScenePreludeStep.ThreadContext);
+            _threadContextEntry = _threadContext.EnterPlayer(main, ordinal); Next();
+            Changed(FalloutStandaloneScenePreludeStep.InputManagerQuery);
+            _ = ReadInputManager(main, ordinal); Check();
+            Changed(FalloutStandaloneScenePreludeStep.ActorProcessQuery);
+            ReadActorProcessQueries(main, ordinal);
+            Changed(FalloutStandaloneScenePreludeStep.ActorSceneContinuation);
+            UpdateSceneScalars(main, ordinal, readScaledTimer);
+            Changed(FalloutStandaloneScenePreludeStep.QueuedSceneNodes);
+            UpdateQueuedSceneReferences(main, ordinal);
+            Changed(FalloutStandaloneScenePreludeStep.ProcessSceneUpdate);
+            UpdateProcessScene(main, ordinal);
+            Changed(FalloutStandaloneScenePreludeStep.PostProcessContext);
+            ReadPostProcessContext(main, ordinal);
+            Changed(FalloutStandaloneScenePreludeStep.TimedActions);
+            UpdateTimedActions(main, ordinal, readScaledTimer);
+            Changed(FalloutStandaloneScenePreludeStep.PlayerSceneContinuation);
+            UpdatePostActions(main, ordinal, readScaledTimer);
+            UpdateActorDistances(main, ordinal);
+            UpdateIdleAnimation(main, ordinal, readScaledTimer);
+            UpdateMovementPrefix(main, ordinal);
+            throw new NotSupportedException("source-Player-following-movement-frame-services-unbound");
         }
         catch (Exception error)
         {

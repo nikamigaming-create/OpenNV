@@ -153,6 +153,7 @@ void crt_standard_runtime(const Frame& frame) {
         Bytes result; result.put(static_cast<std::uint32_t>(std::count_if(standard.streams.begin(), standard.streams.end(),
             [](const auto& row) { return row.second.published; })));
         result.put(state->io->cpp ? static_cast<std::uint32_t>(state->io->cpp->exports.size()) : 0U);
+        crt_write_pure_bindings(result);
         state->calls.pop_back(); reply(frame, ERROR_SUCCESS, "", result);
     } catch (...) { state->calls.pop_back(); throw; }
 }

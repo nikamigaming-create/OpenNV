@@ -40,9 +40,7 @@ internal sealed class FalloutCampaignPortalGraph
                 var teleport = FalloutCellSceneReader.ReadTeleport(record);
                 if (teleport is null) continue;
                 destinationKey = teleport.Door;
-                if (teleport.Flags != 0)
-                    throw new NotSupportedException(
-                        $"{Context(record)} has unowned XTEL flags 0x{teleport.Flags:x8}.");
+                _ = teleport.NoAlarm;
                 var source = RequireDoor(record.FormKey, record);
                 var destination = RequireDoor(teleport.Door, record);
                 if (!links.TryGetValue(source.Cell, out var outgoing)) links.Add(source.Cell, outgoing = []);
@@ -101,7 +99,8 @@ internal sealed class FalloutCampaignPortalGraph
             {
                 var detail = $"Directed source XTEL route from {Context(from)} to {Context(target)} " +
                     $"reaches an unadmitted source CELL {cell}: " +
-                    string.Join("; ", failures.Select(failure => failure.Issue.Error));
+                    string.Join("; ", failures.Select(failure =>
+                        $"{failure.Issue.Winner} REFR {failure.Issue.Reference} at 0x{failure.Issue.HeaderOffset:x}: {failure.Issue.Error}"));
                 if (failures[0].Cause is NotSupportedException)
                     throw new NotSupportedException(detail, failures[0].Cause);
                 throw new InvalidDataException(detail, failures[0].Cause);

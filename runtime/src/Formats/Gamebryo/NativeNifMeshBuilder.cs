@@ -164,6 +164,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
             // Keep the detached native root owned through that work too.
             root.Name = "NativeNif";
             root.SetMeta("opennv_nif_fixed_strings", source.Strings.ToArray());
+            root.SetMeta("opennv_nif_source_sha256", source.Sha256);
+            root.SetMeta("opennv_nif_source_root_blocks", source.Roots.ToArray());
             var state = new BuildState(source, unitsToMetres, preferredTextureArchive, externalSkeleton: externalTransformTargets is not null, contentSource: contentSource)
             { UnboundPropertyFreeLod = unboundPropertyFreeLod, ExternalTransformTargets = externalTransformTargets, AddonAncestors = addonAncestors ?? [], PointLightOwner = pointLightOwner };
             foreach (var rootIndex in source.Roots)

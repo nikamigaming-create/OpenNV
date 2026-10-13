@@ -26,16 +26,20 @@ internal sealed partial class NativePluginExecutionDomain
     // object. Installed replacement hooks require their own genuine semantic
     // authority and remain refused here even when their target is executable.
     internal NativeSourceCallSiteReceipt CallNvseSourceCallSite(NativeNvsePlugin plugin,
-        NativeSourceCallSite site, NativeNvseSourceObject receiver)
+        NativeSourceCallSite site, NativeNvseSourceObject? receiver)
     {
         VerifyNvse(plugin); RequireNvseLoaded(plugin); RequireNvseEmptyCall(); RequireSourceCallSiteIdentity(site, plugin);
-        VerifyNvseSourceObject(plugin, receiver);
         if (_sourceCallSiteInvocation is not null || site.Calls != 0 || site.Failure is not null ||
             site.Phase is not (NativeSourceCallSitePhase.Published or NativeSourceCallSitePhase.Flushed))
             throw new InvalidOperationException("Source CALL overlaps an entered/failed/unpublished object invocation.");
+        if (site.Suppressed) return ObserveSourceSuppression(plugin, site);
+        if (site.Source.Getter is null)
+            throw new NotSupportedException("Unsuppressed source CALL retains its unowned actual runtime caller/target semantics.");
+        if (receiver is null) throw new NotSupportedException("Pointer getter requires its genuine source receiver.");
+        VerifyNvseSourceObject(plugin, receiver);
         if (site.Replacement)
             throw new NotSupportedException("Installed original hook requires its complete typed runtime object/global/effect consumer; executable target identity is insufficient.");
-        if (ReadSourceCallSiteTarget(site, plugin, site.DefaultTarget, 0x20) != site.CurrentTarget)
+        if (ReadSourceCallSiteCode(site, plugin, site.DefaultTarget, site.Protection) != site.Code)
             throw new InvalidDataException("Source CALL changed before its genuine getter invocation.");
         var expected = ReadSourceGetterPointer(plugin, site, receiver);
         _sourceCallSiteInvocation = new(site, receiver, expected.Pointer, expected.Owner);
@@ -78,7 +82,7 @@ internal sealed partial class NativePluginExecutionDomain
         if (!_nvseSourceGraphs.TryGetValue(receiver.Id, out var graph) || graph.Retired ||
             !graph.NativeImages.TryGetValue(receiver.Id, out var image))
             throw new NotSupportedException("Pointer getter receiver has no complete current native field/topology graph.");
-        var offset = site.Source.Getter.MemberOffset;
+        var offset = (site.Source.Getter ?? throw new NotSupportedException("Source target has no complete pointer-getter declaration.")).MemberOffset;
         if (offset < 0 || offset > image.Length - 4 || receiver.Image.Length != image.Length)
             throw new InvalidDataException("Source getter member lies outside its actual complete receiver class.");
         var pointer = BinaryPrimitives.ReadUInt32LittleEndian(image.AsSpan(offset));
@@ -88,5 +92,53 @@ internal sealed partial class NativePluginExecutionDomain
         var owner = receiver.Dependencies.SingleOrDefault(value => value.Address == pointer);
         if (owner is null) throw new NotSupportedException("Source getter pointer has no actual retained native-object dependency lease.");
         VerifyNvseSourceObject(plugin, owner); return (pointer, owner);
+    }
+
+    internal NativeSourceCallSite RetainedNvseSourceCallSite(NativeNvsePlugin plugin, uint sourceAddress)
+    {
+        VerifyNvse(plugin); RequireNvseLoaded(plugin); RequireNvseEmptyCall();
+        if (!_sourceCallSites.TryGetValue(sourceAddress, out var site)) throw new InvalidDataException("Code site has no actual original-module publication.");
+        RequireSourceCallSiteIdentity(site, plugin);
+        if (site.Failure is not null || site.Phase != NativeSourceCallSitePhase.Flushed ||
+            !site.CachePublished || ReadSourceCallSiteCode(site, plugin, site.DefaultTarget, site.Protection) != site.Code)
+            throw new InvalidOperationException("Code site retains an incomplete/failed or changed mutation prefix.");
+        return site;
+    }
+
+    // A cold record contains semantic/source identity only. The fresh original
+    // module must install and flush the patch itself; no pointer, page lease or
+    // old callback is restored or replayed from a save.
+    internal NativeSourceSuppressionCold CaptureNvseSuppression(NativeNvsePlugin plugin, NativeSourceCallSite site)
+    {
+        RequireSourceCallSiteIdentity(site, plugin);
+        _ = RetainedNvseSourceCallSite(plugin, site.Source.Address);
+        if (!site.Suppressed) throw new NotSupportedException("Code-site cold suppression requires its actual NOP publication.");
+        return new(site.Source.RuntimeSha256, site.Source.Identity, site.Source.DeclarationSha256, site.Code!.Sha256, site.Protection);
+    }
+    internal void RequireNvseSuppressionCold(NativeNvsePlugin plugin, NativeSourceCallSite site, NativeSourceSuppressionCold cold)
+    {
+        if (CaptureNvseSuppression(plugin, site) != cold) throw new InvalidDataException("Fresh source suppression differs from its neutral cold identity.");
+    }
+
+    private NativeSourceCallSiteReceipt ObserveSourceSuppression(NativeNvsePlugin plugin, NativeSourceCallSite site)
+    {
+        if (site.Phase != NativeSourceCallSitePhase.Flushed ||
+            !site.CachePublished || ReadSourceCallSiteCode(site, plugin, site.DefaultTarget, site.Protection) != site.Code)
+            throw new InvalidDataException("Source suppression has no exact flushed native mutation receipt.");
+        ++site.Calls; ++_callDepth;
+        try
+        {
+            using var reader = Exchange(NativePluginDomainOperation.SourceCallSites, Payload(writer =>
+            { writer.Write(plugin.Module); writer.Write(2U); writer.Write(site.Id); writer.Write(site.Source.Address); }));
+            var call = reader.ReadUInt64(); var kind = reader.ReadUInt32(); var executed = reader.ReadUInt32(); Finish(reader);
+            if (kind != (uint)NativeSourceCallSiteCodeKind.Suppressed || executed != 0 ||
+                ReadSourceCallSiteCode(site, plugin, site.DefaultTarget, site.Protection) != site.Code)
+                throw new InvalidDataException("Suppression observation executed a target or lost its actual code identity.");
+            // No target call occurred: there is no pointer result, target stack
+            // delta, preserved-register assertion or fabricated source return.
+            return new(Generation, plugin.Module, site.Id, call, null, null, null, null, 0, true, site.Code!.Sha256);
+        }
+        catch (Exception failure) { site.Failure ??= failure.Message; throw; }
+        finally { --_callDepth; --site.Calls; }
     }
 }

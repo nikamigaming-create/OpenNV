@@ -73,7 +73,7 @@ The current user-directed implementation plan is `docs/implementation-plan.md`.
 Before pushing a runtime or claim change, run the selected owned-data audit and:
 
 ```powershell
-.\scripts\Test-GodotRuntime.ps1 -Godot 'D:\code\gd\Godot_v4.7.2-stable_mono_win64\Godot_v4.7.2-stable_mono_win64_console.exe'
+.\scripts\Test-GodotRuntime.ps1 -Godot 'D:\code\gd\Godot_v4.8-dev7_mono_win64\Godot_v4.8-dev7_mono_win64_console.exe'
 git diff --check
 ```
 

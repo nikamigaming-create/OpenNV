@@ -23,7 +23,7 @@ internal sealed class FalloutActorLoaderFields : IDisposable
     private long _sequence, _callbackFault;
     private bool _callback, _disposed;
     internal string? SaveBlocker => _callback ? "actual-Actor-loader-word-source-callback-in-flight" :
-        _actors.Values.FirstOrDefault(field => field.Failure is not null) is { } failed ?
+        _actors.Values.FirstOrDefault(actor => actor.Failure is not null) is { } failed ?
             "actual-Actor-loader-word:" + failed.Source.Reference + ":" + failed.Failure : null;
 
     internal FalloutActorLoaderFields(FalloutActorProcessQueueDeclaration source, string stack,

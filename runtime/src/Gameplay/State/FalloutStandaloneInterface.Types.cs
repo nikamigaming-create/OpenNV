@@ -25,4 +25,5 @@ internal sealed record FalloutStandaloneInterfaceSnapshot(string Schema, Fallout
     FalloutStandaloneInterfaceObject? OwnManager, FalloutStandalonePipBoyManagerFields? ManagerFields,
     FalloutStandaloneInterfaceObject? Dialog, IReadOnlyList<FalloutStandaloneInterfaceObject> Objects,
     Guid? Alternate, FalloutStandaloneInterfaceColdHandoff? ColdHandoff, string? Boundary,
-    string? Failure, bool Retired, FalloutStandaloneMenusSnapshot Menus);
+    string? Failure, bool Retired, FalloutStandaloneMenusSnapshot Menus,
+    FalloutInterfaceActorDistanceSnapshot? ActorDistances = null, FalloutStandaloneActorDistanceSort? ActorDistanceSort = null);

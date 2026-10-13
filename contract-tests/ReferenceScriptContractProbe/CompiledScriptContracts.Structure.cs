@@ -18,6 +18,9 @@ internal static partial class CompiledScriptContracts
             StructuralMenuFilters(directory);
             StructuralMalformed(directory);
             StructuralMasterOverride(directory);
+            QualifiedSet(directory);
+            AdditionalResultScopes(directory);
+            SceneComplexityCommand(directory);
         }
         finally { Directory.Delete(directory, recursive: true); }
         Console.WriteLine("OPENNV_COMPILED_STRUCTURE_PASS originalFrames=true sourceSkips=true baseFlags=true coldDecisions=true menuIdentity=true unknownPrefix=true");

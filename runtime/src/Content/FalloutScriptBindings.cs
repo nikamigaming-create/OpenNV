@@ -6,6 +6,12 @@ namespace OpenNV.Runtime.Content;
 // A matching EDID elsewhere in the load order does not grant script access.
 internal sealed class FalloutScriptBindings
 {
+    internal const uint PlayerReferenceId = 0x14;
+    // This reference is constructed by engine bootstrap; it need not have an
+    // ESM placement record. Runtime identity still belongs to the selected graph.
+    internal static bool IsPlayerReference(FalloutPluginStack records, FalloutFormKey reference) =>
+        records.RuntimeFormId(reference) == PlayerReferenceId;
+
     private readonly FalloutPluginStack _records;
     private readonly FalloutPluginRecord _owner;
     private readonly Func<FalloutPluginRecord, FalloutPluginRecord?>? _attachedScript;
@@ -26,7 +32,7 @@ internal sealed class FalloutScriptBindings
         // This spelling is an internal binding of the reserved engine player,
         // reachable only from a decoded table entry or an authoritative typed
         // query result. No source name or synthetic placed record is required.
-        _playerReference = records.RuntimeFormKey(0x14); HasPlayerReference = true;
+        _playerReference = records.RuntimeFormKey(PlayerReferenceId); HasPlayerReference = true;
     }
 
     internal static FalloutScriptBindings ForCompiled(FalloutPluginStack records, FalloutPluginRecord owner,
@@ -54,7 +60,7 @@ internal sealed class FalloutScriptBindings
         {
             if (field.Data.Length != 4) throw new InvalidDataException("Script reference extent is invalid.");
             var form = source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
-            if (records.RuntimeFormId(form) == 0x14) { HasPlayerReference = true; _playerReference = form; continue; }
+            if (IsPlayerReference(records, form)) { HasPlayerReference = true; _playerReference = form; continue; }
             var record = records.GetEffective(form);
             var ids = record.ReadSubrecords().Where(value => value.Signature == "EDID").ToArray();
             if (ids.Length == 0) continue;

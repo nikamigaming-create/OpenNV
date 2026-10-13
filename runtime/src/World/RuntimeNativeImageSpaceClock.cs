@@ -27,10 +27,11 @@ internal sealed partial class RuntimeNativeImageSpaceClock(FalloutImageSpaceStat
         if (_error is not null) return;
         try
         {
+            if (state.HasSourceMainImages) return; // Its actual Main indexed callback owns the shared cache.
             // Source index zero reads the calendar even while simulation is
             // paused. Draws, menu captures and save capture never write it.
             state.SampleDoubleVisionClock(time, process);
-            if (state.HasSourceMainImages || GetTree().Paused) return;
+            if (GetTree().Paused) return;
             foreach (var expired in state.Advance(delta))
                 GD.Print($"OPENNV_NATIVE_IMAD_EXPIRED source={expired.Form} duration={expired.Duration:R} owner=gameplay-clock");
         }

@@ -39,24 +39,21 @@ public partial class NativeNifInstanceAudit
             var randomBefore = state.SoundRandom.State;
             var owner = new NativeOwnedAnimationSoundPlayer(records, null!, actor, .01f, state.SoundRandom, state.AnimationSoundEvents);
             actor.AddChild(owner);
-            var binding = owner.ResolveEmitter("Joint", true);
-            Require(binding.Emitter is BoneAttachment3D && binding.FollowEmitter && state.SoundRandom.State == randomBefore,
-                "Warm source bone binding changed RNG or lacked its actual native pose adapter.");
+            var binding = owner.ResolveEmitter("", true);
+            Require(binding.Emitter is BoneAttachment3D root && root.BoneIdx == skeleton.FindBone("ActorRoot") &&
+                binding.FollowEmitter && state.SoundRandom.State == randomBefore,
+                "Omitted emitter changed RNG or lacked its actual source-root pose adapter.");
             var sound = FalloutSoundRecordReader.Read(records, new("BoneEmitter.esm", 1));
-            var loop = FalloutSoundLoop.Read(sound);
             var wav = BoneEmitterWav(sound.LogicalPath);
             audioOwners.Add("warmWav", wav.GetInstanceId());
             BoneEmitterStreams(owner).Add(sound.LogicalPath, wav);
-            var selected = FalloutAnimationSound.Select(sound, [sound.LogicalPath], state.SoundRandom, true);
-            var generation = state.AnimationSoundEvents.Begin(records, selected, "Sound:EmitterLoop Joint", false, [sound.LogicalPath]);
-            state.AnimationSoundEvents.BindMedia(generation, wav.GetMeta("opennv_owned_media_sha256").AsString());
-            var pcm = new NativeOwnedPcmStream(wav, loop);
-            var player = new AudioStreamPlayer { Stream = pcm.Stream };
+            GetTree().Paused = true;
+            Require(owner.Dispatch("Sound:EmitterLoop") == "source-sound-playing" && state.AnimationSoundEvents.Events.Count == 1,
+                "Raw NPC-style KF key did not dispatch exactly one actual source generation.");
+            var player = (AudioStreamPlayer)owner.ActiveNativeVoices.Single();
+            var pcm = BoneEmitterPcm(owner, player);
             audioOwners.Add("warmStream", pcm.Stream.GetInstanceId());
             audioOwners.Add("warmPlayer", player.GetInstanceId());
-            GetTree().Paused = true;
-            BoneEmitterTrack(owner, player, binding.Emitter, loop, sound.FormKey, generation, pcm);
-            BoneEmitterPlay(owner, player);
             warmPlayback = player.GetStreamPlayback() ?? throw new InvalidDataException("Warm source-bone voice has no native playback.");
             audioOwners.Add("warmPlayback", warmPlayback.GetInstanceId());
             AudioServer.Lock();
@@ -73,7 +70,8 @@ public partial class NativeNifInstanceAudit
             var identity = playback.SourceBone ?? throw new InvalidDataException("Actual source bone was captured as an opaque node path.");
             Require(playback.Samples.Position > 0 && playback.Samples.Loops > 0 &&
                 playback.Samples.Position != Math.Truncate(playback.Samples.Position) &&
-                identity.Block == skeleton.GetBoneMeta(skeleton.FindBone("Joint"), "opennv_nif_block").AsInt32() &&
+                identity.Block == skeleton.GetBoneMeta(skeleton.FindBone("ActorRoot"), "opennv_nif_block").AsInt32() &&
+                identity.Name == "ActorRoot" &&
                 identity.SkeletonSha256 == skeleton.GetMeta("opennv_nif_source_sha256").AsString(),
                 "Warm PCM did not retain its fractional clock and actual parsed source skeleton identity.");
             cold = new(records);
@@ -97,7 +95,7 @@ public partial class NativeNifInstanceAudit
             audioOwners.Add("coldStream", coldPcm.Stream.GetInstanceId());
             audioOwners.Add("coldPlayer", coldPlayer.GetInstanceId());
             var coldBone = coldSkeleton.GetChildren().OfType<BoneAttachment3D>().Single();
-            Require(coldBone.BoneIdx == coldSkeleton.FindBone("Joint") && !coldBone.OverridePose &&
+            Require(coldBone.BoneIdx == coldSkeleton.FindBone("ActorRoot") && !coldBone.OverridePose &&
                 coldPcm.Capture() == playback.Samples && coldState.SoundRandom.State == random &&
                 JsonSerializer.Serialize(coldEvents.Events.Single() with { Playback = null }) == JsonSerializer.Serialize(active with { Playback = null }),
                 "Cold source bone replayed history/RNG, changed its source clock or rebound a different actual bone.");
@@ -165,7 +163,19 @@ public partial class NativeNifInstanceAudit
                 .GetMethod("RestorePcmVoices", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(coldOwner, null));
             Require(actor.Transform == placement && BoneEmitterPoses(skeleton).SequenceEqual(poses) &&
                 BoneEmitterPoses(coldSkeleton).SequenceEqual(poses), "Sound persistence changed source placement or bone poses.");
-            GD.Print("OPENNV_NATIVE_BONE_EMITTER_PERSISTENCE_PASS actualSourceSkeleton=true recreatedWithoutKey=true namedPathChange=true exactSuffixSamples=257 fractionalClock=true oneAdapter=true sourceIdentityDriftRefused=true anioRefused=true authoritativeDisabledRefused=true rngUnchanged=true sourcePoseUnchanged=true firstPartyMedia=true componentOnly=true");
+            Require(owner.Dispatch("Enum: UnknownSoundEvent") == "unbound-runtime-event" &&
+                state.AnimationSoundEvents.Events.Count == 1 && state.SoundRandom.State == random && owner.ActiveNativeVoices.Count == 1,
+                "Unknown raw KF key mutated its source generation, RNG or voice.");
+            Require(owner.Dispatch("Enum: StopSounds") == "source-stop-sounds" &&
+                coldOwner.Dispatch("Enum: StopSounds") == "source-stop-sounds" &&
+                state.AnimationSoundEvents.Events.Count == 1 && coldEvents.Events.Count == 1 &&
+                state.AnimationSoundEvents.Events.Single().End == FalloutAnimationSoundEnd.SourceStopped &&
+                coldEvents.Events.Single().End == FalloutAnimationSoundEnd.SourceStopped &&
+                state.SoundRandom.State == random && coldState.SoundRandom.State == random &&
+                owner.ActiveNativeVoices.Count == 0 && coldOwner.ActiveNativeVoices.Count == 0 &&
+                !cold.IsEnabled(reference),
+                "Raw source StopSounds replayed selection/history, changed authoritative enable truth or lost actual cold loop completion.");
+            GD.Print("OPENNV_NATIVE_BONE_EMITTER_PERSISTENCE_PASS actualSourceSkeleton=true rawKfDispatch=true omittedEmitterActualRoot=true recreatedWithoutKey=true rawSourceStop=true unknownRawKeyUnchanged=true namedPathChange=true exactSuffixSamples=257 fractionalClock=true oneAdapter=true sourceIdentityDriftRefused=true anioRefused=true authoritativeDisabledRefused=true rngUnchanged=true sourcePoseUnchanged=true firstPartyMedia=true componentOnly=true");
         }
         finally
         {
@@ -187,23 +197,30 @@ public partial class NativeNifInstanceAudit
             }
             cold?.Dispose(); world?.Dispose(); records?.Dispose();
             File.Delete(plugin); Directory.Delete(directory);
-            // Mixer and main-thread retirement are asynchronous. Observe the
-            // native boolean utility without recreating a managed binding.
-            // Real wall time bounds failure even if the driver stops mixing.
-            var retirement = Stopwatch.StartNew();
-            string[] retained;
-            while (true)
-            {
-                retained = audioOwners.Where(value => BoneEmitterInstanceAlive(nativeValidity, value.Value))
-                    .Select(value => $"{value.Key}={value.Value}").ToArray();
-                if (retained.Length == 0 || retirement.Elapsed.TotalSeconds >= 2) break;
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            }
-            Require(retained.Length == 0, "Native source-bone audio owners remained live after bounded source retirement: " +
-                string.Join(", ", retained) + $"; driver={AudioServer.GetDriverName()} lastMixSeconds={AudioServer.GetTimeSinceLastMix():R} wallSeconds={retirement.Elapsed.TotalSeconds:R}");
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await RequireAudioRetirement(nativeValidity, audioOwners, "source-bone");
         }
         GD.Print($"OPENNV_NATIVE_BONE_EMITTER_RETIREMENT_PASS audioOwners={audioOwners.Count} nativeIdsGone=true nonbindingValidity=true mixerAndMainRetired=true boundedWallSeconds=2");
+    }
+
+    private async Task RequireAudioRetirement(Expression nativeValidity,
+        IReadOnlyDictionary<string, ulong> audioOwners, string sourceKind)
+    {
+        // Mixer and main-thread retirement are asynchronous. Observe the native
+        // boolean utility without recreating a managed binding. Real wall time
+        // bounds failure even if the driver stops mixing.
+        const double maximumWallSeconds = 2;
+        var retirement = Stopwatch.StartNew();
+        string[] retained;
+        while (true)
+        {
+            retained = audioOwners.Where(value => BoneEmitterInstanceAlive(nativeValidity, value.Value))
+                .Select(value => $"{value.Key}={value.Value}").ToArray();
+            if (retained.Length == 0 || retirement.Elapsed.TotalSeconds >= maximumWallSeconds) break;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        Require(retained.Length == 0, $"Native {sourceKind} audio owners remained live after bounded source retirement: " +
+            string.Join(", ", retained) + $"; driver={AudioServer.GetDriverName()} lastMixSeconds={AudioServer.GetTimeSinceLastMix():R} wallSeconds={retirement.Elapsed.TotalSeconds:R}");
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
     private static bool BoneEmitterInstanceAlive(Expression query, ulong id)

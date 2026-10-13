@@ -9,6 +9,7 @@ namespace OpenNV.Runtime.World.Actors;
 internal partial class RuntimeNativeNpc : CharacterBody3D
 {
     internal FalloutNpcAppearance Appearance { get; private set; } = null!;
+    internal FalloutActorSourceModel SourceModel { get; private set; } = null!;
     internal RuntimeNativeNifSkeleton Skeleton { get; private set; } = null!;
     internal IReadOnlyList<RuntimeNativeNifScene> Parts { get; private set; } = [];
     internal RuntimeNativeActorCombat? Combat { get; set; }

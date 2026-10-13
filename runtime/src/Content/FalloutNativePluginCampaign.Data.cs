@@ -26,6 +26,7 @@ internal sealed partial class FalloutNativePluginCampaign
         Input = _dataBindings is { } bindings ? new
         {
             bindings.Input.Source,
+            bindings.Input.Provider,
             bindings.Input.Window,
             bindings.Input.Sample,
             bindings.Input.Revision,
@@ -66,7 +67,7 @@ internal sealed partial class FalloutNativePluginCampaign
         {
             RequireCurrent(); var value = bindings.Input.Capture();
             return new(value.Source, value.Window, value.Sample, value.Revision, value.Keys.Select(key => new NativeNvseInputKey(
-                key.Raw, key.Game, key.Inserted, key.Hold, key.Tap, key.UserDisabled, key.ScriptDisabled)).ToArray(), value.Acquired, value.AcquisitionFailure);
+                key.Raw, key.Game, key.Inserted, key.Hold, key.Tap, key.UserDisabled, key.ScriptDisabled)).ToArray(), value.Acquired, value.AcquisitionFailure, value.Provider);
         }
         internal override void PublishInput(IReadOnlyList<NativeNvseInputControlChange> changes)
         {

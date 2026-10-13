@@ -34,9 +34,17 @@ internal sealed partial class FalloutActorProcessRuntimeState
     }
     internal uint ReadSourceImageContextClock(FalloutMainScriptInvocation invocation)
     { invocation.Require(FalloutMainScriptCallerStep.TimedContexts); return _contextTimeBits; }
+
+    internal uint ReadSourceImageMenuClock(FalloutImageSpaceState state)
+    {
+        if (!ReferenceEquals(_sourceMainImages, state) || state.SourceMainImageProcess != _process)
+            throw new InvalidOperationException("Menu image clock is not the actual current shared process binding.");
+        return _contextTimeBits;
+    }
 }
 
 internal sealed partial class FalloutReferenceWorld
 {
     internal IDisposable BindCampaignSourceMainImages(FalloutImageSpaceState state) => ProcessRuntime.BindSourceMainImages(state);
+    internal uint ReadCampaignSourceImageMenuClock(FalloutImageSpaceState state) => ProcessRuntime.ReadSourceImageMenuClock(state);
 }

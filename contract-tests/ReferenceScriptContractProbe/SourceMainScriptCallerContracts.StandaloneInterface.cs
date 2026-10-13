@@ -40,7 +40,21 @@ internal static partial class SourceMainScriptCallerContracts
             "Source dialog close was inferred to destroy its still-living native object.");
         Reject(() => FalloutStandaloneInterfaceState.RequirePlayable(first.Capture()));
         first.RetireDialog(dialog); dialogOwner.Retire();
+        var firstActor = new FalloutFormKey("InterfaceActors.esm", 21);
+        var secondActor = new FalloutFormKey("InterfaceActors.esm", 22);
+        Require(first.IncludeActorDistance(firstActor, 20, _ => 1) && first.IncludeActorDistance(secondActor, 20, _ => 2),
+            "Actual interface actor-list owner lost its current nonempty producers.");
+        var distanceQueries = 0;
+        var sort = first.SortActorDistances(20, actor => { ++distanceQueries; return actor == firstActor ? 8 : 3; });
+        Require(sort.Returned && sort.Process == first.Process && sort.DistanceQueries == 2 &&
+            sort.After.Slots[0] == secondActor && distanceQueries == 2,
+            "Interface sort changed its actual source/native owner or omitted nonempty distance consumers.");
         var saved = first.Capture(); FalloutStandaloneInterfaceState.RequirePlayable(saved);
+        Reject(() => FalloutStandaloneInterfaceState.Validate(saved with { ActorDistances = null }));
+        Reject(() => FalloutStandaloneInterfaceState.Validate(saved with
+        { ActorDistanceSort = saved.ActorDistanceSort! with { After = saved.ActorDistanceSort.After with { Sequence = saved.ActorDistances!.Sequence + 1 } } }));
+        Reject(() => FalloutStandaloneInterfaceState.Validate(saved with
+        { ActorDistanceSort = saved.ActorDistanceSort! with { After = saved.ActorDistanceSort.After with { Slots = saved.ActorDistanceSort.After.Slots.Reverse().ToArray() } } }));
         Reject(() => FalloutStandaloneInterfaceState.Validate(saved with { Mode = 4 }));
         Reject(() => FalloutStandaloneInterfaceState.Validate(saved with { ActiveMenus = Enumerable.Repeat((byte)1, 60).ToArray() }));
         Reject(() => FalloutStandaloneInterfaceState.Validate(saved with { ManagerFields = saved.ManagerFields! with { Selection = 0 } }));
@@ -54,6 +68,9 @@ internal static partial class SourceMainScriptCallerContracts
         Require(rebound.Identity != published.Identity && rebound.Process != published.Process && cold.Capture().ColdHandoff?.PreviousProcess == first.Process,
             "Cold interface replayed an old native pointer or omitted the genuine process handoff.");
         var current = cold.Capture(); FalloutStandaloneInterfaceState.RequirePlayable(current);
+        Require(current.ActorDistances!.Slots.SequenceEqual(saved.ActorDistances!.Slots) &&
+            current.ActorDistanceSort == saved.ActorDistanceSort && distanceQueries == 2,
+            "Cold interface reconstructed actor-list producers, discarded inactive slots or replayed a sort.");
         coldNative.Retire(); Reject(() => cold.Read(FalloutStandaloneInterfaceQuery.MenuGate)); Reject(() => cold.Capture());
         cold.Retire(); first.Retire(); manager.Retire();
         var wrong = new FalloutStandaloneInterfaceState(source, "authored-stack", Guid.NewGuid());
@@ -67,6 +84,14 @@ internal static partial class SourceMainScriptCallerContracts
         Reject(() => wrong.Read(FalloutStandaloneInterfaceQuery.MenuGate));
         Require(wrong.Capture().Boundary is not null, "Unknown original transition was silently cleared back to quiet mode.");
         wrong.Retire(); other.Retire();
+        var guarded = new FalloutStandaloneInterfaceState(source, "authored-stack", Guid.NewGuid());
+        var guardedNative = new AuthoredInterfaceObject();
+        guarded.PublishManager(guardedNative.Publication(guarded, FalloutStandaloneInterfaceObjectRole.PipBoyManager), guardedNative.ReadLiving);
+        guarded.IncludeActorDistance(firstActor, 20, _ => 1); guarded.IncludeActorDistance(secondActor, 20, _ => 2);
+        Reject(() => guarded.SortActorDistances(20, _ => { guardedNative.Retire(); return 3; }));
+        Require(guarded.LastActorDistanceSort is { Returned: false, DistanceQueries: 1, Failure: not null },
+            "Actor sorting returned after its actual native interface lifetime ended during a distance query.");
+        guarded.Retire();
         Console.WriteLine("OPENNV_FO3_SOURCE_INTERFACE_PASS authoredOnly=true exactObjectRoles=true actualLifecycle=true " +
             "signedConsole=true sourceWidths=true coldFreshFactory=true unownedMenuTransitionRefused=true nativeGameplay=UNEXECUTED");
     }

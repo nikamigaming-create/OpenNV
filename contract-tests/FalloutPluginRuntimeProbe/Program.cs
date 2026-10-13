@@ -7,6 +7,12 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--native-plugin-discovery-contracts"])
+{
+    NativePluginDiscoveryContracts.Run();
+    return;
+}
+
 if (args.Length >= 7 && args[0] == "--audit-model-less-headpart")
 {
     ModelLessHeadPartOwnedProbe.Run(args[1], args[2], args[3], args[4], args[5], args[6], args[7..]);
@@ -139,6 +145,7 @@ if (args.Length >= 4 && args[0] == "--audit-mcm-ui")
 }
 ModInstallationContracts.Run();
 ModContentContracts.Run();
+NativePluginDiscoveryContracts.Run();
 CorpusInventoryContracts.Run();
 if (args is ["--mod-install-contracts"]) return;
 
@@ -1535,6 +1542,21 @@ try
         syntheticDoor.SourceDoor.Teleport!.Position.SequenceEqual([100.0f, 200.0f, 300.0f]) &&
         syntheticDoor.DestinationDoor.Teleport!.Door == syntheticDoor.SourceDoor.FormKey,
         "Native XTEL/CELL/WRLD reciprocal door transition differs.");
+    var noAlarmScene = cell with
+    {
+        References = cell.References.Select(reference =>
+            reference.FormKey == syntheticDoor.SourceDoor.FormKey
+                ? reference with { Teleport = reference.Teleport! with { Flags = 1 } }
+                : reference).ToArray(),
+    };
+    var noAlarmExit = FalloutDoorTransitionResolver.Resolve(cellStack, noAlarmScene, syntheticDoor.SourceDoor.FormKey);
+    var noAlarmDestination = FalloutDoorDestinationResolver.Resolve(cellStack, noAlarmExit.SourceDoor);
+    Require(noAlarmExit.SourceDoor.Teleport is { NoAlarm: true, Flags: 1 } &&
+        !syntheticDoor.SourceDoor.Teleport!.NoAlarm &&
+        noAlarmDestination.Destination.FormKey == syntheticDoor.DestinationDoor.FormKey &&
+        noAlarmExit.SourceDoor.Teleport.Position.SequenceEqual(syntheticDoor.SourceDoor.Teleport.Position) &&
+        noAlarmExit.SourceDoor.Teleport.RotationRadians.SequenceEqual(syntheticDoor.SourceDoor.Teleport.RotationRadians),
+        "XTEL No Alarm changed the target/landing pose or was rejected as a transition flag.");
     var syntheticLandscape = FalloutLandscapeTransportResolver.Resolve(cellStack, syntheticDoor);
     LandscapeMaterialProbe.Run();
     Require(
@@ -1574,12 +1596,12 @@ try
                     reference.FormKey == syntheticDoor.SourceDoor.FormKey
                         ? reference with
                         {
-                            Teleport = reference.Teleport! with { Flags = 1 },
+                            Teleport = reference.Teleport! with { Flags = 2 },
                         }
                         : reference).ToArray(),
             },
             syntheticDoor.SourceDoor.FormKey),
-        "is not an active persistent portal");
+        "XTEL No Alarm value");
     var syntheticStart = FalloutNewGamePlayerStartResolver.Resolve(cellStack, cell);
     Require(
         syntheticStart.Reference.FormKey == new FalloutFormKey("Cell.esm", 0x122) &&

@@ -7,13 +7,14 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 internal sealed partial class NativePluginDomainChild
 {
-    internal uint ReadSourceCallSite(uint source, uint imageBase, uint imageBytes,
-        uint defaultTarget, uint originalImage, uint protection, bool retired = false)
+    internal NativeSourceCallSiteCode ReadSourceCallSite(uint source, uint imageBase, uint imageBytes,
+        uint defaultTarget, uint originalImage, uint protection, bool getter, bool retired = false, bool validateTarget = true)
     {
+        var extent = getter ? 6 : 5;
         if (ResourcesRetired || HasExited || source < imageBase || imageBytes == 0 ||
-            (ulong)source + 6 > (ulong)imageBase + imageBytes || defaultTarget == 0)
+            (ulong)source + (uint)extent > (ulong)imageBase + imageBytes || getter && defaultTarget == 0)
             throw new InvalidOperationException("Source CALL readback lost its exact creation-process/image lifetime.");
-        var end = (ulong)source + 6; var cursor = (ulong)source;
+        var end = (ulong)source + (uint)extent; var cursor = (ulong)source;
         while (cursor < end)
         {
             if (QueryOriginal(CngCreationHandle, (nint)(nuint)cursor, out var region,
@@ -25,17 +26,12 @@ internal sealed partial class NativePluginDomainChild
                 throw new InvalidDataException("Source CALL does not retain its selected first-party committed page/protection.");
             cursor = Math.Min(next, end);
         }
-        var bytes = new byte[6];
-        if (!ReadEngineMemory(CngCreationHandle, (nint)(nuint)source, bytes, 6, out var read) || read != 6)
+        var bytes = new byte[extent];
+        if (!ReadEngineMemory(CngCreationHandle, (nint)(nuint)source, bytes, (nuint)extent, out var read) || read != (nuint)extent)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Source CALL native bytes have no complete readback.");
-        if (retired)
-        {
-            if (bytes.Any(value => value != 0xcc)) throw new InvalidDataException("Retired source CALL has no genuine trap extent.");
-            return 0;
-        }
-        if (bytes[0] != 0xe8 || bytes[5] != 0xc3)
-            throw new NotSupportedException("Source hook mutated its declared CALL/return producer to an unowned instruction shape.");
-        var target = unchecked(source + 5U + BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(1)));
+        var observation = NativeSourceCallSiteCode.Read(source, bytes, getter, retired);
+        if (observation.Kind != NativeSourceCallSiteCodeKind.Call || !validateTarget) return observation;
+        var target = observation.Target;
         if (QueryOriginal(CngCreationHandle, (nint)(nuint)target, out var code,
             (nuint)Marshal.SizeOf<CngMemoryInformation>()) == 0)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Source CALL target query failed.");
@@ -45,7 +41,7 @@ internal sealed partial class NativePluginDomainChild
         {
             if ((nuint)code.AllocationBase != originalImage)
                 throw new NotSupportedException("Installed source hook leaves its actual original module image.");
-            return target;
+            return observation;
         }
         var mapped = new StringBuilder(32768); var creation = new StringBuilder(32768); uint capacity = 32768;
         var count = MappedEngineImage(CngCreationHandle, (nint)(nuint)target, mapped, 32768);
@@ -53,7 +49,7 @@ internal sealed partial class NativePluginDomainChild
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Source CALL first-party target identity query failed.");
         if (count >= 32768 || capacity >= 32768 || !StringComparer.OrdinalIgnoreCase.Equals(mapped.ToString(), creation.ToString()))
             throw new InvalidDataException("Source CALL getter is outside the exact living first-party companion image.");
-        return target;
+        return observation;
     }
 
     internal uint ReadSourceCallSiteMember(uint receiver, uint offset)

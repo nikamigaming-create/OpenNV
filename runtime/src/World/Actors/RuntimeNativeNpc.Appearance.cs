@@ -51,7 +51,7 @@ internal partial class RuntimeNativeNpc
                 world.EquippedArmor(reference, level, globals), state, world.Get(reference).Templates);
             if (!Appearance.SkeletonPath.Equals(appearance.SkeletonPath, StringComparison.OrdinalIgnoreCase))
                 throw new NotSupportedException("Appearance refresh changed the source skeleton and needs animation/contact rebinding.");
-            var prepared = FalloutNpcPreparedGeometry.Read(appearance, source);
+            var prepared = FalloutNpcPreparedGeometry.Read(appearance, source, retainedSkeleton: Skeleton.PhysicalModel);
             var channels = new RuntimeNativeNifMaterialChannels();
             foreach (var part in prepared.Parts)
             {
@@ -72,6 +72,7 @@ internal partial class RuntimeNativeNpc
             var previous = Parts;
             Skeleton.MaterialChannels.ReplaceWith(channels);
             Appearance = appearance;
+            SourceModel = prepared.SourceModel;
             Skeleton.Node.Scale = Vector3.One * appearance.Height;
             foreach (var combat in GetChildren().OfType<RuntimeNativeActorCombat>()) combat.RefreshAppearanceMovement();
             Parts = created.ToArray();

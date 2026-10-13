@@ -62,7 +62,9 @@ internal sealed partial class FalloutReferenceScripts
                     running = "Compiled/" + name;
                     if (!MatchesCompiledActorCallback(program, block, admitted[name], instance.Reference)) continue;
                     if (block.Event == 2) observeActivationBegin?.Invoke();
-                    foreach (var _ in CompiledSteps(instance.Reference, program, block, elapsedSeconds, block.Event == 2 ? admitted[name].ActionReference : null)) { }
+                    var action = block.Event is 2 or FalloutCompiledScriptEvents.TriggerEnter or FalloutCompiledScriptEvents.TriggerLeave
+                        ? admitted[name].ActionReference : null;
+                    foreach (var _ in CompiledSteps(instance.Reference, program, block, elapsedSeconds, action)) { }
                     if (block.Event == 2) observeActivationEnd?.Invoke();
                     ++counts[name];
                 }
@@ -119,6 +121,7 @@ internal sealed partial class FalloutReferenceScripts
         var flow = FalloutCompiledControlFlow.Read(block is null ? program.ResultInstructions() : program.EventInstructions(block), block?.End ?? 0);
         var budget = new FalloutScriptExecutionBudget(100_000 - (cursor?.State.BudgetSpent ?? 0));
         var current = -1;
+        FalloutFormKey? assignmentReference = null;
         var bindings = FalloutScriptBindings.ForCompiled(records, localAuthority is null ? CompiledBindingOwner(caller, program) : program.Source, program.Source,
             target => LocalScript(target.FormKey));
         Func<string, FalloutScriptFunction?>? sharedFunction = null;
@@ -209,32 +212,24 @@ internal sealed partial class FalloutReferenceScripts
             }
             return instance.Script?.Record ?? throw new InvalidDataException("Compiled reference has no attached script.");
         }
-        bool ReferenceSlot(FalloutPluginRecord script, uint slot) => script.ReadSubrecords().Any(field =>
-            field.Signature == "SCRV" && field.Data.Length == 4 && BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) == slot);
         FalloutFormKey VariableOwner(FalloutCompiledVariable variable)
         {
             if (variable.OwnerReference is { } reference) return NonNullReference(reference);
-            if (!program.Standalone)
+            if (!program.Standalone && assignmentReference is null)
                 throw new NotSupportedException("Implicit embedded local/event-list operand has no owner.");
-            return caller;
+            return assignmentReference ?? caller;
         }
         FalloutScriptValue ReadVariable(FalloutCompiledVariable variable)
         {
-            if (localAuthority is not null && variable.OwnerReference is null) return localAuthority.Read(variable);
-            var target = VariableOwner(variable); var script = LocalScript(target);
-            var reference = ReferenceSlot(script, variable.Slot) &&
-                (!FalloutScriptLocals.HasMixedStorage(script, variable.Slot) || variable.Storage == (byte)'f');
-            RequireCompiledSlot(script, variable.Slot, variable.Storage, reference);
-            var raw = world.ReadVariable(quests, target, variable.Slot);
-            FalloutScriptLocals.RequireCompiledValue(script, variable.Slot, raw);
-            return reference ? FalloutScriptValue.Form(FalloutScriptLocals.HasMixedStorage(script, variable.Slot)
-                ? (uint)BitConverter.DoubleToUInt64Bits(raw) : raw) : (FalloutScriptValue)raw;
+            if (localAuthority is not null && variable.OwnerReference is null && assignmentReference is null) return localAuthority.Read(variable);
+            var target = VariableOwner(variable);
+            return ReadCompiledStoredVariable(LocalScript(target), target, variable.Slot, variable.Storage);
         }
         void AssignVariable(FalloutCompiledVariable variable, FalloutScriptValue value)
         {
-            if (localAuthority is not null && variable.OwnerReference is null) { localAuthority.Write(variable, value); return; }
+            if (localAuthority is not null && variable.OwnerReference is null && assignmentReference is null) { localAuthority.Write(variable, value); return; }
             var target = VariableOwner(variable); var script = LocalScript(target);
-            var reference = ReferenceSlot(script, variable.Slot) &&
+            var reference = IsCompiledReferenceSlot(script, variable.Slot) &&
                 (!FalloutScriptLocals.HasMixedStorage(script, variable.Slot) || variable.Storage == (byte)'f');
             RequireCompiledSlot(script, variable.Slot, variable.Storage, reference);
             if (reference)
@@ -288,7 +283,7 @@ internal sealed partial class FalloutReferenceScripts
         string Name(FalloutCompiledCommand command, string? boundName = null)
         {
             var declaration = FalloutCompiledCommandDeclarations.Get(command.Opcode, records);
-            var receiver = command.Receiver is { } reference ? NonNullReference(reference) : (FalloutFormKey?)null;
+            var receiver = command.Receiver is { } reference ? NonNullReference(reference) : assignmentReference;
             if (receiver is { } target && records.RuntimeFormId(target) != 0x14 &&
                 records.GetEffective(target).Signature is not ("REFR" or "ACHR" or "ACRE"))
                 throw new InvalidDataException("Compiled command receiver is not a placed reference/engine player.");
@@ -341,6 +336,8 @@ internal sealed partial class FalloutReferenceScripts
         FalloutScriptValue? NativeQuery(ushort opcode, ushort? receiver, ReadOnlyMemory<byte> payload)
         {
             if (world.NativePlugins?.ContainsOpcode(opcode) != true) return null;
+            if (assignmentReference is not null)
+                throw new NotSupportedException("Qualified Set native query requires its actual selected-reference invocation projection.");
             if (localAuthority is not null)
                 throw new NotSupportedException("Original native independent-event call requires its genuine event-list/object projection.");
             var call = FalloutNativePluginCompiledCalls.Bind(caller, program, opcode, receiver, payload,
@@ -354,22 +351,32 @@ internal sealed partial class FalloutReferenceScripts
             {
                 if (instruction.Opcode == 0x15)
                 {
-                    if (instruction.Receiver is not null) throw new InvalidDataException("Compiled Set has a command receiver prefix.");
-                    var cursor = new FalloutCompiledOperandCursor(instruction.Payload);
-                    if (cursor.Peek == 'G')
+                    if (instruction.Receiver is { } reference)
                     {
-                        _ = cursor.Byte(); var target = NonNullReference(cursor.UInt16());
-                        if (records.GetEffective(target).Signature != "GLOB") throw new InvalidDataException("Compiled Set global is not GLOB.");
-                        var value = Evaluate(cursor.Bytes(cursor.UInt16())); cursor.RequireEnd();
-                        if (value.Kind != FalloutScriptValueKind.Number || !float.IsFinite((float)value.Number))
-                            throw new InvalidDataException("Compiled Set global exceeds numeric Float32 storage.");
-                        (host.Globals ?? throw new NotSupportedException("Compiled global has no shared state owner.")).Set(target, (float)value.Number);
+                        var selected = NonNullReference(reference);
+                        if (records.RuntimeFormId(selected) != 0x14 && records.GetEffective(selected).Signature is not ("REFR" or "ACHR" or "ACRE"))
+                            throw new InvalidDataException("Compiled Set calling reference is not a placed reference/engine player.");
+                        assignmentReference = selected;
                     }
-                    else
+                    try
                     {
-                        var variable = cursor.Variable(allowLong: true);
-                        var value = Evaluate(cursor.Bytes(cursor.UInt16())); cursor.RequireEnd(); AssignVariable(variable, value);
+                        var cursor = new FalloutCompiledOperandCursor(instruction.Payload);
+                        if (cursor.Peek == 'G')
+                        {
+                            _ = cursor.Byte(); var target = NonNullReference(cursor.UInt16());
+                            if (records.GetEffective(target).Signature != "GLOB") throw new InvalidDataException("Compiled Set global is not GLOB.");
+                            var value = Evaluate(cursor.Bytes(cursor.UInt16())); cursor.RequireEnd();
+                            if (value.Kind != FalloutScriptValueKind.Number || !float.IsFinite((float)value.Number))
+                                throw new InvalidDataException("Compiled Set global exceeds numeric Float32 storage.");
+                            (host.Globals ?? throw new NotSupportedException("Compiled global has no shared state owner.")).Set(target, (float)value.Number);
+                        }
+                        else
+                        {
+                            var variable = cursor.Variable(allowLong: true);
+                            var value = Evaluate(cursor.Bytes(cursor.UInt16())); cursor.RequireEnd(); AssignVariable(variable, value);
+                        }
                     }
+                    finally { assignmentReference = null; }
                     return;
                 }
                 if (NativeQuery(instruction.Opcode, instruction.Receiver, instruction.Payload) is not null) return;
@@ -404,6 +411,22 @@ internal sealed partial class FalloutReferenceScripts
             catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException or KeyNotFoundException or OverflowException)
             { throw Failure(error); }
         }
+    }
+
+    private static bool IsCompiledReferenceSlot(FalloutPluginRecord script, uint slot) => script.ReadSubrecords().Any(field =>
+        field.Signature == "SCRV" && field.Data.Length == sizeof(uint) && BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) == slot);
+
+    // Header filters and instruction operands read the same declared storage.
+    // In particular, a packed reference is never converted through a float.
+    private FalloutScriptValue ReadCompiledStoredVariable(FalloutPluginRecord script, FalloutFormKey owner, uint slot, byte storage)
+    {
+        var reference = IsCompiledReferenceSlot(script, slot) &&
+            (!FalloutScriptLocals.HasMixedStorage(script, slot) || storage == (byte)'f');
+        RequireCompiledSlot(script, slot, storage, reference);
+        var raw = world.ReadVariable(quests, owner, slot);
+        FalloutScriptLocals.RequireCompiledValue(script, slot, raw);
+        return reference ? FalloutScriptValue.Form(FalloutScriptLocals.HasMixedStorage(script, slot)
+            ? (uint)BitConverter.DoubleToUInt64Bits(raw) : raw) : (FalloutScriptValue)raw;
     }
 
     private static void RequireCompiledSlot(FalloutPluginRecord script, uint index, byte type, bool requireReference)

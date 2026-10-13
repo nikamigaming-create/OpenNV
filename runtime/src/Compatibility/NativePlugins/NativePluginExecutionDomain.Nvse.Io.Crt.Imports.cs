@@ -78,7 +78,8 @@ internal static class NativePluginCrtImports
             var libraryRva = rows.ReadUInt32(); var slots = rows.ReadUInt32();
             if ((namesRva | time | forward | libraryRva | slots) == 0) { ended = true; break; }
             if (namesRva == 0 || libraryRva == 0 || slots == 0) throw new InvalidDataException("CRT original import source lacks names/slots.");
-            var library = Text(pe, libraryRva).ToLowerInvariant(); var relevant = NativePluginCrtExtendedImports.Libraries.Contains(library);
+            var library = Text(pe, libraryRva).ToLowerInvariant();
+            var relevant = NativePluginCrtExtendedImports.Libraries.Contains(library) || NativePluginCrtPureImports.Libraries.Contains(library);
             var names = pe.GetSectionData(checked((int)namesRva)).GetReader(); var complete = false; var selected = new HashSet<string>(StringComparer.Ordinal);
             while (names.RemainingBytes >= 4)
             {
@@ -86,7 +87,7 @@ internal static class NativePluginCrtImports
                 if ((pointer & 0x80000000) != 0) { if (relevant) throw new NotSupportedException("CRT ordinal file interface ownership is absent."); continue; }
                 var name = Text(pe, checked(pointer + 2));
                 if (relevant && IsFileImport(library, name) && !Owned.Contains(name)) throw new NotSupportedException("CRT imported file arm remains unowned: " + name);
-                if (relevant && IsFileImport(library, name) && Owned.Contains(name)) selected.Add(name);
+                if (relevant && IsFileImport(library, name) && Owned.Contains(name) || NativePluginCrtPureImports.Owns(library, name)) selected.Add(name);
             }
             if (!complete) throw new InvalidDataException("CRT import name table has no original terminator.");
             if (selected.Count != 0)

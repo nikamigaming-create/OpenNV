@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.InputSystem;
 
@@ -7,10 +8,13 @@ namespace OpenNV.Runtime.InputSystem;
 // process; it does not inject inputs into a retail process or a native child.
 internal sealed class WindowsDirectInputDevice : IDisposable
 {
+    private const int MouseAxisCount = 3;
+    private const int MouseButtonsOffset = MouseAxisCount * sizeof(int);
+    private const int MouseStateSize = MouseButtonsOffset + FalloutInputLayout.MouseButtonCount;
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private nint _input, _keyboard, _mouse;
     internal nint Window { get; }
-    private readonly byte[] _keyboardBytes = new byte[256], _mouseBytes = new byte[20];
+    private readonly byte[] _keyboardBytes = new byte[FalloutInputLayout.KeyboardKeyCount], _mouseBytes = new byte[MouseStateSize];
     private readonly List<nint> _formatMemory = [];
     internal WindowsDirectInputDevice(nint window)
     {
@@ -32,7 +36,7 @@ internal sealed class WindowsDirectInputDevice : IDisposable
         RequireOwner();
         if (GetForegroundWindow() != Window) throw new DirectInputUnavailableException("Product window is not the foreground DirectInput owner.");
         Read(_keyboard, _keyboardBytes); Read(_mouse, _mouseBytes);
-        return (_keyboardBytes.ToArray(), _mouseBytes.AsSpan(12, 8).ToArray(),
+        return (_keyboardBytes.ToArray(), _mouseBytes.AsSpan(MouseButtonsOffset, FalloutInputLayout.MouseButtonCount).ToArray(),
             System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(_mouseBytes),
             System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(_mouseBytes.AsSpan(4)),
             System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(_mouseBytes.AsSpan(8)));
@@ -47,14 +51,14 @@ internal sealed class WindowsDirectInputDevice : IDisposable
             if (!mouse)
             {
                 var key = GuidMemory(new("55728220-d33c-11cf-bfc7-444553540000"));
-                for (uint index = 0; index < 256; ++index) objects.Add(new() { Guid = key, Offset = index, Type = 0x0c | (index << 8) | 0x80000000U });
+                for (uint index = 0; index < FalloutInputLayout.KeyboardKeyCount; ++index) objects.Add(new() { Guid = key, Offset = index, Type = 0x0c | (index << 8) | 0x80000000U });
             }
             else
             {
                 var axes = new[] { "a36d02e0-c9f3-11cf-bfc7-444553540000", "a36d02e1-c9f3-11cf-bfc7-444553540000", "a36d02e2-c9f3-11cf-bfc7-444553540000" };
-                for (uint index = 0; index < 3; ++index) objects.Add(new() { Guid = GuidMemory(new(axes[index])), Offset = index * 4, Type = 1 | (index << 8) | 0x80000000U });
+                for (uint index = 0; index < MouseAxisCount; ++index) objects.Add(new() { Guid = GuidMemory(new(axes[index])), Offset = index * sizeof(int), Type = 1 | (index << 8) | 0x80000000U });
                 var button = GuidMemory(new("a36d02f0-c9f3-11cf-bfc7-444553540000"));
-                for (uint index = 0; index < 8; ++index) objects.Add(new() { Guid = button, Offset = 12 + index, Type = 0x0c | (index << 8) | 0x80000000U });
+                for (uint index = 0; index < FalloutInputLayout.MouseButtonCount; ++index) objects.Add(new() { Guid = button, Offset = MouseButtonsOffset + index, Type = 0x0c | (index << 8) | 0x80000000U });
             }
             var extent = Marshal.SizeOf<ObjectFormat>(); var array = Allocate(checked(objects.Count * extent));
             for (var index = 0; index < objects.Count; ++index) Marshal.StructureToPtr(objects[index], array + index * extent, false);
@@ -63,7 +67,7 @@ internal sealed class WindowsDirectInputDevice : IDisposable
                 Size = checked((uint)Marshal.SizeOf<DataFormat>()),
                 ObjectSize = checked((uint)extent),
                 Flags = 2,
-                DataSize = mouse ? 20U : 256U,
+                DataSize = checked((uint)(mouse ? MouseStateSize : FalloutInputLayout.KeyboardKeyCount)),
                 ObjectCount = checked((uint)objects.Count),
                 Objects = array
             };

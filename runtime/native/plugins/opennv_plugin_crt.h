@@ -24,6 +24,7 @@ struct CrtProvider {
     std::wstring path;
     std::string sha, declaration;
     std::map<std::string, std::set<std::string>> imports;
+    std::map<std::pair<std::string, std::string>, void*> pure_bindings;
     HMODULE retained = nullptr;
     bool registered = false;
     ~CrtProvider() { if (retained) FreeLibrary(retained); }

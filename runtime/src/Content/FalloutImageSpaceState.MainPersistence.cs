@@ -6,7 +6,7 @@ internal sealed partial class FalloutImageSpaceState
     {
         RequireImageThread();
         if (!ReferenceEquals(output, _sourceImageOutput) || output.Process != _sourceImageProcess || _sourceImageLast?.Invocation != output.Invocation)
-            throw new InvalidDataException("Native image frame changed its real current Main publication.");
+            throw new InvalidDataException("Image frame changed its real current manager publication.");
         float Read(int index) => BitConverter.UInt32BitsToSingle(output.Profile.ReadWord(index));
         System.Numerics.Vector4 Vector(int at) => new(Read(at), Read(at + 1), Read(at + 2), Read(at + 3));
         var sky = ReadSourceSkyContributions().Where(row => _sourceImageList.Contains(row.Instance.Identity))
@@ -47,7 +47,8 @@ internal sealed partial class FalloutImageSpaceState
             SourceMainImageDefault, _sourceImagePrimary?.CloneProfile(), _sourceImageOverride?.CloneProfile(),
             _sourceImageInstances.Values.OrderBy(row => row.Constructed).ToArray(), _sourceImageList.ToArray(),
             _sourceImageUpdates, _sourceImageFields.Capture(), _sourceImageLast, _sourceImageOutput,
-            _sourceImageProcesses.ToArray(), _sourceImageCurves.Values.Select(curve => curve with { Value = (uint[])curve.Value.Clone() }).ToArray(), SourceMainImageDofConstructor);
+            _sourceImageProcesses.ToArray(), _sourceImageCurves.Values.Select(curve => curve with { Value = (uint[])curve.Value.Clone() }).ToArray(), SourceMainImageDofConstructor,
+            _sourceImageMenuLast);
         ValidateSourceMainImages(result); return result;
     }
 
@@ -85,6 +86,8 @@ internal sealed partial class FalloutImageSpaceState
             if (call.Invocation == Guid.Empty || call.Native == Guid.Empty || !saved.Processes.Contains(call.Process) || call.Ordinal <= 0 ||
                 call.Children.Count == 0 || call.Children[0].Name != "profile-copy-and-output-reset" ||
                 call.Returned && call.Failure is not null || !call.Returned && call.Failure is null ||
+                !Enum.IsDefined(call.Caller) || call.Caller != FalloutSourceImageSpaceCaller.Main &&
+                (call.Advance || call.Delta != 0 || call.ClockAfter != call.ClockBefore) ||
                 call.Children.Count(child => child.Returned is null) != (call.Returned ? 0 : 1))
                 throw new InvalidDataException("Saved Main image call omitted its actual successful or failed child prefix.");
             long previous = 0;
@@ -108,7 +111,8 @@ internal sealed partial class FalloutImageSpaceState
             output.Profile.Validate();
             if (output.Invocation == Guid.Empty || !saved.Processes.Contains(output.Process) || output.Mutation <= 0 ||
                 output.Mutation > saved.Changed || output.Radial.Parameters.Length != 4 || output.Radial.Center.Length != 2 ||
-                saved.Last is null || saved.Last.Returned && (output.Invocation != saved.Last.Invocation || output.Process != saved.Last.Process || output.Delta != saved.Last.Delta))
+                saved.Last is null || !Enum.IsDefined(output.Caller) || saved.Last.Returned &&
+                (output.Invocation != saved.Last.Invocation || output.Process != saved.Last.Process || output.Delta != saved.Last.Delta || output.Caller != saved.Last.Caller))
                 throw new InvalidDataException("Saved immutable Main output changed its actual publication call.");
         }
         if (saved.Last?.Returned == true && saved.Output is null)
@@ -116,5 +120,6 @@ internal sealed partial class FalloutImageSpaceState
         if (saved.Last?.Returned == true && (!saved.Fields.ResetCompleted || !saved.Output!.Profile.Words.SequenceEqual(saved.Fields.Profile) ||
             saved.Output.Profile.DefinedWords != saved.Fields.DefinedWords))
             throw new InvalidDataException("Returned Main image output differs from its actual complete native profile stores.");
+        ValidateSourceImageMenu(saved);
     }
 }

@@ -1,7 +1,7 @@
 {
   "schema": "opennv-runtime-manifest/v2",
   "runtime": {
-    "engine": "Godot 4.7.2 Mono",
+    "engine": "Godot 4.8-dev7 Mono",
     "language": "C#",
     "status": "experimental",
     "sourcePolicy": "read-only-direct-owned-install",

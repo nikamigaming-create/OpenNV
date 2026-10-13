@@ -64,6 +64,12 @@ internal sealed class FalloutImageSpacePhaseClock
             throw;
         }
     }
+    internal float SampleSourceMain(Guid process, float hourFactor)
+    {
+        if (!Source.SinglePrecisionArithmetic || Source.SourceHourFactor != hourFactor)
+            throw new InvalidDataException("Registered Main clock changed its actual source GameHour conversion.");
+        Sample(_time, process); return Seconds;
+    }
     internal FalloutImageSpacePhaseClockSnapshot Capture()
     {
         Require();

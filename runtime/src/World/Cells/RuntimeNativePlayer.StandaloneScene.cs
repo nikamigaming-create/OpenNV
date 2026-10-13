@@ -16,10 +16,12 @@ internal partial class RuntimeNativePlayer
             throw new InvalidOperationException("Player first-person field retains another actual world/process lifetime.");
         _standaloneSceneWorld = world;
         PublishStandaloneFirstPersonScene();
+        world.BindStandalonePlayerIdleModelOwner(new StandaloneIdleModelOwner(this, world));
     }
     private void PublishStandaloneFirstPersonScene()
     {
         if (_standaloneSceneWorld is not { } world) return;
+        world.RequireStandalonePlayerSceneReplacement();
         if (_standaloneFirstPersonOwner is not null)
             throw new InvalidOperationException("The previous actual first-person field was not released before replacement.");
         var body = _firstPerson ?? throw new NotSupportedException("Source first-person factory did not return an actual player actor assembly.");
@@ -42,15 +44,17 @@ internal partial class RuntimeNativePlayer
     {
         if (_standaloneFirstPersonOwner is not { } owner) return;
         var world = _standaloneSceneWorld ?? throw new InvalidOperationException("Player scene release lost its actual source world.");
-        world.RequireStandalonePlayerSceneRetirement();
+        world.RequireStandalonePlayerSceneReplacement();
         world.CampaignStandalonePlayerScene.ReleaseFirstPerson(owner);
         _standaloneFirstPersonOwner = null;
     }
     internal void RetireStandalonePlayerScene()
     {
+        _standaloneSceneWorld?.RequireStandalonePlayerSceneRetirement();
         ReleaseStandaloneFirstPersonScene();
         _standaloneSceneWorld = null;
     }
+    private void RequireStandaloneFirstPersonSceneReplacement() => _standaloneSceneWorld?.RequireStandalonePlayerSceneReplacement();
     private void RetirePlayerPerceptionAndStandaloneScene()
     {
         var failures = new List<Exception>();

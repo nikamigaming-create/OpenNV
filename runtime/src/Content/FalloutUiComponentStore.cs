@@ -219,7 +219,7 @@ internal sealed partial class FalloutUiComponentStore
         return tile;
     }
 
-    private static bool IsTile(XElement element) => element.Attribute("name") is not null;
+    private static bool IsTile(XElement element) => element.Name.LocalName != "template" && element.Attribute("name") is not null;
 
     private Tile? ResolveTile(IReadOnlyList<string> segments, bool alt)
     {

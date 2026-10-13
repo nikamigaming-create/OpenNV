@@ -125,7 +125,7 @@ internal static partial class FalloutExecutableStringTable
 
     private sealed partial class Image
     {
-        internal IEnumerable<uint> SourceClassTables(string name, int slots)
+        internal IEnumerable<uint> SourceClassTables(string name, int slots, uint displacement = 0)
         {
             foreach (var section in headers.SectionHeaders.Where(section =>
                 (section.SectionCharacteristics & (SectionCharacteristics.MemRead | SectionCharacteristics.MemWrite | SectionCharacteristics.MemExecute)) == SectionCharacteristics.MemRead))
@@ -136,7 +136,7 @@ internal static partial class FalloutExecutableStringTable
                     var locator = U32(data.Span, at);
                     if (!IsReadOnlyExtent(locator, 20)) continue;
                     var row = Read(locator, 20);
-                    if (U32(row, 0) != 0 || U32(row, 4) != 0 || U32(row, 8) != 0 ||
+                    if (U32(row, 0) != 0 || U32(row, 4) != displacement || U32(row, 8) != 0 ||
                         !IsFileExtent(U32(row, 12), checked(name.Length + 9))) continue;
                     var declaration = Read(checked(U32(row, 12) + 8), name.Length + 1);
                     if (declaration[^1] != 0 || Encoding.ASCII.GetString(declaration, 0, name.Length) != name) continue;

@@ -14,6 +14,7 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
     internal bool RunInSequence => (IdleFlags & 1) != 0;
     internal bool DoOnce => (IdleFlags & 4) != 0;
     internal byte Procedure { get; init; }
+    internal bool HasIdleCollection { get; init; }
     internal int? LocationType { get; init; }
     internal FalloutFormKey? LocationReference { get; init; }
     internal int LocationRadius { get; init; }
@@ -112,6 +113,7 @@ internal sealed record FalloutScriptPackage(FalloutFormKey Form, string EditorId
         {
             Flags = data.Flags,
             Procedure = procedure,
+            HasIdleCollection = FalloutIdlePackageSelection.HasIdleCollection(fields.Select(field => field.Signature)),
             LocationType = locationType,
             LocationReference = locationReference,
             LocationRadius = locationRadius,
@@ -146,7 +148,7 @@ internal sealed record FalloutPackageEvent(FalloutPluginRecord Package, string K
     {
         get
         {
-            var topics = Fields.Where(field => field.Signature == "TNAM").ToArray();
+            var topics = Fields.Where(subrecord => subrecord.Signature == "TNAM").ToArray();
             if (topics.Length > 1 || topics.Length == 1 && topics[0].Data.Length != 4)
                 throw new InvalidDataException("Package event has an invalid topic identity.");
             return topics.Length == 0 ? null : Package.Plugin.AdjustOptionalFormId(

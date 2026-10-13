@@ -8,7 +8,7 @@ namespace OpenNV.Runtime.Content;
 internal enum FalloutScriptScopeKind
 {
     Standalone, DialogueBegin, DialogueEnd, QuestStageResult,
-    PackageBegin, PackageEnd, PackageChange, TerminalEntry
+    PackageBegin, PackageEnd, PackageChange, TerminalEntry, PatrolPointResult, PerkEntryResult
 }
 
 // The record reader supplies ranges and ordinals. Equal byte sequences in two
@@ -24,7 +24,7 @@ internal sealed class FalloutScriptScope : IReadOnlyList<FalloutPluginSubrecord>
     internal int FieldCount => _fields.Length;
     internal string RecordSha256 { get; }
     internal string ScopeSha256 { get; }
-    internal bool Compiled => _fields.Any(field => field.Signature == "SCDA");
+    internal bool Compiled => _fields.Any(subrecord => subrecord.Signature == "SCDA");
     public int Count => _fields.Length;
     public FalloutPluginSubrecord this[int index] => _fields[index];
 
@@ -111,6 +111,58 @@ internal sealed class FalloutScriptScope : IReadOnlyList<FalloutPluginSubrecord>
         var start = entries[entryOrdinal];
         var end = entryOrdinal + 1 < entries.Length ? entries[entryOrdinal + 1] : fields.Length;
         return new(source, fields, FalloutScriptScopeKind.TerminalEntry, start, end - start, -1, entryOrdinal);
+    }
+
+    internal static FalloutScriptScope PatrolResult(FalloutPluginRecord source)
+    {
+        if (source.Signature is not ("REFR" or "ACHR" or "ACRE"))
+            throw new InvalidDataException("Patrol result has no placed source reference owner.");
+        var fields = source.ReadSubrecords().ToArray();
+        var markers = Enumerable.Range(0, fields.Length).Where(index => fields[index].Signature == "XPPA").ToArray();
+        if (markers.Length != 1 || !fields[markers[0]].Data.IsEmpty)
+            throw new InvalidDataException("Patrol result has no unique original patrol-data boundary.");
+        var start = markers[0] + 1;
+        var end = start;
+        while (end < fields.Length && fields[end].Signature is not ("TNAM" or "DATA")) ++end;
+        return new(source, fields, FalloutScriptScopeKind.PatrolPointResult, start, end - start, -1, 0);
+    }
+
+    internal static FalloutScriptScope PerkResult(FalloutPluginRecord source, int entryOrdinal)
+    {
+        if (source.Signature != "PERK") throw new InvalidDataException("Perk result has no original PERK owner.");
+        var fields = source.ReadSubrecords().ToArray();
+        var entries = Enumerable.Range(0, fields.Length).Where(index => fields[index].Signature == "PRKE").ToArray();
+        if ((uint)entryOrdinal >= entries.Length || fields[entries[entryOrdinal]].Data.Length != 3)
+            throw new InvalidDataException("Perk result has no original entry boundary.");
+        var start = entries[entryOrdinal] + 1;
+        var limit = entryOrdinal + 1 < entries.Length ? entries[entryOrdinal + 1] : fields.Length;
+        var ends = Enumerable.Range(start, limit - start).Where(index => fields[index].Signature == "PRKF").ToArray();
+        if (ends.Length != 1 || !fields[ends[0]].Data.IsEmpty)
+            throw new InvalidDataException("Perk result has no original empty entry terminator.");
+        return new(source, fields, FalloutScriptScopeKind.PerkEntryResult, start, ends[0] - start, -1, entryOrdinal);
+    }
+
+    // An uncompiled result may retain an obsolete compiler reference count.
+    // It owns no instructions and must never be promoted from diagnostic SCTX.
+    internal bool ValidateAbsentBody()
+    {
+        if (Compiled) throw new InvalidOperationException("An actual compiled body requires its instruction reader.");
+        var headers = _fields.Where(field => field.Signature == "SCHR").ToArray();
+        var links = _fields.Count(field => field.Signature is "SCRO" or "SCRV");
+        if (headers.Length != 1 || headers[0].Data.Length != 20 ||
+            BinaryPrimitives.ReadUInt32LittleEndian(headers[0].Data.Span[8..]) != 0 ||
+            headers[0].Data.Span[18] > 1 || headers[0].Data.Span[19] != 0)
+            throw new InvalidDataException("Source script header omitted a declared body or its exact reference table.");
+        foreach (var field in _fields.Where(field => field.Signature is "SCRO" or "SCRV"))
+        {
+            if (field.Data.Length != 4 || BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span) == 0)
+                throw new InvalidDataException("Bodyless script retained an invalid original reference row.");
+            if (field.Signature == "SCRO") _ = Source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
+        }
+        var uncompiled = headers[0].Data.Span[18] == 0;
+        if (!uncompiled && BinaryPrimitives.ReadUInt32LittleEndian(headers[0].Data.Span[4..]) != links)
+            throw new InvalidDataException("Empty compiled result differs from its exact reference table.");
+        return uncompiled;
     }
 
     internal void RequireSource(FalloutPluginRecord source)

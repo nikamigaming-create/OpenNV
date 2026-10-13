@@ -8,12 +8,12 @@ internal sealed partial class FalloutActorProcessCommonState
     {
         RequireNotBusy();
         return new(Schema, _source.Contract, _stack, _process, _sequence, _current.Values.ToArray(),
-            _retired.ToArray(), _pending, _transfer, _cold);
+            _retired.ToArray(), _pending, _transfer, _cold, _source.ExecutableSha256);
     }
     private void Restore(FalloutProcessCommonSnapshot saved)
     {
         Validate(saved);
-        if (saved.Contract != _source.Contract || saved.Stack != _stack || saved.CapturedProcess == _process)
+        if (saved.Contract != _source.Contract || saved.ExecutableSha256 != _source.ExecutableSha256 || saved.Stack != _stack || saved.CapturedProcess == _process)
             throw new InvalidDataException("Cold process common owner differs from its source or new process epoch.");
         foreach (var entry in saved.Current.Concat(saved.Retired).Concat(saved.Pending is null ? [] : [saved.Pending]))
             if (Identity(entry.Source.Reference) != entry.Source)
@@ -56,12 +56,14 @@ internal sealed partial class FalloutActorProcessCommonState
     }
     internal static void Validate(FalloutProcessCommonSnapshot saved)
     {
-        if (saved is null || saved.Schema != Schema || saved.Contract is not { Length: 64 } || !saved.Contract.All(Uri.IsHexDigit) ||
+        if (saved is null || !SupportsSchema(saved) || saved.Contract is not { Length: 64 } || !saved.Contract.All(Uri.IsHexDigit) ||
             string.IsNullOrWhiteSpace(saved.Stack) || saved.CapturedProcess == Guid.Empty || saved.Sequence < 0 ||
             saved.Current is null || saved.Retired is null || saved.Current.Any(entry => entry is null || entry.Source is null) ||
             saved.Retired.Any(entry => entry is null || entry.Source is null) || saved.Pending is { Source: null } ||
             saved.Current.Select(entry => entry.Source.Reference).Distinct(FalloutFormKeyComparer.Instance).Count() != saved.Current.Count)
             throw new InvalidDataException("Cold common owner has no complete selected/current ownership snapshot.");
+        if (FalloutActorProcessRuntimeDeclaration.ForExecutable(saved.ExecutableSha256).Contract != saved.Contract)
+            throw new InvalidDataException("Cold common owner changed its executable and constructor contract.");
         var ownership = new HashSet<Guid>();
         foreach (var retired in saved.Retired)
         {
@@ -90,6 +92,7 @@ internal sealed partial class FalloutActorProcessCommonState
                 throw new InvalidDataException("Cold living common process omitted its real actor gameplay lease.");
             if (entry.Body is { } body) RequireBody(body, entry.Source.Reference);
             ValidateSourceBodyEntry(entry);
+            ValidateSceneFields(entry, saved.ExecutableSha256);
         }
         if (saved.Transfer is { } transfer)
         {
@@ -117,4 +120,8 @@ internal sealed partial class FalloutActorProcessCommonState
             cold.PreviousProcess == cold.CurrentProcess || cold.Sequence < 1 || cold.Sequence > saved.Sequence))
             throw new InvalidDataException("Cold common owner lost its genuine new-process handoff.");
     }
+    // v8 adds only FO3 High movement cells. A v7 New Vegas snapshot has the
+    // same validated field graph, so preserve that selected game's cold path.
+    private static bool SupportsSchema(FalloutProcessCommonSnapshot saved) => saved.Schema == Schema ||
+        saved.Schema == "opennv-actor-process-common/v7" && saved.ExecutableSha256 == FalloutSourceMainFamily.NewVegas;
 }

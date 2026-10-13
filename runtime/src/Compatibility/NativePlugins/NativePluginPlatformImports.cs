@@ -48,6 +48,7 @@ internal static class NativePluginPlatformImports
     };
     internal static string? Owner(string library, string name)
     {
+        if (NativePluginCrtPureImports.Owns(library, name)) return "actual-selected-x86-CRT-export:" + library + "!" + name;
         if (NativePluginWindowProcessImports.Owner(library, name) is { } windowOwner) return windowOwner;
         if (NativePluginCppRuntimeImports.Owner(library, name) is { } cppOwner) return cppOwner;
         if (NativePluginIoImports.Unowned.Contains(name) || NativePluginCrtImports.IsFileImport(library, name)) return null;

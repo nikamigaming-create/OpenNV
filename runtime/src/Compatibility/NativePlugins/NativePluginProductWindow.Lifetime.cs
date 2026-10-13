@@ -4,13 +4,14 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 internal sealed partial class NativePluginProductWindow
 {
-    internal void RequireColdCapture()
+    public void RequireColdCapture()
     {
         Require();
-        if (_enumerationEntered || _attachments.Count != 0 || _currentClip is not null || _keyboardConversionEntered)
+        _keyboard.RequireColdCapture();
+        if (_enumerationEntered || _attachments.Count != 0 || _currentClip is not null)
             throw new NotSupportedException("Current native input queues/cursor ownership cannot be restored from a cold pointer snapshot.");
     }
-    internal void RetireAfterChildExit()
+    public void RetireAfterChildExit()
     {
         RequireThread();
         if (_retired) return;
@@ -21,9 +22,9 @@ internal sealed partial class NativePluginProductWindow
             throw new InvalidOperationException("Native input attachments lacked actual live-thread retirement before child closure.");
         RestoreClip();
         if (_readers != 0) throw new InvalidOperationException("Native window readers remain after verified child closure.");
-        _retired = true; _layouts.Clear();
+        _keyboard.Retire(); _retired = true;
     }
-    internal void RetireBeforeChildExit(uint childThread)
+    public void RetireBeforeChildExit(uint childThread)
     {
         Require(); if (_enumerationEntered) throw new InvalidOperationException("An actual enumeration callback prevents queue retirement.");
         List<Exception> failures = [];

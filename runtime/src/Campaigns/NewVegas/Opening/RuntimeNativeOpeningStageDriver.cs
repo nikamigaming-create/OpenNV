@@ -336,6 +336,10 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             _restorePlayerPackageAudio, (program, committed) =>
                 (_resultScripts ?? throw new InvalidOperationException("Player package result VM is absent."))
                     .ExecutePlayerPackageEvent(program, committed));
+        var idlePackageOwner = _playerPackage;
+        _scripts.References!.BindStandalonePlayerIdlePackageOwner(idlePackageOwner, () =>
+            ReferenceEquals(_playerPackage, idlePackageOwner) && GodotObject.IsInstanceValid(this) &&
+            IsInsideTree() && !IsQueuedForDeletion());
         _scripts.References!.UnloadedPackages = new(_pluginStack, _scripts.References, _quests, _gameTime,
             _globals, ExecutePackageEvent, () => SourcePlayerLevel, ActorSitting);
         _speech = new RuntimeNativeSpeech();

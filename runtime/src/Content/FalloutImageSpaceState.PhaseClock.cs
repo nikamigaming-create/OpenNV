@@ -18,6 +18,9 @@ internal sealed partial class FalloutImageSpaceState
     }
     internal void SampleDoubleVisionClock(FalloutGameTime time, Guid process) =>
         (_phaseClock ?? throw new NotSupportedException("Image phase has no actual source clock factory.")).Sample(time, process);
+    internal float SampleSourceMainRegisteredHour(Guid process, float hourFactor) =>
+        (_phaseClock ?? throw new NotSupportedException("Registered Main clock has no actual source calendar/phase factory."))
+            .SampleSourceMain(process, hourFactor);
     private float DoubleVisionAngle(FalloutDoubleVisionPhase phase, float hour)
     {
         if (_phaseClock is null) return phase.Angle(hour); // Pure composition of explicitly supplied source inputs.

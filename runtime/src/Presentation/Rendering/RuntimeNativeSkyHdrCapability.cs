@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Presentation.Rendering;
 // The selected original asks the device for RGBA half-float post-pixel blend
 // support. This owner executes the corresponding native format/pipeline query
 // on Godot's real rendering device. It submits no draw and certifies no pixels.
-internal sealed class RuntimeNativeSkyHdrCapability : IFalloutSkyHdrCapability
+internal sealed class RuntimeNativeSkyHdrCapability : IRuntimeSkyHdrCapability
 {
     private readonly object _gate = new();
     private readonly Guid _process;
@@ -18,7 +18,7 @@ internal sealed class RuntimeNativeSkyHdrCapability : IFalloutSkyHdrCapability
     private Exception? _failure;
     private long _changed;
     private TaskCompletionSource? _retirementCompletion;
-    internal Task Retirement
+    public Task Retirement
     {
         get
         {
@@ -42,6 +42,7 @@ internal sealed class RuntimeNativeSkyHdrCapability : IFalloutSkyHdrCapability
         """;
     internal RuntimeNativeSkyHdrCapability(FalloutSkyHdrSource source, Guid process)
     {
+        ArgumentNullException.ThrowIfNull(source);
         if (process == Guid.Empty) throw new InvalidDataException("Native HDR query has no current source process.");
         _source = source; _process = process;
     }
@@ -50,7 +51,7 @@ internal sealed class RuntimeNativeSkyHdrCapability : IFalloutSkyHdrCapability
         if (System.Environment.CurrentManagedThreadId != _presentationThread)
             throw new InvalidOperationException("Native HDR query publication/retirement left its actual presentation thread.");
     }
-    internal void Begin()
+    public void Begin()
     {
         RequirePresentationThread();
         lock (_gate)
@@ -68,8 +69,8 @@ internal sealed class RuntimeNativeSkyHdrCapability : IFalloutSkyHdrCapability
             if (_retiring || _retired) return; // Cancellation owns every still-created RID below.
             try
             {
-                _device = RenderingServer.GetRenderingDevice() ??
-                    throw new NotSupportedException("Actual rendering device has no admitted half-float format query.");
+                _device = RenderingServer.GetRenderingDevice();
+                if (_device is null) throw new NotSupportedException("Actual rendering device has no admitted half-float format query.");
                 const RenderingDevice.TextureUsageBits usage = RenderingDevice.TextureUsageBits.ColorAttachmentBit |
                     RenderingDevice.TextureUsageBits.SamplingBit;
                 var nativeBlendSupported = RuntimeNativeSkyHdrBlendFormat.Query(_device);
@@ -128,7 +129,7 @@ internal sealed class RuntimeNativeSkyHdrCapability : IFalloutSkyHdrCapability
             catch (Exception failure) { _failure = failure; ++_changed; }
         }
     }
-    internal bool Returned
+    public bool Returned
     {
         get
         {
@@ -155,7 +156,7 @@ internal sealed class RuntimeNativeSkyHdrCapability : IFalloutSkyHdrCapability
                 "Godot-render-thread/public-native-RGBA16Float-blend-feature-query-and-framebuffer-pipeline-return");
         }
     }
-    internal void BeginRetirement()
+    public void BeginRetirement()
     {
         RequirePresentationThread(); lock (_gate)
         {
@@ -195,7 +196,7 @@ internal sealed class RuntimeNativeSkyHdrCapability : IFalloutSkyHdrCapability
             }
         }
     }
-    internal bool Retired
+    public bool Retired
     {
         get
         {

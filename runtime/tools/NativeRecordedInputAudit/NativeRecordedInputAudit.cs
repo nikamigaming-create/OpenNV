@@ -16,6 +16,7 @@ public partial class NativeRecordedInputAudit : Node
         RuntimeLiveHarness? harness = null;
         try
         {
+            await ExerciseHeadlessInputOwner();
             ExerciseBotActionBindings();
             Directory.CreateDirectory(directory);
             var pluginPath = Path.Combine(directory, "Input.esm");

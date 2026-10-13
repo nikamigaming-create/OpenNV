@@ -31,7 +31,10 @@ void* window_process_import_entry(const std::string& library, const std::string&
     auto* replacement = user ? window_process_entry(name) : kernel ? window_process_sdk_entry(name) : nullptr;
     if (!replacement) return nullptr;
     auto& owner = window_process_owner(false);
-    if (user && !owner.window) throw Fatal(ERROR_NOT_SUPPORTED, "Original USER32 import has no genuine product-window producer.");
+    // Import transport retains the actual SDK export, not a guarantee that a
+    // window exists. The product's declared capability handles each reached
+    // call; thread/layout APIs can execute with no HWND, while unavailable
+    // window and queue-input operations remain explicitly refused there.
     if (!io_owner().non_io_imports.count(library + "!" + name))
         throw Fatal(ERROR_NOT_SUPPORTED, "Window/process import lacks its exact selected original declaration.");
     const auto first = GetModuleHandleW(user ? L"user32.dll" : L"kernel32.dll");

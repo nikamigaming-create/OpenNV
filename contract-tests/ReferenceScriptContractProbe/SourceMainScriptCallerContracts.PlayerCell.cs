@@ -118,11 +118,14 @@ internal static partial class SourceMainScriptCallerContracts
         public FalloutMainPlayerCellSource Source => source;
         public string Owner => "authored-interior-Player-source-child";
         internal List<string> Log { get; } = [];
+        internal bool SceneAvailable;
+        internal Action<FalloutMainPlayerCellInvocation>? DuringSceneClock;
+        internal Action<FalloutMainPlayerCellInvocation, bool>? DuringSceneChild;
         private void Read(FalloutMainPlayerCellInvocation invocation, FalloutMainPlayerCellStep step)
         { invocation.Require(step); Log.Add(step.ToString()); }
         private static Exception Excluded() => new InvalidOperationException("An excluded independently authored Player source arm was entered.");
         public bool SceneMode(FalloutMainPlayerCellInvocation invocation) { Read(invocation, FalloutMainPlayerCellStep.SceneMode); return false; }
-        public bool ScenePresent(FalloutMainPlayerCellInvocation invocation) { Read(invocation, FalloutMainPlayerCellStep.SceneRead); return false; }
+        public bool ScenePresent(FalloutMainPlayerCellInvocation invocation) { Read(invocation, FalloutMainPlayerCellStep.SceneRead); return SceneAvailable; }
         public FalloutMainPlayerSourceCell? ParentCell(FalloutMainPlayerCellInvocation invocation)
         { Read(invocation, FalloutMainPlayerCellStep.ParentCellRead); return new(new(new("Authored.esm", 10), 0, new('c', 64), null, null), 1, null, null); }
         public FalloutMainPlayerSourcePosition Position(FalloutMainPlayerCellInvocation invocation)
@@ -138,8 +141,10 @@ internal static partial class SourceMainScriptCallerContracts
         public void PendingFlagChild(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
         public bool HeldInterface(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
         public void HeldChild(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
-        public void SceneClock(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
-        public void SceneChild(FalloutMainPlayerCellInvocation invocation, bool alternate) => throw Excluded();
+        public void SceneClock(FalloutMainPlayerCellInvocation invocation)
+        { Read(invocation, FalloutMainPlayerCellStep.SceneClock); (DuringSceneClock ?? throw Excluded())(invocation); }
+        public void SceneChild(FalloutMainPlayerCellInvocation invocation, bool alternate)
+        { Read(invocation, FalloutMainPlayerCellStep.SceneChild); (DuringSceneChild ?? throw Excluded())(invocation, alternate); }
         public FalloutMainPlayerCellTarget? TargetCell(FalloutMainPlayerCellInvocation invocation, FalloutMainPlayerSourceCell before, FalloutMainPlayerSourcePosition position) => throw Excluded();
         public Task LoadTarget(FalloutMainPlayerCellInvocation invocation, FalloutMainPlayerCellTarget target, FalloutMainPlayerSourcePosition position) => throw Excluded();
         public void SetWorldBracket(FalloutMainPlayerCellInvocation invocation, bool value) => throw Excluded();
