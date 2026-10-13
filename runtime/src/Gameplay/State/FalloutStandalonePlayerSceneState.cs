@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
-    internal const string Schema = "opennv-standalone-Player-scene/v15";
+    internal const string Schema = "opennv-standalone-Player-scene/v17";
     internal FalloutStandalonePlayerSceneSource Source { get; }
     internal Guid Process => _process;
     internal string Stack => _stack;
@@ -24,11 +24,15 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     private FalloutStandaloneCameraCall? _camera;
     private FalloutStandaloneSceneColdHandoff? _cold;
     private readonly FalloutPlayerThreadContextState _threadContext;
+    private FalloutPlayerMovementControlState? _movementControl;
+    private readonly List<FalloutPlayerControlCommandReceipt> _controlObservations = [];
+    private readonly HashSet<Guid> _observedControlIds = [];
     private FalloutPlayerThreadContextEntry? _threadContextEntry;
     private FalloutDirectInputState? _inputManager;
     private FalloutStandaloneInputManagerQuery? _inputManagerQuery;
     private string? _boundary, _failure;
     internal string? SaveBlocker => _retired ? "source-Player-scene-retired" : _failure ?? _boundary ??
+        (_controlObservations.Count != 0 ? FalloutPlayerControlFieldsState.ObservedWriterBoundary : null) ??
         (_clock is { Step: not FalloutStandaloneSceneClockStep.Returned } ? "source-Player-scene-clock-entered" :
         _camera is { Step: not FalloutStandaloneCameraStep.Returned } ? "source-Player-free-camera-entered" :
         _first is not null && _livingFirst is null ? "source-Player-first-person-cold-publication-unbound" : null);
@@ -77,6 +81,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         idleAnimationCall = _idleAnimationCall,
         moverFields = _moverFields,
         movementCall = _movementCall,
+        controlObservations = _controlObservations.ToArray(),
         actorMovementFlag = _actorMovementFlag,
         prelude = _prelude,
         cold = _cold,
@@ -246,6 +251,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (_first is { Released: null } && _livingFirst is not null)
             throw new InvalidOperationException("Actual first-person source field must release before Main scene retirement.");
         _threadContext.Retire();
+        _movementControl?.Retire();
+        _movementPhysics = null;
         _inputManager = null;
         _readProcessQueries = null;
         _retired = true; Next();

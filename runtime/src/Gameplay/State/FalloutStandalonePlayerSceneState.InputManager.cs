@@ -7,9 +7,25 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     internal void BindInputManager(FalloutDirectInputState input)
     {
         RequireIdle(); ArgumentNullException.ThrowIfNull(input);
-        if (_inputManager is not null || input.Source != _stack)
+        if (_inputManager is not null || _movementControl is not null || input.Source != _stack)
             throw new InvalidOperationException("Player input manager changed its selected source or current singleton factory.");
-        _inputManager = input.ReadManagerOwner(); _thread ??= Environment.CurrentManagedThreadId;
+        var current = input.ReadManagerOwner();
+        if (!ReferenceEquals(current, input) || current.Source != _stack || current.Factory == Guid.Empty ||
+            !FalloutDirectInputState.ValidProvider(current.Provider, current.Window))
+            throw new InvalidOperationException("Player input publication lost its genuine current source/factory owner.");
+        // Owned data can prepare the scene on a loading worker. The control
+        // owner is constructed only after the real input singleton verifies
+        // this gameplay thread; preparation never captures that live lease.
+        var controls = new FalloutPlayerMovementControlState(FalloutPlayerMovementControlSource.Reviewed(Source.Main),
+            _stack, _process, _movementCall?.Control);
+        RetainControlObservations(controls);
+        _inputManager = current; _movementControl = controls; _thread ??= Environment.CurrentManagedThreadId;
+    }
+    internal void BindMovementControlConfiguration(FalloutNumericIniSettings settings)
+    {
+        RequireIdle();
+        (_movementControl ?? throw new InvalidOperationException("Player control configuration requires actual input-thread publication."))
+            .BindConfiguration(settings);
     }
     private FalloutDirectInputState ReadInputManager(Guid main, long ordinal)
     {

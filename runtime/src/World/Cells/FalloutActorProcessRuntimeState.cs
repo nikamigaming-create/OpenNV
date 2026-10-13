@@ -68,6 +68,7 @@ internal sealed partial class FalloutActorProcessRuntimeState : IDisposable
         globalTime = SourceGlobalTimeState,
         cachedTimerBoundary = SourceCachedTimerRuntimeBoundary,
         playerCell = MainPlayerCellState,
+        playerScene = _standalonePlayerScene?.State,
         utilityCommands = MainUtilityCommandState,
         platformStartup = PlatformStartupState,
         playerTravelCounter = _travelCounter,

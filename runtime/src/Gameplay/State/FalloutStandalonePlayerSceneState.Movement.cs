@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
@@ -12,14 +13,35 @@ internal sealed record FalloutPlayerMoverFields(uint VectorX, uint VectorY, uint
 internal sealed record FalloutPlayerMovementCall(Guid Main, long MainOrdinal, long Entered, long Changed,
     FalloutProcessMovementFlagUpdate? ProcessFlags,
     IReadOnlyList<uint> MoverReads, uint? InitialLowWord, string Step, bool Returned, string? Failure,
-    byte? ActorFlag = null);
+    byte? ActorFlag = null, FalloutPlayerLivingPhysicsSnapshot? Physics = null,
+    FalloutPlayerMovementControlSnapshot? Control = null);
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
     private FalloutPlayerMoverFields _moverFields = FalloutPlayerMoverFields.Constructed;
     private byte _actorMovementFlag;
     private Func<FalloutProcessMovementFlagUpdate>? _readAndClearMovementFlags;
+    private IFalloutPlayerLivingPhysicsOwner? _movementPhysics;
     private FalloutPlayerMovementCall? _movementCall;
+
+    internal void BindMovementPhysics(IFalloutPlayerLivingPhysicsOwner owner)
+    {
+        RequireIdle(); ArgumentNullException.ThrowIfNull(owner);
+        if (_movementPhysics is not null)
+            throw new InvalidOperationException("Player movement physics already has its actual current Actor owner.");
+        owner.RequireCurrent();
+        RequirePhysicsIdentity(owner.Capture(), owner);
+        _movementPhysics = owner; _thread ??= Environment.CurrentManagedThreadId;
+    }
+
+    private void RequirePhysicsIdentity(FalloutPlayerLivingPhysicsSnapshot snapshot, IFalloutPlayerLivingPhysicsOwner owner)
+    {
+        snapshot.Validate();
+        if (owner.Process != _process || owner.Source != Source.Identity || owner.Stack != _stack ||
+            owner.Factory == Guid.Empty || snapshot.CapturedProcess != owner.Process || snapshot.Source != owner.Source ||
+            snapshot.Stack != owner.Stack || snapshot.Factory != owner.Factory)
+            throw new InvalidOperationException("Player movement physics changed its actual source/process/factory owner.");
+    }
 
     internal void BindMovementFlags(Func<FalloutProcessMovementFlagUpdate> readAndClear)
     {
@@ -71,7 +93,33 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             // The constructed Player state skips the independent locomotion
             // timer arms. No input/movement writer is inferred from Godot.
             Step("movement-current-actor-field-child");
-            throw new NotSupportedException("source-Player-movement-current-actor-field-child-unbound");
+            var physics = _movementPhysics ??
+                throw new NotSupportedException("source-Player-movement-current-actor-field-child-unbound");
+            try { physics.RequireCurrent(); Check(); physics.Update(main, ordinal); Check(); }
+            finally
+            {
+                var snapshot = physics.Capture();
+                _movementCall = _movementCall with { Physics = snapshot, Changed = Next() };
+                RequirePhysicsIdentity(snapshot, physics);
+            }
+            if (_movementCall.Physics?.Frame is not { Returned: true, Failure: null } frame ||
+                frame.Main != main || frame.MainOrdinal != ordinal)
+                throw new InvalidDataException("Actor physical child did not retain its actual returned Main invocation.");
+            RequireReturnedPhysics(_movementCall.Physics);
+            Step("movement-control-child");
+            if (_clock?.ArgumentBits is not { } argument || _inputManager is not { } input)
+                throw new InvalidOperationException("Player controls lost their stored scene argument or actual current input owner.");
+            var controls = _movementControl ??
+                throw new InvalidOperationException("Player controls have no actual input-thread publication.");
+            try
+            {
+                controls.ExecutePrefix(main, ordinal, argument,
+                (ushort)(current & FalloutPlayerMovementControlSource.MoverMask), input); Check();
+            }
+            finally
+            {
+                _movementCall = _movementCall with { Control = controls.Capture(), Changed = Next() };
+            }
         }
         catch (Exception error)
         {
@@ -113,7 +161,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             throw new InvalidDataException("Player movement prefix lost its actual invocation, mover factory or retained failure.");
         if (call.ProcessFlags is not { } update)
         {
-            if (call.Step != "process-flags" || call.MoverReads.Count != 0 || call.InitialLowWord is not null || call.ActorFlag is not null)
+            if (call.Step != "process-flags" || call.MoverReads.Count != 0 || call.InitialLowWord is not null || call.ActorFlag is not null ||
+                call.Physics is not null || call.Control is not null)
                 throw new InvalidDataException("Unreturned movement flag query admitted a later mover child.");
             return;
         }
@@ -121,8 +170,62 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (!SameProcess(update.Before, idle.Before) || update.Before.Changed < idle.Changed || !update.Returned ||
             update.Flags != 0 || (high ? update.Stores != 1 || update.AfterFlags != 0 || update.Changed <= update.Before.Changed
                 : update.Stores != 0 || update.AfterFlags is not null || update.Changed != update.Before.Changed) ||
-            call.Step != "movement-current-actor-field-child" || call.MoverReads.Count != 2 || call.InitialLowWord != 0 || call.ActorFlag != 0 ||
-            call.Failure != "source-Player-movement-current-actor-field-child-unbound")
+            call.Step is not ("movement-current-actor-field-child" or "movement-control-child") ||
+            call.MoverReads.Count != 2 || call.InitialLowWord != 0 || call.ActorFlag != 0)
             throw new InvalidDataException("Movement prefix changed its independent flag clear or repeated source mover reads.");
+        if (call.Physics is not { } physics)
+        {
+            if (call.Step != "movement-current-actor-field-child" || call.Control is not null ||
+                call.Failure != "source-Player-movement-current-actor-field-child-unbound")
+                throw new InvalidDataException("Unbound Actor physics admitted its following control child or lost its actual refusal.");
+            return;
+        }
+        ValidateMovementPhysics(saved, call, physics);
+        if (call.Step == "movement-current-actor-field-child")
+        {
+            if (call.Control is not null || physics.Frame is { Returned: false, Failure: { } failure } && failure != call.Failure)
+                throw new InvalidDataException("Failed Actor physics admitted control input or lost its reached physical failure.");
+            return;
+        }
+        RequireReturnedPhysics(physics);
+        if (call.Control is not { } control || control.Call is not { } child || saved.InputManagerQuery is not { } input ||
+            saved.Clock?.ArgumentBits is not { } argument)
+            throw new InvalidDataException("Player movement omitted its actual following control invocation.");
+        FalloutPlayerMovementControlState.Validate(control);
+        if (control.Source != FalloutPlayerMovementControlSource.Reviewed(saved.Source.Main) || control.Stack != saved.Stack ||
+            control.CapturedProcess != input.Process || control.Retired || child.Main != call.Main || child.MainOrdinal != call.MainOrdinal ||
+            child.ArgumentBits != argument || child.MoverWord != (ushort)(saved.MoverFields.Flags & FalloutPlayerMovementControlSource.MoverMask) ||
+            control.Failure != call.Failure || child.InputFactory is { } factory && (factory != input.Factory ||
+                child.InputWindow != input.Window || child.InputProvider != input.Provider) ||
+            child.MouseReads.Any(read => read.Sample != input.Sample || read.Revision != input.Revision))
+            throw new InvalidDataException("Player controls changed their actual input/source owner, scene argument or masked mover word.");
+    }
+
+    private static void ValidateMovementPhysics(FalloutStandalonePlayerSceneSnapshot saved,
+        FalloutPlayerMovementCall call, FalloutPlayerLivingPhysicsSnapshot physics)
+    {
+        physics.Validate();
+        if (saved.InputManagerQuery is not { } input || physics.Source != saved.Source.Identity || physics.Stack != saved.Stack ||
+            physics.CapturedProcess != input.Process || physics.Frame is { } frame &&
+                (frame.Main != call.Main || frame.MainOrdinal != call.MainOrdinal))
+            throw new InvalidDataException("Actor physics lost its actual Player source, current process or Main child.");
+        if (physics.Admission is not { } admission) return;
+        if (admission.Source.Main != saved.Source.Main || admission.Actor != call.ProcessFlags!.Before.Actor.Reference ||
+            admission.Model is { } model && model.Process != physics.CapturedProcess ||
+            admission.Activities.Any(query => !SameProcess(query.Process, call.ProcessFlags.Before)))
+            throw new InvalidDataException("Actor physical admission borrowed another actor, model or process lease.");
+    }
+
+    private static void RequireReturnedPhysics(FalloutPlayerLivingPhysicsSnapshot physics)
+    {
+        if (!physics.CompleteCapture)
+            throw new NotSupportedException("source-Player-living-physics-current-capture-unavailable:" +
+                string.Join(";", physics.CaptureRefusals!.Select(refusal => refusal.Lane + ":" + refusal.Message)));
+        if (physics.Frame is not { Returned: true, Step: "returned", Failure: null } || physics.Failure is not null ||
+            physics.Admission is not { Returned: true, Register: not null } ||
+            physics.Utility.Phase != (physics.Utility.Systems.Count == 0 ? "zero-system-update-completed" : "update-completed") ||
+            !physics.Admission.Register.Value && (physics.Utility.Registered || physics.Utility.CollisionGroup is not null ||
+                physics.Utility.Systems.Count != 0 || physics.Utility.PendingSystems.Count != 0))
+            throw new InvalidDataException("Actor physics did not return its actual admission-selected utility update.");
     }
 }

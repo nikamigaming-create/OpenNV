@@ -16,6 +16,7 @@ internal partial class RuntimeNativePlayer
             throw new InvalidOperationException("Player first-person field retains another actual world/process lifetime.");
         _standaloneSceneWorld = world;
         PublishStandaloneFirstPersonScene();
+        PublishStandaloneLivingPhysics();
         world.BindStandalonePlayerIdleModelOwner(new StandaloneIdleModelOwner(this, world));
     }
     private void PublishStandaloneFirstPersonScene()
@@ -35,6 +36,7 @@ internal partial class RuntimeNativePlayer
         _standaloneFirstPersonOwner = state.PublishFirstPerson(new(body.SourceSceneFactory, state.Process, state.Source.Identity,
             state.Stack, body.GetInstanceId(), path, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
             "actual-returned-source-first-person-player-assembly/" + GetInstanceId()), Living);
+        if (_livingPhysics is not null) PublishStandaloneLivingPhysics();
         bool Living() => ReferenceEquals(_standaloneSceneWorld, world) && ReferenceEquals(_firstPerson, body) && _presentationError is null &&
             GodotObject.IsInstanceValid(this) && IsInsideTree() && !IsQueuedForDeletion() &&
             GodotObject.IsInstanceValid(body) && body.IsInsideTree() && !body.IsQueuedForDeletion() &&
@@ -45,6 +47,7 @@ internal partial class RuntimeNativePlayer
         if (_standaloneFirstPersonOwner is not { } owner) return;
         var world = _standaloneSceneWorld ?? throw new InvalidOperationException("Player scene release lost its actual source world.");
         world.RequireStandalonePlayerSceneReplacement();
+        ReleaseStandaloneLivingPhysicsModels();
         world.CampaignStandalonePlayerScene.ReleaseFirstPerson(owner);
         _standaloneFirstPersonOwner = null;
     }
@@ -52,6 +55,7 @@ internal partial class RuntimeNativePlayer
     {
         _standaloneSceneWorld?.RequireStandalonePlayerSceneRetirement();
         ReleaseStandaloneFirstPersonScene();
+        RetireStandaloneLivingPhysics();
         _standaloneSceneWorld = null;
     }
     private void RequireStandaloneFirstPersonSceneReplacement() => _standaloneSceneWorld?.RequireStandalonePlayerSceneReplacement();

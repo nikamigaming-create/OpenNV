@@ -110,8 +110,12 @@ internal sealed class FalloutNewGameBootstrap
                     _stages!.Enter(change.Target!.Value, change.Stage);
                     break;
                 case FalloutReferenceEffectKind.PlayerControls:
-                    Controls = new FalloutPlayerControlCommand(change.Enable, change.Controls ??
-                        throw new InvalidDataException("Startup controls have no mask.")).Apply(Controls);
+                    var controls = new FalloutPlayerControlCommand(change.Enable, change.Controls ??
+                        throw new InvalidDataException("Startup controls have no mask."));
+                    if (world.HasStandalonePlayerScene)
+                        world.CampaignStandalonePlayerScene.ObserveSourceControlCommand(new(change.Source,
+                            "actual-new-game-bootstrap-PlayerControls-effect", Guid.NewGuid(), controls.Enable, controls.Arguments));
+                    Controls = controls.Apply(Controls);
                     break;
                 case FalloutReferenceEffectKind.LoadingScreenPolicy:
                     scripts.Session.LocationSpecificLoadScreensOnly = change.Enable;

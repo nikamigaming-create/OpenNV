@@ -184,9 +184,34 @@ virtuals. C# retains the clear before selected flag children and across cold
 construction. Actor's PlayerMover is a separate source owner from the physical
 controller and presentation locomotion. Its vector, flags and timer retain their
 constructor bytes; repeated getters and the independent Actor movement byte
-precede the next current Actor field child. Missing movement/control writers and
-that child fail visibly. Unchanged New Vegas common v7 state remains readable
-when v8 introduces only the FO3 movement fields.
+precede the current Actor physical field. That retained field binds genuine
+view/reference model factories to C# living bodies, linked constraints and world
+membership; Godot PhysicsServer supplies physical resources without rendering.
+The original Actor admission predicate reads independent mode, physical state
+and each current process activity, rather than inferring registration from the
+first-person skeleton. Constructor mode/state/activity zero selects reference
+motion six and registration false before the empty utility update returns.
+High idle action and MiddleHigh signed physical activity remain separate fields.
+Unchanged New Vegas common v7/v8 state remains readable with the FO3 v9 fields.
+
+Living body dynamics and structural world persistence are separate lanes. The
+world captures body identifiers, actual admission order, merged island
+relationships, linked constraint identities and ordered master/slave arrays.
+Cold reconstruction validates detached source objects before native publication,
+then restores that registry without registration, ordering, clock or impulse
+replay. Source contact/solver behavior, canonical controller hulls and live
+animation-driven physical poses remain explicit unowned capabilities; structural
+component proof cannot establish complete gameplay saves or parity.
+
+The following Player control owner is created at genuine input publication on
+the gameplay thread after worker preparation. Source arguments, two independent
+cache clears, cached mouse axes, typed Prefs/Main settings, constructor control
+fields and entered failures have distinct receipts. Current world projection
+FOV, raw reference rotations and the seven control-command writers require
+their own C# producers. Godot camera FOV or basis is never a source field getter.
+Failed cold history restores no current input/physical/orientation lease. Later
+services, the thread epilogue and balanced scene decrement still require a
+returned whole Player body before a playable save.
 
 Atomic save publication flushes a complete candidate before replacement. Bounded
 Windows destination-sharing retries repeat only the rename; neither gameplay

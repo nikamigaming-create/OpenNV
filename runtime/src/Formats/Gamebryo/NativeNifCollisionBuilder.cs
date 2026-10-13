@@ -116,7 +116,8 @@ internal static partial class NativeNifCollisionBuilder
         List<CollisionShape3D> output,
         ref int triangles,
         HashSet<int> active,
-        bool convexOnly = false)
+        bool convexOnly = false,
+        float physicalToSourceUnits = HavokToGameUnits)
     {
         if (!active.Add(reference))
             throw new InvalidDataException($"NIF collision shape graph contains a cycle at block {reference}.");
@@ -126,7 +127,7 @@ internal static partial class NativeNifCollisionBuilder
             {
                 case FalloutNifMoppShape mopp:
                     BuildShape(source, mopp.Child, unitsToMetres, mass, localTransform,
-                        owner, output, ref triangles, active, convexOnly);
+                        owner, output, ref triangles, active, convexOnly, physicalToSourceUnits);
                     break;
                 case FalloutNifPackedShape packed:
                     if (convexOnly)
@@ -141,7 +142,7 @@ internal static partial class NativeNifCollisionBuilder
                         data.SubShapes.Sum(value => checked((long)value.VertexCount)) != data.Vertices.Length)
                         throw new InvalidDataException(
                             $"NIF packed data {data.Block.Index} sub-shape vertices do not cover its vertex table.");
-                    var vertices = data.Vertices.Select(vertex => ConvertScaled(vertex, packed.Scale, unitsToMetres)).ToArray();
+                    var vertices = data.Vertices.Select(vertex => ConvertScaled(vertex, packed.Scale, unitsToMetres, physicalToSourceUnits)).ToArray();
                     if (data.Triangles.Length == 0 || vertices.Any(vertex => !vertex.IsFinite()))
                         throw new InvalidDataException($"NIF packed collision {packed.Block.Index} has no triangles or non-finite vertices.");
                     var faces = new Vector3[checked(data.Triangles.Length * 3)];
@@ -171,23 +172,23 @@ internal static partial class NativeNifCollisionBuilder
                             $"NIF convex shape {convex.Block.Index} has invalid homogeneous vertices.");
                     Add(owner, output, new ConvexPolygonShape3D
                     {
-                        Points = convex.Vertices.Select(vertex => Convert(vertex, unitsToMetres)).ToArray(),
-                        Margin = convex.Radius * HavokToGameUnits * unitsToMetres,
+                        Points = convex.Vertices.Select(vertex => Convert(vertex, unitsToMetres, physicalToSourceUnits)).ToArray(),
+                        Margin = convex.Radius * physicalToSourceUnits * unitsToMetres,
                     }, localTransform, convex.Block.Index, convex.Material);
                     break;
                 case FalloutNifBoxShape box:
                     RequirePositive(box.Dimensions, box.Block.Index, "box dimensions");
                     Add(owner, output, new BoxShape3D
                     {
-                        Size = ConvertAbsolute(box.Dimensions) * (2.0f * HavokToGameUnits * unitsToMetres),
-                        Margin = box.Radius * HavokToGameUnits * unitsToMetres,
+                        Size = ConvertAbsolute(box.Dimensions) * (2.0f * physicalToSourceUnits * unitsToMetres),
+                        Margin = box.Radius * physicalToSourceUnits * unitsToMetres,
                     }, localTransform, box.Block.Index, box.Material);
                     break;
                 case FalloutNifSphereShape sphere:
                     RequirePositive(sphere.Radius, sphere.Block.Index, "sphere radius");
                     Add(owner, output, new SphereShape3D
                     {
-                        Radius = sphere.Radius * HavokToGameUnits * unitsToMetres,
+                        Radius = sphere.Radius * physicalToSourceUnits * unitsToMetres,
                     }, localTransform, sphere.Block.Index, sphere.Material);
                     break;
                 case FalloutNifCapsuleShape capsule:
@@ -195,12 +196,12 @@ internal static partial class NativeNifCollisionBuilder
                     if (MathF.Abs(capsule.FirstRadius - capsule.SecondRadius) > float.Epsilon)
                         throw new NotSupportedException(
                             $"NIF capsule shape {capsule.Block.Index} has unequal endpoint radii.");
-                    var first = Convert(capsule.First, unitsToMetres);
-                    var second = Convert(capsule.Second, unitsToMetres);
+                    var first = Convert(capsule.First, unitsToMetres, physicalToSourceUnits);
+                    var second = Convert(capsule.Second, unitsToMetres, physicalToSourceUnits);
                     var axis = second - first;
                     if (axis.LengthSquared() <= 0.0f)
                         throw new InvalidDataException($"NIF capsule shape {capsule.Block.Index} has coincident endpoints.");
-                    var radius = capsule.FirstRadius * HavokToGameUnits * unitsToMetres;
+                    var radius = capsule.FirstRadius * physicalToSourceUnits * unitsToMetres;
                     var capsuleTransform = new Transform3D(
                         new Basis(Quaternion.FromEuler(Vector3.Zero)),
                         (first + second) * MidpointFactor);
@@ -216,16 +217,16 @@ internal static partial class NativeNifCollisionBuilder
                         throw new InvalidDataException($"NIF list shape {list.Block.Index} is empty.");
                     foreach (var child in list.Children)
                         BuildShape(source, child, unitsToMetres, mass, localTransform,
-                            owner, output, ref triangles, active, convexOnly);
+                            owner, output, ref triangles, active, convexOnly, physicalToSourceUnits);
                     break;
                 case FalloutNifConvexListShape convexList:
                     BuildConvexList(source, convexList, unitsToMetres, mass, localTransform,
-                        owner, output, ref triangles, active);
+                        owner, output, ref triangles, active, physicalToSourceUnits);
                     break;
                 case FalloutNifConvexTransformShape transformed:
                     BuildShape(source, transformed.Child, unitsToMetres, mass,
-                        localTransform * MatrixTransform(transformed, unitsToMetres),
-                        owner, output, ref triangles, active, convexOnly);
+                        localTransform * MatrixTransform(transformed, unitsToMetres, physicalToSourceUnits),
+                        owner, output, ref triangles, active, convexOnly, physicalToSourceUnits);
                     break;
                 default:
                     throw new NotSupportedException(
@@ -310,10 +311,12 @@ internal static partial class NativeNifCollisionBuilder
             Convert(body.Translation, unitsToMetres));
     }
 
-    internal static Transform3D MatrixTransform(FalloutNifConvexTransformShape shape, float unitsToMetres) =>
-        MatrixTransform(shape.MatrixRowMajor, unitsToMetres, "Havok convex-transform matrix");
+    internal static Transform3D MatrixTransform(FalloutNifConvexTransformShape shape, float unitsToMetres,
+        float physicalToSourceUnits = HavokToGameUnits) =>
+        MatrixTransform(shape.MatrixRowMajor, unitsToMetres, "Havok convex-transform matrix", physicalToSourceUnits);
 
-    internal static Transform3D MatrixTransform(IReadOnlyList<float> value, float unitsToMetres, string label)
+    internal static Transform3D MatrixTransform(IReadOnlyList<float> value, float unitsToMetres, string label,
+        float physicalToSourceUnits = HavokToGameUnits)
     {
         if (value.Count != 16 || !float.IsFinite(unitsToMetres) || unitsToMetres <= 0)
             throw new InvalidDataException("Havok matrix extent/unit owner is invalid.");
@@ -327,7 +330,7 @@ internal static partial class NativeNifCollisionBuilder
             GamebryoCoordinate.ConvertBasis(rotation, 1.0f, label),
             GamebryoCoordinate.ConvertVector(new Vector3(
                 value[MatrixM41], value[MatrixM42], value[MatrixM43])) *
-                (HavokToGameUnits * unitsToMetres));
+                (physicalToSourceUnits * unitsToMetres));
     }
 
     private static Basis BasisLookingAlongY(Vector3 y)
@@ -339,16 +342,16 @@ internal static partial class NativeNifCollisionBuilder
         return new Basis(x, y, x.Cross(y).Normalized());
     }
 
-    private static Vector3 Convert(FalloutNifVector3 value, float unitsToMetres) =>
+    private static Vector3 Convert(FalloutNifVector3 value, float unitsToMetres, float physicalToSourceUnits = HavokToGameUnits) =>
         GamebryoCoordinate.ConvertVector(new Vector3(value.X, value.Y, value.Z)) *
-        (HavokToGameUnits * unitsToMetres);
-    private static Vector3 Convert(FalloutNifVector4 value, float unitsToMetres) =>
+        (physicalToSourceUnits * unitsToMetres);
+    private static Vector3 Convert(FalloutNifVector4 value, float unitsToMetres, float physicalToSourceUnits = HavokToGameUnits) =>
         GamebryoCoordinate.ConvertVector(new Vector3(value.X, value.Y, value.Z)) *
-        (HavokToGameUnits * unitsToMetres);
+        (physicalToSourceUnits * unitsToMetres);
     private static Vector3 ConvertScaled(
-        FalloutNifVector3 value, FalloutNifVector3 scale, float unitsToMetres) =>
+        FalloutNifVector3 value, FalloutNifVector3 scale, float unitsToMetres, float physicalToSourceUnits = HavokToGameUnits) =>
         Convert(new FalloutNifVector3(value.X * scale.X, value.Y * scale.Y, value.Z * scale.Z),
-            unitsToMetres);
+            unitsToMetres, physicalToSourceUnits);
     private static Vector3 ConvertAbsolute(FalloutNifVector3 value) =>
         GamebryoCoordinate.ConvertVector(new Vector3(
             MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z))).Abs();

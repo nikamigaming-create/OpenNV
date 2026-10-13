@@ -7,6 +7,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../runtime/src/World/Physics/FalloutPenetration*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../runtime/src/World/Physics/FalloutActorPenetrationUtility*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="../../runtime/src/World/Physics/FalloutBodyPenetrationBackend.cs" Link="FalloutBodyPenetrationBackend.cs" />
     <Compile Include="../../runtime/src/World/Physics/FalloutPhysicalConstructorInputs.cs" Link="FalloutPhysicalConstructorInputs.cs" />
     <Compile Include="../../runtime/src/World/Physics/FalloutCharacterControllerTransformState.cs" Link="FalloutCharacterControllerTransformState.cs" />
     <Compile Include="../../runtime/src/World/Physics/FalloutCharacterCollisionGroups.cs" Link="FalloutCharacterCollisionGroups.cs" />
