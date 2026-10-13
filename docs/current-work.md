@@ -19,10 +19,10 @@ takes with readable labels and visible edit markers. Complete campaigns, other
 mods and physical OpenXR remain separate acceptance work. No accepted gameplay
 save or video exists for this recovery batch.
 
-The user now authorizes publishing the complete source recovery through a checked
-PR, merging it into main and verifying the GitHub backup. The candidate is on
-codex/fo3-offline-clock, based on current origin/main. Preserve unrelated source
-work and the private pre-recovery backup under local/fo3-recovery/source-before-recovery.
+The user now authorizes publishing the complete source recovery through checked
+PRs, merging it into main and verifying the GitHub backup. Each following runtime
+block starts on a fresh codex/ branch from synchronized main. Preserve unrelated
+source work and the private pre-recovery backup under local/fo3-recovery/source-before-recovery.
 Owned assets remain read-only. The existing New Vegas save retains SHA256
 f8304d443bca7d73648d4dd40d5a3406dd98be587ba4ad67fa5933d03eed95f6.
 The development export under tmp/development-runtime/windows is stale and is not
@@ -36,7 +36,7 @@ The user-selected toolchain is now official Godot 4.8-dev7 Mono
 All managed projects target .NET 10. Launcher, installer, CI and validation use
 the shared runtime/godot-toolchain.json pin; archive hashes and actual versions
 are checked. Matching Windows x64 export templates are installed and verified.
-No new product export or publication was made. Release/Debug builds and focused
+No new product export was made. Release/Debug builds and focused
 Main/player/plugin contracts pass. The coordinated 4.8 gate passes, including
 analyzers, native Debug/Release domains, launcher and native Godot loading.
 The private result is runtime-gate-godot-4.8-latest.log. The selected FO3 offline
