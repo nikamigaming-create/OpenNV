@@ -11,6 +11,8 @@ public partial class RuntimeCoordinator
         (_nativeGameplayHud ?? throw new InvalidOperationException("Main scene binding has no actual native HUD.")).BindStandaloneReferenceHud(world.CampaignStandalonePlayerScene);
         world.CampaignStandalonePlayerScene.BindInputManager(
             (_nativeDirectInput ?? throw new InvalidOperationException("Main scene binding has no actual product input manager.")).PlayerManager());
+        world.CampaignStandalonePlayerScene.BindMovementControlConfiguration(
+            (_nativePluginStack ?? throw new InvalidOperationException("Player controls lost the winning record/INI selection.")).IniSettings);
         world.CampaignStandalonePlayerScene.BindActorProcessQueries(world.ReadStandaloneSceneProcessQueries);
         world.CampaignStandalonePlayerScene.BindProcessSceneUpdate(world.UpdateStandalonePlayerProcessScene);
         world.CampaignStandalonePlayerScene.BindPostProcessContext(world.ReadStandalonePlayerSceneContext);

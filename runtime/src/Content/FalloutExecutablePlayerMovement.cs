@@ -61,6 +61,7 @@ internal static partial class FalloutExecutableStringTable
                 Match(code, at + 0x32, [0xeb, 2, 0x33, 0xc0, 0x89, 0x87, 0x84, 1, 0, 0])) ++factories;
         if (factories != 1)
             throw new NotSupportedException("Player lost its actual owned mover allocation/publication and old-owner release.");
+        RequirePlayerMovementControl(code, image, caller);
 
         uint Table(string name, int slots)
         {

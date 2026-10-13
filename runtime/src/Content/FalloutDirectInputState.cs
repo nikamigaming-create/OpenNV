@@ -177,6 +177,11 @@ internal sealed class FalloutDirectInputState
         // polls a device nor rewrites cached bytes after lost acquisition.
         RequireOwner(); return this;
     }
+    internal int ReadRelativeMouseAxis(uint axis)
+    {
+        RequireCurrent();
+        return axis switch { 1 => _x, 2 => _y, 3 => _wheel, _ => 0 };
+    }
     internal IDisposable RetainNativeReader()
     {
         RequireCurrent(); NativeReaders = checked(NativeReaders + 1); return new NativeReader(this);

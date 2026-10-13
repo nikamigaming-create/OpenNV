@@ -9,7 +9,8 @@ internal sealed record FalloutProcessSceneFields(FalloutProcessWeaponEntry? Weap
     Guid? PostActionContext = null, FalloutProcessPostActionScalars? PostActionScalars = null,
     FalloutProcessDetectionActionScalars? DetectionActionScalars = null,
     FalloutActorIdleAnimationFields? IdleAnimation = null, Guid? IdlePrimaryPackage = null,
-    FalloutProcessMovementFlagFields? MovementFlags = null, Guid? ActorValueCache = null)
+    FalloutProcessMovementFlagFields? MovementFlags = null, Guid? ActorValueCache = null,
+    FalloutProcessPhysicalActivityFields? PhysicalActivity = null)
 {
     internal static FalloutProcessSceneFields Constructed => new(null, null);
 }
@@ -50,9 +51,10 @@ internal sealed partial class FalloutActorProcessCommonState
                 PostActionScalars = FalloutProcessPostActionScalars.Constructed,
                 DetectionActionScalars = FalloutProcessDetectionActionScalars.Constructed,
                 IdleAnimation = FalloutActorIdleAnimationFields.Constructed,
-                MovementFlags = FalloutProcessMovementFlagFields.Constructed
+                MovementFlags = FalloutProcessMovementFlagFields.Constructed,
+                PhysicalActivity = FalloutProcessPhysicalActivityFields.Constructed
             }
-            : FalloutProcessSceneFields.Constructed : null;
+            : FalloutProcessSceneFields.Constructed with { PhysicalActivity = FalloutProcessPhysicalActivityFields.Constructed } : null;
 
     internal FalloutProcessPlayerSceneUpdate UpdatePlayerScene(FalloutFormKey actor, long epoch)
     {
@@ -99,5 +101,6 @@ internal sealed partial class FalloutActorProcessCommonState
         ValidatePostActionFields(entry);
         ValidateIdleAnimationFields(entry);
         ValidateMovementFlagFields(entry);
+        ValidatePhysicalActivityFields(entry);
     }
 }

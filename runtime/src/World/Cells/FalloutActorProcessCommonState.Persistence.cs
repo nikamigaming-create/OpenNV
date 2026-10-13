@@ -120,8 +120,9 @@ internal sealed partial class FalloutActorProcessCommonState
             cold.PreviousProcess == cold.CurrentProcess || cold.Sequence < 1 || cold.Sequence > saved.Sequence))
             throw new InvalidDataException("Cold common owner lost its genuine new-process handoff.");
     }
-    // v8 adds only FO3 High movement cells. A v7 New Vegas snapshot has the
-    // same validated field graph, so preserve that selected game's cold path.
+    // v9 adds FO3's independent signed process activity. New Vegas v7/v8
+    // retains the same field graph and can bind a fresh current owner.
     private static bool SupportsSchema(FalloutProcessCommonSnapshot saved) => saved.Schema == Schema ||
-        saved.Schema == "opennv-actor-process-common/v7" && saved.ExecutableSha256 == FalloutSourceMainFamily.NewVegas;
+        saved.Schema is "opennv-actor-process-common/v7" or "opennv-actor-process-common/v8" &&
+        saved.ExecutableSha256 == FalloutSourceMainFamily.NewVegas;
 }

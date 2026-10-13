@@ -61,5 +61,6 @@ internal static partial class FalloutExecutableStringTable
         RequirePlayerPostActionProcess(code, image, caller, constructors[0], highConstructor, timer);
         RequirePlayerIdleAnimation(code, image, caller, constructors[0], highConstructor, timer);
         RequirePlayerMovementFlags(code, image, caller, highConstructor);
+        RequireActorPhysicalActivity(code, image, constructors[0], highConstructor);
     }
 }

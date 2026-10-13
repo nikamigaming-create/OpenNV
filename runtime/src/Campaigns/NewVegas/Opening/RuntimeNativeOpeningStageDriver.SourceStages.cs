@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
@@ -26,6 +27,9 @@ internal partial class RuntimeNativeOpeningStageDriver
             throw new InvalidDataException("Player controls require their actual typed effect.");
         var command = new FalloutPlayerControlCommand(effect.Enable, effect.Controls ??
             throw new InvalidDataException("Player controls are absent."));
+        if (_scripts.References is { HasStandalonePlayerScene: true } world)
+            world.CampaignStandalonePlayerScene.ObserveSourceControlCommand(new FalloutPlayerControlCommandObservation(effect.Source,
+                "actual-shared-script-host-PlayerControls-effect", Guid.NewGuid(), command.Enable, command.Arguments));
         _sourceControls = command.Apply(_sourceControls);
         _player.ApplySourceControls(PlayerControls);
     }

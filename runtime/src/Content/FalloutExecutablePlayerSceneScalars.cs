@@ -37,6 +37,8 @@ internal static partial class FalloutExecutableStringTable
         RequirePlayerSceneReferenceQueue(code, image, start + 0x6f);
         RequirePlayerTimedActions(code, image, caller, constructors[0], Word(code, start + 0x57));
         RequirePlayerPostActionFields(code, image, caller, constructors[0]);
+        RequirePlayerMovementControlConstructor(code, constructors[0]);
+        RequireActorPhysicalAdmissionConstructor(code, image, constructors[0], initialize);
         return Word(code, start + 0x57);
 
         uint Class(string name, int slots)

@@ -3,6 +3,14 @@ using System.Text;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
+if (args is ["--penetration-utility"])
+{
+    PenetrationUtilityContracts.Run(); return 0;
+}
+if (args is ["--penetration-clock"])
+{
+    PenetrationClockContracts.Run(); return 0;
+}
 if (args.Length > 0 && args[0] == "--physical-constructor-inputs")
 {
     if (args.Length == 1) { PhysicalConstructorContracts.Run(); return 0; }
@@ -17,6 +25,8 @@ if (args.Length >= 3 && args[0] == "--physical-models")
     return PhysicalModelContracts.RunOwned(args[1], args[2..]);
 }
 
+PenetrationUtilityContracts.Run();
+PenetrationClockContracts.Run();
 PhysicalConstructorContracts.Run();
 PhysicalModelContracts.Run();
 RagdollConstraintContracts.Run();

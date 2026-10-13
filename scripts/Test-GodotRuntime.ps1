@@ -229,6 +229,15 @@ if ($LASTEXITCODE -ne 0 -or $ragdollText -match $godotFailurePattern -or
 }
 Write-Output "OPENNV_NATIVE_AUTHORED_RAGDOLL_PASS sourceFirstChild=true componentState=true"
 
+$livingOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeLivingPhysicsAudit/NativeLivingPhysicsAudit.tscn 2>&1
+$livingText = $livingOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $livingText -match $godotFailurePattern -or
+    $livingText -notmatch 'OPENNV_NATIVE_LIVING_PHYSICS_PASS' -or
+    $livingText -notmatch 'coldStructuralRegistry=true allocatorPreserved=true') {
+    throw "OpenNV living body, joint or structural world continuation failed:`n$livingText"
+}
+Write-Output 'OPENNV_NATIVE_LIVING_PHYSICS_PASS actualPhysicsServer=true sourceLinks=true currentMemberships=true coldBodies=true coldStructuralRegistry=true allocatorPreserved=true'
+
 $locomotionOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeLocomotionAudit/NativeLocomotionAudit.tscn 2>&1
 $locomotionText = $locomotionOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $locomotionText -match $godotFailurePattern -or

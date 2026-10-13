@@ -15,6 +15,9 @@ internal static partial class SourceMainScriptCallerContracts
         RunPlayerActorDistanceTimer();
         RunPlayerIdleAnimation();
         RunPlayerMovementFlags();
+        RunPlayerPhysicalAdmission();
+        RunPlayerMovementControl();
+        RunPlayerMovementIntegration();
         var main = FalloutMainScriptCallerSource.Read(new(FalloutSourceMainFamily.Fallout3, new('1', 64),
             FalloutImmediateScriptSource.ContractForEngine(FalloutSourceMainFamily.Fallout3)));
         var source = FalloutActorProcessRuntimeDeclaration.ForExecutable(main.EngineSha256);

@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // reselects a package, replays an event or recreates modifier pools.
 internal sealed partial class FalloutActorProcessCommonState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-common/v8";
+    internal const string Schema = "opennv-actor-process-common/v9";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;

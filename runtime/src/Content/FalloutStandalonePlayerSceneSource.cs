@@ -71,7 +71,12 @@ internal sealed record FalloutStandalonePlayerSceneSource(FalloutMainScriptCalle
         "mover-positive-zero-vector-and-two-zero-flags-and-minus-one-timer;" +
         "Actor-wrapper-independent-null-result-or-current-mover-virtual-flags-repeated-before-current-actor-field-child;" +
         "independent-Actor-movement-branch-byte-constructor-zero-not-physical-controller-or-life-state;" +
-        "movement-field-writers-and-following-current-actor-field-child-remain-independent-and-unowned;" +
+        "movement-field-writers-remain-independent-and-unowned;" +
+        "current-Actor-physical-field-actual-source-process-factory-before-independent-movement-control-child;" +
+        "physical-update-retains-real-living-models-admission-and-utility-prefix-on-return-or-failure;" +
+        "following-controls-use-actual-stored-scene-Float32-current-input-and-mover-low-word-masked-cc00;" +
+        "unreturned-physical-or-control-child-never-restores-thread-kind-or-decrements-scene-bracket;" +
+        "cold-physical-and-control-receipts-remain-history-without-callback-input-or-store-replay;" +
         "idle-wait-otherwise-subtracts-current-Main-scaled-timer-unclamped-independent-from-scene-argument;" +
         "unknown-POV-and-full-virtual-children-retain-entered-prefix;" +
         "current-native-factory-and-source-resource-identity-fresh-cold-rebind";

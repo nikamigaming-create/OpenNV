@@ -16,7 +16,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             _viewRequest, _viewRequestArgument, _countdownEnabled, _countdownBits, _referenceScratch, _prelude, _sceneReference, _sceneReferenceArgument, _referenceQuery, _referenceHudCall, _actorScalarReset, _threadContextEntry, _inputManagerQuery, _actorProcessQuery,
             _sceneScalars, _sceneScalarCall, _queuedReferences.References, _sceneQueueCall, _processSceneUpdate, _postProcessContext,
             _timedActions.Capture(), _timedActionsSuppressed, _timedActionsCall, _postActionFields, _postActionsCall,
-            _actorDistanceTimer, _actorDistanceCall, _idleAnimationCall, _moverFields, _movementCall, _actorMovementFlag);
+            _actorDistanceTimer, _actorDistanceCall, _idleAnimationCall, _moverFields, _movementCall, _actorMovementFlag,
+            _controlObservations.ToArray());
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -50,6 +51,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _idleAnimationCall = saved.IdleAnimationCall;
         _moverFields = saved.MoverFields!; _movementCall = saved.MovementCall;
         _actorMovementFlag = saved.ActorMovementFlag;
+        _controlObservations.AddRange(saved.ControlObservations!);
+        _observedControlIds.UnionWith(saved.ControlObservations!.Select(value => value.Command.Observation));
         _cold = new(saved.CapturedProcess, _process, saved.Constructor, _constructor, Next());
         // The old native roots are historical declarations only. A fresh
         // source-role factory must publish on this actual process/thread.
@@ -85,6 +88,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         ValidateActorDistanceCall(saved);
         ValidateIdleAnimationCall(saved);
         ValidateMovementCall(saved);
+        ValidateControlObservations(saved);
         foreach (var owner in saved.FirstPersonHistory)
         {
             var native = owner.Publication;
@@ -145,6 +149,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     {
         Validate(saved);
         if (saved.Retired || saved.Failure is not null || saved.Boundary is not null || saved.Clock is not null ||
+            saved.ControlObservations!.Count != 0 ||
             saved.Camera is { Step: not FalloutStandaloneCameraStep.Returned } ||
             saved.FirstPerson is { Released: null, Publication: { } native } && native.Process != saved.CapturedProcess)
             throw new NotSupportedException("Current standalone Player scene retains a real failed/unowned child or unbound cold native field.");
