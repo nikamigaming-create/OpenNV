@@ -19,10 +19,12 @@ takes with readable labels and visible edit markers. Complete campaigns, other
 mods and physical OpenXR remain separate acceptance work. No accepted gameplay
 save or video exists for this recovery batch.
 
-The user now authorizes publishing the complete source recovery through checked
-PRs, merging it into main and verifying the GitHub backup. Each following runtime
-block starts on a fresh codex/ branch from synchronized main. Preserve unrelated
-source work and the private pre-recovery backup under local/fo3-recovery/source-before-recovery.
+The complete source recovery is merged in [PR192](https://github.com/nikamigaming-create/OpenNV/pull/192).
+All five GitHub checks pass. Local main and origin/main were verified at the same
+recovery baseline, c7da4323ef826b6d784fd83a33498d1ce53cc76b. The source working
+trees are clean; following runtime blocks start on fresh codex/ branches from
+synchronized main. Preserve unrelated source work and the private pre-recovery
+backup under local/fo3-recovery/source-before-recovery.
 Owned assets remain read-only. The existing New Vegas save retains SHA256
 f8304d443bca7d73648d4dd40d5a3406dd98be587ba4ad67fa5933d03eed95f6.
 The development export under tmp/development-runtime/windows is stale and is not

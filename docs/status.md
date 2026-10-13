@@ -3,9 +3,10 @@
 Current work is recovery of New Vegas, standalone FO3 and TTW, with actual
 opening-route gameplay, persistent saves and a phone-friendly video required
 before proceeding through the remaining levels. No accepted video exists yet.
-The latest user direction authorizes publishing all source recovery through a
-checked PR and synchronizing main with GitHub. Source backup and integration do
-not establish working campaigns or qualify a release.
+All 427 source recovery files are merged in
+[PR192](https://github.com/nikamigaming-create/OpenNV/pull/192), with all five
+GitHub checks passing and local main synchronized to origin/main. Source backup
+and integration do not establish working campaigns or qualify a release.
 The selected engine/SDK/launcher/CI pin has moved to official Godot 4.8-dev7 Mono
 and .NET 10. Matching export templates and the complete combined runtime gate
 pass, including Release/Debug, analyzers, native domains and Godot loading.
