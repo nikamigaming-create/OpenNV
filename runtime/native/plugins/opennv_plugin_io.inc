@@ -2,6 +2,11 @@ void* cng_client_import_entry(const std::string&, const std::string&, void*);
 void* cng_client_dynamic_entry(HMODULE, const std::string&);
 void cng_client_flush_detach();
 void cng_client_require_retired();
+BOOL WINAPI io_move_ex_a(LPCSTR, LPCSTR, DWORD);
+BOOL WINAPI io_move_ex_w(LPCWSTR, LPCWSTR, DWORD);
+void* synchronization_import_entry(const std::string&, const std::string&, void*);
+void* synchronization_dynamic_entry(HMODULE, const std::string&);
+void require_native_startup_info(const PluginIoRuntime&);
 constexpr std::uint32_t io_route = 1, io_complete = 2, io_handle_event = 3, io_current_directory = 4;
 constexpr std::uint32_t io_open_api = 1, io_close_api = 2, io_read_api = 3, io_write_api = 4,
     io_directory_api = 5, io_delete_api = 6, io_attributes_api = 7, io_profile_api = 8, io_profile_write_api = 9,
@@ -272,6 +277,7 @@ FARPROC WINAPI io_proc(HMODULE module, LPCSTR pointer) {
             if (auto* replacement = io_entry(name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = window_process_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = cpp_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
+        if (auto* replacement = synchronization_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = crt_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = cng_client_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (crt_io_import_name(filename, name)) throw Fatal(ERROR_NOT_SUPPORTED, "Dynamic CRT file API has no actual selected provider/callable owner.");
@@ -300,6 +306,7 @@ void* io_entry(const std::string& name) {
         {"GetFileSize", reinterpret_cast<void*>(io_size)}, {"GetFileSizeEx", reinterpret_cast<void*>(io_size_ex)}, {"FlushFileBuffers", reinterpret_cast<void*>(io_flush)},
         {"CreateDirectoryW", reinterpret_cast<void*>(io_directory_w)}, {"CreateDirectoryA", reinterpret_cast<void*>(io_directory_a)},
         {"DeleteFileW", reinterpret_cast<void*>(io_delete_w)}, {"DeleteFileA", reinterpret_cast<void*>(io_delete_a)},
+        {"MoveFileExW", reinterpret_cast<void*>(io_move_ex_w)}, {"MoveFileExA", reinterpret_cast<void*>(io_move_ex_a)},
         {"RemoveDirectoryW", reinterpret_cast<void*>(io_remove_w)}, {"RemoveDirectoryA", reinterpret_cast<void*>(io_remove_a)},
         {"GetFileAttributesW", reinterpret_cast<void*>(io_attributes_w)}, {"GetFileAttributesA", reinterpret_cast<void*>(io_attributes_a)},
         {"GetFileAttributesExW", reinterpret_cast<void*>(io_attributes_ex_w)}, {"GetFileAttributesExA", reinterpret_cast<void*>(io_attributes_ex_a)},
@@ -344,6 +351,7 @@ void io_prepare(const Frame& frame) {
     LARGE_INTEGER end{};
     if (!SetFilePointerEx(owner->stdout_file, end, nullptr, FILE_END) || !SetFilePointerEx(owner->stderr_file, end, nullptr, FILE_END) ||
         !SetStdHandle(STD_INPUT_HANDLE, nullptr) || !SetStdHandle(STD_OUTPUT_HANDLE, owner->stdout_file) || !SetStdHandle(STD_ERROR_HANDLE, owner->stderr_file)) throw Fatal(GetLastError(), "Native private diagnostic channel publication failed.");
+    require_native_startup_info(*owner);
     state->io = std::move(owner); crt_prepare_preentry_standard(); Bytes data; data.put(1U); reply(frame, ERROR_SUCCESS, "", data);
 }
 void io_bind_imports(HMODULE image) {
@@ -379,7 +387,8 @@ void io_bind_imports(HMODULE image) {
             const auto crt_pure = crt_pure_import_name(library, name);
             auto* window_bound = window_process_import_entry(library, name, prior);
             auto* cpp_bound = cpp_import_entry(library, name, prior);
-            auto* replacement = window_bound ? window_bound : cpp_bound ? cpp_bound : platform ? io_entry(name) :
+            auto* synchronization_bound = synchronization_import_entry(library, name, prior);
+            auto* replacement = window_bound ? window_bound : cpp_bound ? cpp_bound : synchronization_bound ? synchronization_bound : platform ? io_entry(name) :
                 crt_file || crt_pure ? crt_import_entry(library, name, prior) : cng_client_import_entry(library, name, prior);
             if (!replacement) {
                 if (crt_file || crt_pure || !owner.non_io_imports.count(library + "!" + name)) throw Fatal(ERROR_NOT_SUPPORTED, "Imported function has neither actual native I/O nor selected non-I/O ownership.");

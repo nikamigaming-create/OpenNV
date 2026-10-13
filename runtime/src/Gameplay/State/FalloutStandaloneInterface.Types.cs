@@ -26,4 +26,5 @@ internal sealed record FalloutStandaloneInterfaceSnapshot(string Schema, Fallout
     FalloutStandaloneInterfaceObject? Dialog, IReadOnlyList<FalloutStandaloneInterfaceObject> Objects,
     Guid? Alternate, FalloutStandaloneInterfaceColdHandoff? ColdHandoff, string? Boundary,
     string? Failure, bool Retired, FalloutStandaloneMenusSnapshot Menus,
-    FalloutInterfaceActorDistanceSnapshot? ActorDistances = null, FalloutStandaloneActorDistanceSort? ActorDistanceSort = null);
+    FalloutInterfaceActorDistanceSnapshot? ActorDistances = null, FalloutStandaloneActorDistanceSort? ActorDistanceSort = null,
+    FalloutHudInterfaceFields? HudControl = null, IReadOnlyList<FalloutSourceHudMenuBinding>? HudMenus = null);

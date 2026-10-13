@@ -20,6 +20,7 @@ internal sealed partial class RuntimeLiveHarness : Node
     private Task<LiveHarnessFileWrite>? _stateWrite;
     private ulong _stateWriteStartedMilliseconds;
     private bool _statePublicationRequested;
+    private bool _retired;
     private long _statePublicationDeferredRequests;
     private LiveHarnessFileWrite? _lastFileWrite;
     private long _statePublicationSharingRetries;
@@ -128,6 +129,7 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     public override void _Process(double delta)
     {
+        if (_retired) return;
         var now = Time.GetTicksMsec();
         var stop = Path.Combine(_directory, "stop.request");
         if (File.Exists(stop))
@@ -556,10 +558,11 @@ internal sealed partial class RuntimeLiveHarness : Node
         _lastStateWriteMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
 
-    private void BeforeDraw() => _trace?.BeforeDraw();
+    private void BeforeDraw() { if (!_retired) _trace?.BeforeDraw(); }
 
     private void AfterDraw()
     {
+        if (_retired) return;
         _frameIntervals.Record(Stopwatch.GetTimestamp() * (1000.0 / Stopwatch.Frequency));
         if (_pendingCapture == 0 && _liveFrames is null && _trace?.Pending != true)
             return;
@@ -616,9 +619,15 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     private static void AtomicWrite(string path, string text) => LiveHarnessAtomicFile.Write(path, text);
 
-    public override void _ExitTree()
+    public override void _ExitTree() => Retire();
+
+    internal void Retire()
     {
+        if (_retired) return;
+        _retired = true;
+        SetProcess(false);
         GD.Print($"OPENNV_LIVE_HARNESS_RETIRE phase=enter stateWritePending={_stateWrite is not null}");
+        _campaignBot.Stop();
         _bot?.Stop();
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
         FinishReplayDeliveryJournal("Playback ended with its runtime owner.");

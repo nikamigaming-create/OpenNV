@@ -47,9 +47,16 @@ internal static class FalloutPlayerControlOrientation
         if (string.IsNullOrWhiteSpace(read.Base.OwnerPlugin) || read.Base.ObjectId == 0 ||
             read.BaseSignature is not ("NPC_" or "CREA"))
             throw new InvalidDataException("Player yaw getter has no exact current winning Actor base.");
-        var yaw = Finite(read.ReferenceYawBits); var offset = Finite(playerOffset);
-        if (read.IsCharacter && read.BaseSignature == "NPC_" && (read.BaseFlags & NpcTiltYaw) != 0)
-            yaw = Normalize((float)(yaw + Finite(read.ReferenceRollBits)));
+        return YawFields(read.ReferenceYawBits, read.ReferenceRollBits, read.IsCharacter, read.BaseSignature, read.BaseFlags, playerOffset);
+    }
+    // The source virtual yaw getter also has non-Main callers. This pure field
+    // arithmetic never manufactures a control-read lease for those callers.
+    internal static uint YawFields(uint referenceYaw, uint referenceRoll, bool isCharacter,
+        string baseSignature, uint baseFlags, uint playerOffset)
+    {
+        var yaw = Finite(referenceYaw); var offset = Finite(playerOffset);
+        if (isCharacter && baseSignature == "NPC_" && (baseFlags & NpcTiltYaw) != 0)
+            yaw = Normalize((float)(yaw + Finite(referenceRoll)));
         return BitConverter.SingleToUInt32Bits(Normalize((float)(yaw + offset)));
     }
     internal static float WorldFovScale(float declared, uint currentBits)
@@ -65,6 +72,7 @@ internal static class FalloutPlayerControlOrientation
             throw new NotSupportedException("source-Player-control-nonfinite-orientation-arithmetic-unowned");
         return value;
     }
+    internal static uint NormalizeBits(uint bits) => BitConverter.SingleToUInt32Bits(Normalize(BitConverter.UInt32BitsToSingle(bits)));
     private static float Normalize(float value)
     {
         if (!float.IsFinite(value))

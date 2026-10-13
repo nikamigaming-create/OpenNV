@@ -2,150 +2,144 @@
 
 ## Acceptance
 
-Recover ordinary gameplay and complete saves for New Vegas, standalone Fallout 3
-and Tale of Two Wastelands with the selected mod stacks. Headless, desktop and
-OpenXR share authoritative C# gameplay and persistence. Godot adapts physical
-resources, input and presentation. Component checks cannot establish a campaign,
-matched retail parity or complete native mod support.
+Recover ordinary New Vegas, Fallout 3 and Tale of Two Wastelands gameplay,
+complete saves and the unchanged selected mod stacks. Headless, desktop and
+OpenXR share authoritative C# gameplay and persistence. Every object, event,
+state transition, audio voice, UI element, draw, frame and pixel remains in the
+parity denominator. Matched retail evidence is required for a parity claim.
 
-The first acceptance runs are New Vegas's Goodsprings quest and departure;
-FO3's Vault 101 quests, exit and entry into Megaton; and TTW's Vault route,
-Megaton arrival and a Megaton quest. Each must include source-permitted complete
-saves, normal Quit and three cold Continue cycles, including transitions. Record
-actual rendered takes as phone-friendly H.264/AAC fast-start videos with readable
-labels and visible edit markers. No accepted gameplay save or quest video exists.
+The first accepted routes must finish Goodsprings and depart; finish Vault 101,
+exit and reach Megaton; and finish TTW's Vault route, reach Megaton and complete
+a Megaton quest. Each includes complete saves, normal Quit and three cold
+Continue cycles, including transitions. Produce phone-friendly H.264/AAC
+fast-start videos from actual rendered gameplay with readable labels and visible
+edit markers. No complete gameplay save or quest run is accepted.
 
-The current bounded block binds FO3 living Player physics and retains actual
-control-writer failures. The complete source recovery is already
-published in [PR192](https://github.com/nikamigaming-create/OpenNV/pull/192).
-Keep completed blocks checked and merged before the next feature branch.
-Preserve unrelated work and private recovery inputs; owned files
-remain read-only. The retained New Vegas save must keep SHA256
-f8304d443bca7d73648d4dd40d5a3406dd98be587ba4ad67fa5933d03eed95f6.
+A private 36-second FO3 startup video from main shows Boy selection and character
+creation navigation. It has audio and a visible edit, but the birth background
+is black and it does not show quest completion or save/Continue. It is an
+incomplete startup check, not a showcase qualification.
 
-## Verified physics and next Player owner
+## Current implementation
 
-The living physical model now constructs source-ordered wrappers, actual bodies
-and linked constraints from the owned model graph. Its C# world owns admission,
-unsigned body identifiers, current islands and ordered master/slave membership.
-The Godot adapter allocates actual PhysicsServer bodies, shapes and joints without
-rendered nodes or GPU allocation. Current transform, mass, velocity, center of
-mass, filter, active state, shape scale and source identities have cold body
-reconstruction. A separate structural snapshot preserves actual admission order,
-constraint membership, island relationships and the next identifier. Restore
-validates detached source objects before publishing fresh resources and never
-replays Actor registration, clock reads, ordering or impulses.
+The published living-physics block is on main. Authored and FO3/FNV/TTW owned
+skeleton checks each construct 18 real PhysicsServer bodies and 17 joints,
+retire and reconstruct fresh resources, and preserve dynamics, registry order,
+islands, constraints and the next body identifier. FO3's actual Player physical
+child returns through source mode/state/process predicates and the retained
+penetration utility. Contacts, solver parity, canonical controller hulls and
+phantoms, and live animation-driven physical poses remain separate gaps.
 
-Native headless checks on the FO3, FNV and TTW owned third-person skeleton data
-each construct 18 real bodies and 17 real joints, then retire and reconstruct
-fresh resources with exact structural-registry JSON and preserved allocation.
-The authored native check rejects malformed source links/indices/islands and
-pending or unknown physical operations before cold publication. These are
-physical-component results under the reviewed constructor contract; they do not
-qualify the three games' controller, solver, contact or campaign parity.
+The current feature block binds the actual Player control command before
+bootstrap. Its C# owners retain source-ordered flag stores, HUD XML writes,
+shared Interface transitions, actual cached timer and thread-kind scope, and
+the current Actor process fighting query. Genuine input publication transfers
+the prepared fields to the gameplay thread. Failed effects retain committed
+stores and refuse complete saves. FO3 semantic control defaults now use the
+same verified argument expansion as the flag writer; FNV's unverified legacy
+default path is kept separate.
 
-The Actor penetration utility owns ordered registration, connected systems,
-source depth ordering, body/bone mappings, detector state, filter mutations,
-point velocity, impulse clamps, retry/deferred state and failed cold prefixes.
-Its retained performance-counter owner follows the selected executable's
-frequency conversion, Float32 stores and signed duration truncation. It outlives
-model replacement. Actual all-hit query ordering/reverse flags, source contact
-production, canonical controller hull/phantom/proxy construction and live
-animation-driven physical poses remain separate unowned capabilities.
+C# now owns the ordinary World camera/frustum/matrix constructor, retained FOV,
+raw Player reference rotations, and complete save associations. The Godot
+adapter supplies current viewport extent and renderer presence only. Cold
+restoration binds fresh identities without constructor, clock, command, tile
+transition or camera replay. Later SceneGraph clip queries, rotation mask-two
+callbacks and nonzero Player orientation writers remain explicit refusals.
 
-Production FO3 binds this retained Actor field to the genuine current first-
-person and reference model factories. Admission reads the actual Actor mode,
-independent physical state and each current process activity query. Constructor
-mode/state/activity zero selects reference-model motion six and registration
-false. The empty utility update returns only after those real models and source
-predicate queries; first-person body count never selects success. Source motion
-conversion happens detached, followed by actual body/joint world admission.
-Physical equipment attachments and source WeaponObject producers remain explicit
-refusals when the real selected actor requires them.
+Authored control/HUD/process and projection/cold-association checks pass. Owned
+FO3 audits pass the logical World constructor, source camera and raw fields, and
+all seven actual HUD settings plus the winning XML and initialization. Crosshair
+is a Prefs Boolean; safe zones are Main integers; dimensions belong to Renderer.
+The effective owned dimensions are 1176 by 664. Source checks derive actual
+constructor-selected classes and table extents instead of assuming another
+class's layout.
 
-A fresh 4.8 headless FO3 New Game returns from the physical child with 18 bodies,
-17 joints and an unregistered zero-system utility. The entered Main frame remains
-unreturned. Its following control owner is constructed on actual gameplay input
-publication, after worker preparation; source-thread checks remain enforced.
-The worker/publication, foreign-thread, reentry and failed cold-history contracts
-pass. Original cached X/Y/wheel reads occur after the actual input getter and two
-independent control-cache stores. Typed configuration and Player constructor
-fields now have source-backed owners. Actual bootstrap/shared command observations
-retain their original arguments and invalidate stale control fields without
-replaying stores or effects. The next writer boundary is
-source-Player-control-observed-command-flag-writer-unbound. Its mandatory
-input/Actor/view effects, then current world-projection FOV and reference rotation
-producers must be owned before control can return. A camera projection or Godot
-basis cannot supply those fields.
+The original compiled startup command in Fallout3.esm:01f388 now returns with
+its five explicit one operands and mask 1F. HUD, fighting and POV effects return.
+POV reads the genuine first-person field, stores its distinct camera-mode byte,
+and on the constructor-null arm stores positive zero to the independent shared
+camera scalar. Its nonnull C3 camera child remains refused after the preceding
+byte store. Neither branch borrows the separate model-view byte or Godot absence.
+Three cold component cycles retain HUD constructor lifetimes and POV store
+history without replaying original effects.
 
-The headless diagnostic used ordinary Boy, name confirmation, character-creation
-page controls, Done/Yes, Create New Save and normal Quit. It has zero state-
-publication loss, reaches CG00 stage 65 and retires source owners normally.
-No complete slot was published and no frames were recorded. This selected run
-proves physical-child and replacement/retirement behavior, not the quest route.
-Actual playerScene telemetry now publishes the independently retained physical
-and control failure prefixes. The final gated candidate verifies 18 admitted
-bodies, 17 joints, next identifier 18, zero physical-capture refusals, genuine
-10,000,000 Hz counter frequency and one actual bootstrap control observation.
-Its control word is correctly unavailable rather than stale constructor state.
+The fresh native headless run publishes Player in the Vault birth cell and
+returns the physical and zero-input control children. Ordinary input reaches
+Boy selection, name entry and character-creation completion at CG00 stage 65.
+The whole Player frame refuses its following source services. Diagnostic capture
+now retains successful movement-child returns independently of that later
+failure. One state-publication interval exceeded its budget; this run is not
+matched parity or performance evidence.
 
-## Other reached failures
+The final native shutdown retry again reaches stage 65 with zero state-publication
+failures, then normal Quit exits with code zero. The collector drains and removes
+callbacks before scene disposal; all 288 prototypes and source owners retire,
+without late disposed-node reads or leak warnings. This proves shutdown of the
+reached opening state, not complete save/Continue or quest gameplay.
 
-Full FO3 saving still waits on the entered source Player invocation and its
-remaining movement/control, camera, equipment and context services. Physical
-trigger contacts/phase/order and complete cold physical publication remain
-unowned. Creature guard/idle behavior for Fallout3.esm:054426, 05442f and 054430,
-editor travel for Fallout3.esm:0300ef and disabled Mom voice continuation also
-remain visible divergences. Completing one physical component cannot release
-these save guards. Cold Continue remains unexecuted.
+Ordinary Create New Save fails without committing a slot. Independent menu
+transition, actor registration/process, experience notification and physical
+contact owners also block saving. The next Player service is the actual High
+teleport-fade update and opacity callback. Current first-person publication is
+nonnull, so completing it requires C# ownership of logical scene bounds,
+ordered children and mutable shader alpha; declarations or a null shortcut are
+insufficient. Repeated whole Player/Main return and cold Continue remain open.
 
-The selected FNV and TTW retries retain all 10 and 18 plugins, with three and six
-native modules respectively. Both stop without a complete save. JIP Query/Load
-and protocol 38 pass; callback 50 reaches a typed task-dispatch table mutation
-whose real command task queue producer is still missing. TTW separately retains
-nine JohnnyGuitar, 84 Stewie and four TTW NVSE callable imports. FNV XR requests
-Console/PlayerControls interfaces, ShowOff reaches Data function one without its
-native class/cache/extra-data owner, and XR unload retains a child EOF. Do not
-omit selected modules, fabricate interfaces or bypass their failures. TTW's
-owned installed DATA and required selected dependency roots are already resolved.
+## Native mods and performance
 
-The pinned engine is official Godot 4.8-dev7 Mono, Godot.NET.Sdk 4.8.0-dev.7 and
-.NET SDK 10.0.401, with matching verified export templates. Direct owned DDS
-uploads still report zero streamed/budget bytes despite 1.37-1.68 GB total
-textures through FO3 birth/character creation. Complete texture streaming and
-whole-game performance remain unaccepted. The development export is stale.
-Engine-owned command input, headless play and rendered viewport readback work
-independently of foreground desktop activation. Retail observation and physical
-OpenXR acceptance remain separate evidence lanes.
+Actual x86 caller checks pass paired MoveFileExA/W private routes, replacement,
+Unicode, real errors and cold tombstones. Real Windows SRW byte returns,
+contention, standard handles, startup info, MSVC entropy, caught/unhandled
+breakpoints, retirement and fresh retries pass. Exact MSVC stream seek/tell,
+hidden position ABI, state predicates, exceptions and fresh retries pass through
+the retained real provider. These close reached callable boundaries; they do
+not qualify an unchanged full mod or game.
+
+Retain all selected FNV/TTW plugins and native modules. The last complete-stack
+retries preserve FNV's 10 plugins/three modules and TTW's 18 plugins/six modules.
+JohnnyGuitar's unowned imports fall from nine to five, Stewie's from 84 to 81,
+and TTW NVSE's from four to zero. These are callable admission results, not mod
+behavior qualification. Both stacks still stop without complete saves: JIP
+task-dispatch mutation needs its real command task queue; remaining parallel
+worker/TLS imports, XR interfaces, ShowOff native data/cache owners and XR unload
+remain unresolved. General cross-mod task execution also needs co-resident
+original-module address-space ownership; per-DLL companion processes cannot
+execute another module's pointer. Do not install a writable table or fabricate
+empty queues/form maps to report success.
+
+The engine pin is official Godot 4.8-dev7 Mono with .NET SDK 10.0.401. Direct
+owned DDS uploads still lack an accepted streaming budget/residency path.
+Current headless startup script preparation takes approximately 43-57 seconds
+on this machine. Full loading, frame-time, memory, thread-scaling and rendered
+performance qualification remain open. Keep recording off for development and
+headless checks. Remove temporary capture frames after inspection/export.
 
 ## Verification and next executable outcome
 
-Focused Debug/Release penetration utility, source clock, physical admission,
-process-query and Player control-prefix checks pass. Native authored and three
-owned skeleton cold checks pass. The full candidate gate and selected owned FO3
-audit have been repeated for this candidate. The complete 4.8 gate passes,
-including malformed inverse-mass refusal before any native cold mutation.
-Run scripts/Test-GodotRuntime.ps1 with the pinned 4.8 console executable and
-scripts/Test-Fallout3OfflineStartup.ps1 with the owned FO3 DATA, then git diff
---check. The offline audit distinguishes its expected desktop-input absence
-from the actual unfinished Player body; that remaining failed game check is not
-a passing gameplay audit. It has 33 passes, one expected input boundary and one
-failed offline Player child among 35 checks. The real native run additionally
-proves physical return and its following observed-control-writer refusal.
-NativeLivingPhysicsAudit is now part of the gate. git diff --check passes.
+The complete pinned 4.8 gate passes, including Release/Debug builds, formatting,
+analyzers, contracts, native domains and Godot checks. Actual Release x86 callers
+also pass the new Windows, file-move and stream methods. The expanded selected
+FO3 audit has 33 passes, one expected desktop-input boundary and one unfinished
+offline Player check among 35; selected native HUD and idle-model audits also
+pass. These remain component checks.
 
-Private component/live evidence remains under local/fo3-recovery. Keep
-living-physics-*-latest.log, physical-world-runtime-gate-latest.log,
-physical-world-fo3-offline-latest.log and the headless-physical-world-final
-receipt/logs while investigating. No private owned
-assets, saves, raw reverse-engineering output or captures are public inputs.
-Recording stays off during development and headless checks. Inspect/export only
-specific visual takes and clean exact temporary frames in finally paths.
+Returned cold controls now bind fresh configuration and orientation before the
+first current call. A real Main-caller test restores history, publishes fresh
+input and fields, then executes two new calls while refusing foreign owners,
+replay and rebinding after returned or failed current entry. The affected owned
+FO3 command audit also passes. The final full pinned 4.8 gate passes on the
+corrected candidate. Publish it through checked CI, merge and synchronize main.
 
-Next, bind real world-projection FOV and retained reference rotation/control
-writers, advance the original Player call until repeated frames return and then
-qualify a complete save/normal Quit/cold Continue. In the same shared ownership
-path, close actual controller/contact producers and the reached native mod
-owners. Execute the three ordinary quest routes and record their rendered proof
-only when their gameplay can finish. Publish each complete bounded block through
-a checked PR, merge it, synchronize local main to origin/main and start fresh.
+Next, own teleport fade and its real logical-scene opacity callback, advance the
+actual Player invocation until repeated frames return, and qualify complete
+save/Quit/cold Continue. Continue closing canonical
+controller/contact and reached mod owners. Then finish and record the three
+ordinary quest routes and compare equivalent retail states across all evidence
+lanes. Publish completed bounded work through checked PRs, merge, synchronize
+local main with origin/main, and start each subsequent block on a fresh branch.
+
+Private diagnostics are under local/fo3-recovery; requested video is under
+local/deliverables. Preserve the New Vegas save with SHA256
+f8304d443bca7d73648d4dd40d5a3406dd98be587ba4ad67fa5933d03eed95f6.
+Owned assets, saves, executables, raw reverse-engineering material and private
+captures are never public repository inputs.

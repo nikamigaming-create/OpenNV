@@ -3,7 +3,7 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutPlayerThreadContextSource(FalloutMainScriptCallerSource Main, string Contract,
     uint InitialKind, byte InitialInitialized, uint PlayerKind, uint InitialModel = 0, uint InitialReference = 0)
 {
-    private const string Rules = "source-FO3-Player-thread-context/v3;" +
+    private const string Rules = "source-FO3-Player-thread-context/v4;" +
         "current-source-calling-thread-loaded-kind-fifty-nine-and-initialized-zero;" +
         "on-demand-callback-reason-two-initialized-byte-store-before-empty-initializer-range;" +
         "first-initializer-before-previous-kind-read-second-initializer-before-kind-store;" +
@@ -11,6 +11,9 @@ internal sealed record FalloutPlayerThreadContextSource(FalloutMainScriptCallerS
         "kind-scope-remains-entered-until-returned-Player-body-before-epilogue;" +
         "epilogue-same-current-thread-index-initializer-and-prior-kind-restore-before-virtual-return;" +
         "successive-source-invocations-reenter-initialized-thread-with-fresh-receipts;" +
+        "Menu-transition-allocation-same-on-demand-thread-kind-owner-initializes-before-save-and-enters-thirteen;" +
+        "returned-Menu-allocation-restores-actual-captured-prior-kind-and-failed-child-never-invents-restoration;" +
+        "Menu-transition-control-mode-four-is-independent-from-current-thread-kind;" +
         "loaded-current-thread-model-and-reference-cache-pointers-null-independent-from-kind-and-common-body;" +
         "Player-model-current-thread-cache-reference-comparison-before-loaded-reference-model-fallback;" +
         "model-cache-writers-remain-independent-and-cold-retains-history-without-replay;" +

@@ -57,20 +57,24 @@ internal sealed partial class FalloutPlayerMovementControlState
     private uint _firstCacheWord, _secondCacheWord;
     private uint _yawCache, _pitchCache;
     private byte _cameraMode, _controllerCameraMode;
+    private readonly FalloutPlayerControlConfigurationSnapshot? _historicalConfiguration;
     private FalloutPlayerControlConfiguration? _configuration;
     private IFalloutPlayerControlOrientationOwner? _orientation;
     internal FalloutPlayerControlFieldsState Fields { get; }
     private FalloutPlayerMovementControlCall? _call;
     private string? _failure;
-    private bool _writing, _retired;
+    private bool _writing, _retired, _currentInvocationEntered;
 
     internal FalloutPlayerMovementControlState(FalloutPlayerMovementControlSource source, string stack,
-        Guid process, FalloutPlayerMovementControlSnapshot? saved = null)
+        Guid process, FalloutPlayerMovementControlSnapshot? saved = null, FalloutPlayerControlFieldsState? fields = null)
     {
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack);
         if (process == Guid.Empty) throw new ArgumentException("Player movement/control needs its actual Main process.", nameof(process));
         _source = source; _stack = stack; _process = process;
-        Fields = new(source, stack, process, saved?.Fields);
+        Fields = fields ?? new(source, stack, process, saved?.Fields);
+        var currentFields = Fields.Capture();
+        if (currentFields.Source != source.Identity || currentFields.Stack != stack || currentFields.Process != process)
+            throw new InvalidOperationException("Player movement/control selected foreign source Player fields.");
         if (saved is null) return;
         Validate(saved);
         if (saved.Source != source || saved.Stack != stack || saved.CapturedProcess == process || saved.Retired)
@@ -82,22 +86,23 @@ internal sealed partial class FalloutPlayerMovementControlState
         _cameraMode = saved.CameraMode; _yawCache = saved.YawCache; _pitchCache = saved.PitchCache;
         _orientationStores = saved.OrientationStores;
         _controllerCameraMode = saved.ControllerCameraMode;
+        _historicalConfiguration = saved.Configuration;
     }
 
     internal void BindConfiguration(FalloutNumericIniSettings settings)
     {
         RequireOwner();
-        if (_configuration is not null || _call is not null && _failure is null)
+        if (_configuration is not null || _currentInvocationEntered)
             throw new InvalidOperationException("Player controls changed configuration after actual entry/publication.");
         var current = new FalloutPlayerControlConfiguration(_source, _stack, settings);
-        if (_call?.Configuration is { } previous && previous != current.Fields)
+        if (_historicalConfiguration is { } previous && previous != current.Fields)
             throw new InvalidDataException("Cold Player controls changed their exact configured declarations or layered values.");
         _configuration = current;
     }
     internal void BindOrientation(IFalloutPlayerControlOrientationOwner owner)
     {
         RequireOwner(); ArgumentNullException.ThrowIfNull(owner);
-        if (_orientation is not null || _call is not null)
+        if (_orientation is not null || _currentInvocationEntered)
             throw new InvalidOperationException("Player controls changed orientation ownership after actual entry/publication.");
         owner.RequireCurrent(); RequireOrientationIdentity(owner); _orientation = owner;
     }
@@ -108,9 +113,12 @@ internal sealed partial class FalloutPlayerMovementControlState
         RequireOwner(); ArgumentNullException.ThrowIfNull(input);
         if (_failure is { } failure) throw new NotSupportedException(failure);
         if (main == Guid.Empty || ordinal < 1 || _call is { Returned: false } ||
-            _call is { } previous && ordinal <= previous.MainOrdinal ||
+            _call is { } previous && (main == previous.Main || previous.Process == _process && ordinal <= previous.MainOrdinal) ||
             (moverWord & ~FalloutPlayerMovementControlSource.MoverMask) != 0 || firstArgument != 0 || lastArgument != 0)
             throw new InvalidOperationException("Player movement/control changed or replayed its actual Main child and source arguments.");
+        // Restored calls are immutable history. Fresh dependencies bind until
+        // this process enters its first call; failure closes that phase too.
+        _currentInvocationEntered = true;
         _writing = true; var fault = _reentry;
         _call = new(main, ordinal, Next(), _sequence, sceneArgument, moverWord, firstArgument, lastArgument,
             FalloutPlayerMovementControlStep.SourceMode, null, null, null, 0, [], false, null, _process);
@@ -124,6 +132,7 @@ internal sealed partial class FalloutPlayerMovementControlState
             var current = input.ReadManagerOwner();
             if (!ReferenceEquals(current, input) || current.Source != _stack)
                 throw new InvalidOperationException("Player movement/control selected a foreign current input owner.");
+            if (Fields.HasActualInput) Fields.RequireActualInput(current);
             _call = _call with
             {
                 InputFactory = current.Factory,
@@ -214,7 +223,7 @@ internal sealed partial class FalloutPlayerMovementControlState
         RequireOwner(allowRetired: true);
         var saved = new FalloutPlayerMovementControlSnapshot(Schema, _source, _stack, _process, _factory,
             _sequence, _mode, _inhibition, _joystickAvailable, _joystickSuppressed, _firstCacheWord,
-            _secondCacheWord, _cacheStores, _call, _failure, _retired, _configuration?.Fields ?? _call?.Configuration,
+            _secondCacheWord, _cacheStores, _call, _failure, _retired, _configuration?.Fields ?? _historicalConfiguration,
             Fields.Capture(), _cameraMode, _yawCache, _pitchCache, _orientationStores, _controllerCameraMode);
         Validate(saved); return saved;
     }

@@ -4,6 +4,23 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--audit-owned-player-control-hud", var ownedControlHudData])
+{
+    Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedPlayerControlHud(ownedControlHudData);
+    return;
+}
+
+if (args is ["--player-world-orientation-contracts"])
+{
+    PlayerWorldOrientationContracts.Run();
+    return;
+}
+if (args is ["--audit-owned-player-world-orientation", var ownedOrientationData])
+{
+    Environment.ExitCode = PlayerWorldOrientationContracts.AuditOwned(ownedOrientationData);
+    return;
+}
+
 if (args.Length >= 3 && args[0] == "--audit-owned-sound-startup")
 {
     Environment.ExitCode = OwnedSoundStartupProbe.Run(args[1], args[2], args[3..]);
@@ -1521,6 +1538,7 @@ PlayerActorValueContracts.Run();
 PerkParameterContracts.Run();
 InputControlContracts.Run();
 HeadlessInputContracts.Run();
+PlayerWorldOrientationContracts.Run();
 PlayerMoveContracts.Run();
 LoadingScreenContracts.Run();
 CharacterGenerationContracts.Run();

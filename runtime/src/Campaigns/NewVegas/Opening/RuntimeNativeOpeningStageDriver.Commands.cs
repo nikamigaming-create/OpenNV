@@ -262,7 +262,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             _playerSkills.CaptureValues(), _playerAbilities.Capture(), CaptureCurrentPlayerStatistics(), CaptureCurrentProcessQueues(),
             CaptureSourceIndexedInterfaceSounds(), _scripts.References.CaptureCampaignSharedScripts(),
             _imageSpaceState.CaptureDoubleVisionClock(), CaptureSourceRoomPortals(), _conversation!.CaptureContinuation(),
-            _imageSpaceState.HasSourceMainImages ? _imageSpaceState.CaptureSourceMainImages() : null);
+            _imageSpaceState.HasSourceMainImages ? _imageSpaceState.CaptureSourceMainImages() : null,
+            _scripts.References.HasStandalonePlayerScene ? _scripts.References.CaptureStandaloneWorldProjection() : null);
     }
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)

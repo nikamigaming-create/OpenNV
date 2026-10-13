@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // reselects a package, replays an event or recreates modifier pools.
 internal sealed partial class FalloutActorProcessCommonState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-common/v9";
+    internal const string Schema = "opennv-actor-process-common/v10";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;
@@ -39,7 +39,9 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         _transfer is { Failure: not null } failedTransfer ? "actual-process-common-transfer:" + failedTransfer.Owner + ":" + failedTransfer.Failure :
         _transfer is { Initialized: false } transfer ? "actual-process-common-transfer:" + transfer.Owner + ":" + (transfer.Failure ?? "source-prefix-incomplete") :
         _current.Values.FirstOrDefault(entry => entry.Boundary is not null) is { } failed ?
-            "actual-process-common:" + failed.Source.Reference + ":" + failed.Boundary : null;
+            "actual-process-common:" + failed.Source.Reference + ":" + failed.Boundary :
+        _current.Values.FirstOrDefault(entry => entry.SceneFields?.WeaponDrawn is { Available: false }) is { } weapon ?
+            "source-Actor-weapon-drawn-observed-writer-unbound:" + weapon.Source.Reference : null;
     internal object State => new
     {
         source = _source.Contract,
@@ -240,6 +242,6 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
     {
         if (_disposed) return; RequireNotBusy();
         if (_transfer is { Initialized: false }) throw new NotSupportedException("Actual common process retirement retains an unfinished old/new ownership transfer.");
-        _disposed = true; _current.Clear(); _retired.Clear(); _pending = null;
+        _disposed = true; _current.Clear(); _retired.Clear(); _weaponObservations.Clear(); _pending = null;
     }
 }

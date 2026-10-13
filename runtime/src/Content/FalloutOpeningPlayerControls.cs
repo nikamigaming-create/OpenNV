@@ -24,8 +24,27 @@ internal sealed record FalloutPlayerControlCommand(
     private const int SneakingIndex = 6;
 
     internal FalloutPlayerControlState Apply(FalloutPlayerControlState state)
+        => Apply(state, ExpandArguments(Enable ? [true, true, true, true, true, true, true] :
+            [true, true, true, true, false, false, false]));
+
+    internal FalloutPlayerControlState ApplyStandalone(FalloutPlayerControlState state)
+        => Apply(state, SelectedStandaloneArguments());
+
+    internal bool[] SelectedStandaloneArguments()
+        // The reviewed FO3 handler defaults movement, Pip-Boy and fighting.
+        // Its fourth argument (POV) has an independent zero default.
+        => ExpandArguments(Enable ? [true, true, true, true, true, true, true] :
+            [true, true, true, false, false, false, false]);
+
+    private bool[] ExpandArguments(bool[] defaults)
     {
         if (Arguments.Count > 7) throw new InvalidDataException("Player control mask has more than seven flags.");
+        for (var index = 0; index < Arguments.Count; ++index) defaults[index] = Arguments[index];
+        return defaults;
+    }
+
+    private FalloutPlayerControlState Apply(FalloutPlayerControlState state, bool[] arguments)
+    {
         var values = new[]
         {
             state.Movement,
@@ -36,9 +55,6 @@ internal sealed record FalloutPlayerControlCommand(
             state.RolloverText,
             state.Sneaking,
         };
-        var arguments = Enable ? new[] { true, true, true, true, true, true, true } :
-            new[] { true, true, true, true, false, false, false };
-        for (var index = 0; index < Arguments.Count; ++index) arguments[index] = Arguments[index];
         for (var index = 0; index < arguments.Length; ++index)
         {
             if (arguments[index])

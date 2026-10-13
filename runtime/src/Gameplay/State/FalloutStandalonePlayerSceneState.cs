@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
-    internal const string Schema = "opennv-standalone-Player-scene/v17";
+    internal const string Schema = "opennv-standalone-Player-scene/v19";
     internal FalloutStandalonePlayerSceneSource Source { get; }
     internal Guid Process => _process;
     internal string Stack => _stack;
@@ -25,6 +25,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     private FalloutStandaloneSceneColdHandoff? _cold;
     private readonly FalloutPlayerThreadContextState _threadContext;
     private FalloutPlayerMovementControlState? _movementControl;
+    private readonly FalloutPlayerControlFieldsState _controlFields;
     private readonly List<FalloutPlayerControlCommandReceipt> _controlObservations = [];
     private readonly HashSet<Guid> _observedControlIds = [];
     private FalloutPlayerThreadContextEntry? _threadContextEntry;
@@ -32,7 +33,10 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     private FalloutStandaloneInputManagerQuery? _inputManagerQuery;
     private string? _boundary, _failure;
     internal string? SaveBlocker => _retired ? "source-Player-scene-retired" : _failure ?? _boundary ??
-        (_controlObservations.Count != 0 ? FalloutPlayerControlFieldsState.ObservedWriterBoundary : null) ??
+        _controlHud?.SaveBlocker ?? (_historicalControlHud is not null && _controlHud is null ? "source-Player-cold-HUD-publication-unbound" : null) ??
+        (_historicalReferenceOrientation is not null && _referenceOrientation is null ? "source-Player-cold-reference-orientation-publication-unbound" : null) ??
+        (_controlFields.Capture() is { WordAvailable: false } ? FalloutPlayerControlFieldsState.ObservedWriterBoundary :
+            _controlFields.Capture().Failure) ??
         (_clock is { Step: not FalloutStandaloneSceneClockStep.Returned } ? "source-Player-scene-clock-entered" :
         _camera is { Step: not FalloutStandaloneCameraStep.Returned } ? "source-Player-free-camera-entered" :
         _first is not null && _livingFirst is null ? "source-Player-first-person-cold-publication-unbound" : null);
@@ -82,6 +86,11 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         moverFields = _moverFields,
         movementCall = _movementCall,
         controlObservations = _controlObservations.ToArray(),
+        controlFields = _controlFields.Capture(),
+        controlHud = _controlHud?.Capture() ?? _historicalControlHud,
+        controlDisplay = _controlDisplay?.Capture() ?? _historicalControlDisplay,
+        referenceOrientation = _referenceOrientation?.Capture() ?? _historicalReferenceOrientation,
+        pointOfView = CaptureControlPointOfView(),
         actorMovementFlag = _actorMovementFlag,
         prelude = _prelude,
         cold = _cold,
@@ -97,7 +106,11 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (process == Guid.Empty) throw new ArgumentException("Player scene requires its real current Main process.", nameof(process));
         Source = source; _stack = stack; _process = process;
         _threadContext = new(FalloutPlayerThreadContextSource.Reviewed(source.Main), process);
+        var controls = FalloutPlayerMovementControlSource.Reviewed(source.Main);
+        _pointOfViewSource = FalloutPlayerPointOfViewSource.Reviewed(controls);
+        _controlFields = new(controls, stack, process, saved?.ControlFields);
         if (saved is not null) Restore(saved);
+        else _pointOfViewLifetimes.Add(new(_process, _constructor, 0));
     }
     private long Next() => _sequence = checked(_sequence + 1);
     private void RequireThread()
@@ -250,6 +263,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         RequireIdle(allowFailure: true);
         if (_first is { Released: null } && _livingFirst is not null)
             throw new InvalidOperationException("Actual first-person source field must release before Main scene retirement.");
+        _referenceOrientation?.Retire();
         _threadContext.Retire();
         _movementControl?.Retire();
         _movementPhysics = null;

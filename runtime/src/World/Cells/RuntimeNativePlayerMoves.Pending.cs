@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -15,6 +16,13 @@ internal static partial class RuntimeNativePlayerMoves
         world.RequireCampaignMainPlayerInvocation(invocation, FalloutMainPlayerCellStep.PendingDestination);
         world.RequireSourcePlayerRawTransfer(world.ReadMainPlayerPendingPayload(request));
         var (placement, transform) = ResolveSourcePending(world, invocation, player, request);
+        if (world.HasStandalonePlayerScene)
+        {
+            var raw = world.ReadMainPlayerPendingPayload(request);
+            world.CampaignStandalonePlayerScene.PublishPlayerReferencePlacement(request.Identity,
+                "actual-source-Main-Player-pending-rotation-store", FalloutReferencePlacementIngress.RawPending,
+                raw.RotationX, raw.RotationY, raw.RotationZ);
+        }
         if (placement.Cell == activeCell) player.Teleport(transform);
         else await transfer(placement, transform);
         // The actual caller still owns this payload. Physical publication does

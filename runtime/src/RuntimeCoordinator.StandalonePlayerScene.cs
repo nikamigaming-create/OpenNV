@@ -1,9 +1,51 @@
+using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator
 {
+    private RuntimeNativeWorldProjection? _nativeWorldProjectionTarget;
+    private FalloutReferenceWorld? _nativeWorldProjectionWorld;
+
+    private void PrepareStandalonePlayerOwners(FalloutReferenceWorld world)
+    {
+        if (!world.HasStandalonePlayerScene) return;
+        if (_nativeWorldProjectionTarget is not null || _nativeWorldProjectionWorld is not null)
+            throw new InvalidOperationException("Player construction still owns another actual World projection target.");
+        var scene = world.CampaignStandalonePlayerScene;
+        var source = world.PrepareStandaloneWorldOrientationSource();
+        bool Living() => ReferenceEquals(_nativeReferences, world) && IsInsideTree() && !IsQueuedForDeletion();
+        _nativeWorldProjectionWorld = world;
+        var target = new RuntimeNativeWorldProjection(source, scene.Stack, world.StandaloneWorldProjectionIdentity, GetViewport(), Living);
+        _nativeWorldProjectionTarget = target;
+        var publication = world.ConstructStandaloneWorldProjection(target.Read, Living, world.PreparedStandaloneWorldProjectionRestore);
+        var savedOrientation = scene.Capture().ReferenceOrientation;
+        var orientation = new FalloutPlayerReferenceOrientationOwner(source, scene.Stack, scene.Process,
+            world.ReadStandalonePlayerReferenceOrientationBinding(), publication, scene.ControlFields, Living,
+            scene.RequireMovementOrientationInvocation, savedOrientation);
+        scene.BindPlayerReferenceOrientation(orientation);
+        if (savedOrientation is null)
+            orientation.InitializePlayerFov((_nativePluginStack ??
+                throw new InvalidOperationException("Player constructor lost its winning INI owner.")).IniSettings);
+        world.PrepareStandalonePlayerControlEffects(_nativeUi ??
+            throw new InvalidOperationException("Player controls have no actual source UI store."),
+            (_nativeDirectInput ?? throw new InvalidOperationException("Player controls have no actual current input manager.")).PlayerManager());
+    }
+
+    private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)
+    {
+        world.RetireStandalonePlayerControlEffects();
+        world.RetireStandaloneWorldProjection();
+        if (_nativeWorldProjectionWorld is null) return;
+        if (!ReferenceEquals(_nativeWorldProjectionWorld, world))
+            throw new InvalidOperationException("Projection retirement selected a different actual source world.");
+        _nativeWorldProjectionTarget?.Retire();
+        _nativeWorldProjectionTarget = null;
+        _nativeWorldProjectionWorld = null;
+    }
+
     private void BindStandalonePlayerScene(FalloutReferenceWorld world)
     {
         if (!world.HasStandalonePlayerScene) return;

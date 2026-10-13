@@ -17,7 +17,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             _sceneScalars, _sceneScalarCall, _queuedReferences.References, _sceneQueueCall, _processSceneUpdate, _postProcessContext,
             _timedActions.Capture(), _timedActionsSuppressed, _timedActionsCall, _postActionFields, _postActionsCall,
             _actorDistanceTimer, _actorDistanceCall, _idleAnimationCall, _moverFields, _movementCall, _actorMovementFlag,
-            _controlObservations.ToArray());
+            _controlObservations.ToArray(), _controlFields.Capture(), _threadContext.CaptureKindScopes(),
+            _controlHud?.Capture() ?? _historicalControlHud, _controlDisplay?.Capture() ?? _historicalControlDisplay,
+            _referenceOrientation?.Capture() ?? _historicalReferenceOrientation, CaptureControlPointOfView());
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -38,6 +40,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _referenceHudCall = saved.ReferenceHudCall;
         _actorScalarReset = saved.ActorScalarReset;
         _threadContextEntry = saved.ThreadContextEntry;
+        _threadContext.RetainColdKindScopes(saved.MenuKindScopes);
         _inputManagerQuery = saved.InputManagerQuery;
         _actorProcessQuery = saved.ActorProcessQuery;
         _sceneScalars = saved.SceneScalars!; _sceneScalarCall = saved.SceneScalarCall;
@@ -51,9 +54,13 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _idleAnimationCall = saved.IdleAnimationCall;
         _moverFields = saved.MoverFields!; _movementCall = saved.MovementCall;
         _actorMovementFlag = saved.ActorMovementFlag;
+        _historicalControlHud = saved.ControlHud; _historicalControlDisplay = saved.ControlDisplay;
+        _historicalReferenceOrientation = saved.ReferenceOrientation;
+        RestoreControlPointOfView(saved.PointOfView!);
         _controlObservations.AddRange(saved.ControlObservations!);
         _observedControlIds.UnionWith(saved.ControlObservations!.Select(value => value.Command.Observation));
         _cold = new(saved.CapturedProcess, _process, saved.Constructor, _constructor, Next());
+        _pointOfViewLifetimes.Add(new(_process, _constructor, _cold.Changed));
         // The old native roots are historical declarations only. A fresh
         // source-role factory must publish on this actual process/thread.
     }
@@ -77,6 +84,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         ValidateReferenceHud(saved);
         ValidateActorScalarReset(saved);
         ValidateThreadContextEntry(saved);
+        FalloutPlayerThreadContextState.ValidateKindScopes(saved.MenuKindScopes, FalloutPlayerThreadContextSource.Reviewed(saved.Source.Main));
         ValidateInputManagerQuery(saved);
         ValidateActorProcessQuery(saved);
         ValidateSceneScalars(saved);
@@ -89,6 +97,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         ValidateIdleAnimationCall(saved);
         ValidateMovementCall(saved);
         ValidateControlObservations(saved);
+        ValidateControlOwners(saved);
+        ValidateControlPointOfView(saved);
         foreach (var owner in saved.FirstPersonHistory)
         {
             var native = owner.Publication;
@@ -149,7 +159,12 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     {
         Validate(saved);
         if (saved.Retired || saved.Failure is not null || saved.Boundary is not null || saved.Clock is not null ||
-            saved.ControlObservations!.Count != 0 ||
+            saved.ControlFields is { WordAvailable: false } or { Failure: not null } ||
+            saved.ControlHud is { InitializationReturned: false } or { Failure: not null } or { Retired: true } or { ColdBindingFailure: not null } ||
+            saved.ControlHud is { } currentHud && currentHud.Tiles!.Any(tile => !tile.Alive || tile.Animated) ||
+            saved.ControlHud is { } hud && hud.Process != saved.CapturedProcess ||
+            saved.ReferenceOrientation is { Failure: not null } or { PlayerFovReturned: false } or { Retired: true } ||
+            saved.ReferenceOrientation is { } orientation && orientation.CapturedProcess != saved.CapturedProcess ||
             saved.Camera is { Step: not FalloutStandaloneCameraStep.Returned } ||
             saved.FirstPerson is { Released: null, Publication: { } native } && native.Process != saved.CapturedProcess)
             throw new NotSupportedException("Current standalone Player scene retains a real failed/unowned child or unbound cold native field.");

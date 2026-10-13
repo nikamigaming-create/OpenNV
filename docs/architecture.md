@@ -3,6 +3,21 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Standalone Player startup constructs source control fields, HUD and logical
+World camera owners before the compiled bootstrap consumes them. HUD uses the
+winning XML and the same C# Interface transition queue. World projection and raw
+reference angles have independent source owners; Godot supplies target extent,
+input and presentation. Complete cold state retains those fields and original
+failed prefixes while rebinding fresh process, UI and native lifetimes. Unknown
+camera or Actor effects refuse at their actual call instead of replaying commands
+or borrowing presentation values.
+
+The live diagnostic collector has an explicit retirement boundary before CELL,
+camera and HDR consumers retire. It drains its immutable file writer, releases
+input and removes process/draw callbacks while their owners are still alive.
+Scene reload constructs a fresh collector; old scene nodes cannot supply later
+telemetry.
+
 The presentation toolchain is selected through runtime/godot-toolchain.json,
 currently official Godot 4.8-dev7 Mono with the matching managed SDK and .NET 10.
 Launcher, installer and gate reject engine/SDK drift. Godot's new mip-level

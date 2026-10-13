@@ -64,6 +64,16 @@ internal sealed class FalloutRendererClockState : IDisposable
         _previous = Float(saved.PreviousBits); _remainder = Float(saved.RemainderBits); _delta = Float(saved.DeltaBits);
         _steps = saved.Steps; _last = saved.LastPublication;
     }
+    internal uint ReadMainControlMode(Guid actualProcess)
+    {
+        Require();
+        if (actualProcess != _process)
+            throw new InvalidOperationException("HUD read another source Main control-mode owner.");
+        // This independent source global is constructor-current before the
+        // first renderer-clock publication. Unknown later mode writers still
+        // have no admitted transition; they cannot borrow a GUI mode enum.
+        return _mainMode;
+    }
     internal void Publish(Guid main, long ordinal, float scaledSeconds, float currentRate,
         float maximumTime, bool sceneIsComplex)
     {

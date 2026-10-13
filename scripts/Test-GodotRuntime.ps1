@@ -129,6 +129,9 @@ foreach ($configuration in @('Debug', 'Release')) {
     & dotnet run --project $domainProject --configuration $configuration -- --test-native-domain `
         (Join-Path $domainOutput 'opennv_plugin_domain.exe') (Join-Path $domainOutput 'fixtures')
     if ($LASTEXITCODE -ne 0) { throw "Native plugin execution-domain $configuration contracts failed." }
+    & dotnet run --project $domainProject --configuration $configuration -- --test-native-move-policy `
+        (Join-Path $domainOutput 'fixtures/opennv_move_file_fixture.dll')
+    if ($LASTEXITCODE -ne 0) { throw "Native paired file-move $configuration contracts failed." }
 }
 
 & npm run check --prefix (Join-Path $repository "desktop")

@@ -47,6 +47,11 @@ internal sealed partial class NativePluginExecutionDomain
                 _ => throw new InvalidDataException("Private IO extension dispatch lost its exact operation."),
             };
         }
+        if (frame.Operation == MoveFileCallback)
+        {
+            if (enteredLoader) throw new NotSupportedException("Original loader entry has no entered paired file-move caller owner.");
+            return DispatchPrivateMoveFile(parent, owner, reader);
+        }
         if (frame.Operation == SharedPlacementCallback)
         {
             if (enteredLoader) throw new NotSupportedException("Original pre-entry shared heap publication has no intercepted source caller.");

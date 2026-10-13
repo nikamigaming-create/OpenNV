@@ -7,6 +7,10 @@ Quit and three cold Continue cycles, with phone-friendly rendered video. None
 of these three complete runs is accepted. Source publication and component
 checks do not establish a playable campaign or matched retail parity.
 
+A private phone-friendly 36-second FO3 startup clip from main shows Boy selection
+and character creation with audio and a visible edit. Its birth background is
+black. It does not establish a completed quest or save/Continue.
+
 The product reads the player's owned winning ESM/ESP, loose/BSA, NIF, DDS and KF
 data directly. C# owns formats, records, scripts, world state, gameplay,
 telemetry and persistence. Godot owns presentation, input adaptation and OpenXR.
@@ -28,9 +32,16 @@ models, constructs source-ordered physical bodies and linked joints and returns
 through the genuine admission predicate and utility. The initial mode/state/
 process activity selects reference-model motion six and registration false.
 This is never inferred from the first-person skeleton's empty body count.
-The next failure is the independent control call: genuine input/configuration
-and Player fields precede still-unbound world-projection FOV and reference
-rotation/control writers. Whole Main completion and save guards remain intact.
+Source control fields, winning HUD XML and its shared Interface queue now bind
+before bootstrap. Authored effect/cold tests and owned HUD/settings checks pass.
+C# logical World projection, retained FOV and raw reference fields also pass
+owned construction and cold-association checks. The actual compiled startup
+command selects five controls and returns its source camera-mode/shared-scalar
+null branch. Its nonnull camera child remains refused after the byte store.
+Three cold component cycles preserve HUD/POV constructor and effect history.
+Native headless input reaches character-creation completion at CG00 stage 65;
+physical and zero-input control children return. Complete Player/Main return,
+teleport-fade/scene-opacity ownership and gameplay saving remain unaccepted.
 
 The C# living world owns body admission, identifiers, current islands and
 constraint master/slave order. Real Godot PhysicsServer resources work headlessly.
@@ -58,8 +69,9 @@ refuse complete saves rather than publishing a partial slot.
 FNV and TTW resolve their selected 10/18 plugins with three/six native modules.
 Neither current stack produces a complete gameplay save. JIP Query/Load and
 protocol 38 pass; callback 50 now reaches a task-dispatch mutation without the
-real source command task queue producer. TTW separately retains nine
-JohnnyGuitar, 84 Stewie and four TTW NVSE callable imports. FNV XR requires
+real source command task queue producer. The unchanged TTW retry now retains
+five JohnnyGuitar and 81 Stewie callable imports; TTW NVSE's four import
+refusals are cleared, without qualifying its full behavior. FNV XR requires
 Console/PlayerControls interfaces, ShowOff requires its Data native class/cache/
 extra-data producer, and XR unload retains a child EOF. Selected modules stay
 loaded into the compatibility denominator; no support claim follows from Query
@@ -70,6 +82,12 @@ source-image identity and retirement contracts have bounded tested owners.
 Unsupported imports, callbacks or mutations remain visible. The selected TTW
 owned DATA and dependency folders resolve without missing required packages;
 this is installation admission, not playable TTW acceptance.
+
+New actual x86 callers pass the reached paired file moves, Windows SRW and
+breakpoint behavior, real startup/private standard handles, MSVC entropy and
+stream position/state methods. They verify real provider addresses, ABI,
+exceptions, retirement and fresh retries. The complete selected mod stacks
+must still be retried; these component results do not establish mod compatibility.
 
 ## Toolchain and verification
 

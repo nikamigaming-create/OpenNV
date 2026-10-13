@@ -21,6 +21,7 @@ public partial class RuntimeCoordinator
         RetireNativeGlobalTime(world);
         var failures = new List<Exception>();
         try { world.BindPreparedSourceMutableRetirement(this); } catch (Exception failure) { failures.Add(failure); }
+        try { RetireStandalonePlayerOwners(world); } catch (Exception failure) { failures.Add(failure); }
         try { world.Dispose(); } catch (Exception failure) { failures.Add(failure); }
         if (failures.Count != 0) throw new AggregateException("Native world source handoff and retirement retained failures.", failures);
     }

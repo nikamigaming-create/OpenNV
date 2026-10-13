@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 // field here. Unknown source children retain their entered prefix.
 internal sealed partial class FalloutStandaloneInterfaceState
 {
-    internal const string Schema = "opennv-standalone-interface/v3";
+    internal const string Schema = "opennv-standalone-interface/v4";
     internal FalloutStandaloneInterfaceSource Source { get; }
     private readonly string _stack;
     private readonly Guid _process, _constructor = Guid.NewGuid();
@@ -31,7 +31,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
     internal string Stack => _stack;
     internal bool Retired => _retired;
     internal string? SaveBlocker => _retired ? "source-interface-retired" : _failure ?? _boundary ??
-        DialogSaveBlocker ?? _actorDistances.SaveBlocker ?? (_manager is null || _enabled == 0 ? "source-interface-native-manager-factory-not-returned" : null);
+        HudControlSaveBlocker ?? DialogSaveBlocker ?? _actorDistances.SaveBlocker ?? (_manager is null || _enabled == 0 ? "source-interface-native-manager-factory-not-returned" : null);
     internal object State => new
     {
         source = Source.Identity,

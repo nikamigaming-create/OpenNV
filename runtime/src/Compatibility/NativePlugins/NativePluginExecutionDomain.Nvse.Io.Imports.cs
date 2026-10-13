@@ -11,7 +11,7 @@ internal static class NativePluginIoImports
         "fopen", "_wfopen", "fopen_s", "_wfopen_s", "freopen", "_wfreopen", "freopen_s", "_wfreopen_s", "_fsopen", "_wfsopen",
         "_open", "_wopen", "_sopen", "_wsopen", "_sopen_s", "_wsopen_s", "open", "creat", "_creat", "_wcreat",
         "FindFirstFileExA", "FindFirstFileExW",
-        "CopyFileA", "CopyFileW", "CopyFileExA", "CopyFileExW", "CopyFile2", "MoveFileA", "MoveFileW", "MoveFileExA", "MoveFileExW",
+        "CopyFileA", "CopyFileW", "CopyFileExA", "CopyFileExW", "CopyFile2", "MoveFileA", "MoveFileW",
         "MoveFileWithProgressA", "MoveFileWithProgressW", "ReplaceFileA", "ReplaceFileW", "SetFileAttributesA", "SetFileAttributesW",
         "WriteFileEx", "ReadFileEx",
         "NtCreateFile", "NtOpenFile", "NtWriteFile", "NtDeleteFile", "NtSetInformationFile" };
@@ -21,7 +21,7 @@ internal static class NativePluginIoImports
         "RemoveDirectoryW", "RemoveDirectoryA", "GetFileAttributesW", "GetFileAttributesA", "GetPrivateProfileStringW", "GetPrivateProfileStringA",
         "GetPrivateProfileIntW", "GetPrivateProfileIntA", "WritePrivateProfileStringW", "WritePrivateProfileStringA", "GetProcAddress",
         "LoadLibraryA", "LoadLibraryW", "LoadLibraryExA", "LoadLibraryExW", "GetCurrentDirectoryW", "GetCurrentDirectoryA",
-        "SetCurrentDirectoryW", "SetCurrentDirectoryA", "GetFileType", "SetEndOfFile",
+        "SetCurrentDirectoryW", "SetCurrentDirectoryA", "GetFileType", "SetEndOfFile", "MoveFileExA", "MoveFileExW",
         "FindFirstFileW", "FindFirstFileA", "FindNextFileW", "FindNextFileA", "FindClose",
         "CreateFileMappingA", "CreateFileMappingW", "OpenFileMappingA", "OpenFileMappingW",
         "MapViewOfFile", "MapViewOfFileEx", "UnmapViewOfFile", "FlushViewOfFile",

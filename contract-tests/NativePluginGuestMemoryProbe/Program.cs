@@ -1,5 +1,35 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args is ["--test-native-cpp-stream-declarations"])
+{
+    NativeCppStreamsContracts.RunDeclarations();
+    return;
+}
+
+if (args is ["--test-native-platform-declarations"])
+{
+    NativePlatformCapabilitiesContracts.Run();
+    return;
+}
+
+if (args.Length == 2 && args[0] == "--test-native-move-policy")
+{
+    NativeMoveFileContracts.RunPolicy(args[1]);
+    return;
+}
+
+if (args.Length == 6 && args[0] == "--test-native-platform-capabilities")
+{
+    NativePlatformCapabilitiesContracts.Run(args[1], args[2], args[3], args[4], args[5]);
+    return;
+}
+
+if (args.Length == 5 && args[0] == "--test-native-move-file")
+{
+    NativeMoveFileContracts.Run(args[1], args[2], args[3], args[4]);
+    return;
+}
+
 if (args is ["--test-source-suppression"])
 {
     NativeSourceSuppressionContracts.Run();
@@ -110,6 +140,8 @@ if (args.Length != 0)
 }
 
 NativeEngineCommandLeafContracts.Run();
+NativePlatformCapabilitiesContracts.Run();
+NativeCppStreamsContracts.RunDeclarations();
 NativeHeadlessUser32Contracts.Run();
 NativeNvseLoggingContracts.Run();
 NativeCrtPureContracts.Run();
