@@ -7,6 +7,8 @@ internal sealed partial class FalloutReferenceWorld
 {
     private bool _sourceLinkedPlayerParentConstructed;
     private FalloutFormKey? _sourceLinkedPlayerParent;
+    private readonly Guid _sourceLinkedPlayerParentFactory = Guid.NewGuid();
+    private long _sourceLinkedPlayerParentRevision;
     private void ConstructSourcePlayerLinkedParent(bool cold)
     {
         var actor = ReadCombatActorIdentity(_enginePlayer);
@@ -16,6 +18,7 @@ internal sealed partial class FalloutReferenceWorld
         // resumes the returned source setter; native body publication is later.
         _sourceLinkedPlayerParent = cold ? SourceCellLinks.RuntimeActorParent(actor) : null;
         _sourceLinkedPlayerParentConstructed = true;
+        _sourceLinkedPlayerParentRevision++;
     }
     internal FalloutFormKey? CurrentSourcePlayerLinkedCell
     {
@@ -54,6 +57,7 @@ internal sealed partial class FalloutReferenceWorld
             RequireCampaignMainPlayerInvocation(invocation, step);
             _ = RequirePublishedLinkedPlayer(); publishActualParentCell();
             _sourceLinkedPlayerParent = destination;
+            _sourceLinkedPlayerParentRevision++;
             if (_currentPlayerProcessCell!() != destination)
                 throw new InvalidDataException("Canonical Player ParentCELL callback did not publish the actual destination.");
         }, "actual-source-Player-" + step + "/" + invocation.Main.Identity);

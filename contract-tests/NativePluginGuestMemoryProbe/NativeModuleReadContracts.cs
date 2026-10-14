@@ -79,6 +79,7 @@ internal static class NativeModuleReadContracts
             var primary = domain.LoadNvseImage(host, paths[1], hashes[paths[1]], sourcePluginHandle: 11);
             Require(domain.QueryNvse(primary).Returned && domain.InitializeNvse(primary).Returned, "original primary file owner returned");
             var peer = domain.LoadCoResidentNvseImage(paths[2], hashes[paths[2]], 22);
+            NativeModuleConstructionContracts.CheckActualReturned(domain, peer);
             Require(domain.QueryNvse(peer).Returned && domain.InitializeNvse(peer).Returned, "original module source/read loader returned");
             var moduleName = domain.NvseLastModuleReadIoReceipt ?? throw new InvalidDataException("Actual module-zero filename receipt missing.");
             Require(moduleName.Returned && !moduleName.Sdk && moduleName.Operation == NativePluginModuleReadOperation.GameModuleNameA &&
@@ -137,7 +138,7 @@ internal static class NativeModuleReadContracts
             }
         }
     }
-    private static void WriteImage(string path, bool tlsCallback, bool callsFromEntry)
+    internal static void WriteImage(string path, bool tlsCallback, bool callsFromEntry)
     {
         var bytes = new byte[0x600];
         void U16(int at, ushort value) => BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(at), value);

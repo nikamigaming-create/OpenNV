@@ -31,7 +31,10 @@ internal sealed partial class FalloutReferenceWorld
                     FalloutSourceCellLoaderDeclaration.Read(declaration.EngineSha256), records, stack);
             _sourceCellLinks = new(declaration, stack, CellProcesses.ReadSourceQueueReferences,
                 ReadSourceLinkedReference, actualIngestion, saved, ReadCombatActorIdentity);
-            ConstructSourcePlayerLinkedParent(saved is not null);
+            if (!_sourceLinkedPlayerParentConstructed)
+                ConstructSourcePlayerLinkedParent(saved is not null);
+            else if (saved is not null || CurrentSourcePlayerLinkedCell is not null)
+                throw new InvalidDataException("CELL list publication cannot replace an already constructed Player ParentCELL.");
         }
         catch (Exception failure) { _sourceCellLinksConstructionFailure = failure; throw; }
     }

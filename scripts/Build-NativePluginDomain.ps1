@@ -125,6 +125,12 @@ try {
         "/Fo$output/module-read-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF',
         "/DEF:$fixtureSource/NativeModuleReadFixture.def", "/OUT:$fixtures/opennv_module_read_fixture.dll",
         "/IMPLIB:$output/module-read-fixture.lib", 'kernel32.lib')
+    $diagnosticArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/GS-', '/LD',
+        (Join-Path $fixtureSource 'NativeDiagnosticPrimaryFixture.cpp'), "/Fo$output/diagnostic-primary-fixture.obj",
+        '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF', 'ucrt.lib', 'vcruntime.lib', 'msvcprt.lib', "/DEF:$fixtureSource/NativeCrtFixture.def",
+        "/OUT:$fixtures/opennv_diagnostic_primary_fixture.dll", "/IMPLIB:$output/diagnostic-primary-fixture.lib")
+    & $compiler @diagnosticArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Authored shared diagnostic provider fixture compilation failed.' }
     foreach ($moduleVariant in @(@{Suffix='primary';Defines=@();Libraries=@('msvcprt.lib')},
             @{Suffix='secondary';Defines=@('/DOPENNV_CORESIDENT_SECONDARY');Libraries=@()})) {
         Invoke-Compile (@('/GS-', '/LD') + $moduleVariant.Defines + @(
@@ -155,6 +161,7 @@ try {
     $files += 'fixtures/opennv_file_size_primary.dll'
     $files += 'fixtures/opennv_file_size_peer.dll'
     $files += 'fixtures/opennv_module_read_fixture.dll'
+    $files += 'fixtures/opennv_diagnostic_primary_fixture.dll'
     $files += 'fixtures/opennv_co_resident_primary.dll'
     $files += 'fixtures/opennv_co_resident_secondary.dll'
     $files += 'fixtures/opennv_platform_capabilities_fixture.dll'

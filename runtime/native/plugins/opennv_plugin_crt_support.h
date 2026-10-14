@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <memory>
 #include <stdio.h>
@@ -26,9 +27,9 @@ struct CrtSupportState {
     std::uint32_t lock_depth = 0;
     std::uint32_t active_calls = 0;
 };
-struct CrtDeferredCallback { std::uint32_t operation; std::vector<std::uint8_t> payload; bool heap = false; };
+struct CrtDeferredCallback { std::uint32_t operation; std::vector<std::uint8_t> payload; bool heap = false; std::uint64_t module = 0; };
 struct PluginCrtSupportRuntime {
     std::map<std::uint32_t, std::shared_ptr<CrtSupportState>> streams;
-    std::vector<CrtDeferredCallback> pending;
+    std::deque<CrtDeferredCallback> pending;
 };
 }

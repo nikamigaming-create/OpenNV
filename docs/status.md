@@ -59,8 +59,14 @@ process/factory history without replay.
 The synchronous opening package owner now returns StartEvent, StartCallback and
 procedure zero. Independent Script initialization and animation selection use
 actual current owners; raw rotation borrows the shared reference orientation.
-The latest ordinary candidate fails next at current position/mode ownership,
-before loading the Vault, with zero final diagnostic loss. Shared PACK instances,
+The latest candidate constructs and retains the real detached early controller,
+returns winning Base and both startup XYZ/reset writes, form-file persistence,
+TES/grid selection and yaw. Its compiled package current XYZ, ParentCELL,
+Worldspace, persistent-CELL fallback and Saved18 stores return. The next actual
+refusal is Actor package assignment's shared status and Current-arm consumers.
+Failed startup now drains
+and retires its source/native owners without a reported leak, with zero final
+diagnostic loss. Shared PACK instances,
 six-field slots, logical mover and ordered partial command stores retain fresh
 cold component lifetimes. Whole Player construction, complete saving and routes
 remain unfinished.
@@ -112,6 +118,12 @@ now retains four parallel-worker imports and Stewie 81 imports; XR, ShowOff and
 TTW NVSE need independent supplemental bindings. Their later interfaces, native
 data/cache and retirement still require acceptance. Every selected module stays
 in the compatibility denominator; no support claim follows from Query or Load.
+
+Protocol 42 returns TTW NVSE's original construction and Query through its actual
+module-bound diagnostic CRT service. Debug and Release original-DLL audits pass
+real sharing failures, ordered retries and destructor close. TTW Load next refuses
+its terminal model-path pointer mutation. No complete native-global cold save is
+accepted.
 
 Shared native-domain, source import/ABI, guest memory, protection/cache,
 source-image identity and retirement contracts have bounded tested owners.

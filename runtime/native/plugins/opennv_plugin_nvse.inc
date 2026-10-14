@@ -495,11 +495,15 @@ void unload_nvse(const Frame& frame) {
         values_heap_flush_detach(frame); io_flush_detach(frame); window_process_flush_detach(frame);
     } else {
         state->calls.push_back(frame.header.id);
+        const auto previous_retiring = state->io && state->io->loader_retiring;
         try {
+            if (state->io) state->io->loader_retiring = true;
             LoaderInvocation loader;
             if (!FreeLibrary(image)) throw Fatal(GetLastError(), "Additional original DLL FreeLibrary failed.");
-            loader.finish(); state->calls.pop_back();
-        } catch (...) { state->calls.pop_back(); throw; }
+            loader.finish(); if (state->io) state->io->loader_retiring = previous_retiring;
+            if (nvse_module_record(module).diagnostic) crt_support_flush_detach();
+            state->calls.pop_back();
+        } catch (...) { if (state->io) state->io->loader_retiring = previous_retiring; state->calls.pop_back(); throw; }
     }
     if (callback_fault.load()) throw Fatal(callback_fault.load(), "Original NVSE detach attempted an unowned callback.");
     MEMORY_BASIC_INFORMATION memory{};

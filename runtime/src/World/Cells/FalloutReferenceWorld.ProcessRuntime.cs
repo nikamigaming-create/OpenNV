@@ -212,7 +212,9 @@ internal sealed partial class FalloutReferenceWorld
         // The manager retires first. Failed common/runtime retirement retains
         // its real providers and cannot be reported as a complete world close.
         RetireSourcePackageCommands();
+        RetireStandaloneReferencePositionOwners();
         _processCommon?.Dispose(); _processCommon = null;
+        RetireStandaloneEarlyControllerFactory();
         _processRuntime?.Dispose(); _processRuntime = null;
         _processRuntimeDeclaration = null; _processRuntimeStack = null;
         _processRuntimeRestore = null; _processCommonRestore = null;

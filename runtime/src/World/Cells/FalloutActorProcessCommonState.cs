@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // reselects a package, replays an event or recreates modifier pools.
 internal sealed partial class FalloutActorProcessCommonState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-common/v15";
+    internal const string Schema = "opennv-actor-process-common/v16";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;
@@ -44,7 +44,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
             "actual-process-common:" + failed.Source.Reference + ":" + failed.Boundary :
         _current.Values.FirstOrDefault(entry => entry.SceneFields?.WeaponDrawn is { Available: false }) is { } weapon ?
             "source-Actor-weapon-drawn-observed-writer-unbound:" + weapon.Source.Reference :
-        SourcePackageSaveBlocker is { } package ? package :
+        SourcePackageSaveBlocker is { } package ? package : EarlyControllerSaveBlocker is { } controller ? controller :
         _current.Values.FirstOrDefault(entry => entry.SceneFields?.WeaponContinuation is { ActionAvailable: false, Initialization: not null } or
         { ActivityAvailable: false } or { CacheAvailable: false }) is { } following ?
             "source-Actor-following-weapon-observed-writer-unbound:" + following.Source.Reference : null;
@@ -53,7 +53,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         source = _source.Contract,
         process = _process,
         _sequence,
-        current = _current.Values.ToArray(),
+        current = _current.Values.Select(CaptureEarlyControllerField).ToArray(),
         retired = _retired.ToArray(),
         pending = _pending,
         transfer = _transfer,
@@ -253,6 +253,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
     {
         if (_disposed) return; RequireNotBusy();
         if (_transfer is { Initialized: false }) throw new NotSupportedException("Actual common process retirement retains an unfinished old/new ownership transfer.");
+        RetireEarlyControllerFields();
         _disposed = true; _current.Clear(); _retired.Clear(); _weaponObservations.Clear(); _followingObservations.Clear(); _packageLedgers.Clear(); _pending = null;
     }
 }

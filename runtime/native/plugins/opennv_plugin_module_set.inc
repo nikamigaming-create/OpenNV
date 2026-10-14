@@ -14,22 +14,30 @@ void nvse_module_set_load(const Frame& frame, Reader& reader) {
             throw Fatal(ERROR_INVALID_DATA, "Additional original import lost its named source IAT slot.");
         imports.push_back(std::move(declaration));
     }
-    reader.finish();
+    auto construction = module_construction_read(reader); auto cpp = module_cpp_read(reader); auto diagnostic = module_diagnostic_read(reader); reader.finish();
     for (const auto& item : state->module_set->modules)
         if (!item.second->retired && item.second->runtime->handle == handle)
             throw Fatal(ERROR_INVALID_HANDLE, "Additional original source handle aliases another live module.");
     auto module = std::make_unique<NvseModuleRecord>();
     if (state->next_module == UINT32_MAX) throw Fatal(ERROR_ARITHMETIC_OVERFLOW, "Original module identity allocation exhausted.");
     module->id = ++state->next_module; module->supplemental = true;
+    module->diagnostic = std::move(diagnostic);
     module->runtime = std::make_shared<NvseRuntime>(); auto& runtime = *module->runtime;
     runtime.tables = state->module_set->shared_tables; runtime.tables_extent = state->module_set->shared_tables_extent;
     runtime.owns_tables = false; runtime.directory = state->nvse->directory;
     runtime.logging_path = state->nvse->logging_path; runtime.logging_path_length = state->nvse->logging_path_length;
     runtime.handle = handle; runtime.interface_budget = state->nvse->interface_budget;
+    module_construction_prepare(construction, path);
+    module_cpp_prepare(cpp);
     LoaderInvocation loader;
+    construction.entered = true;
     const auto actual = LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
-    const auto error = actual ? ERROR_SUCCESS : GetLastError(); loader.finish();
-    if (!actual) { reply(frame, error, loader.refusal("Additional original Windows DLL admission failed.")); return; }
+    const auto sdk_error = GetLastError(); const auto error = actual ? ERROR_SUCCESS : sdk_error;
+    construction.returned = true; loader.finish(); module_construction_release(construction);
+    if (!actual) {
+        Bytes result; module_construction_bytes(result, construction, sdk_error, false); module_cpp_bytes(result, cpp);
+        reply(frame, error, loader.refusal("Additional original Windows DLL admission failed."), result); return;
+    }
     module->image = actual;
     const auto id = module->id;
     auto& set = *state->module_set;
@@ -45,6 +53,8 @@ void nvse_module_set_load(const Frame& frame, Reader& reader) {
     const auto nt = nvse_copy(reinterpret_cast<const IMAGE_NT_HEADERS32*>(reinterpret_cast<const unsigned char*>(actual) + dos.e_lfanew));
     if (nt.Signature != IMAGE_NT_SIGNATURE || nt.FileHeader.Machine != IMAGE_FILE_MACHINE_I386 || nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC)
         throw Fatal(ERROR_BAD_EXE_FORMAT, "Additional original mapping lost its x86 PE declaration.");
+    module_construction_validate(construction, actual, nt);
+    module_diagnostic_bind(nvse_module_record(id), nt, construction.sha, construction.stack);
     std::uint32_t bound_reads = 0;
     for (const auto& declaration : imports) {
         if (declaration.slot > nt.OptionalHeader.SizeOfImage || 4U > nt.OptionalHeader.SizeOfImage - declaration.slot)
@@ -63,6 +73,8 @@ void nvse_module_set_load(const Frame& frame, Reader& reader) {
             if (adapter) ++bound_reads;
         }
         if (!adapter) adapter = source_call_site_api(declaration.name);
+        if (!adapter) adapter = module_cpp_import_entry(cpp, declaration.library, declaration.name, original);
+        if (!adapter) adapter = module_runtime_import_entry(declaration.library, declaration.name, original);
         if (adapter) {
             DWORD previous = 0;
             if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &previous))
@@ -77,8 +89,10 @@ void nvse_module_set_load(const Frame& frame, Reader& reader) {
     runtime.query = address(reinterpret_cast<void*>(GetProcAddress(actual, "NVSEPlugin_Query")));
     runtime.load = address(reinterpret_cast<void*>(GetProcAddress(actual, "NVSEPlugin_Load")));
     nvse_executable(reinterpret_cast<void*>(runtime.query)); nvse_executable(reinterpret_cast<void*>(runtime.load));
-    Bytes result; result.put(id); result.put(address(actual)); result.put(handle);
+    Bytes result; module_construction_bytes(result, construction, sdk_error, true); module_cpp_bytes(result, cpp);
+    result.put(id); result.put(address(actual)); result.put(handle);
     result.put(address(runtime.tables)); result.put(runtime.query); result.put(runtime.load); result.put(bound_reads);
+    result.put(nvse_module_record(id).diagnostic ? 1U : 0U);
     reply(frame, ERROR_SUCCESS, "", result);
 }
 

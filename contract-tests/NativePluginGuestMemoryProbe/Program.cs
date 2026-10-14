@@ -1,5 +1,27 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args is ["--test-native-module-diagnostic-source", var diagnosticSource])
+{
+    NativeModuleDiagnosticContracts.RunOwnedSource(diagnosticSource);
+    return;
+}
+if (args.Length == 6 && args[0] == "--test-native-module-diagnostic")
+{
+    NativeModuleDiagnosticContracts.Run(args[1], args[2], args[3], args[4], args[5]);
+    return;
+}
+
+if (args is ["--test-native-module-construction-declarations"])
+{
+    NativeModuleConstructionContracts.RunDeclarations();
+    return;
+}
+if (args is ["--test-native-module-construction-owned", var ttwConstruction, var showOffConstruction])
+{
+    NativeModuleConstructionContracts.RunOwned(ttwConstruction, showOffConstruction);
+    return;
+}
+
 if (args.Length == 6 && args[0] == "--test-native-module-read")
 {
     NativeModuleReadContracts.Run(args[1], args[2], args[3], args[4], args[5]);
@@ -176,7 +198,7 @@ if (args.Length != 0)
 NativeEngineCommandLeafContracts.Run();
 NativeCoResidentModuleContracts.RunDeclarations();
 NativeFileSizeContracts.RunDeclarations();
-NativeModuleReadContracts.RunDeclarations();
+NativeModuleConstructionContracts.RunDeclarations();
 NativePlatformCapabilitiesContracts.Run();
 NativeCppStreamsContracts.RunDeclarations();
 NativeHeadlessUser32Contracts.Run();

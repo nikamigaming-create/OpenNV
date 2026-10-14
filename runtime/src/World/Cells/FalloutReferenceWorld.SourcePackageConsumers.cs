@@ -133,9 +133,39 @@ internal sealed partial class FalloutReferenceWorld
             world.CampaignStandalonePlayerScene.PlayerInhibition.StorePackageAssignmentFourth(invocation, RequireCurrent);
         }
         public FalloutFormKey? ReadWorldspace(FalloutPackageCommandFieldInvocation invocation, FalloutFormKey? parentCell)
-        { RequireCurrent(invocation); throw new NotSupportedException(FalloutActorPackageCommandFields.WorldspaceBoundary); }
+        {
+            var read = ReadCurrentReferenceWorldspace(invocation);
+            if (read.Parent.Cell != parentCell)
+                throw new InvalidDataException("Worldspace query changed its actual current ParentCELL.");
+            return read.Worldspace;
+        }
         public void ReferenceChanged(FalloutPackageCommandFieldInvocation invocation, uint mask)
-        { RequireCurrent(invocation); throw new NotSupportedException(FalloutActorPackageCommandFields.ReferenceChangeBoundary); }
+        {
+            RequireCurrent(invocation);
+            _ = world.WithActualReferencePosition(FalloutReferencePositionIngress.PackageCommand,
+                current => world._sourceReferenceChanges!.ReferenceChanged(current, mask, false,
+                    new SourceReferencePositionConsumers(world)));
+        }
+        public FalloutReferencePositionRead ReadCurrentReferencePosition(FalloutPackageCommandFieldInvocation invocation)
+        {
+            RequireCurrent(invocation);
+            return world.WithActualReferencePosition(FalloutReferencePositionIngress.PackageCommand,
+                current => world._sourcePlayerReferencePosition!.ReadCurrentPosition(current));
+        }
+        public FalloutReferenceParentCellRead ReadCurrentReferenceParentCell(FalloutPackageCommandFieldInvocation invocation)
+        {
+            RequireCurrent(invocation);
+            return world.WithActualReferencePosition(FalloutReferencePositionIngress.PackageCommand,
+                current => world._sourcePlayerReferencePosition!.ReadCurrentParentCell(current,
+                    new SourceReferencePositionConsumers(world)));
+        }
+        public FalloutReferenceWorldspaceRead ReadCurrentReferenceWorldspace(FalloutPackageCommandFieldInvocation invocation)
+        {
+            RequireCurrent(invocation);
+            return world.WithActualReferencePosition(FalloutReferencePositionIngress.PackageCommand,
+                current => world._sourcePlayerReferencePosition!.ReadWorldspace(current,
+                    new SourceReferencePositionConsumers(world)));
+        }
         public FalloutPackageCommandRawRotationRead? ReadRawRotationZ(FalloutPackageCommandFieldInvocation invocation) =>
             world.CampaignStandalonePlayerScene.ReadPackageCommandRawRotationZ(invocation, RequireCurrent);
         private FalloutPackageRuntimeRegistry Registry => world._sourcePackageRegistry ??

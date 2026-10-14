@@ -354,6 +354,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         _ => 0U,
                     };
                     if (liveModules != expectedModules) throw new InvalidDataException("Native module lifetime drifted across its request.");
+                    if (operation == NativePluginDomainOperation.NvseModuleSet && BitConverter.ToUInt32(payload) == 0)
+                        ReadModuleConstructionReply(reader, status);
                     if (status != 0) { Finish(reader); throw new NativePluginDomainRefusal(status, liveModules, reason); }
                     if (reason.Length != 0) throw new InvalidDataException("Native success reply carries an unowned diagnostic.");
                     return reader;

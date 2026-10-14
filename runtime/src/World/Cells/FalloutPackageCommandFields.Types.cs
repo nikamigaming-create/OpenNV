@@ -41,7 +41,8 @@ internal sealed record FalloutPackageCommandFieldOperation(FalloutPackageCommand
     IReadOnlyList<FalloutPackageScriptEventRow?>? PublishedRows = null, Guid? EventFactory = null,
     FalloutPackageCommandEventMark? EventMark = null, FalloutPackageCommandAnimationRead? AnimationRead = null,
     FalloutPackageCommandSavedPositionCall? SavedPositionCall = null,
-    FalloutPackageCommandAnimationInitialization? AnimationInitialization = null);
+    FalloutPackageCommandAnimationInitialization? AnimationInitialization = null,
+    FalloutPackageCommandSavedPositionInitialization? SavedPositionInitialization = null);
 internal sealed record FalloutPackageCommandFieldSnapshot(string Schema, FalloutPackageCommandFieldsSource Source,
     string Stack, FalloutCombatActorIdentity Actor, Guid Process, Guid Factory, Guid Constructor, long Epoch,
     FalloutPackageCommandFieldConstruction Construction, long Sequence, FalloutPackageCommandFieldValues Values,
@@ -71,7 +72,12 @@ internal sealed record FalloutPackageCommandSavedPositionCall(FalloutPackageComm
     bool ParentCellReturned, FalloutFormKey? Worldspace, bool WorldspaceReturned, Guid? Consumer,
     FalloutPackageSavedPosition? Before, FalloutPackageSavedPosition? After,
     IReadOnlyList<FalloutPackageCommandFieldStore> Stores, bool ChangeEntered, bool Returned, string? Failure,
-    FalloutPackageCommandRawRotationRead? RotationRead = null);
+    FalloutPackageCommandRawRotationRead? RotationRead = null,
+    FalloutReferencePositionRead? PositionRead = null, FalloutReferenceParentCellRead? ParentRead = null,
+    FalloutReferenceWorldspaceRead? WorldspaceRead = null);
+internal sealed record FalloutPackageCommandSavedPositionInitialization(FalloutPackageCommandFieldInvocation Invocation,
+    string Source, Guid FieldsFactory, Guid Constructor, long Entered, long Changed,
+    FalloutReferencePositionPrefix Prefix, bool Returned, string? Failure);
 internal sealed record FalloutPackageCommandRawRotationRead(string Source, string Stack, Guid Process,
     Guid Factory, Guid Constructor, FalloutFormKey Reference, FalloutFormKey Base, long Sequence, uint ZBits);
 
@@ -85,6 +91,9 @@ internal interface IFalloutPackageReferenceFieldConsumers
     Guid Factory { get; }
     void RequireCurrent(FalloutPackageCommandFieldInvocation invocation);
     FalloutPackageCommandRawRotationRead? ReadRawRotationZ(FalloutPackageCommandFieldInvocation invocation) => null;
+    FalloutReferencePositionRead? ReadCurrentReferencePosition(FalloutPackageCommandFieldInvocation invocation) => null;
+    FalloutReferenceParentCellRead? ReadCurrentReferenceParentCell(FalloutPackageCommandFieldInvocation invocation) => null;
+    FalloutReferenceWorldspaceRead? ReadCurrentReferenceWorldspace(FalloutPackageCommandFieldInvocation invocation) => null;
     FalloutFormKey? ReadWorldspace(FalloutPackageCommandFieldInvocation invocation, FalloutFormKey? parentCell);
     void ReferenceChanged(FalloutPackageCommandFieldInvocation invocation, uint mask);
 }

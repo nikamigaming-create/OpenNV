@@ -16,7 +16,7 @@ internal sealed partial class NativePluginExecutionDomain
             }
         }
     }
-    private byte[] DispatchPrivateCrt(Frame frame, ulong parent, NativePluginPrivateIo owner, BinaryReader reader)
+    private byte[] DispatchPrivateCrt(Frame frame, ulong parent, ulong moduleId, NativePluginPrivateIo owner, BinaryReader reader)
     {
         if (frame.Operation == CrtProvider)
         {
@@ -33,12 +33,18 @@ internal sealed partial class NativePluginExecutionDomain
             throw new InvalidDataException("CRT operation has no current correlated native provider.");
         if (frame.Operation == CrtRoute)
         {
-            var api = reader.ReadUInt32(); var mode = ReadText(reader); var writable = reader.ReadUInt32(); var path = ReadText(reader); Finish(reader);
+            var api = reader.ReadUInt32(); var mode = ReadText(reader); var writable = reader.ReadUInt32(); var path = ReadText(reader);
+            var caller = reader.ReadUInt32(); var sharing = reader.ReadInt32(); var cell = reader.ReadUInt32();
+            var value = reader.ReadUInt32(); var attempt = reader.ReadUInt32(); Finish(reader);
             if (writable > 1 || !(api == 1 && CrtModeWritable(mode) == (writable != 0) || api == 5 && mode.Length == 0 && writable == 1))
                 throw new InvalidDataException("CRT route altered its actual path/API/mode access contract.");
             var action = api == 5 ? NativePluginIoAction.Directory : writable != 0 ? NativePluginIoAction.Write : NativePluginIoAction.Read;
-            var route = owner.Resolve(parent, api, action, path);
-            if (!_crtRoutes.TryAdd(route.Id, (providerId, mode, writable != 0)))
+            var supplemental = IsSupplementalNvseModule(RetainedNvseModule(moduleId));
+            if (!supplemental && (caller != 0 || sharing != 0 || cell != 0 || value != 0 || attempt != 0))
+                throw new InvalidDataException("Primary CRT route carries a foreign diagnostic producer.");
+            var route = supplemental ? EnterModuleDiagnostic(parent, moduleId, caller, cell, value, attempt, sharing, api, path, mode, writable != 0) :
+                owner.Resolve(parent, api, action, path);
+            if (!_crtRoutes.TryAdd(route.Id, (providerId, mode, writable != 0, moduleId)))
                 throw new InvalidDataException("CRT route repeats a live selected path decision.");
             // Source absence/deletion maps to a protected absent private path.
             // Opening the original virtual spelling could expose a loser or
@@ -53,15 +59,19 @@ internal sealed partial class NativePluginExecutionDomain
         if (!Enum.IsDefined(operation) || retired > 1)
             throw new InvalidDataException("CRT result has an unknown operation/retirement disposition.");
         var receipt = new NativePluginCrtReceipt(0, Generation, parent, providerId, routeId, stream, operation, argument, requested,
-            result, status, retired != 0, providerOwner.Selection.SourceOwner);
+            result, status, retired != 0, providerOwner.Selection.SourceOwner)
+        { Module = moduleId };
         if (frame.Operation == CrtOpened)
         {
             if (operation != NativePluginCrtOperation.Open || retired != 0 || !_crtRoutes.Remove(routeId, out var route) ||
-                route.Provider != providerId || (stream == 0) != (result == 0) || result != stream ||
+                route.Provider != providerId || route.Module != moduleId || (stream == 0) != (result == 0) || result != stream ||
                 status.StreamStatusAvailable != (stream != 0))
                 throw new InvalidDataException("CRT open lacks its actual selected mode/pointer/result lifetime.");
-            owner.ValidateResult(routeId, 1, route.Writable); owner.CompleteCrt(parent, routeId, 1, stream != 0);
-            if (stream != 0 && (!_crtStreams.TryAdd(routeId, new(providerId, routeId, stream, route.Writable, route.Mode, providerOwner.Selection.SourceOwner)) ||
+            owner.ValidateResult(routeId, 1, route.Writable);
+            if (IsSupplementalNvseModule(RetainedNvseModule(moduleId)))
+            { owner.CompleteModuleDiagnostic(routeId, stream != 0); CompleteModuleDiagnostic(moduleId, routeId, stream, status); }
+            else owner.CompleteCrt(parent, routeId, 1, stream != 0);
+            if (stream != 0 && (!_crtStreams.TryAdd(routeId, new(providerId, routeId, stream, route.Writable, route.Mode, providerOwner.Selection.SourceOwner) { Module = moduleId }) ||
                 _crtStreams.Values.Count(value => value.Address == stream) != 1))
                 throw new InvalidDataException("CRT actual stream aliases another live source capability.");
             owner.RecordCrt(receipt); return Payload(writer => writer.Write(1U));
@@ -70,11 +80,11 @@ internal sealed partial class NativePluginExecutionDomain
         {
             if (stream != 0 || retired != 0 || operation != NativePluginCrtOperation.MakeDirectory ||
                 status.StreamStatusAvailable || !_crtRoutes.Remove(routeId, out var route) || route.Provider != providerId ||
-                route.Mode.Length != 0 || !route.Writable || result is not (0 or -1))
+                route.Mode.Length != 0 || !route.Writable || route.Module != moduleId || result is not (0 or -1))
                 throw new InvalidDataException("CRT directory result changed its private path/source disposition.");
             owner.CompleteCrt(parent, routeId, 5, result == 0); owner.RecordCrt(receipt); return Payload(writer => writer.Write(1U));
         }
-        if (frame.Operation != CrtEvent || !_crtStreams.TryGetValue(routeId, out var current) || current.Provider != providerId || current.Address != stream ||
+        if (frame.Operation != CrtEvent || !_crtStreams.TryGetValue(routeId, out var current) || current.Provider != providerId || current.Address != stream || current.Module != moduleId ||
             operation is NativePluginCrtOperation.Open or NativePluginCrtOperation.MakeDirectory ||
             (operation == NativePluginCrtOperation.Close) != (retired == 1) ||
             (operation != NativePluginCrtOperation.Close) != status.StreamStatusAvailable ||
@@ -116,7 +126,7 @@ internal sealed partial class NativePluginExecutionDomain
     internal void RequirePrivateCrtSaveOwned()
     {
         RequireNvseModuleSetColdState();
-        VerifyOwner(); RequireNativeEnvironmentSaveOwned(); RequireNativeFileMetadataSaveOwned(); RequireNativeFileSizeSaveOwned(); RequireModuleReadIoSaveOwned();
+        VerifyOwner(); RequireNativeEnvironmentSaveOwned(); RequireNativeFileMetadataSaveOwned(); RequireNativeFileSizeSaveOwned(); RequireModuleReadIoSaveOwned(); RequireModuleDiagnosticSaveOwned();
         if (_crtStreams.Count != 0 || _crtRoutes.Count != 0 || NvseCrtReceipts.Count != 0 || _crtDescriptorReceipts.Count != 0 || _cppRuntimePublished || _crtPureBindings.Count != 0)
             throw new NotSupportedException("Original CRT current/cold stream/caller/error/floating-state construction has no unified source save owner.");
     }

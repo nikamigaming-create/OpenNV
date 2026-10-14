@@ -47,6 +47,7 @@ internal sealed record FalloutProcessCommonEntry(FalloutCombatActorIdentity Sour
     FalloutProcessSceneFields? SceneFields = null, FalloutProcessPackageSlots? Packages = null)
 {
     public IReadOnlyList<FalloutProcessPackageRequestFlagStore> RequestFlagStores { get; init; } = [];
+    public FalloutProcessEarlyControllerFieldSnapshot? EarlyController { get; init; }
 }
 internal sealed record FalloutProcessCommonTransfer(FalloutFormKey Actor, long BeforeEpoch, long NewEpoch,
     FalloutDetectionProcessLevel Before, FalloutDetectionProcessLevel After, string Owner,
@@ -60,7 +61,8 @@ internal sealed record FalloutProcessCommonSnapshot(string Schema, string Contra
     IReadOnlyList<FalloutProcessCommonPublication>? Publications = null,
     FalloutPackageRegistrySnapshot? PackageRegistry = null,
     IReadOnlyList<FalloutPackageCommandFieldSnapshot>? CommandFields = null,
-    IReadOnlyList<FalloutSourcePackageAssignmentCall>? PackageCommands = null);
+    IReadOnlyList<FalloutSourcePackageAssignmentCall>? PackageCommands = null,
+    FalloutStandaloneReferenceOwnersSnapshot? ReferenceOwners = null);
 
 internal sealed record FalloutActorProcessNodeBinding(byte PartType, string SourceNode, int? Block);
 internal sealed record FalloutActorProcessBodyBinding(FalloutFormKey Actor, string SkeletonPath,

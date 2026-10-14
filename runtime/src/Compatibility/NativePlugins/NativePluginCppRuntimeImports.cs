@@ -27,12 +27,14 @@ internal static class NativePluginCppRuntimeImports
     internal const string StreamVirtualBaseDestructor = "??_D?$basic_istream@DU?$char_traits@D@std@@@std@@QAEXXZ";
     internal const string LocaleWideMonths = "?_W_Getmonths@_Locinfo@std@@QBEPBGXZ";
     internal const string LocaleWideDays = "?_W_Getdays@_Locinfo@std@@QBEPBGXZ";
+    internal const string LocaleIdConversion = "??Bid@locale@std@@QAEIXZ";
     internal static readonly IReadOnlySet<string> Names = new HashSet<string>(StringComparer.Ordinal)
     {
         OpenWide, OpenNarrow, ErrorStream, RandomDevice,
         ClearInputState, SeekInputPosition, SeekInputOffset, TellInputPosition,
         StreamEndOfFile, StreamFailed, StreamBad, SetStreamExceptions,
         StreamVirtualBaseDestructor, LocaleWideMonths, LocaleWideDays,
+        LocaleIdConversion,
         "??0?$basic_ostream@DU?$char_traits@D@std@@@std@@QAE@PAV?$basic_streambuf@DU?$char_traits@D@std@@@1@_N@Z",
         "?flush@?$basic_ostream@DU?$char_traits@D@std@@@std@@QAEAAV12@XZ",
         "?in@?$codecvt@DDU_Mbstatet@@@std@@QBEHAAU_Mbstatet@@PBD1AAPBDPAD3AAPAD@Z",

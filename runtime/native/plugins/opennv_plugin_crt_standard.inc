@@ -96,7 +96,7 @@ void crt_publish_standard(unsigned index) {
     stream.route = receipt.get<std::uint64_t>(); receipt.finish();
     if (!stream.route) throw Fatal(ERROR_INVALID_DATA, "Standard FILE has no actual correlated private C# route.");
     auto& streams = crt_owner().streams;
-    if (!streams.emplace(address(stream.pointer), CrtStream{provider.id, stream.route, stream.pointer, true, L"a"}).second)
+    if (!streams.emplace(address(stream.pointer), CrtStream{provider.id, stream.route, stream.pointer, true, L"a", state->module_id}).second)
         throw Fatal(ERROR_INVALID_HANDLE, "Standard FILE repeats a live native stream capability.");
     CrtDescriptor descriptor; descriptor.provider = provider.id; descriptor.route = stream.route; descriptor.stream = stream.pointer;
     descriptor.descriptor = stream.descriptor; descriptor.handle = stream.handle; descriptor.writable = true;

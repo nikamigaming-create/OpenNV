@@ -5,9 +5,11 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 // exports and the existing source protection adapter form this bounded lane.
 internal static class NativePluginCoResidentImports
 {
-    internal static void Require(NativePluginImageDeclaration source, NativePluginModuleReadIoSource? moduleRead = null)
+    internal static void Require(NativePluginImageDeclaration source, NativePluginModuleReadIoSource? moduleRead = null,
+        NativePluginModuleCppSource? cpp = null)
     {
         moduleRead?.Check(source);
+        cpp ??= NativePluginModuleCppSource.Read(source); cpp?.Check(source);
         if (source.DelayImports) throw new NotSupportedException("Co-resident delay imports need their genuine module loader lifetime.");
         foreach (var import in source.Imports)
         {
@@ -15,6 +17,7 @@ internal static class NativePluginCoResidentImports
             var name = import.Name ?? throw new NotSupportedException("Co-resident ordinal imports require their exact provider declaration.");
             if (NativePluginSharedFileSizeImports.Owns(library, name)) continue;
             if (moduleRead?.Owns(library, name) == true) continue;
+            if (cpp?.Owns(library, name) == true || NativePluginModuleRuntimeImports.Owns(library, name)) continue;
             if (NativePluginModuleReadIoSource.OwnsExport(library, name))
                 throw new NotSupportedException("Co-resident original read import needs its actual module-bound source/constructor owner: " + library + "!" + name);
             var windows = library is "kernel32.dll" or "kernelbase.dll" || library.StartsWith("api-ms-win-core-", StringComparison.Ordinal);

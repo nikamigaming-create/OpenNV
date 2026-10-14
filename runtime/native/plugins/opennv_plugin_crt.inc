@@ -37,7 +37,7 @@ bool crt_io_import_name(const std::string& library, const std::string& name) {
     return unowned.count(name) != 0;
 }
 PluginCrtRuntime& crt_owner() {
-    auto& io = io_owner();
+    auto& io = crt_io_owner();
     if (!io.crt) throw Fatal(ERROR_NOT_SUPPORTED, "Original CRT file calls have no selected actual export provider.");
     return *io.crt;
 }
@@ -88,13 +88,13 @@ void crt_register(CrtProvider& provider) {
     if (provider.registered) return;
     Bytes request; request.put(provider.id); request.put(address(provider.retained));
     request.text(io_utf8(provider.path)); request.text(provider.sha);
-    auto response = io_host(crt_provider_event, request); Reader result{response.data};
+    auto response = crt_host(crt_provider_event, request); Reader result{response.data};
     if (result.get<std::uint32_t>() != 1) throw Fatal(ERROR_INVALID_DATA, "Actual CRT provider has no correlated C# source receipt.");
     result.finish(); provider.registered = true;
 }
 void crt_emit(const CrtEvent& event, std::uint32_t callback = crt_stream_event) {
     auto& provider = crt_provider(event.provider);
-    if (io_owner().loader_retiring) {
+    if (crt_io_owner().loader_retiring) {
         if (callback != crt_stream_event) throw Fatal(ERROR_NOT_SUPPORTED, "CRT path/open cannot invoke C# while original loader retirement holds its lock.");
         if (!provider.registered) throw Fatal(ERROR_NOT_SUPPORTED, "First CRT detach operation has no registered original export provider.");
     }
@@ -107,6 +107,13 @@ CrtStream crt_stream(void* pointer, bool write = false) {
     auto& owner = crt_owner(); const auto found = owner.streams.find(address(pointer));
     if (!pointer || found == owner.streams.end() || found->second.pointer != pointer || (write && !found->second.writable))
         throw Fatal(ERROR_INVALID_HANDLE, "CRT operation has a foreign/closed stream or writes an original read-only input.");
+    if (found->second.module != state->module_id)
+        throw Fatal(ERROR_INVALID_HANDLE, "CRT FILE belongs to another current original module.");
+    if (!nvse_primary_services()) {
+        const auto& module = nvse_module_record(state->module_id);
+        const auto* cell = reinterpret_cast<void* const*>(reinterpret_cast<const unsigned char*>(module.image) + module.diagnostic->stream);
+        if (nvse_copy(cell) != pointer) throw Fatal(ERROR_INVALID_HANDLE, "Diagnostic member lost its actual source global FILE association.");
+    }
     (void)crt_provider(found->second.provider); return found->second;
 }
 void crt_prepare(PluginIoRuntime& io, Reader& reader) {

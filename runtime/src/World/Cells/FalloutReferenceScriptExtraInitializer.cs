@@ -67,10 +67,14 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
                 throw new InvalidDataException("Cold Script initializer reused a process or replaced its fields-owned source history.");
             _referenceFlags = saved.ReferenceFlags; _template = saved.Template; _writerBoundary = saved.WriterBoundary;
             _publications.AddRange(saved.Publications); _calls.AddRange(saved.Calls.Select(CloneCall));
+            _referenceFlagWrites.AddRange(saved.ReferenceFlagWrites ?? []);
             _failure = _calls.FirstOrDefault(value => !value.Returned)?.Failure;
             _returnedInitialization = _calls.Any(value => value.Returned && value.InvalidatedWriter is null);
             foreach (var call in _calls) _invocations.Add(call.Invocation.Initialization);
-            _sequence = _calls.LastOrDefault()?.Changed ?? 0; LastCall = _calls.LastOrDefault();
+            foreach (var write in _referenceFlagWrites) _invocations.Add(write.Invocation.Call);
+            _sequence = Math.Max(_calls.LastOrDefault()?.Changed ?? 0, _referenceFlagWrites.LastOrDefault()?.Changed ?? 0);
+            _failure ??= _referenceFlagWrites.FirstOrDefault(value => !value.Returned)?.Failure;
+            LastCall = _calls.LastOrDefault();
             _publications.Add(new(Process, Factory, FieldsFactory, Constructor, Epoch, threadContext.Process, threadContext.Factory,
                 saved.Process, saved.Factory));
             threadContext.RetainColdScriptInitializationScopes(_calls.Where(value => value.ThreadScope is not null)
@@ -184,7 +188,8 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         if (_busy) { _fault = checked(_fault + 1); throw new InvalidOperationException("Entered Script initializer cannot be captured."); }
         var snapshot = new FalloutReferenceScriptExtraInitializerSnapshot(Schema, Source, _fields.Stack, Actor, Process,
             Factory, FieldsFactory, Constructor, Epoch, _referenceFlags, _template, _writerBoundary,
-            Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_calls.Select(CloneCall).ToArray()));
+            Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_calls.Select(CloneCall).ToArray()),
+            _referenceFlagWrites.Count == 0 ? null : Array.AsReadOnly(_referenceFlagWrites.ToArray()));
         Validate(snapshot, Source, _fields.Stack, Actor); return snapshot;
     }
 

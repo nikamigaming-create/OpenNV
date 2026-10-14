@@ -15,7 +15,7 @@ internal sealed partial class FalloutPlayerThreadContextState
     {
         ArgumentNullException.ThrowIfNull(requireCurrent); requireCurrent();
         if (_retired || invocation == Guid.Empty || ownerFactory == Guid.Empty || _scriptKindScopes.ContainsKey(invocation) ||
-            _kindScopeIndices.ContainsKey(invocation) ||
+            _kindScopeIndices.ContainsKey(invocation) || HasPhysicsInitializationScope(invocation) ||
             _thread is { } thread && thread != Environment.CurrentManagedThreadId)
             throw new InvalidOperationException("Reference Script initialization changed its actual current-thread owner.");
         RequireCurrentKindOwner(); var fields = CurrentKindFields();

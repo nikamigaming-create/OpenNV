@@ -31,7 +31,7 @@ internal sealed partial class FalloutPlayerThreadContextState
         ArgumentNullException.ThrowIfNull(requireCurrent); requireCurrent();
         if (_retired || invocation == Guid.Empty || ownerFactory == Guid.Empty ||
             _thread is { } thread && thread != Environment.CurrentManagedThreadId ||
-            _kindScopeIndices.ContainsKey(invocation) || _scriptKindScopes.ContainsKey(invocation))
+            _kindScopeIndices.ContainsKey(invocation) || _scriptKindScopes.ContainsKey(invocation) || HasPhysicsInitializationScope(invocation))
             throw new InvalidOperationException("Menu allocation changed its actual source thread, owner or invocation.");
         RequireCurrentKindOwner();
         var fields = CurrentKindFields();

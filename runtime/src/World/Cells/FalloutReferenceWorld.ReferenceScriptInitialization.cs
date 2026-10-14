@@ -14,9 +14,15 @@ internal sealed partial class FalloutReferenceWorld
         var scene = CampaignStandalonePlayerScene;
         var owned = records.OwnedSource ?? throw new NotSupportedException("source-reference-Script-initialization-owned-image-unbound");
         var source = FalloutExecutableStringTable.ReadReferenceScriptExtraInitializer(owned.FalloutExecutablePath, fields.Source);
-        var initializer = new FalloutReferenceScriptExtraInitializer(source, records, fields, scene.ThreadContext,
+        _sourceReferenceScriptInitializer = new FalloutReferenceScriptExtraInitializer(source, records, fields, scene.ThreadContext,
             RequireActualReferenceScriptInitialization);
-        _sourceReferenceScriptInitializer = initializer;
+    }
+
+    private void InitializeStandaloneReferenceScript()
+    {
+        var initializer = _sourceReferenceScriptInitializer ??
+            throw new NotSupportedException("source-reference-Script-initialization-owner-unbound");
+        var fields = _sourcePackageFields[_enginePlayer];
         // Cold fields retain the original initializer's returned/failed history.
         // The fresh owner binds it without repeating reference or Extra stores.
         if (_processCommonRestore is not null) return;

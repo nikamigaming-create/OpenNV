@@ -34,7 +34,13 @@ internal sealed record FalloutReferenceScriptExtraInitializerSnapshot(string Sch
     Guid Process, Guid Factory, Guid FieldsFactory, Guid Constructor, long Epoch,
     uint ReferenceFlags, FalloutFormKey? Template, string? WriterBoundary,
     IReadOnlyList<FalloutReferenceScriptExtraInitializerPublication> Publications,
-    IReadOnlyList<FalloutReferenceScriptExtraInitializationCall> Calls);
+    IReadOnlyList<FalloutReferenceScriptExtraInitializationCall> Calls,
+    IReadOnlyList<FalloutReferenceInitializedFlagWrite>? ReferenceFlagWrites = null);
+internal sealed record FalloutReferenceInitializedFlagWrite(FalloutReferencePositionInvocation Invocation,
+    string Source, Guid Factory, Guid FieldsFactory, long Entered, long Changed,
+    uint Before, uint After, bool Initialized, bool Returned, string? Failure,
+    uint Mask = FalloutReferenceScriptExtraInitializerSource.InitializedFlag,
+    FalloutReferenceBaseAssignmentInputs? BaseAssignment = null);
 
 internal enum FalloutScriptExtraInitializationFieldOperationKind
 { Begin, Read, Attach, EventListPublication, Admit, UnownedWriter }

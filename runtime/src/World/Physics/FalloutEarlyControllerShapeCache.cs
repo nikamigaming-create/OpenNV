@@ -9,6 +9,7 @@ internal sealed record FalloutEarlyControllerNativeShape(string Role, Shape3D Sh
 internal sealed record FalloutEarlyControllerShapeCall(FalloutEarlyControllerShapeInvocation Invocation,
     FalloutPlayerControllerConstructionInputs Inputs, bool ReusedConvex, IReadOnlyList<ulong> Allocated,
     IReadOnlyList<ulong> ReturnedNativeShapes, bool Returned, string? Failure);
+internal sealed record FalloutEarlyControllerColdShapeCall(FalloutEarlyControllerShapeCall Resources);
 
 // The cache owns actual resources, and each lease owns its fresh slot0 capsule.
 // No resource is attached to a default world by this source construction.
@@ -21,6 +22,7 @@ internal sealed class FalloutEarlyControllerShapeCache
     private readonly HashSet<FalloutEarlyControllerShapeLease> _leases = [];
     private readonly List<FalloutEarlyControllerNativeShape> _pendingRetirement = [];
     private readonly List<FalloutEarlyControllerShapeCall> _calls = [];
+    private readonly List<FalloutEarlyControllerColdShapeCall> _coldCalls = [];
     private IReadOnlyList<FalloutEarlyControllerNativeShape>? _convex;
     private FalloutStandardControllerConvexInputs? _convexInputs;
     private FalloutEarlyControllerConvexGeometry? _geometry;
@@ -45,7 +47,20 @@ internal sealed class FalloutEarlyControllerShapeCache
     }
 
     internal FalloutEarlyControllerShapeLease Acquire(FalloutEarlyControllerShapeInvocation invocation,
-        FalloutPlayerControllerConstructionInputs player)
+        FalloutPlayerControllerConstructionInputs player) => AcquireResources(invocation, player, false);
+    internal FalloutEarlyControllerShapeLease RebindColdResources(FalloutEarlyControllerShapeInvocation invocation,
+        FalloutPlayerControllerConstructionInputs player) => AcquireResources(invocation, player, true);
+    internal IReadOnlyList<FalloutEarlyControllerShapeCall> CaptureOriginalCalls() => _calls.ToArray();
+    internal IReadOnlyList<FalloutEarlyControllerColdShapeCall> CaptureColdCalls() => _coldCalls.ToArray();
+    internal void RetainColdHistory(IReadOnlyList<FalloutEarlyControllerShapeCall> source,
+        IReadOnlyList<FalloutEarlyControllerColdShapeCall> cold)
+    {
+        RequireOwner(); if (_calls.Count != 0 || _coldCalls.Count != 0 || _convex is not null || _leases.Count != 0)
+            throw new InvalidOperationException("Cold shape history cannot replace a live resource cache.");
+        _calls.AddRange(source); _coldCalls.AddRange(cold); LastCall = _calls.LastOrDefault();
+    }
+    private FalloutEarlyControllerShapeLease AcquireResources(FalloutEarlyControllerShapeInvocation invocation,
+        FalloutPlayerControllerConstructionInputs player, bool cold)
     {
         RequireOwner(); ArgumentNullException.ThrowIfNull(invocation); ArgumentNullException.ThrowIfNull(player);
         if (_failure is not null) throw new InvalidOperationException("Early shape factory retains its original failed construction: " + _failure);
@@ -78,13 +93,13 @@ internal sealed class FalloutEarlyControllerShapeCache
             _leases.Add(lease);
             var call = new FalloutEarlyControllerShapeCall(invocation, player, reused, created.Select(value => value.NativeId).ToArray(),
                 new[] { capsule.NativeId }.Concat(_convex!.Select(value => value.NativeId)).ToArray(), true, null);
-            _calls.Add(call); LastCall = call; return lease;
+            Publish(call); return lease;
         }
         catch (Exception error)
         {
             _failure ??= string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
             var call = new FalloutEarlyControllerShapeCall(invocation, player, reused, created.Select(value => value.NativeId).ToArray(), [], false, _failure);
-            _calls.Add(call); LastCall = call;
+            Publish(call);
             // A published shared cache outlives the failed caller. Unpublished
             // resources retire in reverse order; rejected releases remain real.
             var published = _convex?.Select(value => value.NativeId).ToHashSet() ?? [];
@@ -93,6 +108,8 @@ internal sealed class FalloutEarlyControllerShapeCache
         }
         finally { _busy = false; }
 
+        void Publish(FalloutEarlyControllerShapeCall call)
+        { if (cold) _coldCalls.Add(new(call)); else { _calls.Add(call); LastCall = call; } }
         void Guard()
         {
             if (_fault != fault || _retired || invocation.Initialization == Guid.Empty || invocation.Constructor == Guid.Empty ||
