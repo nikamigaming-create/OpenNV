@@ -16,8 +16,8 @@ internal sealed record FalloutStandaloneCameraCall(Guid Invocation, byte Argumen
     long Entered, long Changed, FalloutStandaloneCameraStep Step, string Owner, string? Failure, FalloutStandaloneCameraStep? FailedAt);
 internal enum FalloutStandaloneSceneClockStep { Incremented, ArgumentStored, VirtualEntered, Returned, Failed }
 internal sealed record FalloutStandaloneSceneClockCall(Guid Main, long MainOrdinal, byte BeforeBracket,
-    byte Bracket, uint DeliveredBits, uint? ArgumentBits, long Entered, long Changed,
-    FalloutStandaloneSceneClockStep Step, string? Failure);
+    byte Bracket, uint? CachedScaledBits, uint? ArgumentBits, long Entered, long Changed,
+    FalloutStandaloneSceneClockStep Step, string? Failure, FalloutSourceFrameDeltaRead? CachedTimer = null);
 internal enum FalloutStandaloneScenePreludeStep { ViewRequests, OwnedChildRelease, Countdown, ReferenceScratchStore, ReferenceQuery, ReferenceFrame, ReferenceRelease, ActorScalarReset, ThreadContext, InputManagerQuery, ActorProcessQuery, ActorSceneContinuation, QueuedSceneNodes, ProcessSceneUpdate, PostProcessContext, TimedActions, PlayerSceneContinuation, Failed }
 internal sealed record FalloutStandaloneActorProcessQuery(Guid Main, long MainOrdinal, Guid Process,
     long Entered, long Changed, FalloutProcessSceneQuery? Result, int EntryCalls, bool AnimationReturned, string? Failure);
@@ -63,7 +63,9 @@ internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, Fallo
     FalloutPlayerInhibitionSnapshot? Inhibition = null,
     FalloutPlayerFollowingTimerFlagSnapshot? FollowingTimerFlag = null,
     FalloutPlayerFollowingContinuationCall? FollowingContinuation = null,
-    FalloutActorMoverSnapshot? ActorMover = null);
+    FalloutActorMoverSnapshot? ActorMover = null,
+    FalloutPlayerLateActorSnapshot? LateActorTime = null,
+    FalloutPlayerLateFrameSnapshot? LateFrame = null);
 
 // These are individual source children. A supplied delegate is not a completion
 // receipt; the source call records its actual returned child and committed prefix.

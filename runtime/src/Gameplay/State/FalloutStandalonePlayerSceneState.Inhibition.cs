@@ -34,6 +34,11 @@ internal sealed partial class FalloutStandalonePlayerSceneState
                 throw new InvalidOperationException("Movement inhibition lost its actual Prelude invocation.");
             return;
         }
+        if (consumer == FalloutPlayerInhibitionConsumer.LateFrame)
+        {
+            RequireLateFrameCaller(caller);
+            return;
+        }
         if (consumer != FalloutPlayerInhibitionConsumer.Following)
             throw new InvalidDataException("Player inhibition selected an unknown source consumer.");
         RequireFollowingContinuationInvocation(caller);

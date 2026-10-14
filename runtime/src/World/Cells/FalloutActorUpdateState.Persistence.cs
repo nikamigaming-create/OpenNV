@@ -8,7 +8,8 @@ internal sealed partial class FalloutActorUpdateState
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_busy) throw new NotSupportedException("An actual actor update mutation is in flight.");
-        return new(Schema, _stack, _source.Contract, _process, _sequence, _actors.Values.ToArray(), _receipts.ToArray(), _cold);
+        return new(Schema, _stack, _source.Contract, _process, _sequence, _actors.Values.ToArray(), _receipts.ToArray(), _cold,
+            CaptureRetainedPlayerFrameGlobalAi());
     }
     private void Restore(FalloutActorUpdateSnapshot saved)
     {
@@ -61,6 +62,12 @@ internal sealed partial class FalloutActorUpdateState
         if (saved.ColdHandoff is { } handoff && (handoff.PreviousProcess == Guid.Empty || handoff.CurrentProcess != saved.CapturedProcess ||
             handoff.PreviousProcess == handoff.CurrentProcess || handoff.Sequence > saved.Sequence || handoff.Sequence < 0))
             throw new InvalidDataException("Actor update cold process handoff is malformed.");
+        if (saved.PlayerFrameGlobalAi is { } globalAi)
+        {
+            ValidatePlayerFrameGlobalAi(globalAi, saved.CapturedProcess, saved.Sequence);
+            _preparedColdFrameGlobalAi = globalAi with
+            { Writers = Array.AsReadOnly(globalAi.Writers.ToArray()) };
+        }
         foreach (var (key, actor) in actorRows) _actors.Add(key, actor);
         _receipts.AddRange(saved.Receipts); _sequence = saved.Sequence;
         _cold = new(saved.CapturedProcess, _process, Next());

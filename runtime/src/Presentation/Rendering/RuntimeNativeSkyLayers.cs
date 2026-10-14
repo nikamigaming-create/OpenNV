@@ -79,8 +79,10 @@ internal partial class RuntimeNativeSkyLayers : Node3D
 
     public override void _Process(double delta)
     {
-        ProcessSourceMoonCalendar();
         if (GetViewport().GetCamera3D() is { } camera) GlobalPosition = camera.GlobalPosition;
+        // Camera placement adapts this viewport independently of a source
+        // Moon frame. Its failure still stops the following source consumers.
+        ProcessSourceMoonCalendar();
         for (var layer = 0; layer < _cloudOffsets.Length; layer++)
             _cloudOffsets[layer] = (_cloudOffsets[layer] + delta * _cloudRates[layer]) % 1.0;
         foreach (var (_, material, layer) in _clouds)

@@ -33,7 +33,7 @@ internal static partial class SourceMainScriptCallerContracts
         var native = new AuthoredPlayerSceneObject(); var owned = scene.PublishFirstPerson(native.Publication(scene), native.ReadLiving);
         var before = scene.Capture();
         var cold = new FalloutStandalonePlayerSceneState(graph.Source, before.Stack, Guid.NewGuid(), before);
-        var coldMain = Guid.NewGuid(); cold.StoreSceneClock(coldMain, 1, 0x3c800000); cold.EnterSceneVirtual(coldMain, 1);
+        var coldMain = Guid.NewGuid(); cold.StoreSceneClock(coldMain, 1, () => AuthoredSceneCachedDelta(cold, 0x3c800000)); cold.EnterSceneVirtual(coldMain, 1);
         Reject(() => cold.ExecuteInitialVirtualPrefix(coldMain, 1, () => { }));
         Require(cold.Capture().ReferenceQuery is { GetterReturned: false, Returned: false } &&
             cold.Capture().Prelude?.FailedAt == FalloutStandaloneScenePreludeStep.ReferenceQuery,
@@ -55,7 +55,7 @@ internal static partial class SourceMainScriptCallerContracts
         var reboundScene = new FalloutStandalonePlayerSceneState(graph.Source, before.Stack, Guid.NewGuid(), before);
         var reboundNative = new AuthoredPlayerSceneObject();
         var reboundOwner = reboundScene.PublishFirstPerson(reboundNative.Publication(reboundScene), reboundNative.ReadLiving);
-        var reboundMain = Guid.NewGuid(); reboundScene.StoreSceneClock(reboundMain, 1, 0x3c800000); reboundScene.EnterSceneVirtual(reboundMain, 1);
+        var reboundMain = Guid.NewGuid(); reboundScene.StoreSceneClock(reboundMain, 1, () => AuthoredSceneCachedDelta(reboundScene, 0x3c800000)); reboundScene.EnterSceneVirtual(reboundMain, 1);
         Reject(() => reboundScene.ExecuteInitialVirtualPrefix(reboundMain, 1, () => { }));
         var reboundQuery = reboundScene.Capture();
         Require(reboundQuery.ReferenceQuery is { GetterReturned: true, Returned: true } &&
@@ -67,12 +67,12 @@ internal static partial class SourceMainScriptCallerContracts
         var releasedNative = new AuthoredPlayerSceneObject();
         var releasedOwner = releasedScene.PublishFirstPerson(releasedNative.Publication(releasedScene), releasedNative.ReadLiving);
         releasedScene.ReleaseFirstPerson(releasedOwner);
-        var releasedMain = Guid.NewGuid(); releasedScene.StoreSceneClock(releasedMain, 1, 0x3c800000); releasedScene.EnterSceneVirtual(releasedMain, 1);
+        var releasedMain = Guid.NewGuid(); releasedScene.StoreSceneClock(releasedMain, 1, () => AuthoredSceneCachedDelta(releasedScene, 0x3c800000)); releasedScene.EnterSceneVirtual(releasedMain, 1);
         Reject(() => releasedScene.ExecuteInitialVirtualPrefix(releasedMain, 1, () => { }));
         Require(releasedScene.Capture().ReferenceQuery is { GetterReturned: true, Returned: true, FirstPerson: null },
             "Releasing the latest cold field resurrected an older unreleased historical factory.");
         releasedScene.Retire(); releasedNative.Retire();
-        var main = Guid.NewGuid(); scene.StoreSceneClock(main, 1, 0x3c800000); scene.EnterSceneVirtual(main, 1);
+        var main = Guid.NewGuid(); scene.StoreSceneClock(main, 1, () => AuthoredSceneCachedDelta(scene, 0x3c800000)); scene.EnterSceneVirtual(main, 1);
         var releaseCount = 0; Reject(() => scene.ExecuteInitialVirtualPrefix(main, 1, () => releaseCount++));
         var stopped = scene.Capture();
         Require(releaseCount == 1 && stopped.ReferenceQuery is { Returned: true, GetterReturned: true, Result: null } query &&

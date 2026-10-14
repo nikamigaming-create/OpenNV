@@ -9,6 +9,7 @@ internal static partial class SourceMainScriptCallerContracts
     private static void RunPlayerFollowingPrefixContracts()
     {
         RunPlayerPackageLineageContracts();
+        RunHistoricalInhibitionReadContracts();
         using var warm = new FollowingPrefixFixture();
         var before = warm.Common.Capture();
         Reject(warm.Execute);

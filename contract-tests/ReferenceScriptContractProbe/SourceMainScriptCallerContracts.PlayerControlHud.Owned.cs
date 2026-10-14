@@ -91,6 +91,7 @@ internal static partial class SourceMainScriptCallerContracts
             var packageCommandFields = AuditOwnedPackageCommandFields(records, common, controls);
             var packageState = AuditOwnedPackageState(records, common, controls);
             var referenceScriptInitialization = AuditOwnedReferenceScriptExtraInitializer(records, common, controls);
+            var lateActorTimeConstructor = AuditOwnedLateActorTimeConstruction(records, common, followingSource);
             var observation = new FalloutPlayerControlCommandObservation(program.Source.FormKey,
                 "owned-offline-original-compiled-control-command", Guid.NewGuid(), command.Enable, command.Arguments);
             var fighting = new FalloutPlayerControlFightingOwner(controls, content.StackId, process, common, player, 1,
@@ -124,6 +125,7 @@ internal static partial class SourceMainScriptCallerContracts
                 packageCommandFields,
                 packageState,
                 referenceScriptInitialization,
+                lateActorTimeConstructor,
                 originalCompiledControl = new { source = program.Source.FormKey, program.Scope.ScopeSha256,
                     program.ProgramSha256, instruction.Offset, originalOperands = command.Arguments, mask = controlCall.Mask,
                     controlCall.Returned, pointOfView = returned.PointOfView },

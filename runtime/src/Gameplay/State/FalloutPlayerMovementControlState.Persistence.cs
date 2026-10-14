@@ -152,21 +152,16 @@ internal sealed partial class FalloutPlayerMovementControlState
             call.Step != FalloutPlayerMovementControlStep.Inhibition &&
                 (call.Inhibited is null || call.Inhibited == true && !call.Returned || call.Inhibited == false && reads.Count != 4))
             throw new InvalidDataException("Player control call skipped its shared current inhibition predicate.");
+        var source = FalloutPlayerFollowingContinuationSource.Reviewed(saved.Source);
+        var history = reads.Count == 0 ? null : new FalloutPlayerInhibitionReadHistory(
+            saved.InhibitionOwner ?? throw new InvalidDataException("Inhibition read has no shared source owner."), source, saved.Stack);
+        var caller = new FalloutPlayerSourceCaller(call.Main, call.MainOrdinal, call.Invocation);
         for (var index = 0; index < reads.Count; ++index)
         {
-            var read = reads[index]; var owner = saved.InhibitionOwner ?? throw new InvalidDataException("Inhibition read has no shared source owner.");
-            var source = FalloutPlayerFollowingContinuationSource.Reviewed(saved.Source);
-            FalloutPlayerInhibitionState.RequireHistoricalPublication(owner, source, saved.Stack, read.Process, read.Factory);
-            if (read.Source != source.Identity || read.Stack != saved.Stack || read.Process != call.Process ||
-                read.Consumer != FalloutPlayerInhibitionConsumer.Movement || read.Caller != new FalloutPlayerSourceCaller(call.Main, call.MainOrdinal, call.Invocation) ||
-                read.Lane != (FalloutPlayerInhibitionLane)index || read.Revision < 6 ||
-                index > 0 && (reads[index - 1].Value != 0 || read.Factory != reads[0].Factory || read.Revision != reads[0].Revision))
+            var read = reads[index];
+            history!.Require(read, FalloutPlayerInhibitionConsumer.Movement, caller, call.Process, (FalloutPlayerInhibitionLane)index);
+            if (index > 0 && (reads[index - 1].Value != 0 || read.Factory != reads[0].Factory || read.Revision != reads[0].Revision))
                 throw new InvalidDataException("Player movement inhibition changed actual caller/factory/order or historical getter identity.");
-            var writer = owner.History.LastOrDefault(entry => entry.Lane == read.Lane && entry.Changed <= read.Revision &&
-                entry.Operation != FalloutPlayerInhibitionOperation.SelectedVoidCallback);
-            if (read.Revision > owner.Sequence || writer is null || writer.Value != read.Value ||
-                writer.Operation == FalloutPlayerInhibitionOperation.UnownedWriter)
-                throw new InvalidDataException("Player movement inhibition differs from its actual available historical byte writer.");
         }
         if (call.Inhibited is { } result && (reads.Count == 0 || result != (reads[^1].Value != 0) || !result && reads.Count != 4) ||
             call.Inhibited == true && call.Step is not (FalloutPlayerMovementControlStep.Inhibition or FalloutPlayerMovementControlStep.Returned) ||

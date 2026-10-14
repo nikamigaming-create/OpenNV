@@ -79,7 +79,7 @@ internal static partial class SourceMainScriptCallerContracts
         scene.BindIdleAnimation(_ => common.UpdateIdleAnimation(player, 1, idleConsumers), () => common.LastIdleAnimationUpdate);
         scene.BindMovementFlags(() => common.ReadAndClearPlayerMovementFlags(player, 1));
         Reject(() => scene.BindActorProcessQueries(() => query));
-        var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, 0x3c800000); scene.EnterSceneVirtual(invocation, 1);
+        var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, () => AuthoredSceneCachedDelta(scene, 0x3c800000)); scene.EnterSceneVirtual(invocation, 1);
         Reject(() => scene.ExecuteInitialVirtualPrefix(invocation, 1, () => { }, hud,
             () => throw new InvalidOperationException("The zero-time arm queried a scaled timer.")));
         var saved = scene.Capture();
@@ -233,7 +233,7 @@ internal static partial class SourceMainScriptCallerContracts
         scene.BindProcessSceneUpdate(() => common.UpdatePlayerScene(player, 1));
         var context = Guid.NewGuid(); var reads = 0;
         scene.BindPostProcessContext(() => { reads++; return common.ReadSceneContext(player, 1) with { Context = context }; });
-        var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, 0x3c800000); scene.EnterSceneVirtual(invocation, 1);
+        var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, () => AuthoredSceneCachedDelta(scene, 0x3c800000)); scene.EnterSceneVirtual(invocation, 1);
         Reject(() => scene.ExecuteInitialVirtualPrefix(invocation, 1, () => { }, hud, () => .5f));
         var saved = scene.Capture();
         Require(reads == 1 && saved.Prelude?.FailedAt == FalloutStandaloneScenePreludeStep.PostProcessContext &&
@@ -288,7 +288,7 @@ internal static partial class SourceMainScriptCallerContracts
                 }
             };
             scene.BindIdleAnimation(_ => common.UpdateIdleAnimation(player, 1, consumers), () => common.LastIdleAnimationUpdate);
-            var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, 0x3c800000); scene.EnterSceneVirtual(invocation, 1);
+            var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, () => AuthoredSceneCachedDelta(scene, 0x3c800000)); scene.EnterSceneVirtual(invocation, 1);
             Reject(() => scene.ExecuteInitialVirtualPrefix(invocation, 1, () => { }, hud, () => .5f));
             var saved = scene.Capture();
             Require(reads == 2 && saved.IdleAnimationCall is { Result: { } update } &&
@@ -347,7 +347,7 @@ internal static partial class SourceMainScriptCallerContracts
         var reads = 0;
         scene.BindActorProcessQueries(() => ++reads == 1 ? query :
             throw new NotSupportedException("actual-animation-getter-failure"));
-        var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, 0x3c800000); scene.EnterSceneVirtual(invocation, 1);
+        var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, () => AuthoredSceneCachedDelta(scene, 0x3c800000)); scene.EnterSceneVirtual(invocation, 1);
         Reject(() => scene.ExecuteInitialVirtualPrefix(invocation, 1, () => { }, hud));
         var failed = scene.Capture();
         Require(failed.Prelude?.FailedAt == FalloutStandaloneScenePreludeStep.ActorProcessQuery &&

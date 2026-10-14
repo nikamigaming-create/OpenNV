@@ -14,17 +14,20 @@ internal sealed partial class FalloutSkyLightingState
     private string? _transferStack;
     private Guid _transferProcess;
     private string? _transferUnowned = "source-Sky-selected-reset-factory-not-configured";
-    private bool _projectionRestore;
     internal FalloutSkyTransferState? SourceTransfer => _sourceTransfer;
     internal string? SourceTransferSaveBlocker => _sourceTransfer?.SaveBlocker ?? SourceMoonSaveBlocker;
     internal object SourceTransferState => _sourceTransfer?.State ?? new { unowned = _transferUnowned ?? "source-Sky-transfer-not-constructed" };
     internal void ConfigureSourceTransfer(string executable, string stack, Guid process, FalloutImageSpaceState images)
+        => ConfigureSourceTransfer(() => FalloutSkyTransferDeclaration.Read(executable), stack, process, images);
+    internal void ConfigureSourceTransfer(FalloutSkyTransferDeclaration declaration, string stack, Guid process, FalloutImageSpaceState images)
+        => ConfigureSourceTransfer(() => declaration, stack, process, images);
+    private void ConfigureSourceTransfer(Func<FalloutSkyTransferDeclaration> readDeclaration, string stack, Guid process, FalloutImageSpaceState images)
     {
         if (_sourceTransfer is not null || _transferDeclaration is not null) throw new InvalidOperationException("Source Sky is already constructed.");
         _transferImages = images; _transferStack = stack; _transferProcess = process;
         try
         {
-            _transferDeclaration = FalloutSkyTransferDeclaration.Read(executable);
+            _transferDeclaration = readDeclaration();
             _sourceTransfer = new(_transferDeclaration, _records, images, stack, _daytimeExtension);
             _sourceTransfer.BindProcess(process);
             ConstructSourceMoons();
@@ -62,19 +65,17 @@ internal sealed partial class FalloutSkyLightingState
     }
     internal void RestoreLightingProjection(FalloutSkyLightingProjection projection)
     {
-        if (_projectionRestore) throw new InvalidOperationException("Sky lighting projection restore reentered.");
-        _projectionRestore = true;
-        try
-        {
-            Restore(new(projection.Climate, projection.Regions, projection.ForcedWeather, projection.ExteriorWeather,
-            projection.RandomState, projection.ClimateWeather));
-        }
-        finally { _projectionRestore = false; }
+        RestoreLightingFields(projection);
+        _unbound = null;
     }
     internal void CommitLightingProjection(FalloutSkyLightingProjection projection)
     {
-        RestoreLightingProjection(projection);
-        _sourceTransfer?.ResetClimate(_climate.Form, PublishResetField);
+        var prepared = PrepareLightingFields(projection);
+        var climateChanged = _sourceTransfer is { } source && source.Climate != projection.Climate;
+        _sourceTransfer?.ResetClimate(projection.Climate, PublishResetField);
+        if (climateChanged) prepared = prepared with { Fields = prepared.Fields with { ForcedWeather = ForcedWeather } };
+        ApplyLightingFields(prepared);
+        _unbound = null;
     }
     private void SourceClimateSelected() => _sourceTransfer?.ResetClimate(_climate.Form, PublishResetField);
     private FalloutSkyTransferSnapshot? CaptureSourceTransfer()
@@ -84,7 +85,6 @@ internal sealed partial class FalloutSkyLightingState
     }
     private void RestoreSourceTransfer(FalloutSkyLightingSnapshot snapshot)
     {
-        if (_projectionRestore) return;
         if (_transferDeclaration is null)
         {
             if (snapshot.SourceTransfer is not null || snapshot.TransferUnowned != _transferUnowned || _transferUnowned is null)

@@ -64,7 +64,7 @@ internal static partial class SourceMainScriptCallerContracts
                     "Foreign gameplay thread changed source control observations after real input publication.");
             }
             Require(OnMovementFixtureThread(() => scene.Capture()) is InvalidOperationException &&
-                OnMovementFixtureThread(() => scene.StoreSceneClock(Guid.NewGuid(), 1, 0x3ca3d70a)) is InvalidOperationException &&
+                OnMovementFixtureThread(() => scene.StoreSceneClock(Guid.NewGuid(), 1, () => AuthoredSceneCachedDelta(scene, 0x3ca3d70a))) is InvalidOperationException &&
                 scene.Capture().Sequence == beforePublication.Sequence,
                 "A foreign thread read or entered the source scene after its actual gameplay/input publication.");
             scene.BindProcessSceneUpdate(() => common.UpdatePlayerScene(player, 1));
@@ -100,7 +100,7 @@ internal static partial class SourceMainScriptCallerContracts
                 try { scene.Capture(); } catch (InvalidOperationException) { }
             };
             physics.EnableCurrentFailure();
-            var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, 0x3ca3d70a); scene.EnterSceneVirtual(invocation, 1);
+            var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, () => AuthoredSceneCachedDelta(scene, 0x3ca3d70a)); scene.EnterSceneVirtual(invocation, 1);
             Reject(() => scene.ExecuteInitialVirtualPrefix(invocation, 1, () => { }, hud,
                 () => failure is "opacity" or "opacity-failed" or "weapon" or "weapon-failed" or "following" or "following-input" ? .25f :
                     throw new InvalidOperationException("Constructed timers unexpectedly polled a provider.")));

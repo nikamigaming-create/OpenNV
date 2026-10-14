@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 // Constructed at the actual selected Player loading lifetime. Both consumers
 // borrow this owner. The only permitted loading-thread transfer is publication
 // by the genuine current input manager; getters do not bind their first caller.
-internal sealed class FalloutPlayerInhibitionState
+internal sealed partial class FalloutPlayerInhibitionState
 {
     internal const string Schema = "opennv-Player-inhibition/v2";
     internal const string ObservedWriterBoundary = "source-Player-current-inhibition-observed-writer-unbound";

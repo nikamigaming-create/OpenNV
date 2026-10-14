@@ -19,7 +19,6 @@ internal sealed partial class FalloutSkyLightingState
     private FalloutSkyMoonSnapshot? CaptureSourceMoons() => _sourceMoons?.Capture();
     private void RestoreSourceMoons(FalloutSkyLightingSnapshot snapshot)
     {
-        if (_projectionRestore) return;
         if (_sourceTransfer is null)
         {
             if (snapshot.Moons is not null) throw new InvalidDataException("Saved Moons have no selected Sky declaration.");

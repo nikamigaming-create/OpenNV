@@ -14,8 +14,10 @@ mover, follower lookup and source-null animation handoff, then returns the pendi
 birth-CELL transfer and ordinary load. All 1,610 references are retained; ten
 source-selected XPRM plane/portal bases have genuine engine-static ingress.
 The latest first Player frame returns its real nonnull controller context and
-post-action children and its Current/Primary idle-package query. It next fails
-at the unfinished inhibited/life late Player-frame tail. The fresh run publishes
+post-action children and its Current/Primary idle-package query. The latest
+ordinary run also returns the late Flags setter, independent inhibition timer
+and bytes, Actor-time body and XY/Z stores using actual cached Main time. It next
+fails at the late mover-delta virtual. The fresh run publishes
 that shared World failure without recorded publication losses. Earlier package
 diagnostics called a failed gameplay getter; dedicated retained-field observation
 repairs that loss. The latest ordinary headless session opens Pause through
@@ -23,6 +25,14 @@ Escape, resumes through the actual menu, returns the source stack to quiet mode,
 then reopens and quits through the actual confirmation. Normal process exit is
 zero and source owners are disposed. This proves menu and faulted-session cleanup;
 it does not prove a healthy Player frame, gameplay save or cold Continue.
+Four newly requested rendering screenshots show source-placed Sunny and Cheyenne
+indoors and distinct daytime/night exterior views. They use live owned files and
+diagnostic camera framing, with no actor placement or enable-state changes. The
+check repaired image-phase initialization, first-entry weather erasure, streamed
+lighting projection restore and the selected Model 2 shader reader. Authored and
+owned climate/decode checks pass; original weather/Moon frames, missing reference
+geometry, complete gameplay and matched pixels remain unaccepted. Only requested
+PNG deliverables are retained and recording is off.
 Retained controller-history checks
 pass three JSON/new-scene cycles, with whole-product cold state still unaccepted.
 Returned mover parent

@@ -34,7 +34,7 @@ internal sealed partial class FalloutReferenceWorld
     }
 
     private sealed class PlayerFollowingConsumers(FalloutReferenceWorld world, long epoch)
-        : IFalloutPlayerFollowingContinuationConsumers, IFalloutPlayerReadyItemConsumers
+        : IFalloutPlayerFollowingContinuationConsumers, IFalloutPlayerReadyItemConsumers, IFalloutPlayerLateFrameConsumers
     {
         public void RequireCurrent(FalloutPlayerSourceCaller caller)
         {
@@ -46,6 +46,12 @@ internal sealed partial class FalloutReferenceWorld
         }
         public FalloutPlayerInhibitionPredicate ReadInhibition(FalloutPlayerSourceCaller caller, Action<FalloutPlayerInhibitionRead> observe) =>
             world.CampaignStandalonePlayerScene.ReadFollowingInhibition(caller, observe);
+        public void UpdateLateFrame(FalloutPlayerSourceCaller caller, Action<FalloutPlayerLateFrameCall> observe)
+        {
+            RequireCurrent(caller);
+            world.CampaignStandalonePlayerScene.UpdateLateFrame(caller, child =>
+            { RequireCurrent(caller); observe(child); });
+        }
         public FalloutPlayerFollowingLifeRead ReadLife(bool argument)
         {
             var process = world.ProcessCommon.ReadSceneQueries(world._enginePlayer, epoch);

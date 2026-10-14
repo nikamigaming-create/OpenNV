@@ -56,24 +56,45 @@ internal sealed partial class FalloutSkyLightingState
     internal void Restore(FalloutSkyLightingSnapshot snapshot)
     {
         ValidateSnapshot(_records, snapshot);
-        var climate = FalloutClimateLighting.Read(_records.GetEffective(snapshot.Climate));
+        RestoreLightingFields(new(snapshot.Climate, snapshot.Regions, snapshot.ForcedWeather,
+            snapshot.ExteriorWeather, snapshot.RandomState ?? _random.State, snapshot.ClimateWeather));
+        RestoreSourceTransfer(snapshot);
+        RestoreSourceMoons(snapshot);
+        _unbound = null;
+    }
+
+    private void RestoreLightingFields(FalloutSkyLightingProjection projection)
+        => ApplyLightingFields(PrepareLightingFields(projection));
+
+    private sealed record PreparedLighting(FalloutClimateLighting Climate, FalloutSkyLightingProjection Fields,
+        IReadOnlyDictionary<FalloutFormKey, FalloutFormKey> Regions);
+
+    private PreparedLighting PrepareLightingFields(FalloutSkyLightingProjection projection)
+    {
+        var climate = FalloutClimateLighting.Read(_records.GetEffective(projection.Climate));
+        if (projection.Regions is null) throw new InvalidDataException("Lighting projection has no region cache collection.");
+        if (projection.ForcedWeather is { } forced) _ = Weather(forced);
+        if (projection.ExteriorWeather is { } exterior) _ = Weather(exterior);
+        if (projection.ClimateWeather is { } selected) _ = Weather(selected);
         var regions = new Dictionary<FalloutFormKey, FalloutFormKey>();
-        foreach (var row in snapshot.Regions)
+        foreach (var row in projection.Regions)
         {
             RequireRegion(row.Region);
             _ = Weather(row.Weather);
             if (!regions.TryAdd(row.Region, row.Weather)) throw new InvalidDataException("Saved sky repeats a region weather cache.");
         }
-        _climate = climate;
-        ForcedWeather = snapshot.ForcedWeather;
-        ExteriorWeather = snapshot.ExteriorWeather;
-        _climateWeather = snapshot.ClimateWeather;
-        if (snapshot.RandomState is { } random) _random.Restore(random);
+        return new(climate, projection, regions);
+    }
+
+    private void ApplyLightingFields(PreparedLighting prepared)
+    {
+        _random.Restore(prepared.Fields.RandomState);
+        _climate = prepared.Climate;
+        ForcedWeather = prepared.Fields.ForcedWeather;
+        ExteriorWeather = prepared.Fields.ExteriorWeather;
+        _climateWeather = prepared.Fields.ClimateWeather;
         _regions.Clear();
-        foreach (var row in regions) _regions.Add(row.Key, row.Value);
-        RestoreSourceTransfer(snapshot);
-        RestoreSourceMoons(snapshot);
-        _unbound = null;
+        foreach (var row in prepared.Regions) _regions.Add(row.Key, row.Value);
     }
 
     internal static void ValidateSnapshot(FalloutPluginStack records, FalloutSkyLightingSnapshot snapshot)
@@ -112,6 +133,7 @@ internal sealed partial class FalloutSkyLightingState
             var climate = FalloutExteriorClimate.Resolve(_records, world);
             var changed = _climate.Form != climate;
             _climate = FalloutClimateLighting.Read(_records.GetEffective(climate));
+            SourceClimateSelected();
             if (changed || _climateWeather is null)
                 _climateWeather = FalloutExteriorClimate.SelectWeather(_records, climate, globals, _random);
             ExteriorWeather = _climateWeather;
@@ -121,7 +143,6 @@ internal sealed partial class FalloutSkyLightingState
                     _regions.Add(region, selected = FalloutExteriorClimate.SelectWeather(_records, region, globals, _random));
                 ExteriorWeather = selected;
             }
-            SourceClimateSelected();
             _unbound = null;
             return;
         }

@@ -26,7 +26,10 @@ and idle update. Its next failure is the unfinished inhibited/life late Player
 tail; current diagnostics retain the shared failure without publication loss.
 The failed investigation was stopped explicitly. Detailed fault capture is
 explicitly partial; that request still needs an actual failed-session check.
-Complete gameplay, save, normal Quit, cold Continue and routes remain unaccepted.
+The latest ordinary repeat additionally returns late Flags, independent
+inhibition fields, Actor-time and XY/Z stores using actual cached Main time,
+then fails at mover-delta. Pause and observed Quit/Yes exit normally with code
+zero. Complete gameplay, save, cold Continue and routes remain unaccepted.
 The original New Vegas save is unchanged. A private read-only retail FO3 launch
 and observation succeeded but establishes no matched gameplay or pixel parity.
 
@@ -58,6 +61,8 @@ a categorical rejection after its real C# owner returns is an implementation bug
 | A17 | P1 | A source-eligible INFO with no response is categorically rejected before its result scripts or authored links can execute. The parser retains zero-response INFO fields, and the component test deliberately expects the eligible case to fail. Conversation Begin always publishes a voice response, so removing the guard alone cannot implement it. | Implement the genuine result-only INFO flow, Begin/End effect and link ordering, and settled persistence without manufacturing an audio completion. Test eligible and filtered-out empty INFO separately, then qualify reached owned data. No observed route failure is attributed to this capability gap yet. | Missing general dialogue flow; code-proven restriction, no executed route claim. |
 | A18 | P0 | New controller read-history validation originally required every historical invocation's constructor to equal the scene's current constructor. Cold Restore retains old controller calls while creating a fresh scene constructor, so this rejected valid retained history. | Current source matches the exact historical (PlayerProcess, Constructor) lifetime interval and source/thread/factory joins. Root reports three fresh Scene/JSON cycles and tamper substitutions passed. The fixture uses a retained failed scene and authored child lineage; actual full controller-child aggregate cold restoration and functional save remain unverified. | Current/cold history admission defect; source correction inspected. |
 | A19 | P1 | An earlier actual Main idle-package failure latched the Common boundary, then package diagnostic State invoked the normal gameplay package getter. That getter correctly refuses failed Common state, so live JSON stopped publishing and became stale; the separate marker reported 3,583 publication failures. | Current source provides immutable retained Current/Primary fields, availability and original boundary separately from gameplay admission. The inspected fresh FO3 repeat returned the idle query, retained the later World/Scene failure and recorded zero publication failures. Detailed fault inspection explicitly marks a partial snapshot and its authoritative-reference capture failure while leaving save admission intact. | Observed diagnostic publication loss; source correction and one Root-run fresh failure summary inspected. Detailed fault request and complete telemetry coverage remain separate verification. |
+| A20 | P1 | First/change climate entry and streamed grid commit selected a winning lighting WTHR before source reset erased it. Streamed projection restore also fabricated a full save snapshot lacking source ownership and was rejected by full-save validation. | Reset before applying the prepared lighting projection, preserve override clearing and validate before source mutation. Keep full-source restoration independent. Authored first/repeat/grid/rejection and owned climate checks pass; fresh day/night views render. Original weather-frame/Moon completion remains unaccepted. | Actual rendering and streamed-state integration defects; typed source correction and component execution. |
+| A21 | P1 | The selected owned celestial package uses VS2.0/PS2.x while the reader only admitted Model 3. Version extension exposed malformed DCL/TEXLD/modifier forms silently aliased or ignored by emission. | Decode distinct fixed banks and bind semantic inputs/outputs; enforce stage, masks, modifiers, five-bit declarations and reserved token fields. Authored positive/negative and actual selected package decode checks pass. No package fallback or pixel-parity claim. | Owned-format restriction and unsafe admission; source correction and component execution. |
 
 P0 means it prevents the immediate save/Continue milestone. P1 affects ordinary
 gameplay, the requested transitions/editions, or the product launch path. P2 is
@@ -372,13 +377,15 @@ Source correction inspection and execution are recorded separately. Root
 reports authored provider retirement/concurrent drain/nested reads/cold reopen,
 Main pause lease contracts, and healthy/faulted quest-write checks passed. These
 are Root-reported component executions; this reviewer ran no build or test.
-The latest Root-run owned FO3 startup returned loading in 166,166 ms and the
-actual nonnull controller context/post-action children, then returned the idle
-query and refused the unfinished inhibited/life late Player-frame tail. Its
+The latest Root-run owned FO3 startup returned loading in 233,290 ms, the
+actual nonnull controller context/post-action children, idle query, late Flags,
+independent inhibition reads, Actor-time and XY/Z stores. It refused the reached
+mover-delta virtual. The argument agrees with the actual cached Main timer. Its
 inspected summary retains the same World/Scene failure and package fields,
 records zero publication failures and no last publication failure, and has no
-state-error marker. Recording was off and termination was an explicit
-investigation stop, not ordinary Quit. The previous run's diagnostic loss
+state-error marker. Recording was off. Escape and the observed Quit/Yes buttons
+returned normal process exit zero and source-owner disposal. This is a
+faulted-session cleanup check. The previous run's diagnostic loss
 remains documented as A19; one corrected summary does not establish complete
 telemetry, whole gameplay or detailed fault-request acceptance.
 No complete normal Player frame,

@@ -141,9 +141,10 @@ internal sealed partial class FalloutActorProcessCommonState
             throw new InvalidDataException("Cold common owner lost its genuine new-process handoff.");
         ValidatePackageRegistryAssociations(saved);
     }
-    // v9 adds FO3's independent signed process activity. New Vegas v7/v8
-    // retains the same field graph and can bind a fresh current owner.
+    // v18 requires FO3's independently constructed/copied packed date word.
+    // An omitted prior FO3 word cannot become zero during a cold load. Earlier
+    // New Vegas schemas retain their unqualified null word.
     private static bool SupportsSchema(FalloutProcessCommonSnapshot saved) => saved.Schema == Schema ||
-        saved.Schema is "opennv-actor-process-common/v7" or "opennv-actor-process-common/v8" &&
+        saved.Schema is "opennv-actor-process-common/v7" or "opennv-actor-process-common/v8" or "opennv-actor-process-common/v17" &&
         saved.ExecutableSha256 == FalloutSourceMainFamily.NewVegas;
 }

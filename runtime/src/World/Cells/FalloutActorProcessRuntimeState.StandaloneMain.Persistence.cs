@@ -13,6 +13,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         OpenNV.Runtime.Gameplay.State.FalloutStandalonePlayerSceneState.Validate(saved.Scene);
         if (saved.Scene.Source.Main != saved.Source || saved.Scene.Stack != runtime.Stack || saved.Scene.CapturedProcess != runtime.CapturedProcess)
             throw new InvalidDataException("Standalone Player scene changed its exact Main/stack/captured process.");
+        ValidatePlayerTimerReads(saved, runtime);
         if (saved.Interface.Source.Main != saved.Source || saved.Interface.Stack != runtime.Stack ||
             saved.Interface.CapturedProcess != runtime.CapturedProcess)
             throw new InvalidDataException("Standalone interface changed its actual Main/stack/process owner.");
@@ -49,6 +50,30 @@ internal sealed partial class FalloutActorProcessRuntimeState
                 constructor.Changed > runtime.Sequence || (constructor.Process == runtime.CapturedProcess) != current)
                 throw new InvalidDataException("Standalone Main singleton retained a false native/current constructor lifetime.");
         }
+    }
+    private static void ValidatePlayerTimerReads(FalloutStandaloneMainSnapshot saved, FalloutActorProcessRuntimeSnapshot runtime)
+    {
+        var scene = saved.Scene;
+        if (scene.Clock?.CachedTimer is { } clockRead)
+        {
+            var clock = scene.Clock;
+            var owner = scene.PointOfView!.Lifetimes.SingleOrDefault(lifetime => lifetime.Process == clockRead.Process)
+                ?? throw new InvalidDataException("Scene clock lost its actual current/historical Player constructor.");
+            if (saved.PlayerCell.LastCall is not { } player || player.MainInvocation != clock.Main ||
+                player.MainOrdinal != clock.MainOrdinal || player.Process != clockRead.Process)
+                throw new InvalidDataException("Scene clock read left its exact original Main/Player parent invocation.");
+            OpenNV.Runtime.Gameplay.State.FalloutSourceFrameTimerState.ValidateRetainedRead(
+                RequireTimer(), clockRead, new(OpenNV.Runtime.Gameplay.State.FalloutSourceFrameDeltaReader.SceneClock,
+                    owner.Constructor, clock.Main, clock.Main, clock.MainOrdinal, player.Process));
+        }
+        if (scene.LateActorTime?.LastCall is { Timer: { } actorRead } actor)
+            OpenNV.Runtime.Gameplay.State.FalloutSourceFrameTimerState.ValidateRetainedRead(
+                RequireTimer(), actorRead, new(OpenNV.Runtime.Gameplay.State.FalloutSourceFrameDeltaReader.ActorTime,
+                    actor.Factory, actor.Invocation.Caller.Invocation, actor.Invocation.Caller.Main,
+                    actor.Invocation.Caller.Ordinal, actor.Invocation.PlayerProcess));
+
+        OpenNV.Runtime.Gameplay.State.FalloutSourceFrameTimerSnapshot RequireTimer() => runtime.CachedTimer ??
+            throw new InvalidDataException("Player cached-delta read omitted its actual retained Main timer parent.");
     }
     internal static void RequireStandaloneMainPlayable(FalloutActorProcessRuntimeSnapshot runtime)
     {
