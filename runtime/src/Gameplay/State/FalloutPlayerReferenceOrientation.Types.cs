@@ -36,11 +36,14 @@ internal sealed record FalloutReferenceOrientationPlacement(Guid Invocation, str
 internal sealed record FalloutReferenceOrientationCall(Guid Invocation, string Producer, string Ingress, long Entered, long Changed,
     FalloutReferenceRotationAxis? Axis, uint ArgumentBits, uint? BeforeBits, uint? StoredBits,
     FalloutReferenceOrientationStep Step, byte? ChangeMask, Guid? Consumer, bool Returned, string? Failure);
+internal sealed record FalloutPlayerReferenceOrientationPublication(Guid Process, Guid Factory,
+    Guid? PreviousProcess = null, Guid? PreviousFactory = null);
 internal sealed record FalloutPlayerReferenceOrientationSnapshot(string Schema, FalloutPlayerWorldOrientationSource Source,
     string Stack, Guid CapturedProcess, Guid Factory, FalloutPlayerReferenceOrientationBinding Binding, long Sequence,
     uint XBits, uint YBits, uint ZBits, long Stores, uint? PlayerFovBits, FalloutIniValue? PlayerFovSetting,
     Guid? PlayerFovInvocation, bool PlayerFovReturned, FalloutReferenceOrientationPlacement? Placement,
-    FalloutReferenceOrientationCall? Call, string? Failure, bool Retired, Guid ProjectionWorld, Guid? ProjectionRootFactory);
+    FalloutReferenceOrientationCall? Call, string? Failure, bool Retired, Guid ProjectionWorld, Guid? ProjectionRootFactory,
+    IReadOnlyList<FalloutPlayerReferenceOrientationPublication>? Publications = null);
 
 internal interface IFalloutReferenceOrientationChangeConsumer
 {

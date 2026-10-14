@@ -28,6 +28,12 @@ internal static partial class PlayerWorldOrientationContracts
         ordinary.Reference.PublishPlacement(Guid.NewGuid(), "authored-original-raw-pending", FalloutReferencePlacementIngress.RawPending,
             Bits(-0.25f), Bits(0.25f), Bits(0.5f));
         var yaw = ordinary.Reference.ReadCurrentReferenceYaw(ordinary.Main, 1);
+        var commandConstructor = Guid.NewGuid();
+        var rawRotation = ordinary.Reference.ReadPackageCommandRawRotationZ(commandConstructor);
+        Require(rawRotation.ZBits == Bits(0.5f) && rawRotation.ZBits != FalloutPlayerControlOrientation.Yaw(yaw, ordinary.Fields.ReadYawOffset()) &&
+            rawRotation.Process == ordinary.Reference.Process && rawRotation.Factory == ordinary.Reference.Factory &&
+            rawRotation.Constructor == commandConstructor && rawRotation.Reference == ordinary.Reference.Binding.Reference,
+            "Package raw rotation borrowed derived yaw, another source field or a fake Player frame invocation.");
         Require(FalloutPlayerControlOrientation.Yaw(yaw, ordinary.Fields.ReadYawOffset()) == Bits(0.75f) &&
             ordinary.Reference.ReadCurrentReferencePitch(ordinary.Main, 1).Bits == Bits(-0.25f),
             "Current reference getters imported a scene basis, lost distinct placement axes or omitted independent NPC tilt/Player offset.");
@@ -81,6 +87,10 @@ internal static partial class PlayerWorldOrientationContracts
             restoredRoot.Capture().Camera.Updates == root.Camera.Updates && restoredRoot.Capture().Stores == root.Stores &&
             restoredReference.Capture().Stores == reference.Stores && restoredReference.Capture().PlayerFovInvocation == reference.PlayerFovInvocation && warm.TargetReads == 1,
             "Cold source owners reused old identities or replayed constructor, target queries, placement or callbacks.");
+        Require(restoredReference.Capture().Publications is { Count: 2 } publications &&
+            publications[0].Factory == reference.Factory && publications[1].PreviousFactory == reference.Factory,
+            "Cold reference rotation lost the actual prior factory needed by historical command reads.");
+        Reject(() => FalloutPlayerReferenceOrientationOwner.Validate(reference with { Publications = null }));
         Require(restoredReference.ReadCurrentWorldFov(actualMain, 1).Bits == Bits(42) &&
             restoredReference.ReadCurrentReferencePitch(actualMain, 1).Bits == Bits(-0.25f), "Cold current getters omitted restored field bits.");
         Require(restoredReference.Capture().ProjectionWorld == world &&

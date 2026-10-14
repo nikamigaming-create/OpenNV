@@ -8,14 +8,16 @@ internal sealed partial class FalloutNativePluginCampaign
     private bool _sharedDomainAttempted;
     private string? _sharedDomainFailure;
 
-    private void RequireSupplementalConstruction(FalloutNativePluginModuleAdmission admission)
+    private NativePluginModuleReadIoSource? RequireSupplementalConstruction(FalloutNativePluginModuleAdmission admission)
     {
         var source = NativePluginImageDeclarations.Read(admission.PhysicalPath, dll: true);
         if (!source.Sha256.Equals(admission.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Additional selected module changed its original source declaration.");
-        NativePluginCoResidentImports.Require(source);
+        var moduleRead = NativePluginModuleReadIoSource.Read(source, _source.StackId);
+        NativePluginCoResidentImports.Require(source, moduleRead);
         if (admission.Heap is not null || admission.SourceFiles is not null || admission.ExpressionAbi is not null)
             throw new NotSupportedException("Additional original module requires its own heap/source-file/expression constructor owner; the primary module cannot substitute.");
+        return moduleRead;
     }
     private void RetainSharedDomainFailure(NativePluginExecutionDomain? domain, string failure)
     {
@@ -44,6 +46,7 @@ internal sealed partial class FalloutNativePluginCampaign
             domain.ChildExited,
             domain.NaturallyRetired,
             domain.ResourcesRetired,
+            ModuleReadIo = domain.NvseLastModuleReadIoReceipt,
             Modules = domain.NvseModules.Select(module => new
             {
                 module.Module,

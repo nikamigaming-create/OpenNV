@@ -177,8 +177,7 @@ DWORD WINAPI io_size(HANDLE handle, LPDWORD high) {
         const auto result = GetFileSize(handle, high); const auto last = GetLastError(); io_event(file, io_size_api, 0, result == INVALID_FILE_SIZE ? last : 0U); SetLastError(last); return result; });
 }
 BOOL WINAPI io_size_ex(HANDLE handle, PLARGE_INTEGER size) {
-    return nvse_adapter([&]() -> BOOL { const auto file = io_file(handle); expression_writable(size, sizeof(LARGE_INTEGER));
-        const auto result = GetFileSizeEx(handle, size); const auto last = GetLastError(); io_event(file, io_size_api, 0, result ? 0U : last); SetLastError(last); return result; });
+    return io_shared_size_ex(handle, size);
 }
 BOOL WINAPI io_flush(HANDLE handle) {
     return nvse_adapter([&]() -> BOOL { auto& owner = io_owner(); if (handle == owner.stdout_file || handle == owner.stderr_file) return FlushFileBuffers(handle);
@@ -426,6 +425,8 @@ void io_flush_detach(const Frame& frame) {
     owner.pending.clear(); mutex_flush_detach(); mutex_namespace_retire(); crt_flush_detach(); crt_support_flush_detach(); cpp_retire(); parallel_hardware_retire(); crt_standard_retire(); find_flush_detach(); mapping_flush_detach(); shared_placement_flush_detach(); cng_client_flush_detach(); crypto_flush_detach(); state->calls.pop_back();
 }
 void io_retire() {
+    shared_file_size_require_retired();
+    module_read_io_require_retired();
     if (!state->io) return; auto& owner = *state->io;
     if (!owner.files.empty() || !owner.pending.empty()) throw Fatal(ERROR_BUSY, "Selected native file capabilities remain after module retirement.");
     window_process_retire();

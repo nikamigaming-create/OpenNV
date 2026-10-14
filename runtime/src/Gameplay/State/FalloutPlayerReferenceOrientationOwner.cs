@@ -8,7 +8,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 // this same owner. A failed change callback keeps its preceding source stores.
 internal sealed partial class FalloutPlayerReferenceOrientationOwner : IFalloutPlayerControlOrientationOwner
 {
-    internal const string Schema = "opennv-source-Player-reference-orientation/v1";
+    internal const string Schema = "opennv-source-Player-reference-orientation/v2";
     internal const string ChangeBoundary = "source-reference-rotation-change-mask-two-consumer-unowned";
     private readonly FalloutPlayerWorldOrientationSource _source;
     private readonly FalloutWorldProjectionPublication _projection;
@@ -25,6 +25,7 @@ internal sealed partial class FalloutPlayerReferenceOrientationOwner : IFalloutP
     private FalloutReferenceOrientationPlacement? _placement;
     private FalloutReferenceOrientationCall? _call;
     private string? _failure;
+    private readonly List<FalloutPlayerReferenceOrientationPublication> _publications = [];
     internal FalloutPlayerReferenceOrientationBinding Binding { get; }
     public FalloutPlayerMovementControlSource Source => _source.Controls;
     public string Stack { get; }
@@ -48,11 +49,18 @@ internal sealed partial class FalloutPlayerReferenceOrientationOwner : IFalloutP
         _fields = fields; _living = living; _requireInvocation = requireInvocation;
         // The inherited reference constructor explicitly stores positive zero
         // to all three independent fields. Cold construction does not replay it.
-        if (saved is null) { _x = 0; _y = 0; _z = 0; return; }
+        if (saved is null)
+        {
+            _x = 0; _y = 0; _z = 0;
+            _publications.Add(new(Process, Factory));
+            return;
+        }
         Validate(saved);
         if (saved.Source != source || saved.Stack != stack || saved.Binding != binding || saved.CapturedProcess == process || saved.Retired)
             throw new InvalidDataException("Cold reference orientation changed its exact source binding or reused retirement/process.");
         projection.RequireColdReferenceProjection(saved.ProjectionWorld, saved.ProjectionRootFactory);
+        _publications.AddRange(saved.Publications!);
+        _publications.Add(new(Process, Factory, saved.CapturedProcess, saved.Factory));
         _sequence = saved.Sequence; _stores = saved.Stores; _x = saved.XBits; _y = saved.YBits; _z = saved.ZBits;
         _playerFov = saved.PlayerFovBits; _playerFovSetting = saved.PlayerFovSetting;
         _playerFovInvocation = saved.PlayerFovInvocation; _playerFovReturned = saved.PlayerFovReturned;

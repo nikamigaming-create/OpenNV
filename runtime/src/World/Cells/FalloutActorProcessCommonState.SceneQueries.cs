@@ -14,7 +14,8 @@ internal sealed record FalloutProcessSceneFields(FalloutProcessWeaponEntry? Weap
     FalloutProcessWeaponDrawnFields? WeaponDrawn = null,
     FalloutProcessOpacityFields? Opacity = null, FalloutActorTeleportFadeFields? TeleportFade = null,
     FalloutProcessTeleportFadeUpdate? TeleportCall = null,
-    FalloutProcessWeaponContinuationFields? WeaponContinuation = null)
+    FalloutProcessWeaponContinuationFields? WeaponContinuation = null,
+    FalloutProcessPackageStartFields? PackageStart = null)
 {
     internal static FalloutProcessSceneFields Constructed => new(null, null);
 }
@@ -60,14 +61,16 @@ internal sealed partial class FalloutActorProcessCommonState
                 WeaponDrawn = FalloutProcessWeaponDrawnFields.Constructed,
                 Opacity = FalloutProcessOpacityFields.Constructed,
                 TeleportFade = FalloutActorTeleportFadeFields.Constructed,
-                WeaponContinuation = FalloutProcessWeaponContinuationFields.Constructed
+                WeaponContinuation = FalloutProcessWeaponContinuationFields.Constructed,
+                PackageStart = FalloutProcessPackageStartFields.Constructed
             }
             : FalloutProcessSceneFields.Constructed with
             {
                 PhysicalActivity = FalloutProcessPhysicalActivityFields.Constructed,
                 WeaponDrawn = FalloutProcessWeaponDrawnFields.Constructed,
                 Opacity = FalloutProcessOpacityFields.Constructed,
-                WeaponContinuation = FalloutProcessWeaponContinuationFields.Constructed
+                WeaponContinuation = FalloutProcessWeaponContinuationFields.Constructed,
+                PackageStart = FalloutProcessPackageStartFields.Constructed
             } : null;
 
     internal FalloutProcessPlayerSceneUpdate UpdatePlayerScene(FalloutFormKey actor, long epoch)

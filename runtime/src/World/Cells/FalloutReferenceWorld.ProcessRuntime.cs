@@ -17,7 +17,7 @@ internal sealed partial class FalloutReferenceWorld
     internal bool ActualProcessRuntimeConfigured => _processRuntime is not null && _processCommon is not null;
     internal object? ActualProcessRuntimeState => _processRuntime?.State;
     internal object? ActualProcessCommonState => _processCommon?.State;
-    internal string? ActualProcessRuntimeSaveBlocker => _processRuntime?.SaveBlocker ?? _processRuntime?.SourceCachedTimerRuntimeBoundary ??
+    internal string? ActualProcessRuntimeSaveBlocker => SourcePackageCommandSaveBlocker ?? _processRuntime?.SaveBlocker ?? _processRuntime?.SourceCachedTimerRuntimeBoundary ??
         (_processRuntime is null ? "actual-Main-Player-Actor-process-runtime-owner-absent" : null);
     internal string? ActualProcessCommonSaveBlocker => _processCommon?.SaveBlocker ??
         (_processCommon is null ? "actual-actor-common-process-owner-absent" : null);
@@ -202,7 +202,7 @@ internal sealed partial class FalloutReferenceWorld
         foreach (var actor in ActorPerception.ConstructedSourceActors)
             if (ActorPerception.RequiresNativePublication(actor) && ReadActualProcessBody(actor) is null)
                 throw new NotSupportedException("Current common process lost its actual source body publication: " + actor);
-        return ProcessCommon.Capture();
+        return CaptureSourcePackageCommandChildren(ProcessCommon.Capture());
     }
     private void RetireActualProcessRuntime()
     {
@@ -211,6 +211,7 @@ internal sealed partial class FalloutReferenceWorld
         if (_processBodies.Count != 0) throw new NotSupportedException("Actual common process source still owns native body consumers.");
         // The manager retires first. Failed common/runtime retirement retains
         // its real providers and cannot be reported as a complete world close.
+        RetireSourcePackageCommands();
         _processCommon?.Dispose(); _processCommon = null;
         _processRuntime?.Dispose(); _processRuntime = null;
         _processRuntimeDeclaration = null; _processRuntimeStack = null;

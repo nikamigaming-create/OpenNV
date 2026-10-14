@@ -15,6 +15,7 @@ internal sealed record FalloutProcessWeaponContinuationFields(byte? WeaponAction
     int FirstContextWord = -1, int SecondContextWord = -1, Guid? FirstContextPointer = null,
     Guid? SecondContextPointer = null, byte ContextByte = 0)
 {
+    public IReadOnlyList<FalloutProcessPackageCacheClear> PackageFlagClears { get; init; } = [];
     internal static FalloutProcessWeaponContinuationFields Constructed => new(null, 0, null, 0,
         Guid.NewGuid(), Enumerable.Repeat(FalloutPlayerWeaponContinuationSource.UnqueriedScalarBits,
             FalloutPlayerWeaponContinuationSource.CachedScalarCount).ToArray(),
@@ -146,7 +147,11 @@ internal sealed partial class FalloutActorProcessCommonState
             SceneFields = entry.SceneFields with
             {
                 WeaponContinuation = fields with
-                { CachedScalarBits = fields.CachedScalarBits.ToArray(), Observations = fields.Observations.ToArray() }
+                {
+                    CachedScalarBits = fields.CachedScalarBits.ToArray(),
+                    Observations = fields.Observations.ToArray(),
+                    PackageFlagClears = Array.AsReadOnly(fields.PackageFlagClears.ToArray())
+                }
             }
         } : entry;
 
@@ -169,6 +174,7 @@ internal sealed partial class FalloutActorProcessCommonState
             fields.ActivityAvailable != fields.Observations.All(value => value.Lane != FalloutProcessWeaponObservedLane.Activity) ||
             fields.CacheAvailable != fields.Observations.All(value => value.Lane != FalloutProcessWeaponObservedLane.StatusCache))
             throw new InvalidDataException("Process weapon continuation lost its independent constructor, status cache or writer prefix.");
+        ValidatePackageCacheClears(entry, fields);
         long priorChanged = fields.Initialization?.Changed ?? 0;
         foreach (var observation in fields.Observations)
         {

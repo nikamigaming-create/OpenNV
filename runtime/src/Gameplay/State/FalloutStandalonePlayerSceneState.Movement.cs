@@ -18,7 +18,6 @@ internal sealed record FalloutPlayerMovementCall(Guid Main, long MainOrdinal, lo
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
-    private FalloutPlayerMoverFields _moverFields = FalloutPlayerMoverFields.Constructed;
     private byte _actorMovementFlag;
     private Func<FalloutProcessMovementFlagUpdate>? _readAndClearMovementFlags;
     private IFalloutPlayerLivingPhysicsOwner? _movementPhysics;

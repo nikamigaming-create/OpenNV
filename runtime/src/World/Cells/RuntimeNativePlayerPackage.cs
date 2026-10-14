@@ -103,6 +103,11 @@ internal sealed partial class RuntimeNativePlayerPackage
         {
             if (sourceEffect.Argument != form) throw new InvalidDataException("Package driver changed the original source request.");
             _world.ObserveStandalonePlayerPackageCommand(sourceEffect, "actual-shared-script-host-Player-package-effect");
+            if (_world.BorrowReturnedSourcePackageCommand(sourceEffect) is { } returned)
+            {
+                AttachReturnedSourceCommand(returned);
+                return;
+            }
         }
         else _world.ObserveStandalonePlayerPackageMutation(Guid.NewGuid(), "actual-native-player-package-request", null, form, form is null);
         try { ApplyCore(form); }
@@ -111,6 +116,17 @@ internal sealed partial class RuntimeNativePlayerPackage
             _failure = error.Message;
             throw;
         }
+    }
+
+    private void AttachReturnedSourceCommand(FalloutSourcePackageAssignmentCall command)
+    {
+        if (command.Package.ObjectId == 0 || command.Result != true ||
+            command.Step != FalloutSourcePackageAssignmentStep.Returned || command.Invocation.Actor.Reference != _stack.RuntimeFormKey(0x14))
+            throw new InvalidDataException("Player presentation lost its actual returned source package command.");
+        // Synchronous source execution already owns event/result/idle effects.
+        // Presentation may borrow that state, but its current animation owner
+        // must be associated before this legacy driver can attach it.
+        throw new NotSupportedException("source-returned-package-presentation-animation-publication-unbound");
     }
 
     private void ApplyCore(FalloutFormKey? form)
