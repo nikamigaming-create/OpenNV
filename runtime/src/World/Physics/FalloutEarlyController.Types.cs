@@ -62,7 +62,7 @@ internal sealed record FalloutEarlyControllerSnapshot(string Schema, FalloutEarl
     FalloutEarlyControllerPhantomSnapshot Phantom, FalloutEarlyControllerProxySnapshot Proxy,
     uint ResetScalarBits, uint Flags, uint PlayerPropertySelector, uint? ActorScaleBits,
     IReadOnlyList<FalloutEarlyControllerStore> Stores, IReadOnlyList<FalloutEarlyControllerResetCall> Resets,
-    string? Failure, bool Retired, string CanonicalLane);
+    string? Failure, bool Retired, string CanonicalLane, FalloutControllerPostProcessFields PostProcessFields);
 internal sealed record FalloutEarlyControllerConstructionCall(FalloutEarlyControllerInvocation Invocation,
     FalloutEarlyControllerLineage Lineage, FalloutEarlyControllerDescriptorSnapshot? Descriptor,
     FalloutSourceThreadKindScope? ThreadScope, ulong? PhantomNativeId, Guid? Controller,

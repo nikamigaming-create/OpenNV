@@ -30,6 +30,7 @@ internal sealed partial class FalloutReferenceWorld
     internal void BeforeActorHit(FalloutFormKey actor)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        RequireNoFunctionalFailure();
         FalloutReferenceHitEvents.RequireActor(records, actor);
         if (actor != records.RuntimeFormKey(0x14) && !IsResident(actor))
             throw new InvalidOperationException("An actor hit requires its current resident contact owner.");

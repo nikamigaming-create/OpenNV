@@ -45,22 +45,9 @@ foreach ($file in Get-ChildItem -LiteralPath $runtimeData[0].FullName -Recurse -
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
     Copy-Item -LiteralPath $file.FullName -Destination $destination
 }
-$domain = Join-Path $repo 'runtime/generated/native-plugins/Release/opennv_plugin_domain.exe'
-if (!(Test-Path -LiteralPath $domain -PathType Leaf)) { throw 'Build the first-party Release native plugin domain before packaging.' }
-$domainOutput = Join-Path $output 'generated/native-plugins/Release'
-[IO.Directory]::CreateDirectory($domainOutput) | Out-Null
-Copy-Item -LiteralPath $domain -Destination $domainOutput
-foreach ($nativeOwned in @('opennv_cng_service.exe', 'opennv_engine_tls.dll', 'build-manifest.json')) {
-    $nativeInput = Join-Path ([IO.Path]::GetDirectoryName($domain)) $nativeOwned
-    if (!(Test-Path -LiteralPath $nativeInput -PathType Leaf)) { throw "Missing first-party native service/build identity: $nativeOwned" }
-    Copy-Item -LiteralPath $nativeInput -Destination $domainOutput
-}
-$providerRelative = 'providers/cng/bcrypt.dll'
-$providerInput = Join-Path ([IO.Path]::GetDirectoryName($domain)) $providerRelative
-if (!(Test-Path -LiteralPath $providerInput -PathType Leaf)) { throw 'Missing first-party callable import provider.' }
-$providerDestination = Join-Path $domainOutput $providerRelative
-[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($providerDestination)) | Out-Null
-Copy-Item -LiteralPath $providerInput -Destination $providerDestination
+& (Join-Path $PSScriptRoot 'Stage-NativePluginDomain.ps1') `
+    -SourceDirectory (Join-Path $repo 'runtime/generated/native-plugins/Release') `
+    -DestinationDirectory (Join-Path $output 'generated/native-plugins/Release')
 $toolchainPath = Join-Path $export 'build-toolchain.json'
 if (Test-Path -LiteralPath $toolchainPath -PathType Leaf) {
     $toolchain = Get-Content -LiteralPath $toolchainPath -Raw | ConvertFrom-Json

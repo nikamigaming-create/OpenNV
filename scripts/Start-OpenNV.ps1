@@ -87,6 +87,7 @@ foreach ($requiredFile in @(
 }
 
 & (Join-Path $PSScriptRoot 'Build-NativeAudio.ps1') -Godot $versionCheckPath
+& (Join-Path $PSScriptRoot 'Build-NativePluginDomain.ps1') -Configuration Release
 
 if ($Configuration -eq "Release") {
     # The editor's --path runner always loads Debug OpenNV and GodotSharp.
@@ -110,6 +111,9 @@ if ($Configuration -eq "Release") {
     if (-not (Test-Path -LiteralPath (Join-Path $exportRoot 'opennv_audio.dll') -PathType Leaf)) {
         throw 'Godot did not export the native audio extension.'
     }
+    & (Join-Path $PSScriptRoot 'Stage-NativePluginDomain.ps1') `
+        -SourceDirectory (Join-Path $repoRoot 'runtime/generated/native-plugins/Release') `
+        -DestinationDirectory (Join-Path $exportRoot 'generated/native-plugins/Release')
     $exportManifest = Get-Content -LiteralPath (Join-Path $runtimeRoot "runtime-manifest.json") -Raw | ConvertFrom-Json
     $exportManifest.runtime | Add-Member -NotePropertyName executables -NotePropertyValue @{ win32 = "OpenNV.exe" } -Force
     [IO.File]::WriteAllText((Join-Path $exportRoot "runtime-manifest.json"),

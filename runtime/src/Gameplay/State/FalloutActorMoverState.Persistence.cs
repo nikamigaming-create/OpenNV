@@ -81,6 +81,7 @@ internal sealed partial class FalloutActorMoverState
             saved.Availability.Any(value => value is null || !availability.TryGetValue(value.Lane, out var expected) || value != expected) ||
             saved.Availability.Select(value => value.Lane).Distinct().Count() != availability.Count)
             throw new InvalidDataException("Actor mover current values or availability disagree with committed writer history.");
+        ValidatePlayerFrame(saved, source, stack, publications);
     }
 
     private static void ValidateJoin(FalloutActorMoverResetJoin join, FalloutPackageCommandFieldInvocation invocation,
@@ -118,6 +119,9 @@ internal sealed partial class FalloutActorMoverState
         FalloutActorMoverField.InheritedVectorXY => values with { InheritedVector = values.InheritedVector with { X = store.Bits, Y = store.SecondBits!.Value } },
         FalloutActorMoverField.InheritedVectorZ => values with { InheritedVector = values.InheritedVector with { Z = store.Bits } },
         FalloutActorMoverField.ResetByte => values with { ResetByte = checked((byte)store.Bits) },
+        FalloutActorMoverField.PlayerFlags => values with { Player = values.Player with { Flags = store.Bits } },
+        FalloutActorMoverField.PlayerVectorXY => values with { Player = values.Player with { VectorX = store.Bits, VectorY = store.SecondBits!.Value } },
+        FalloutActorMoverField.PlayerVectorZ => values with { Player = values.Player with { VectorZ = store.Bits } },
         _ => throw new InvalidDataException("Actor mover current writer has no owned field-store implementation.")
     };
     private static FalloutActorMoverResetJoin CloneJoin(FalloutActorMoverResetJoin join) => join with

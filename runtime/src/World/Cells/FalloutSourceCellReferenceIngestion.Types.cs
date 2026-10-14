@@ -5,7 +5,8 @@ namespace OpenNV.Runtime.World.Cells;
 internal enum FalloutSourceCellIngestionDisposition
 {
     InsertPersistent, RetainPersistentMembership, InsertWinningTemporary,
-    SkipEarlierTemporaryProvider, SkipAlreadyConstructed, Refused
+    SkipEarlierTemporaryProvider, SkipAlreadyConstructed, Refused,
+    InsertSelectedTemporary, SkipUnselectedTemporaryProvider
 }
 
 internal sealed record FalloutSourceCellIngestionInput(string Plugin, string PluginSha256, int LoadOrder,
@@ -14,7 +15,7 @@ internal sealed record FalloutSourceCellIngestionInput(string Plugin, string Plu
 
 internal sealed record FalloutSourceCellIngestionEvidence(FalloutSourceCellLoaderDeclaration Source,
     string Stack, FalloutCellProcessIdentity Cell, string GraphSha256, string InputsSha256,
-    IReadOnlyList<FalloutSourceCellIngestionInput> Inputs);
+    IReadOnlyList<FalloutSourceCellIngestionInput> Inputs, string? ProviderHeadersSha256 = null);
 
 internal interface IFalloutSourceOwnedCellReferenceIngestion : IFalloutSourceCellReferenceIngestion
 {

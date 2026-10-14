@@ -1,7 +1,7 @@
 using System.Text;
 using OpenNV.Runtime.Content;
 
-internal static class ModContentContracts
+internal static partial class ModContentContracts
 {
     internal static void Run()
     {
@@ -55,6 +55,7 @@ internal static class ModContentContracts
             }
             using (var reordered = Open([patch, mod]))
                 Require(reordered.SaveCompatibilityId != identity, "Changing selected folder priority retained a compatible save identity.");
+            VerifyReadRetirement(() => Open([mod, patch]), Path.Combine(textureDirectory, "SHARED.DDS"));
             var layers = new FalloutContentLayers([mod, patch, mod]);
             Require(layers.Roots.SequenceEqual([patch, mod]), "A repeated folder silently retained its earlier priority.");
             Reject(() => layers.ResolveFile("../outside"));

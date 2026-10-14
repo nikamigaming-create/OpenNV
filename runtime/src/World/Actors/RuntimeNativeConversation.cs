@@ -15,6 +15,7 @@ internal partial class RuntimeNativeConversation : Node
     internal FalloutFormKey? PendingSpeaker => _pending.TryPeek(out var request) ? request.Speaker : null;
     private RuntimeNativeSpeech _speech = null!;
     private RuntimeNativePlayer _player = null!;
+    private Action _requireGameplayAdmission = null!;
     private FalloutPluginStack _records = null!;
     private FalloutFormKey _speaker;
     private FalloutFormKey _dialogueSubject;
@@ -52,6 +53,8 @@ internal partial class RuntimeNativeConversation : Node
         response = _conversation.ResponseIndex,
         speakerReference = _speaker.ToString(),
         dialogueSubject = _dialogueSubject.ToString(),
+        sourceSpeakerBase = _conversation.SpeakerBase.ToString(),
+        addedTopics = _conversation.AddedTopics,
         voiceType = _identity?.VoiceType.ToString(),
         choices = _conversation.Choices,
         pending = _pending.Count,
@@ -67,6 +70,7 @@ internal partial class RuntimeNativeConversation : Node
 
     internal void Configure(FalloutPluginStack records, FalloutQuestState quests, RuntimeNativePlayer player, RuntimeNativeSpeech speech,
         Func<FalloutCondition, float> evaluate, Action<FalloutDialogueInfo, FalloutFormKey, bool> results,
+        Action requireGameplayAdmission,
         HashSet<FalloutFormKey>? saidInfos = null,
         Func<FalloutFormKey, FalloutCondition, FalloutFormKey?>? resolveRunOnCell = null,
         Func<FalloutFormKey, float>? healthPercentage = null,
@@ -83,9 +87,11 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, int>? deadCount = null,
         Func<FalloutDialogueInfo, FalloutFormKey, bool, FalloutScriptResultReceipt>? ownedResults = null)
     {
+        ArgumentNullException.ThrowIfNull(requireGameplayAdmission);
         if (records.OwnedSource is not null && ownedResults is null)
             throw new NotSupportedException("Owned native conversation requires the actual shared result executor.");
         _records = records; _quests = quests; _player = player; _speech = speech; _runtimeConditions = evaluate;
+        _requireGameplayAdmission = requireGameplayAdmission;
         _resolveRunOnCell = resolveRunOnCell;
         _healthPercentage = healthPercentage;
         _actorValue = actorValue;
@@ -104,7 +110,8 @@ internal partial class RuntimeNativeConversation : Node
         _deadCount = deadCount;
         _conversation = new(records, quests, condition => _conditions!.Evaluate(condition),
             (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom,
-            ownedResults is null ? null : (info, begin) => ownedResults(info, _dialogueSubject, begin), () => _dialogueSubject);
+            ownedResults is null ? null : (info, begin) => ownedResults(info, _dialogueSubject, begin), () => _dialogueSubject,
+            requireGameplayAdmission);
     }
 
     internal void Request(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey? topic, Action? completed = null)
@@ -112,6 +119,7 @@ internal partial class RuntimeNativeConversation : Node
         if (_records.RuntimeFormId(target) != 0x14) throw new NotSupportedException("NPC-to-NPC conversation travel is unbound.");
         if (_retired || Error is not null) throw new InvalidOperationException(Error ?? "Conversation native lifetime is retired.");
         if (_pending.Count != 0 || _conversation.Phase != "closed") throw new NotSupportedException("Competing conversation requests require arbitration.");
+        _requireGameplayAdmission();
         _pending.Enqueue((speaker, topic, completed));
     }
 
@@ -122,6 +130,7 @@ internal partial class RuntimeNativeConversation : Node
         {
             if (_speech.Error is { } error && (_conversation.Phase != "closed" || _pending.Count != 0)) throw new InvalidOperationException(error);
             if (_pending.Count == 0 || _speech.IsDialogueBusy(_pending.Peek().Speaker)) return;
+            _requireGameplayAdmission();
             var request = _pending.Dequeue(); _speaker = request.Speaker; _completed = request.Completed;
             BindConversationSource(_speaker);
             OpenConversationPresentation();

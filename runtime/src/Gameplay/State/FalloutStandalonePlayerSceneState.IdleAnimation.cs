@@ -148,12 +148,28 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             read.Process != result.Before.Process || read.GameplayOwnership != result.Before.GameplayOwnership ||
             read.Actor != result.Before.Actor.Reference || read.Stack != result.Before.Stack || read.Result != trace.SelectedObject ||
             result.Before.IdlePrimaryPackage is not null)
-            throw new InvalidDataException("Idle selected package lost its actual current driver, process lease or independent primary field.");
+            throw new InvalidDataException("Idle selected package lost its actual Common field factory, process lease or independent primary field.");
         if (read.Result is { } value && (value.Source is not { } source || source.Factory != read.Factory ||
             source.Process != read.Process || source.GameplayOwnership != read.GameplayOwnership || source.Actor != read.Actor ||
             source.Stack != read.Stack || source.Revision != read.Revision || string.IsNullOrWhiteSpace(source.Package.OwnerPlugin) ||
             source.Package.ObjectId == 0 || source.Sha256.Length != 64 || source.Sha256.Any(character => !Uri.IsHexDigit(character))))
             throw new InvalidDataException("Idle selected object lost its actual winning package record and assignment epoch.");
+        if (read.ProcessPackage is { } slot)
+        {
+            if (slot.Process != result.Before || slot.Fields is null || slot.Fields.Fields is null || !slot.Fields.Available || !Enum.IsDefined(slot.Slot) ||
+                slot.Fields.Slot != slot.Slot || slot.Fields.Source != FalloutProcessPackageState.Source(result.Before.ExecutableSha256) ||
+                slot.Fields.Publication is null || slot.Fields.Publication.Factory != read.Factory ||
+                slot.Fields.Publication.Process != read.Process || slot.Fields.Changed < 0 || read.Revision != (ulong)slot.Fields.Changed ||
+                read.RegistryFactory is not { } registry || registry == Guid.Empty ||
+                read.RegistrySource != FalloutPackageRuntimeRegistry.SourceFor(result.Before.ExecutableSha256) ||
+                (slot.Fields.Fields.Package is null) != (read.Result is null) ||
+                read.Result is { Source: { } actual } && (actual.Package != slot.Fields.Fields.Package || actual.Slot != slot.Slot ||
+                    actual.RegistryFactory != registry || actual.RegistrySource != read.RegistrySource))
+                throw new InvalidDataException("Idle package lost its actual selected slot or same winning registry metadata.");
+        }
+        else if (read.RegistryFactory is not null || read.RegistrySource is not null ||
+            read.Result?.Source is { } authored && (authored.RegistryFactory is not null || authored.RegistrySource is not null || authored.Slot is not null))
+            throw new InvalidDataException("Idle authored fixture metadata cannot claim a registry without its real Common slot.");
         if (trace.AlternateObjectReturned && trace.SelectedObject is not { Kind: 0x1c } ||
             !trace.AlternateObjectReturned && trace.AlternateObject is not null)
             throw new InvalidDataException("Idle alternate package was returned without its source selector.");

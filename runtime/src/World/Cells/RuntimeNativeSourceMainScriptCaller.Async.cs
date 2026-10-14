@@ -7,10 +7,11 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller
 {
     private Task? _activeMainCall;
     private bool _stopMainDelivery;
+    private readonly OpenNV.Runtime.Gameplay.State.RuntimeSourceDeliveryPause _saveDelivery = new();
     internal bool CanDestroyAfterRetirement => _activeMainCall is null && _callerLease is null && _fadeLease is null;
     private void DeliverMain(ulong frame, float seconds)
     {
-        if (_stopMainDelivery || _activeMainCall is { IsCompleted: false }) return;
+        if (_stopMainDelivery || _saveDelivery.Paused || _activeMainCall is { IsCompleted: false }) return;
         ObserveReturnedMainCall();
         if (_failure is not null) return;
         _activeMainCall = _world.ExecuteCampaignMainScriptCaller(frame, seconds);

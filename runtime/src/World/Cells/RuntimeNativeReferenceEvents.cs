@@ -242,6 +242,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
 
     internal bool TryActivate(Node collider)
     {
+        if (_world.FunctionalFailure is not null) return false;
         for (Node? node = collider; node is not null; node = node.GetParent())
         {
             if (!_nodeReferences.TryGetValue(node.GetInstanceId(), out var reference)) continue;
@@ -277,6 +278,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
 
     internal void DefaultActivate(FalloutFormKey reference, FalloutFormKey? actionReference = null)
     {
+        _world.RequireNoFunctionalFailure();
         var binding = _bindings[reference];
         var actor = actionReference ?? _records.RuntimeFormKey(0x14);
         if (binding.Instance.Destroyed || binding.Instance.DeletePending) return;
@@ -323,6 +325,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
 
     internal void ScriptActivate(FalloutFormKey reference, FalloutFormKey actor, bool runOnActivate)
     {
+        _world.RequireNoFunctionalFailure();
         if (!_bindings.TryGetValue(reference, out var binding)) throw new NotSupportedException("Script activation target has no resident event owner.");
         if (binding.Instance.DeletePending || !_world.AllowsActivation(reference, actor)) return;
         if (!runOnActivate) { DefaultActivate(reference, actor); return; }
@@ -395,6 +398,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
 
     public override void _Process(double delta)
     {
+        if (_world.FunctionalFailure is not null) return;
         ++_frames;
         var tree = GetTree();
         if (!IsProcessing() || tree.Paused) return;

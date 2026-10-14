@@ -300,6 +300,7 @@ internal sealed partial class RuntimeNativeCreature
     public override void _PhysicsProcess(double delta)
     {
         Combat?.StopPackageMotion();
+        if (_aiWorld?.FunctionalFailure is not null) return;
         _waitingForTarget = null;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;

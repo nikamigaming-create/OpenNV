@@ -5,7 +5,7 @@ using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
-internal static class FalloutActorProcessRuntimeSaveContract
+internal static partial class FalloutActorProcessRuntimeSaveContract
 {
     internal static void ValidateShape(FalloutActorProcessRuntimeSnapshot? runtime, FalloutProcessCommonSnapshot? common,
         FalloutActorProcessesSnapshot? processes)
@@ -20,10 +20,13 @@ internal static class FalloutActorProcessRuntimeSaveContract
             (common.PackageRegistry is null || common.CommandFields is not { Count: > 0 } || common.PackageCommands is null ||
                 !common.PackageRegistry.CountAuthorityAvailable || common.PackageRegistry.Packages.Any(package =>
                     !package.CountAvailable || !package.ProcedureAvailable || !package.FlagsAvailable) ||
-                common.CommandFields.Any(fields => fields.Availability.Any(lane => !lane.Available) || fields.Operations.Any(operation => !operation.Returned) ||
+                common.CommandFields.Any(fields => fields.Operations.Any(operation => !operation.Returned) ||
                     fields.ScriptInitialization is not { Calls.Count: > 0 } || fields.ScriptInitialization.Calls.Any(call => !call.Returned || call.InvalidatedWriter is not null)) ||
                 common.PackageCommands.Any(call => call.Step != FalloutSourcePackageAssignmentStep.Returned)))
             throw new NotSupportedException("Current save retains unclosed source package constructors, fields, counts or command consumers.");
+        if (FalloutSourceMainFamily.IsFallout3(common.ExecutableSha256))
+            FalloutReferenceColdSaveReadiness.RequireCurrentFields(common, runtime.StandaloneMain?.Scene ??
+                throw new InvalidDataException("Current save omitted its actual standalone Player scene."));
         if (runtime.StandaloneMain?.Scene.FollowingContinuation is { } following)
             foreach (var read in new[] { following.Current, following.Primary }.OfType<FalloutProcessPackageRead>())
                 FalloutProcessPackageState.ValidateRead(read, common.ExecutableSha256, common.Stack, common);
@@ -61,12 +64,8 @@ internal static class FalloutActorProcessRuntimeSaveContract
                 if (!commonProcesses.Contains(operation.Invocation.Process) ||
                     !epochs.Contains((operation.Invocation.Actor, operation.Invocation.Epoch)))
                     throw new InvalidDataException("Saved logical mover lost its real Common command/process/Actor epoch.");
-                // No production parent currently publishes the complete linked
-                // and High reset owners. Authored joined child tests cannot
-                // authorize a campaign save with invented parent receipts.
-                if (operation.Join is not null)
-                    throw new NotSupportedException("Current save requires actual linked-reference and High package-reset parent ownership.");
             }
+            ValidateMoverAssignmentParents(mover, common);
         }
         if (runtime.StandaloneMain?.Scene is { } scene)
         {
@@ -106,6 +105,8 @@ internal static class FalloutActorProcessRuntimeSaveContract
         var runtime = saved.ActorProcessRuntime!; var common = saved.ActorProcessCommon!;
         FalloutStandaloneInterfaceSaveContract.ValidateSource(records, runtime);
         FalloutStandalonePlayerSceneSaveContract.ValidateSource(records, runtime);
+        if (runtime.StandaloneMain?.Scene.IdleAnimationCall?.Result?.Trace.SelectedPackageRead is { } idlePackage)
+            FalloutPackageRuntimeRegistry.ValidateIdlePackageRead(idlePackage, common, records);
         if (runtime.Contract != selected.Contract || runtime.Stack != source.StackId || runtime.Player != records.RuntimeFormKey(0x14))
             throw new InvalidDataException("Runtime/common cold state changed its selected executable/stack/player declaration.");
         if (runtime.GlobalTime is { } globalTime && globalTime.Source.Timer.EngineSha256 != selected.ExecutableSha256)

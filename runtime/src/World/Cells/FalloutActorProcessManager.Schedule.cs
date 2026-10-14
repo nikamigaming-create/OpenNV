@@ -4,6 +4,11 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutActorProcessManager
 {
+    private List<FalloutActorProcessVisit>? _activeScheduleVisits;
+
+    private FalloutActorProcessScheduleReceipt? ObserveSchedule() => _schedule is { } schedule && _activeScheduleVisits is { } visits ?
+        schedule with { Visits = visits.ToArray() } : _schedule;
+
     internal void AdvanceSourceDetection(float delta)
     {
         Operation(null, "original-full-high-cohort-detection-schedule", () =>
@@ -21,6 +26,7 @@ internal sealed partial class FalloutActorProcessManager
             var visits = new List<FalloutActorProcessVisit>();
             _schedule = new(Next(), _seconds, delta, start, end, window, start, visits.ToArray(), 0, false, null,
                 _cohort.Segment(0), _cohort.Revision, null);
+            _activeScheduleVisits = visits;
             try
             {
                 if (end == 0) { _playerScheduleFlag = false; Next(); }
@@ -78,7 +84,7 @@ internal sealed partial class FalloutActorProcessManager
                     visits.Add(new(slot, key, actor.Epoch,
                         produced.ReachedFinalTimerWrite ? FalloutActorDetectionVisitKind.ProducerCompleted : FalloutActorDetectionVisitKind.ProducerEarlyReturn,
                         before, current.DetectionTimer, word, interval, produced.CompletedPairs, produced.OriginalEarlyReturn));
-                    _schedule = _schedule with { Visits = visits.ToArray(), NextSlot = slot + 1, InFlight = null };
+                    _schedule = _schedule with { NextSlot = slot + 1, InFlight = null };
                     if (observed.BaseEligibility.Require()) continue;
                     if (!observed.ProcessEligibility.Require()) continue;
                     var detected = _inputs.PlayerDetection(key.Value);
@@ -117,12 +123,17 @@ internal sealed partial class FalloutActorProcessManager
                 Next();
 
                 void Visit(FalloutActorProcessVisit visit)
-                { visits.Add(visit); _schedule = _schedule with { Visits = visits.ToArray(), NextSlot = visit.Slot + 1 }; }
+                { visits.Add(visit); _schedule = _schedule with { NextSlot = visit.Slot + 1 }; }
             }
             catch (Exception error)
             {
                 _schedule = _schedule with { Failure = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message };
                 throw;
+            }
+            finally
+            {
+                _schedule = _schedule with { Visits = visits.ToArray() };
+                _activeScheduleVisits = null;
             }
         });
     }

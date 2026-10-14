@@ -73,13 +73,28 @@ internal static partial class SourceMainScriptCallerContracts
             RejectMutation(beforeClear, mutation with { RetainedCount = 7 });
             RejectMutation(beforeClear, mutation with { Stores = mutation.Stores.Reverse().ToArray() });
             FailedClock(records); FailedContext(records); FailedTemporary(records); ObservedWriter(records); UnknownSharedCount(records); ReentryAndCaller(records);
-            SignedDefaults(records); TwoActorFields(records);
+            SignedDefaults(records); TwoActorFields(records); ActualIdlePackageGetter(records); RetainedPackageObservation(records);
             Console.WriteLine("OPENNV_PACKAGE_STATE_MUTATION_PASS actualCommon=true sharedRegistry=true typedExtra=true pointerEqualSkip=true " +
                 "atomicCounts=true orderedStores=true failedPrefixes=true coldCycles=3 noEffectReplay=true authoredTwoActors=true originalAddScriptPackage=UNEXECUTED");
         }
         finally { File.Delete(Path.Combine(directory, "WeaponFixture.esm")); Directory.Delete(directory); }
 
         static FalloutFormKey Key(uint id) => new("WeaponFixture.esm", id);
+    }
+
+    private static void RetainedPackageObservation(FalloutPluginStack records)
+    {
+        using var fixture = new PackageMutationFixture(records);
+        fixture.Set(FalloutProcessPackageSlot.Current, 0x100);
+        var before = fixture.Common.ObserveSourcePackageFields(fixture.Player, 1);
+        fixture.Common.RetainUnownedMutation(fixture.Player, "authored-actual-Common-child-failure");
+        Reject(() => fixture.Common.ReadSourcePackageSlot(fixture.Player, 1, FalloutProcessPackageSlot.Current));
+        var after = fixture.Common.ObserveSourcePackageFields(fixture.Player, 1);
+        Require(after.Current == before.Current && after.Primary == before.Primary &&
+            after.CurrentAvailable == before.CurrentAvailable && after.PrimaryAvailable == before.PrimaryAvailable &&
+            after.Process == before.Process && after.Actor == before.Actor && after.Changed > before.Changed &&
+            after.Failure == "authored-actual-Common-child-failure",
+            "A failed process lost its exact diagnostic fields or allowed a fresh gameplay getter.");
     }
 
     private static void FailedClock(FalloutPluginStack records)
@@ -96,6 +111,12 @@ internal static partial class SourceMainScriptCallerContracts
         Require(cold.Registry.Require(new("WeaponFixture.esm", 0x100)).LifetimeCount == 1 && cold.HourReads == 0,
             "Cold failed prefix inferred count from null slot or re-read time.");
         Reject(() => cold.Set(FalloutProcessPackageSlot.Current, 0x100));
+        var observation = failed.Common.ObserveSourcePackageFields(failed.Player, 1);
+        Require(observation.Failure is not null && observation.Current == fields.Fields &&
+            observation.Process == fields.Publication.Process && observation.Actor.Reference == failed.Player,
+            "Diagnostic package observation changed or erased the actual failed committed fields.");
+        Reject(() => failed.Common.ReadSourcePackageSlot(failed.Player, 1, FalloutProcessPackageSlot.Current));
+        Reject(() => failed.Common.ObserveSourcePackageFields(failed.Player, 2));
     }
     private static void FailedContext(FalloutPluginStack records)
     {
@@ -171,8 +192,11 @@ internal static partial class SourceMainScriptCallerContracts
         using var cold = new PackageMutationFixture(records, RoundTripPackage(global));
         Require(!cold.Registry.Capture().CountAuthorityAvailable && cold.Registry.SaveBlocker is not null,
             "Fresh cold registry repaired unknown counter authority.");
-        Reject(() => FalloutActorProcessCommonState.Validate(global with { PackageRegistry = global.PackageRegistry with
-        { CountAuthorityAvailable = true, CountAuthorityObservations = [] } }));
+        Reject(() => FalloutActorProcessCommonState.Validate(global with
+        {
+            PackageRegistry = global.PackageRegistry with
+            { CountAuthorityAvailable = true, CountAuthorityObservations = [] }
+        }));
         using var unbound = new WeaponContinuationFixture();
         unbound.Common.ObserveSourcePackageAssignment(unbound.Player, 1, Guid.NewGuid(), "authored-prebind-unowned-assignment", null,
             new("WeaponFixture.esm", 0x100), false, FalloutProcessPackageWriterTarget.Current);
@@ -204,8 +228,13 @@ internal static partial class SourceMainScriptCallerContracts
         long sequence = 1; var invocation = new FalloutPackageCommandFieldInvocation(Guid.NewGuid(), actor, process.Process, 2, Environment.CurrentManagedThreadId);
         var call = FalloutProcessPackageState.Mutate(invocation, process, fields, FalloutPackageStateOperation.Set, fixture.Registry,
             fixture.Registry.Require(new("WeaponFixture.esm", 0x100)), null, new IndependentPackageServices(), () => ++sequence,
-            (words, receipt) => fields = fields with { Fields = words, Available = receipt.Step == FalloutPackageStateStep.Returned,
-                Changed = receipt.Changed, Mutations = [receipt] });
+            (words, receipt) => fields = fields with
+            {
+                Fields = words,
+                Available = receipt.Step == FalloutPackageStateStep.Returned,
+                Changed = receipt.Changed,
+                Mutations = [receipt]
+            });
         Require(call.Step == FalloutPackageStateStep.Returned && fields.Available && fields.Fields == call.After && call.RetainedCount == 2 &&
             fixture.Registry.Require(new("WeaponFixture.esm", 0x100)).LifetimeCount == 2,
             "Two authored independent Actor field owners acquired duplicate package counts.");
@@ -215,8 +244,11 @@ internal static partial class SourceMainScriptCallerContracts
     private static void RejectMutation(FalloutProcessCommonSnapshot saved, FalloutPackageStateMutation call)
     {
         var entry = saved.Current.Single(); var slots = entry.Packages!; var fields = slots.Current;
-        Reject(() => FalloutActorProcessCommonState.Validate(saved with { Current = [entry with
-        { Packages = slots with { Current = fields with { Mutations = fields.Mutations!.Select(item => item.Entered == call.Entered ? call : item).ToArray() } } }] }));
+        Reject(() => FalloutActorProcessCommonState.Validate(saved with
+        {
+            Current = [entry with
+        { Packages = slots with { Current = fields with { Mutations = fields.Mutations!.Select(item => item.Entered == call.Entered ? call : item).ToArray() } } }]
+        }));
     }
     private static T RoundTripPackage<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
 
@@ -289,10 +321,17 @@ internal static partial class SourceMainScriptCallerContracts
         using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream);
         var header = new byte[18]; "HEDR"u8.CopyTo(header); BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(4), 12);
         Record("TES4", 0, header);
-        foreach (var (id, kind, flags) in new (uint, byte, uint)[] { (0x100, 6, 0x1004), (0x101, 255, 0), (0x102, 2, 0), (0x103, 6, 0x800), (0x104, 17, 0) })
+        foreach (var (id, kind, flags) in new (uint, byte, uint)[] { (0x100, 6, 0x1004), (0x101, 255, 0), (0x102, 2, 0), (0x103, 6, 0x800), (0x104, 17, 0), (0x105, 6, 0) })
         {
             var data = new byte[14]; "PKDT"u8.CopyTo(data); BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(4), 8);
-            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(6), flags); data[10] = kind; Record("PACK", id, data);
+            BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(6), flags); data[10] = kind;
+            if (id == 0x105)
+            {
+                // An explicit empty collection has a nonnull source pointer.
+                var collection = new byte[7]; "IDLC"u8.CopyTo(collection); collection[4] = 1;
+                data = data.Concat(collection).ToArray();
+            }
+            Record("PACK", id, data);
         }
         return stream.ToArray();
         void Record(string name, uint id, byte[] body)

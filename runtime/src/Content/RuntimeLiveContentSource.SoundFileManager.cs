@@ -14,6 +14,7 @@ internal sealed partial class RuntimeLiveContentSource
     internal FalloutMenuSoundDirectory ObserveSourceMenuDirectory(FalloutPluginStack records,
         FalloutAdvancementRuntimeSource runtime, string raw, string extension)
     {
+        using var readLifetime = EnterResourceRead();
         lock (_menuSoundGate)
         {
             _ = OpenMenuSoundSelection(records, runtime);

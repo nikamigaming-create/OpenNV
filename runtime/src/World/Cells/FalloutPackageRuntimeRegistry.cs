@@ -12,6 +12,7 @@ internal sealed class FalloutPackageRuntimeObject
     internal FalloutFormKey Form => Record.FormKey;
     internal string RecordSha256 { get; }
     internal sbyte Kind { get; }
+    internal bool HasIdleCollection { get; }
     internal uint SourceFlags { get; }
     internal int Procedure { get; set; } = -1;
     internal uint Flags { get; set; }
@@ -26,6 +27,7 @@ internal sealed class FalloutPackageRuntimeObject
         Record = record; var data = FalloutPackageData.Read(record);
         RecordSha256 = Convert.ToHexString(SHA256.HashData(record.ReadData())).ToLowerInvariant();
         Kind = unchecked((sbyte)data.Procedure); SourceFlags = data.Flags; Flags = SourceFlags;
+        HasIdleCollection = FalloutIdlePackageSelection.HasIdleCollection(record.ReadSubrecords().Select(field => field.Signature));
         Target = FalloutPackageRuntimeTargetFields.Load(record, RecordSha256);
     }
     internal int Retain() => Interlocked.Increment(ref _lifetimeCount);

@@ -71,7 +71,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     }
     internal string? ExecutionFault => ExecutionError ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? SourceIndexedInterfaceSoundFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? TerminalExecutionFault ?? SourceManualSaveFailure;
     internal string? BlockingExecutionError => _stageResultDriverFailure?.Error == ExecutionError ? null : ExecutionError;
-    internal string? BlockingExecutionFault => BlockingExecutionError ?? PlayerStatisticFailure ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? SourceIndexedInterfaceSoundFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
+    internal string? BlockingExecutionFault => _scripts?.References?.FunctionalFailure?.Error ?? BlockingExecutionError ?? PlayerStatisticFailure ?? _player?.PlayerPhysicalFailure ?? CampaignRestFailure ?? SourceIndexedInterfaceSoundFailure ?? NativePluginExecutionFailure ?? _speech?.Error ?? _conversation?.ExecutionFault ?? BlockingTerminalExecutionFault;
     private readonly List<object> _headTrackingCommands = [];
     internal object[] HeadTrackingCommands => _headTrackingCommands.ToArray();
 
@@ -93,6 +93,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     private FalloutActorDefenseResolver? _incomingDefense;
     internal void DamagePlayer(FalloutWeaponDamage damage, byte part)
     {
+        _scripts.References?.RequireNoFunctionalFailure();
         _scripts.References?.BeforeActorHit(_pluginStack.RuntimeFormKey(0x14));
         _incomingDefense ??= new(_pluginStack);
         var armor = _inventory.Equipped.Select(_pluginStack.RuntimeFormKey)

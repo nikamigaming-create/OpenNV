@@ -55,6 +55,8 @@ public partial class RuntimeCoordinator
         var camera = GetViewport().GetCamera3D();
         var cellChildren = _nativeCurrentCellRoot?.GetChildren();
         var cellNodes = cellChildren?.ToArray() ?? [];
+        var referenceCaptureFailure = _nativeReferences?.FunctionalFailure is { } gameplayFailure
+            ? "authoritative-gameplay-fault:" + gameplayFailure.Owner + ":" + gameplayFailure.Error : null;
         return new
         {
             paused = GetTree().Paused,
@@ -63,7 +65,9 @@ public partial class RuntimeCoordinator
             manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },
             combatWheel = _nativeCombatWheel?.State,
             xr = _nativeXr?.State,
-            detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-reference-controller-and-quest-details",
+            detail = detailed ? referenceCaptureFailure is null ? "complete-runtime-snapshot" :
+                "partial-runtime-snapshot;authoritative-reference-capture-refused" :
+                "live-summary;request-state-for-reference-controller-and-quest-details",
             reviewScope = !detailed || _nativeActiveCell is null ? null : new
             {
                 sourceCompatibilityId = RuntimeLiveContentSource.Current!.SaveCompatibilityId,
@@ -95,6 +99,7 @@ public partial class RuntimeCoordinator
                 _nativeReferences.InstanceCount,
                 _nativeReferences.ResidentCellCount,
                 _nativeReferences.ScriptDefinitionCount,
+                functionalFailure = _nativeReferences.FunctionalFailure,
                 playerStatistics = _nativeReferences.PlayerStatisticState,
                 sourceMutablePublication = _nativeReferences.SourceMutableNativePublicationState,
                 sourceMutableSaveBlocker = _nativeReferences.SourceMutableNativePublicationSaveBlocker,
@@ -110,7 +115,8 @@ public partial class RuntimeCoordinator
                 stoppedPackageBindings = _nativeReferences.StoppedPackageBindingCount,
                 talkingActivatorBindings = _nativeReferences.TalkingActivatorBindings,
                 unloadedActorPackages = _nativeReferences.UnloadedPackages?.State,
-                state = detailed && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
+                captureFailure = detailed ? referenceCaptureFailure : null,
+                state = detailed && referenceCaptureFailure is null && !_nativeReferences.PlayerMoves.Pending && _nativeReferences.PendingPackageEventCount == 0 &&
                     _nativeReferences.PendingProcedureCaptureCount == 0 && _nativeReferences.PendingAnimationSoundCaptureCount == 0
                     ? _nativeReferences.Capture() : null,
                 actorOverrides = detailed && !_nativeReferences.PlayerMoves.Pending ? _nativeReferences.CaptureActorOverrides() : null

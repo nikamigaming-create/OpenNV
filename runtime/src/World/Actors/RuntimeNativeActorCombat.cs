@@ -146,6 +146,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
     {
         try
         {
+            _world.RequireNoFunctionalFailure();
             var part = HitPart(collider);
             _world.BeforeActorHit(_state.Reference);
             _world.ObserveCombatHit(_state.Reference, attacker);

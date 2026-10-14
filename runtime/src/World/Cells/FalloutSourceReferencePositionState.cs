@@ -9,7 +9,7 @@ namespace OpenNV.Runtime.World.Cells;
 // rendered transforms and native controller poses are independent consumers.
 internal sealed partial class FalloutSourceReferencePositionState
 {
-    internal const string Schema = "opennv-source-reference-position/v1";
+    internal const string Schema = "opennv-source-reference-position/v2";
     internal const string PrefixBoundary = "source-reference-position-constructor-current-writer-prefix-unbound";
     internal const string AdjustedBoundary = "source-reference-adjusted-position-bounds-and-scratch-ring-unbound";
     private readonly FalloutPluginStack _records;
@@ -97,7 +97,7 @@ internal sealed partial class FalloutSourceReferencePositionState
         });
         foreach (var lane in new[] { FalloutReferencePositionLane.PositionMode,
             FalloutReferencePositionLane.Scale, FalloutReferencePositionLane.PersistentCell, FalloutReferencePositionLane.ActorYawMode,
-            FalloutReferencePositionLane.ActorAssignmentByte }) _writers.Remove(lane);
+            FalloutReferencePositionLane.ActorAssignmentByte, FalloutReferencePositionLane.FollowerExtra }) _writers.Remove(lane);
         return LastPrefix!;
     }
 

@@ -66,6 +66,7 @@ internal static partial class SourceMainScriptCallerContracts
         control.Retire(); cold.Retire(); foreignControl.Retire(); unavailableControl.Retire(); wrongArguments.Retire();
         input.Retire(); foreign.Retire(); unavailable.Retire();
         RunPlayerControlConfigurationAndOrientation(source, stack);
+        RunInhibitedPlayerMovementControl(source, stack);
         Console.WriteLine("OPENNV_PLAYER_MOVEMENT_CONTROL_PASS genuineCachedMouse=true orderedCacheStores=true noDevicePoll=true failedPrefix=true coldNoReplay=true laterGettersRefused=true gameplay=UNEXECUTED");
     }
 }

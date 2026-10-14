@@ -177,7 +177,13 @@ internal sealed partial class FalloutActorProcessCommonState
             {
                 var extra = consumers.ReadFollowerExtra(invocation); call = call with { Followers = extra };
                 if (extra.Actor != invocation.Actor || extra.Process == Guid.Empty || extra.Factory == Guid.Empty || extra.Constructor == Guid.Empty ||
-                    string.IsNullOrWhiteSpace(extra.Source) || extra.Sequence < 0 || extra.Present != (extra.Extra is not null) || !extra.Present && extra.Payload is not null)
+                    extra.Source != FalloutReferenceFollowerSource.Reviewed(fields.Source.Reference).Identity ||
+                    extra.Sequence < 0 || extra.Present != (extra.Extra is not null) || !extra.Present && extra.Payload is not null ||
+                    extra.ReferenceInvocation is not { } reference || reference.Actor != invocation.Actor ||
+                    reference.ReferenceProcess != extra.Process || reference.ReferenceConstructor != extra.Constructor ||
+                    reference.CommonProcess != invocation.Process || reference.PackageCommand != invocation.SourceCommand ||
+                    reference.Ingress != FalloutReferencePositionIngress.PackageCommand || reference.ThreadId != invocation.ThreadId ||
+                    reference.Epoch != invocation.Epoch)
                     throw new InvalidDataException("Actor followers lost their actual independent Extra membership owner.");
                 if (extra.Payload is not null)
                     throw new NotSupportedException("source-Actor-package-follower-ordered-payload-and-process-services-unowned");

@@ -78,6 +78,7 @@ public partial class RuntimeCoordinator
         world.CampaignStandalonePlayerScene.BindActorProcessQueries(world.ReadStandaloneSceneProcessQueries);
         world.CampaignStandalonePlayerScene.BindProcessSceneUpdate(world.UpdateStandalonePlayerProcessScene);
         world.CampaignStandalonePlayerScene.BindPostProcessContext(world.ReadStandalonePlayerSceneContext);
+        world.CampaignStandalonePlayerScene.BindPostProcessController(world.BorrowStandalonePlayerContextController);
         world.CampaignStandalonePlayerScene.BindTimedActionCondition(world.ReadStandalonePlayerActionCondition);
         world.CampaignStandalonePlayerScene.BindPostActions(world.UpdateStandalonePlayerPostActions, world.UpdateStandalonePlayerDetectionAction);
         world.CampaignStandalonePlayerScene.BindActorDistances(world.StandaloneInterface, world.ReadStandaloneActorDistanceLimit,

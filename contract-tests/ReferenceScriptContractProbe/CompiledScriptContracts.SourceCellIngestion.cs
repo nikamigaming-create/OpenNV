@@ -9,7 +9,13 @@ internal static partial class CompiledScriptContracts
 {
     internal static void RunSourceCellIngestion()
     {
-        const string engine = "518c87f58a6c4d9826e9ef8fbb7f4213882fa70822675610d45aea2464502a57";
+        foreach (var engine in new[] { FalloutSourceMainFamily.NewVegas, FalloutSourceMainFamily.Fallout3 })
+            RunSourceCellIngestion(engine);
+        RunFo3TemporaryProviderContracts();
+        RunSourceCellEngineStaticsContracts();
+    }
+    private static void RunSourceCellIngestion(string engine)
+    {
         var directory = Path.Combine(Path.GetTempPath(), "opennv-source-cell-stream-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -20,7 +26,8 @@ internal static partial class CompiledScriptContracts
                 Record("STAT", 0x90, Field("EDID", Text("AuthoredBase"))), Record("CELL", 0x800, Field("DATA", [1])),
                 SourceCellGroup(6, 0x800, SourceCellGroup(8, 0x800, SourceCellReference(0xa50, true)),
                     SourceCellGroup(9, 0x800, SourceCellReference(0xa10, false)))));
-            File.WriteAllBytes(last, Join(Tes4("Bytecode.esm"), Record("CELL", 0x800, Field("DATA", [1])),
+            File.WriteAllBytes(last, Join(engine == FalloutSourceMainFamily.Fallout3 ?
+                SourceCellOnamHeader([0xa10], "Bytecode.esm") : Tes4("Bytecode.esm"), Record("CELL", 0x800, Field("DATA", [1])),
                 SourceCellGroup(6, 0x800, SourceCellGroup(8, 0x800, SourceCellReference(0xa50, true)),
                     SourceCellGroup(9, 0x800, SourceCellReference(0xa10, false), SourceCellReference(0x01000900, false)))));
             var hashes = new[] { SHA256.HashData(File.ReadAllBytes(first)), SHA256.HashData(File.ReadAllBytes(last)) };
@@ -43,9 +50,12 @@ internal static partial class CompiledScriptContracts
             Require(prepared.Evidence.Inputs.Select(row => row.Disposition).SequenceEqual([
                 FalloutSourceCellIngestionDisposition.InsertPersistent,
                 FalloutSourceCellIngestionDisposition.RetainPersistentMembership,
-                FalloutSourceCellIngestionDisposition.SkipEarlierTemporaryProvider,
-                FalloutSourceCellIngestionDisposition.InsertWinningTemporary,
-                FalloutSourceCellIngestionDisposition.InsertWinningTemporary]),
+                engine == FalloutSourceMainFamily.Fallout3 ? FalloutSourceCellIngestionDisposition.SkipUnselectedTemporaryProvider :
+                    FalloutSourceCellIngestionDisposition.SkipEarlierTemporaryProvider,
+                engine == FalloutSourceMainFamily.Fallout3 ? FalloutSourceCellIngestionDisposition.InsertSelectedTemporary :
+                    FalloutSourceCellIngestionDisposition.InsertWinningTemporary,
+                engine == FalloutSourceMainFamily.Fallout3 ? FalloutSourceCellIngestionDisposition.InsertSelectedTemporary :
+                    FalloutSourceCellIngestionDisposition.InsertWinningTemporary]),
                 "Actual full-reader source stream changed eager same-parent retention or lazy winning-file selection.");
             try
             {
@@ -69,26 +79,36 @@ internal static partial class CompiledScriptContracts
                     saved.Cells.Single().Members.Count == 3 && saved.Cells.Single().RuntimeActors?.Single().Source == player &&
                     !records.TryGetEffective(player.Reference, out _),
                     "Canonical Player acquired an invented ACHR or lost its genuine typed head membership.");
-                var cold = Task.Run(() =>
+                var retained = Copy(saved);
+                for (var cycle = 0; cycle < 3; cycle++)
                 {
-                    var reader = new FalloutSourceCellReferenceIngestion(declarations, records, "authored-source-cell-stack");
-                    var links = new FalloutSourceCellReferenceLinks(linkDeclaration, "authored-source-cell-stack",
-                        cellSource.Read, Reference, reader, saved, _ => player);
-                    return (Reader: reader, Links: links);
-                }).GetAwaiter().GetResult();
-                try
-                {
-                    var coldRoot = new object(); cold.Links.PublishNativeOwner(coldRoot); cold.Reader.PublishNativeOwner(coldRoot);
-                    Require(cold.Links.Read(cell).OrderedReferences.SequenceEqual(saved.Cells.Single().OrderedReferences) &&
-                        cold.Links.RuntimeActorParent(player) == cell && cold.Links.Capture().Membership == saved.Membership,
-                        "Cold canonical/source memberships were replayed, retargeted or reordered.");
-                    using var state = JsonDocument.Parse(JsonSerializer.Serialize(cold.Reader.State));
-                    Require(state.RootElement.GetProperty("calls").GetInt64() == 0,
-                        "Cold source evidence authentication entered an initial insertion stream.");
-                    var drift = saved with { Cells = saved.Cells.Select(row => row with { GraphSha256 = new('f', 64) }).ToArray() };
-                    Reject(() => FalloutSourceCellReferenceLinks.Validate(drift));
+                    var cold = Task.Run(() =>
+                    {
+                        var reader = new FalloutSourceCellReferenceIngestion(declarations, records, "authored-source-cell-stack");
+                        var links = new FalloutSourceCellReferenceLinks(linkDeclaration, "authored-source-cell-stack",
+                            cellSource.Read, Reference, reader, retained, _ => player);
+                        return (Reader: reader, Links: links);
+                    }).GetAwaiter().GetResult();
+                    try
+                    {
+                        var coldRoot = new object(); cold.Links.PublishNativeOwner(coldRoot); cold.Reader.PublishNativeOwner(coldRoot);
+                        Require(cold.Links.Read(cell).OrderedReferences.SequenceEqual(saved.Cells.Single().OrderedReferences) &&
+                            cold.Links.RuntimeActorParent(player) == cell && cold.Links.Capture().Membership == saved.Membership,
+                            "Cold canonical/source memberships were replayed, retargeted or reordered.");
+                        using var state = JsonDocument.Parse(JsonSerializer.Serialize(cold.Reader.State));
+                        Require(state.RootElement.GetProperty("calls").GetInt64() == 0,
+                            "Cold source evidence authentication entered an initial insertion stream.");
+                        var drift = saved with { Cells = saved.Cells.Select(row => row with { GraphSha256 = new('f', 64) }).ToArray() };
+                        Reject(() => FalloutSourceCellReferenceLinks.Validate(drift));
+                        if (engine == FalloutSourceMainFamily.Fallout3)
+                        {
+                            var evidence = saved.Cells.Single().InitialEvidence!;
+                            Reject(() => cold.Reader.RequireEvidence(evidence with { ProviderHeadersSha256 = new('f', 64) }, cellSource.Read(cell)));
+                        }
+                        retained = Copy(cold.Links.Capture());
+                    }
+                    finally { cold.Links.Dispose(); cold.Reader.Dispose(); }
                 }
-                finally { cold.Links.Dispose(); cold.Reader.Dispose(); }
                 var unchanged = prepared.Links.Capture().Membership;
                 try
                 {
@@ -118,6 +138,11 @@ internal static partial class CompiledScriptContracts
                 "sourceResumeZero=true sourcePauseWrap=true originalNativeAndWholeMain=UNEXECUTED");
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+    private static byte[] SourceCellOnamHeader(uint[] forms, params string[] masters)
+    {
+        var header = Tes4(masters);
+        return Record("TES4", 0, header[FalloutPlugin.RecordHeaderSize..], Field("ONAM", Join(forms.Select(U32).ToArray())));
     }
     private static byte[] SourceCellGroup(int type, uint label, params byte[][] bodies)
     {

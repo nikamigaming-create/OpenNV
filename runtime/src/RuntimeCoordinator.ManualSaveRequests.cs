@@ -84,7 +84,7 @@ public partial class RuntimeCoordinator
                 player, records.SoundVoices, Invalidation, Admission, CreateNativeCheckpoint,
                 PublishNativeManualSave, NativeOrderedManualSaveSettled, sourceProducers: [scripts],
                 sourceRequests: driver.ManualSourceSaveRequests, originalSourceBlocker: driver.ObserveOriginalSourceManualSaveBlocker,
-                driverProducer: driver);
+                driverProducer: driver, pauseMain: driver.PauseMainForSave);
             _nativeManualSavePreparation = preparation;
             AddChild(preparation); preparation.Begin();
         }

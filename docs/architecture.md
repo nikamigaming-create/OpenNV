@@ -3,6 +3,14 @@
 OpenNV has one runtime architecture: C# readers consume a legally owned game
 installation in place and publish authoritative state to Godot.
 
+Gameplay faults belong to the shared C# world and stop subsequent producers.
+Diagnostics read retained immutable fields and report failed prefixes separately
+from gameplay getters. A faulted detailed snapshot explicitly marks unavailable
+reference capture; it does not bypass the authoritative save guard. Manual save
+preparation pauses new Main delivery and drains its actual entered call before
+acquiring audio, tree, driver and input leases. Cleanup restores only settings
+whose mutation was acquired and resumes Main admission last.
+
 Standalone Player startup constructs source control fields, HUD and logical
 World camera owners before the compiled bootstrap consumes them. HUD uses the
 winning XML and the same C# Interface transition queue. World projection and raw

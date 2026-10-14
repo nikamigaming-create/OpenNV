@@ -220,6 +220,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        if (_aiWorld?.FunctionalFailure is not null) return;
         if (_sandboxNativeAction is not null && !_sandboxNativeRetired && _sandbox?.Failure is not null) return;
         if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true) return;
         RestoreAuthoredHeadPose();

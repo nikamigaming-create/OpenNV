@@ -7,9 +7,11 @@ internal static partial class SourceMainScriptCallerContracts
     internal static void RunEarlyControllerContracts()
     {
         ContactNumbers(); ManagerAndArrays(); SharedCurrentInputs(); PhysicsThreadScopes(); EarlyControllerColdOwners();
+        ControllerPostProcessConsumers();
         Console.WriteLine("OPENNV_EARLY_CONTROLLER_CONTRACTS_PASS contactFloat32Fixtures=12 proxyDistinctSlope=true " +
             "actualStateObjects=true realArrayStorage=true nullableCurrentBase=true independentWriterBarriers=true " +
             "physicsKind16=true failureAndColdScopes=true coldFactoryCycles=3 retainedTypedPayloadRefused=true " +
+            "nonnullContextNullBodies=true nullObjectForcedGetter=true " +
             "nativeResources=SEPARATE_AUDIT canonicalBytes=UNQUALIFIED");
     }
     private static void ContactNumbers()

@@ -67,7 +67,35 @@ internal static partial class FalloutExecutableStringTable
         Need(reset + 0x12, [0x89, 0x41, 0xc, 0xc6, 0x41, 0x73, 0, 0xc3], "reset Z store then distinct byte zero and pure return");
         if (Word(code, reset + 4) != vector || Word(code, reset + 0xe) != vector + 8)
             throw new NotSupportedException("Actor package reset borrowed a different default vector producer.");
+        RequirePlayerFrameStores();
         return source;
+
+        void RequirePlayerFrameStores()
+        {
+            var frame = Get(player, 0x2f8);
+            Need(frame + 0xca2, [0x80, 0xbf, 0xe5, 6, 0, 0, 0, 0x0f, 0x85], "actual following first-byte late-tail branch");
+            var late = checked(frame + 0xca2 + 13 + BinaryPrimitives.ReadInt32LittleEndian(code.AsSpan(frame + 0xca2 + 9)));
+            Need(late + 0x24, [0x8b, 0x8f, 0x84, 1, 0, 0, 0x0f, 0xb7, 0x45, 0xec, 0x50, 0x8b, 0x11, 0xff, 0x52, 0xc],
+                "same actual mover receiver and existing frame-local unsigned-short flag argument");
+            var setter = Get(playerMover, 0xc);
+            Need(setter, [0x55, 0x8b, 0xec, 0x8b, 0x55, 8, 0x8b, 0x81, 0x94, 0, 0, 0,
+                0x56, 0x57, 0x8b, 0xf2, 0x8b, 0xfa, 0x25, 0, 4, 0, 0, 0x81, 0xe6, 0, 4, 0, 0,
+                0x83, 0xe7, 0x30, 0x74, 0x16], "current/requested turning masks before zero-direction skip");
+            Need(setter + 0x38, [0x89, 0x91, 0x94, 0, 0, 0, 0x3b, 0xc6, 0x0f, 0x84],
+                "complete flag-word store before turning-change predicate");
+            var returned = checked(setter + 0x46 + BinaryPrimitives.ReadInt32LittleEndian(code.AsSpan(setter + 0x42)));
+            Need(returned, [0x5f, 0x5e, 0x5d, 0xc2, 4, 0], "zero-word flags setter's complete pure return");
+            var supplied = late + 0x25f;
+            Need(supplied, [0x8b, 0x8f, 0x84, 1, 0, 0, 0x68], "same frame mover and separate default-vector argument");
+            if (Word(code, supplied + 7) != vector)
+                throw new NotSupportedException("Player frame vector writer borrowed a different default source.");
+            var copied = Call(supplied + 0xb);
+            Need(copied, [0x55, 0x8b, 0xec, 0x8b, 0x45, 8, 0xf3, 0x0f, 0x7e, 0,
+                0x66, 0x0f, 0xd6, 0x81, 0x88, 0, 0, 0, 0x8b, 0x40, 8,
+                0x89, 0x81, 0x90, 0, 0, 0, 0x5d, 0xc2, 4, 0], "complete paired-XY/then-Z frame helper without following virtual");
+            Need(supplied + 0x10, [0x8b, 0x8f, 0x84, 1, 0, 0, 0xf3, 0x0f, 0x10, 0x43, 8, 0x51,
+                0xf3, 0x0f, 0x11, 4, 0x24, 0x8b, 1, 0xff, 0x50, 0x14], "independent mandatory mover delta virtual after returned vector helper");
+        }
 
         uint Class(string name, int count) => image.SourceClassTables(name, count).ToArray() is [var table] ? table :
             throw new NotSupportedException("Actor mover lacks a unique selected class: " + name);

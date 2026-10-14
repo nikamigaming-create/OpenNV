@@ -55,7 +55,7 @@ internal sealed partial class FalloutActorProcessManager : IDisposable
         cohort = _cohort.Capture(),
         actors = _actors.Values.ToArray(),
         factory = _factory,
-        schedule = _schedule,
+        schedule = ObserveSchedule(),
         faults = _faults.ToArray(),
         saveBlocker = SaveBlocker
     };
@@ -198,8 +198,8 @@ internal sealed partial class FalloutActorProcessManager : IDisposable
     {
         if (_disposed) return;
         if (_busy) throw new InvalidOperationException("Actor process manager cannot retire inside a producer callback.");
-        if (_factory is { Phase: not FalloutActorProcessFactoryPhase.Complete })
-            throw new NotSupportedException("Actor process retirement still owns an unfinished old/new factory lifetime.");
+        // An unwound failed factory retains semantic history, not an entered
+        // callback or native resource. Its providers own their separate leases.
         _disposed = true; _actors.Clear();
     }
 }

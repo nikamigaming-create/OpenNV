@@ -70,6 +70,7 @@ internal static partial class FalloutExecutableStringTable
         Need(SourceOffset(code, image.CodeBase, Word(image.Read(player + 0x21c, 4), 0)), [0x32, 0xc0, 0xc3],
             "selected Player false base-collision predicate independent of current Base identity");
         RequireDescriptor(); RequireManager(); RequireThreadAndModel(); RequireContact();
+        RequirePlayerControllerContext(code, image);
         return source;
 
         void RequireDescriptor()

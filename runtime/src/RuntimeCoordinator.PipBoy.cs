@@ -45,6 +45,7 @@ public partial class RuntimeCoordinator
 
     private string? RequestNativeFastTravel(FalloutFormKey reference)
     {
+        _nativeReferences!.RequireNoFunctionalFailure();
         var records = _nativePluginStack!;
         var player = _nativePlayer!;
         var driver = _nativeOpeningStageDriver!;

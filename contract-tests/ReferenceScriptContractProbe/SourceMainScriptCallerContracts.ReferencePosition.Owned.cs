@@ -5,7 +5,7 @@ using OpenNV.Runtime.World.Cells;
 
 internal static partial class SourceMainScriptCallerContracts
 {
-    internal static int AuditOwnedReferenceStartup(string dataRoot)
+    internal static int AuditOwnedReferenceStartup(string dataRoot, uint? selectedCell = null)
     {
         RuntimeLiveContentSource.Configure(dataRoot, RuntimeLiveContentSource.Fallout3Game);
         using var owned = RuntimeLiveContentSource.Current!;
@@ -32,6 +32,10 @@ internal static partial class SourceMainScriptCallerContracts
             SHA256.HashData(File.ReadAllBytes(owned.FalloutExecutablePath)).AsSpan().SequenceEqual(before),
             "Owned reference startup lost an original selector, distinct vector, source dependency or read-only source bytes.");
         var actorAssignment = AuditOwnedActorPackageAssignment(records, fixture.Common, controls);
+        var dataHandlerLoading = AuditOwnedDataHandlerLoadingPreservation(records, fixture.Common, controls);
+        var followers = AuditOwnedReferenceFollowerMembership(records, fixture);
+        var cellIngestion = CompiledScriptContracts.AuditOwnedSourceCellIngestion(records, main.EngineSha256,
+            selectedCell is { } id ? records.RuntimeFormKey(id) : null);
         var saved = fixture.Capture();
         for (var cycle = 0; cycle < 3; cycle++)
         {
@@ -41,7 +45,7 @@ internal static partial class SourceMainScriptCallerContracts
             saved = cold.Capture();
         }
         Console.WriteLine(JsonSerializer.Serialize(new { status = "OPENNV_OWNED_REFERENCE_STARTUP_PASS", source = source.Identity,
-            fileSource = fileSource.Identity, cellSource = cellSource.Identity, file, inputs, first, prefix, second, actorAssignment,
+            fileSource = fileSource.Identity, cellSource = cellSource.Identity, file, inputs, first, prefix, second, actorAssignment, dataHandlerLoading, followers, cellIngestion,
             coldCycles = 3, scope = "AUTHORED_WITH_OWNED_DATA", originalStartup = "UNEXECUTED", wholePlayer = "UNEXECUTED",
             controllerReset = "AUTHORED_COMPONENT_CALLBACK", canonicalParity = "UNVERIFIED" }));
         return 0;

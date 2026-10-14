@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
     internal Guid Constructor => _constructor;
-    internal const string Schema = "opennv-standalone-Player-scene/v23";
+    internal const string Schema = "opennv-standalone-Player-scene/v24";
     internal FalloutStandalonePlayerSceneSource Source { get; }
     internal Guid Process => _process;
     internal string Stack => _stack;

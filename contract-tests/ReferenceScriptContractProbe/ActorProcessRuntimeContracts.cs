@@ -114,7 +114,8 @@ internal static class ActorProcessRuntimeContracts
         Require(saved.Transfer is { OldRetired: true, Published: true, Initialized: false, Failure: not null } &&
             saved.Current.Single(actor => actor.Source.Reference == Npc).Epoch == 2 && saved.Pending is null && common.SaveBlocker is not null,
             "Missing High body discarded the actual published source prefix.");
-        Reject(common.Dispose); Reject(manager.Dispose);
+        common.Dispose(); manager.Dispose(); common.Dispose(); manager.Dispose();
+        Reject(() => common.ReadSceneQueries(Npc, 2)); Reject(() => manager.Read(Npc));
 
         FalloutActorProcessRuntimeState? reentrant = null; var trigger = false;
         reentrant = new(source, Stack, Player, key =>

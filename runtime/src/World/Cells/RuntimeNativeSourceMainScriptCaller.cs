@@ -22,6 +22,8 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
         started = _started,
         retired = _retired,
         deliveryClosed = _nativeDeliveryClosed,
+        savePaused = _saveDelivery.Paused,
+        enteredCallPending = _activeMainCall is { IsCompleted: false },
         failure = _failure?.ToString(),
         retirementFailure = _retirementFailure?.ToString()
     };

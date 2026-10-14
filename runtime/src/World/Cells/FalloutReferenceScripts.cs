@@ -80,6 +80,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
         IReadOnlyList<FalloutReferenceScriptEvent> events, double elapsedSeconds,
         Action? observeActivationBegin = null, Action? observeActivationEnd = null)
     {
+        world.RequireNoFunctionalFailure();
         if (!double.IsFinite(elapsedSeconds) || elapsedSeconds < 0)
             throw new ArgumentOutOfRangeException(nameof(elapsedSeconds));
         if (!world.IsResident(reference)) throw new InvalidOperationException($"Reference {reference} cannot receive events while its cell is unloaded.");
@@ -270,6 +271,7 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
 
     internal void ExecuteProgram(FalloutPluginRecord owner, FalloutPluginRecord script, FalloutGameModeProgram program, double seconds)
     {
+        world.RequireNoFunctionalFailure();
         FalloutQuestScriptAuthority.RequireSourceExecution(script);
         var key = (owner.FormKey, script.FormKey);
         if (!_questBindings.TryGetValue(key, out var bindings))
@@ -1503,8 +1505,19 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             bindCompiledOwners(Function, Call); return [];
         }
         if (program is null) throw new InvalidOperationException("Source gameplay execution has no source program.");
-        return world.ScriptManualSaves.Execute(source, records.GetEffective(bindings.Source), program,
-            program.Steps(Read, Write, Call, Function, UserFunction, budget, values), observeInvocation, executionScope);
+        return GuardGameplaySteps(world.ScriptManualSaves.Execute(source, records.GetEffective(bindings.Source), program,
+            program.Steps(Read, Write, Call, Function, UserFunction, budget, values), observeInvocation, executionScope));
+    }
+
+    private IEnumerable<bool> GuardGameplaySteps(IEnumerable<bool> steps)
+    {
+        using var execution = steps.GetEnumerator();
+        while (true)
+        {
+            world.RequireNoFunctionalFailure();
+            if (!execution.MoveNext()) yield break;
+            yield return execution.Current;
+        }
     }
 
     private static string StringArgument(string token) => token.Length >= 2 && token[0] == '"' && token[^1] == '"' &&

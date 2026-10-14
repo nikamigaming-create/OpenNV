@@ -18,8 +18,7 @@ internal sealed partial class FalloutActorProcessCommonState
     private readonly Dictionary<FalloutFormKey, EarlyControllerField> _earlyControllerFields = new(FalloutFormKeyComparer.Instance);
     private readonly List<IFalloutEarlyControllerLease> _rejectedEarlyControllerTemporaries = [];
     private FalloutEarlyControllerInvocation? _enteredEarlyControllerStore;
-    private string? EarlyControllerSaveBlocker => _earlyControllerFields.Count == 0 ? null :
-        "source-early-controller-cold-native-resource-owner-unbound";
+    private string? EarlyControllerSaveBlocker => ReadEarlyControllerSaveBlocker();
 
     // The Common field and the post-process scene getter retain this same real
     // controller. A null constructor observation cannot outlive publication.

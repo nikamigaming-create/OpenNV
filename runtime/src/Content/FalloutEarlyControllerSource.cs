@@ -7,6 +7,7 @@ internal sealed record FalloutEarlyControllerSource(FalloutPackageCommandFieldsS
     internal const uint MaximumSlopeBits = 0x3fc90fdb, ActorPropertyKey = 1000, ProxyPropertyKey = 0x1300;
     internal const uint PositiveOneBits = 0x3f800000, PositiveZeroBits = 0, StrengthBits = 0x42c80000, MaximumBoundBits = 0x7f7fffee;
     internal const uint HelperConditionalFlag = 0x100000, HelperAlwaysFlag = 0x200000, ResetFlag = 0x80;
+    internal const uint PostActionContextFlag = 0x20000;
     internal const uint ArrayEmptyFlag = 0x80000000, ArrayCapacityMask = 0x3fffffff, ArrayRetainedFlag = 0x40000000;
     internal const int ContactIterations = 4, UserPlanes = 10, ManagerSlots = 11;
     internal const uint State2ScalarBits = 0x44fa0000, ContextScalarABits = 0x441c4000, ContextScalarBBits = 0x41a00000;
@@ -15,7 +16,7 @@ internal sealed record FalloutEarlyControllerSource(FalloutPackageCommandFieldsS
     internal static World.Physics.FalloutPhysicalVector3 InitialStandardCenter => default;
     internal const byte InitialHelperFlag = 0;
     internal const string NumericalBoundary = "source-default-control-constructor-Float32-fields-qualified;general-double-control-and-canonical-byte-parity-unqualified";
-    private const string Rules = "source-FO3-early-detached-character-controller/v1;" +
+    private const string Rules = "source-FO3-early-detached-character-controller/v3;" +
         "actual-Player-High-process-constructor-before-global-Player-and-Main;" +
         "Common-Runtime-and-current-thread-process-lineages-independent;" +
         "inherited-reference-final-Base-model-and-ParentCELL-null-stores-after-intermediate-Base-preservation;" +
@@ -32,8 +33,18 @@ internal sealed record FalloutEarlyControllerSource(FalloutPackageCommandFieldsS
         "four-real-proxy-arrays-retained-storage-capacity-and-source-empty-flags;" +
         "phantom-properties-retain-actual-proxy-and-Actor-owners;" +
         "returned-controller-retained-through-actual-Common-pointer-setter;" +
+        "three-independent-body-body-object-wrapper-constructor-null-fields-before-selected-initialization;" +
+        "separate-inherited-base-proxy-publication-and-proxy-back-reference-preserve-those-wrapper-fields;" +
+        "selected-creation-info-cleanup-preserves-independent-body-object-fields;" +
+        "Main-repeated-current-context-getters-first-body-second-body-equality-before-second-body-reread;" +
+        "independent-object-null-conversion-still-reads-forced-first-person-before-null-input-return;" +
+        "later-post-action-repeated-current-context-reads-first-body-before-null-reference-conversion-and-action-eight-removal;" +
+        "independent-second-post-action-context-reads-same-current-controller-flags-bit-seventeen-before-Player-context-byte-store;" +
+        "post-action-flags-read-borrows-real-constructor-helper-and-position-reset-flag-stores-with-distinct-source-scope;" +
+        "body-object-current-writer-boundaries-retained-independently-through-cold-state-without-replay;" +
         "Player-later-selector-one-thousand-and-upper-filter-nine-preserves-lower-thirty;" +
         "XYZ-reset-offset-current-rotation-translation-velocity-four-zero-scalar-zero-conditional-flags-array-count;" +
+        "position-reset-preserves-current-body-body-object-wrapper-fields;" +
         "unwritten-translation-W-explicit-and-source-nonnull-world-AABB-broadphase-independent;" +
         "failure-prefix-native-lifetime-and-retirement-retry-retained;" +
         "canonical-hull-trig-bytes-contacts-solver-world-admission-and-unreached-state-transitions-independent";

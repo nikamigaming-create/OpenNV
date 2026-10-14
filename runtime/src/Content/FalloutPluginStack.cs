@@ -81,6 +81,8 @@ internal sealed class FalloutPluginStack : IDisposable
         new(StringComparer.Ordinal);
     private readonly int _effectiveRecordCount;
     private FalloutSoundVoices? _soundVoices;
+    private FalloutPluginStackLoadReceipt? _loadReceipt;
+    private bool _readLifetimeRetired;
     internal FalloutSoundVoices SoundVoices => _soundVoices ??= new(this);
     internal FalloutSoundPaths SoundPaths { get; }
     private readonly object _cellIndexLock = new();
@@ -119,6 +121,15 @@ internal sealed class FalloutPluginStack : IDisposable
 
     internal IReadOnlyList<FalloutPluginContext> Plugins => _plugins;
     internal RuntimeLiveContentSource? OwnedSource { get; }
+    internal FalloutPluginStackLoadReceipt LoadReceipt => _loadReceipt ??
+        throw new InvalidOperationException("The complete plugin reader has not returned its input lifetime.");
+
+    internal void RequireLiveLoadReceipt(FalloutPluginStackLoadReceipt receipt)
+    {
+        ObjectDisposedException.ThrowIf(_readLifetimeRetired, this);
+        if (!ReferenceEquals(_loadReceipt, receipt) || !receipt.Returned)
+            throw new InvalidDataException("Records consumer replaced its actual returned reader/input lifetime.");
+    }
     internal bool IsPluginLoaded(string name) => _loadOrderIndices.ContainsKey(name);
     internal int WinnerRecordCount => _winners.Count;
     internal int EffectiveRecordCount => _effectiveRecordCount;
@@ -167,6 +178,7 @@ internal sealed class FalloutPluginStack : IDisposable
             ownedSource is not null && !sources.SequenceEqual(ownedSource.PluginSources))
             throw new FalloutPluginFormatException("Plugin sources differ from their complete owned source graph.");
 
+        var loadFactory = Guid.NewGuid();
         var canonicalByFold = sources.ToDictionary(source => source.Name, source => source.Name, StringComparer.OrdinalIgnoreCase);
         var orderedPluginNames = sources.Select(source => source.Name).ToArray();
         var uniquePaths = new HashSet<string>(PathComparer);
@@ -287,6 +299,7 @@ internal sealed class FalloutPluginStack : IDisposable
             metrics = new FalloutPluginStackLoadMetrics(
                 pluginHeaderScan.Elapsed,
                 winnerConstruction.Elapsed);
+            stack._loadReceipt = FalloutPluginStackLoadReceipt.CreateReturned(loadFactory, contexts, ownedSource);
             return stack;
         }
         catch
@@ -432,6 +445,7 @@ internal sealed class FalloutPluginStack : IDisposable
 
     public void Dispose()
     {
+        _readLifetimeRetired = true;
         try { _soundVoices?.Retire(); }
         finally
         {

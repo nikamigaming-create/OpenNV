@@ -30,8 +30,6 @@ internal sealed partial class FalloutReferenceWorld
         RequireStandaloneControlPublication();
         if (_sourceEarlyControllerFactory is not null || _sourceEarlyControllerGroups is not null)
             throw new InvalidOperationException("Early Player physics construction was replayed.");
-        if (_processCommonRestore is not null)
-            throw new NotSupportedException("source-early-controller-cold-native-resource-owner-unbound");
         var fields = _sourcePackageFields[_enginePlayer];
         var scene = CampaignStandalonePlayerScene;
         var owned = records.OwnedSource ?? throw new NotSupportedException("source-early-controller-owned-image-unbound");
@@ -40,6 +38,12 @@ internal sealed partial class FalloutReferenceWorld
         var settings = FalloutPhysicalEffectiveSettings.Read(name => FalloutGameSettingFloats.ReadRetained(records,
             name, nameof(PrepareStandaloneEarlyPlayerController)));
         var inputs = new FalloutPhysicalConstructorInputs(source.Fields.Controls.Main.EngineSha256, settings);
+        if (_processCommonRestore is { } cold)
+        {
+            RestoreStandaloneEarlyPlayerController(source, inputs, sourceUnitsToMetres, cold.ReferenceOwners ??
+                throw new InvalidDataException("Cold World omitted its early-controller owner."));
+            return;
+        }
         _sourceEarlyControllerGroups = new(inputs);
         // This is the source-qualified inherited reference model field. The
         // original ctor explicitly clears it before a model can be published.

@@ -407,7 +407,14 @@ internal sealed partial class RuntimeLiveHarness : Node
             try
             {
                 AtomicWrite(Path.Combine(_directory, "state-error.json"), JsonSerializer.Serialize(new
-                { drawCount = Engine.GetFramesDrawn(), error = error.Message, failures = _statePublicationFailures }, Json));
+                {
+                    process = System.Environment.ProcessId,
+                    drawCount = Engine.GetFramesDrawn(),
+                    physicsCount = Engine.GetPhysicsFrames(),
+                    error = error.Message,
+                    exception = error.ToString(),
+                    failures = _statePublicationFailures
+                }, Json));
             }
             catch (IOException markerError)
             {

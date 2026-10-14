@@ -36,6 +36,7 @@ internal partial class RuntimeNativeConversation
     {
         if (_retired || Error is not null || _menu is not null || _pending.Count != 0 || _completed is not null)
             throw new InvalidOperationException("Cold conversation requires a fresh configured native owner.");
+        _requireGameplayAdmission();
         if (saved.Conversation.Phase == "closed")
         {
             if (saved.Speaker is not null || saved.DialogueSubject is not null)

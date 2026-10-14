@@ -4,7 +4,7 @@ internal sealed record FalloutActorMoverSource(FalloutPlayerMovementControlSourc
 {
     internal const uint InitialInheritedFlags = 0x101;
     internal const uint InitialPlayerTimerBits = 0xbf800000;
-    private const string Rules = "source-FO3-ActorMover-PlayerMover-fields/v1;" +
+    private const string Rules = "source-FO3-ActorMover-PlayerMover-fields/v2;" +
         "actual-Player-constructor-retires-old-mover-constructs-PlayerMover-publishes-same-field;" +
         "PlayerMover-inherits-actual-ActorMover-constructor-and-independent-default-vectors;" +
         "inherited-flags-101-and-inherited-reset-byte-in-zero-word-distinct-from-Player-movement-word;" +
@@ -13,6 +13,12 @@ internal sealed record FalloutActorMoverSource(FalloutPlayerMovementControlSourc
         "actual-Actor-byte-nonzero-skips-base-predicate-and-mover-reset;" +
         "base-predicate-nonzero-skips-reset-zero-reads-same-Actor-mover-field;" +
         "reset-copies-default-XY-together-default-Z-then-independent-byte-zero;" +
+        "actual-Player-frame-reads-same-mover-and-current-local-unsigned-short;" +
+        "zero-frame-word-and-current-turning-bit-zero-store-complete-flags-word-then-pure-return;" +
+        "separate-frame-default-vector-copies-same-source-positive-zero-XY-together-then-Z-and-returns;" +
+        "frame-stores-never-certify-following-mover-delta-physics-or-reference-position-return;" +
+        "actual-frame-Main-Prelude-Actor-Common-epoch-thread-scopes-distinct-from-package-command;" +
+        "bounded-latest-frame-receipts-and-independent-cumulative-frame-store-sequence-never-replay-on-cold;" +
         "current-getters-borrow-same-mutable-owner-source-thread-and-lifetime;" +
         "observed-unowned-writers-invalidate-specific-cells-cold-stores-never-replayed;" +
         "logical-mover-is-independent-of-physical-controller-phantom-shape-and-renderer";

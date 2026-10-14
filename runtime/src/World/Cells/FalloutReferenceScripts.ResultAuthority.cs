@@ -37,6 +37,7 @@ internal sealed partial class FalloutReferenceScripts
     private FalloutScriptResultReceipt ExecuteScopeOwned(FalloutScriptScope scope, FalloutFormKey caller,
         FalloutPluginRecord diagnosticOwner, Action<FalloutGameModeProgram, Exception>? sourceFailure = null)
     {
+        world.RequireNoFunctionalFailure();
         scope.RequireSource(records.GetEffective(scope.Source.FormKey));
         if (_closedResultFailures.TryGetValue((caller, scope.ScopeSha256), out var closed))
             throw new NotSupportedException(closed);

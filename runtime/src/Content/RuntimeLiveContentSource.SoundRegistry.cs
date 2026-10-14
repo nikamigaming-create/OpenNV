@@ -61,6 +61,7 @@ internal sealed partial class RuntimeLiveContentSource
 
     internal bool TryReadSourceMenuAudio(string logicalPath, long selectionOrdinal, out byte[] data, out string source)
     {
+        using var readLifetime = EnterResourceRead();
         lock (_menuSoundGate)
         {
             ObjectDisposedException.ThrowIf(_menuSoundRetiring, this);

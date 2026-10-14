@@ -190,7 +190,7 @@ internal sealed partial class FalloutSourceReferencePositionState
                 if (prefix.Returned)
                     foreach (var lane in new[] { FalloutReferencePositionLane.PositionMode,
                         FalloutReferencePositionLane.Scale, FalloutReferencePositionLane.PersistentCell, FalloutReferencePositionLane.ActorYawMode,
-                        FalloutReferencePositionLane.ActorAssignmentByte }) writers.Remove(lane);
+                        FalloutReferencePositionLane.ActorAssignmentByte, FalloutReferencePositionLane.FollowerExtra }) writers.Remove(lane);
             }
             if (call.InvalidatedLane is { } invalidated)
             {
