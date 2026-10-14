@@ -95,8 +95,76 @@ internal static partial class SourceMainScriptCallerContracts
             stopped.ReadFrameLeaf(frame => { Reject(() => stopped.Data.ReadForMover(frame, stopped.RequireFrame)); return true; });
             unrestored.Retire();
         }
+        RunReferenceModelFailureBindings(prior);
         Console.WriteLine("OPENNV_REFERENCE_MODEL_COLD_PASS actualAuthoredNifGraph=true nonnullModel=true freshGraph3=true fieldsAndMaterialsPreserved=true " +
             "noSourceCtorOrSetterReplay=true noOldNativeRelease=true historicalReadJoin=true tamperRefusal=true nativeFactoryAndCampaignContinue=UNEXECUTED");
+    }
+
+    private static void RunReferenceModelFailureBindings(FalloutReferenceModelDataSnapshot saved)
+    {
+        foreach (var cold in new[] { false, true })
+        {
+            using var fixture = new MoverDeltaFixture(cold ? saved : null);
+            if (!cold) fixture.AllocateData();
+            var graph = PlayerOpacityContracts.CreateReferenceColdModel().ConstructLogicalScene(fixture.Data.PreparedColdModel);
+            var reads = 0; var releases = 0; var retirements = 0; var bound = true;
+            var node = new FalloutReferenceModelDataNode(new(fixture.Scene.Process, graph.Factory, cold ? 102UL : 101UL), graph,
+                () => { fixture.RequireLife(); if (++reads == 3) throw new IOException("Actual authored retain entry fails after pointer store."); },
+                () => releases++, () => { if (!bound) throw new InvalidOperationException("Binding retired twice."); bound = false; retirements++; });
+            var ingress = cold ? FalloutReferenceModelDataIngress.ColdBinding : FalloutReferenceModelDataIngress.ModelSetter;
+            fixture.DataCall(ingress, invocation => Reject(() =>
+            {
+                if (cold) fixture.Data.BindColdModel(invocation, node);
+                else fixture.Data.StoreReturnedModel(invocation, new("authored-model-ParentCELL", fixture.Stack,
+                    Guid.NewGuid(), Guid.NewGuid(), fixture.Scene.Constructor, fixture.Actor, 0, null,
+                    fixture.Source.Controller.Fields.Controls.Main.EngineSha256), node);
+            }));
+            var failed = fixture.Data.Capture();
+            Require(failed.Failure is not null && failed.Fields!.Model == node.Node && bound && releases == 0,
+                "Failed retain lost the actual committed model or fabricated a source release.");
+            var preserved = false; var freed = false;
+            fixture.Data.CleanupUnpublishedModel(node.Node, () => preserved = true, () => { freed = true; graph.Retire(); });
+            Require(preserved && !freed && fixture.Data.Capture().ModelScene?.Factory == graph.Factory,
+                "Unpublished assembly cleanup destroyed its actually adopted failed-prefix graph.");
+            fixture.Data.Retire(); fixture.Data.Retire();
+            Require(!bound && retirements == 1 && releases == 0,
+                "Zero-retain binding leaked or retirement invented a source reference release.");
+            Reject(node.RequireCurrent); graph.Retire();
+        }
+
+        using var owner = new MoverDeltaFixture(); owner.AllocateData();
+        var adoptedGraph = PlayerOpacityContracts.CreateReferenceColdModel().ConstructLogicalScene();
+        var bindingRetired = 0; var sourceReleased = 0; var presentationFailed = false;
+        var adopted = new FalloutReferenceModelDataNode(new(owner.Scene.Process, adoptedGraph.Factory, 103), adoptedGraph,
+            () => { owner.RequireLife(); if (presentationFailed) throw new InvalidOperationException("Actual authored presentation failed."); },
+            () => sourceReleased++, () => bindingRetired++, owner.RequireLife);
+        owner.DataCall(FalloutReferenceModelDataIngress.ModelSetter, invocation => owner.Data.StoreReturnedModel(invocation,
+            new("authored-model-ParentCELL", owner.Stack, Guid.NewGuid(), Guid.NewGuid(), owner.Scene.Constructor,
+                owner.Actor, 0, null, owner.Source.Controller.Fields.Controls.Main.EngineSha256), adopted));
+        var kept = false; var destroyed = false;
+        try { throw new IOException("Authored later assembly child fails after successful source model store."); }
+        catch (IOException)
+        {
+            owner.Data.CleanupUnpublishedModel(adopted.Node, () => kept = true, () => { destroyed = true; adoptedGraph.Retire(); });
+        }
+        Require(kept && !destroyed && owner.Data.Capture().ModelScene?.Factory == adoptedGraph.Factory,
+            "Later assembly failure freed a successfully retained source model.");
+        var otherGraph = PlayerOpacityContracts.CreateReferenceColdModel().ConstructLogicalScene(); var otherFreed = false;
+        owner.Data.CleanupUnpublishedModel(new(owner.Scene.Process, otherGraph.Factory, 104),
+            () => throw new InvalidOperationException("An unadopted graph acquired source ownership."),
+            () => { otherFreed = true; otherGraph.Retire(); });
+        Require(otherFreed && owner.Data.Capture().Fields!.Model == adopted.Node,
+            "Unadopted cleanup altered the actual source-owned graph.");
+        adoptedGraph.RetainUnownedPose("authored actual later logical animation failure");
+        presentationFailed = true;
+        Reject(adopted.RequireCurrent);
+        owner.Data.Retire(); owner.Data.Retire();
+        Require(sourceReleased == 1 && bindingRetired == 1, "Returned source retain or native binding retired more than once.");
+        Require(adoptedGraph.Capture().Failure == "authored actual later logical animation failure",
+            "Retirement erased the actual logical failure while releasing its real binding.");
+        adoptedGraph.Retire();
+        Console.WriteLine("OPENNV_REFERENCE_MODEL_FAILURE_LIFETIME_PASS warmAndColdStoredBeforeRetain=true noFalseSourceRelease=true " +
+            "laterAssemblyFailurePreserved=true unadoptedGraphRetired=true bindingRetiredOnce=true nativeAssembly=UNEXECUTED");
     }
 }
 

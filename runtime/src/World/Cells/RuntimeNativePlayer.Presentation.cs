@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 
@@ -302,7 +303,11 @@ internal partial class RuntimeNativePlayer
             PresentationChanged?.Invoke();
             Activity.SetWeaponDrawn(weapon is not null && _weaponHandling.Drawn);
         }
-        finally { first?.Free(); third?.Free(); }
+        finally
+        {
+            NativeNifSceneRetirement.Drain("Unpublished Player presentation",
+                [() => first?.Free(), () => { if (third is not null) CleanupUnpublishedReferenceModel(third); }]);
+        }
     }
 
     private Godot.Collections.Array<Rid> SelfQueryBodies

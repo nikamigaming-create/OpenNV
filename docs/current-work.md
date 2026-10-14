@@ -114,6 +114,19 @@ Profiling identified repeated HUD source qualification; bounded verified-hash
 reuse reduces the selected movement-source audit from 41.1 to 26.9 seconds in a
 fresh process. This is not a whole-game load or frame-performance claim.
 
+Adversarial review before merge found failed model assembly/free, zero-retain
+binding leaks, health-gated retirement and omitted failed Actor children. Cleanup
+now distinguishes source reference counts from native binding lifetime, preserves
+adopted models after later assembly failure, and retires graphs after successful
+source release. Failed Actor calls are retained by invocation in their mover.
+Focused failure, aggregate-join and independent-JSON checks pass. A fresh ordinary
+FO3 repeat returns both movement children, loads in 101.5 seconds (prior run
+322.6 seconds), then reaches the same tail boundary with zero publication loss.
+Observed Quit/Yes exits zero and disposes source owners; the original NV save hash
+is unchanged. These run timings are observations, not a general load-performance
+guarantee. The review corrections pass the full pinned gate and selected owned
+Release audit. CI must validate the corrected PR revision before merge.
+
 Publish the checked source repair through a PR, merge it and verify clean local
 main equals origin/main before starting the next feature branch. Private owned
 inputs, saves, selectors and captures are never public repository inputs.

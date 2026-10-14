@@ -154,8 +154,15 @@ internal sealed partial class FalloutPlayerMoverDeltaState
                 {
                     Step(FalloutPlayerMoverDeltaStep.ActorMovement);
                     var body = _owners.ActorMovement ?? throw new NotSupportedException(ActorMovementBoundary);
-                    var movement = body.Update(new(Guid.NewGuid(), invocation, LastCall.Delta, mover.Flags, data));
-                    LastCall = LastCall with { ActorMovement = movement, Changed = Next() }; Check();
+                    var child = new FalloutPlayerActorMovementInvocation(Guid.NewGuid(), invocation, LastCall.Delta, mover.Flags, data);
+                    FalloutPlayerActorMovementCall movement;
+                    try { movement = body.Update(child); }
+                    finally
+                    {
+                        var retained = body.LastCall;
+                        LastCall = LastCall with { ActorMovement = retained?.Invocation == child ? retained : null, Changed = Next() };
+                    }
+                    Check();
                     if (!movement.Returned) throw new InvalidOperationException("Mover delta received an unreturned actual Actor movement child.");
                 }
             }

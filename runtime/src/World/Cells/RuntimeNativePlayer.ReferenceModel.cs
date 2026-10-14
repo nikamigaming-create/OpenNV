@@ -33,18 +33,23 @@ internal partial class RuntimeNativePlayer
                 var logical = body.BindLogicalScene(saved);
                 _referenceModelLeases.Add(body);
                 return new(new(world.CampaignStandalonePlayerScene.Process, body.SourceSceneFactory, body.GetInstanceId()),
-                    logical, RequireCurrent, () =>
+                    logical, RequireCurrent, () => { }, () =>
                     {
-                        RequireCurrent();
+                        RequireBindingLifetime();
                         if (!_referenceModelLeases.Remove(body))
                             throw new InvalidOperationException("Reference data released another actual model lease.");
-                    });
+                    }, RequireBindingLifetime);
 
                 void RequireCurrent()
                 {
+                    RequireBindingLifetime();
+                    if (IsQueuedForDeletion() || body.IsQueuedForDeletion() || body.Error is not null)
+                        throw new InvalidOperationException("Reference model is unavailable for gameplay.");
+                }
+                void RequireBindingLifetime()
+                {
                     if (!ReferenceEquals(_referenceModelWorld, world) || !_referenceModelLeases.Contains(body) ||
-                        !GodotObject.IsInstanceValid(this) || IsQueuedForDeletion() ||
-                        !GodotObject.IsInstanceValid(body) || body.IsQueuedForDeletion() || body.Error is not null ||
+                        !GodotObject.IsInstanceValid(this) || !GodotObject.IsInstanceValid(body) ||
                         body.IsFirstPersonSourceRole || !ReferenceEquals(body.LogicalScene, logical) ||
                         body.SourceSceneFactory != logical.Factory)
                         throw new InvalidOperationException("Reference data lost its actual returned logical/native model.");
@@ -56,24 +61,25 @@ internal partial class RuntimeNativePlayer
         {
             if (returned is not null)
             {
-                var node = new FalloutSourceSceneNode(world.CampaignStandalonePlayerScene.Process,
-                    returned.SourceSceneFactory, returned.GetInstanceId());
-                if (world.RetainsReturnedReferenceModel(node))
-                {
-                    // A committed source field owns this actual failed factory
-                    // prefix. Keep it in the native lifetime tree for orderly
-                    // retirement even though the caller did not adopt it.
-                    if (returned.GetParent() is null) AddChild(returned);
-                }
-                else
-                {
-                    _referenceModelLeases.Remove(returned);
-                    NativeNifSceneRetirement.Drain("Unadopted Player reference factory",
-                        [returned.RetireLogicalScene, returned.Free]);
-                }
+                CleanupUnpublishedReferenceModel(returned);
             }
             throw;
         }
+    }
+
+    private void CleanupUnpublishedReferenceModel(RuntimeNativePlayerActor model)
+    {
+        if (_referenceModelWorld is not { } world) { model.Free(); return; }
+        var node = new FalloutSourceSceneNode(world.CampaignStandalonePlayerScene.Process,
+            model.SourceSceneFactory, model.GetInstanceId());
+        world.CleanupUnpublishedReferenceModel(node,
+            () => { if (model.GetParent() is null) AddChild(model); },
+            () =>
+            {
+                _referenceModelLeases.Remove(model);
+                NativeNifSceneRetirement.Drain("Unadopted Player reference factory",
+                    [model.RetireLogicalScene, model.Free]);
+            });
     }
 
     private void ReleaseStandaloneReferenceModel()

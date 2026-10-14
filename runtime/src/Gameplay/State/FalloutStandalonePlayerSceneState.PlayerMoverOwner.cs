@@ -39,7 +39,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             throw new InvalidOperationException("Mover delta left its actual entered Player/Main/Common/clock scope.");
     }
 
-    private static void ValidatePlayerMoverOwners(FalloutStandalonePlayerSceneSnapshot saved)
+    internal static void ValidatePlayerMoverOwners(FalloutStandalonePlayerSceneSnapshot saved)
     {
         if (saved.MoverDelta is { } mover)
         {

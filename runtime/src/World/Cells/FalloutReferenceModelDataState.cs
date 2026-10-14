@@ -265,13 +265,21 @@ internal sealed partial class FalloutReferenceModelDataState
         RequireIdle();
         return _model?.Node == node || _other?.Node == node;
     }
+    internal void CleanupUnpublishedModel(FalloutSourceSceneNode node, Action preserve, Action retire)
+    {
+        ArgumentNullException.ThrowIfNull(preserve); ArgumentNullException.ThrowIfNull(retire);
+        if (RetainsReturnedModel(node)) preserve();
+        else retire();
+    }
     internal void Retire()
     {
         if (_retired) return; RequireIdle(); _requireLifetime();
         if (_model is not null) _retainedModelScene = _model.CaptureScene();
         if (_modelRetained) _model!.Release(() => _modelRetained = false);
+        _model?.RetireBinding();
         _model = null;
         if (_otherRetained) _other!.Release(() => _otherRetained = false);
+        _other?.RetireBinding();
         _other = null; _retired = true;
     }
 }

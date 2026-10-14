@@ -12,6 +12,7 @@ internal static partial class SourceMainScriptCallerContracts
     internal static void RunPlayerMoverDeltaContracts()
     {
         RunReferenceModelCold();
+        RunMoverActorFailureRetention();
         using (var fixture = new MoverDeltaFixture())
         {
             var returned = fixture.Frame(1);
@@ -101,7 +102,7 @@ internal static partial class SourceMainScriptCallerContracts
         public void SetInitialPlacementYaw(FalloutReferencePositionInvocation invocation) => throw Unreached();
         public void ClearStartupChangeSuppression(FalloutReferencePositionInvocation invocation) => throw Unreached();
     }
-    private sealed class MoverDeltaFixture : IDisposable
+    private sealed partial class MoverDeltaFixture : IDisposable
     {
         private readonly string _directory = Path.Combine(Path.GetTempPath(), "OpenNV-MoverDelta-" + Guid.NewGuid().ToString("N"));
         private readonly Guid _worldProcess = Guid.NewGuid(), _worldFactory = Guid.NewGuid();
@@ -124,7 +125,7 @@ internal static partial class SourceMainScriptCallerContracts
         internal readonly FalloutPlayerMoverDeltaState Delta;
         internal readonly FalloutStandaloneInterfaceState Interface;
         private readonly FalloutSourceReferencePositionState _position;
-        internal MoverDeltaFixture(FalloutReferenceModelDataSnapshot? saved = null)
+        internal MoverDeltaFixture(FalloutReferenceModelDataSnapshot? saved = null, bool failActorFormKind = false)
         {
             Directory.CreateDirectory(_directory);
             var acbs = new byte[24]; BinaryPrimitives.WriteInt16LittleEndian(acbs.AsSpan(8), 1);
@@ -137,7 +138,7 @@ internal static partial class SourceMainScriptCallerContracts
                 Setting(0x502, "fMoveRunMult", 4), Setting(0x503, "fMoveWeightMin", 0),
                 Setting(0x504, "fMoveWeightMax", 150), Setting(0x505, "fMoveEncumEffect", .4f),
                 Setting(0x506, "fMoveOneCrippledLegSpeedMult", .85f), Setting(0x507, "fMoveTwoCrippledLegsSpeedMult", .75f)));
-            Records = FalloutPluginStack.Load(_directory, ["MoverDeltaFixture.esm"]);
+            Records = LoadFailureRetentionRecords(failActorFormKind);
             var main = FalloutMainScriptCallerSource.Read(new(FalloutSourceMainFamily.Fallout3, new('1', 64),
                 FalloutImmediateScriptSource.ContractForEngine(FalloutSourceMainFamily.Fallout3)));
             var basis = Records.GetEffective(Records.RuntimeFormKey(7));
@@ -167,10 +168,11 @@ internal static partial class SourceMainScriptCallerContracts
             if (saved is null) DataCall(FalloutReferenceModelDataIngress.ReferenceConstructor, Data.ConstructReferenceField);
             Interface = new(FalloutStandaloneInterfaceSource.Read(main), Stack, Guid.NewGuid());
             _position = new(FalloutReferencePositionSource.Reviewed(fieldSource), Records, Stack, Actor, Scene.Process,
-                Scene.Constructor, _ => throw new InvalidOperationException("Null-data arm cannot enter a position writer."));
+                Scene.Constructor, RequireFailureReference);
+            var actorMovement = failActorFormKind ? CreateFailureRetentionActor() : null;
             Delta = new(Source, Records, Stack, Scene.Process, Scene.Constructor, current,
                 new(Mover, Common, Runtime, Fields, Flags, Data, Interface, View, Parent,
-                    (_, _) => throw new InvalidOperationException("Null-data arm cannot fabricate a position scope."), _position, new UnreachedDeltaPosition()),
+                    (_, _) => throw new InvalidOperationException("Null-data arm cannot fabricate a position scope."), _position, new UnreachedDeltaPosition(), actorMovement),
                 RequireFrame, Lifetime);
         }
         private FalloutProcessSceneQuery Current() => Common.ReadSceneQueries(Actor.Reference, 1);
@@ -225,7 +227,7 @@ internal static partial class SourceMainScriptCallerContracts
         private void Lifetime() { if (!_alive || Environment.CurrentManagedThreadId != _thread) throw new InvalidOperationException("Retired/foreign authored delta thread."); }
         public void Dispose()
         {
-            try { Delta.Retire(); Data.Retire(); Mover.Retire(); _position.Retire(); Fields.Retire(); Interface.Retire(); Scene.Retire(); Common.Dispose(); Runtime.Dispose(); }
+            try { RetireFailureRetentionOwners(); Delta.Retire(); Data.Retire(); Mover.Retire(); _position.Retire(); Fields.Retire(); Interface.Retire(); Scene.Retire(); _failureProjection?.RetireCurrent(); Common.Dispose(); Runtime.Dispose(); }
             finally { _alive = false; Records.Dispose(); Directory.Delete(_directory, true); }
         }
         private static byte[] Setting(uint id, string name, float value) => Row("GMST", id, Field("EDID", Encoding.ASCII.GetBytes(name + "\0")), Field("DATA", BitConverter.GetBytes(value)));

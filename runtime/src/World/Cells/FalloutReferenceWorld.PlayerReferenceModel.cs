@@ -75,8 +75,10 @@ internal sealed partial class FalloutReferenceWorld
         _enteredReferenceModelLoad = Guid.NewGuid();
         try
         {
-            WithActualReferenceModel(FalloutReferenceModelDataIngress.ModelSetter,
-                invocation => data.StoreReturnedModel(invocation, null, null));
+            // Final lifetime retirement releases actual retained references and
+            // native bindings even after a failed source writer. It does not
+            // replay a gameplay setter or erase its committed diagnostic prefix.
+            data.Retire();
         }
         finally { _enteredReferenceModelLoad = null; }
     }
@@ -89,6 +91,12 @@ internal sealed partial class FalloutReferenceWorld
     {
         RequireReferenceModelLifetime();
         return _sourcePlayerModelData!.RetainsReturnedModel(node);
+    }
+
+    internal void CleanupUnpublishedReferenceModel(FalloutSourceSceneNode node, Action preserve, Action retire)
+    {
+        RequireReferenceModelLifetime();
+        _sourcePlayerModelData!.CleanupUnpublishedModel(node, preserve, retire);
     }
 
     private void WithActualReferenceModel(FalloutReferenceModelDataIngress ingress,

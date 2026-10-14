@@ -66,14 +66,16 @@ internal partial class RuntimeNativePlayer
         try
         {
             NativeNifSceneRetirement.Drain("Actual Player standalone scene",
-                [ReleaseStandaloneFirstPersonScene, ReleaseStandaloneReferenceModel,
-                    () => _thirdPerson?.RetireLogicalScene(), RetireStandaloneLivingPhysics]);
+                [ReleaseStandaloneFirstPersonScene,
+                    () => { ReleaseStandaloneReferenceModel(); _thirdPerson?.RetireLogicalScene(); },
+                    RetireStandaloneLivingPhysics]);
         }
         finally
         {
             // A rejected source release still owns its field and world. Keep
             // those references available for a genuine later retirement retry.
-            if (_standaloneFirstPersonOwner is null && _livingPhysics is null) _standaloneSceneWorld = null;
+            if (_standaloneFirstPersonOwner is null && _livingPhysics is null && _referenceModelWorld is null)
+                _standaloneSceneWorld = null;
         }
     }
     private void RequireStandaloneFirstPersonSceneReplacement() => _standaloneSceneWorld?.RequireStandalonePlayerSceneReplacement();

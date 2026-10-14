@@ -40,21 +40,27 @@ internal sealed class FalloutReferenceModelDataNode
 {
     private readonly FalloutActorLogicalScene _logical;
     private readonly Action _requireActual;
+    private readonly Action _requireRetirement;
     private readonly Action _released;
+    private readonly Action? _retireBinding;
     private int _references;
+    private bool _bindingRetired;
     internal FalloutSourceSceneNode Node { get; }
     internal string? SaveBlocker => _logical.SaveBlocker;
     internal FalloutActorLogicalSceneSnapshot CaptureScene() => _logical.Capture();
     internal FalloutReferenceModelDataNode(FalloutSourceSceneNode node, FalloutActorLogicalScene logical,
-        Action requireActual, Action released)
+        Action requireActual, Action released, Action? retireBinding = null, Action? requireRetirement = null)
     {
         ArgumentNullException.ThrowIfNull(logical); ArgumentNullException.ThrowIfNull(requireActual); ArgumentNullException.ThrowIfNull(released);
         if (node.Process == Guid.Empty || node.Factory == Guid.Empty || node.NativeRoot == 0 || node.Factory != logical.Factory)
             throw new InvalidDataException("Reference model publication changed its actual returned graph/native factory.");
-        Node = node; _logical = logical; _requireActual = requireActual; _released = released; RequireCurrent();
+        Node = node; _logical = logical; _requireActual = requireActual; _released = released;
+        _requireRetirement = requireRetirement ?? requireActual;
+        _retireBinding = retireBinding; RequireCurrent();
     }
     internal void RequireCurrent()
     {
+        if (_bindingRetired) throw new InvalidOperationException("Reference model binding is retired.");
         _requireActual();
         if (_logical.SaveBlocker is { } failure) throw new NotSupportedException(failure);
         if (_logical.Factory != Node.Factory) throw new InvalidOperationException("Reference model changed its retained source graph.");
@@ -63,9 +69,21 @@ internal sealed class FalloutReferenceModelDataNode
     { RequireCurrent(); _references = checked(_references + 1); committed(); RequireCurrent(); }
     internal void Release(Action committed)
     {
-        RequireCurrent(); if (_references < 1) throw new InvalidOperationException("Reference model released a foreign or retired lease.");
+        _requireRetirement();
+        if (_bindingRetired || _logical.Factory != Node.Factory || _references < 1)
+            throw new InvalidOperationException("Reference model released a foreign or retired binding.");
         // The real final-release callback precedes retirement of our retained
         // count, so a failed callback retains the genuine lease for cleanup.
         if (_references == 1) _released(); --_references; committed();
+        if (_references == 0) RetireBinding();
+    }
+    internal void RetireBinding()
+    {
+        if (_bindingRetired) return;
+        if (_references != 0) throw new InvalidOperationException("Reference model binding retains source references.");
+        // Native binding ownership exists even when a pointer store commits
+        // before the source retain. Retiring it never fabricates a Release.
+        _retireBinding?.Invoke();
+        _bindingRetired = true;
     }
 }
