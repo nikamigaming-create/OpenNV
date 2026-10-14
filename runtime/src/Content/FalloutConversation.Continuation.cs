@@ -31,6 +31,7 @@ internal sealed partial class FalloutConversation
         var lease = _responseLease ?? throw new InvalidOperationException("Conversation has no source response publication.");
         RequireResponse(lease);
         if (_responseEntered) throw new InvalidOperationException("The current source response already entered its voice owner.");
+        requireGameplayAdmission?.Invoke();
         _responseEntered = true;
         return lease;
     }
@@ -69,7 +70,7 @@ internal sealed partial class FalloutConversation
     {
         if (_mutating || Error is not null || Phase is not ("closed" or "choices") || _responseEntered)
             throw new NotSupportedException("Conversation capture requires a settled source choice or closed owner; active results/audio remain unowned.");
-        var added = _added.ToArray();
+        var added = AddedTopics;
         if (Phase == "closed") return new(FalloutConversationSnapshot.ExpectedSchema, Phase,
             ResponseGeneration, null, null, null, 0, added, [], null, null);
         var info = Info ?? throw new InvalidOperationException("Settled choices lost their actual INFO owner.");
@@ -88,6 +89,7 @@ internal sealed partial class FalloutConversation
         if (Phase != "closed" || ResponseGeneration != 0 || Error is not null || _mutating || _responseEntered)
             throw new InvalidOperationException("Conversation continuation requires a fresh source owner.");
         saved.RequireSource(records, caller);
+        requireGameplayAdmission?.Invoke();
         ResponseGeneration = saved.Generation;
         foreach (var added in saved.AddedTopics) _added.Add(added);
         if (saved.Phase == "closed") return;

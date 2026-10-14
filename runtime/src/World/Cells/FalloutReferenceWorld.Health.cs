@@ -87,6 +87,7 @@ internal sealed partial class FalloutReferenceWorld
     internal FalloutActorHit DamageActor(FalloutFormKey reference, FalloutFormKey attacker, byte partType,
         float damage, float limbMultiplier, int level, FalloutGlobalState? globals = null)
     {
+        RequireNoFunctionalFailure();
         if (!float.IsFinite(damage) || damage < 0 || !float.IsFinite(limbMultiplier) || limbMultiplier < 0)
             throw new ArgumentOutOfRangeException(nameof(damage));
         var source = HealthSource(reference);
@@ -114,6 +115,7 @@ internal sealed partial class FalloutReferenceWorld
 
     internal bool KillActor(FalloutFormKey reference, FalloutFormKey? killer, int level, FalloutGlobalState? globals = null)
     {
+        RequireNoFunctionalFailure();
         if (level < 1) throw new ArgumentOutOfRangeException(nameof(level));
         var actor = Actor(reference);
         var source = HealthSource(reference);

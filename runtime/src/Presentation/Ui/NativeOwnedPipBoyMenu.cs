@@ -430,6 +430,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
             _tiles.Text[equip] = Setting(aid ? "sInventoryUse" : equipped ? "sInventoryUnequip" : "sInventoryEquip");
             Target(equip, aid ? "Use" : equipped ? "Unequip" : "Equip", () =>
             {
+                _references.RequireNoFunctionalFailure();
                 if (aid) (_useAid ?? throw new NotSupportedException("Aid use has no gameplay owner."))(selected.FormKey);
                 else ToggleEquipment(selected);
                 Refresh();
@@ -463,6 +464,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
 
     private void ToggleEquipment(FalloutCampaignItem item)
     {
+        _references.RequireNoFunctionalFailure();
         if (_inventory.Equipped.Contains(item.RuntimeFormId)) _inventory.Unequip(_records, item.FormKey);
         else _inventory.Equip(_records, item.FormKey);
     }

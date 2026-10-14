@@ -26,14 +26,23 @@ internal sealed partial class FalloutReferenceWorld
         {
             var declaration = FalloutSourceCellReferenceLinksDeclaration.ForExecutable(_processRuntimeDeclaration?.ExecutableSha256 ??
                 throw new NotSupportedException("CELL links have no actual selected source process declaration."));
+            if (records.OwnedSource is { } owned)
+                declaration = FalloutExecutableStringTable.ReadCellReferenceLinks(owned.FalloutExecutablePath, declaration.EngineSha256);
             if (actualIngestion is null)
                 actualIngestion = _sourceCellIngestion = new(
                     FalloutSourceCellLoaderDeclaration.Read(declaration.EngineSha256), records, stack);
             _sourceCellLinks = new(declaration, stack, CellProcesses.ReadSourceQueueReferences,
                 ReadSourceLinkedReference, actualIngestion, saved, ReadCombatActorIdentity);
-            if (!_sourceLinkedPlayerParentConstructed)
+            if (_processCommonRestore?.ReferenceOwners is not null)
+            {
+                // Restore the scalar from its own history. A list constructed
+                // before that field is authenticated when the field binds.
+                if (_sourceLinkedPlayerParentConstructed)
+                    SourceCellLinks.RequireRuntimeActorParent(ReadCombatActorIdentity(_enginePlayer), CurrentSourcePlayerLinkedCell);
+            }
+            else if (!_sourceLinkedPlayerParentConstructed && (!HasStandalonePlayerScene || _sourcePlayerReferencePosition is not null))
                 ConstructSourcePlayerLinkedParent(saved is not null);
-            else if (saved is not null || CurrentSourcePlayerLinkedCell is not null)
+            else if (_sourceLinkedPlayerParentConstructed && (saved is not null || CurrentSourcePlayerLinkedCell is not null))
                 throw new InvalidDataException("CELL list publication cannot replace an already constructed Player ParentCELL.");
         }
         catch (Exception failure) { _sourceCellLinksConstructionFailure = failure; throw; }

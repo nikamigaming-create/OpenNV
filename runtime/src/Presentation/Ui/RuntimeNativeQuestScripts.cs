@@ -111,6 +111,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     public override void _Process(double delta)
     {
         if (_error is not null) return;
+        if (Scripts.References?.FunctionalFailure is not null) return;
         if (!_worldActive)
         {
             if (Bootstrap is not null)

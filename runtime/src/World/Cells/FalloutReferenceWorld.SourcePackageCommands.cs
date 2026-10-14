@@ -10,6 +10,7 @@ internal sealed partial class FalloutReferenceWorld
     private FalloutPackageAssignmentSource? _sourcePackageAssignmentSource;
     private readonly Dictionary<FalloutFormKey, FalloutActorPackageCommandFields> _sourcePackageFields = new(FalloutFormKeyComparer.Instance);
     private readonly List<FalloutSourcePackageAssignmentCall> _sourcePackageCommands = [];
+    private readonly Dictionary<Guid, FalloutSourcePackageAssignmentCall> _sourcePackageCommandIndex = [];
     private FalloutPackageCommandFieldInvocation? _enteredPackageCommand;
     private FalloutSourcePackageAssignmentCall? _currentPackageCommand;
     private FalloutSourcePackageAssignmentCall? _firstFailedPackageCommand;
@@ -44,7 +45,7 @@ internal sealed partial class FalloutReferenceWorld
         _sourceReferenceFormFiles?.SaveBlocker ??
         _sourceInitialPlacementCells?.SaveBlocker ??
         (HasStandalonePlayerScene ? CampaignStandalonePlayerScene.ThreadContext.ReferenceChangeFlagsSaveBlocker : null) ??
-        _sourcePackageFields.Values.FirstOrDefault(fields => fields.SaveBlocker is not null)?.SaveBlocker;
+        _sourcePackageFields.Values.FirstOrDefault(fields => fields.OwnedFieldsSaveBlocker is not null)?.OwnedFieldsSaveBlocker;
 
     internal void PrepareStandaloneSourcePackageCommands()
     {
@@ -85,6 +86,7 @@ internal sealed partial class FalloutReferenceWorld
             if (_processCommonRestore?.PackageCommands is { } history)
             {
                 _sourcePackageCommands.AddRange(history);
+                foreach (var call in history) _sourcePackageCommandIndex.Add(call.Invocation.SourceCommand, call);
                 _firstFailedPackageCommand = history.FirstOrDefault(call => call.Step != FalloutSourcePackageAssignmentStep.Returned);
             }
             _sourcePackageRegistry = registry; _sourcePackageFieldsSource = source; _sourcePackageAssignmentSource = assignment;
@@ -136,6 +138,7 @@ internal sealed partial class FalloutReferenceWorld
             if (_currentPackageCommand is { } call && call.Invocation == invocation)
             {
                 _sourcePackageCommands.Add(call);
+                _sourcePackageCommandIndex.Add(call.Invocation.SourceCommand, call);
                 if (call.Step != FalloutSourcePackageAssignmentStep.Returned) _firstFailedPackageCommand ??= call;
             }
             _enteredPackageCommand = null;
@@ -238,6 +241,7 @@ internal sealed partial class FalloutReferenceWorld
         _sourcePackageRegistry?.Dispose(); _sourcePackageRegistry = null;
         _sourcePackageFieldsSource = null; _sourcePackageAssignmentSource = null;
         _sourceActorPackageAssignment = null; _sourceDataHandlerLoading = null;
+        _sourceReferenceFollower = null;
         _currentActorPackageAssignment = null;
         _sourcePackageGlobals = null; _sourcePackageGameHour = null; _requireSourcePackageGlobals = null;
     }

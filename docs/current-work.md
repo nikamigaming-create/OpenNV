@@ -3,169 +3,112 @@
 ## Acceptance
 
 Recover ordinary New Vegas, Fallout 3 and Tale of Two Wastelands gameplay,
-complete saves and the unchanged selected mod stacks. Headless, desktop and
-OpenXR share authoritative C# gameplay and persistence. Every object, event,
-state transition, voice, UI element, draw, frame and pixel remains in the parity
-denominator. Matched retail evidence is required for a parity claim.
+complete saves and unchanged selected mod stacks. Finish and depart Goodsprings;
+finish Vault 101 and reach Megaton; finish TTW's Vault route, reach Megaton and
+complete a Megaton quest. Each run must save complete authoritative state, Quit
+normally and Continue in three new process lifetimes through CELL transitions.
+Deliver phone-friendly H.264/AAC fast-start videos from actual rendered runs.
+None of these complete runs is accepted. The short FO3 startup clip does not
+prove a quest or save/Continue.
 
-Finish Goodsprings and depart; finish Vault 101, exit and reach Megaton; finish
-TTW's Vault route, reach Megaton and complete a Megaton quest. Each run includes
-complete saves, normal Quit and three cold Continue cycles through transitions.
-Produce phone-friendly H.264/AAC fast-start videos of actual rendered gameplay
-with readable labels and visible edit markers. None of these runs is accepted.
-The private 36-second FO3 startup clip shows character creation with audio and
-an edit, but has a black birth background and proves no quest or save/Continue.
+C# owns gameplay and persistence in headless, desktop and OpenXR. Godot adapts
+input, native physics resources and presentation. Every object, transition,
+event, voice, UI element, draw, frame and pixel remains in the parity denominator.
+Matched retail evidence is required for a parity claim.
 
 ## Current executable result
 
-The latest ordinary FO3 startup returns both XYZ/reset writes, source form-file
-persistence, initial TES/grid selection and yaw. The compiled opening package
-returns its current XYZ, ParentCELL, Worldspace, persistent-CELL fallback and
-Saved18 stores. The actual Actor assignment now returns its same status and byte
-reads, byte-zero store, mutable target derivation, Current setter, direct Common
-animation read and linked-null cleanup. High reset retains its preceding stores
-and next refuses the cleanup loading byte's pre-command record-load history.
-ParentCELL construction now precedes package queries on
-the same existing World field; later CELL-list publication cannot replace it.
-Grid qualification and repeated legitimate thread-flag reads pass the selected
-owned/source and focused regression checks.
-Final publication has zero telemetry loss. Failed startup drains readers and
-disposes source owners without a reported native leak.
-No complete save, normal menu Quit, cold Continue or quest route is accepted.
+The latest ordinary FO3 New Game returns the opening source package command,
+including Current setter, linked-null cleanup, High reset, same logical mover
+reset and the actual reference's absent follower Extra membership. The cleanup
+loading byte is preserved through the genuine current indexed-records lifetime.
+The selected null animation handoff attaches without replaying the source command
+or starting a legacy idle.
 
-Earlier bounded FO3 runs reached CG00 stage 100 and normal Quit, but could not
-complete the authoritative Player frame or save. Those results do not admit
-stale constructor package fields after an actual assignment. The current failure
-retains the missing writer instead of continuing through it.
+The latest repeat returns the birth CELL transfer and ordinary load completion.
+Its complete 1,610-reference stream retains ten genuine engine-created static
+bases: one plane and nine portals. Existing room and collision STAT rows remain
+reused. Source-qualified primitive/full-reader checks and the actual birth-CELL
+owned audit pass, including three JSON cold component cycles.
+The latest first Player frame returns the actual nonnull controller context and
+post-action body/flags children, using that same controller's independent fields.
+The Current/Primary idle query now reads the same winning runtime package object
+and returns in the fresh ordinary run. The next failure is the unfinished
+inhibited/life late Player-frame tail. That run publishes its actual shared World
+failure and returned children with zero recorded publication losses. Failed
+investigations were stopped explicitly and are not normal Quit evidence.
+Retained-field diagnostics are separate from gameplay admission; detailed fault
+inspection reports partial capture explicitly without bypassing the save guard.
+Controller source/factory and historical constructor
+interval checks pass three JSON/new-scene cycles without child replay; full
+controller-child aggregate cold and product saves remain unaccepted.
+No complete Player/Main frame, gameplay save, cold Continue or quest is accepted.
 
-The unchanged selected mod stacks retain FNV's 10 plugins/three native modules
-and TTW's 18 plugins/six modules. Both latest ordinary starts exit one without a
-complete save. JIP Query/Load return; PostLoad still needs the typed image
-mutation/code-site/task-dispatch producer. TTW NVSE returns original construction
-and Query. Its first RaceSex model-operand mutation now returns the actual
-VirtualProtect call, pointer store, readback and protection restore. Load next
-refuses a distinct mutation whose typed source extent remains unowned.
-Original XR and ShowOff construction refuse before module entry. JohnnyGuitar retains four parallel
-worker imports and Stewie 81 imports. Every selected module remains in scope;
-no writable table, fabricated queue or module omission supplies acceptance.
+The selected FNV and TTW graphs retain 10/18 plugins and three/six native modules.
+Original native imports, PostLoad dispatch, later mutations and cold native
+globals remain incomplete. Their unfinished Main and Player services also need
+implementation; module startup alone cannot admit gameplay.
 
-## Verified owners
+## Adversarial audit and repair
 
-C# constructs source controls, winning HUD XML/shared Interface state, logical
-World projection/FOV and independent raw reference orientation before bootstrap.
-The compiled startup control command returns its five explicit operands and
-mask 1F. Constructor-null POV stores and their independent scalar return;
-nonnull camera effects remain refused. Cold components preserve original
-constructor, effect and failed-prefix history while binding fresh lifetimes.
+Inventory and scan all non-ignored first-party code and build/export configuration,
+then trace findings through actual callers and state owners. Textual scan coverage
+is separate from semantic review and executed acceptance. Identify unconditional
+refusals, conflicting authority, persistent value versus managed object identity,
+missing behavior bodies, lifetime faults and avoidable collection/history work.
 
-Package command composition owns shared mutable winning PACK objects with
-independent count/procedure/flag history, six-field current/primary slots,
-retained GameHour and ordered partial stores. Unknown old pointers impose an
-O(1) count barrier. One logical mover owns inherited fields and distinct Player
-movement fields; both input paths publish that same owner. Command attachment
-borrows the returned original receipt without replay. Independent Script kind21
-and menu kind13 remain on the same actual source thread owner. Animation borrows
-current Common/view fields, independently of the first-person node root.
+Current fixes join real mover parents to retained package, linked-reference and
+High-reset receipts; compare persisted child values instead of list identity;
+restore reference, ParentCELL and native controller history without startup replay;
+and attach source animation without a second package authority. Focused JSON and
+altered-receipt checks pass. Cleanup reads recheck the living records receipt.
 
-The reached late Player physical predicate/penetration utility, High teleport
-fade, logical-scene opacity and weapon/action/activity/status child have bounded
-returned paths. Authored and FO3/FNV/TTW skeleton checks construct 18 real bodies
-and 17 joints, retire them and reconstruct fresh native resources. Logical scene
-checks construct 180 objects and write 28 actual shader properties. These results
-do not qualify the earlier controller or complete Player/Main.
+Native continuation capture distinguishes original module identity in the shared
+domain. Developer Release export and packaging share native companion staging
+with copied-hash verification. Script parsing and actual first-party staging pass;
+complete selected native cold execution remains unavailable.
 
-The early rounded-convex resource passes the owned shape audit. The new owned
-headless controller audit also passes real detached Area/phantom/proxy, retained
-Common field, eleven-slot manager, kind16, properties, reset and failed-resource
-retirement. Twelve bounded Float32 fixtures pass. Full reference construction now
-qualifies final Base/model/ParentCELL null stores independently of allocator
-payload. Complete canonical bytes and whole-world cold native resource restoration
-remain unqualified; this component audit does not accept gameplay. Three owned-data
-native cold resource cycles now pass fresh Areas/shapes, actual Common pointers,
-retained XYZ, failure/cleanup and unchanged constructor/group/kind histories.
+The [code audit](code-audit.md) records verified defects and exact coverage
+limits. Open critical findings include the unfinished Player tail and return schema,
+movement without a shared C# XYZ/orientation producer, a configured locomotion
+capsule distinct from the audited detached controller, exterior world/tree and
+directed-door callback services and unfinished NV/TTW Main.
+Shared fault checks now cover the inspected desktop/XR, quest/reference and NPC
+producer paths, child combat/creature callbacks, damage/activation entry points
+and late projectile/explosion effects. Alternate callbacks still require review.
+Manual saving now pauses actual Main admission, drains the entered call and
+resumes after cleanup. Pause/mouse restoration requires an acquired mutation;
+cancellation while Main drains cannot restore settings it never owned.
+Failed managed factories can retire after their callbacks unwind; real controller,
+body and resource borrowers keep their separate retirement checks. Content reads
+now have a closed/draining lifetime, including nested read dependencies, and
+actual concurrent-reader/read-after-disposal regression checks pass.
+Remove contradictory admission guards and implement genuinely missing behavior.
 
-Protocol 43 uses one actual shared native domain, independent original module
-contexts and borrowed function lifetimes. Its rebuilt native domain and real
-supplemental read caller pass. Shared GetFileSizeEx and read-only I/O pass the
-complete Release gate. The original dynamic CRT source structure passes selected
-TTW qualification and authored negative cases. The ordinary selected TTW run
-returns original attach and Query through its actual
-module-bound diagnostic CRT service. The real original-DLL caller audit passes
-genuine sharing failures/retries, the all-six-fail arm and destructor file close.
-The unchanged TTW Load returns its first source RaceSex model-operand mutation,
-including the real SDK outputs and equal-text pointer replacement. The next
-distinct mutation remains refused. The shared field is borrowed by the existing
-RaceSex device consumer; later receiver construction and rendered parity remain
-independent. Native-global cold state is still unavailable.
-JIP Query/Load return; its later PostLoad task producer remains separate. XR,
-ShowOff, JohnnyGuitar and Stewie independently retain their unresolved failures.
-The I/O capabilities cover GetFileSizeEx and supplemental read-only file/profile/module-name
-calls, including a sparse file larger than 4 GiB, original Win32 outputs/errors,
-shared routes/HANDLEs, x86 ABI, failed prefixes and fresh retirement. Original
-unowned TLS/CRT/DllMain effects refuse before LoadLibrary. Native-global cold
-saving remains unfinished. Indexed retirement is O(V+E).
+## Verification and next owner
 
-## Validation and next owner
+PR 200 is merged into main. This work branch is based on synchronized origin/main
+and preserves the existing New Vegas save. Debug builds and focused loading,
+follower, mover, Parent, reference and animation checks pass. The selected owned
+FO3 startup audit passes on the actual birth CELL, including source-qualified
+provider/primitive handling and three cold component cycles. Focused provider,
+failed-context, conversation fault-admission and managed retirement checks pass.
+The full pinned runtime gate passes, including Release/Debug, formatting,
+analyzers, contracts, launcher and native project checks. Selected owned Release
+birth-CELL and Debug/Release idle-field audits also pass. The original New Vegas
+save remains unchanged. Checked publication is the remaining step for this block.
 
-The published base passes the required pinned Godot runtime gate:
-Release/Debug builds, formatting/analyzers, full contract probes, native domains,
-launcher checks and native Godot loading. Focused package/field/Script/animation,
-raw-orientation and shape checks pass. The selected owned HUD/mover/source audit
-passes again in Release, including three cold component cycles. Its 36.4-second
-measurement is source-reader work, not loading or frame-performance acceptance.
+Implement the reached late Player-frame tail, complete the Player frame and connect
+movement, controller, reference fields and shared functional-fault handling.
+Bind source Pause/Save menu transitions and the held Player child. Review every
+production subsystem; textual inventory coverage is not exhaustive semantic review.
+Validate ordinary save, normal Quit and cold Continue three times, including a
+CELL transition. Finish Vault-to-Megaton, Goodsprings and TTW; record accepted runs.
+Keep the audit active across every production subsystem.
 
-The merged source-controller repair passes the complete pinned runtime gate,
-including Release/Debug builds, formatting/analyzers, contract probes, native
-domains, launcher checks and native Godot loading. The selected owned reference
-startup audit passes in Debug and Release, including three cold scalar-owner
-cycles. The original TTW diagnostic-file caller passes in both configurations.
-The owned Godot controller audit passes construction/reset, three native cold
-component cycles and retirement. These audits retain their authored callback and
-unexecuted whole-Player boundaries.
-
-PR 199 is merged; local main and origin/main are synchronized. The next block
-uses a fresh feature branch for the reached Actor assignment, retained reference
-history validation and the source RaceSex model-path mutation. ParentCELL now
-retains constructor and Main-child writer receipts on its existing World field;
-authored current-lineage and failed-prefix checks pass. Typed Saved18 component
-checks and aggregate retained-owner joins pass, including three authored cold
-cycles and coherent tamper rejection. The new Actor assignment graph and actual
-shared GameHour binding pass Debug builds, focused failed-prefix checks and the
-ordinary product repeat. The owned audit validates winning package targets and
-three cold component cycles, including actual twelve-byte PTDT reads into the
-source-zeroed sixteen-byte buffer. The combined pinned runtime gate and selected
-owned reference/model-source checks pass in Release. The block is ready for a
-checked PR; source publication does not qualify gameplay.
-
-The toolchain is official Godot 4.8-dev7 Mono with matching managed SDK and
-.NET 10.0.401. Direct owned DDS uploads still lack accepted streaming residency,
-budgets and memory/frame/thread measurements. An enabled streaming setting is
-not an accepted streaming implementation.
-
-The immediate functional milestone is one ordinary FO3 load/play/save session,
-normal Quit and cold Continue, repeated through a CELL transition. Defer unrelated
-native fixtures and presentation audits until that path works.
-
-Next own the actual cleanup loading byte's selected record-load preservation and
-writer/callback edges, then finish High reset, the logical mover join and current
-follower Extra membership. The bulk-loader byte is independent of this cleanup
-field; an unload/teardown zero cannot supply a record-load return.
-Bind whole-world cold controller resources and validate reference, Script flag,
-ParentCELL, Saved18 and change-map histories across their retained publications.
-Validated aggregate reference-owner history is not sufficient for a complete save;
-the whole-world cold resource blocker remains active. Pending transfer and rendered
-pose cannot supply current reference fields. Then close repeated Player/Main and complete-save owners,
-leave the Vault for Megaton and finish/depart Goodsprings. Finish the unchanged
-TTW/mod owners and all three recorded save/Continue quest runs.
-
-Publish completed blocks through checked PRs, merge and synchronize main with
-origin/main, then start a fresh feature branch. Source publication is not gameplay
-acceptance. Recording stays off during development/headless checks; remove
-temporary frames after inspection/export. Keep only requested deliverables and
-selected active diagnostics.
-
-Private diagnostics/neutral next-owner contracts are under local/fo3-recovery.
-Requested video is under local/deliverables. The preserved New Vegas save retains
-SHA256 f8304d443bca7d73648d4dd40d5a3406dd98be587ba4ad67fa5933d03eed95f6.
-Owned assets, saves, executables, raw reverse-engineering material and private
-captures are never public repository inputs.
+The pinned toolchain is official Godot 4.8-dev7 Mono with matching managed SDK
+and .NET 10.0.401. Streaming residency, budgets and measured frame/thread/memory
+performance remain unaccepted. Publish completed fixes through checked PRs,
+merge and verify local main equals origin/main before the next branch.
+Recording stays off during development. Delete temporary frames after inspection
+or export; retain only requested deliverables or selected active diagnostics.

@@ -11,7 +11,7 @@ internal static partial class FalloutExecutableStringTable
             throw new NotSupportedException("Player movement/control changed its actual scene, zero arguments, mutable word or Boolean merge.");
         var child = Call(arguments + 0x15);
         if (!Match(code, child, [0x55, 0x8b, 0xec, 0x83, 0xe4, 0xf8, 0x83, 0xec, 0x78, 0xa1]) ||
-            !Match(code, child + 0xe, [0xc6, 0x44, 0x24, 5, 0, 0x56, 0x57, 0x8b, 0xf9]) ||
+            !Match(code, child + 0xe, [0xc6, 0x44, 0x24, 5, 0, 0x56, 0x57, 0x8b, 0xf9, 0x89, 0x7c, 0x24, 0x30]) ||
             !Match(code, child + 0x1b, [0x83, 0xf8, 4, 0x0f, 0x87]) ||
             !Match(code, child + 0x24, [0xff, 0x24, 0x85]) ||
             Word(image.ReadLoaderData(Word(code, child + 0xa), 4), 0) != 0)
@@ -33,6 +33,10 @@ internal static partial class FalloutExecutableStringTable
                 throw new NotSupportedException("Player inhibition predicate changed its four distinct ordered source bytes.");
         if (!Match(code, inhibited + 36, [0x32, 0xc0, 0xc3, 0xb0, 1, 0xc3]))
             throw new NotSupportedException("Player inhibition predicate acquired an unowned effect or return.");
+        var inhibitedReturn = checked(ordinary + 9 + unchecked((sbyte)code[ordinary + 8]));
+        if (!Match(code, inhibitedReturn, [0x8a, 0x44, 0x24, 0x0d, 0x5f, 0x5e, 0x8b, 0xe5, 0x5d, 0xc2, 0x10, 0]) ||
+            checked(child + 0x24 + System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(code.AsSpan(child + 0x20))) != inhibitedReturn)
+            throw new NotSupportedException("Inhibited Player controls lost the existing zero-local Boolean and complete argument-return epilogue.");
         var joystick = Call(ordinary + 0x34);
         if (!Match(code, joystick, [0x80, 0x3d]) ||
             !Match(code, joystick + 6, [0, 0x74, 0x0c, 0x80, 0x3d]) ||

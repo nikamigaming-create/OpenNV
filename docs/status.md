@@ -7,6 +7,28 @@ Quit and three cold Continue cycles, with phone-friendly rendered video. None
 of these three complete runs is accepted. Source publication and component
 checks do not establish a playable campaign or matched retail parity.
 
+The adversarial audit inventories all first-party code and configuration and
+traces unconditional refusals, ownership contradictions, persistence and
+performance risks. The latest FO3 start returns its opening package, High reset,
+mover, follower lookup and source-null animation handoff, then returns the pending
+birth-CELL transfer and ordinary load. All 1,610 references are retained; ten
+source-selected XPRM plane/portal bases have genuine engine-static ingress.
+The latest first Player frame returns its real nonnull controller context and
+post-action children and its Current/Primary idle-package query. It next fails
+at the unfinished inhibited/life late Player-frame tail. The fresh run publishes
+that shared World failure without recorded publication losses. Earlier package
+diagnostics called a failed gameplay getter; dedicated retained-field observation
+repairs that loss. Investigations were stopped explicitly, with no normal Quit
+proof. Retained controller-history checks
+pass three JSON/new-scene cycles, with whole-product cold state still unaccepted.
+Returned mover parent
+joins and JSON child equality are repaired with regression checks; complete
+Player frame/movement, source Pause/Save transitions, save/Continue and NV/TTW
+Main services remain open. Actual Main save pause/drain, failed-factory retirement
+and content read lifetime are repaired with focused regression checks; complete
+product acceptance remains unavailable.
+This current result supersedes older component/refusal checkpoints below.
+
 A private phone-friendly 36-second FO3 startup clip from main shows Boy selection
 and character creation with audio and a visible edit. Its birth background is
 black. It does not establish a completed quest or save/Continue.

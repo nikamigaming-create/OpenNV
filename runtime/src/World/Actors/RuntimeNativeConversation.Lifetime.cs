@@ -38,6 +38,7 @@ internal partial class RuntimeNativeConversation
     {
         if (_retired || _nativeResponse is not { } response)
             throw new InvalidOperationException("Skip has no actual current conversation response owner.");
+        _requireGameplayAdmission();
         _speech.SkipConversationResponse(response, _conversation);
     }
     private void CloseConversationPresentation()

@@ -27,6 +27,7 @@ internal sealed partial class FalloutReferenceScripts
                 !receipt.Topics.Contains(info.Plugin.AdjustFormId(topics[0].LabelAsUInt32)))
                 throw new InvalidDataException("Speech completion INFO does not belong to its winning source topic.");
         }
+        world.RequireNoFunctionalFailure();
         var instance = world.Retained(receipt.Speaker);
         if (instance.DeletePending || instance.Deleted || instance.Templates?.Absent == true)
             throw new InvalidOperationException("Speech completion speaker no longer owns a live retained instance.");

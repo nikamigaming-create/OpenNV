@@ -7,7 +7,9 @@ internal sealed record FalloutStandalonePostActionsCall(Guid Main, long MainOrdi
     FalloutPlayerPostActionFields Before, FalloutPlayerPostActionFields After,
     FalloutProcessPostActionUpdate? ProcessUpdate, IReadOnlyList<FalloutProcessSceneContextQuery> ContextQueries,
     bool RemovedEight, int FlagStores, FalloutProcessDetectionActionUpdate? DetectionUpdate,
-    uint? SceneArgumentBits, int TimerStores, bool Returned, string? Failure);
+    uint? SceneArgumentBits, int TimerStores, bool Returned, string? Failure,
+    IReadOnlyList<FalloutPlayerControllerPostActionsTrace>? ControllerChildren = null,
+    FalloutStandaloneSceneReferenceQueryCall? BodyReference = null);
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
@@ -40,7 +42,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
                 Check();
                 if (query.Process != expected) throw new InvalidOperationException("Post-action context changed its actual current process/epoch.");
                 _postActionsCall = _postActionsCall with { ContextQueries = _postActionsCall.ContextQueries.Append(query).ToArray(), Changed = Next() };
-                if (query.Context is not null) throw new NotSupportedException("source-Player-post-action-nonnull-context-consumers-unbound");
+                if (query.Context is not null) ExecutePostActionControllerContext(main, ordinal, query, index);
                 if (index == 0)
                 {
                     _timedActions.RemoveFirst(8, null);
@@ -116,8 +118,10 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             call.After != saved.PostActionFields || call.ContextQueries is null || call.ContextQueries.Count > 2 ||
             call.Returned == (call.Failure is not null) || call.Failure is not null && call.Failure != saved.Failure ||
             call.FlagStores is < 0 or > 1 || call.TimerStores is not (0 or 2) ||
-            (call.ContextQueries.Count > 0 && call.ContextQueries[0].Context is null) != call.RemovedEight ||
-            (call.ContextQueries.Count == 2 && call.ContextQueries[1].Context is null) != (call.FlagStores == 1) ||
+            (call.ContextQueries.Count > 0 && (call.ContextQueries[0].Context is null ||
+                call.ControllerChildren?.Any(child => child.QueryOrdinal == 0 && child.Returned && child.RemoveEight) == true)) != call.RemovedEight ||
+            (call.ContextQueries.Count == 2 && (call.ContextQueries[1].Context is null ||
+                call.ControllerChildren?.Any(child => child.QueryOrdinal == 1 && child.Returned && child.ClearContextFlag) == true)) != (call.FlagStores == 1) ||
             call.Returned && (call.ProcessUpdate is null || call.ContextQueries.Count != 2 || call.DetectionUpdate is null || call.TimerStores != 2) ||
             call.DetectionUpdate is not null && call.FlagStores != 1 || call.TimerStores != 0 && call.DetectionUpdate is null ||
             call.ContextQueries.Count != 0 && call.ProcessUpdate is null ||
@@ -133,9 +137,11 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             var expected = update.Before with { Changed = update.Changed };
             if (call.ContextQueries.Any(query => query.Process != expected) ||
                 call.ContextQueries.Select((query, index) => (query, index)).Any(item => item.query.Context is not null &&
-                    (call.Returned || item.index != call.ContextQueries.Count - 1 || call.Failure != "source-Player-post-action-nonnull-context-consumers-unbound")))
+                    call.ControllerChildren?.Any(child => child.QueryOrdinal == item.index && child.Returned) != true &&
+                    (call.Returned || item.index != call.ContextQueries.Count - 1 || call.Failure is null)))
                 throw new InvalidDataException("Post-action context receipt lost its distinct current queries or nonnull refusal.");
             if (call.DetectionUpdate is { } detection) RequireDetectionActionUpdate(detection, expected);
         }
+        ValidatePostActionControllerChildren(saved, call);
     }
 }

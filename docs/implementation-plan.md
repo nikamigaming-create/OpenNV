@@ -2,14 +2,21 @@
 
 ## Immediate functional recovery
 
+Audit all first-party code and configuration adversarially. Inventory complete
+scan coverage separately from semantic review and executed evidence. Remove
+guards that contradict valid gameplay ownership, repair persistent-value joins,
+and implement required behavior behind unconditional production refusals. Keep
+the ordinary game/save/Continue path as the acceptance test for those repairs.
+
 The first deliverable is one ordinary Fallout 3 session that loads a fresh game,
 advances gameplay, saves complete authoritative state, quits through the normal
 menu and continues in a new process. Component audit passes are supporting checks;
 they do not complete this deliverable.
 
-1. Finish the reached startup package cleanup. Qualify the actual loading-byte
-   writer/preservation path, High reset, mover join and follower Extra membership.
-   Remove an admission restriction only when the current owner proves it artificial.
+1. Repair the reached idle-package query against the actual Current/Primary slot
+   and winning runtime package. Loading transfer, package cleanup and controller
+   context/post-action children now return in the ordinary FO3 run. Keep failed
+   diagnostics fresh without admitting gameplay after the retained fault.
 2. Return the complete Player/Main gameplay frame and exercise ordinary movement
    and quest input. Fix the next actual behavioral failure on this same path.
 3. Publish a complete save through the normal game UI, Quit normally, then cold
@@ -21,9 +28,15 @@ they do not complete this deliverable.
 5. Record the three accepted rendered routes as phone-friendly videos. Keep frame
    recording off until an actual visual run is ready.
 
-Current first refusal: the cleanup loading byte's pre-command records history.
-The actual Current package setter and linked-null cleanup now return. Complete
-startup, gameplay saving, cold Continue and all three routes remain unaccepted.
+Current first refusal: the actual Player frame reaches its unfinished
+inhibited/life late-frame tail. Nonnull early-controller context, post-action
+children and the winning Current/Primary idle-package query now return in the
+ordinary run. Birth-CELL ingestion and transfer/load return with the complete
+stream, including source-selected plane/portal bases. Shared fault diagnostics
+remain current without admitting new gameplay or save capture.
+The actual opening package, High reset, mover, follower lookup and selected-null
+animation attachment also return. Complete startup, gameplay saving, cold Continue
+and all three routes remain unaccepted.
 Keep source publication checked and merged, while this functional test remains
 the next work priority. Defer unrelated native fixtures and presentation audits.
 

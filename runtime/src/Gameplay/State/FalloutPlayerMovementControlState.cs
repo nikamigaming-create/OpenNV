@@ -36,8 +36,9 @@ internal sealed record FalloutPlayerMovementControlSnapshot(string Schema, Fallo
 
 // C# owns this source call independently of Actor's physical utility, camera
 // presentation, keyboard control bindings, process flags and thread epilogue.
-// Zero motion still requires real configuration, Player flag and world/reference
-// getters before the source Boolean child can return. Later Player services
+// Uninhibited zero motion still requires real configuration, Player flag and
+// world/reference getters. Inhibition returns the source local's false value
+// before those services. Later Player services
 // remain separate owners even after a complete returned control child.
 // The scene constructs this live owner at validated input publication, after
 // loading-worker preparation. Its source thread remains fixed for its lifetime.
@@ -45,7 +46,6 @@ internal sealed partial class FalloutPlayerMovementControlState
 {
     internal const string Schema = "opennv-Player-movement-control/v3";
     internal const string InhibitionOwnerBoundary = "source-Player-movement-control-shared-inhibition-owner-unbound";
-    internal const string InhibitedBoundary = "source-Player-movement-control-inhibited-Boolean-continuation-unbound";
     internal const string ConfigurationBoundary = "source-Player-movement-control-invert-Y-configuration-unbound";
     internal const string WorldFovBoundary = "source-Player-movement-control-current-world-projection-FOV-unbound";
     internal const string WheelBoundary = "source-Player-movement-control-wheel-view-services-unbound";
@@ -143,7 +143,13 @@ internal sealed partial class FalloutPlayerMovementControlState
                 { InhibitionReads = inhibitionReads.ToArray(), Changed = Next() };
             });
             _call = _call with { Inhibited = predicate.Result, Changed = Next() };
-            if (predicate.Result) throw new NotSupportedException(InhibitedBoundary);
+            Check();
+            if (predicate.Result)
+            {
+                Step(FalloutPlayerMovementControlStep.Returned);
+                _call = _call with { Returned = true, Result = false, Changed = Next() };
+                return false;
+            }
             Step(FalloutPlayerMovementControlStep.InputOwner);
             var current = input.ReadManagerOwner();
             if (!ReferenceEquals(current, input) || current.Source != _stack)

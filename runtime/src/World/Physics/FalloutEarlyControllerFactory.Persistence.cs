@@ -54,6 +54,7 @@ internal sealed partial class FalloutEarlyControllerFactory
             !Shared.Capture().SlopeAvailable || !Shared.Capture().HelperFlagAvailable)
             throw new InvalidOperationException("Cold controller has no returned live source state to bind.");
         RequireColdArrays(saved.Proxy);
+        FalloutEarlyController.RequireCompletePostProcessFields(saved.PostProcessFields);
         var current = invocation.Current; var fault = _fault; var counter = _groups.Capture().Counter;
         var callsBefore = _calls.Count; var scopesBefore = _threadContext.CapturePhysicsInitializationScopes();
         if (!scopesBefore.SequenceEqual(_restoredFactory.PhysicsScopes))
@@ -280,6 +281,7 @@ internal sealed partial class FalloutEarlyControllerFactory
             saved.Proxy.MaximumSlopeCosineBits != FalloutControllerContactState.MaximumSlopeCosine(FalloutEarlyControllerSource.MaximumSlopeBits))
             throw new InvalidDataException("Cold detached controller lost its source/native/state-context/descriptor lineage.");
         saved.Lineage.Actor.Validate();
+        FalloutEarlyController.ValidatePostProcessFields(saved.PostProcessFields);
         if (saved.Descriptor.Model is null || saved.Descriptor != Descriptor(saved.Descriptor.Player,
             saved.Descriptor.AllocatedFilter, saved.Descriptor.Model) ||
             saved.Descriptor.Model.Model is not null ||

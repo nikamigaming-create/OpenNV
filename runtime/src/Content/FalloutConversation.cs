@@ -8,7 +8,7 @@ internal sealed partial class FalloutConversation(FalloutPluginStack records, Fa
     Func<FalloutCondition, float> evaluate, Action<FalloutDialogueInfo, bool> results, HashSet<FalloutFormKey>? saidInfos = null,
     Func<uint, uint>? random = null,
     Func<FalloutDialogueInfo, bool, FalloutScriptResultReceipt>? ownedResults = null,
-    Func<FalloutFormKey>? resultCaller = null)
+    Func<FalloutFormKey>? resultCaller = null, Action? requireGameplayAdmission = null)
 {
     private readonly Dictionary<FalloutFormKey, FalloutDialogueTopic> _topics = [];
     private readonly FalloutDialogueQuestSelection _selection = new(records, quests);
@@ -20,15 +20,17 @@ internal sealed partial class FalloutConversation(FalloutPluginStack records, Fa
     internal IReadOnlyList<FalloutConversationChoice> Choices { get; private set; } = [];
     internal string Phase { get; private set; } = "closed";
     internal string? Error { get; private set; }
+    internal FalloutFormKey SpeakerBase => _speaker;
+    internal IReadOnlyList<FalloutFormKey> AddedTopics => _added.ToArray();
     internal FalloutDialogueResponse? Response => Phase == "speaking" ? Info!.Responses[ResponseIndex] : null;
     internal bool IsGoodbye(FalloutFormKey topic) => FalloutDialogueTopic.IsGoodbye(records, topic);
 
     internal void Start(FalloutFormKey speakerBase, FalloutFormKey topic)
     {
         if (Phase != "closed" || Error is not null) throw new InvalidOperationException("Conversation owner is already active or faulted.");
-        _speaker = speakerBase;
         Mutate(() =>
         {
+            _speaker = speakerBase;
             _ending = FalloutDialogueTopic.IsGoodbye(records, topic);
             Begin(Select(topic) ?? throw new NotSupportedException($"Topic {topic} has no eligible INFO."));
         });
@@ -108,7 +110,9 @@ internal sealed partial class FalloutConversation(FalloutPluginStack records, Fa
     {
         if (_mutating || Error is not null) throw new InvalidOperationException("Conversation cannot repeat or recursively execute a failed transition.");
         _mutating = true;
-        try { action(); }
+        // Immediate INFO results can leave no later script callback. Admit
+        // the transition before speaker, response, topic or SayOnce stores.
+        try { requireGameplayAdmission?.Invoke(); action(); }
         catch (Exception error) { Error = error.Message; Phase = "failed"; throw; }
         finally { _mutating = false; }
     }

@@ -25,10 +25,6 @@ internal sealed partial class FalloutReferenceWorld
             !before.Actor.EnginePlayer || before.Level != FalloutDetectionProcessLevel.High ||
             before.Stack != CampaignStandalonePlayerScene.Stack || before.ExecutableSha256 != CampaignMainScriptSource.EngineSha256)
             throw new NotSupportedException("Source idle package lost its actual current Player process.");
-        var selected = ProcessCommon.ReadSourcePackageSlotForIdle(before, slot);
-        if (selected.Fields.Fields.Package is not null)
-            throw new NotSupportedException("source-idle-nonnull-process-package-kind-and-runtime-object-owner-unbound");
-        return new(selected.Fields.Publication.Factory, before.Process, before.GameplayOwnership, before.Actor.Reference,
-            before.Stack, checked((ulong)selected.Fields.Changed), null);
+        return ProcessCommon.ReadSourcePackageForIdle(before, slot);
     }
 }

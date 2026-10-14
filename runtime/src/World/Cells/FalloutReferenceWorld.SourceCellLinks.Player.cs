@@ -102,10 +102,13 @@ internal sealed partial class FalloutReferenceWorld
     {
         _ = RequirePublishedLinkedPlayer();
         var declaration = FalloutSourceCellLoaderDeclaration.Read(_processRuntimeDeclaration!.ExecutableSha256);
-        var flags = declaration.CanonicalPlayerInitialReferenceFlags;
+        var flags = HasStandalonePlayerScene ? WithActualReferencePosition(FalloutReferencePositionIngress.CellAttachment,
+            invocation => (_sourceReferenceScriptInitializer ?? throw new NotSupportedException("Current Player reference flags have no source owner."))
+                .ReadReferenceFlags(invocation, RequireActualReferencePosition).Flags) : declaration.CanonicalPlayerInitialReferenceFlags;
         // This writer is the real source manager pending-request owner. The
         // immutable ENGINE_PLAYER identity is not a current-reference flag.
         var pending = ProcessReevaluation.ReadPendingReferenceFlag(_enginePlayer, ActorProcesses.Read(_enginePlayer).Epoch);
+        flags &= ~FalloutActorProcessQueueDeclaration.PendingReferenceFlag;
         if (pending.Require()) flags |= FalloutActorProcessQueueDeclaration.PendingReferenceFlag;
         return flags;
     }

@@ -15,7 +15,7 @@ internal sealed record FalloutReferencePositionInvocation(Guid Call, FalloutComb
             throw new InvalidDataException("Reference child lost its original entered package command.");
     }
 }
-internal enum FalloutReferencePositionLane { Position, PositionMode, Scale, PersistentCell, ActorYawMode, ActorAssignmentByte }
+internal enum FalloutReferencePositionLane { Position, PositionMode, Scale, PersistentCell, ActorYawMode, ActorAssignmentByte, FollowerExtra }
 internal enum FalloutReferencePositionStep
 {
     Entered, SourcePrefix, ConfiguredCell, ConfiguredX, InitialPlacement, PersistentPredicate, KindPredicate,
@@ -23,7 +23,8 @@ internal enum FalloutReferencePositionStep
     ParentCell, PositionMode, Scale, PersistentCell, Returned, UnownedWriter, ActorYawMode, ActorAssignmentByte
 }
 internal sealed record FalloutReferencePositionValues(FalloutPackageRawPosition Position, byte PositionMode,
-    uint Scale, FalloutFormKey? PersistentCell, bool PersistentCellPresent, uint ActorYawMode = 0, byte ActorAssignmentByte = 0);
+    uint Scale, FalloutFormKey? PersistentCell, bool PersistentCellPresent, uint ActorYawMode = 0, byte ActorAssignmentByte = 0,
+    Guid? FollowerExtra = null, Guid? FollowerPayload = null);
 internal sealed record FalloutReferencePositionStore(FalloutReferencePositionStep Step, long Changed,
     uint? Bits = null, FalloutFormKey? Form = null, bool? Present = null);
 internal sealed record FalloutReferencePositionPublication(Guid Process, Guid Factory, Guid Constructor,

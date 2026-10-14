@@ -213,8 +213,40 @@ internal static partial class SourceMainScriptCallerContracts
             reentryCommon.SaveBlocker is not null, "A swallowed source idle reentry lost its real failed child receipt.");
         FalloutActorProcessCommonState.Validate(reentryCommon.Capture());
         RunPlayerIdleModelSelection(main, stack, source, player, Identity, Gameplay);
+        RunPlayerNonnullContextFailure(main, stack, source, player, Identity, Gameplay);
         Console.WriteLine("OPENNV_PLAYER_PROCESS_QUERY_PASS actualCommonOwner=true independentGetters=true classAndEpoch=true " +
             "getterNoMutation=true coldNewProcess=true coldNoReplay=true sourceReferenceQueue=true timedActions=true postActionTimers=true nonnullWriters=UNOWNED nativeInput=FIXTURE wholePlayerVirtual=UNRETURNED");
+    }
+
+    private static void RunPlayerNonnullContextFailure(FalloutMainScriptCallerSource main, string stack,
+        FalloutActorProcessRuntimeDeclaration source, FalloutFormKey player,
+        Func<FalloutFormKey, FalloutCombatActorIdentity> identity, Func<FalloutFormKey, FalloutProcessGameplayState> gameplay)
+    {
+        using var common = new FalloutActorProcessCommonState(source, stack, identity, gameplay, _ => null);
+        common.Construct(player, 1, FalloutDetectionProcessLevel.High);
+        var scene = new FalloutStandalonePlayerSceneState(FalloutStandalonePlayerSceneSource.Read(main), stack, Guid.NewGuid());
+        var input = new FalloutDirectInputState(stack, 123, new(_ => null));
+        var hud = new FalloutPlayerReferenceHudState(FalloutPlayerReferenceHudSource.Reviewed(main), stack, scene.Process,
+            AuthoredReferenceHudComponents());
+        scene.BindInputManager(input);
+        scene.BindActorProcessQueries(() => common.ReadSceneQueries(player, 1));
+        scene.BindProcessSceneUpdate(() => common.UpdatePlayerScene(player, 1));
+        var context = Guid.NewGuid(); var reads = 0;
+        scene.BindPostProcessContext(() => { reads++; return common.ReadSceneContext(player, 1) with { Context = context }; });
+        var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, 0x3c800000); scene.EnterSceneVirtual(invocation, 1);
+        Reject(() => scene.ExecuteInitialVirtualPrefix(invocation, 1, () => { }, hud, () => .5f));
+        var saved = scene.Capture();
+        Require(reads == 1 && saved.Prelude?.FailedAt == FalloutStandaloneScenePreludeStep.PostProcessContext &&
+            saved.PostProcessContext is { Returned: false, Failure: not null, Queries.Count: 1 } &&
+            saved.PostProcessContext.Queries[0].Context == context,
+            "Reached nonnull context lost its exact observable failure prefix.");
+        var copy = JsonSerializer.Deserialize<FalloutStandalonePlayerSceneSnapshot>(JsonSerializer.Serialize(saved))!;
+        FalloutStandalonePlayerSceneState.Validate(copy);
+        Reject(() => FalloutStandalonePlayerSceneState.RequirePlayable(copy));
+        Reject(() => FalloutStandalonePlayerSceneState.Validate(copy with
+        { PostProcessContext = copy.PostProcessContext! with { Queries = [copy.PostProcessContext.Queries[0], copy.PostProcessContext.Queries[0]] } }));
+        ControllerReadColdLineage(copy);
+        scene.Retire(); hud.Retire(); input.Retire();
     }
 
     private static void RunPlayerIdleModelSelection(FalloutMainScriptCallerSource main, string stack,

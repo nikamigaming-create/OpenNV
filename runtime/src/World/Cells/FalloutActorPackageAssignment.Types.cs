@@ -75,7 +75,8 @@ internal sealed record FalloutActorPackageExtraRead(string Source, FalloutFormKe
     byte? TargetKind, FalloutPackageExtraReference? Extra, bool CurrentTargetAvailable, string? Failure = null,
     FalloutPackageRuntimeTargetRead? TargetRead = null);
 internal sealed record FalloutActorFollowerExtraRead(string Source, FalloutCombatActorIdentity Actor,
-    Guid Process, Guid Factory, Guid Constructor, long Sequence, bool Present, Guid? Extra, Guid? Payload);
+    Guid Process, Guid Factory, Guid Constructor, long Sequence, bool Present, Guid? Extra, Guid? Payload,
+    FalloutReferencePositionInvocation? ReferenceInvocation = null);
 internal sealed record FalloutActorPackageAssignmentCall(FalloutPackageCommandFieldInvocation Invocation,
     string Source, Guid Factory, FalloutFormKey Package, bool Primary, bool Alternate, long Entered, long Changed,
     FalloutActorAssignmentStep Step, FalloutActorAssignmentStep? FailedAt, string? Failure,

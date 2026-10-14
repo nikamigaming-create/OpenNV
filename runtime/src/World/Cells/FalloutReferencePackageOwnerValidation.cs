@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.World.Cells;
 
 // This validates retained reference/package joins. It does not certify a whole
 // constructor, native World reconstruction, playable save or rendered parity.
-internal sealed class FalloutReferencePackageOwnerValidation
+internal sealed partial class FalloutReferencePackageOwnerValidation
 {
     internal const string ParentHistoryBoundary = "source-cold-World-ParentCELL-field-history-unbound";
     private sealed record PositionBoundary(FalloutReferencePositionValues Values,
@@ -63,6 +63,7 @@ internal sealed class FalloutReferencePackageOwnerValidation
                 throw new NotSupportedException("source-cold-package-reference-initializer-history-unbound");
             BuildFlagIndex(initialization, field, threadFlags);
         }
+        ValidateParentRuntimePublications(runtime);
         foreach (var command in common.PackageCommands)
         {
             FalloutSourcePackageAssignment.Validate(command, common);
@@ -96,6 +97,7 @@ internal sealed class FalloutReferencePackageOwnerValidation
                 (!_changeCalls.TryGetValue((child.Factory, child.Changed), out var actual) || !SameChange(actual, child)))
                 throw new InvalidDataException("Reference position mask2 receipt has no identical retained manager child.");
         ValidatePackageBorrows();
+        ValidateActorFollowerBorrows();
     }
 
     internal static void ValidateOwnedSources(FalloutPluginStack records, FalloutReferencePositionSnapshot position,

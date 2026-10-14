@@ -2,13 +2,15 @@ using OpenNV.Runtime.Compatibility.NativePlugins;
 
 namespace OpenNV.Runtime.Content;
 
+internal readonly record struct FalloutNativeSourceModuleCaptureKey(ulong Generation, string LogicalPath, string Sha256);
+
 internal sealed class FalloutNativeSourceContinuationCapture
 {
     internal FalloutNativePluginCampaign Campaign { get; }
     internal FalloutNativeSourceContinuationState State { get; }
-    internal IReadOnlyDictionary<ulong, NativeNvseSourceFileCurrentCapture> Native { get; }
+    internal IReadOnlyDictionary<FalloutNativeSourceModuleCaptureKey, NativeNvseSourceFileCurrentCapture> Native { get; }
     internal FalloutNativeSourceContinuationCapture(FalloutNativePluginCampaign campaign,
-        FalloutNativeSourceContinuationState state, IReadOnlyDictionary<ulong, NativeNvseSourceFileCurrentCapture> native)
+        FalloutNativeSourceContinuationState state, IReadOnlyDictionary<FalloutNativeSourceModuleCaptureKey, NativeNvseSourceFileCurrentCapture> native)
     { Campaign = campaign; State = state; Native = native; }
 }
 
@@ -24,14 +26,14 @@ internal sealed partial class FalloutNativePluginCampaign
         foreach (var domain in ActualDomains()) domain.RequireNvseModuleSetColdState();
         if (_modules.Count == 0) return null;
         var selection = _selection ?? throw new InvalidOperationException("Native source continuation has no exact selected module/runtime identity.");
-        var captures = new Dictionary<ulong, NativeNvseSourceFileCurrentCapture>();
+        var captures = new Dictionary<FalloutNativeSourceModuleCaptureKey, NativeNvseSourceFileCurrentCapture>();
         var modules = new List<FalloutNativeSourceModuleState>();
         foreach (var module in _modules)
         {
             if (module.Retired || module.Plugin.Phase != NativeNvsePhase.LoadedTrue)
                 throw new NotSupportedException("Native source continuation requires a genuinely initialized live module.");
             var capture = module.Domain.CaptureNvseSourceFileCurrent(module.Plugin);
-            captures.Add(module.Domain.Generation, capture);
+            captures.Add(new(module.Domain.Generation, module.Admission.LogicalPath, module.Admission.Sha256), capture);
             modules.Add(new(module.Admission.LogicalPath, module.Admission.Sha256,
                 checked((ulong)capture.CompletedCalls), Array.AsReadOnly(capture.Entries.Select(entry =>
                     new FalloutNativeSourceModuleContributor(entry.Key, entry.SourceOwner, entry.SourceSha256, entry.StateSha256, entry.StateSchema)).ToArray())));
@@ -50,7 +52,7 @@ internal sealed partial class FalloutNativePluginCampaign
         var state = new FalloutNativeSourceContinuationState("opennv-native-source-continuation/v1", _source.StackId,
             selection.RuntimeSha256, modules.AsReadOnly(), sources);
         var owned = new FalloutNativeSourceContinuationCapture(this, state,
-            new System.Collections.ObjectModel.ReadOnlyDictionary<ulong, NativeNvseSourceFileCurrentCapture>(captures));
+            new System.Collections.ObjectModel.ReadOnlyDictionary<FalloutNativeSourceModuleCaptureKey, NativeNvseSourceFileCurrentCapture>(captures));
         _sourceContinuation = owned; RequireSourceContinuationCurrent(owned); return owned;
     }
 
@@ -66,7 +68,8 @@ internal sealed partial class FalloutNativePluginCampaign
         {
             var module = _modules[ordinal]; var saved = capture.State.Modules[ordinal];
             if (module.Retired || saved.LogicalPath != module.Admission.LogicalPath || saved.Sha256 != module.Admission.Sha256 ||
-                !capture.Native.TryGetValue(module.Domain.Generation, out var native) || saved.CompletedSourceFileCalls != (ulong)native.CompletedCalls)
+                !capture.Native.TryGetValue(new(module.Domain.Generation, module.Admission.LogicalPath, module.Admission.Sha256), out var native) ||
+                saved.CompletedSourceFileCalls != (ulong)native.CompletedCalls)
                 throw new InvalidOperationException("Native source continuation changed the exact original module order/identity/generation.");
             module.Domain.RequireNvseSourceFileCurrent(module.Plugin, native);
         }

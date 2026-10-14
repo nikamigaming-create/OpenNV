@@ -147,7 +147,7 @@ internal partial class RuntimeNativePlayer
     }
     internal void XrActivate()
     {
-        if (_modalInput) return;
+        if (_playerPerceptionWorld?.FunctionalFailure is not null || _modalInput) return;
         if (!_activationEnabled) { RejectActivation(); return; }
         if (DispatchSourceFurnitureActivation()) return;
         if (AimedObject() is not { } collider) { RejectActivation(); return; }

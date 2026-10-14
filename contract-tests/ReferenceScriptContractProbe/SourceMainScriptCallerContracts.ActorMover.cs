@@ -64,6 +64,7 @@ internal static partial class SourceMainScriptCallerContracts
             FailedMoverPrefix(records, source);
             MissingMoverPredecessor(records, source);
             MoverPreparationHandoff(source, packages.Stack);
+            RunActorMoverFrameStores(records, source);
             scene.Retire(); input.Retire();
             Console.WriteLine("OPENNV_ACTOR_MOVER_PASS sameSceneOwner=true inherited101Player0=true " +
                 "actualCurrentPrimarySetters=true predecessorReceipts=authored orderedXY_Z_byte=true failedPrefix=true " +

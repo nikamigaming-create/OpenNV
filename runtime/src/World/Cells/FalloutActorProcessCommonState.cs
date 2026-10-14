@@ -253,7 +253,8 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
     public void Dispose()
     {
         if (_disposed) return; RequireNotBusy();
-        if (_transfer is { Initialized: false }) throw new NotSupportedException("Actual common process retirement retains an unfinished old/new ownership transfer.");
+        // Failed transfers do not prevent retirement after callbacks unwind.
+        // Release actual controller leases; never complete the failed transfer.
         RetireEarlyControllerFields();
         _disposed = true; _current.Clear(); _retired.Clear(); _weaponObservations.Clear(); _followingObservations.Clear(); _packageLedgers.Clear(); _pending = null;
     }

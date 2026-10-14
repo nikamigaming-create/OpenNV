@@ -24,6 +24,22 @@ internal static partial class SourceMainScriptCallerContracts
                 (invalidated ? high is { Returned: false, FailedAt: FalloutActorHighResetStep.Loading } : high.Returned),
                 "Actor prefix lost real Current/byte/linked/reset stores or crossed an unavailable loading/follower owner.");
             var snapshot = fixture.Reference.Common.Capture(); FalloutActorProcessCommonState.Validate(snapshot);
+            var restoredJson = JsonSerializer.Deserialize<FalloutProcessCommonSnapshot>(JsonSerializer.Serialize(snapshot))!;
+            FalloutActorProcessCommonState.Validate(restoredJson);
+            var jsonFields = restoredJson.Current.Single().ActorAssignment!;
+            var jsonCall = jsonFields.Calls.Single();
+            Reject(() => FalloutActorProcessCommonState.Validate(restoredJson with
+            {
+                Current = [restoredJson.Current.Single() with
+            { ActorAssignment = jsonFields with { Calls = [jsonCall with { Linked = jsonCall.Linked! with { NullCleanupReturned = false } }] } }]
+            }));
+            if (jsonCall.HighReset is { } jsonHigh)
+                Reject(() => FalloutActorProcessCommonState.Validate(restoredJson with
+                {
+                    Current = [restoredJson.Current.Single() with
+                { ActorAssignment = jsonFields with { Calls = [jsonCall with { HighReset = jsonHigh with
+                { Stores = jsonHigh.Stores.Select((store, index) => index == 0 ? store with { AfterBits = store.AfterBits ^ 1u } : store).ToArray() } }] } }]
+                }));
             var fields = snapshot.Current.Single().ActorAssignment!;
             Require(fields.LinkedCalls.Select(value => value.Occurrence).SequenceEqual(
                 [FalloutActorLinkedOccurrence.ActorAssignment, FalloutActorLinkedOccurrence.SharedReset]),
@@ -32,25 +48,37 @@ internal static partial class SourceMainScriptCallerContracts
                 fixture.Reference.Common.ReadSourcePackageSlot(fixture.Reference.Actor.Reference, 1, FalloutProcessPackageSlot.Current).Fields.Fields.TimeBits == fixture.HourBits,
                 "Current setter used another package, fabricated a count or ignored actual mutable GameHour.");
             Reject(() => fixture.Reference.Common.ExecuteActorPackageAssignment(fixture.Invocation!, fixture.Package, false, false, fixture, _ => { }));
-            Reject(() => FalloutActorProcessCommonState.Validate(snapshot with { Current = [snapshot.Current.Single() with
-            { ActorAssignment = fields with { Values = fields.Values with { Tier = 1 } } }] }));
-            Reject(() => FalloutActorProcessCommonState.Validate(snapshot with { Current = [snapshot.Current.Single() with
-            { ActorAssignment = fields with { LinkedCalls = [fields.LinkedCalls[0], fields.LinkedCalls[0]] } }] }));
+            Reject(() => FalloutActorProcessCommonState.Validate(snapshot with
+            {
+                Current = [snapshot.Current.Single() with
+            { ActorAssignment = fields with { Values = fields.Values with { Tier = 1 } } }]
+            }));
+            Reject(() => FalloutActorProcessCommonState.Validate(snapshot with
+            {
+                Current = [snapshot.Current.Single() with
+            { ActorAssignment = fields with { LinkedCalls = [fields.LinkedCalls[0], fields.LinkedCalls[0]] } }]
+            }));
         }
         using (var fixture = new ActorAssignmentFixture())
         {
             fixture.InCommand(invocation => fixture.Reference.Call(FalloutReferencePositionIngress.PackageCommand,
                 current => fixture.Reference.Position.StoreActorYawMode(current, 4)));
             fixture.Execute(expectFailure: true);
-            Require(fixture.Reference.Common.LastActorPackageAssignment is { FailedAt: FalloutActorAssignmentStep.ExceptionalStatus,
-                StatusReads.Count: 2, PackageMutation: null }, "Nonzero assignment status used neutral life or skipped a reached original child.");
+            Require(fixture.Reference.Common.LastActorPackageAssignment is
+            {
+                FailedAt: FalloutActorAssignmentStep.ExceptionalStatus,
+                StatusReads.Count: 2, PackageMutation: null
+            }, "Nonzero assignment status used neutral life or skipped a reached original child.");
         }
         using (var fixture = new ActorAssignmentFixture())
         {
             fixture.InCommand(invocation => fixture.Reference.Common.StoreActorAssignmentAdjustment(invocation, 0x3f800000, fixture.RequireCurrent));
             fixture.Execute(expectFailure: true);
-            Require(fixture.Reference.Common.LastActorPackageAssignment is { FailedAt: FalloutActorAssignmentStep.PositiveAdjustment,
-                PackageMutation: null, ByteStore: null }, "Positive adjustment reached the byte/package suffix before its unowned children.");
+            Require(fixture.Reference.Common.LastActorPackageAssignment is
+            {
+                FailedAt: FalloutActorAssignmentStep.PositiveAdjustment,
+                PackageMutation: null, ByteStore: null
+            }, "Positive adjustment reached the byte/package suffix before its unowned children.");
             _ = fixture.Reference.Common.Capture();
         }
         using (var fixture = new ActorAssignmentFixture())
@@ -60,8 +88,32 @@ internal static partial class SourceMainScriptCallerContracts
                 "A swallowed actual graph capture reentry continued into a package writer.");
         }
         RunActorPackageTargetContracts();
+        RunReturnedMoverParentContracts();
         Console.WriteLine("OPENNV_ACTOR_PACKAGE_ASSIGNMENT_PASS authoredScopeOnly=true sameStatusAndByteOwners=true realCurrentSetter=true " +
             "twoLinkedNullTails=true sharedLoadingBoundary=true partialHighStoresRetained=true targetsOwned=true wholePlayer=UNRETURNED");
+    }
+
+    private static void RunReturnedMoverParentContracts()
+    {
+        using var fixture = new ActorAssignmentFixture(complete: true);
+        fixture.Execute(expectFailure: false);
+        var common = fixture.Reference.Common.Capture();
+        var mover = fixture.Scene!.ActorMover.Capture();
+        Require(common.Current.Single().ActorAssignment!.Calls.Single() is { Returned: true, MoverReturned: true } &&
+            mover.Operations.Single() is { Returned: true, Join: not null }, "Returned mover test omitted the actual Actor assignment parent.");
+        FalloutActorProcessRuntimeSaveContract.ValidateMoverAssignmentParents(mover, common);
+        var restoredCommon = JsonSerializer.Deserialize<FalloutProcessCommonSnapshot>(JsonSerializer.Serialize(common))!;
+        var restoredMover = JsonSerializer.Deserialize<FalloutActorMoverSnapshot>(JsonSerializer.Serialize(mover))!;
+        FalloutActorProcessCommonState.Validate(restoredCommon);
+        FalloutActorProcessRuntimeSaveContract.ValidateMoverAssignmentParents(restoredMover, restoredCommon);
+        Reject(() => FalloutActorProcessRuntimeSaveContract.ValidateMoverAssignmentParents(restoredMover, restoredCommon with
+        { Current = [restoredCommon.Current.Single() with { ActorAssignment = null }] }));
+        var operation = restoredMover.Operations.Single(); var join = operation.Join!;
+        Reject(() => FalloutActorProcessRuntimeSaveContract.ValidateMoverAssignmentParents(restoredMover with
+        { Operations = [operation with { Join = join with { LinkedReference = join.LinkedReference with { Identity = Guid.NewGuid() } } }] }, restoredCommon));
+        Reject(() => FalloutActorProcessRuntimeSaveContract.ValidateMoverAssignmentParents(restoredMover with
+        { Operations = [operation with { Join = join with { PackageStore = join.PackageStore with { After = join.PackageStore.After with { TimeBits = 0 } } } }] }, restoredCommon));
+        Console.WriteLine("OPENNV_RETURNED_MOVER_PARENT_PASS actualAssignment=true jsonRoundtrip=true foreignParentRefused=true changedPackageRefused=true wholeSave=UNACCEPTED");
     }
 
     private static void RunActorPackageTargetContracts()
@@ -88,8 +140,11 @@ internal static partial class SourceMainScriptCallerContracts
         var full = saved.Packages.Single(package => package.Form.ObjectId == 0x701).Target!;
         Reject(() => FalloutPackageRuntimeTargetFields.Validate(full with { Loads = [full.Loads[0] with { SourceExtent = 12 }] }));
         using (var oversized = fixture.Reference.ReadOversizedTargetRecordFixture())
-            Reject(() => { using var unreturned = new FalloutPackageRuntimeRegistry(oversized,
-                fixture.Source.Command.Fields.Controls.Main.EngineSha256, fixture.Reference.Stack); });
+            Reject(() =>
+            {
+                using var unreturned = new FalloutPackageRuntimeRegistry(oversized,
+                fixture.Source.Command.Fields.Controls.Main.EngineSha256, fixture.Reference.Stack);
+            });
         var originalLoads = JsonSerializer.Serialize(saved.Packages.Select(package => package.Target!.Loads));
         for (var cycle = 0; cycle < 3; ++cycle)
         {
@@ -113,12 +168,16 @@ internal static partial class SourceMainScriptCallerContracts
     private static byte[] ActorAssignmentFixtureRows()
     {
         byte[] Row(string signature, uint form, params byte[][] fields)
-        { var data = fields.SelectMany(value => value).ToArray(); var result = new byte[24 + data.Length]; Encoding.ASCII.GetBytes(signature).CopyTo(result, 0);
+        {
+            var data = fields.SelectMany(value => value).ToArray(); var result = new byte[24 + data.Length]; Encoding.ASCII.GetBytes(signature).CopyTo(result, 0);
             BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(4), (uint)data.Length); BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(12), form);
-            data.CopyTo(result, 24); return result; }
+            data.CopyTo(result, 24); return result;
+        }
         byte[] Part(string signature, byte[] data)
-        { var result = new byte[6 + data.Length]; Encoding.ASCII.GetBytes(signature).CopyTo(result, 0);
-            BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(4), (ushort)data.Length); data.CopyTo(result, 6); return result; }
+        {
+            var result = new byte[6 + data.Length]; Encoding.ASCII.GetBytes(signature).CopyTo(result, 0);
+            BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(4), (ushort)data.Length); data.CopyTo(result, 6); return result;
+        }
         var kind = new byte[12]; kind[4] = 6;
         var target = new byte[16]; target[0] = 2; BinaryPrimitives.WriteUInt32LittleEndian(target.AsSpan(4), 42);
         BinaryPrimitives.WriteUInt32LittleEndian(target.AsSpan(8), 7); BinaryPrimitives.WriteUInt32LittleEndian(target.AsSpan(12), 0x40400000);
@@ -144,16 +203,25 @@ internal static partial class SourceMainScriptCallerContracts
         private readonly Guid _runtime = Guid.NewGuid();
         private FalloutDataHandlerLoadingInvocation? _loading;
         private bool _entered;
+        internal readonly FalloutStandalonePlayerSceneState? Scene;
+        private FalloutActorMoverResetJoin? _moverJoin;
         public FalloutActorPackageAssignmentSource Source { get; }
         public string Stack => Reference.Stack;
-        internal ActorAssignmentFixture()
+        internal ActorAssignmentFixture(bool complete = false)
         {
             Source = FalloutActorPackageAssignmentSource.Reviewed(Reference.Fields.Source);
             Registry = new(Reference.Records, Source.Command.Fields.Controls.Main.EngineSha256, Stack);
             Reference.Common.BindSourcePackageRegistry(Registry);
             Reference.Common.BindActorPackageAssignment(Source, Reference.Actor.Reference, 1, actual =>
             { Require(actual.Actor == Reference.Actor && actual.Epoch == 1, "Wrong authored original Common constructor."); });
-            Reference.Call(FalloutReferencePositionIngress.ActorPosition,
+            if (complete)
+            {
+                Reference.PrepareSavedPosition();
+                Scene = new(FalloutStandalonePlayerSceneSource.Read(Source.Command.Fields.Controls.Main), Stack, Guid.NewGuid());
+                Scene.BindActorMoverPackageReset(Reference.Actor, RequireCurrent, _ => _moverJoin ??
+                    throw new InvalidOperationException("Authored mover reset left its actual assignment parent."));
+            }
+            else Reference.Call(FalloutReferencePositionIngress.ActorPosition,
                 current => Reference.Position.InitializeConstructedPlayerFields(current, AnimationSettings("", "")));
             Loading = new(Source, Stack, _runtime, Guid.NewGuid(), actual =>
             { if (actual != _loading) throw new InvalidOperationException("Authored loading owner left its current source scope."); });
@@ -201,10 +269,19 @@ internal static partial class SourceMainScriptCallerContracts
                 FalloutDataHandlerLoadingIngress.PackageCleanup, invocation.SourceCommand);
             try { return Loading.Read(_loading); } finally { _loading = null; }
         }
-        public FalloutActorAssignmentBaseRead ReadCurrentBaseForMover(FalloutPackageCommandFieldInvocation invocation) =>
-            throw new NotSupportedException("authored-current-Base-and-mover-following-boundary");
-        public void ResetActualMover(FalloutPackageCommandFieldInvocation invocation, FalloutActorMoverResetJoin join) => throw new InvalidOperationException("Unowned current Base cannot enter mover.");
-        public FalloutActorFollowerExtraRead ReadFollowerExtra(FalloutPackageCommandFieldInvocation invocation) => throw new NotSupportedException("authored-follower-current-membership-unowned");
+        public FalloutActorAssignmentBaseRead ReadCurrentBaseForMover(FalloutPackageCommandFieldInvocation invocation) => Scene is null ?
+            throw new NotSupportedException("authored-current-Base-and-mover-following-boundary") :
+            new("authored-returned-current-NPC-Base", Reference.Actor.Base, 42, null, Reference.Position.Capture().Sequence);
+        public void ResetActualMover(FalloutPackageCommandFieldInvocation invocation, FalloutActorMoverResetJoin join)
+        {
+            RequireCurrent(invocation); _moverJoin = join;
+            try { (Scene ?? throw new InvalidOperationException("Unowned current Base cannot enter mover.")).ResetActorMoverForPackageAssignment(invocation); }
+            finally { _moverJoin = null; }
+        }
+        public FalloutActorFollowerExtraRead ReadFollowerExtra(FalloutPackageCommandFieldInvocation invocation) => Scene is null ?
+            throw new NotSupportedException("authored-follower-current-membership-unowned") :
+            Reference.Call(FalloutReferencePositionIngress.PackageCommand,
+                current => Reference.Position.ReadFollowerExtra(current, FalloutReferenceFollowerSource.Reviewed(Reference.Source)));
         public FalloutPackageRuntimeObject? ReadPlayerSpecialPackage(FalloutPackageCommandFieldInvocation invocation) => null;
         public void ClearPlayerSpecialPackage(FalloutPackageCommandFieldInvocation invocation, FalloutPackageRuntimeObject expected) => throw new InvalidOperationException("No actual special package.");
         public FalloutPackageGameHourRead ReadGameHour(FalloutPackageCommandFieldInvocation invocation)
@@ -213,7 +290,7 @@ internal static partial class SourceMainScriptCallerContracts
         public void DestroyContext(FalloutPackageCommandFieldInvocation invocation, Guid context) => throw new InvalidOperationException("Actual context is null.");
         public void DeleteTemporaryPackage(FalloutPackageCommandFieldInvocation invocation, FalloutPackageRuntimeObject package) => throw new InvalidOperationException("No temporary package.");
         public void RequireExtra(FalloutPackageCommandFieldInvocation invocation, FalloutPackageExtraReference extra) => throw new InvalidOperationException("Actual target is null.");
-        public void Dispose() { Registry.Dispose(); Reference.Dispose(); }
+        public void Dispose() { Scene?.Retire(); Registry.Dispose(); Reference.Dispose(); }
     }
 
     private sealed partial class ReferencePositionFixture

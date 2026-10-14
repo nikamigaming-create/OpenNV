@@ -91,6 +91,7 @@ internal sealed partial class FalloutReferenceScripts
         FalloutCompiledExecutionCursor? cursor = null, Func<bool>? canContinue = null,
         string? executionScope = null, IFalloutCompiledEventLocalAuthority? localAuthority = null)
     {
+        world.RequireNoFunctionalFailure();
         var winning = records.GetEffective(program.Source.FormKey);
         if (winning.Plugin != program.Source.Plugin || winning.HeaderOffset != program.Source.HeaderOffset)
             throw new InvalidDataException("Compiled invocation differs from its winning source owner.");
@@ -154,7 +155,7 @@ internal sealed partial class FalloutReferenceScripts
                 while (true)
                 {
                     bool moved;
-                    try { moved = enumerator.MoveNext(); }
+                    try { world.RequireNoFunctionalFailure(); moved = enumerator.MoveNext(); }
                     catch (Exception failure) { context?.Fail(failure); throw; }
                     if (!moved) { context?.Returned(); yield break; }
                     yield return enumerator.Current;
@@ -178,7 +179,7 @@ internal sealed partial class FalloutReferenceScripts
             while (true)
             {
                 bool moved;
-                try { moved = instructions.MoveNext(); }
+                try { world.RequireNoFunctionalFailure(); moved = instructions.MoveNext(); }
                 catch (Exception error)
                 {
                     if (error.Message.StartsWith($"Compiled {program.Source.FormKey} at SCDA offset ", StringComparison.Ordinal))

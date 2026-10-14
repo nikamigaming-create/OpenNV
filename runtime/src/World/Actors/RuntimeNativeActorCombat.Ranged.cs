@@ -464,6 +464,7 @@ internal sealed partial class RuntimeNativeActorCombat
                     direction, spreadDegrees, handling.NextShotRandomUnit);
                 var flight = effects.PrepareProjectile(shot.Projectile, _context!.Gravity,
                     origin, projectileDirection, _mask, _enemyRayExclusions!);
+                flight.BindGameplayWorld(_world);
                 flight.OnContact = contact => ApplyProjectileTargetContact(player, shot, damage, contact);
                 if (shot.Projectile.ExplosionSource is not null)
                     flight.OnDetonate = point => ApplyEnemyProjectileDetonation(player, shot, explosionDamage!.Value, point);

@@ -27,21 +27,25 @@ internal sealed partial class FalloutReferenceWorld
         RequireStandaloneControlPublication();
         if (_sourcePlayerReferencePosition is not null || _sourceReferenceChanges is not null)
             throw new InvalidOperationException("Source reference position construction was replayed.");
-        if (_processCommonRestore is not null)
-            throw new NotSupportedException("source-reference-position-cold-World-bindings-unbound");
         var fields = _sourcePackageFields[_enginePlayer];
         var scene = CampaignStandalonePlayerScene;
         var owned = records.OwnedSource ?? throw new NotSupportedException("source-reference-position-owned-image-unbound");
         var source = FalloutExecutableStringTable.ReadReferencePosition(owned.FalloutExecutablePath, fields.Source);
+        var formFiles = FalloutExecutableStringTable.ReadReferenceFormFileAssociation(owned.FalloutExecutablePath, source);
+        var cells = FalloutExecutableStringTable.ReadInitialPlacementCells(owned.FalloutExecutablePath, source);
+        if (_processCommonRestore is { } cold)
+        {
+            RestoreStandaloneReferencePositionOwners(source, formFiles, cells, cold.ReferenceOwners ??
+                throw new InvalidDataException("Cold World omitted its authoritative reference owners."));
+            return;
+        }
         _sourcePlayerReferencePosition = new(source, records, scene.Stack, fields.Actor,
             scene.Process, scene.Constructor, RequireActualReferencePosition);
         _sourceReferenceChanges = new(source, scene.Stack, scene.Process, _sourceReferenceChangeConstructor,
             RequireActualReferencePosition);
-        var formFiles = FalloutExecutableStringTable.ReadReferenceFormFileAssociation(owned.FalloutExecutablePath, source);
         _sourceReferenceFormFiles = new(formFiles, records, scene.Stack, scene.Process, scene.Constructor,
             fields.Actor, RequireActualReferencePosition);
         scene.ThreadContext.BindReferenceChangeFlags(source);
-        var cells = FalloutExecutableStringTable.ReadInitialPlacementCells(owned.FalloutExecutablePath, source);
         _sourceInitialPlacementCells = new(cells, records, scene.Stack, ActualSourceProcessIdentity,
             _sourceInitialPlacementConstructor, RequireActualInitialPlacementCells);
         WithActualReferencePosition(FalloutReferencePositionIngress.ControllerConstruction, invocation =>
@@ -123,6 +127,13 @@ internal sealed partial class FalloutReferenceWorld
         if (!HasStandalonePlayerScene) return;
         var owner = _sourcePlayerReferencePosition ??
             throw new NotSupportedException("source-reference-position-owner-unbound");
+        if (_processCommonRestore is not null)
+        {
+            if (owner.LastPrefix is not { Returned: true } || _sourceReferenceBaseAssignment is not { Returned: true } ||
+                !_sourceLinkedPlayerParentConstructed || _sourceEarlyControllerFactory is null)
+                throw new InvalidDataException("Cold startup lacks its restored reference/Base/Parent/controller owners.");
+            return;
+        }
         var consumers = new SourceReferencePositionConsumers(this);
         PublishInitialReferenceBase();
         WithActualReferencePosition(FalloutReferencePositionIngress.ConstructorStartup,

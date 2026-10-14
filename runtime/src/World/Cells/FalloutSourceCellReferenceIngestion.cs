@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
@@ -5,7 +6,7 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.World.Cells;
 
 // The graph authenticates source identities. Registration, file traversal,
-// the winning-file filter and head insertion provide the list's actual order.
+// the selected provider filter and head insertion provide the actual list order.
 // Scene order and runtime FormID order never enter this owner.
 internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedCellReferenceIngestion, IDisposable
 {
@@ -21,6 +22,8 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
     private readonly Dictionary<FalloutFormKey, HashSet<FalloutFormKey>> _rawParents = new(FalloutFormKeyComparer.Instance);
     private readonly Dictionary<FalloutFormKey, Plan> _plans = new(FalloutFormKeyComparer.Instance);
     private readonly Dictionary<FalloutFormKey, long> _entered = new(FalloutFormKeyComparer.Instance);
+    private readonly Dictionary<FalloutFormKey, FalloutPlugin> _temporaryProviders = new(FalloutFormKeyComparer.Instance);
+    private string? _providerHeadersSha256;
     private int _thread = Environment.CurrentManagedThreadId;
     private object? _nativeOwner;
     private bool _indexed, _disposed, _busy;
@@ -73,6 +76,7 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
         var current = ReadPlan(cell).Evidence;
         if (evidence.Source != current.Source || evidence.Stack != current.Stack || evidence.Cell != current.Cell ||
             evidence.GraphSha256 != current.GraphSha256 || evidence.InputsSha256 != current.InputsSha256 ||
+            evidence.ProviderHeadersSha256 != current.ProviderHeadersSha256 ||
             !evidence.Inputs.SequenceEqual(current.Inputs))
             throw new InvalidDataException("Cold CELL loader provenance differs from the actual unchanged source stream.");
     }
@@ -95,7 +99,8 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
                     throw _failure;
                 }
                 if (step.Disposition is FalloutSourceCellIngestionDisposition.InsertPersistent or
-                    FalloutSourceCellIngestionDisposition.InsertWinningTemporary)
+                    FalloutSourceCellIngestionDisposition.InsertWinningTemporary or
+                    FalloutSourceCellIngestionDisposition.InsertSelectedTemporary)
                     yield return step.Reference;
             }
         }
@@ -106,10 +111,35 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
     {
         if (_indexed) return;
         var expected = 0;
+        using var providerHeaders = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         foreach (var context in _records.Plugins)
         {
             if (context.LoadOrderIndex != expected++)
                 throw new InvalidDataException("Source CELL files lost their actual configured registration sequence.");
+            if (_source.EngineSha256 == FalloutSourceMainFamily.Fallout3)
+            {
+                var header = context.Plugin.Records.FirstOrDefault() ??
+                    throw new InvalidDataException("Source temporary provider registration has no actual file header.");
+                if (header.Signature != "TES4")
+                    throw new InvalidDataException("Source temporary provider registration lost its first TES4 header.");
+                var body = header.ReadData();
+                providerHeaders.AppendData(JsonSerializer.SerializeToUtf8Bytes(new
+                { context.Plugin.Name, context.Sha256, context.LoadOrderIndex, header.HeaderOffset, BodySha256 = Hash(body) }));
+                // The selected dispatcher consumes the first ONAM field, adjusts
+                // each ID through this file's masters and replaces prior entries.
+                var onam = header.ReadSubrecords().FirstOrDefault(field => field.Signature == "ONAM");
+                if (onam.Signature is not null)
+                {
+                    if (onam.Data.Length % sizeof(uint) != 0)
+                        throw new InvalidDataException("TES4 ONAM provider IDs have an incomplete original word.");
+                    for (var ordinal = 0; ordinal < onam.Data.Length; ordinal += sizeof(uint))
+                    {
+                        var raw = BinaryPrimitives.ReadUInt32LittleEndian(onam.Data.Span[ordinal..]);
+                        var key = context.Plugin.AdjustFormId(raw);
+                        _temporaryProviders[key] = context.Plugin;
+                    }
+                }
+            }
             long prior = -1;
             foreach (var record in context.Plugin.Records)
             {
@@ -137,6 +167,8 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
                 parents.Add(parent);
             }
         }
+        if (_source.EngineSha256 == FalloutSourceMainFamily.Fallout3)
+            _providerHeadersSha256 = Convert.ToHexString(providerHeaders.GetHashAndReset()).ToLowerInvariant();
         _indexed = true;
     }
 
@@ -169,6 +201,11 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
                     refusal = "Source CELL child file has no registered CELL declaration; its loader file-list producer is unowned.";
                 else if (!seenInFile.Add((input.Context.LoadOrderIndex, record.FormKey)))
                     refusal = "Repeated placed-reference bodies in one original file require the actual object/winner table consumer.";
+                else if (group == 9 && _source.EngineSha256 == FalloutSourceMainFamily.Fallout3 &&
+                    _temporaryProviders.TryGetValue(record.FormKey, out var provider) && !ReferenceEquals(provider, record.Plugin))
+                    kind = FalloutSourceCellIngestionDisposition.SkipUnselectedTemporaryProvider;
+                else if (group == 9 && _source.EngineSha256 == FalloutSourceMainFamily.Fallout3 && constructed.Contains(record.FormKey))
+                    kind = FalloutSourceCellIngestionDisposition.SkipAlreadyConstructed;
                 else if (_rawParents[record.FormKey].Count != 1)
                     refusal = "Source override moves ParentCELL before initial load; the cross-CELL loader transaction is unowned.";
                 else if (record.IsDeleted)
@@ -178,18 +215,22 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
                 else if (!_records.TryGetWinner(record.FormKey, out var winner) || winner.IsDeleted ||
                     FalloutCellSceneReader.ParentCell(winner) != cell.Source.Cell || !selected.TryGetValue(record.FormKey, out var actual))
                     refusal = "Source initial reference has no admitted final winning CELL membership.";
-                else if (group == 9 && !ReferenceEquals(winner.Plugin, record.Plugin))
+                else if (group == 9 && _source.EngineSha256 != FalloutSourceMainFamily.Fallout3 &&
+                    !ReferenceEquals(winner.Plugin, record.Plugin))
                     kind = FalloutSourceCellIngestionDisposition.SkipEarlierTemporaryProvider;
                 else
                 {
-                    if (group == 9 && winner.HeaderOffset != record.HeaderOffset)
+                    if (group == 9 && _source.EngineSha256 != FalloutSourceMainFamily.Fallout3 &&
+                        winner.HeaderOffset != record.HeaderOffset)
                         refusal = "Original temporary winning-file selection has duplicate source positions.";
                     else
                     {
                         var positions = record.ReadSubrecords().Where(field => field.Signature == "DATA").ToArray();
                         var basis = FalloutDialogueTopic.RequiredForm(record, "NAME");
-                        if (positions.Length == 1 && positions[0].Data.Length == 24 &&
-                            _records.TryGetEffective(basis, out var sourceBase) && !sourceBase.IsDeleted)
+                        var liveBase = _records.TryGetEffective(basis, out var sourceBase) ? !sourceBase.IsDeleted :
+                            record.Signature == "REFR" && _source.HasEngineConstructedStaticBase(_records, basis) &&
+                            actual.Base == basis && actual.BaseSha256 is null && FalloutReferencePrimitive.Read(record) is not null;
+                        if (positions.Length == 1 && positions[0].Data.Length == 24 && liveBase)
                         {
                             if (ReferenceEquals(winner, record) && (actual.Flags != record.Flags || actual.Sha256 != digest || actual.Base != basis))
                                 throw new InvalidDataException("CELL stream changed its actual winning reference bytes/base.");
@@ -197,9 +238,12 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
                                 FalloutSourceCellIngestionDisposition.RetainPersistentMembership :
                                 FalloutSourceCellIngestionDisposition.SkipAlreadyConstructed : group == 8 ?
                                 FalloutSourceCellIngestionDisposition.InsertPersistent :
-                                FalloutSourceCellIngestionDisposition.InsertWinningTemporary;
+                                _source.EngineSha256 == FalloutSourceMainFamily.Fallout3 ?
+                                    FalloutSourceCellIngestionDisposition.InsertSelectedTemporary :
+                                    FalloutSourceCellIngestionDisposition.InsertWinningTemporary;
                         }
-                        else refusal = "Source initial reference has no admitted NAME/DATA and live base load result.";
+                        else refusal = "Source initial reference has no admitted NAME/DATA and live base load result: " +
+                            record.FormKey + " in " + input.Context.Plugin.Name + " at " + record.HeaderOffset + ".";
                     }
                 }
                 steps.Add(new(input.Context.Plugin.Name, input.Context.Sha256, input.Context.LoadOrderIndex,
@@ -212,7 +256,7 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
                 input.Record.Flags, input.Group, Hash(input.Record.ReadData()), FalloutSourceCellIngestionDisposition.Refused,
                 "Visible-distant CELL references have an independent source registration consumer."));
         var evidence = new FalloutSourceCellIngestionEvidence(_source, _stack, cell.Source, cell.GraphSha256,
-            Hash(JsonSerializer.SerializeToUtf8Bytes(steps)), steps.ToArray());
+            Hash(JsonSerializer.SerializeToUtf8Bytes(steps)), steps.ToArray(), _providerHeadersSha256);
         Validate(evidence);
         var plan = new Plan(evidence, evidence.Inputs); _plans.Add(cell.Source.Cell, plan); return plan;
     }
@@ -230,6 +274,9 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
             evidence.InputsSha256 != Hash(JsonSerializer.SerializeToUtf8Bytes(evidence.Inputs)))
             throw new InvalidDataException("Source CELL ingestion omitted exact ordered source bodies or refusals.");
         evidence.Source.Validate();
+        if (evidence.Source.EngineSha256 == FalloutSourceMainFamily.Fallout3 ?
+            !FalloutAdvancementRuntimeReceipt.Digest(evidence.ProviderHeadersSha256) : evidence.ProviderHeadersSha256 is not null)
+            throw new InvalidDataException("CELL ingestion changed its selected registered TES4 provider headers.");
         FalloutCellExtraProcessState.RequireCell(evidence.Cell, evidence.Cell.Cell);
     }
 
@@ -248,6 +295,6 @@ internal sealed class FalloutSourceCellReferenceIngestion : IFalloutSourceOwnedC
         if (_disposed) return;
         if (_busy || _thread != Environment.CurrentManagedThreadId)
             throw new InvalidOperationException("Source CELL loader cannot retire an entered or foreign-thread stream.");
-        _disposed = true; _plans.Clear(); _children.Clear(); _cellFiles.Clear(); _rawParents.Clear();
+        _disposed = true; _plans.Clear(); _children.Clear(); _cellFiles.Clear(); _rawParents.Clear(); _temporaryProviders.Clear();
     }
 }

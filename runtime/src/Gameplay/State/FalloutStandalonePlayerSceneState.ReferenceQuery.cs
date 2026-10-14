@@ -31,16 +31,22 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         }
     }
 
-    private sealed class CurrentReferenceGraph(FalloutStandalonePlayerSceneState state) : IFalloutSourceSceneReferenceGraph
+    private sealed class CurrentReferenceGraph(FalloutStandalonePlayerSceneState state,
+        Func<FalloutStandaloneSceneReferenceQueryCall?>? readCall = null,
+        Action<FalloutStandaloneSceneReferenceQueryCall>? writeCall = null,
+        Action? requireScope = null) : IFalloutSourceSceneReferenceGraph
     {
+        private FalloutStandaloneSceneReferenceQueryCall? CurrentCall => readCall is null ? state._referenceQuery : readCall();
         public FalloutStandalonePlayerSceneSource Source => state.Source;
         public Guid Process => state._process;
         public void RequireCurrent()
         {
             state.RequireThread(); ObjectDisposedException.ThrowIf(state._retired, state);
-            if (!state._writing || state._referenceQuery is not { Returned: false, Failure: null } query ||
-                query.Process != Process || state._prelude?.Step != FalloutStandaloneScenePreludeStep.ReferenceQuery)
+            if (!state._writing || CurrentCall is not { Returned: false, Failure: null } query || query.Process != Process)
                 throw new InvalidOperationException("Reference query lost its actual entered source child.");
+            if (requireScope is not null) requireScope();
+            else if (state._prelude?.Step != FalloutStandaloneScenePreludeStep.ReferenceQuery)
+                throw new InvalidOperationException("Initial reference query left its entered source prefix.");
         }
         public FalloutSourceSceneNode? ReadForcedFirstPerson()
         {
@@ -55,8 +61,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             // The explicit source argument bypasses view selection and TLS.
             // Constructor-null and an actual returned release remain null;
             // a historical live field never becomes a current native root.
-            state._referenceQuery = state._referenceQuery! with
-            { FirstPerson = result, GetterReturned = true, Changed = state.Next() };
+            var returned = CurrentCall! with { FirstPerson = result, GetterReturned = true, Changed = state.Next() };
+            if (writeCall is null) state._referenceQuery = returned;
+            else writeCall(returned);
             return result;
         }
         public FalloutFormKey ReadPlayerReference() =>
@@ -95,6 +102,12 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (saved.ColdHandoff is { } handoff && (query.Process == handoff.CurrentProcess
             ? query.Entered <= handoff.Changed : query.Changed >= handoff.Changed))
             throw new InvalidDataException("Scene reference query moved across its actual cold process handoff.");
+        ValidateForcedFirstPersonField(saved, query);
+    }
+
+    private static void ValidateForcedFirstPersonField(FalloutStandalonePlayerSceneSnapshot saved,
+        FalloutStandaloneSceneReferenceQueryCall query)
+    {
         var history = saved.FirstPersonHistory.Where(owner => owner.Stored < query.Entered)
             .OrderBy(owner => owner.Stored).ToArray();
         if (history.Select(owner => owner.Stored).Distinct().Count() != history.Length)

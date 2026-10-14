@@ -77,6 +77,7 @@ internal static partial class SourceMainScriptCallerContracts
         internal float Distance;
         internal Action? ModelCallback;
         internal Func<FalloutSourceSceneNode?>? ModelOverride;
+        internal Func<FalloutIdleSelectedObject?>? SelectedObjectOverride;
         internal FalloutIdlePackageRead? PackageRead;
         public FalloutIdlePackageRead? SelectedPackageRead => PackageRead;
         private int _models, _settings;
@@ -91,7 +92,7 @@ internal static partial class SourceMainScriptCallerContracts
             if (ModelOverride is not null) return ModelOverride();
             return NullModel || _models == 2 && DisappearSecondModel ? null : _model;
         }
-        public FalloutIdleSelectedObject? ReadSelectedObject() { Call("object"); return null; }
+        public FalloutIdleSelectedObject? ReadSelectedObject() { Call("object"); return SelectedObjectOverride?.Invoke(); }
         public FalloutIdleAnimationContext? ReadAnimation() { Call("animation"); return Animation; }
         public FalloutIdleSelectedObject? ReadAlternateObject() { Call("alternate-object"); return null; }
         public uint? ReadBoundRadius(FalloutSourceSceneNode model) { Call("bound"); return 0x42800000; }

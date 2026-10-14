@@ -136,6 +136,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _PhysicsProcess(double delta)
     {
+        if (_world.FunctionalFailure is not null) { StopPackageMotion(); return; }
         _enemyMuzzle?.Advance(delta);
         if (Dead) { RestoreDeath(); return; }
         if (_context is null || !_state.Enabled || _state.Unconscious) return;

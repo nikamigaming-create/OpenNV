@@ -37,7 +37,7 @@ public partial class NativeDialogueMenuAudit : Node
             var conversation = new FalloutConversation(records, quests, conditions.Evaluate,
                 (info, begin) => scripts.ExecuteResult(info, speaker.FormKey, begin),
                 ownedResults: (info, begin) => scripts.ExecuteResultOwned(info, speaker.FormKey, begin),
-                resultCaller: () => speaker.FormKey);
+                resultCaller: () => speaker.FormKey, requireGameplayAdmission: world.RequireNoFunctionalFailure);
             Exception? failure = null;
             var menu = new NativeOwnedDialogueMenu(conversation.CompleteResponse, error => failure ??= error);
             AddChild(menu);

@@ -33,7 +33,7 @@ internal sealed partial class FalloutActorMoverState
     internal Guid Constructor { get; }
     internal FalloutActorMoverOperation? LastPackageReset { get; private set; }
     internal string? SaveBlocker => _retired ? "source-Actor-mover-retired" : _busy ? "source-Actor-mover-in-flight" :
-        _failure ??
+        _failure ?? _frameFailure ??
         _availability.Values.FirstOrDefault(value => !value.Available)?.Boundary;
     internal object State => new
     {
@@ -76,6 +76,7 @@ internal sealed partial class FalloutActorMoverState
         _observations.UnionWith(saved.Operations.Select(operation => (operation.Invocation.SourceCommand, operation.Kind, operation.InvalidatedLane)));
         _failure = saved.Operations.FirstOrDefault(operation => !operation.Returned)?.Failure;
         LastPackageReset = _operations.LastOrDefault(operation => operation.Kind == PackageResetKind);
+        RestorePlayerFrame(saved.PlayerFrame);
     }
 
     internal void BindActualInput(FalloutDirectInputState input)
@@ -138,7 +139,8 @@ internal sealed partial class FalloutActorMoverState
         RequireSnapshot();
         var saved = new FalloutActorMoverSnapshot(Schema, Source, Stack, Process, Factory, Constructor, _sequence, _values,
             Array.AsReadOnly(_constructorStores.ToArray()), Array.AsReadOnly(_availability.Values.ToArray()),
-            Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_operations.Select(Clone).ToArray()), _retired, _actor);
+            Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_operations.Select(Clone).ToArray()), _retired, _actor,
+            CapturePlayerFrame());
         Validate(saved, Source, Stack); return saved;
     }
     internal void Retire() { RequireSnapshot(); _retired = true; }

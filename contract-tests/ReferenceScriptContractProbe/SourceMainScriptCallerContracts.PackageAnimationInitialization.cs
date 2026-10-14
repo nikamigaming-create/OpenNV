@@ -24,6 +24,10 @@ internal static partial class SourceMainScriptCallerContracts
             Require(read is { Returned: true, Selection: FalloutPackageAnimationSelection.Process, Context: null, ViewRead.View: 1 } &&
                 viewCalls == 1 && commonCalls == 1 && read.ViewRead.Process != fields.Process,
                 "Animation did not borrow the current independent scene view before Common fallback.");
+            var beforePresentation = fields.Fields.Capture().Sequence;
+            Require(fields.Fields.BorrowReturnedAnimation(read.Invocation) == read && fields.Fields.Capture().Sequence == beforePresentation,
+                "Null-animation presentation replayed an initializer, package event or animation getter.");
+            Reject(() => fields.Fields.BorrowReturnedAnimation(read.Invocation with { SourceCommand = Guid.NewGuid() }));
             Reject(() => fields.Call(invocation => fields.Fields.InitializeConstructedPlayerAnimation(invocation, empty)));
             Require(fields.Fields.Capture().Operations.Count == 2,
                 "Repeated animation initialization entered another deferred constructor/setting receipt.");
@@ -36,6 +40,9 @@ internal static partial class SourceMainScriptCallerContracts
                     cold.Fields.Capture().Operations.Count == saved.Operations.Count &&
                     cold.Fields.LastAnimationInitialization!.Invocation.Process != cold.Process,
                     "Cold animation fields replayed initialization or rebound its historical Common identity.");
+                var retainedRead = cold.Fields.LastAnimationRead!;
+                Require(cold.Fields.BorrowReturnedAnimation(retainedRead.Invocation) == retainedRead,
+                    "Cold presentation refused its retained null animation or replayed its historical command.");
                 _ = cold.Call(invocation => cold.Fields.ReadAnimationContext(invocation, cold.ReadCommon, cold.ReadView));
                 saved = Roundtrip(cold.Fields.Capture());
                 common = cold.Actual.Common.Capture();

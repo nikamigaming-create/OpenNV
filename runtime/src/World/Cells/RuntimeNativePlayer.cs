@@ -307,6 +307,11 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled(); return;
         }
         var input = _configuration.Player.DesktopInput;
+        if (_playerPerceptionWorld?.FunctionalFailure is not null &&
+            !inputEvent.IsActionPressed(input.Cancel.Action) && !inputEvent.IsActionPressed(input.CaptureMouse.Action))
+        {
+            GetViewport().SetInputAsHandled(); return;
+        }
         if (_inputControls is null && !_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Q or Key.H } wheel)
         {
@@ -335,7 +340,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         }
         if (inputEvent.IsActionPressed(input.Cancel.Action))
         {
-            if (!_modalInput) OpenPauseMenu?.Invoke();
+            if (!_modalInput || _playerPerceptionWorld?.FunctionalFailure is not null) OpenPauseMenu?.Invoke();
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -362,7 +367,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled();
             return;
         }
-        if (_modalInput || !_lookingEnabled || Input.MouseMode != Input.MouseModeEnum.Captured ||
+        if (_playerPerceptionWorld?.FunctionalFailure is not null || _modalInput || !_lookingEnabled || Input.MouseMode != Input.MouseModeEnum.Captured ||
             inputEvent is not InputEventMouseMotion motion)
             return;
         if (_furniturePhase is 1 or 2 or 4) return;
@@ -382,12 +387,14 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal event Action<OpenNV.Runtime.Gameplay.State.FalloutPipBoyPage>? OpenPipBoyPage;
     internal event Action<bool>? OpenCombatWheel;
     internal event Action? OpenPauseMenu;
+    internal bool GameplayMutationBlocked => _playerPerceptionWorld?.FunctionalFailure is not null;
 
     public override void _PhysicsProcess(double delta)
     {
         PublishXrPointer();
         if (_xr is not null && GetTree().Paused) return;
-        if (_playerPhysical?.Failure is not null) { Velocity = Vector3.Zero; return; }
+        if (_playerPerceptionWorld?.FunctionalFailure is not null || _playerPhysical?.Failure is not null)
+        { Velocity = Vector3.Zero; return; }
         AdvanceExplosionExposure(delta);
         if (AdvancePlayerKnockdown(delta)) return;
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }

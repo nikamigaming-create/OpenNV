@@ -615,6 +615,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
+        RequireNoFunctionalFailure();
         _scriptManualSaves?.RequireCapture();
         ObjectDisposedException.ThrowIf(_disposed, this);
         PlayerMoves.RequireSettled();

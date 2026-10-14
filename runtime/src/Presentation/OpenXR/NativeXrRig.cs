@@ -139,8 +139,8 @@ internal sealed partial class NativeXrRig : Node3D
             { CloseCombatWheel?.Invoke(false); _heldWheel = null; _rightInputReady = false; _snapReady = false; }
             else MenuRequested?.Invoke();
         }
-        AdvanceCombatWheels(tracked, left, right, delta);
-        var modal = Modal?.Invoke() ?? _player is null;
+        if (_player?.GameplayMutationBlocked != true) AdvanceCombatWheels(tracked, left, right, delta);
+        var modal = (Modal?.Invoke() ?? _player is null) || _player?.GameplayMutationBlocked == true;
         var stick = left ? LeftGrip.GetVector2(NativeXrActions.Move) : Vector2.Zero;
         Movement = tracked && _calibrated && !modal && stick.Length() >= _configuration.Xr.MovementDeadzone ? stick.LimitLength() : Vector2.Zero;
         Sprint = left && LeftGrip.IsButtonPressed(NativeXrActions.Sprint);

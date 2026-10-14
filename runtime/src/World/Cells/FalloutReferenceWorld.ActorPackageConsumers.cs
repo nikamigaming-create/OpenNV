@@ -65,7 +65,12 @@ internal sealed partial class FalloutReferenceWorld
             finally { world._enteredActorMoverJoin = null; }
         }
         public FalloutActorFollowerExtraRead ReadFollowerExtra(FalloutPackageCommandFieldInvocation invocation)
-        { RequireCurrent(invocation); throw new NotSupportedException("source-Actor-package-current-follower-Extra-membership-owner-unbound"); }
+        {
+            RequireCurrent(invocation);
+            var source = world._sourceReferenceFollower ?? throw new NotSupportedException("source-Actor-package-follower-lookup-source-unbound");
+            return world.WithActualReferencePosition(FalloutReferencePositionIngress.PackageCommand,
+                current => world._sourcePlayerReferencePosition!.ReadFollowerExtra(current, source));
+        }
         public FalloutPackageRuntimeObject? ReadPlayerSpecialPackage(FalloutPackageCommandFieldInvocation invocation)
         { RequireCurrent(invocation); throw new NotSupportedException("source-package-current-Player-special-package-field-unbound"); }
         public void ClearPlayerSpecialPackage(FalloutPackageCommandFieldInvocation invocation, FalloutPackageRuntimeObject expected)

@@ -4,9 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--functional-failure-contracts"])
+{
+    SourceDeliveryPauseContracts.Run();
+    FunctionalFailureContracts.Run();
+    return;
+}
+
 if (args is ["--actor-package-assignment-contracts"])
 {
     SourceMainScriptCallerContracts.RunActorPackageAssignmentContracts();
+    SourceMainScriptCallerContracts.RunDataHandlerLoadingPreservationContracts();
+    SourceMainScriptCallerContracts.RunReferenceFollowerMembershipContracts();
     return;
 }
 
@@ -37,12 +46,21 @@ if (args is ["--reference-position-contracts"])
 if (args is ["--reference-parent-history-contracts"])
 {
     ParentHistoryContracts.Run();
+    ParentColdContracts.Run();
     return;
 }
 
 if (args is ["--audit-owned-reference-startup", var ownedReferenceStartup])
 {
     Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedReferenceStartup(ownedReferenceStartup);
+    return;
+}
+
+if (args is ["--audit-owned-reference-startup", var selectedDataRoot, var selectedCellText])
+{
+    var selectedCell = uint.Parse(selectedCellText, System.Globalization.NumberStyles.HexNumber,
+        System.Globalization.CultureInfo.InvariantCulture);
+    Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedReferenceStartup(selectedDataRoot, selectedCell);
     return;
 }
 
@@ -1604,8 +1622,13 @@ SourceMainScriptCallerContracts.RunEarlyControllerConvexGeometryContracts();
 SourceMainScriptCallerContracts.RunEarlyControllerContracts();
 SourceMainScriptCallerContracts.RunReferencePositionOwnershipContracts();
 ParentHistoryContracts.Run();
+ParentColdContracts.Run();
 SourceMainScriptCallerContracts.RunReferenceScriptExtraInitializationContracts();
 SourceMainScriptCallerContracts.RunActorPackageAssignmentContracts();
+SourceDeliveryPauseContracts.Run();
+FunctionalFailureContracts.Run();
+SourceMainScriptCallerContracts.RunDataHandlerLoadingPreservationContracts();
+SourceMainScriptCallerContracts.RunReferenceFollowerMembershipContracts();
 SourceMainScriptCallerContracts.RunPlayerPackageCommandFieldContracts();
 SourceMainScriptCallerContracts.RunPlayerPackageAnimationInitializationContracts();
 SourceMainScriptCallerContracts.RunPackageStateMutationContracts();

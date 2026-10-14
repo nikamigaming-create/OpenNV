@@ -161,6 +161,7 @@ internal partial class RuntimeNativePlayer
     {
         var pending = _pendingShotCount;
         _pendingShotCount = 0;
+        if (GameplayMutationBlocked) return;
         if (pending == 0) return;
         if (_firstPerson?.Weapon is not { } weapon || _modalInput ||
             _xr is { } xr && (!xr.RightGrip.GetHasTrackingData() || !xr.RightAim.GetHasTrackingData() || xr.PointAtPipBoy is not null ||

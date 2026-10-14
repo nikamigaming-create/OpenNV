@@ -15,6 +15,7 @@ internal sealed partial class RuntimeNativePlayerPackage
     private readonly Func<FalloutFormKey> _cell;
     private string? _packageHash;
     private FalloutScriptPackage? _package;
+    private FalloutSourcePackageAssignmentCall? _sourceCommandAttachment;
     private FalloutNifAnimatedNodePath? _animation;
     private FalloutIdleAnimationPlayback? _playback;
     private FalloutFormKey? _idle;
@@ -56,7 +57,7 @@ internal sealed partial class RuntimeNativePlayerPackage
         }
     }
 
-    internal FalloutFormKey? CurrentPackage => _package?.Form;
+    internal FalloutFormKey? CurrentPackage => _world.TryReadCurrentSourcePlayerPackage(out var package) ? package : _package?.Form;
     internal FalloutPlayerPackageAudioSnapshot CaptureAudio()
     {
         RequireHealthy();
@@ -66,35 +67,44 @@ internal sealed partial class RuntimeNativePlayerPackage
         return new(_soundEvents.Capture(), _soundRandom.State);
     }
 
-    internal object State => new
+    internal object State
     {
-        package = _package?.Form.ToString(),
-        idle = _idle?.ToString(),
-        sequence = _animation?.Sequence.Name,
-        elapsedSeconds = _elapsed,
-        sourceSeconds = _playback?.SourceSeconds,
-        additionalLoops = _playback?.AdditionalLoops,
-        completedRepeats = _playback?.CompletedRepeats,
-        loopStart = _playback?.LoopStart,
-        loopEnd = _playback?.LoopEnd,
-        eventKind = _eventKind,
-        exitAction = _exitAction,
-        resultReceipts = _results.Values,
-        failure = _failure,
-        pendingPackage = _pendingPackage?.Form.ToString(),
-        animatedPathNodes = _animation?.AnimatedPathNodes,
-        unboundOtherTargets = _animation?.UnboundOtherTargets,
-        complete = _complete,
-        locationReference = _package?.LocationReference?.ToString(),
-        locationRadius = _package?.LocationRadius,
-        pendingPlayerMove = _world.PlayerMoves.Pending,
-        textKeyEvents = _textKeyEvents,
-        unboundTextKeys = _unboundTextKeys,
-        sounds = _sounds?.State,
-        unbound = new[] { "unreached-destination-traversal", "editor-location-semantics",
+        get
+        {
+            var sourcePackage = _world.ObserveCurrentSourcePlayerPackage();
+            return new
+            {
+                package = (sourcePackage is null ? _package?.Form : sourcePackage.Primary?.Package ?? sourcePackage.Current.Package)?.ToString(),
+                sourcePackage,
+                sourceCommand = _sourceCommandAttachment?.Invocation.SourceCommand,
+                idle = _idle?.ToString(),
+                sequence = _animation?.Sequence.Name,
+                elapsedSeconds = _elapsed,
+                sourceSeconds = _playback?.SourceSeconds,
+                additionalLoops = _playback?.AdditionalLoops,
+                completedRepeats = _playback?.CompletedRepeats,
+                loopStart = _playback?.LoopStart,
+                loopEnd = _playback?.LoopEnd,
+                eventKind = _eventKind,
+                exitAction = _exitAction,
+                resultReceipts = _results.Values,
+                failure = _failure,
+                pendingPackage = _pendingPackage?.Form.ToString(),
+                animatedPathNodes = _animation?.AnimatedPathNodes,
+                unboundOtherTargets = _animation?.UnboundOtherTargets,
+                complete = _complete,
+                locationReference = _package?.LocationReference?.ToString(),
+                locationRadius = _package?.LocationRadius,
+                pendingPlayerMove = _world.PlayerMoves.Pending,
+                textKeyEvents = _textKeyEvents,
+                unboundTextKeys = _unboundTextKeys,
+                sounds = _sounds?.State,
+                unbound = new[] { "unreached-destination-traversal", "editor-location-semantics",
             "player-topic-voice", "body-animation-targets", "matched-event-timing" },
-        parity = "unmeasured"
-    };
+                parity = "unmeasured"
+            };
+        }
+    }
 
     internal void Apply(FalloutFormKey? form, FalloutReferenceScriptEffect? sourceEffect = null)
     {
@@ -123,10 +133,15 @@ internal sealed partial class RuntimeNativePlayerPackage
         if (command.Package.ObjectId == 0 || command.Result != true ||
             command.Step != FalloutSourcePackageAssignmentStep.Returned || command.Invocation.Actor.Reference != _stack.RuntimeFormKey(0x14))
             throw new InvalidDataException("Player presentation lost its actual returned source package command.");
-        // Synchronous source execution already owns event/result/idle effects.
-        // Presentation may borrow that state, but its current animation owner
-        // must be associated before this legacy driver can attach it.
-        throw new NotSupportedException("source-returned-package-presentation-animation-publication-unbound");
+        var animation = _world.BorrowReturnedPackageAnimation(command);
+        if (animation.Context is not null)
+            throw new NotSupportedException("source-returned-package-nonnull-animation-presentation-unbound");
+        if (_package is not null || _animation is not null || _pendingPackage is not null)
+            throw new InvalidOperationException("Player package presentation has conflicting source and legacy owners.");
+        // The actual selected null context has no idle to project. The source
+        // command already committed package/event effects; do not replay them
+        // through Assign, Start or the legacy idle clock.
+        _sourceCommandAttachment = command;
     }
 
     private void ApplyCore(FalloutFormKey? form)
@@ -405,6 +420,12 @@ internal sealed partial class RuntimeNativePlayerPackage
     {
         RequireHealthy();
         if (!double.IsFinite(delta) || delta < 0) throw new ArgumentOutOfRangeException(nameof(delta));
+        if (_sourceCommandAttachment is { } command)
+        {
+            if (_world.BorrowReturnedPackageAnimation(command).Context is not null)
+                throw new NotSupportedException("source-returned-package-nonnull-animation-presentation-unbound");
+            return;
+        }
         if (_world.PlayerMoves.Pending) return;
         _textKeyEvents.Clear();
         try { AdvanceCore(delta); }

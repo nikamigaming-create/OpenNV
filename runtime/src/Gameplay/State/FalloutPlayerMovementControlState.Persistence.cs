@@ -39,11 +39,11 @@ internal sealed partial class FalloutPlayerMovementControlState
             (saved.CacheStores - call.CacheStores) % 2 != 0 || !Enum.IsDefined(call.Step))
             throw new InvalidDataException("Player movement/control lost its actual invocation, arguments or entered/returned prefix.");
         ValidateInhibition(saved, call);
-        if (call.Step == FalloutPlayerMovementControlStep.Inhibition)
+        if (call.Step == FalloutPlayerMovementControlStep.Inhibition || call.Inhibited == true)
         {
             if (call.InputFactory is not null || call.InputWindow is not null || call.InputProvider is not null ||
                 call.CacheStores != 0 || call.MouseReads.Count != 0 || HasLaterReads(call))
-                throw new InvalidDataException("Failed shared inhibition admitted later source input/cache/getter work.");
+                throw new InvalidDataException("The inhibition branch admitted skipped source input/cache/getter work.");
             return;
         }
         if (call.InputFactory is null)
@@ -149,7 +149,8 @@ internal sealed partial class FalloutPlayerMovementControlState
     {
         var reads = call.InhibitionReads ?? throw new InvalidDataException("Player control call lost its ordered inhibition read prefix.");
         if (reads.Count > 4 || reads.Count != 0 && saved.InhibitionOwner is null ||
-            call.Step != FalloutPlayerMovementControlStep.Inhibition && (call.Inhibited != false || reads.Count != 4))
+            call.Step != FalloutPlayerMovementControlStep.Inhibition &&
+                (call.Inhibited is null || call.Inhibited == true && !call.Returned || call.Inhibited == false && reads.Count != 4))
             throw new InvalidDataException("Player control call skipped its shared current inhibition predicate.");
         for (var index = 0; index < reads.Count; ++index)
         {
@@ -161,9 +162,14 @@ internal sealed partial class FalloutPlayerMovementControlState
                 read.Lane != (FalloutPlayerInhibitionLane)index || read.Revision < 6 ||
                 index > 0 && (reads[index - 1].Value != 0 || read.Factory != reads[0].Factory || read.Revision != reads[0].Revision))
                 throw new InvalidDataException("Player movement inhibition changed actual caller/factory/order or historical getter identity.");
+            var writer = owner.History.LastOrDefault(entry => entry.Lane == read.Lane && entry.Changed <= read.Revision &&
+                entry.Operation != FalloutPlayerInhibitionOperation.SelectedVoidCallback);
+            if (read.Revision > owner.Sequence || writer is null || writer.Value != read.Value ||
+                writer.Operation == FalloutPlayerInhibitionOperation.UnownedWriter)
+                throw new InvalidDataException("Player movement inhibition differs from its actual available historical byte writer.");
         }
         if (call.Inhibited is { } result && (reads.Count == 0 || result != (reads[^1].Value != 0) || !result && reads.Count != 4) ||
-            call.Inhibited == true && call.Failure != InhibitedBoundary ||
+            call.Inhibited == true && call.Step is not (FalloutPlayerMovementControlStep.Inhibition or FalloutPlayerMovementControlStep.Returned) ||
             saved.InhibitionOwner is null && call.Failure != InhibitionOwnerBoundary)
             throw new InvalidDataException("Player movement inhibition fabricated a source Boolean or missed its actual unowned branch.");
     }

@@ -181,9 +181,10 @@ internal static class ActorProcessContracts
         Reject(() => cold.ContinueSourceFactory(Npc, 1, "authored-original-high-factory-entry"));
         Reject(() => Manager(declaration, coldPerception, _ => { }, saved with
         { Actors = saved.Actors.Select(actor => actor.Source.Reference == Npc ? actor with { Source = actor.Source with { BaseSha256 = Digest("foreign winner") } } : actor).ToArray() }));
-        // These are actual retained failed owners, so disposal must refuse;
-        // there is no native handle or fabricated native cleanup callback.
-        Reject(owner.Dispose); Reject(cold.Dispose);
+        // The actual callback has unwound. Managed failed history does not
+        // invent a native resource or require semantic factory completion.
+        owner.Dispose(); cold.Dispose(); owner.Dispose(); cold.Dispose();
+        Reject(() => owner.Read(Npc)); Reject(() => cold.Read(Npc));
     }
     private static FalloutActorProcessManager Manager(FalloutActorProcessDeclaration source, FalloutActorPerception perception,
         Action<FalloutActorProcessFactorySnapshot> copy, FalloutActorProcessesSnapshot? restore = null,

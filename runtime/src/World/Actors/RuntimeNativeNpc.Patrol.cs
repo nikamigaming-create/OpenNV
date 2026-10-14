@@ -23,6 +23,7 @@ internal partial class RuntimeNativeNpc
 
     public override void _PhysicsProcess(double delta)
     {
+        if (_aiWorld?.FunctionalFailure is not null) return;
         Combat?.StopPackageMotion();
         if (_findFurniture is not null) AdvanceFindFurniture(delta);
         if (_sandboxSource is not null) { AdvanceSandbox(delta); return; }

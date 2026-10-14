@@ -6,9 +6,9 @@ namespace OpenNV.Runtime.World.Cells;
 internal sealed partial class FalloutReferenceWorld
 {
     private FalloutActorPackageAssignmentSource? _sourceActorPackageAssignment;
+    private FalloutReferenceFollowerSource? _sourceReferenceFollower;
     private FalloutSourceDataHandlerLoadingState? _sourceDataHandlerLoading;
     private readonly Guid _sourceDataHandlerConstructor = Guid.NewGuid();
-    private readonly Guid _sourceRecordGraphBinding = Guid.NewGuid();
     private FalloutDataHandlerLoadingInvocation? _enteredDataHandlerLoading;
     private FalloutActorPackageAssignmentCall? _currentActorPackageAssignment;
     private FalloutActorMoverResetJoin? _enteredActorMoverJoin;
@@ -26,6 +26,8 @@ internal sealed partial class FalloutReferenceWorld
         var owned = records.OwnedSource ?? throw new NotSupportedException("source-Actor-package-owned-image-unbound");
         var source = FalloutExecutableStringTable.ReadActorPackageAssignment(owned.FalloutExecutablePath, fields.Source);
         _sourceActorPackageAssignment = source;
+        _sourceReferenceFollower = FalloutExecutableStringTable.ReadReferenceFollowerExtra(
+            owned.FalloutExecutablePath, reference.Source);
         ProcessCommon.BindActorPackageAssignment(source, fields.Actor.Reference, fields.Epoch, process =>
         {
             RequireStandaloneControlPublication();
@@ -34,23 +36,31 @@ internal sealed partial class FalloutReferenceWorld
                 process.Process != fields.Process || reference.LastPrefix is not { Returned: true })
                 throw new InvalidOperationException("Actor assignment fields left the actual initial Common/reference prefix.");
         });
+        var savedLoading = _processCommonRestore is { } cold ? cold.ReferenceOwners?.DataHandlerLoading ??
+            throw new InvalidDataException("Cold World omitted its actual DataHandler loading history.") : null;
         var loading = new FalloutSourceDataHandlerLoadingState(source, fields.Stack, ActualSourceProcessIdentity,
-            _sourceDataHandlerConstructor, RequireActualDataHandlerLoading);
+            _sourceDataHandlerConstructor, RequireActualDataHandlerLoading, savedLoading);
         _sourceDataHandlerLoading = loading;
-        // This retains the actual selected record-graph input. It does not
-        // invent an original DataHandler loader invocation or a returned zero.
-        loading.RetainUnqualifiedRecordLoadPrefix(_sourceRecordGraphBinding, owned.StackId, () =>
+        if (savedLoading is not null)
+            loading.BindCurrentIndexedRecords(records, records.LoadReceipt, RequireRecords);
+        else
+            loading.PreserveIndexedRecordPrefix(FalloutExecutableStringTable.ReadDataHandlerLoadingPreservation(
+                owned.FalloutExecutablePath, source), records, records.LoadReceipt, RequireRecords);
+
+        void RequireRecords()
         {
             RequireStandaloneControlPublication();
             if (!ReferenceEquals(records.OwnedSource, owned) || !ReferenceEquals(_sourceDataHandlerLoading, loading) ||
                 loading.RuntimeProcess != ActualSourceProcessIdentity || _enteredPackageCommand is not null)
                 throw new InvalidOperationException("DataHandler prefix lost its actual selected records/World binding.");
-        });
+            records.RequireLiveLoadReceipt(records.LoadReceipt);
+        }
     }
 
     private FalloutDataHandlerLoadingRead ReadActualDataHandlerLoading(FalloutPackageCommandFieldInvocation command)
     {
         RequireActualSourcePackageCommand(command);
+        records.RequireLiveLoadReceipt(records.LoadReceipt);
         if (_enteredDataHandlerLoading is not null)
             throw new InvalidOperationException("DataHandler loading reentered its actual package cleanup.");
         var loading = _sourceDataHandlerLoading ?? throw new NotSupportedException("source-DataHandler-loading-field-owner-unbound");

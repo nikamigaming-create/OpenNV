@@ -3,11 +3,13 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutPlayerMovementControlSource(FalloutMainScriptCallerSource Main, string Contract)
 {
     internal const uint MoverMask = 0xcc00;
-    private const string Rules = "source-FO3-Player-movement-control/v2;" +
+    private const string Rules = "source-FO3-Player-movement-control/v3;" +
         "independent-Actor-physical-utility-before-movement-control-child;" +
         "actual-scene-Float32-and-zero-byte-and-masked-mover-word-and-zero-byte-arguments;" +
         "independent-source-mode-zero-selects-ordinary-control-arm;" +
         "four-Player-constructor-zero-inhibition-bytes-ordered-first-second-third-fourth;" +
+        "caller-local-Boolean-zero-before-mode-dispatch-and-pure-inhibition-predicate;" +
+        "inhibited-branch-returns-existing-local-false-before-current-input-cache-configuration-or-orientation-work;" +
         "nonnull-current-source-input-owner-before-two-independent-global-control-cache-zero-stores;" +
         "joystick-availability-byte-before-independent-suppression-byte;" +
         "mouse-arm-reads-current-cache-axes-one-X-two-Y-three-wheel-without-polling;" +

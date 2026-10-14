@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.World.Physics;
 
 internal sealed partial class FalloutEarlyController : IFalloutPlayerTransferController
 {
-    internal const string Schema = "source-early-detached-controller/v2";
+    internal const string Schema = "source-early-detached-controller/v3";
     private readonly FalloutEarlyControllerFactory _factory;
     private readonly FalloutEarlyControllerShapeLease _shapes;
     private readonly FalloutCharacterStateContext _state;
@@ -28,7 +28,7 @@ internal sealed partial class FalloutEarlyController : IFalloutPlayerTransferCon
     internal FalloutEarlyControllerPhantom Phantom { get; }
     internal FalloutEarlyControllerProxy Proxy { get; }
     internal FalloutControllerContactState Contact => _contact;
-    internal string? SaveBlocker => _busy ? "source-early-controller-consumer-in-flight" : _failure ??
+    internal string? SaveBlocker => _busy || _readingPostProcess ? "source-early-controller-consumer-in-flight" : _failure ?? PostProcessFieldSaveBlocker ??
         (_retired ? "source-early-controller-retired" : null);
     internal FalloutEarlyController(FalloutEarlyControllerFactory factory, FalloutEarlyControllerLineage lineage,
         FalloutEarlyControllerDescriptorSnapshot descriptor, FalloutCharacterStateContext state,
@@ -123,11 +123,12 @@ internal sealed partial class FalloutEarlyController : IFalloutPlayerTransferCon
         _stores.Add(new(checked(++_sequence), field, bits, xyz, fourth, count));
     internal FalloutEarlyControllerSnapshot Capture() => new(Schema, Lineage, Identity, Descriptor, _state.Snapshot, _contact.Snapshot,
         Phantom.Capture(), Proxy.Capture(), _scalar, _flags, _selector, _actorScaleBits, _stores.ToArray(), _resets.ToArray(), _failure, _retired,
-        FalloutEarlyControllerConvexGeometry.CanonicalBoundary);
+        FalloutEarlyControllerConvexGeometry.CanonicalBoundary, CapturePostProcessFields());
     internal void RetireUnleased()
     {
         if (_retired) return; _factory.RequireLifetime();
-        if (_busy || _leases.Count != 0) throw new InvalidOperationException("Actual controller must outlive its entered consumers and retained leases.");
+        if (_busy || _readingPostProcess || _leases.Count != 0)
+            throw new InvalidOperationException("Actual controller must outlive its entered consumers and retained leases.");
         Proxy.Retire(); Phantom.Retire(); _shapes.Dispose(); _state.Dispose(); _retired = true; _factory.ControllerRetired(this);
     }
     private void Release(Lease lease)
@@ -139,6 +140,8 @@ internal sealed partial class FalloutEarlyController : IFalloutPlayerTransferCon
             // Keep the actual last borrower until genuine native retirement
             // returns; a rejected release can retry this same retained lease.
             if (_busy) { ++_fault; throw new InvalidOperationException("Controller retired inside its actual entered source reset."); }
+            if (_readingPostProcess)
+            { ++_postProcessReadFault; throw new InvalidOperationException("Controller retired inside its actual context field getter."); }
             Proxy.Retire(); Phantom.Retire(); _shapes.Dispose(); _state.Dispose(); _retired = true; _factory.ControllerRetired(this);
         }
         _leases.Remove(lease);

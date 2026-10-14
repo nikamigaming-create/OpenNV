@@ -522,6 +522,7 @@ internal sealed partial class FalloutQuestScripts
     internal void Advance(double seconds, bool gameMode = true, IEnumerable<uint>? menus = null, bool execute = true)
     {
         if (!double.IsFinite(seconds) || seconds < 0 || seconds > float.MaxValue) throw new ArgumentOutOfRangeException(nameof(seconds));
+        if (References?.FunctionalFailure is not null) return;
         Menus.Publish(gameMode, menus);
         foreach (var entry in _schedule)
         {
@@ -557,6 +558,7 @@ internal sealed partial class FalloutQuestScripts
     internal void AdvanceClaimed(FalloutFormKey quest, double seconds, FalloutQuestScriptHost host)
     {
         if (!double.IsFinite(seconds) || seconds < 0 || seconds > float.MaxValue) throw new ArgumentOutOfRangeException(nameof(seconds));
+        if (References?.FunctionalFailure is not null) return;
         if (_compiledInstances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) is { } compiled)
         {
             AdvanceCompiled(compiled, seconds, true, true, host);
@@ -588,6 +590,7 @@ internal sealed partial class FalloutQuestScripts
 
     internal void ExecuteClaimedMenu(FalloutFormKey quest, uint menu, FalloutQuestScriptHost host)
     {
+        if (References?.FunctionalFailure is not null) return;
         if (_compiledInstances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) is { } compiled)
         {
             using var compiledMenuContext = Menus.Enter(menu);

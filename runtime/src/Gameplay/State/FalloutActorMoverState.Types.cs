@@ -37,4 +37,4 @@ internal sealed record FalloutActorMoverSnapshot(string Schema, FalloutActorMove
     IReadOnlyList<FalloutActorMoverAvailability> Availability,
     IReadOnlyList<FalloutActorMoverPublication> Publications,
     IReadOnlyList<FalloutActorMoverOperation> Operations, bool Retired,
-    FalloutCombatActorIdentity? Actor = null);
+    FalloutCombatActorIdentity? Actor = null, FalloutActorMoverPlayerFrameSnapshot? PlayerFrame = null);

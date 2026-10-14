@@ -105,6 +105,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     // decompressed asset for the lifetime of a campaign.
     internal IEnumerable<(string Identity, ReadOnlyMemory<byte> Bytes)> CachedResources()
     {
+        using var readLifetime = EnterResourceRead();
         foreach (var (identity, logical) in _archiveResources)
         {
             var file = identity[..identity.IndexOf("::", StringComparison.Ordinal)];
@@ -125,6 +126,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     internal (string File, long Offset, int StoredBytes, bool Compressed) ResourceExtent(string identity)
     {
+        using var readLifetime = EnterResourceRead();
         var split = identity.IndexOf("::", StringComparison.Ordinal);
         if (split < 0) return (identity, 0, checked((int)new FileInfo(identity).Length), false);
         var file = identity[..split];
@@ -216,6 +218,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     internal bool TryRead(string logicalPath, string? preferredArchive, out byte[] data, out string source,
         out FalloutBsaMemberEncoding? archiveEncoding)
     {
+        using var readLifetime = EnterResourceRead();
         archiveEncoding = null;
         if (TryResolveLoose(logicalPath, out var loosePath))
         {
@@ -255,6 +258,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     internal bool TryResolve(string logicalPath, string? preferredArchive, out string source)
     {
+        using var readLifetime = EnterResourceRead();
         if (TryResolveLoose(logicalPath, out source))
             return true;
         var canonical = FalloutBsaArchive.CanonicalPath(logicalPath);
@@ -269,6 +273,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     internal IReadOnlyList<string> ResourcePathsUnder(string logicalDirectory)
     {
+        using var readLifetime = EnterResourceRead();
         var prefix = FalloutBsaArchive.CanonicalPath(logicalDirectory).TrimEnd('\\') + "\\";
         ArchiveWarmup.GetAwaiter().GetResult();
         var paths = _archiveWinners.Keys.Where(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
@@ -327,6 +332,21 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     public void Dispose()
     {
+        RequireNotInsideResourceRead();
+        lock (_resourceRetirement)
+        {
+            if (_resourcesDisposed)
+            {
+                if (_resourceRetirementFailure is { } failure)
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+                return;
+            }
+            DisposeResources();
+        }
+    }
+
+    private void DisposeResources()
+    {
         List<Exception>? failures = null;
         void Retire(Action operation)
         {
@@ -335,16 +355,24 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         }
         Retire(RetireNativePluginDeclarationRead);
         Retire(RetireMenuSoundSelection);
-        // Warmup owns archive handles too; do not let it reopen them after disposal.
+        // First stop/drain asynchronous producer owners above, then wait for
+        // actual entered reads. New readers cannot pass the retirement store.
+        StopAndDrainResourceReads();
+        // Warmup is an independent constructor task and must return before
+        // its archive handles are released. It does not enter public reads.
         Retire(() => ArchiveWarmup.GetAwaiter().GetResult());
         Retire(_payloads.Clear);
         foreach (var archive in _openArchives.Values)
+            if (archive.IsValueCreated) Retire(archive.Value.Dispose);
+        _resourcesDisposed = true;
+        _resourceRetirementFailure = failures switch
         {
-            if (archive.IsValueCreated)
-                Retire(archive.Value.Dispose);
-        }
-        if (failures is { Count: 1 }) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failures[0]).Throw();
-        if (failures is { Count: > 1 }) throw new AggregateException("Selected source retirement retained independent owner failures.", failures);
+            { Count: 1 } => failures[0],
+            { Count: > 1 } => new AggregateException("Selected source retirement retained independent owner failures.", failures),
+            _ => null
+        };
+        if (_resourceRetirementFailure is { } error)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
     }
 
     internal static IReadOnlyList<string> ResolvePluginOrder(string dataRoot, NativeGame game, string? activePluginsPath = null)

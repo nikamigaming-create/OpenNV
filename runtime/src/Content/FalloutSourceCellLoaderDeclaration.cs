@@ -13,10 +13,24 @@ internal sealed record FalloutSourceCellLoaderDeclaration(string EngineSha256, s
 
     internal static FalloutSourceCellLoaderDeclaration Read(string executable)
     {
-        if (executable != Executable)
+        if (executable is not (Executable or FalloutSourceMainFamily.Fallout3))
             throw new NotSupportedException("Selected executable initial CELL reference ingestion is unowned.");
-        return new(executable, FalloutAdvancementRuntimeReceipt.Hash(Contract));
+        return new(executable, FalloutAdvancementRuntimeReceipt.Hash(executable == FalloutSourceMainFamily.Fallout3 ?
+            "source-FO3-CELL-reference-loader/v3;registered-plugin-and-physical-record-order;" +
+            "eager-interior-persistent-source-reference-construction-same-parent-retains-membership;" +
+            "TES4-ONAM-adjusted-FormID-provider-table-later-registration-overwrites;" +
+            "lazy-temporary-group-nine-selected-provider-filter-missing-key-permits-file;" +
+            "actual-existing-object-skips-construction-before-source-body-effects;" +
+            "engine-constructed-STAT-marker-base-with-actual-XPRM-independent-of-absent-ESM-row;" +
+            "head-insert-before-current-ParentCELL-publication;real-engine-Player-independent-of-placed-rows;" +
+            "current-Player-flags-borrow-existing-reference-owner-not-initial-loader-zero;" +
+            "deleted-partial-relocated-visible-distant-and-exterior-effects-independent;" +
+            "cold-unchanged-input-digests-and-membership-history-no-insertion-replay" : Contract));
     }
+
+    internal bool HasEngineConstructedStaticBase(FalloutPluginStack records, FalloutFormKey basis) =>
+        FalloutDynamicPrimitiveSource.Supports(EngineSha256) &&
+        FalloutDynamicPrimitiveSource.Read(EngineSha256).IsEngineConstructedStatic(records, basis);
 
     internal void Validate()
     {

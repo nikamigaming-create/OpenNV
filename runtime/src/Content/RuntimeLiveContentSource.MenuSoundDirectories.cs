@@ -15,6 +15,7 @@ internal sealed partial class RuntimeLiveContentSource
     internal FalloutMenuSoundSelection OpenMenuSoundSelection(FalloutPluginStack records,
         FalloutAdvancementRuntimeSource runtime, FalloutMenuSoundSelectionSnapshot? restore = null)
     {
+        using var readLifetime = EnterResourceRead();
         lock (_menuSoundGate)
         {
             ObjectDisposedException.ThrowIf(_menuSoundRetiring, this);
@@ -47,6 +48,7 @@ internal sealed partial class RuntimeLiveContentSource
 
     internal FalloutMenuSoundSelection RequireMenuSoundSelection(FalloutPluginStack records)
     {
+        using var readLifetime = EnterResourceRead();
         lock (_menuSoundGate)
         {
             ObjectDisposedException.ThrowIf(_menuSoundRetiring, this);

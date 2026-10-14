@@ -111,6 +111,9 @@ internal sealed partial class FalloutActorProcessCommonState
             unknown.Any(item => !fields.UnownedWriters.TryGetValue(item.Key, out var boundary) || boundary != item.Value))
             throw new InvalidDataException("Actor assignment current fields differ from constructor/store/writer history.");
         var linkedKeys = new HashSet<(Guid, FalloutActorLinkedOccurrence)>(); var childIds = new HashSet<Guid>();
+        var linkedCalls = new Dictionary<Guid, FalloutActorLinkedCall>();
+        var highCalls = new Dictionary<Guid, FalloutActorHighResetCall>();
+        var retainedStores = fields.Stores.ToHashSet();
         foreach (var linked in fields.LinkedCalls)
         {
             Require(linked.Invocation, linked.Process, linked.Entered, linked.Factory);
@@ -120,7 +123,8 @@ internal sealed partial class FalloutActorProcessCommonState
                 linked.Returned != (linked.Step == FalloutActorLinkedStep.Returned) || linked.Returned != (linked.Failure is null) ||
                 linked.Returned && (linked.Desired is not null || !linked.Equal || !linked.NullCleanupReturned || linked.Stores.Count != 0 || linked.Selected is not null))
                 throw new InvalidDataException("Linked-null child erased its equality tail, replayed an occurrence or fabricated a return.");
-            foreach (var store in linked.Stores) if (!fields.Stores.Contains(store)) throw new InvalidDataException("Linked child borrowed another pointer store.");
+            linkedCalls.Add(linked.Identity, linked);
+            foreach (var store in linked.Stores) if (!retainedStores.Contains(store)) throw new InvalidDataException("Linked child borrowed another pointer store.");
         }
         foreach (var high in fields.HighCalls)
         {
@@ -129,13 +133,14 @@ internal sealed partial class FalloutActorProcessCommonState
                 FalloutActorAssignmentCell.CommonFlagTwo, FalloutActorAssignmentCell.CommonFlagOne, FalloutActorAssignmentCell.CommonFlagForty }.Concat(ActorHighResetTail.Select(item => item.Cell)).ToArray();
             if (high.Source != fields.Source.Identity || high.Identity == Guid.Empty || !childIds.Add(high.Identity) || high.Changed < high.Entered ||
                 high.Changed > entry.Changed || high.Stores is null || high.Stores.Count > order.Length ||
-                !high.Stores.Select(store => store.Cell).SequenceEqual(order.Take(high.Stores.Count)) || high.Stores.Any(store => !fields.Stores.Contains(store)) ||
+                !high.Stores.Select(store => store.Cell).SequenceEqual(order.Take(high.Stores.Count)) || high.Stores.Any(store => !retainedStores.Contains(store)) ||
                 high.Returned != (high.Step == FalloutActorHighResetStep.Returned) || high.Returned != (high.Failure is null) ||
                 high.Returned && (high.Stores.Count != order.Length || high.Linked is not { Returned: true, Occurrence: FalloutActorLinkedOccurrence.SharedReset } ||
                     high.Loading is null || !high.InlineListEmpty || high.RequestFlag is not { Requested: false }))
                 throw new InvalidDataException("High reset omitted ordered stores or crossed an unreturned Shared child.");
-            if (high.Linked is { } linked && !fields.LinkedCalls.Contains(linked)) throw new InvalidDataException("High reset borrowed a foreign linked-null occurrence.");
+            if (high.Linked is { } linked && !HasLinked(linked)) throw new InvalidDataException("High reset borrowed a foreign linked-null occurrence.");
             if (high.RequestFlag is { } flag && !entry.RequestFlagStores.Contains(flag)) throw new InvalidDataException("High reset fabricated the mask20 writer.");
+            highCalls.Add(high.Identity, high);
         }
         var commands = new HashSet<Guid>();
         foreach (var call in fields.Calls)
@@ -144,7 +149,7 @@ internal sealed partial class FalloutActorProcessCommonState
                 call.Entered <= constructor.Changed || call.Changed < call.Entered || call.Changed > entry.Changed || call.ReturnedChildren is null ||
                 call.Returned != (call.Step == FalloutActorAssignmentStep.Returned) || call.Returned != (call.Failure is null) ||
                 call.ReturnedChildren.Distinct().Count() != call.ReturnedChildren.Count ||
-                call.Linked is { } linked && !fields.LinkedCalls.Contains(linked) || call.HighReset is { } high && !fields.HighCalls.Contains(high) ||
+                call.Linked is { } linked && !HasLinked(linked) || call.HighReset is { } high && !HasHigh(high) ||
                 call.MoverReturned && (call.PackageMutation is not { Step: FalloutPackageStateStep.Returned } || call.Linked is not { Returned: true } || call.HighReset is not { Returned: true }) ||
                 call.Returned && call.InitialProcess is not null && call.Followers is null)
                 throw new InvalidDataException("Actor assignment omitted an original command prefix or returned before its real children.");
@@ -154,7 +159,25 @@ internal sealed partial class FalloutActorProcessCommonState
                 target.Object == Guid.Empty || (target.Object is null) != (target.Values is null) || target.Values?.Kind != extra.TargetKind ||
                 target.Values is not { Kind: 0 or 3 } && extra.Extra is not null))
                 throw new InvalidDataException("Actor Extra derivation omitted its actual returned mutable PACK target.");
+            if (call.Followers is { } follower &&
+                (follower.Source != FalloutReferenceFollowerSource.Reviewed(fields.Source.Reference).Identity || follower.Actor != call.Invocation.Actor ||
+                follower.Process == Guid.Empty || follower.Factory == Guid.Empty || follower.Constructor == Guid.Empty || follower.Sequence < 0 ||
+                follower.Extra == Guid.Empty || follower.Payload == Guid.Empty || follower.Present != (follower.Extra is not null) ||
+                !follower.Present && follower.Payload is not null || call.Returned && follower.Payload is not null ||
+                follower.ReferenceInvocation is not { } reference || reference.ReferenceProcess != follower.Process ||
+                reference.ReferenceConstructor != follower.Constructor || reference.CommonProcess != call.Invocation.Process ||
+                reference.Actor != call.Invocation.Actor || reference.PackageCommand != call.Invocation.SourceCommand ||
+                reference.Ingress != FalloutReferencePositionIngress.PackageCommand || reference.ThreadId != call.Invocation.ThreadId ||
+                reference.Epoch != call.Invocation.Epoch))
+                throw new InvalidDataException("Actor follower read fabricated current reference membership or replaced its original caller.");
         }
+        bool HasLinked(FalloutActorLinkedCall candidate) => linkedCalls.TryGetValue(candidate.Identity, out var retained) &&
+            candidate with { Stores = retained.Stores } == retained && candidate.Stores.SequenceEqual(retained.Stores);
+        bool HasHigh(FalloutActorHighResetCall candidate) => highCalls.TryGetValue(candidate.Identity, out var retained) &&
+            candidate with { Stores = retained.Stores, Linked = retained.Linked } == retained &&
+            candidate.Stores.SequenceEqual(retained.Stores) &&
+            (candidate.Linked is null ? retained.Linked is null : retained.Linked is not null && HasLinked(candidate.Linked));
+
         void Require(FalloutPackageCommandFieldInvocation invocation, FalloutProcessSceneQuery process, long changed, Guid? factory)
         {
             if (invocation.SourceCommand == Guid.Empty || invocation.Actor != entry.Source || invocation.Process != process.Process ||
