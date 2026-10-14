@@ -13,10 +13,11 @@ internal sealed record FalloutSourceFrameTimerSnapshot(FalloutSourceFrameTimer S
     long Epoch, long Sequence, uint CachedMilliseconds, uint OriginAgeMilliseconds, uint RawAtCapture, byte PauseCount,
     float FixedMilliseconds, float FractionalMilliseconds, float ScaledSeconds, float UnscaledSeconds,
     float Rate, float TargetRate, bool UseRateWrites, bool ZeroElapsed, long Updated, string? Failure,
-    string? EnteredOperation, long EnteredAt, long ReturnedThrough);
+    string? EnteredOperation, long EnteredAt, long ReturnedThrough,
+    FalloutSourceFrameTimerReadProvenance? ReadProvenance = null);
 
 internal sealed record FalloutSourceFrameDeltaRead(string Source, Guid Process, long Epoch, long Sequence,
-    uint ScaledSecondsBits, bool HasReturnedUpdate);
+    uint ScaledSecondsBits, bool HasReturnedUpdate, FalloutSourceFrameDeltaReadOwner? Owner = null);
 
 // Raw OS time, the cached UInt32 value, animation delta and game calendar are
 // separate fields. In particular the zero-elapsed and minimum-wait branches
@@ -49,7 +50,7 @@ internal sealed partial class FalloutSourceFrameTimerState : IDisposable
         // publish the same epoch for unrelated timer constructions.
         _epoch = BitConverter.ToInt64(_process.ToByteArray()) & long.MaxValue;
         if (_epoch == 0) _epoch = long.MaxValue;
-        if (restored is null) return;
+        if (restored is null) { InitializeReadProvenance(null); return; }
         Validate(restored);
         if (restored.Source != source || restored.CapturedProcess == _process)
             throw new InvalidDataException("Cold cached timer differs from its selected source/current process.");
@@ -63,6 +64,7 @@ internal sealed partial class FalloutSourceFrameTimerState : IDisposable
         _rate = restored.Rate; _target = restored.TargetRate;
         _useRateWrites = restored.UseRateWrites; _zeroElapsed = restored.ZeroElapsed; _failure = restored.Failure;
         _operation = restored.EnteredOperation; _enteredAt = restored.EnteredAt; _returnedThrough = restored.ReturnedThrough;
+        InitializeReadProvenance(restored);
     }
 
     internal object State => new
@@ -220,7 +222,8 @@ internal sealed partial class FalloutSourceFrameTimerState : IDisposable
         var result = new FalloutSourceFrameTimerSnapshot(_source, _process, _epoch, _sequence, _cached,
             _pause == 0 ? unchecked(now - _origin) : _origin,
             now, _pause, _fixed, _fraction, _scaled, _unscaled, _rate, _target,
-            _useRateWrites, _zeroElapsed, _updated, _failure, _operation, _enteredAt, _returnedThrough);
+            _useRateWrites, _zeroElapsed, _updated, _failure, _operation, _enteredAt, _returnedThrough,
+            CaptureReadProvenance());
         Validate(result); return result;
     }
     internal static void Validate(FalloutSourceFrameTimerSnapshot saved)
@@ -240,14 +243,16 @@ internal sealed partial class FalloutSourceFrameTimerState : IDisposable
             !float.IsFinite(saved.Rate) || !float.IsFinite(saved.TargetRate) ||
             saved.Failure is not null && string.IsNullOrWhiteSpace(saved.Failure))
             throw new InvalidDataException("Saved source cached timer fields/committed update are invalid.");
+        ValidateReadProvenance(saved);
     }
     private void ExecuteWriter(string operation, Action writer)
     {
         RequireHealthy();
         _entered = true; _operation = operation; _enteredAt = Next();
+        EnterReadWriter();
         try
         {
-            writer(); _returnedThrough = Next(); _operation = null;
+            writer(); _returnedThrough = Next(); ReturnReadWriter(operation); _operation = null;
         }
         catch (Exception error) { _failure ??= error.ToString(); throw; }
         finally { _entered = false; }

@@ -22,7 +22,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             _controlHud?.Capture() ?? _historicalControlHud, _controlDisplay?.Capture() ?? _historicalControlDisplay,
             _referenceOrientation?.Capture() ?? _historicalReferenceOrientation, CaptureControlPointOfView(),
             _playerOpacity?.Capture() ?? _historicalPlayerOpacity, _followingServicesCall, _weaponContinuation,
-            _inhibition.Capture(), _followingTimerFlag.Capture(), _followingContinuation, mover);
+            _inhibition.Capture(), _followingTimerFlag.Capture(), _followingContinuation, mover,
+            _lateActorTime?.Capture() ?? _historicalLateActorTime, CaptureLateFrame());
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -62,6 +63,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _historicalPlayerOpacity = saved.Opacity; _followingServicesCall = saved.FollowingServices;
         _weaponContinuation = saved.WeaponContinuation;
         _followingContinuation = saved.FollowingContinuation;
+        _historicalLateActorTime = saved.LateActorTime;
+        _historicalLateFrame = saved.LateFrame;
         RestoreControlPointOfView(saved.PointOfView!);
         _controlObservations.AddRange(saved.ControlObservations!);
         _observedControlIds.UnionWith(saved.ControlObservations!.Select(value => value.Command.Observation));
@@ -114,6 +117,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         ValidateFollowingServices(saved);
         ValidateInhibitionOwners(saved);
         ValidateFollowingContinuation(saved);
+        ValidateLateActorTime(saved);
+        ValidateLateFrame(saved);
         ValidatePlayerWeaponContinuation((saved.Stack, saved.Source.Main,
             saved.FollowingServices, saved.WeaponContinuation));
         foreach (var owner in saved.FirstPersonHistory)
@@ -141,7 +146,11 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             if (clock.Main == Guid.Empty || clock.MainOrdinal < 1 || clock.Entered < 1 || clock.Changed < clock.Entered ||
                 clock.Changed > saved.Sequence || !Enum.IsDefined(clock.Step) || clock.BeforeBracket != 0 ||
                 clock.Bracket != unchecked((byte)(clock.BeforeBracket + 1)) || saved.SceneBracket != clock.Bracket ||
-                clock.ArgumentBits is { } argument && argument != clock.DeliveredBits ||
+                clock.ArgumentBits is { } argument && argument != clock.CachedScaledBits ||
+                (clock.CachedTimer is null) != (clock.CachedScaledBits is null) ||
+                clock.CachedTimer is { } timer && (timer.Source != saved.Source.Main.EngineSha256 ||
+                    !ChildBelongsToParentProcessLineage(saved, timer.Process) || timer.Epoch < 1 || timer.Sequence < 0 ||
+                    timer.ScaledSecondsBits != clock.CachedScaledBits) ||
                 (clock.Step is FalloutStandaloneSceneClockStep.ArgumentStored or FalloutStandaloneSceneClockStep.VirtualEntered) && clock.ArgumentBits is null ||
                 clock.Step == FalloutStandaloneSceneClockStep.Returned ||
                 (clock.Step == FalloutStandaloneSceneClockStep.Failed) != (clock.Failure is not null) ||

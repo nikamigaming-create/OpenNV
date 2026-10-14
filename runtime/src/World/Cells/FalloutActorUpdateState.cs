@@ -11,13 +11,14 @@ internal sealed record FalloutActorUpdateEntry(FalloutCombatActorIdentity Source
 internal sealed record FalloutActorUpdateHandoff(Guid PreviousProcess, Guid CurrentProcess, long Sequence);
 internal sealed record FalloutActorUpdateSnapshot(string Schema, string Stack, string Contract,
     Guid CapturedProcess, long Sequence, IReadOnlyList<FalloutActorUpdateEntry> Actors,
-    IReadOnlyList<FalloutActorUpdateReceipt> Receipts, FalloutActorUpdateHandoff? ColdHandoff);
+    IReadOnlyList<FalloutActorUpdateReceipt> Receipts, FalloutActorUpdateHandoff? ColdHandoff,
+    FalloutPlayerLateGlobalAiSnapshot? PlayerFrameGlobalAi = null);
 
 // The actual source actor factory creates this state. Native rendering and the
 // existence of a metadata row do not construct or enable an actor here.
 internal sealed partial class FalloutActorUpdateState : IDisposable
 {
-    internal const string Schema = "opennv-source-actor-update/v1";
+    internal const string Schema = "opennv-source-actor-update/v2";
     private readonly FalloutActorUpdateDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;
@@ -39,7 +40,7 @@ internal sealed partial class FalloutActorUpdateState : IDisposable
     internal IReadOnlyList<FalloutFormKey> Actors => _actors.Keys.ToArray();
     internal string? SaveBlocker => _busy ? "source-actor-update-mutation-in-flight" :
         _actors.Values.FirstOrDefault(actor => actor.Failure is not null) is { } failed ?
-            "source-actor-update:" + failed.Source.Reference + ":" + failed.Failure : null;
+            "source-actor-update:" + failed.Source.Reference + ":" + failed.Failure : PlayerFrameGlobalAiSaveBlocker;
     internal object State => new
     {
         source = _source.Contract,
@@ -48,6 +49,7 @@ internal sealed partial class FalloutActorUpdateState : IDisposable
         actors = _actors.Values.ToArray(),
         receipts = _receipts.ToArray(),
         cold = _cold,
+        playerFrameGlobalAi = CaptureRetainedPlayerFrameGlobalAi(),
         saveBlocker = SaveBlocker
     };
 

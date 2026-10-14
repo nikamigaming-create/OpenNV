@@ -26,9 +26,13 @@ internal sealed record FalloutActorProcessRuntimeSnapshot(string Schema, string 
 // leaves a field unwritten. An unwritten lane cannot be consumed as zero.
 internal sealed record FalloutProcessCommonScalars(uint ClockBits, byte Flags,
     uint VectorFirstBits, uint VectorSecondBits, uint FirstWord, uint SecondWord, uint ThirdWord,
-    uint? FinalFirstBits, uint FinalSecondBits, uint FinalThirdBits)
+    uint? FinalFirstBits, uint FinalSecondBits, uint FinalThirdBits, uint? PackedDateWord = null)
 {
     internal static FalloutProcessCommonScalars Constructed => new(0xbf800000u, 0, 0, 0, 0, 0, 0, null, 0, 0);
+    // The selected FO3 Low constructor writes this independent word and its
+    // Low-to-High copy preserves it. Other source families remain unqualified.
+    internal static FalloutProcessCommonScalars ConstructedFor(string executable) =>
+        FalloutSourceMainFamily.IsFallout3(executable) ? Constructed with { PackedDateWord = 0 } : Constructed;
 }
 internal sealed record FalloutProcessGameplayState(FalloutFormKey Actor, FalloutActorPackageAssignment? Package,
     FalloutActorPackageMotion? Motion, FalloutActorScriptPackageSnapshot? ScriptPackage,

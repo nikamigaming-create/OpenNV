@@ -108,7 +108,7 @@ internal sealed partial class FalloutActorProcessCommonState
                 throw new InvalidDataException("Shared reset changed the actual existing Common first scalar word.");
             commonWord = 0; wordAvailable = true;
         }
-        if (entry.Scalars with { Flags = 0, FirstWord = 0 } != FalloutProcessCommonScalars.Constructed || entry.Scalars.Flags != flags || entry.Scalars.FirstWord != commonWord)
+        if (entry.Scalars with { Flags = 0, FirstWord = 0 } != FalloutProcessCommonScalars.ConstructedFor(executable) || entry.Scalars.Flags != flags || entry.Scalars.FirstWord != commonWord)
             throw new InvalidDataException("Common scalars lack their constructor or selected byte writer.");
         foreach (var clear in entry.SceneFields?.WeaponContinuation?.PackageFlagClears ?? [])
             if (processes?.Contains(clear.Invocation.Process) != true ||

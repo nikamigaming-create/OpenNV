@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // reselects a package, replays an event or recreates modifier pools.
 internal sealed partial class FalloutActorProcessCommonState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-common/v17";
+    internal const string Schema = "opennv-actor-process-common/v18";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;
@@ -76,7 +76,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         if (epoch != 1 || level != (source.EnginePlayer ? FalloutDetectionProcessLevel.High : FalloutDetectionProcessLevel.Low))
             throw new InvalidDataException("Actual source common constructor lost the original Player/nonplayer factory class.");
         var sequence = Next();
-        _current.Add(actor, new(source, epoch, level, FalloutProcessCommonScalars.Constructed,
+        _current.Add(actor, new(source, epoch, level, FalloutProcessCommonScalars.ConstructedFor(_source.ExecutableSha256),
             new(source, Guid.NewGuid(), epoch, sequence, false), FalloutProcessCommonPhase.Constructed, null, null, sequence,
             SceneFields: ConstructSceneFields(level), Packages: ConstructSourcePackageSlots(source, epoch, level,
                 source.EnginePlayer ? FalloutProcessPackageConstructionKind.InitialPlayerConstructor : FalloutProcessPackageConstructionKind.IndependentProcessConstructor)));

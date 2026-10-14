@@ -27,6 +27,25 @@ failed prefixes while rebinding fresh process, UI and native lifetimes. Unknown
 camera or Actor effects refuse at their actual call instead of replaying commands
 or borrowing presentation values.
 
+The late Player body reuses the same C# mover, reference flags, Common process,
+calendar GLOBAL, numeric INI and cached Main timer. Its independent inhibition
+clock and view-request byte have distinct source owners. Retained reads join to
+their actual writer and process histories during cold admission. Scalar and
+vector stores commit in source order; a later failed movement or animation child
+keeps those stores visible without returning the enclosing Player frame.
+
+Lighting projection and complete Sky persistence are distinct typed paths.
+A streamed projection validates its winning climate, weather and region caches
+before entering source reset, then applies selected record-based weather after
+reset while preserving override clearing. It does not restore or return the
+original weather frame, Moon, HDR or source owner. Full Sky restoration still
+validates all saved source/native lanes. Rendering diagnostics expose selected
+lighting weather separately from the source's current-weather field. Camera
+placement and WTHR light construction keep their independent presentation fields
+valid when a later Moon child fails; its source failure and save guard remain
+mandatory. Selected Model 2/3 shader streams bind actual semantics, constants
+and samplers rather than assuming one version's register numbering.
+
 The live diagnostic collector has an explicit retirement boundary before CELL,
 camera and HDR consumers retire. It drains its immutable file writer, releases
 input and removes process/draw callbacks while their owners are still alive.

@@ -61,7 +61,7 @@ internal static partial class SourceMainScriptCallerContracts
 
         var scene = new FalloutStandalonePlayerSceneState(FalloutStandalonePlayerSceneSource.Read(mainSource), "authored-scene-HUD", Guid.NewGuid());
         var sceneHud = new FalloutPlayerReferenceHudState(source, scene.Stack, scene.Process, AuthoredReferenceHudComponents());
-        var sceneMain = Guid.NewGuid(); scene.StoreSceneClock(sceneMain, 1, 0x3c800000); scene.EnterSceneVirtual(sceneMain, 1);
+        var sceneMain = Guid.NewGuid(); scene.StoreSceneClock(sceneMain, 1, () => AuthoredSceneCachedDelta(scene, 0x3c800000)); scene.EnterSceneVirtual(sceneMain, 1);
         Reject(() => scene.ExecuteInitialVirtualPrefix(sceneMain, 1, () => { }, sceneHud));
         var saved = scene.Capture();
         Require(saved.ReferenceHudCall is { Step: FalloutPlayerReferenceHudStep.Returned } &&
@@ -110,7 +110,7 @@ internal static partial class SourceMainScriptCallerContracts
         thread.Start(); thread.Join(); Require(wrongThread is InvalidOperationException, "Input getter accepted a foreign device thread.");
         input.Publish(new byte[256], new byte[8], 7, 8, 9); input.DeviceUnavailable("authored-lost-acquisition");
         var bytes = input.Capture();
-        var main = Guid.NewGuid(); scene.StoreSceneClock(main, 1, 0x3c800000); scene.EnterSceneVirtual(main, 1);
+        var main = Guid.NewGuid(); scene.StoreSceneClock(main, 1, () => AuthoredSceneCachedDelta(scene, 0x3c800000)); scene.EnterSceneVirtual(main, 1);
         Reject(() => scene.ExecuteInitialVirtualPrefix(main, 1, () => { }, hud));
         var saved = scene.Capture();
         Require(saved.Prelude?.FailedAt == FalloutStandaloneScenePreludeStep.ActorProcessQuery &&

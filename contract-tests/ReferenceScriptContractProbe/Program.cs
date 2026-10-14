@@ -4,6 +4,54 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--audit-owned-celestial-programs", var celestialDataRoot])
+{
+    SourceSkyTransferContracts.AuditOwnedCelestialPrograms(celestialDataRoot);
+    return;
+}
+
+if (args is ["--audit-owned-climate-entry", var climateDataRoot, var climateCellId])
+{
+    SourceSkyTransferContracts.AuditOwnedClimateEntry(climateDataRoot, climateCellId);
+    return;
+}
+
+if (args is ["--historical-inhibition-read-contracts"])
+{
+    SourceMainScriptCallerContracts.RunHistoricalInhibitionReadContracts();
+    return;
+}
+
+if (args is ["--player-cached-clock-contracts"])
+{
+    SourceMainScriptCallerContracts.RunSceneCachedClockContracts();
+    return;
+}
+
+if (args is ["--late-frame-prefix-contracts"])
+{
+    SourceMainScriptCallerContracts.RunLateFramePrefixContracts();
+    return;
+}
+
+if (args is ["--audit-owned-late-frame-prefix-source", var latePrefixDataRoot])
+{
+    SourceMainScriptCallerContracts.AuditOwnedLateFramePrefixSources(latePrefixDataRoot);
+    return;
+}
+
+if (args is ["--late-player-actor-time-contracts"])
+{
+    SourceMainScriptCallerContracts.RunLateActorTimeContracts();
+    return;
+}
+
+if (args is ["--audit-owned-late-actor-time-source", var lateActorDataRoot])
+{
+    SourceMainScriptCallerContracts.AuditOwnedLateActorTimeSources(lateActorDataRoot);
+    return;
+}
+
 if (args is ["--source-menu-lifecycle-contracts"])
 {
     SourceMenuLifecycleContracts.Run();

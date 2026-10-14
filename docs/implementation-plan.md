@@ -13,10 +13,11 @@ advances gameplay, saves complete authoritative state, quits through the normal
 menu and continues in a new process. Component audit passes are supporting checks;
 they do not complete this deliverable.
 
-1. Implement the reached inhibited/life late Player tail using current runtime
-   owners. Loading transfer, controller context/post-actions and the actual
-   Current/Primary idle query now return. Complete source Pause/Save transitions
-   and the held-Player child while retaining the same input, image and UI owners.
+1. Implement the reached mover-delta virtual and remaining late Player tail
+   using current runtime owners. Loading transfer, controller context/post-actions,
+   Current/Primary idle query, late inhibition prefix, Actor-time and XY/Z stores
+   now return in ordinary FO3. The argument uses actual cached Main time.
+   Complete healthy source Pause/Save transitions while retaining the same owners.
 2. Return the complete Player/Main gameplay frame and exercise ordinary movement
    and quest input. Fix the next actual behavioral failure on this same path.
 3. Publish a complete save through the normal game UI, Quit normally, then cold
@@ -28,8 +29,9 @@ they do not complete this deliverable.
 5. Record the three accepted rendered routes as phone-friendly videos. Keep frame
    recording off until an actual visual run is ready.
 
-Current first refusal: the actual Player frame reaches its unfinished
-inhibited/life late-frame tail. Nonnull early-controller context, post-action
+Current first refusal: the actual Player frame reaches its unfinished late
+mover-delta virtual after returned Flags, inhibition, Actor-time and vector stores.
+Nonnull early-controller context, post-action
 children and the winning Current/Primary idle-package query now return in the
 ordinary run. Birth-CELL ingestion and transfer/load return with the complete
 stream, including source-selected plane/portal bases. Shared fault diagnostics

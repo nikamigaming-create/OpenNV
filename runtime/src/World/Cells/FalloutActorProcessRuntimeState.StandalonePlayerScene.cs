@@ -34,7 +34,10 @@ internal sealed partial class FalloutActorProcessRuntimeState
         var main = _scriptCallerLast ?? throw new InvalidOperationException("Scene clock lost its actual Main delivery.");
         if (main.Invocation != invocation.Main.Identity || main.Ordinal != invocation.Main.Ordinal ||
             main.SourceProcess != _process) throw new InvalidOperationException("Player scene changed its retained Main source argument.");
-        _ = StandalonePlayerScene.StoreSceneClock(main.Invocation, main.Ordinal, main.DeliveredSecondsBits);
+        var timer = _cachedSourceTimer ?? throw new InvalidOperationException("Scene clock lost its actual cached Main timer.");
+        var readOwner = new FalloutSourceFrameDeltaReadOwner(FalloutSourceFrameDeltaReader.SceneClock,
+            StandalonePlayerScene.Constructor, main.Invocation, main.Invocation, main.Ordinal, _process);
+        _ = StandalonePlayerScene.StoreSceneClock(main.Invocation, main.Ordinal, () => timer.ReadScaledDelta(readOwner));
     }
     internal uint EnterStandalonePlayerSceneVirtual(FalloutMainPlayerCellInvocation invocation)
     {

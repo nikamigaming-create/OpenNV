@@ -51,7 +51,7 @@ internal sealed partial class FalloutActorProcessCommonState
         }
         if (previous != fields.Publication) throw new InvalidDataException("Actor assignment current factory differs from its cold lineage.");
         var unknown = new Dictionary<FalloutActorAssignmentLane, string>(); var values = constructor.Values;
-        var scalars = FalloutProcessCommonScalars.Constructed; var prior = constructor.Changed; var sequences = new HashSet<long>();
+        var scalars = FalloutProcessCommonScalars.ConstructedFor(executable); var prior = constructor.Changed; var sequences = new HashSet<long>();
         var writers = fields.Writers.ToDictionary(writer => writer.Changed);
         var stores = fields.Stores.ToDictionary(store => store.Changed);
         foreach (var changed in stores.Keys.Concat(writers.Keys).Order())

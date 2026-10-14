@@ -105,6 +105,14 @@ internal static partial class FalloutActorProcessRuntimeSaveContract
         var runtime = saved.ActorProcessRuntime!; var common = saved.ActorProcessCommon!;
         FalloutStandaloneInterfaceSaveContract.ValidateSource(records, runtime);
         FalloutStandalonePlayerSceneSaveContract.ValidateSource(records, runtime);
+        if (runtime.StandaloneMain?.Scene.LateActorTime is { } lateActor)
+        {
+            var fields = common.CommandFields?.SingleOrDefault(value => value.Actor == lateActor.Actor && value.Epoch == lateActor.Epoch)
+                ?? throw new InvalidDataException("Actor-time cold admission has no actual Player reference/field parent.");
+            FalloutPlayerLateActorTimeSaveContract.ValidateOwned(records, lateActor, fields,
+                saved.Globals ?? throw new InvalidDataException("Actor-time cold admission omitted its actual GLOBAL owner."),
+                saved.ActorUpdates ?? throw new InvalidDataException("Actor-time cold admission omitted its shared Actor-update owner."));
+        }
         if (runtime.StandaloneMain?.Scene.IdleAnimationCall?.Result?.Trace.SelectedPackageRead is { } idlePackage)
             FalloutPackageRuntimeRegistry.ValidateIdlePackageRead(idlePackage, common, records);
         if (runtime.Contract != selected.Contract || runtime.Stack != source.StackId || runtime.Player != records.RuntimeFormKey(0x14))

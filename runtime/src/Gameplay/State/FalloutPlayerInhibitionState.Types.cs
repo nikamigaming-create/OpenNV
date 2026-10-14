@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 // independent source bytes, not control permissions or action Boolean aliases.
 internal enum FalloutPlayerInhibitionLane { First, Second, Third, Fourth }
 internal enum FalloutPlayerInhibitionOperation { ConstructorLiteral, ConstructorCompletedLoop, SelectedVoidCallback, ZeroSetter, UnownedWriter, PackageAssignmentStore }
-internal enum FalloutPlayerInhibitionConsumer { Movement, Following }
+internal enum FalloutPlayerInhibitionConsumer { Movement, Following, LateFrame }
 internal sealed record FalloutPlayerSourceCaller(Guid Main, long Ordinal, Guid Invocation);
 internal sealed record FalloutPlayerInhibitionByte(byte Value, bool Available);
 internal sealed record FalloutPlayerInhibitionEntry(Guid Observation, string Producer, Guid Process, Guid Factory,

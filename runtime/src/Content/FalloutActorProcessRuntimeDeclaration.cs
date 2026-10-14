@@ -21,7 +21,11 @@ internal sealed record FalloutActorProcessRuntimeDeclaration(string ExecutableSh
             "High-source-BPTD-node-lookup-and-first-Bip01-NiBSBoneLODController-chain-retention;" +
             "nullable-node-and-controller-results-valid;selection-not-LOD-activation;" +
             "general-processing-tree-and-CELL-extra-type-nine-have-independent-producers";
-        return new(executable, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(executable + "\0" + rules))).ToLowerInvariant());
+        var selected = FalloutSourceMainFamily.IsFallout3(executable) ? rules +
+            ";FO3-low-independent-packed-date-word-constructor-zero;" +
+            "same-low-to-high-full-word-copy;low-nine-bit-selected-getter;" +
+            "current-unowned-date-writers-retain-common-boundary;omitted-cold-word-refused" : rules;
+        return new(executable, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(executable + "\0" + selected))).ToLowerInvariant());
     }
     internal void Validate()
     {

@@ -15,12 +15,13 @@ internal sealed record FalloutSkyCelestialPass(int Role, string EngineSha256, st
 
 internal static class FalloutSkyCelestialPrograms
 {
-    private const string Rules = "source-generated-Moon-property/v1;family-six;primary-role-six-pass-SKYT-SKYTEX;" +
+    private const string Rules = "source-generated-Moon-property/v2;family-six;primary-role-six-pass-SKYT-SKYTEX;" +
         "shadow-role-seven-pass-SKYMM-SKYTEX;source-property-RGBA-to-first-colour-constant;other-two-colours-positive-zero;" +
         "primary-source-alpha-property-six-seven-no-alpha-test;shadow-pass-source-zero-destination-one-no-depth-write;" +
         "primary-sampler-and-source-fallback-second-sampler;Moon-property-blend-Params-x-positive-zero;" +
         "Params-y-requires-the-distinct-actual-HDR-conditioned-shader-field-writer;" +
         "source-vertex-far-depth-from-selected-literal;source-UV-colour-registers-and-all-straight-line-operations;" +
+        "selected-SM2-fixed-output-and-texture-colour-input-banks-or-SM3-declared-semantics;SM2-pixel-colour-saturation;" +
         "no-weather-mode-HDR-TLS-writer-admission-from-program-selection";
     internal static FalloutSkyCelestialPass Read(RuntimeLiveContentSource source, FalloutMoonSource moon, int role)
     {
@@ -46,11 +47,13 @@ internal static class FalloutSkyCelestialPrograms
         var vertexBytes = Select(vertexName); var pixelBytes = Select(pixelName);
         var vertex = FalloutD3D9SkyProgram.Read(vertexBytes.Bytecode, FalloutSkyProgramStage.Vertex);
         var pixel = FalloutD3D9SkyProgram.Read(pixelBytes.Bytecode, FalloutSkyProgramStage.Pixel);
-        FalloutSkyProgramSemantic[] vertexInputs = [new(0, 0, 0, 15), new(1, 5, 0, 15), new(2, 10, 0, 15)];
-        FalloutSkyProgramSemantic[] vertexOutputs = [new(0, 0, 0, 15), new(1, 5, 0, 3), new(2, 5, 1, 3), new(3, 10, 0, 15)];
-        FalloutSkyProgramSemantic[] pixelInputs = [new(0, 5, 0, 3), new(1, 5, 1, 3), new(2, 10, 0, 15)];
-        if (!vertex.Inputs.SequenceEqual(vertexInputs) || !vertex.Outputs.SequenceEqual(vertexOutputs) ||
-            !pixel.Inputs.SequenceEqual(pixelInputs) || !vertex.Constants.SequenceEqual([0, 1, 3, 4, 5, 6]) ||
+        static bool Semantics(IReadOnlyList<FalloutSkyProgramSemantic> actual, params (int Usage, int Index, uint Mask)[] expected) =>
+            actual.Count == expected.Length && actual.Select(row => (row.Usage, row.Index, row.Mask)).ToHashSet().SetEquals(expected);
+        static int Register(IReadOnlyList<FalloutSkyProgramSemantic> rows, int usage, int index) =>
+            rows.Single(row => row.Usage == usage && row.Index == index).Register;
+        if (!Semantics(vertex.Inputs, (0, 0, 15), (5, 0, 15), (10, 0, 15)) ||
+            !Semantics(vertex.Outputs, (0, 0, 15), (5, 0, 3), (5, 1, 3), (10, 0, 15)) ||
+            !Semantics(pixel.Inputs, (5, 0, 3), (5, 1, 3), (10, 0, 15)) || !vertex.Constants.SequenceEqual([0, 1, 3, 4, 5, 6]) ||
             !pixel.Constants.SequenceEqual([4]) || vertex.Samplers.Count != 0 || !pixel.Samplers.SequenceEqual([0, 1]) ||
             vertex.DefinedWord(2, 1) != BitConverter.SingleToUInt32Bits(1f) ||
             vertex.DefinedWord(2, 2) != 0 || vertex.DefinedWord(2, 3) != 0 ||
@@ -63,9 +66,9 @@ internal static class FalloutSkyCelestialPrograms
             throw new InvalidDataException("Celestial program has no admitted far-depth literal.");
         var vertexCode = vertex.Emit("vertex", new Dictionary<int, string>
         {
-            [0] = "vec4(VERTEX, 1.0)",
-            [1] = "vec4(UV, 0.0, 1.0)",
-            [2] = "COLOR",
+            [Register(vertex.Inputs, 0, 0)] = "vec4(VERTEX, 1.0)",
+            [Register(vertex.Inputs, 5, 0)] = "vec4(UV, 0.0, 1.0)",
+            [Register(vertex.Inputs, 10, 0)] = "COLOR",
         }, new Dictionary<int, string>
         {
             [0] = "source_transform[0]",
@@ -76,17 +79,17 @@ internal static class FalloutSkyCelestialPrograms
             [6] = "vec4(0.0)",
         }, new Dictionary<int, string>(), new Dictionary<int, string>
         {
-            [0] = "POSITION",
-            [1] = "source_uv_zero",
-            [2] = "source_uv_one",
-            [3] = "source_vertex_colour",
+            [Register(vertex.Outputs, 0, 0)] = "POSITION",
+            [Register(vertex.Outputs, 5, 0)] = "source_uv_zero",
+            [Register(vertex.Outputs, 5, 1)] = "source_uv_one",
+            [Register(vertex.Outputs, 10, 0)] = "source_vertex_colour",
         }, "    mat4 source_transform = transpose(PROJECTION_MATRIX * MODELVIEW_MATRIX);",
         "    POSITION.z = POSITION.w - POSITION.z * (1.0 - CLIP_SPACE_FAR);");
         var pixelCode = pixel.Emit("fragment", new Dictionary<int, string>
         {
-            [0] = "source_uv_zero",
-            [1] = "source_uv_one",
-            [2] = "source_vertex_colour",
+            [Register(pixel.Inputs, 5, 0)] = "source_uv_zero",
+            [Register(pixel.Inputs, 5, 1)] = "source_uv_one",
+            [Register(pixel.Inputs, 10, 0)] = "source_vertex_colour",
         }, new Dictionary<int, string> { [4] = "vec4(0.0, source_Moon_rgb_multiplier, 0.0, 0.0)" },
         new Dictionary<int, string> { [0] = "source_Moon_sampler", [1] = "source_Moon_sampler" },
         new Dictionary<int, string> { [0] = "source_fragment" }, "    vec4 source_fragment;",

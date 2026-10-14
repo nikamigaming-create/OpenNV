@@ -14,6 +14,7 @@ internal static partial class SourceSkyTransferContracts
         NativeChildSourceContracts();
         MoonContracts();
         HdrProducerContracts();
+        LightingProjectionOrderContracts();
         using var fixture = new SourceFixture();
         var images = new FalloutImageSpaceState(); var process = Guid.NewGuid();
         var sky = new FalloutSkyTransferState(Declaration, fixture.Records, images, Stack, .5f);
@@ -91,8 +92,13 @@ internal static partial class SourceSkyTransferContracts
         {
             Directory.CreateDirectory(_directory); _base = Path.Combine(_directory, "Authored.esm"); _deleted = Path.Combine(_directory, "Delete.esp");
             File.WriteAllBytes(_base, Join(Record("TES4", 0, Field("HEDR", new byte[12])),
-                Record("CLMT", 40, Field("TNAM", [36, 48, 108, 120, 0, 0])),
-                Record("WTHR", 41, Field("\0IAD", BitConverter.GetBytes(42u))), Record("IMAD", 42),
+                Record("CLMT", 40, Field("TNAM", [36, 48, 108, 120, 0, 0]), Field("WLST", Join(BitConverter.GetBytes(41u), BitConverter.GetBytes(100), new byte[4]))),
+                Record("WTHR", 41, Field("\0IAD", BitConverter.GetBytes(42u)), Field("NAM0", Enumerable.Repeat((byte)100, 160).ToArray())), Record("IMAD", 42),
+                Record("CLMT", 0x15f, Field("TNAM", [36, 48, 108, 120, 0, 0])),
+                Record("WTHR", 0x15e, Field("NAM0", new byte[160])),
+                Record("WRLD", 44, Field("CNAM", BitConverter.GetBytes(40u))), Record("CELL", 45),
+                Record("CLMT", 46, Field("TNAM", [36, 48, 108, 120, 0, 0]), Field("WLST", Join(BitConverter.GetBytes(47u), BitConverter.GetBytes(100), new byte[4]))),
+                Record("WTHR", 47, Field("NAM0", Enumerable.Repeat((byte)200, 160).ToArray())),
                 Record("GMST", 43, Field("EDID", Encoding.ASCII.GetBytes("fDaytimeColorExtension\0")), Field("DATA", BitConverter.GetBytes(.5f)))));
             Records = FalloutPluginStack.Load(_directory, ["Authored.esm"]);
         }

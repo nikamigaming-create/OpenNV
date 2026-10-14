@@ -7,6 +7,7 @@ internal static partial class SourceSkyTransferContracts
 {
     private static void CelestialContracts()
     {
+        CelestialShaderModel2Contracts();
         var source = FalloutMoonSource.Read(new(FalloutSourceMainFamily.Fallout3,
             FalloutSkyTransferDeclaration.StandaloneContractSha256));
         var package = CelestialPackage();

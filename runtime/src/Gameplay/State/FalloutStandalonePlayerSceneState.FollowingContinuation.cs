@@ -63,11 +63,13 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             call.Caller.Ordinal != weapon.MainOrdinal || call.Caller.Invocation != weapon.Invocation)
             throw new InvalidDataException("Following Player history lost its actual returned weapon/process caller.");
         var inhibition = saved.Inhibition ?? throw new InvalidDataException("Following history omitted its shared inhibition field owner.");
-        foreach (var read in call.InhibitionReads)
+        var history = new FalloutPlayerInhibitionReadHistory(inhibition, source, saved.Stack);
+        for (var index = 0; index < call.InhibitionReads.Count; index++)
         {
-            FalloutPlayerInhibitionState.RequireHistoricalPublication(inhibition, source, saved.Stack, read.Process, read.Factory);
-            if (read.Revision > inhibition.Sequence)
-                throw new InvalidDataException("Following history retained a future inhibition revision.");
+            var read = call.InhibitionReads[index];
+            history.Require(read, FalloutPlayerInhibitionConsumer.Following, call.Caller, call.PlayerProcess, (FalloutPlayerInhibitionLane)index);
+            if (index > 0 && (read.Factory != call.InhibitionReads[0].Factory || read.Revision != call.InhibitionReads[0].Revision))
+                throw new InvalidDataException("Following predicate changed its actual atomic inhibition factory or revision.");
         }
         if (call.Timer is { } timer)
         {

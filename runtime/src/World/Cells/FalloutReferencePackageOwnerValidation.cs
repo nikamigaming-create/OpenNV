@@ -10,7 +10,6 @@ internal sealed partial class FalloutReferencePackageOwnerValidation
     internal const string ParentHistoryBoundary = "source-cold-World-ParentCELL-field-history-unbound";
     private sealed record PositionBoundary(FalloutReferencePositionValues Values,
         bool Position, bool Mode, bool PersistentCell);
-    private sealed record FlagBoundary(uint Flags, bool Available);
     private readonly FalloutPluginStack _records;
     private readonly FalloutProcessCommonSnapshot _common;
     private readonly FalloutReferencePositionSnapshot _position;
@@ -18,7 +17,7 @@ internal sealed partial class FalloutReferencePackageOwnerValidation
     private readonly FalloutReferenceFormFileSnapshot _files;
     private readonly FalloutReferenceParentCellSnapshot? _parent;
     private readonly Dictionary<(Guid Process, Guid Factory, Guid Constructor, long Sequence), PositionBoundary> _positions = [];
-    private readonly Dictionary<(Guid Process, Guid Factory, Guid Fields, Guid Constructor, long Sequence), FlagBoundary> _flags = [];
+    private readonly Dictionary<Guid, FalloutReferenceFlagHistory> _flagOwners = [];
     private readonly Dictionary<Guid, FalloutReferenceScriptExtraInitializerPublication> _initializerPublications = [];
     private readonly Dictionary<Guid, FalloutReferenceScriptExtraInitializerPublication> _initializerByReference = [];
     private readonly Dictionary<Guid, FalloutSourcePackageAssignmentCall> _commands = [];
@@ -114,6 +113,8 @@ internal sealed partial class FalloutReferencePackageOwnerValidation
     private void BuildFlagIndex(FalloutReferenceScriptExtraInitializerSnapshot initialization,
         FalloutPackageCommandFieldSnapshot fields, FalloutSourceThreadReferenceFlagsSnapshot thread)
     {
+        var history = new FalloutReferenceFlagHistory(initialization,
+            FalloutReferenceScriptExtraInitializerSource.Reviewed(_position.Source.Fields), _common.Stack, _position.Actor);
         var fieldPublications = fields.Publications.ToDictionary(value => value.Process);
         var threadPublications = thread.Publications.ToDictionary(value => value.Process);
         foreach (var publication in initialization.Publications)
@@ -124,22 +125,7 @@ internal sealed partial class FalloutReferencePackageOwnerValidation
                 !_initializerPublications.TryAdd(publication.Process, publication) ||
                 !_initializerByReference.TryAdd(publication.ThreadProcess, publication))
                 throw new InvalidDataException("Reference flags changed their actual Fields/Common/current-thread publications.");
-        }
-        var events = initialization.Calls.Select(value => (Process: value.Invocation.Process, value.Changed, value.FlagsAfter,
-                Boundary: value.InvalidatedWriter is FalloutReferenceScriptExtraWriter.ReferenceFlags or FalloutReferenceScriptExtraWriter.ScriptCallback ? value.WriterBoundary : null))
-            .Concat((initialization.ReferenceFlagWrites ?? []).Select(value =>
-                (Process: value.Invocation.CommonProcess, value.Changed, FlagsAfter: value.After, Boundary: (string?)null)))
-            .OrderBy(value => value.Changed).ToArray();
-        var grouped = events.GroupBy(value => value.Process).ToDictionary(value => value.Key, value => value.ToArray());
-        uint flags = FalloutReferenceScriptExtraInitializerSource.ConstructorFlags; long sequence = 0; var available = true;
-        foreach (var publication in initialization.Publications)
-        {
-            sequence = publication.PublishedSequence!.Value;
-            Store();
-            foreach (var value in grouped.GetValueOrDefault(publication.Process) ?? [])
-            { sequence = value.Changed; flags = value.FlagsAfter; if (value.Boundary is not null) available = false; Store(); }
-            void Store() => _flags.Add((publication.Process, publication.Factory, publication.FieldsFactory,
-                publication.Constructor, sequence), new(flags, available));
+            _flagOwners.Add(publication.Process, history);
         }
     }
 
@@ -194,16 +180,11 @@ internal sealed partial class FalloutReferencePackageOwnerValidation
         return publication;
     }
 
-    private FlagBoundary RequireFlags(FalloutReferenceFlagRead read, Guid commonProcess, long epoch)
+    private void RequireFlags(FalloutReferenceFlagRead read, Guid commonProcess, long epoch)
     {
-        if (!_initializerPublications.TryGetValue(commonProcess, out var publication) || read.Process != commonProcess || read.Epoch != epoch ||
-            read.Actor != _position.Actor || read.Stack != _common.Stack || read.Source !=
-                FalloutReferenceScriptExtraInitializerSource.Reviewed(_position.Source.Fields).Identity ||
-            read.Factory != publication.Factory || read.FieldsFactory != publication.FieldsFactory || read.Constructor != publication.Constructor ||
-            !_flags.TryGetValue((read.Process, read.Factory, read.FieldsFactory, read.Constructor, read.Sequence), out var boundary) ||
-            !boundary.Available || boundary.Flags != read.Flags)
+        if (!_flagOwners.TryGetValue(commonProcess, out var history))
             throw new InvalidDataException("Reference flag borrow has no identical retained merged initializer writer boundary.");
-        return boundary;
+        history.Require(read, commonProcess, epoch);
     }
 
     private PositionBoundary RequirePositionBoundary(Guid process, Guid factory, Guid constructor, long sequence,

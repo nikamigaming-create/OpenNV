@@ -49,6 +49,13 @@ public partial class RuntimeCoordinator
         world.PrepareStandaloneEarlyPlayerController(_configuration.World.GameUnitsToMeters);
         world.InitializeStandaloneReferenceStartupPositions();
         world.PrepareStandaloneActorPackageAssignmentOwners();
+        var calendar = _nativeGameTime ?? throw new InvalidOperationException("Player Actor-time has no actual calendar owner.");
+        world.PrepareStandalonePlayerLateActorTime(calendar, records.IniSettings, () =>
+        {
+            if (_retiringNativeSession || !ReferenceEquals(_nativeGameTime, calendar) ||
+                !ReferenceEquals(_nativePluginStack, records) || !ReferenceEquals(_nativeReferences, world))
+                throw new InvalidOperationException("Player Actor-time left its actual calendar, records or World lifetime.");
+        });
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)

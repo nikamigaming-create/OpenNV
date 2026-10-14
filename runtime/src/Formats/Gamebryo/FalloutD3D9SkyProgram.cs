@@ -7,35 +7,61 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 internal enum FalloutSkyProgramStage { Vertex, Pixel }
 internal sealed record FalloutSkyProgramSemantic(int Register, int Usage, int Index, uint Mask);
 
-// Straight-line SM3 is an input format. Shader operations and declarations are
+// Straight-line SM2/SM3 are input formats. Shader operations and declarations are
 // read from the selected SDP; neither executable code nor derivative assets are
 // copied into this owner. A different instruction/input/constant requires its
 // actual consumer before it can be published to Godot.
 internal sealed class FalloutD3D9SkyProgram
 {
+    private const uint SaturateModifier = 0x00100000;
+    private const uint IdentitySwizzle = 0xe4;
+    private const uint DeclarationParameterBit = 0x80000000;
+    private const uint SemanticDeclarationBits = 0x800f001f;
+    private const uint SamplerDeclarationBits = 0xf8000000;
+    private const uint LastDeclarationUsage = 13;
     private sealed record Instruction(uint Opcode, uint Destination, uint[] Sources);
     private readonly List<Instruction> _instructions = [];
     private readonly Dictionary<int, uint[]> _definitions = [];
     private readonly List<FalloutSkyProgramSemantic> _inputs = [], _outputs = [];
     private readonly HashSet<int> _constants = [], _samplers = [];
+    private readonly Dictionary<int, FalloutSkyProgramSemantic> _fixedOutputs = [];
     internal FalloutSkyProgramStage Stage { get; }
+    internal int MajorVersion { get; }
+    internal int MinorVersion { get; }
     internal IReadOnlyList<FalloutSkyProgramSemantic> Inputs => _inputs;
     internal IReadOnlyList<FalloutSkyProgramSemantic> Outputs => _outputs;
     internal IReadOnlyList<int> Constants => _constants.Except(_definitions.Keys).Order().ToArray();
     internal IReadOnlyList<int> Samplers => _samplers.Order().ToArray();
-    internal FalloutD3D9SkyProgram(FalloutSkyProgramStage stage) => Stage = stage;
+    private FalloutD3D9SkyProgram(FalloutSkyProgramStage stage, int major, int minor)
+    { Stage = stage; MajorVersion = major; MinorVersion = minor; }
     private static int Bank(uint token) => (int)(((token >> 28) & 7) | ((token >> 8) & 0x18));
     private static int Index(uint token) => (int)(token & 0x7ff);
     private static uint Mask(uint token) => (token >> 16) & 15;
-    private static string Register(uint token)
+    private static uint Swizzle(uint token) => (token >> 16) & 255;
+    private static uint SourceModifier(uint token) => (token >> 24) & 15;
+    // SM2 has separate fixed colour/texture banks. Keep their identities
+    // distinct while exposing one register key to the semantic consumer.
+    private int RegisterKey(uint token) => MajorVersion == 2 ? (Stage, Bank(token)) switch
     {
-        if ((token & 0x80002000) != 0x80000000) throw new NotSupportedException("Sky register token/relative addressing is unowned.");
+        (FalloutSkyProgramStage.Pixel, 1) => 8 + Index(token),
+        (FalloutSkyProgramStage.Vertex, 5) => 9 + Index(token),
+        (FalloutSkyProgramStage.Vertex, 6) => 1 + Index(token),
+        _ => Index(token),
+    } : Index(token);
+
+    private string Register(uint token)
+    {
+        if ((token & 0x8000e000) != 0x80000000) throw new NotSupportedException("Sky register marker, reserved controls or relative addressing is unowned.");
         return Bank(token) switch
         {
             0 => "r" + Index(token),
-            1 => "v" + Index(token),
+            1 when Stage == FalloutSkyProgramStage.Vertex || MajorVersion == 3 || Index(token) < 2 => "v" + RegisterKey(token),
+            3 when Stage == FalloutSkyProgramStage.Pixel && MajorVersion == 2 && Index(token) < 8 => "v" + RegisterKey(token),
             2 => "c" + Index(token),
-            6 or 8 => "o" + Index(token),
+            4 when Stage == FalloutSkyProgramStage.Vertex && MajorVersion == 2 && Index(token) == 0 => "o0",
+            5 when Stage == FalloutSkyProgramStage.Vertex && MajorVersion == 2 && Index(token) < 2 => "o" + RegisterKey(token),
+            6 when Stage == FalloutSkyProgramStage.Vertex && (MajorVersion == 3 || Index(token) < 8) => "o" + RegisterKey(token),
+            8 when Stage == FalloutSkyProgramStage.Pixel && Index(token) == 0 => "o0",
             10 => "s" + Index(token),
             _ => throw new NotSupportedException("Sky register bank is unowned."),
         };
@@ -45,9 +71,11 @@ internal sealed class FalloutD3D9SkyProgram
         var bytes = payload.Span;
         if (bytes.Length < 8 || bytes.Length % 4 != 0) throw new InvalidDataException("Sky program is truncated.");
         uint Word(int at) => BinaryPrimitives.ReadUInt32LittleEndian(payload.Span[(at * 4)..]);
-        if (Word(0) != (stage == FalloutSkyProgramStage.Vertex ? 0xfffe0300U : 0xffff0300U))
-            throw new NotSupportedException("Sky program requires its actual shader-model-3 stage.");
-        var result = new FalloutD3D9SkyProgram(stage);
+        var version = Word(0); var major = (int)((version >> 8) & 255); var minor = (int)(version & 255);
+        if (!Enum.IsDefined(stage) || (version >> 16) != (stage == FalloutSkyProgramStage.Vertex ? 0xfffeU : 0xffffU) ||
+            !(major == 3 && minor == 0 || major == 2 && (minor == 0 || stage == FalloutSkyProgramStage.Pixel && minor == 1)))
+            throw new NotSupportedException("Sky program version or stage has no actual SM2/SM3 consumer.");
+        var result = new FalloutD3D9SkyProgram(stage, major, minor);
         var declared = new Dictionary<string, uint>(); var initialized = new Dictionary<string, uint>();
         var ended = false;
         for (var at = 1; at < bytes.Length / 4;)
@@ -62,20 +90,30 @@ internal sealed class FalloutD3D9SkyProgram
             if (opcode == 31)
             {
                 if (count != 2) throw new InvalidDataException("Sky declaration has an invalid extent.");
-                var name = Register(operands[1]); var bank = Bank(operands[1]); var mask = Mask(operands[1]);
+                var name = result.Register(operands[1]); var bank = Bank(operands[1]); var mask = Mask(operands[1]);
+                if ((operands[0] & DeclarationParameterBit) == 0 || (operands[1] & 0x0ff0e000) != 0)
+                    throw new NotSupportedException("Sky declaration omitted its parameter marker or has unowned reserved/destination controls.");
                 if (mask == 0 || !declared.TryAdd(name, mask)) throw new InvalidDataException("Sky declaration is empty or repeated.");
                 if (bank == 10)
                 {
-                    if (stage != FalloutSkyProgramStage.Pixel || ((operands[0] >> 27) & 15) != 2)
+                    if (stage != FalloutSkyProgramStage.Pixel || (operands[0] & ~SamplerDeclarationBits) != 0 ||
+                        ((operands[0] >> 27) & 15) != 2)
                         throw new NotSupportedException("Sky sampler has no admitted 2D pixel owner.");
                     result._samplers.Add(Index(operands[1])); initialized[name] = mask;
                 }
                 else
                 {
-                    var row = new FalloutSkyProgramSemantic(Index(operands[1]), (int)(operands[0] & 15),
-                        (int)((operands[0] >> 16) & 15), mask);
-                    if (bank == 1) { result._inputs.Add(row); initialized[name] = mask; }
-                    else if (bank == 6 && stage == FalloutSkyProgramStage.Vertex) result._outputs.Add(row);
+                    if ((operands[0] & ~SemanticDeclarationBits) != 0 || (operands[0] & 31) > LastDeclarationUsage)
+                        throw new NotSupportedException("Sky semantic declaration has reserved bits or an unsupported full usage field.");
+                    var row = major == 2 && stage == FalloutSkyProgramStage.Pixel
+                        ? operands[0] != 0x80000000U || bank is not (1 or 3)
+                            ? throw new NotSupportedException("SM2 pixel input requires its actual fixed colour/texture declaration.")
+                            : new FalloutSkyProgramSemantic(result.RegisterKey(operands[1]), bank == 1 ? 10 : 5, Index(operands[1]), mask)
+                        : new FalloutSkyProgramSemantic(Index(operands[1]), (int)(operands[0] & 31),
+                            (int)((operands[0] >> 16) & 15), mask);
+                    if (bank == 1 || bank == 3 && major == 2 && stage == FalloutSkyProgramStage.Pixel)
+                    { result._inputs.Add(row); initialized[name] = mask; }
+                    else if (bank == 6 && major == 3 && stage == FalloutSkyProgramStage.Vertex) result._outputs.Add(row);
                     else throw new NotSupportedException("Sky declaration has another stage/register owner.");
                 }
                 continue;
@@ -86,20 +124,43 @@ internal sealed class FalloutD3D9SkyProgram
                     operands.Skip(1).Any(value => !float.IsFinite(BitConverter.UInt32BitsToSingle(value))) ||
                     !result._definitions.TryAdd(Index(operands[0]), operands[1..]))
                     throw new InvalidDataException("Sky literal constant is malformed/repeated/non-finite.");
-                _ = Register(operands[0]); initialized[Register(operands[0])] = 15; continue;
+                _ = result.Register(operands[0]); initialized[result.Register(operands[0])] = 15; continue;
             }
             var extent = opcode switch { 1 => 2, 2 or 3 or 5 or 8 or 9 or 66 => 3, 4 or 18 or 88 => 4, _ => 0 };
             if (extent == 0) throw new NotSupportedException($"Sky instruction {opcode} has no actual consumer.");
             if (count != extent) throw new InvalidDataException("Sky instruction operand extent changed.");
-            var destination = Register(operands[0]); var destinationBank = Bank(operands[0]); var maskWrite = Mask(operands[0]);
-            if (destinationBank is not (0 or 6 or 8) || destinationBank == 6 && stage != FalloutSkyProgramStage.Vertex ||
-                destinationBank == 8 && (stage != FalloutSkyProgramStage.Pixel || Index(operands[0]) != 0) || maskWrite == 0 ||
+            var destination = result.Register(operands[0]); var destinationBank = Bank(operands[0]); var maskWrite = Mask(operands[0]);
+            var vertexOutput = stage == FalloutSkyProgramStage.Vertex &&
+                (major == 3 && destinationBank == 6 || major == 2 && destinationBank is 4 or 5 or 6);
+            if (destinationBank != 0 && !vertexOutput && !(destinationBank == 8 && stage == FalloutSkyProgramStage.Pixel) || maskWrite == 0 ||
                 (operands[0] & 0x0fe00000) != 0)
                 throw new NotSupportedException("Sky destination mask/modifier/stage is unowned.");
+            if (vertexOutput && major == 3 && !declared.ContainsKey(destination))
+                throw new InvalidDataException("Sky vertex output was not declared.");
+            if (major == 2 && stage == FalloutSkyProgramStage.Pixel && destinationBank == 8 &&
+                (operands[0] & SaturateModifier) != 0)
+                throw new NotSupportedException("SM2 pixel output cannot carry a saturation modifier.");
+            if (opcode == 66)
+            {
+                // The emitter consumes a sampler identity. Its independent
+                // source modifiers/swizzle cannot be silently discarded.
+                if (stage != FalloutSkyProgramStage.Pixel || Bank(operands[2]) != 10 ||
+                    SourceModifier(operands[2]) != 0 || Swizzle(operands[2]) != IdentitySwizzle ||
+                    (operands[0] & SaturateModifier) != 0)
+                    throw new NotSupportedException("Sky TEXLD sampler modifier/swizzle or saturation has no actual consumer.");
+                if (major == 2 && (destinationBank != 0 || maskWrite != 15 ||
+                    Bank(operands[1]) is not (0 or 3) || SourceModifier(operands[1]) != 0 ||
+                    Swizzle(operands[1]) != IdentitySwizzle))
+                    throw new NotSupportedException("SM2 TEXLD requires its full temporary destination and direct texture/temporary coordinates.");
+            }
             foreach (var source in operands.Skip(1))
             {
-                var name = Register(source); var bank = Bank(source);
-                if (((source >> 24) & 15) is not (0 or 1 or 11 or 12))
+                var name = result.Register(source); var bank = Bank(source);
+                if (bank is not (0 or 1 or 2 or 10) && !(major == 2 && stage == FalloutSkyProgramStage.Pixel && bank == 3))
+                    throw new NotSupportedException("Sky source bank has no actual read-only input owner.");
+                var modifier = SourceModifier(source);
+                if (modifier is not (0 or 1 or 11 or 12) ||
+                    major == 2 && stage == FalloutSkyProgramStage.Pixel && modifier is 11 or 12)
                     throw new NotSupportedException("Sky source modifier is unowned.");
                 if (bank == 2) { result._constants.Add(Index(source)); continue; }
                 if (bank == 10)
@@ -117,9 +178,23 @@ internal sealed class FalloutD3D9SkyProgram
             if (opcode == 66 && (stage != FalloutSkyProgramStage.Pixel || Bank(operands[2]) != 10))
                 throw new NotSupportedException("Sky texture instruction has no admitted pixel sampler.");
             initialized[destination] = initialized.GetValueOrDefault(destination) | maskWrite;
+            if (vertexOutput && major == 2)
+            {
+                var key = result.RegisterKey(operands[0]);
+                result._fixedOutputs[key] = new(key, destinationBank == 4 ? 0 : destinationBank == 5 ? 10 : 5,
+                    Index(operands[0]), initialized[destination]);
+            }
             result._instructions.Add(new(opcode, operands[0], operands[1..]));
         }
         if (!ended || result._instructions.Count == 0) throw new InvalidDataException("Sky program lacks its complete terminal instruction.");
+        if (major == 2 && stage == FalloutSkyProgramStage.Vertex)
+        {
+            result._outputs.AddRange(result._fixedOutputs.OrderBy(row => row.Key).Select(row => row.Value));
+            if (initialized.GetValueOrDefault("o0") != 15 || result._outputs.Where(row => row.Usage == 5)
+                .Any(row => row.Mask is not (1 or 3 or 7 or 15) ||
+                    Enumerable.Range(0, row.Index).Any(index => !result._fixedOutputs.ContainsKey(index + 1))))
+                throw new InvalidDataException("SM2 vertex program omitted its fixed position or preceding texture output.");
+        }
         if (stage == FalloutSkyProgramStage.Pixel && initialized.GetValueOrDefault("o0") != 15 ||
             stage == FalloutSkyProgramStage.Vertex && result._outputs.Any(row =>
                 (initialized.GetValueOrDefault("o" + row.Register) & row.Mask) != row.Mask))
@@ -140,7 +215,15 @@ internal sealed class FalloutD3D9SkyProgram
         var registers = _instructions.SelectMany(row => row.Sources.Prepend(row.Destination)).Select(Register)
             .Where(row => row.StartsWith('r') || row.StartsWith('o')).Distinct().Order();
         foreach (var register in registers) text.AppendLine($"    vec4 {register} = vec4(0.0);");
-        foreach (var (register, value) in inputs) text.AppendLine($"    vec4 v{register} = {value};");
+        foreach (var (register, value) in inputs)
+        {
+            // SM2 colour interpolators arrive saturated. SM3 generic inputs
+            // do not inherit this independent fixed-function range rule.
+            var expression = Stage == FalloutSkyProgramStage.Pixel && MajorVersion == 2 &&
+                _inputs.Single(row => row.Register == register).Usage == 10
+                ? "clamp(" + value + ", vec4(0.0), vec4(1.0))" : value;
+            text.AppendLine($"    vec4 v{register} = {expression};");
+        }
         foreach (var (register, values) in _definitions)
             text.AppendLine($"    vec4 c{register} = vec4({string.Join(", ", values.Select(value => Number(BitConverter.UInt32BitsToSingle(value))))});");
         foreach (var (register, value) in constants) text.AppendLine($"    vec4 c{register} = {value};");
@@ -168,7 +251,7 @@ internal sealed class FalloutD3D9SkyProgram
                 88 => "mix(" + Source(2) + ", " + Source(1) + ", step(vec4(0.0), " + Source(0) + "))",
                 _ => throw new InvalidOperationException("Sky decoder retained an unowned instruction."),
             };
-            if ((row.Destination & 0x00100000) != 0) value = "clamp(" + value + ", vec4(0.0), vec4(1.0))";
+            if ((row.Destination & SaturateModifier) != 0) value = "clamp(" + value + ", vec4(0.0), vec4(1.0))";
             var mask = new string(Enumerable.Range(0, 4).Where(i => (Mask(row.Destination) & 1U << i) != 0).Select(i => "xyzw"[i]).ToArray());
             text.AppendLine($"    {Register(row.Destination)}.{mask} = ({value}).{mask};");
         }

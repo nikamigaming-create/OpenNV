@@ -13,7 +13,8 @@ internal sealed record FalloutPlayerFollowingContinuationCall(string Source, str
     bool? CurrentClearSelected, FalloutProcessPackageRead? Primary, bool? PrimaryClearSelected,
     FalloutPlayerFollowingTimerFlagRead? Timer, bool ScalarSkipped,
     FalloutPlayerFollowingContinuationStep? FailedAt, string? Failure,
-    IReadOnlyList<FalloutOriginalInputQuery>? ReadyItemQueries = null);
+    IReadOnlyList<FalloutOriginalInputQuery>? ReadyItemQueries = null,
+    FalloutPlayerLateFrameCall? LateFrame = null);
 
 internal interface IFalloutPlayerFollowingContinuationConsumers
 {
@@ -66,12 +67,12 @@ internal static partial class FalloutPlayerFollowingContinuation
             });
             call = call with { Inhibited = inhibition.Result }; Check();
             if (!inhibition.Reads.SequenceEqual(reads)) throw new InvalidDataException("Following inhibition getter omitted its actual entered read prefix.");
-            if (inhibition.Result) { Step(FalloutPlayerFollowingContinuationStep.LateTail); throw new NotSupportedException(LateTailBoundary); }
+            if (inhibition.Result) EnterLateFrame();
             Step(FalloutPlayerFollowingContinuationStep.Life);
             var life = consumers.ReadLife(false); call = call with { Life = life }; Check();
             if (life.Raw.Value is not { } raw || life.Raw.Failure is not null || life.Argument || life.Result != LifePredicate(raw, false))
                 throw new NotSupportedException(life.Raw.Failure ?? "source-Player-current-Actor-life-predicate-owner-unbound");
-            if (life.Result == true) { Step(FalloutPlayerFollowingContinuationStep.LateTail); throw new NotSupportedException(LateTailBoundary); }
+            if (life.Result == true) EnterLateFrame();
             Step(FalloutPlayerFollowingContinuationStep.CurrentPackage);
             var current = consumers.ReadCurrentPackage(); call = call with { Current = current }; Check();
             if (current.Fields.Fields.Package is not null)
@@ -119,6 +120,18 @@ internal static partial class FalloutPlayerFollowingContinuation
             observe(call); throw;
         }
         void Step(FalloutPlayerFollowingContinuationStep step) { call = call with { Step = step }; observe(call); }
+        void EnterLateFrame()
+        {
+            Step(FalloutPlayerFollowingContinuationStep.LateTail);
+            if (consumers is IFalloutPlayerLateFrameConsumers late)
+                late.UpdateLateFrame(caller, child =>
+                {
+                    if (child.Invocation.Caller != caller || child.Invocation.PlayerProcess != playerProcess || child.Stack != stack)
+                        throw new InvalidDataException("Late Player child returned another actual following caller.");
+                    call = call with { LateFrame = child }; Check(); observe(call);
+                });
+            throw new NotSupportedException(LateTailBoundary);
+        }
         void ObserveQuery(FalloutOriginalInputQuery query)
         {
             var preceding = call.ReadyItemQueries ?? [];
@@ -181,10 +194,17 @@ internal static partial class FalloutPlayerFollowingContinuation
             FalloutPlayerFollowingContinuationStep.ReadyItemGlobals => ReadyItemGlobalsBoundary,
             FalloutPlayerFollowingContinuationStep.ReadyItemPositive => ReadyItemPositiveBoundary,
             FalloutPlayerFollowingContinuationStep.ReadyItemTail => ReadyItemTailBoundary,
-            FalloutPlayerFollowingContinuationStep.LateTail => LateTailBoundary,
+            FalloutPlayerFollowingContinuationStep.LateTail => call.LateFrame?.Failure ?? LateTailBoundary,
             _ => call.Failure
         };
         if (call.Failure != expectedFailure) throw new InvalidDataException("Following Player service changed its precise selected unowned boundary.");
+        if (call.LateFrame is { } child)
+        {
+            FalloutStandalonePlayerSceneState.ValidateLateFrameCall(child, FalloutPlayerLateFramePrefixSource.Reviewed(source), stack);
+            if (at != FalloutPlayerFollowingContinuationStep.LateTail || child.Invocation.Caller != call.Caller ||
+                child.Invocation.PlayerProcess != call.PlayerProcess || child.Failure != call.Failure)
+                throw new InvalidDataException("Following Player omitted its actual late-child failure or entered another branch.");
+        }
     }
     private static void RequireReadIdentity(FalloutPlayerFollowingContinuationCall call, FalloutPlayerFollowingContinuationSource source,
         string stack, Guid process)

@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutStandalonePlayerSceneSource(FalloutMainScriptCallerSource Main, string Contract)
 {
-    private const string Rules = "source-FO3-Main-Player-scene/v1;" +
+    private const string Rules = "source-FO3-Main-Player-scene/v2;" +
         "Main-factory-byte-scene-zero-and-independent-hold-zero;" +
         "Player-constructor-view-zero-first-person-null;" +
         "selected-first-person-factory-return-old-owner-release-before-store-before-acquire;" +
@@ -13,7 +13,7 @@ internal sealed record FalloutStandalonePlayerSceneSource(FalloutMainScriptCalle
         "free-camera-scene-inversion-before-hold-enter-and-argument-nonzero;" +
         "actual-enabled-input-manager-child-byte-before-enter-only-position-height-angles;" +
         "scene-clock-loader-numerator-one-denominator-one-manager-kind-zero;" +
-        "byte-increment-before-clock-query-wide-ratio-times-scalar-times-delivered-Float32;" +
+        "byte-increment-before-clock-query-wide-ratio-times-scalar-times-current-cached-Main-Float32;" +
         "Float32-store-before-actual-Player-virtual-return-before-byte-decrement;" +
         "unit-kind-not-four-arm-exact-identity-conversion-only;" +
         "nonunit-x87-and-kind-four-child-not-substituted;" +

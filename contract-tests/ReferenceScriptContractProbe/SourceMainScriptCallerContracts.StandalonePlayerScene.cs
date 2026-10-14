@@ -7,6 +7,7 @@ internal static partial class SourceMainScriptCallerContracts
     {
         RunSourceSceneReferenceQueryContracts();
         RunPlayerReferenceHudContracts();
+        RunSceneCachedClockContracts();
         var immediate = new FalloutImmediateScriptSource(FalloutSourceMainFamily.Fallout3, new('1', 64),
             FalloutImmediateScriptSource.ContractForEngine(FalloutSourceMainFamily.Fallout3));
         var source = FalloutStandalonePlayerSceneSource.Read(FalloutMainScriptCallerSource.Read(immediate));
@@ -59,8 +60,8 @@ internal static partial class SourceMainScriptCallerContracts
 
         var clock = new FalloutStandalonePlayerSceneState(source, saved.Stack, Guid.NewGuid());
         var main = Guid.NewGuid();
-        Require(clock.StoreSceneClock(main, 7, 0x3e800000) == 0x3e800000 && clock.EnterSceneVirtual(main, 7) == 0x3e800000,
-            "Selected unit clock changed the actual delivered Float32 bits.");
+        Require(clock.StoreSceneClock(main, 7, () => AuthoredSceneCachedDelta(clock, 0x3e800000)) == 0x3e800000 && clock.EnterSceneVirtual(main, 7) == 0x3e800000,
+            "Selected unit clock changed the actual cached Main Float32 bits.");
         var released = 0;
         Reject(() => clock.ExecuteInitialVirtualPrefix(main, 7, () => released++));
         var stopped = clock.Capture();
@@ -68,7 +69,7 @@ internal static partial class SourceMainScriptCallerContracts
             stopped.Prelude?.FailedAt == FalloutStandaloneScenePreludeStep.ReferenceFrame &&
             stopped.ReferenceQuery is { GetterReturned: true, Returned: true, Input: null, Result: null },
             "Actual shared-child prefix was skipped/repeated or the unreturned virtual fabricated the source decrement.");
-        Reject(() => clock.StoreSceneClock(main, 7, 0x3e800000));
+        Reject(() => clock.StoreSceneClock(main, 7, () => AuthoredSceneCachedDelta(clock, 0x3e800000)));
         Reject(() => FalloutStandalonePlayerSceneState.RequirePlayable(stopped));
         Reject(() => FalloutStandalonePlayerSceneState.Validate(stopped with { SceneBracket = 0 }));
         var failedFirst = new AuthoredPlayerSceneObject();
