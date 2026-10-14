@@ -5,9 +5,13 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
-    private sealed class SourcePackageCommandConsumers(FalloutReferenceWorld world, FalloutActorPackageCommandFields fields) :
+    private sealed partial class SourcePackageCommandConsumers :
         IFalloutSourcePackageAssignmentConsumers, IFalloutPackageReferenceFieldConsumers
     {
+        private readonly FalloutReferenceWorld world;
+        private readonly FalloutActorPackageCommandFields fields;
+        internal SourcePackageCommandConsumers(FalloutReferenceWorld world, FalloutActorPackageCommandFields fields)
+        { this.world = world; this.fields = fields; }
         public FalloutPackageCommandFieldsSource Source => fields.Source;
         public FalloutPackageAssignmentSource AssignmentSource => world._sourcePackageAssignmentSource ??
             throw new NotSupportedException("source-ordered-package-command-selector-unbound");
@@ -112,12 +116,11 @@ internal sealed partial class FalloutReferenceWorld
         public void AssignActorPackage(FalloutPackageCommandFieldInvocation invocation, FalloutFormKey package, bool primary, bool alternate)
         {
             RequireCurrent(invocation);
-            // Slot mutation is a child of this call. The actual Actor status,
-            // High adjustment and mandatory reset owners precede its return.
-            throw new NotSupportedException("source-Actor-package-assignment-status-and-current-arm-consumers-unbound");
+            _ = world.ProcessCommon.ExecuteActorPackageAssignment(invocation, package, primary, alternate, this,
+                call => world._currentActorPackageAssignment = call);
         }
         public int ReadProcessTier(FalloutPackageCommandFieldInvocation invocation)
-        { RequireCurrent(invocation); throw new NotSupportedException("source-package-command-process-tier-current-writer-unbound"); }
+        { RequireCurrent(invocation); return world.ProcessCommon.ReadActorAssignmentTier(invocation).Value; }
         public uint StoreProcessClock(FalloutPackageCommandFieldInvocation invocation)
         { RequireCurrent(invocation); throw new NotSupportedException("source-package-command-nonzero-tier-clock-store-unbound"); }
         public void UpdateTierOne(FalloutPackageCommandFieldInvocation invocation)

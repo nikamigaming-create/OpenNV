@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // reselects a package, replays an event or recreates modifier pools.
 internal sealed partial class FalloutActorProcessCommonState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-common/v16";
+    internal const string Schema = "opennv-actor-process-common/v17";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;
@@ -44,7 +44,8 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
             "actual-process-common:" + failed.Source.Reference + ":" + failed.Boundary :
         _current.Values.FirstOrDefault(entry => entry.SceneFields?.WeaponDrawn is { Available: false }) is { } weapon ?
             "source-Actor-weapon-drawn-observed-writer-unbound:" + weapon.Source.Reference :
-        SourcePackageSaveBlocker is { } package ? package : EarlyControllerSaveBlocker is { } controller ? controller :
+        SourcePackageSaveBlocker is { } package ? package : ActorAssignmentSaveBlocker is { } assignment ? assignment :
+        EarlyControllerSaveBlocker is { } controller ? controller :
         _current.Values.FirstOrDefault(entry => entry.SceneFields?.WeaponContinuation is { ActionAvailable: false, Initialization: not null } or
         { ActivityAvailable: false } or { CacheAvailable: false }) is { } following ?
             "source-Actor-following-weapon-observed-writer-unbound:" + following.Source.Reference : null;

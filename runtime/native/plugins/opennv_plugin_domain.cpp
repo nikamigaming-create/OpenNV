@@ -601,6 +601,7 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_source_local_attach.inc"
 #include "opennv_plugin_callable_pages.inc"
 #include "opennv_plugin_engine_commands.inc"
+#include "opennv_plugin_model_operand.inc"
 #include "opennv_plugin_source_call_sites.inc"
 #include "opennv_plugin_source_globals.inc"
 #include "opennv_plugin_source_field_methods.inc"

@@ -31,6 +31,7 @@ internal static partial class SourceMainScriptCallerContracts
             fixture.Changes.Capture().Entries.Single().Flags == 2 && fixture.Cells.GridConstruction is { Returned: true } &&
             SHA256.HashData(File.ReadAllBytes(owned.FalloutExecutablePath)).AsSpan().SequenceEqual(before),
             "Owned reference startup lost an original selector, distinct vector, source dependency or read-only source bytes.");
+        var actorAssignment = AuditOwnedActorPackageAssignment(records, fixture.Common, controls);
         var saved = fixture.Capture();
         for (var cycle = 0; cycle < 3; cycle++)
         {
@@ -40,7 +41,7 @@ internal static partial class SourceMainScriptCallerContracts
             saved = cold.Capture();
         }
         Console.WriteLine(JsonSerializer.Serialize(new { status = "OPENNV_OWNED_REFERENCE_STARTUP_PASS", source = source.Identity,
-            fileSource = fileSource.Identity, cellSource = cellSource.Identity, file, inputs, first, prefix, second,
+            fileSource = fileSource.Identity, cellSource = cellSource.Identity, file, inputs, first, prefix, second, actorAssignment,
             coldCycles = 3, scope = "AUTHORED_WITH_OWNED_DATA", originalStartup = "UNEXECUTED", wholePlayer = "UNEXECUTED",
             controllerReset = "AUTHORED_COMPONENT_CALLBACK", canonicalParity = "UNVERIFIED" }));
         return 0;

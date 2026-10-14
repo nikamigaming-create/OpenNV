@@ -11,7 +11,7 @@ internal sealed record FalloutPackageExtraReference(FalloutFormKey Form, Fallout
             throw new InvalidDataException("Package Extra has no typed original form/reference identity.");
     }
 }
-internal enum FalloutPackageRuntimeMutationKind { Retain, Release, Procedure, ScriptAssignedFlag, UnownedProcedure, UnownedFlags, UnownedLifetime }
+internal enum FalloutPackageRuntimeMutationKind { Retain, Release, Procedure, ScriptAssignedFlag, UnownedProcedure, UnownedFlags, UnownedLifetime, UnownedTarget }
 internal sealed record FalloutPackageRuntimeMutation(long Sequence, FalloutPackageCommandFieldInvocation Invocation,
     FalloutFormKey Package, FalloutPackageRuntimeMutationKind Kind, int BeforeCount, int AfterCount,
     int BeforeProcedure, int AfterProcedure, uint BeforeFlags, uint AfterFlags, string Producer);
@@ -19,7 +19,7 @@ internal sealed record FalloutPackageRuntimePublication(Guid Factory, Guid? Prev
 internal sealed record FalloutPackageCountAuthorityObservation(long Sequence, FalloutPackageCommandFieldInvocation Invocation, string Producer);
 internal sealed record FalloutPackageRuntimeSnapshot(FalloutFormKey Form, string RecordSha256, sbyte Kind, uint SourceFlags,
     int Procedure, uint Flags, int LifetimeCount, bool ProcedureAvailable, bool FlagsAvailable, bool CountAvailable,
-    IReadOnlyList<FalloutPackageRuntimeMutation> History);
+    IReadOnlyList<FalloutPackageRuntimeMutation> History, FalloutPackageRuntimeTargetSnapshot? Target = null);
 internal sealed record FalloutPackageRegistrySnapshot(string Schema, string Source, string Stack, Guid Factory,
     long Sequence, IReadOnlyList<FalloutPackageRuntimeSnapshot> Packages, IReadOnlyList<FalloutPackageRuntimePublication> Publications,
     bool CountAuthorityAvailable, IReadOnlyList<FalloutPackageCountAuthorityObservation> CountAuthorityObservations);

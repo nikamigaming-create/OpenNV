@@ -47,6 +47,14 @@ public:
         (void)source_code_protection(address, extent);
     }
     std::uint64_t acquire_site(std::uint32_t address, std::uint32_t target, bool getter) {
+        return acquire_source_site(address, target, getter, 0);
+    }
+    std::uint64_t acquire_model_operand(std::uint32_t instruction, std::uint32_t pointer) {
+        if (!pointer) throw CallablePageFailure(ERROR_INVALID_ADDRESS, "The model input has no source CString pointer.");
+        return acquire_source_site(instruction, 0, false, pointer);
+    }
+private:
+    std::uint64_t acquire_source_site(std::uint32_t address, std::uint32_t target, bool getter, std::uint32_t model_pointer) {
         healthy();
         const auto extent = getter ? 6U : 5U;
         const auto image = reinterpret_cast<std::uintptr_t>(source_image_base_);
@@ -92,6 +100,11 @@ public:
                 std::memcpy(body.data() + 1, &displacement, 4);
                 std::memcpy(reinterpret_cast<void*>(address), body.data(), body.size());
             }
+            else if (model_pointer) {
+                std::array<std::uint8_t, 5> instruction{0x68, 0, 0, 0, 0};
+                std::memcpy(instruction.data() + 1, &model_pointer, sizeof(model_pointer));
+                std::memcpy(reinterpret_cast<void*>(address), instruction.data(), instruction.size());
+            }
             else {
                 // A write lease owns five traps until the original module's
                 // actual mutation. No copied target, fake getter or RET exists.
@@ -101,6 +114,7 @@ public:
         }
         catch (...) { faulted_ = true; throw; }
     }
+public:
     void release_site(std::uint64_t owner) {
         healthy();
         auto found = std::find_if(site_entries_.begin(), site_entries_.end(), [&](const auto& site) { return site.owner == owner && site.live; });

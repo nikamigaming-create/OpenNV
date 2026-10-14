@@ -62,7 +62,7 @@ internal sealed partial class FalloutSourceReferencePositionState
             ConstructorStartup = _calls.LastOrDefault(value => value.Kind == "constructor-startup-position");
             ConfiguredStartup = _calls.LastOrDefault(value => value.Kind == "configured-startup-position");
         }
-        _publications.Add(new(Process, Factory, Constructor, saved?.Process, saved?.Factory));
+        _publications.Add(new(Process, Factory, Constructor, saved?.Process, saved?.Factory, _sequence));
     }
 
     // This closes only unchanged constructor lanes from actual winning inputs.
@@ -96,8 +96,15 @@ internal sealed partial class FalloutSourceReferencePositionState
             if (x.Length != 0) throw new NotSupportedException("source-configured-grid-reference-publication-unbound");
         });
         foreach (var lane in new[] { FalloutReferencePositionLane.PositionMode,
-            FalloutReferencePositionLane.Scale, FalloutReferencePositionLane.PersistentCell, FalloutReferencePositionLane.ActorYawMode }) _writers.Remove(lane);
+            FalloutReferencePositionLane.Scale, FalloutReferencePositionLane.PersistentCell, FalloutReferencePositionLane.ActorYawMode,
+            FalloutReferencePositionLane.ActorAssignmentByte }) _writers.Remove(lane);
         return LastPrefix!;
+    }
+
+    internal long ReadCurrentBorrowSequence(FalloutReferencePositionInvocation invocation)
+    {
+        RequireRead(invocation);
+        return _sequence;
     }
 
     internal FalloutReferencePositionRead ReadCurrentPosition(FalloutReferencePositionInvocation invocation)

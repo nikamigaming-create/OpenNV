@@ -28,7 +28,7 @@ internal sealed record FalloutReferenceScriptExtraInitializationCall(FalloutRefe
 }
 internal sealed record FalloutReferenceScriptExtraInitializerPublication(Guid Process, Guid Factory, Guid FieldsFactory,
     Guid Constructor, long Epoch, Guid ThreadProcess, Guid ThreadFactory, Guid? PreviousProcess = null,
-    Guid? PreviousFactory = null);
+    Guid? PreviousFactory = null, long? PublishedSequence = null);
 internal sealed record FalloutReferenceScriptExtraInitializerSnapshot(string Schema,
     FalloutReferenceScriptExtraInitializerSource Source, string Stack, FalloutCombatActorIdentity Actor,
     Guid Process, Guid Factory, Guid FieldsFactory, Guid Constructor, long Epoch,

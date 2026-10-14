@@ -19,6 +19,7 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
     private SceneTree? _pausedTree;
     private bool _previousPause;
     private IDisposable? _background;
+    private FalloutRaceMenuModelPathConsumer? _modelInput;
     private int _page, _previewRevision = -1;
     internal string? Error { get; private set; }
     internal event Action<FalloutNativeRaceSexSelection>? Accepted;
@@ -86,24 +87,46 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
     };
 
     internal void Configure(FalloutNativeRaceSexContract contract, FalloutNativeRaceSexSelection current, FalloutPluginStack records,
-        RuntimeNativeImageSpace? imageSpace = null, string? modelPath = null)
+        RuntimeNativeImageSpace? imageSpace = null, string? modelPath = null, FalloutRaceMenuModelPath? modelInput = null)
     {
         Name = "NativeRaceSexEntry"; Layer = 120; ProcessMode = ProcessModeEnum.Always;
         _records = records;
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Creation has no owned content source.");
         _settings = FalloutInstallationSettings.Read(source);
         _creation = new(records, contract, current, _settings);
-        _device = new(modelPath ?? FalloutExecutableStringTable.ReadNativeRaceMenuModel(source.FalloutExecutablePath), _settings)
-        { Size = GetViewport().GetVisibleRect().Size };
-        AddChild(_device);
-        _screen = new(_device, records, _settings, Fail); AddChild(_screen);
-        _screen.Menu.Navigate += Navigate;
-        GetViewport().SizeChanged += Resize;
-        _pausedTree = GetTree(); _previousPause = _pausedTree.Paused; _pausedTree.Paused = true;
-        _background = imageSpace?.BeginMenuBackground(records, FalloutMenuBackgroundKind.Popup);
-        Input.MouseMode = Input.MouseModeEnum.Visible;
-        RefreshPreview(); ShowPage();
-        GD.Print($"OPENNV_NATIVE_CREATION_PRESENTED pages={_creation.Headers.Count} controls={_creation.Controls.Controls.Count} source=owned-nif-xml-fnt-ctl-player-records parity=unverified");
+        try
+        {
+            if (modelInput is not null)
+            {
+                _modelInput = modelInput.BorrowConsumer();
+                if (modelPath is not null && modelPath != _modelInput.Model)
+                    throw new InvalidDataException("Race-menu device constructor changed its actual current model operand.");
+                modelPath = _modelInput.Model;
+            }
+            _device = new(modelPath ?? FalloutExecutableStringTable.ReadNativeRaceMenuModel(source.FalloutExecutablePath), _settings)
+            { Size = GetViewport().GetVisibleRect().Size };
+            AddChild(_device);
+            _screen = new(_device, records, _settings, Fail); AddChild(_screen);
+            _screen.Menu.Navigate += Navigate;
+            GetViewport().SizeChanged += Resize;
+            _pausedTree = GetTree(); _previousPause = _pausedTree.Paused; _pausedTree.Paused = true;
+            _background = imageSpace?.BeginMenuBackground(records, FalloutMenuBackgroundKind.Popup);
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+            RefreshPreview(); ShowPage();
+            GD.Print($"OPENNV_NATIVE_CREATION_PRESENTED pages={_creation.Headers.Count} controls={_creation.Controls.Controls.Count} source=owned-nif-xml-fnt-ctl-player-records parity=unverified");
+        }
+        catch (Exception original)
+        {
+            var failures = new List<Exception>();
+            try { GetViewport().SizeChanged -= Resize; ReleasePause(); } catch (Exception cleanup) { failures.Add(cleanup); }
+            foreach (var child in new Node?[] { _portrait, _screen, _device })
+                try { if (child is not null && GodotObject.IsInstanceValid(child)) child.Free(); }
+                catch (Exception cleanup) { failures.Add(cleanup); }
+            if (failures.Count == 0) { _modelInput?.Dispose(); _modelInput = null; }
+            if (failures.Count != 0)
+                throw new AggregateException("Creation allocation and actual resource retirement both failed.", new[] { original }.Concat(failures));
+            throw;
+        }
     }
     private void Resize() => _device.Size = GetViewport().GetVisibleRect().Size;
     private string Text(string setting) => FalloutGameSettingStrings.Read(_records, setting);
@@ -242,5 +265,9 @@ internal partial class RuntimeNativeRaceSexEntry : CanvasLayer
         if (_pausedTree is null) return;
         _pausedTree.Paused = _previousPause; _pausedTree = null;
     }
-    public override void _ExitTree() { GetViewport().SizeChanged -= Resize; ReleasePause(); }
+    public override void _ExitTree()
+    {
+        try { GetViewport().SizeChanged -= Resize; ReleasePause(); }
+        finally { _modelInput?.Dispose(); _modelInput = null; }
+    }
 }

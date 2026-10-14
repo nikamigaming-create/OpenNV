@@ -75,6 +75,7 @@ internal sealed partial class FalloutReferenceWorld
     private void RetireSourceCellLinks()
     {
         var failures = new List<Exception>();
+        try { _sourceLinkedPlayerParentHistory?.Retire(); } catch (Exception error) { failures.Add(error); }
         try { _sourceCellLinks?.Dispose(); _sourceCellLinks = null; } catch (Exception error) { failures.Add(error); }
         try { _sourceCellIngestion?.Dispose(); _sourceCellIngestion = null; } catch (Exception error) { failures.Add(error); }
         if (_sourceCellLinks is null) { _sourceLinkedPlayerParentConstructed = false; _sourceLinkedPlayerParent = null; }

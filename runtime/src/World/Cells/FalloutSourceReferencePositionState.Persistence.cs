@@ -12,6 +12,7 @@ internal sealed partial class FalloutSourceReferencePositionState
         FalloutCombatActorIdentity actor)
     {
         var dependencies = new List<FalloutReferencePositionDependency>();
+        var seen = new HashSet<FalloutFormKey>(FalloutFormKeyComparer.Instance);
         var basis = records.GetEffective(actor.Base);
         if (basis.Signature != "NPC_" || basis.FormKey != actor.Base || basis.Flags != actor.BaseFlags || Digest(basis) != actor.BaseSha256)
             throw new InvalidDataException("Reference prefix changed its actual winning NPC base.");
@@ -41,7 +42,7 @@ internal sealed partial class FalloutSourceReferencePositionState
         void Add(FalloutPluginRecord record)
         {
             if (record.IsDeleted) throw new InvalidDataException("Reference prefix selected a deleted source dependency.");
-            if (dependencies.All(value => value.Form != record.FormKey))
+            if (seen.Add(record.FormKey))
                 dependencies.Add(new(record.FormKey, record.Signature, record.Flags, Digest(record)));
         }
         static void NoCallbacks(IReadOnlyList<FalloutPluginSubrecord> rows, string owner)
@@ -68,6 +69,7 @@ internal sealed partial class FalloutSourceReferencePositionState
             FalloutReferencePositionStep.PositionMode when Bits() <= byte.MaxValue => before with { PositionMode = (byte)Bits() },
             FalloutReferencePositionStep.Scale => before with { Scale = Bits() },
             FalloutReferencePositionStep.ActorYawMode => before with { ActorYawMode = Bits() },
+            FalloutReferencePositionStep.ActorAssignmentByte when Bits() == 0 => before with { ActorAssignmentByte = 0 },
             FalloutReferencePositionStep.PersistentCell when store.Present is { } present && (present || store.Form is null) =>
                 before with { PersistentCell = store.Form, PersistentCellPresent = present },
             _ => throw new InvalidDataException("Reference history contains an unknown scalar or Extra store.")
@@ -153,6 +155,7 @@ internal sealed partial class FalloutSourceReferencePositionState
                 "raw-adjusted-position-mode-store" => [FalloutReferencePositionStep.PositionMode],
                 "raw-reference-scale-store" => [FalloutReferencePositionStep.Scale],
                 "raw-Actor-yaw-selection-word-store" => [FalloutReferencePositionStep.ActorYawMode],
+                "raw-Actor-assignment-byte-zero-store" => [FalloutReferencePositionStep.ActorAssignmentByte],
                 "persistent-CELL-Extra-twelve-store" => [FalloutReferencePositionStep.PersistentCell],
                 _ => throw new InvalidDataException("Reference fields contain an unknown writer kind.")
             };
@@ -170,7 +173,8 @@ internal sealed partial class FalloutSourceReferencePositionState
             foreach (var (step, lane) in new[] { (FalloutReferencePositionStep.PositionMode, FalloutReferencePositionLane.PositionMode),
                 (FalloutReferencePositionStep.Scale, FalloutReferencePositionLane.Scale),
                 (FalloutReferencePositionStep.PersistentCell, FalloutReferencePositionLane.PersistentCell),
-                (FalloutReferencePositionStep.ActorYawMode, FalloutReferencePositionLane.ActorYawMode) })
+                (FalloutReferencePositionStep.ActorYawMode, FalloutReferencePositionLane.ActorYawMode),
+                (FalloutReferencePositionStep.ActorAssignmentByte, FalloutReferencePositionLane.ActorAssignmentByte) })
                 if (call.Stores.Any(value => value.Step == step)) writers.Remove(lane);
             if ((call.Kind == "constructed-reference-field-prefix") != (call.Prefix is not null))
                 throw new InvalidDataException("Reference prefix omitted or borrowed its independent source receipt.");
@@ -185,7 +189,8 @@ internal sealed partial class FalloutSourceReferencePositionState
                     throw new InvalidDataException("Reference prefix invented winning-source or configured-start closure.");
                 if (prefix.Returned)
                     foreach (var lane in new[] { FalloutReferencePositionLane.PositionMode,
-                        FalloutReferencePositionLane.Scale, FalloutReferencePositionLane.PersistentCell, FalloutReferencePositionLane.ActorYawMode }) writers.Remove(lane);
+                        FalloutReferencePositionLane.Scale, FalloutReferencePositionLane.PersistentCell, FalloutReferencePositionLane.ActorYawMode,
+                        FalloutReferencePositionLane.ActorAssignmentByte }) writers.Remove(lane);
             }
             if (call.InvalidatedLane is { } invalidated)
             {
@@ -215,5 +220,7 @@ internal sealed partial class FalloutSourceReferencePositionState
         if (sequence != saved.Sequence || values != saved.Values || writers.Count != saved.UnownedWriters.Count ||
             writers.Any(value => !saved.UnownedWriters.TryGetValue(value.Key, out var boundary) || boundary != value.Value))
             throw new InvalidDataException("Reference snapshot changed its current state or writer availability.");
+        FalloutReferencePublicationSequence.Validate(saved.Publications.Select(value => (value.Process, value.PublishedSequence)),
+            saved.Calls.Select(value => (value.Invocation.ReferenceProcess, value.Entered, value.Changed)), saved.Sequence);
     }
 }

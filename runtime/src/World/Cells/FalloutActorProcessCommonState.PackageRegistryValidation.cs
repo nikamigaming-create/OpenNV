@@ -50,6 +50,8 @@ internal sealed partial class FalloutActorProcessCommonState
             throw new InvalidDataException("An unreviewed source family acquired the FO3 mutable package registry.");
         FalloutPackageRuntimeRegistry.Validate(registry, saved.ExecutableSha256, saved.Stack);
         var packages = registry.Packages.ToDictionary(package => package.Form, FalloutFormKeyComparer.Instance);
+        FalloutPackageRuntimeRegistry.ValidateTargetReads(entries.SelectMany(entry => entry.ActorAssignment?.Calls ?? [])
+            .Select(assignment => assignment.Extra?.TargetRead).OfType<FalloutPackageRuntimeTargetRead>(), registry);
         var history = registry.Packages.SelectMany(package => package.History).ToArray();
         var lifetimes = history.Where(item => item.Kind is FalloutPackageRuntimeMutationKind.Retain or FalloutPackageRuntimeMutationKind.Release)
             .ToLookup(item => (item.Invocation.SourceCommand, item.Invocation.Actor, item.Invocation.Process, item.Invocation.Epoch, item.Package, item.Kind));

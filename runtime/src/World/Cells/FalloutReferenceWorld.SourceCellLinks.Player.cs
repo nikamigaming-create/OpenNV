@@ -9,16 +9,26 @@ internal sealed partial class FalloutReferenceWorld
     private FalloutFormKey? _sourceLinkedPlayerParent;
     private readonly Guid _sourceLinkedPlayerParentFactory = Guid.NewGuid();
     private long _sourceLinkedPlayerParentRevision;
+    private FalloutReferenceParentCellHistory? _sourceLinkedPlayerParentHistory;
     private void ConstructSourcePlayerLinkedParent(bool cold)
     {
         var actor = ReadCombatActorIdentity(_enginePlayer);
         if (_sourceLinkedPlayerParentConstructed || !actor.EnginePlayer || !ActorProcesses.HasActor(_enginePlayer))
             throw new InvalidOperationException("Canonical Player ParentCELL has no actual once-only source actor factory.");
+        if (cold && _sourcePlayerReferencePosition is not null)
+            throw new NotSupportedException("source-cold-World-ParentCELL-field-history-unbound");
         // Source reference construction initializes ParentCELL to null. Cold
         // resumes the returned source setter; native body publication is later.
         _sourceLinkedPlayerParent = cold ? SourceCellLinks.RuntimeActorParent(actor) : null;
         _sourceLinkedPlayerParentConstructed = true;
         _sourceLinkedPlayerParentRevision++;
+        if (_sourcePlayerReferencePosition is { } reference)
+        {
+            var scene = CampaignStandalonePlayerScene;
+            _sourceLinkedPlayerParentHistory = new(reference.Source, scene.Stack, ActualSourceProcessIdentity,
+                _sourceLinkedPlayerParentFactory, scene.Constructor, actor, _sourceLinkedPlayerParentRevision,
+                _sourceLinkedPlayerParent);
+        }
     }
     internal FalloutFormKey? CurrentSourcePlayerLinkedCell
     {
@@ -27,6 +37,7 @@ internal sealed partial class FalloutReferenceWorld
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (!_sourceLinkedPlayerParentConstructed)
                 throw new NotSupportedException("Canonical Player source ParentCELL constructor is absent.");
+            _sourceLinkedPlayerParentHistory?.RequireCurrentField(_sourceLinkedPlayerParentRevision, _sourceLinkedPlayerParent);
             return _sourceLinkedPlayerParent;
         }
     }
@@ -52,15 +63,29 @@ internal sealed partial class FalloutReferenceWorld
         if (_currentPlayerProcessCell!() != before)
             throw new InvalidDataException("Canonical Player native ParentCELL lease substituted the active presentation CELL for source membership.");
         SourceCellLinks.RequireRuntimeActorParent(actor, before);
-        SourceCellLinks.InsertRuntimeActor(actor, before, destination, () =>
+        var history = _sourceLinkedPlayerParentHistory;
+        history?.BeginStore(invocation.Main.Identity, step, _sourceLinkedPlayerParentRevision, before, destination);
+        Exception? failure = null;
+        try
         {
-            RequireCampaignMainPlayerInvocation(invocation, step);
-            _ = RequirePublishedLinkedPlayer(); publishActualParentCell();
-            _sourceLinkedPlayerParent = destination;
-            _sourceLinkedPlayerParentRevision++;
-            if (_currentPlayerProcessCell!() != destination)
-                throw new InvalidDataException("Canonical Player ParentCELL callback did not publish the actual destination.");
-        }, "actual-source-Player-" + step + "/" + invocation.Main.Identity);
+            SourceCellLinks.InsertRuntimeActor(actor, before, destination, () =>
+            {
+                RequireCampaignMainPlayerInvocation(invocation, step);
+                _ = RequirePublishedLinkedPlayer(); publishActualParentCell();
+                _sourceLinkedPlayerParent = destination;
+                _sourceLinkedPlayerParentRevision++;
+                history?.ObserveStore(_sourceLinkedPlayerParentRevision, _sourceLinkedPlayerParent);
+                if (_currentPlayerProcessCell!() != destination)
+                    throw new InvalidDataException("Canonical Player ParentCELL callback did not publish the actual destination.");
+            }, "actual-source-Player-" + step + "/" + invocation.Main.Identity);
+        }
+        catch (Exception error) { failure = error; throw; }
+        finally
+        {
+            try { history?.EndStore(failure); }
+            catch (Exception finish) when (failure is not null)
+            { throw new AggregateException("ParentCELL writer and retained history both failed.", failure, finish); }
+        }
     }
 
     // Cold native construction rebinds a retained source membership. It never

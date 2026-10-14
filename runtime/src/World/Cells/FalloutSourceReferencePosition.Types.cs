@@ -15,19 +15,19 @@ internal sealed record FalloutReferencePositionInvocation(Guid Call, FalloutComb
             throw new InvalidDataException("Reference child lost its original entered package command.");
     }
 }
-internal enum FalloutReferencePositionLane { Position, PositionMode, Scale, PersistentCell, ActorYawMode }
+internal enum FalloutReferencePositionLane { Position, PositionMode, Scale, PersistentCell, ActorYawMode, ActorAssignmentByte }
 internal enum FalloutReferencePositionStep
 {
     Entered, SourcePrefix, ConfiguredCell, ConfiguredX, InitialPlacement, PersistentPredicate, KindPredicate,
     Worldspace, Detached, PositionX, PositionY, PositionZ, ReferenceChange, ControllerReset, ModelTranslation,
-    ParentCell, PositionMode, Scale, PersistentCell, Returned, UnownedWriter, ActorYawMode
+    ParentCell, PositionMode, Scale, PersistentCell, Returned, UnownedWriter, ActorYawMode, ActorAssignmentByte
 }
 internal sealed record FalloutReferencePositionValues(FalloutPackageRawPosition Position, byte PositionMode,
-    uint Scale, FalloutFormKey? PersistentCell, bool PersistentCellPresent, uint ActorYawMode = 0);
+    uint Scale, FalloutFormKey? PersistentCell, bool PersistentCellPresent, uint ActorYawMode = 0, byte ActorAssignmentByte = 0);
 internal sealed record FalloutReferencePositionStore(FalloutReferencePositionStep Step, long Changed,
     uint? Bits = null, FalloutFormKey? Form = null, bool? Present = null);
 internal sealed record FalloutReferencePositionPublication(Guid Process, Guid Factory, Guid Constructor,
-    Guid? PreviousProcess = null, Guid? PreviousFactory = null);
+    Guid? PreviousProcess = null, Guid? PreviousFactory = null, long? PublishedSequence = null);
 internal sealed record FalloutReferencePositionRead(string Source, string Stack, Guid Process, Guid Factory,
     Guid Constructor, FalloutCombatActorIdentity Actor, long Sequence, byte Mode, FalloutPackageRawPosition Position);
 internal sealed record FalloutReferenceConstructorPositionRead(string Source, string Stack, Guid Process, Guid Factory,

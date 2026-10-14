@@ -52,7 +52,7 @@ internal sealed class FalloutReferenceFormFileAssociationState
                 throw new InvalidDataException("Cold reference form files changed original files or reused their constructor.");
             _sequence = saved.Sequence; _writer = saved.Writer; _publications.AddRange(saved.Publications); _calls.AddRange(saved.Calls);
         }
-        _publications.Add(new(Process, Factory, Constructor, saved?.Process, saved?.Factory));
+        _publications.Add(new(Process, Factory, Constructor, saved?.Process, saved?.Factory, _sequence));
     }
 
     internal FalloutReferenceFormFileRead ReadCurrentFile(FalloutReferencePositionInvocation invocation)
@@ -149,5 +149,7 @@ internal sealed class FalloutReferenceFormFileAssociationState
             threads.TryAdd(owner.Process, invocation.ThreadId); ordinal = order[owner.Process];
         }
         if (sequence != saved.Sequence || writer != saved.Writer) throw new InvalidDataException("Form-file current history differs from its snapshot.");
+        FalloutReferencePublicationSequence.Validate(saved.Publications.Select(value => (value.Process, value.PublishedSequence)),
+            saved.Calls.Select(value => (value.Invocation.ReferenceProcess, value.Entered, value.Changed)), saved.Sequence);
     }
 }

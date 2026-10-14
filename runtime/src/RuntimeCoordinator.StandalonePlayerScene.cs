@@ -37,9 +37,18 @@ public partial class RuntimeCoordinator
         world.InitializeStandalonePlayerWeaponActionConstructor();
         world.PrepareStandalonePlayerFollowingContinuation();
         world.PrepareStandaloneSourcePackageCommands();
+        var globals = _nativeGlobals ?? throw new InvalidOperationException("Player package state has no actual shared globals.");
+        var records = _nativePluginStack ?? throw new InvalidOperationException("Player package state has no actual winning records.");
+        world.BindStandalonePackageGlobals(globals, FalloutGameTimeBindings.Read(records), () =>
+        {
+            if (_retiringNativeSession || !ReferenceEquals(_nativeGlobals, globals) ||
+                !ReferenceEquals(_nativePluginStack, records) || !ReferenceEquals(_nativeReferences, world))
+                throw new InvalidOperationException("Package globals left their actual source campaign lifetime.");
+        });
         world.PrepareStandaloneReferencePositionOwners();
         world.PrepareStandaloneEarlyPlayerController(_configuration.World.GameUnitsToMeters);
         world.InitializeStandaloneReferenceStartupPositions();
+        world.PrepareStandaloneActorPackageAssignmentOwners();
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)

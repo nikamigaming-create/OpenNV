@@ -57,7 +57,8 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         {
             if (fields.SavedScriptInitialization is not null)
                 throw new InvalidDataException("Cold Script fields omitted their original initializer.");
-            _publications.Add(new(Process, Factory, FieldsFactory, Constructor, Epoch, threadContext.Process, threadContext.Factory));
+            _publications.Add(new(Process, Factory, FieldsFactory, Constructor, Epoch, threadContext.Process, threadContext.Factory,
+                PublishedSequence: _sequence));
         }
         else
         {
@@ -76,7 +77,7 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
             _failure ??= _referenceFlagWrites.FirstOrDefault(value => !value.Returned)?.Failure;
             LastCall = _calls.LastOrDefault();
             _publications.Add(new(Process, Factory, FieldsFactory, Constructor, Epoch, threadContext.Process, threadContext.Factory,
-                saved.Process, saved.Factory));
+                saved.Process, saved.Factory, _sequence));
             threadContext.RetainColdScriptInitializationScopes(_calls.Where(value => value.ThreadScope is not null)
                 .Select(value => value.ThreadScope!).ToArray());
         }

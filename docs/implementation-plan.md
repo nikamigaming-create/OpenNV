@@ -1,5 +1,32 @@
 # Gameplay, playtest and release plan
 
+## Immediate functional recovery
+
+The first deliverable is one ordinary Fallout 3 session that loads a fresh game,
+advances gameplay, saves complete authoritative state, quits through the normal
+menu and continues in a new process. Component audit passes are supporting checks;
+they do not complete this deliverable.
+
+1. Finish the reached startup package cleanup. Qualify the actual loading-byte
+   writer/preservation path, High reset, mover join and follower Extra membership.
+   Remove an admission restriction only when the current owner proves it artificial.
+2. Return the complete Player/Main gameplay frame and exercise ordinary movement
+   and quest input. Fix the next actual behavioral failure on this same path.
+3. Publish a complete save through the normal game UI, Quit normally, then cold
+   Continue. Restore existing reference/ParentCELL/controller owners and retain
+   history without replaying startup. Test three cold cycles, including a CELL
+   transition. Preserve the existing New Vegas save.
+4. Finish the Vault-to-Megaton route. Then finish New Vegas's Goodsprings route
+   and the unchanged TTW/mod startup and Megaton route, with the same save test.
+5. Record the three accepted rendered routes as phone-friendly videos. Keep frame
+   recording off until an actual visual run is ready.
+
+Current first refusal: the cleanup loading byte's pre-command records history.
+The actual Current package setter and linked-null cleanup now return. Complete
+startup, gameplay saving, cold Continue and all three routes remain unaccepted.
+Keep source publication checked and merged, while this functional test remains
+the next work priority. Defer unrelated native fixtures and presentation audits.
+
 ## Complete-game direction and execution
 
 Finish all three campaigns and their selected mod stacks. Treat the recorded

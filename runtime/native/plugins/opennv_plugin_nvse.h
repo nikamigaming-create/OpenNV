@@ -16,7 +16,7 @@ enum class NvseHostCall : std::uint32_t {
     source_call_site_declare = 15, source_call_site_publish = 16, source_call_site_transition = 17, source_call_site_execute = 18, source_call_site_retire = 19,
     engine_global_publish = 20, engine_tls_publish = 21, engine_global_retire = 22, engine_tls_retire = 23,
     source_field_method_declare = 24, source_field_method_publish = 25, source_field_method_execute = 26, source_field_method_retire = 27,
-    logging_get_path = 28
+    logging_get_path = 28, source_model_operand = 29
 };
 enum class NvsePhase : std::uint32_t { mapped, querying, queried_true, queried_false, loading, loaded_true, loaded_false, retired };
 enum class NvseSerializationEvent : std::uint32_t { save, load, new_game, pre_load };

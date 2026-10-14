@@ -60,8 +60,26 @@ public partial class RuntimeCoordinator
                 () => _nativeOpeningStageDriver?.PlayerLevel ?? throw new NotSupportedException("Actual player level has not been constructed."),
                 () => _nativeGlobals ?? throw new NotSupportedException("Actual globals are unbound."));
             _nativeInventoryReferences = inventory;
+            FalloutRaceMenuModelPath? modelPath = null;
+            if (source.Game == RuntimeLiveContentSource.FalloutNewVegasGame)
+            {
+                var modelSource = FalloutRaceMenuModelPathSource.Read(source.FalloutExecutablePath);
+                var productThread = System.Environment.CurrentManagedThreadId;
+                modelPath = new(modelSource, () =>
+                {
+                    if (System.Environment.CurrentManagedThreadId != productThread ||
+                        !ReferenceEquals(RuntimeLiveContentSource.Current, source) ||
+                        !ReferenceEquals(_nativePluginStack, records) || !ReferenceEquals(_nativeQuestScripts?.Scripts, scripts) ||
+                        !ReferenceEquals(scripts.References, world))
+                        throw new InvalidOperationException("Race-menu model input left its actual product/source/World lifetime.");
+                }, () =>
+                {
+                    if (modelPath is { ActiveConsumers: not 0 })
+                        throw new InvalidOperationException("Race-menu model input still owns actual rendered-device consumers.");
+                });
+            }
             var owner = new FalloutNativePluginCampaign(records, quests, scripts, companion, privateRoot, declarations,
-                new(input.State, inventory));
+                new(input.State, inventory), modelPath);
             world.NativePlugins = owner; _nativePluginCampaign = owner;
             _nativeQuestScripts!.BindDirectInput(input.State);
         }

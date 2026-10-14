@@ -19,12 +19,14 @@ internal sealed class FalloutPackageRuntimeObject
     internal bool ProcedureAvailable { get; set; } = true;
     internal bool FlagsAvailable { get; set; } = true;
     internal bool CountAvailable { get; set; } = true;
+    internal FalloutPackageRuntimeTargetFields Target { get; set; }
     internal readonly List<FalloutPackageRuntimeMutation> History = [];
     internal FalloutPackageRuntimeObject(FalloutPluginRecord record)
     {
         Record = record; var data = FalloutPackageData.Read(record);
         RecordSha256 = Convert.ToHexString(SHA256.HashData(record.ReadData())).ToLowerInvariant();
         Kind = unchecked((sbyte)data.Procedure); SourceFlags = data.Flags; Flags = SourceFlags;
+        Target = FalloutPackageRuntimeTargetFields.Load(record, RecordSha256);
     }
     internal int Retain() => Interlocked.Increment(ref _lifetimeCount);
     internal int Release() => Interlocked.Decrement(ref _lifetimeCount);
@@ -33,7 +35,7 @@ internal sealed class FalloutPackageRuntimeObject
 
 internal sealed partial class FalloutPackageRuntimeRegistry : IDisposable
 {
-    internal const string Schema = "opennv-package-runtime/v1";
+    internal const string Schema = "opennv-package-runtime/v2";
     internal const uint TemporaryFlag = 0x800, ScriptAssignedFlag = 0x4000;
     internal const uint NullGameHourBits = 0x41400000;
     private readonly FalloutPluginStack _records;
@@ -64,7 +66,8 @@ internal sealed partial class FalloutPackageRuntimeRegistry : IDisposable
         if (restore is null) _publications.Add(new(Factory, null)); else Restore(restore);
     }
     internal static string SourceFor(string executable) => FalloutAdvancementRuntimeReceipt.Hash(executable +
-        "\0source-mutable-winning-PACK/v1;constructor-count-zero-procedure-minus-one;PKDT-kind-flags-independent;" +
+        "\0source-mutable-winning-PACK/v2;constructor-count-zero-procedure-minus-one;PKDT-kind-flags-independent;" +
+        "same-target-pointer-null-construction-ordered-PTDT-target-object-load-current-writer-invalidation;" +
         "shared-atomic-count-source-ordered-writers;unknown-count-writer-retains-last-count;O1-unknown-old-pointer-authority-barrier;" +
         "fresh-cold-objects-no-counter-clock-or-command-replay");
     internal FalloutPackageRuntimeObject Require(FalloutFormKey form)
@@ -143,7 +146,7 @@ internal sealed partial class FalloutPackageRuntimeRegistry : IDisposable
     }
     private void RetainUnavailable(FalloutPackageRuntimeObject package)
     {
-        if (!package.ProcedureAvailable || !package.FlagsAvailable || !package.CountAvailable) _firstUnavailable ??= package;
+        if (!package.ProcedureAvailable || !package.FlagsAvailable || !package.CountAvailable || !package.Target.Available) _firstUnavailable ??= package;
     }
     internal static void RequireInvocation(FalloutPackageCommandFieldInvocation invocation)
     {

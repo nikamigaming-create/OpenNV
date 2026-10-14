@@ -23,6 +23,7 @@ internal sealed partial class FalloutActorProcessCommonState
         return PackageCommandStore(invocation, requireActualCommand, process =>
         {
             var current = Require(invocation.Actor.Reference);
+            RequireActorAssignmentCommonFlags(invocation);
             var flags = current.Scalars.Flags;
             var after = requested ? (byte)(flags | PackageRequestMask) : (byte)(flags & ~PackageRequestMask);
             var store = new FalloutProcessPackageRequestFlagStore(invocation, process, requested, flags, after, Next());
@@ -81,14 +82,33 @@ internal sealed partial class FalloutActorProcessCommonState
     {
         if (entry.RequestFlagStores is null) throw new InvalidDataException("Request byte omitted its actual writer history.");
         byte flags = 0; long prior = 0;
-        foreach (var store in entry.RequestFlagStores)
+        var requests = entry.RequestFlagStores.Select(store => (store.Invocation, store.Process, store.Changed, store.Before,
+            store.After, Mask: PackageRequestMask, store.Requested));
+        var resets = (entry.ActorAssignment?.Stores ?? []).Where(store => store.Cell is FalloutActorAssignmentCell.CommonFlagTwo or
+            FalloutActorAssignmentCell.CommonFlagOne or FalloutActorAssignmentCell.CommonFlagForty).Select(store =>
+            (store.Invocation, store.Process, store.Changed, Before: checked((byte)(store.BeforeBits ?? throw new InvalidDataException("Flag reset omitted its actual before byte."))),
+                After: checked((byte)(store.AfterBits ?? throw new InvalidDataException("Flag reset omitted its actual after byte."))),
+                Mask: ActorAssignmentFlagMask(store.Cell), Requested: false));
+        foreach (var store in requests.Concat(resets).OrderBy(store => store.Changed))
         {
             Require(store.Invocation, store.Process, store.Changed);
-            if (store.Before != flags || store.After != (store.Requested ? (byte)(flags | PackageRequestMask) : (byte)(flags & ~PackageRequestMask)))
+            if (entry.ActorAssignment?.Writers.Any(writer => writer.Lane == FalloutActorAssignmentLane.CommonFlags && writer.Changed < store.Changed) == true ||
+                store.Before != flags || store.After != (store.Requested ? (byte)(flags | store.Mask) : (byte)(flags & ~store.Mask)))
                 throw new InvalidDataException("Request byte changed independent bits or omitted its preceding writer.");
             flags = store.After;
         }
-        if (entry.Scalars with { Flags = 0 } != FalloutProcessCommonScalars.Constructed || entry.Scalars.Flags != flags)
+        uint commonWord = 0; var wordAvailable = true;
+        var wordStores = (entry.ActorAssignment?.Stores ?? []).Where(store => store.Cell == FalloutActorAssignmentCell.CommonWord).ToDictionary(store => store.Changed);
+        var wordWriters = (entry.ActorAssignment?.Writers ?? []).Where(writer => writer.Lane == FalloutActorAssignmentLane.CommonWord).ToDictionary(writer => writer.Changed);
+        foreach (var changed in wordStores.Keys.Concat(wordWriters.Keys).Order())
+        {
+            if (wordWriters.ContainsKey(changed)) { wordAvailable = false; continue; }
+            var store = wordStores[changed];
+            if (store.BeforeKnown != wordAvailable || store.BeforeBits != (wordAvailable ? commonWord : null) || store.AfterBits != 0)
+                throw new InvalidDataException("Shared reset changed the actual existing Common first scalar word.");
+            commonWord = 0; wordAvailable = true;
+        }
+        if (entry.Scalars with { Flags = 0, FirstWord = 0 } != FalloutProcessCommonScalars.Constructed || entry.Scalars.Flags != flags || entry.Scalars.FirstWord != commonWord)
             throw new InvalidDataException("Common scalars lack their constructor or selected byte writer.");
         foreach (var clear in entry.SceneFields?.WeaponContinuation?.PackageFlagClears ?? [])
             if (processes?.Contains(clear.Invocation.Process) != true ||
