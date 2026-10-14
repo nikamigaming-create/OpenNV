@@ -43,7 +43,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
         // make an otherwise unowned queue element return.
         for (var node = _menuTransitions.First; node is not null;)
         {
-            var next = node.Next; var current = node.Value; RequireHudTransitionMenu(current.Menu);
+            var next = node.Next; var current = node.Value; RequireAnyMenuTransition(current.Menu);
             var value = FalloutStandaloneMenuTransitions.Advance(current.ElapsedBits, current.DurationBits,
                 frame.Clock.ScaledSecondsBits, frame.ControlMode, frame.DivisorBits);
             var changed = Next();
@@ -85,12 +85,14 @@ internal sealed partial class FalloutStandaloneInterfaceState
         foreach (var transition in saved.Menus.Transitions)
         {
             if (transition.Identity == Guid.Empty || !identities.Add(transition.Identity) ||
-                !menus.TryGetValue(transition.Menu, out var menu) || transition.Requested <= requested ||
-                transition.Requested <= menu.Constructed || transition.Changed <= transition.Requested || transition.Changed > saved.Sequence ||
+                (!menus.TryGetValue(transition.Menu, out var menu) && !IsOrdinaryTransition(transition)) || transition.Requested <= requested ||
+                menu is not null && transition.Requested <= menu.Constructed || transition.Changed <= transition.Requested || transition.Changed > saved.Sequence ||
                 transition.DurationBits != FalloutStandaloneMenuTransitions.Duration(transition.DurationBits) ||
                 transition.ProgressBits == 0x3f800000)
                 throw new InvalidDataException("Interface queue lost source allocation, order, duration or current membership.");
             requested = transition.Requested;
         }
+        bool IsOrdinaryTransition(FalloutStandaloneMenuTransition transition) => saved.MenuFields?.Menus.Any(row =>
+            row.Object == transition.Menu && row.Root is not null && transition.Requested > row.Constructed) == true;
     }
 }

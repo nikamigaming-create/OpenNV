@@ -7,6 +7,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
     internal FalloutStandaloneInterfaceSnapshot Capture()
     {
         RequireOwnerThread();
+        RequireMenuFieldIdle();
         if (_enabled != 0 && (_manager is null || !_native.TryGetValue(_manager.Identity, out var living) || !ReadNative(living)))
             throw new NotSupportedException("Current interface cannot capture a restored/dead native manager as a living factory return.");
         if (_objects.Any(item => item.Process == _process && item.Retired is null &&
@@ -15,7 +16,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
         var snapshot = new FalloutStandaloneInterfaceSnapshot(Schema, Source, _stack, _process, _constructor, _sequence,
             _enabled, _mode, _context, _slots.ToArray(), _active.ToArray(), _dialogByte, _console, _consoleCounter,
             _manager, _managerFields, _dialog, _objects.ToArray(), _alternate, _cold, _boundary, _failure, _retired, CaptureDialogMenus(),
-            _actorDistances.Capture(), _actorDistanceSort, _hudControl, _hudMenus.ToArray());
+            _actorDistances.Capture(), _actorDistanceSort, _hudControl, _hudMenus.ToArray(), CaptureMenuFields());
         Validate(snapshot); return snapshot;
     }
     internal static void Validate(FalloutStandaloneInterfaceSnapshot saved)
@@ -33,6 +34,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
         saved.Source.Validate();
         ValidateHudControl(saved.HudControl);
         ValidateActorDistances(saved);
+        ValidateMenuFields(saved);
         // Original stack writes preserve entered failures independently of
         // quiet construction. Active bytes/context/console have separate writers.
         if (saved.Context != 0 ||
@@ -42,11 +44,12 @@ internal sealed partial class FalloutStandaloneInterfaceState
         {
             var native = item.Native;
             if (item.Identity == Guid.Empty || item.Process == Guid.Empty ||
-                item.Role is not (FalloutStandaloneInterfaceObjectRole.PipBoyManager or FalloutStandaloneInterfaceObjectRole.DialogMenu) || item.Role != native.Role ||
+                item.Role is not (FalloutStandaloneInterfaceObjectRole.PipBoyManager or FalloutStandaloneInterfaceObjectRole.DialogMenu or FalloutStandaloneInterfaceObjectRole.OtherMenu) || item.Role != native.Role ||
                 item.Constructed < 1 || item.Constructed > saved.Sequence || native.Factory == Guid.Empty || native.Process != item.Process ||
                 native.Source != saved.Source.Identity || native.Stack != saved.Stack || native.NativeInstance == 0 ||
                 !FalloutAdvancementRuntimeReceipt.Digest(native.ResourceSha256) || string.IsNullOrWhiteSpace(native.Owner) ||
-                native.Resource != (item.Role == FalloutStandaloneInterfaceObjectRole.DialogMenu ? "menus/dialog/dialog_menu.xml" : "menus/main/hud_main_menu.xml") ||
+                native.Resource != (item.Role == FalloutStandaloneInterfaceObjectRole.DialogMenu ? "menus/dialog/dialog_menu.xml" :
+                    item.Role == FalloutStandaloneInterfaceObjectRole.OtherMenu ? FalloutStandaloneMenuLifecycleSource.StartMenuPath : "menus/main/hud_main_menu.xml") ||
                 item.Closed is { } closed && (closed <= item.Constructed || closed > saved.Sequence) ||
                 item.Retired is { } retired && (retired <= item.Constructed || retired > saved.Sequence || item.Closed is { } end && end > retired) ||
                 item.Role == FalloutStandaloneInterfaceObjectRole.PipBoyManager && item.Closed is not null)
@@ -87,14 +90,16 @@ internal sealed partial class FalloutStandaloneInterfaceState
     }
     private void Restore(FalloutStandaloneInterfaceSnapshot saved)
     {
-        RequirePlayable(saved);
+        RequireSaving(saved);
         if (saved.Source != Source || saved.Stack != _stack || saved.CapturedProcess == _process || saved.Constructor == _constructor)
             throw new InvalidDataException("Cold interface changed the selected source or reused an old process/constructor.");
         _sequence = saved.Sequence; _objects.AddRange(saved.Objects); RestoreDialogMenus(saved.Menus); _hudMenus.AddRange(saved.HudMenus!);
+        RestoreMenuFields(saved.MenuFields);
         // All old native identities remain historical. The logical constructor
         // values agree, but no old native pointer/lease becomes a current one.
         _cold = new(saved.CapturedProcess, _process, saved.Constructor, _constructor, Next());
-        _enabled = saved.Enabled; _mode = saved.Mode; _context = saved.Context; _hudControl = saved.HudControl!;
+        _ordinaryMenuColdConstructors.Add(_cold);
+        _enabled = saved.Enabled; _mode = FalloutStandaloneMenuLifecycleSource.QuietMode; _context = 0; _hudControl = saved.HudControl!;
         _actorDistances.Restore(saved.ActorDistances!); _actorDistanceSort = saved.ActorDistanceSort;
     }
 }

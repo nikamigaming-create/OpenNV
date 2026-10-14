@@ -88,8 +88,11 @@ public partial class RuntimeCoordinator
         public bool HeldInterface(FalloutMainPlayerCellInvocation invocation) => Source.Main.HasNewVegasChildren
             ? throw Unowned(invocation, FalloutMainPlayerCellStep.HeldInterfaceQuery, "actual-interface-signed-kind-two-producer-unowned")
             : world.ReadStandalonePlayerHeldInterface(invocation);
-        public void HeldChild(FalloutMainPlayerCellInvocation invocation) =>
-            throw Unowned(invocation, FalloutMainPlayerCellStep.HeldChild, "held-Player-child-unowned");
+        public void HeldChild(FalloutMainPlayerCellInvocation invocation)
+        {
+            Require(invocation, FalloutMainPlayerCellStep.HeldChild);
+            world.ExecuteStandaloneHeldPlayerMenu(invocation);
+        }
         public bool SceneMode(FalloutMainPlayerCellInvocation invocation)
         {
             Require(invocation, FalloutMainPlayerCellStep.SceneMode);

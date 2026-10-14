@@ -69,8 +69,12 @@ internal sealed partial class RuntimeNativeStandaloneInterface : Node
         // A census is only a negative guard. It never writes source mode,
         // context, active-byte or cached Main fields from a native menu count.
         var actual = _actualNativeMenus()?.ToArray() ?? [];
-        if (actual.Length != 0)
-            throw new NotSupportedException("source-FO3-native-menu-tile-input-manager-dispatch-unowned/" + string.Join(',', actual));
+        var session = actual.Contains(FalloutStandaloneMenuLifecycleSource.StartMenu) &&
+            IsKnownSessionMenu(FalloutStandaloneMenuLifecycleSource.StartMenu);
+        foreach (var code in actual)
+            if (!session || code != FalloutStandaloneMenuLifecycleSource.StartMenu &&
+                code != FalloutScriptMenus.Category(FalloutStandaloneMenuLifecycleSource.StartMenu))
+                throw new NotSupportedException("source-FO3-native-menu-tile-input-manager-dispatch-unowned/" + code);
         if (_pipBoy.Open) throw new NotSupportedException("source-FO3-FOPipboyManager-current-device-transition-unowned");
         return true;
     }
@@ -98,6 +102,7 @@ internal sealed partial class RuntimeNativeStandaloneInterface : Node
         if (!_state.Retired)
         {
             _world.RequireStandaloneInterfaceNativeRetirement();
+            RetireSourceSessionMenu();
             _state.Retire();
         }
         _manager = null; _retired = true;

@@ -48,27 +48,7 @@ internal sealed partial class FalloutStandaloneInterfaceState
                 row.Failure is not null && saved.Failure is null || row.Boundary is not null && saved.Boundary is null)
                 throw new InvalidDataException("Source Dialog declared a returned tail without its genuine consumers.");
         }
-        var slots = new uint[10]; uint mode = 1; long previous = 0;
-        foreach (var write in menus.StackWrites)
-        {
-            var row = menus.Dialogs.SingleOrDefault(item => item.Object == write.Dialog);
-            if (row is null || write.Before is not { Count: 10 } || write.After is not { Count: 10 } ||
-                write.Changed <= previous || write.Changed > saved.Sequence || !write.Before.SequenceEqual(slots) || write.BeforeMode != mode ||
-                write.Slot is < -1 or > 9 || write.Failure is not null && string.IsNullOrWhiteSpace(write.Failure))
-                throw new InvalidDataException("Source menu stack omitted or reordered a committed operation.");
-            var slot = Array.FindIndex(slots, value => value == 0);
-            if (slot != write.Slot || row.MenuIdentity != FalloutStandaloneDialogSource.MenuId)
-                throw new InvalidDataException("Source Dialog stack write changed the first-empty/exhausted operand.");
-            if (slot >= 0) { slots[slot] = row.MenuIdentity; if (slot == 0) mode = 3; }
-            var scene = slot == 0 && row.MenuIdentity != 1001 || slot == 1 && slots[0] == 1001;
-            if (!write.After.SequenceEqual(slots) || write.AfterMode != mode || write.RequiresSceneByte != scene ||
-                !scene && (!write.Returned || write.Failure is not null) || write.Failure is not null && write.Returned ||
-                !write.Returned && write.Failure is null)
-                throw new InvalidDataException("Menu source native child return changed the real stack/mode prefix.");
-            previous = write.Changed;
-        }
-        if (!saved.MenuSlots.SequenceEqual(slots) || saved.Mode != mode || saved.ActiveMenus.Any(value => value != 0))
-            throw new InvalidDataException("Interface mode/slots/active bytes have no matching original writer.");
+        ValidateCombinedMenuStack(saved);
         // Source HUD transitions share this actual queue. Their independent
         // allocator/TLS and current clock are validated by the HUD owner and
         // the retained source menu-factory graph.
@@ -82,5 +62,6 @@ internal sealed partial class FalloutStandaloneInterfaceState
     }
     private string? DialogSaveBlocker => _dialogInvocation is not null ? "source-Dialog-original-child-entered" :
         _dialogMenus.Any(row => row.Process == _process && row.Retired is null) ? "source-Dialog-native-lifetime-active" :
+        HasCurrentSourcePauseMenu ? null :
         _slots.Any(value => value != 0) || _mode != 1 || _menuTransitions.Count != 0 ? "source-menu-original-stack-transition-unreturned" : null;
 }

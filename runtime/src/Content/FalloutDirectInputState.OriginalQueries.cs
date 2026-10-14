@@ -127,10 +127,13 @@ internal sealed partial class FalloutDirectInputState
                 if (!_menuKnown) throw new NotSupportedException("source-original-input-menu-word-current-writer-unowned");
                 if ((_menuWord & MenuMask) != 0)
                 {
+                    var beforeMenu = _menuWord;
                     _menuWord = (ushort)(_menuWord & ~MenuMask);
                     _originalQuery = _originalQuery with { Count = 0, AfterMenuWord = _menuWord };
                     if (mode is 0 or 1) _menuWord |= MenuMask;
                     _originalQuery = _originalQuery with { AfterMenuWord = _menuWord }; ++_bufferRevision;
+                    _originalMenuWordWrites.Add(new(invocation.Invocation, FalloutOriginalMenuWordWriter.ControlQuery,
+                        _bufferRevision, beforeMenu, _menuWord));
                 }
             }
             return Returned();

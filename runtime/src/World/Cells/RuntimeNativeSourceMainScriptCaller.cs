@@ -34,7 +34,7 @@ internal sealed partial class RuntimeNativeSourceMainScriptCaller : Node
         // Existing shared clock is int.MinValue. This orders the real current
         // Godot adaptation before ordinary driver consumers; it does not claim
         // the rest of the original Main frame has acquired a producer.
-        ProcessPriority = int.MinValue + 1;
+        ProcessPriority = int.MinValue + 2;
     }
     internal static RuntimeNativeSourceMainScriptCaller Attach(Node parent, FalloutReferenceWorld world,
         FalloutInterfaceFade actualFade, FalloutScriptSession actualSession, Action<Exception> failed, Action<RuntimeNativeSourceMainScriptCaller> retainConstruction)

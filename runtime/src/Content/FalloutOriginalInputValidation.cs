@@ -1,6 +1,6 @@
 namespace OpenNV.Runtime.Content;
 
-internal static class FalloutOriginalInputValidation
+internal static partial class FalloutOriginalInputValidation
 {
     internal static void ValidateQuery(FalloutOriginalInputSource source, string stack, FalloutOriginalInputQuery query)
     {
@@ -35,9 +35,11 @@ internal static class FalloutOriginalInputValidation
         else if (query.Count != sum && query.FailedAt != FalloutOriginalInputQueryStep.MenuWord)
             throw new InvalidDataException("Failed original input query lost its preceding device count.");
     }
-    private static void ValidateObservation(FalloutOriginalInputQuery query, FalloutOriginalInputObservation observation)
+    private static void ValidateObservation(FalloutOriginalInputQuery query, FalloutOriginalInputObservation observation) =>
+        ValidateObservation(query.Control, query.Mode, observation);
+    private static void ValidateObservation(int control, int suppliedMode, FalloutOriginalInputObservation observation)
     {
-        var mode = query.Control == 28 ? 1 : query.Mode;
+        var mode = control == 28 ? 1 : suppliedMode;
         var invalidMode = observation.Device == FalloutOriginalInputDevice.Keyboard ? (uint)mode > 3 : (uint)mode > 4;
         if (observation.Device == FalloutOriginalInputDevice.Mouse && observation.Binding is 8 or 9)
         {
@@ -58,7 +60,7 @@ internal static class FalloutOriginalInputValidation
         }
         else if (observation.Swap is not null || observation.EffectiveButton is not null)
             throw new InvalidDataException("Original keyboard observation has foreign mouse fields.");
-        if (query.Control is 29 or 30)
+        if (control is 29 or 30)
         {
             if (observation.Device != FalloutOriginalInputDevice.Keyboard || observation.Current is null || observation.Previous is null ||
                 observation.Result != (((observation.Current.Value | observation.Previous.Value) & 0x80) != 0 ? 1 : 0))
@@ -89,8 +91,38 @@ internal static class FalloutOriginalInputValidation
             throw new InvalidDataException("Original input snapshot changed its actual source, owner, extents or constructor prefix.");
         if (saved.Known.Swap && saved.Swap != saved.Construction.Swap ||
             saved.Construction.DoubleClickMilliseconds is { } click && saved.DoubleClickMilliseconds != click ||
-            saved.Known.Suppression && saved.ControllerSuppression != 0 || saved.Known.MenuWord && saved.MenuWord != 0)
+            saved.Known.Suppression && saved.ControllerSuppression != 0)
             throw new InvalidDataException("Original input snapshot changed a current field without its actual admitted writer.");
+        ushort menuWord = 0; long menuRevision = 0;
+        foreach (var menuStore in saved.MenuWordWrites ?? [])
+        {
+            if (menuStore.Invocation == Guid.Empty || !Enum.IsDefined(menuStore.Writer) || menuStore.BufferRevision <= menuRevision ||
+                menuStore.BufferRevision > saved.BufferRevision || menuStore.Before != menuWord ||
+                menuStore.Writer == FalloutOriginalMenuWordWriter.MenuDestructor && menuStore.After != (ushort)(menuStore.Before | 8) ||
+                menuStore.Writer == FalloutOriginalMenuWordWriter.ControlQuery && (menuStore.Before & 8) == 0 ||
+                menuStore.Writer == FalloutOriginalMenuWordWriter.ControlQuery && menuStore.After != menuStore.Before && menuStore.After != (ushort)(menuStore.Before & ~8))
+                throw new InvalidDataException("Input MenuWord lost its genuine shared query/destructor writer chain.");
+            menuWord = menuStore.After; menuRevision = menuStore.BufferRevision;
+        }
+        if (saved.Known.MenuWord && saved.MenuWord != menuWord)
+            throw new InvalidDataException("Input MenuWord has no current source constructor/store ownership.");
+        if (saved.MenuClose is { } close) ValidateMenuClose(source, stack, saved.Factory, saved.BufferRevision, close);
+        var menuCalls = new HashSet<Guid>();
+        foreach (var retained in saved.MenuCloses ?? [])
+        {
+            if (!menuCalls.Add(retained.Invocation)) throw new InvalidDataException("Input retained a repeated source menu-close invocation.");
+            ValidateMenuClose(source, stack, saved.Factory, saved.BufferRevision, retained);
+        }
+        if (saved.MenuCloses is { Count: > 0 } history && (saved.MenuClose is null || !SameMenuClose(history[^1], saved.MenuClose)))
+            throw new InvalidDataException("Input last menu-close fields differ from their actual retained call.");
+        var menuFlushes = new HashSet<Guid>();
+        foreach (var flush in saved.MenuMouseFlushes ?? [])
+            if (flush.Invocation == Guid.Empty || !menuFlushes.Add(flush.Invocation) || flush.InterfaceProcess == Guid.Empty || flush.Menu == Guid.Empty || flush.InputFactory != saved.Factory ||
+                flush.Stack != stack || !flush.Returned || flush.SourceElementExtent != 20 ||
+                flush.Present != (flush.NativeDeviceFactory is not null) ||
+                flush.Present && (flush.NativeElementExtent is not (20 or 24) || flush.BeforeCount != uint.MaxValue || flush.AfterCount is null || flush.Status is null) ||
+                !flush.Present && (flush.NativeElementExtent is not null || flush.BeforeCount is not null || flush.AfterCount is not null || flush.Status is not null))
+                throw new InvalidDataException("Menu mouse flush changed its real current nullable device/ABI output.");
         if (!saved.Construction.Returned && saved.Construction.DoubleClickMilliseconds is null &&
             (saved.Known.Keyboard || saved.Known.PreviousKeyboard || saved.Known.Mouse || saved.Known.PreviousMouse || saved.Known.Suppression))
             throw new InvalidDataException("Failed platform construction established unreached input buffer/suppression stores.");

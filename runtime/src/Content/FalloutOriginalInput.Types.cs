@@ -57,7 +57,11 @@ internal sealed record FalloutOriginalInputSnapshot(string Source, string Stack,
     int Swap, uint DoubleClickMilliseconds, byte ControllerSuppression, ushort MenuWord,
     FalloutOriginalInputKnown Known, FalloutOriginalInputConstruction Construction,
     FalloutOriginalInputSelection? Selection, FalloutOriginalInputPoll? Poll,
-    FalloutOriginalInputQuery? Query, FalloutOriginalInputUnownedWriter? UnownedWriter);
+    FalloutOriginalInputQuery? Query, FalloutOriginalInputUnownedWriter? UnownedWriter,
+    IReadOnlyList<FalloutOriginalMenuWordWrite>? MenuWordWrites = null,
+    FalloutOriginalMenuClose? MenuClose = null,
+    IReadOnlyList<FalloutOriginalMouseBufferFlush>? MenuMouseFlushes = null,
+    IReadOnlyList<FalloutOriginalMenuClose>? MenuCloses = null);
 
 // The device writes into the actual retained, initialized engine destination.
 // A nonzero state HRESULT never licenses replacement output or all-released.

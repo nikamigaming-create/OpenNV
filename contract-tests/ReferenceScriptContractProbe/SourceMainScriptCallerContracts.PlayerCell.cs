@@ -120,6 +120,7 @@ internal static partial class SourceMainScriptCallerContracts
         internal List<string> Log { get; } = [];
         internal bool SceneAvailable;
         internal Action<FalloutMainPlayerCellInvocation>? DuringSceneClock;
+        internal Action<FalloutMainPlayerCellInvocation>? DuringHeldChild;
         internal Action<FalloutMainPlayerCellInvocation, bool>? DuringSceneChild;
         private void Read(FalloutMainPlayerCellInvocation invocation, FalloutMainPlayerCellStep step)
         { invocation.Require(step); Log.Add(step.ToString()); }
@@ -139,8 +140,8 @@ internal static partial class SourceMainScriptCallerContracts
         public void RetirePendingDeferredChildren(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
         public bool PendingFlagQueries(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
         public void PendingFlagChild(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
-        public bool HeldInterface(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
-        public void HeldChild(FalloutMainPlayerCellInvocation invocation) => throw Excluded();
+        public bool HeldInterface(FalloutMainPlayerCellInvocation invocation) { Read(invocation, FalloutMainPlayerCellStep.HeldInterfaceQuery); return false; }
+        public void HeldChild(FalloutMainPlayerCellInvocation invocation) { Read(invocation, FalloutMainPlayerCellStep.HeldChild); (DuringHeldChild ?? throw Excluded())(invocation); }
         public void SceneClock(FalloutMainPlayerCellInvocation invocation)
         { Read(invocation, FalloutMainPlayerCellStep.SceneClock); (DuringSceneClock ?? throw Excluded())(invocation); }
         public void SceneChild(FalloutMainPlayerCellInvocation invocation, bool alternate)

@@ -1,6 +1,6 @@
 namespace OpenNV.Runtime.Content;
 
-internal sealed record FalloutUiComponentBinding(Guid Factory, long Epoch, string Path);
+internal sealed record FalloutUiComponentBinding(Guid Factory, long Epoch, string Path, Guid MenuInstance);
 
 internal sealed partial class FalloutUiComponentStore
 {
@@ -8,21 +8,25 @@ internal sealed partial class FalloutUiComponentStore
     {
         if (!_menus.TryGetValue(menuName, out var menu) || IsDetached(menu.Root))
             throw new InvalidDataException("Current source UI menu root is absent: " + menuName);
-        return new(Factory, Epoch, menu.Root.Path);
+        return new(Factory, Epoch, menu.Root.Path, menu.Instance);
     }
 
     internal FalloutUiComponentBinding BindComponent(string path)
     {
         if (!TrySplitComponent(path, out var segments) || ResolveTile(segments, alt: false) is not { } tile || IsDetached(tile))
             throw new InvalidDataException("Current source UI component is absent: " + path);
-        return new(Factory, Epoch, tile.Path);
+        return new(Factory, Epoch, tile.Path, _menus[tile.MenuName].Instance);
     }
 
     internal void RequireComponent(FalloutUiComponentBinding binding)
     {
-        if (binding.Factory != Factory || binding.Epoch != Epoch || !_tiles.TryGetValue(binding.Path, out var tile) || IsDetached(tile))
+        if (!HasLivingComponent(binding))
             throw new InvalidOperationException("Source UI binding outlived its actual component tree.");
     }
+
+    private bool HasLivingComponent(FalloutUiComponentBinding binding) =>
+        binding.Factory == Factory && binding.Epoch == Epoch && _tiles.TryGetValue(binding.Path, out var tile) && !IsDetached(tile) &&
+        _menus[tile.MenuName].Instance == binding.MenuInstance;
 
     internal float ReadFloat(FalloutUiComponentBinding binding, string trait)
     {

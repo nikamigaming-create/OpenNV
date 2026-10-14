@@ -119,6 +119,7 @@ public partial class RuntimeCoordinator
             CloseNativeSessionMenu, SaveNativeMenuSlot, CancelNativeManualSaveFromInput, LoadNativeSelectedSlot,
             () => RestartNativeSession(false), () => QuitNativeSession(NativeSessionQuitOrigin.SessionMenu), DescribeNativeSave);
         AddChild(_nativeSessionLayer); _nativeSessionLayer.AddChild(_nativeSessionMenu);
+        _nativeOpeningStageDriver?.OpenSourceSessionMenu(_nativeSessionMenu, _nativeUi!);
         _nativePlayer?.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
         GetTree().Paused = true;
         _nativeSessionMenu.ShowManualSaveReceipt(_nativeManualSaves.Receipt);
@@ -130,6 +131,13 @@ public partial class RuntimeCoordinator
         if (_nativeSessionTransitioning) return;
         if (_nativeDeathPresented && !_retiringNativeSession) return;
         CancelNativeManualSave("Session menu closed before the pending manual save committed.", allQueued: true);
+        if (_nativeSessionMenu is { } closing &&
+            _nativeOpeningStageDriver?.BeginCloseSourceSessionMenu(closing, CompleteNativeSessionMenuClose) == true) return;
+        CompleteNativeSessionMenuClose();
+    }
+
+    private void CompleteNativeSessionMenuClose()
+    {
         _nativeSessionLayer?.QueueFree(); _nativeSessionLayer = null; _nativeSessionMenu = null;
         _nativePlayer?.SetModalInput(false); GetTree().Paused = _sessionWasPaused; Input.MouseMode = _sessionMouseMode;
         _sessionPreviousMenu?.Show(); _sessionPreviousMenu = null;

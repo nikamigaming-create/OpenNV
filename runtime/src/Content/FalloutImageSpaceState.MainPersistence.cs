@@ -48,7 +48,7 @@ internal sealed partial class FalloutImageSpaceState
             _sourceImageInstances.Values.OrderBy(row => row.Constructed).ToArray(), _sourceImageList.ToArray(),
             _sourceImageUpdates, _sourceImageFields.Capture(), _sourceImageLast, _sourceImageOutput,
             _sourceImageProcesses.ToArray(), _sourceImageCurves.Values.Select(curve => curve with { Value = (uint[])curve.Value.Clone() }).ToArray(), SourceMainImageDofConstructor,
-            _sourceImageMenuLast);
+            _sourceImageMenuLast, _sourceMenuStack is null ? null : CaptureSourceMenuStackEffect());
         ValidateSourceMainImages(result); return result;
     }
 
@@ -121,5 +121,14 @@ internal sealed partial class FalloutImageSpaceState
             saved.Output.Profile.DefinedWords != saved.Fields.DefinedWords))
             throw new InvalidDataException("Returned Main image output differs from its actual complete native profile stores.");
         ValidateSourceImageMenu(saved);
+        if (saved.MenuStack is { } stack)
+        {
+            // The menu declaration carries the selected Interface identity;
+            // its validator checks it independently of the effect profile.
+            ValidateSourceMenuStackEffect(stack);
+            if (stack.Process != saved.Process || stack.Constructors.Any(row => !saved.Processes.Contains(row.Process)) ||
+                stack.Constructors.Any(row => row.Changed > saved.Changed) || stack.Writes.Any(row => row.Changed > saved.Changed))
+                throw new InvalidDataException("Menu effect changed its actual shared image-manager process/history.");
+        }
     }
 }

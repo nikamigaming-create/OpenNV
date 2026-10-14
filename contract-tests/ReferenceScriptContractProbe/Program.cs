@@ -4,6 +4,18 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--source-menu-lifecycle-contracts"])
+{
+    SourceMenuLifecycleContracts.Run();
+    return;
+}
+
+if (args is ["--audit-owned-source-menu-lifecycle", var menuDataRoot])
+{
+    SourceMainScriptCallerContracts.AuditOwnedSourceMenuLifecycles(menuDataRoot);
+    return;
+}
+
 if (args is ["--functional-failure-contracts"])
 {
     SourceDeliveryPauseContracts.Run();
