@@ -178,6 +178,7 @@ internal partial class RuntimeNativeNpc
         else if (clip.Sequence.ControlledBlocks.Any(link => link.NodeName == clip.Sequence.TargetName))
             throw new NotSupportedException("Furniture base accumulation requires root-motion extraction.");
         var animation = new RuntimeNativeNifAnimation(clip.Nif, clip.Sequence, Skeleton, accumulationRoot: rootOwner);
+        Skeleton.RefuseUnownedLogicalPose("source-logical-scene-native-furniture-accumulation-pose-writer-unowned");
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(animation.Sequence.TargetName), Transform3D.Identity);
         animation.ApplySourceTime(animation.Sequence.StartTime);
         _baseAnimation = animation;

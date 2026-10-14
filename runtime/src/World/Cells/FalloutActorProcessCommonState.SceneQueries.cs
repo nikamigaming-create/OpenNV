@@ -11,7 +11,10 @@ internal sealed record FalloutProcessSceneFields(FalloutProcessWeaponEntry? Weap
     FalloutActorIdleAnimationFields? IdleAnimation = null, Guid? IdlePrimaryPackage = null,
     FalloutProcessMovementFlagFields? MovementFlags = null, Guid? ActorValueCache = null,
     FalloutProcessPhysicalActivityFields? PhysicalActivity = null,
-    FalloutProcessWeaponDrawnFields? WeaponDrawn = null)
+    FalloutProcessWeaponDrawnFields? WeaponDrawn = null,
+    FalloutProcessOpacityFields? Opacity = null, FalloutActorTeleportFadeFields? TeleportFade = null,
+    FalloutProcessTeleportFadeUpdate? TeleportCall = null,
+    FalloutProcessWeaponContinuationFields? WeaponContinuation = null)
 {
     internal static FalloutProcessSceneFields Constructed => new(null, null);
 }
@@ -54,12 +57,17 @@ internal sealed partial class FalloutActorProcessCommonState
                 IdleAnimation = FalloutActorIdleAnimationFields.Constructed,
                 MovementFlags = FalloutProcessMovementFlagFields.Constructed,
                 PhysicalActivity = FalloutProcessPhysicalActivityFields.Constructed,
-                WeaponDrawn = FalloutProcessWeaponDrawnFields.Constructed
+                WeaponDrawn = FalloutProcessWeaponDrawnFields.Constructed,
+                Opacity = FalloutProcessOpacityFields.Constructed,
+                TeleportFade = FalloutActorTeleportFadeFields.Constructed,
+                WeaponContinuation = FalloutProcessWeaponContinuationFields.Constructed
             }
             : FalloutProcessSceneFields.Constructed with
             {
                 PhysicalActivity = FalloutProcessPhysicalActivityFields.Constructed,
-                WeaponDrawn = FalloutProcessWeaponDrawnFields.Constructed
+                WeaponDrawn = FalloutProcessWeaponDrawnFields.Constructed,
+                Opacity = FalloutProcessOpacityFields.Constructed,
+                WeaponContinuation = FalloutProcessWeaponContinuationFields.Constructed
             } : null;
 
     internal FalloutProcessPlayerSceneUpdate UpdatePlayerScene(FalloutFormKey actor, long epoch)
@@ -98,7 +106,7 @@ internal sealed partial class FalloutActorProcessCommonState
         return new(process, fields.ActionCondition, fields.ActionCondition == 0 ? null : fields.Action9Condition);
     }
 
-    private static void ValidateSceneFields(FalloutProcessCommonEntry entry, string executable)
+    private static void ValidateSceneFields(FalloutProcessCommonEntry entry, string executable, string stack)
     {
         var expected = FalloutSourceMainFamily.IsFallout3(executable) &&
             entry.Level is FalloutDetectionProcessLevel.High or FalloutDetectionProcessLevel.MiddleHigh;
@@ -109,5 +117,7 @@ internal sealed partial class FalloutActorProcessCommonState
         ValidateMovementFlagFields(entry);
         ValidatePhysicalActivityFields(entry);
         ValidateWeaponDrawnFields(entry);
+        ValidateOpacityFields(entry, executable, stack);
+        ValidateWeaponContinuationFields(entry);
     }
 }

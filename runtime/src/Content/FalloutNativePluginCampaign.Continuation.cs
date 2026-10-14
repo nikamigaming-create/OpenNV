@@ -21,6 +21,7 @@ internal sealed partial class FalloutNativePluginCampaign
         RequireCurrent();
         if (ModuleFailure is { } failure) throw new NotSupportedException("Native source continuation retains selected module failure: " + failure);
         if (_active != 0) throw new InvalidOperationException("Native source continuation overlaps an actual original caller.");
+        foreach (var domain in ActualDomains()) domain.RequireNvseModuleSetColdState();
         if (_modules.Count == 0) return null;
         var selection = _selection ?? throw new InvalidOperationException("Native source continuation has no exact selected module/runtime identity.");
         var captures = new Dictionary<ulong, NativeNvseSourceFileCurrentCapture>();

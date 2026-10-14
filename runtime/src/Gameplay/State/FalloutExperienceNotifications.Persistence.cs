@@ -24,7 +24,7 @@ internal sealed partial class FalloutExperienceNotifications
         var result = new FalloutExperienceNotificationSnapshot(Schema, _contract, _observedExperience,
             _lastOrdinal, _retiredThrough, _pending.ToArray(), current, _sounds.ToArray(), _random.State,
             clock.LevelMilliseconds, _levelTimestamp, _idlePresented,
-            _lastSequence, _retiredSequence, _frameGate.Capture(), _failure);
+            _lastSequence, _retiredSequence, _frameGate.Capture(), _failure, _sourceHud?.Capture() ?? _historicalSourceHud);
         ValidateSnapshot(result); return result;
     }
 
@@ -40,6 +40,15 @@ internal sealed partial class FalloutExperienceNotifications
             state.IdlePresented && (state.Display is not null || state.Pending.Count != 0 || state.RetiredThrough != state.LastOrdinal))
             throw new InvalidDataException("XP notification snapshot is incomplete or failed.");
         FalloutExperienceFrameGate.Validate(state.FrameGate);
+        if (state.SourceHud is { } sourceHud)
+        {
+            FalloutExperienceSourceHud.Validate(sourceHud);
+            if (sourceHud.Contract != state.Contract)
+                throw new InvalidDataException("XP source publication differs from its retained notification consumer.");
+            if (sourceHud.FrameRefusal is not null) throw new NotSupportedException(FalloutExperienceSourceHud.FrameBoundary);
+            RequireSourceConstructorContinuation(state.Display, state.Pending.Count, state.Sounds.Count, state.IdlePresented,
+                state.LastSequence, state.RetiredSequence, state.FrameGate);
+        }
         if (state.FrameGate.Ready && (state.Display is not null || state.Pending.Count != 0 ||
                 state.FrameGate.CompletedSequence != state.RetiredSequence) ||
             (state.FrameGate.Flags == FalloutExperienceSourceFlags.LevelText) != (state.Display?.LevelTextPublished == true))
@@ -88,6 +97,15 @@ internal sealed partial class FalloutExperienceNotifications
                 sound.State == FalloutExperienceSoundState.Pending && sound.Sequence != state.Display?.Sequence)
                 throw new InvalidDataException("XP notification sound continuation has no current admitted owner.");
         }
+    }
+
+    private static void RequireSourceConstructorContinuation(FalloutExperienceDisplay? display, int pending, int sounds,
+        bool idlePresented, ulong lastSequence, ulong retiredSequence, FalloutExperienceFrameGateSnapshot frame)
+    {
+        if (display is not null || pending != 0 || sounds != 0 || idlePresented || lastSequence != 0 || retiredSequence != 0 ||
+            frame.Ready || frame.Flags != FalloutExperienceSourceFlags.Meter || frame.ResetGeneration != 0 ||
+            frame.CompletedSequence is not null || frame.CompletedLevel is not null)
+            throw new NotSupportedException(FalloutExperienceSourceHud.FrameBoundary);
     }
 
     private void Restore(FalloutExperienceNotificationSnapshot state)

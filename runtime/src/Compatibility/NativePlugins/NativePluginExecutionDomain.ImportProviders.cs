@@ -5,7 +5,6 @@ internal sealed partial class NativePluginExecutionDomain
     private string? _importProviderCompanion;
     private NativePluginImportProviderBuild? _importProviderBuild;
     private NativePluginOriginalLoaderAttempt? _originalLoaderAttempt;
-    private bool _importProvidersRetiring;
     private readonly List<NativePluginImportProviderReceipt> _importProviderReceipts = [];
     private bool ImportProviderSourcesRetired => _importProviderBuild is null;
     internal IReadOnlyList<NativePluginImportProviderReceipt> ImportProviderReceipts => _importProviderReceipts.AsReadOnly();
@@ -99,16 +98,11 @@ internal sealed partial class NativePluginExecutionDomain
         if (_originalLoaderAttempt is not { } attempt || attempt.Phase == NativePluginLoaderAttemptPhase.Retired) return;
         if (attempt.Phase == NativePluginLoaderAttemptPhase.Entering)
             throw new InvalidOperationException("Original entry is still using its first-party callable provider.");
-        _importProvidersRetiring = true;
-        try
-        {
-            using var reader = Exchange(NativePluginDomainOperation.ImportProviders, Payload(writer => writer.Write(3U)));
-            if (reader.ReadUInt64() != attempt.Id) throw new InvalidDataException("First-party dependency retirement changed its actual source attempt.");
-            ReadImportProviderReceipts(reader, attempt.Id, retiring: true); Finish(reader);
-            attempt.Phase = NativePluginLoaderAttemptPhase.Retired;
-            _importProviderBuild!.RequireCurrent(); _importProviderBuild.Dispose(); _importProviderBuild = null;
-        }
-        finally { _importProvidersRetiring = false; }
+        using var reader = Exchange(NativePluginDomainOperation.ImportProviders, Payload(writer => writer.Write(3U)));
+        if (reader.ReadUInt64() != attempt.Id) throw new InvalidDataException("First-party dependency retirement changed its actual source attempt.");
+        ReadImportProviderReceipts(reader, attempt.Id, retiring: true); Finish(reader);
+        attempt.Phase = NativePluginLoaderAttemptPhase.Retired;
+        _importProviderBuild!.RequireCurrent(); _importProviderBuild.Dispose(); _importProviderBuild = null;
     }
     private void ReadImportProviderReceipts(BinaryReader reader, ulong attemptId, bool retiring)
     {

@@ -85,6 +85,7 @@ public partial class RuntimeCoordinator
                 _nativeDirectInput.State.NativeReaders
             },
             nativeData = _nativePluginCampaign?.DataExecutionState,
+            nativeModuleSet = _nativePluginCampaign?.ModuleSetDiagnostics,
             nativeSteam = _nativeSteamCampaign?.State,
             modelConstraints = detailed ? _nativeReferencePresentation?.Nodes.SelectMany(reference =>
                 OpenNV.Runtime.SceneGraph.NodeTraversal.Descendants<RuntimeNifHingeJoint>(reference.Value)
@@ -1439,6 +1440,11 @@ public partial class RuntimeCoordinator
                 throw new NotSupportedException("Configured startup quest has no source identity for the current gameplay owner."),
             0, _nativeBootstrap?.Controls, restore is null ? _nativeBootstrap?.CaptureStageResults() : null,
             restore is null ? _nativeBootstrapCharacter : null);
+        var sourceWorld = _nativeReferences ?? throw new InvalidOperationException("XP construction has no actual gameplay world.");
+        if (sourceWorld.HasStandalonePlayerScene)
+            _nativeOpeningStageDriver.BindExperienceSourceHud(
+                _nativeUi ?? throw new InvalidOperationException("XP construction has no shared source UI store."),
+                sourceWorld.RequireStandalonePlayerControlHud(), sourceWorld.RequireStandalonePlayerControlDisplay());
         _nativeOpeningStageDriver.PrepareSourceIndexedInterfaceSounds();
         AddChild(_nativeOpeningStageDriver);
         BindCurrentNativeRoomPortalCapture();

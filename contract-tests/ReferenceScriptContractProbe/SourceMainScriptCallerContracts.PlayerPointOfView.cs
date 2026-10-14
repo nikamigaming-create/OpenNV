@@ -7,6 +7,7 @@ internal static partial class SourceMainScriptCallerContracts
 {
     private static void RunPlayerPointOfViewContracts(FalloutMainScriptCallerSource main, string stack)
     {
+        RunPlayerOwnerLineageContracts(main, stack);
         var command = new FalloutPlayerControlCommand(false, [true, true, true, true, true]);
         Require(FalloutPlayerControlFieldsState.CommandMask(command) == 0x1f,
             "Five explicit source literal-one arguments were replaced by the omitted command defaults.");

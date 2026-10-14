@@ -74,7 +74,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             UpdateActorDistances(main, ordinal);
             UpdateIdleAnimation(main, ordinal, readScaledTimer);
             UpdateMovementPrefix(main, ordinal);
-            throw new NotSupportedException("source-Player-following-movement-frame-services-unbound");
+            UpdateFollowingServices(main, ordinal, readScaledTimer);
+            UpdatePlayerWeaponServices(main, ordinal);
+            throw new NotSupportedException("source-Player-following-weapon-frame-services-unbound");
         }
         catch (Exception error)
         {

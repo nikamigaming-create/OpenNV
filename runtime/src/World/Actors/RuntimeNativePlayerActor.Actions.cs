@@ -104,6 +104,7 @@ internal sealed partial class RuntimeNativePlayerActor
             // At Detach the source Weapon channel changes coordinate frame:
             // its translation/rotation are now local to the prn bone. Applying
             // the old hand's global pose a second time displaces the holster.
+            Skeleton.RefuseUnownedLogicalPose("source-logical-scene-native-holster-parent-and-pose-writer-unowned");
             Skeleton.Node.ResetBonePoses();
             Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);
             RuntimeNativeNifAnimation.ApplyLayers((_idle!, _idle!.Sequence.StartTime), (clip, Math.Max(detach.Time, parenting.Time)));

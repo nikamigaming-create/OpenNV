@@ -19,7 +19,8 @@ internal sealed record FalloutExperienceNotificationSnapshot(string Schema, stri
     ulong LastOrdinal, ulong RetiredThrough, IReadOnlyList<FalloutExperienceChange> Pending,
     FalloutExperienceDisplay? Display, IReadOnlyList<FalloutExperienceSoundReceipt> Sounds,
     ulong SoundRandomState, long LevelClockMilliseconds, double? LevelTimestampMilliseconds, bool IdlePresented,
-    ulong LastSequence, ulong RetiredSequence, FalloutExperienceFrameGateSnapshot FrameGate, string? Failure);
+    ulong LastSequence, ulong RetiredSequence, FalloutExperienceFrameGateSnapshot FrameGate, string? Failure,
+    FalloutExperienceSourceHudSnapshot? SourceHud = null);
 internal sealed record FalloutExperienceNotificationFrame(Guid View, ulong Revision, ulong Sequence,
     FalloutExperienceNotificationPhase Phase, float MeterAlpha, float LevelAlpha, float PointerFraction,
     int Amount, int LastLevel, int NextLevel, bool LevelBufferIsShort, bool MeterVisible, bool LevelVisible,
@@ -48,16 +49,25 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
     private ulong _lastOrdinal, _retiredThrough, _revision;
     private ulong _lastSequence, _retiredSequence;
     private Guid _view;
+    private FalloutExperienceSourceHud? _sourceHud;
+    private readonly FalloutExperienceSourceHudSnapshot? _historicalSourceHud;
     private long? _lastClock, _lastLevelClock;
     private double? _levelTimestamp;
     private bool _nativeOwned, _idlePresented, _disposed;
+    private bool _currentSourceEntered, _currentPresentationEntered;
     private string? _failure;
     internal string? Failure => _failure;
     internal FalloutSoundRandomState SoundRandom => _random;
     internal string Contract => _contract;
     internal bool IsSettled => !_disposed && _failure is null && _nativeOwned && _idlePresented && _pending.Count == 0 &&
         _display is null && _retiredThrough == _lastOrdinal;
-    internal string? SaveBlocker => _failure is not null ? "experience-notification-failure" : !_nativeOwned ? "experience-notification-owner" :
+    internal bool HasSourceHud => _sourceHud is not null;
+    internal FalloutExperienceSourceHud? SourceHud => _sourceHud;
+    internal FalloutExperienceSourceHudSnapshot? PreparedSourceHudRestore => _historicalSourceHud;
+    internal string? SaveBlocker => _failure is not null ? "experience-notification-failure" :
+        _sourceHud is { } source ? source.SaveBlocker ?? (_sounds.Any(sound => sound.State == FalloutExperienceSoundState.Playing)
+            ? "experience-notification-active-sound" : _display is not null || _pending.Count != 0
+            ? FalloutExperienceSourceHud.FrameBoundary : null) : !_nativeOwned ? "experience-notification-owner" :
         _sounds.Any(sound => sound.State == FalloutExperienceSoundState.Playing) ? "experience-notification-active-sound" : null;
     internal object State => new
     {
@@ -68,6 +78,9 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
         phase = _display?.Phase.ToString(),
         elapsedMilliseconds = _display?.ElapsedMilliseconds,
         nativeOwned = _nativeOwned,
+        sourceOwned = _sourceHud is not null,
+        currentSourceEntered = _currentSourceEntered,
+        sourceHud = _sourceHud?.Capture() ?? _historicalSourceHud,
         isSettled = IsSettled,
         frameGate = _frameGate.Capture(),
         lastSequence = _lastSequence,
@@ -84,6 +97,7 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
         source.Validate(); ArgumentNullException.ThrowIfNull(events);
         if (contract.Length != 64) throw new InvalidDataException("XP notification selection contract is absent.");
         _source = source; _contract = contract; _events = events; _level = level; _experience = experience;
+        _historicalSourceHud = restore?.SourceHud;
         frameSource.Validate(); ArgumentNullException.ThrowIfNull(levelIntroInput);
         if (frameSource.ExecutableSha256 != source.ExecutableSha256)
             throw new InvalidDataException("XP frame producer differs from the selected notification consumer.");
@@ -95,9 +109,27 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
         _events.ExperienceChanged += Changed;
     }
 
+    internal void BindSourceHud(FalloutExperienceSourceHud hud)
+    {
+        RequireHealthy(); ArgumentNullException.ThrowIfNull(hud); hud.RequireCurrent();
+        if (_sourceHud is not null || hud.Contract != _contract || hud.Engine != _source.ExecutableSha256)
+            throw new InvalidOperationException("Experience notifications changed their actual source HUD constructor.");
+        if (_currentSourceEntered || _currentPresentationEntered || _view != Guid.Empty || _lastClock is not null)
+            throw new NotSupportedException("source-experience-constructor-publication-after-source-entry-unbound");
+        RequireSourceConstructorContinuation(_display, _pending.Count, _sounds.Count, _idlePresented,
+            _lastSequence, _retiredSequence, _frameGate.Capture());
+        if (_retiredThrough != _lastOrdinal)
+            throw new NotSupportedException(FalloutExperienceSourceHud.FrameBoundary);
+        if (_historicalSourceHud is { } historical) hud.RequireHistoricalPublication(historical);
+        else if (_lastOrdinal != 0)
+            throw new NotSupportedException("source-experience-historical-actual-HUD-publication-unbound");
+        _sourceHud = hud;
+    }
+
     private void Changed(int previous, int published)
     {
         RequireHealthy();
+        _currentSourceEntered = true;
         try
         {
             if (previous != _observedExperience || published < 0 || published == previous || published != _experience())
@@ -121,6 +153,7 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
         RequireHealthy();
         if (_view != Guid.Empty || sourceContract != _contract)
             throw new InvalidOperationException("XP presentation lease differs from the actual notification owner.");
+        _currentPresentationEntered = true;
         _view = Guid.NewGuid(); _nativeOwned = true; _idlePresented = false; _lastClock = null; _lastLevelClock = null;
         if (_display is { } display) _display = display with { PhasePresented = false };
         return _view;
@@ -134,7 +167,7 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
     {
         if (!_disposed && _failure is null && _observedExperience != _experience())
             RetainFailure(new InvalidDataException("XP changed without its actual notification event publication."));
-        return new(_failure is not null || _disposed || !_nativeOwned ? FalloutExperienceNotificationFact.Unowned :
+        return new(_failure is not null || _disposed || !_nativeOwned && _sourceHud is null ? FalloutExperienceNotificationFact.Unowned :
             IsSettled ? FalloutExperienceNotificationFact.Satisfied : FalloutExperienceNotificationFact.Held,
             $"experience-notification:{_contract}:{_lastOrdinal}:{_retiredThrough}:{_display?.Phase.ToString() ?? "idle"}" +
             (_failure is null ? "" : ":" + _failure));
@@ -144,6 +177,12 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
         bool characterGenerationEnded)
     {
         RequireHealthy();
+        _currentSourceEntered = true;
+        if (_sourceHud is { } source)
+        {
+            source.EnterCurrentFrame(clock, admission, levelRequestPending, characterGenerationEnded);
+            throw new InvalidOperationException("Unowned source XP frame returned without its original service owner.");
+        }
         try
         {
             var milliseconds = clock.TilesMilliseconds;
@@ -301,6 +340,7 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
     internal void Presented(FalloutExperienceNotificationFrame frame, FalloutExperienceClockReading clock)
     {
         RequireView(frame.View);
+        RequireLegacyFrameProducer();
         if (_display is not { } display || frame.Revision != _revision || frame.Sequence != display.Sequence || frame.Phase != display.Phase)
             throw new InvalidOperationException("Stale XP draw receipt cannot retire or advance the current source phase.");
         var milliseconds = clock.TilesMilliseconds;
@@ -326,14 +366,15 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
     }
 
     internal ulong IdleRevision(Guid view) { RequireView(view); return _revision; }
-    internal bool CurrentSubmission(FalloutExperienceNotificationFrame frame) => _failure is null && !_disposed &&
+    internal bool CurrentSubmission(FalloutExperienceNotificationFrame frame) => _sourceHud is null && _failure is null && !_disposed &&
         frame.View == _view && _display is { } display && frame.Revision == _revision &&
         frame.Sequence == display.Sequence && frame.Phase == display.Phase;
-    internal bool CurrentIdleSubmission(Guid view, ulong revision) => _failure is null && !_disposed && view == _view &&
+    internal bool CurrentIdleSubmission(Guid view, ulong revision) => _sourceHud is null && _failure is null && !_disposed && view == _view &&
         revision == _revision && _display is null && _pending.Count == 0 && _retiredThrough == _lastOrdinal;
     internal void PresentedIdle(Guid view, ulong revision)
     {
         RequireView(view);
+        RequireLegacyFrameProducer();
         if (!CurrentIdleSubmission(view, revision))
             throw new InvalidOperationException("Stale idle HUD receipt cannot settle an unseen XP publication.");
         _idlePresented = true;
@@ -345,14 +386,14 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
     }
     internal void SoundStarted(Guid view, FalloutExperienceSoundReceipt sound)
     {
-        RequireView(view); var at = _sounds.IndexOf(sound);
+        RequireView(view); RequireLegacyFrameProducer(); var at = _sounds.IndexOf(sound);
         if (at < 0 || sound.State != FalloutExperienceSoundState.Pending || sound.Sequence != _display?.Sequence)
             throw new InvalidOperationException("XP sound does not own the current source phase.");
         _sounds[at] = sound with { State = FalloutExperienceSoundState.Playing };
     }
     internal void SoundFinished(Guid view, ulong sequence, string editorId)
     {
-        RequireView(view); var at = _sounds.FindIndex(sound => sound.Sequence == sequence && sound.EditorId == editorId);
+        RequireView(view); RequireLegacyFrameProducer(); var at = _sounds.FindIndex(sound => sound.Sequence == sequence && sound.EditorId == editorId);
         if (at < 0 || _sounds[at].State != FalloutExperienceSoundState.Playing)
             throw new InvalidOperationException("XP sound retirement is absent, repeated or foreign.");
         _sounds[at] = _sounds[at] with { State = FalloutExperienceSoundState.Finished };
@@ -366,6 +407,11 @@ internal sealed partial class FalloutExperienceNotifications : IDisposable
     {
         RequireHealthy(); if (view == Guid.Empty || view != _view || !_nativeOwned)
             throw new InvalidOperationException("XP notification has no matching current native presentation lease.");
+    }
+    private void RequireLegacyFrameProducer()
+    {
+        if (_sourceHud is not null) throw new NotSupportedException(FalloutExperienceSourceHud.FrameBoundary);
+        _currentSourceEntered = true;
     }
     private void RequireHealthy()
     {

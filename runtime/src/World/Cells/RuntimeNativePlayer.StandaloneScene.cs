@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -33,6 +34,7 @@ internal partial class RuntimeNativePlayer
         if (!content.TryRead(path, null, out var bytes, out _))
             throw new FileNotFoundException("First-person scene cannot bind its original source resource.", path);
         var state = world.CampaignStandalonePlayerScene;
+        body.BindLogicalScene(state.CurrentPlayerOpacity?.PreparedColdScene);
         _standaloneFirstPersonOwner = state.PublishFirstPerson(new(body.SourceSceneFactory, state.Process, state.Source.Identity,
             state.Stack, body.GetInstanceId(), path, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
             "actual-returned-source-first-person-player-assembly/" + GetInstanceId()), Living);
@@ -47,18 +49,45 @@ internal partial class RuntimeNativePlayer
         if (_standaloneFirstPersonOwner is not { } owner) return;
         var world = _standaloneSceneWorld ?? throw new InvalidOperationException("Player scene release lost its actual source world.");
         world.RequireStandalonePlayerSceneReplacement();
-        ReleaseStandaloneLivingPhysicsModels();
-        world.CampaignStandalonePlayerScene.ReleaseFirstPerson(owner);
-        _standaloneFirstPersonOwner = null;
+        ReleaseStandaloneFirstPersonOwnership(world.CampaignStandalonePlayerScene, owner,
+            ReleaseStandaloneLivingPhysicsModels, () => _firstPerson?.RetireLogicalScene(),
+            () => _standaloneFirstPersonOwner = null);
+    }
+    internal static void ReleaseStandaloneFirstPersonOwnership(FalloutStandalonePlayerSceneState scene,
+        FalloutStandaloneFirstPersonOwner owner, Action releaseModels, Action retireLogicalScene, Action clearReleasedField)
+    {
+        scene.RequireFirstPersonReplacement();
+        NativeNifSceneRetirement.Drain("Actual Player first-person ownership",
+            [releaseModels, retireLogicalScene, () => { scene.ReleaseFirstPerson(owner); clearReleasedField(); }]);
     }
     internal void RetireStandalonePlayerScene()
     {
         _standaloneSceneWorld?.RequireStandalonePlayerSceneRetirement();
-        ReleaseStandaloneFirstPersonScene();
-        RetireStandaloneLivingPhysics();
-        _standaloneSceneWorld = null;
+        try
+        {
+            NativeNifSceneRetirement.Drain("Actual Player standalone scene",
+                [ReleaseStandaloneFirstPersonScene, RetireStandaloneLivingPhysics]);
+        }
+        finally
+        {
+            // A rejected source release still owns its field and world. Keep
+            // those references available for a genuine later retirement retry.
+            if (_standaloneFirstPersonOwner is null && _livingPhysics is null) _standaloneSceneWorld = null;
+        }
     }
     private void RequireStandaloneFirstPersonSceneReplacement() => _standaloneSceneWorld?.RequireStandalonePlayerSceneReplacement();
+    internal FalloutActorLogicalScene? ReadStandaloneFirstPersonLogicalScene(FalloutReferenceWorld world)
+    {
+        if (_standaloneSceneWorld is null && _standaloneFirstPersonOwner is null) return null;
+        if (!ReferenceEquals(_standaloneSceneWorld, world))
+            throw new InvalidOperationException("Opacity read selected another current Player world.");
+        if (_standaloneFirstPersonOwner is not { } owner) return null;
+        var body = _firstPerson ?? throw new NotSupportedException("Actual first-person source field lost its current assembly.");
+        if (!body.IsFirstPersonSourceRole || body.SourceSceneFactory != owner.Publication.Factory ||
+            body.GetInstanceId() != owner.Publication.NativeRoot || _presentationError is not null)
+            throw new NotSupportedException("Opacity read lost its actual source-role assembly lifetime.");
+        return body.LogicalScene;
+    }
     private void RetirePlayerPerceptionAndStandaloneScene()
     {
         var failures = new List<Exception>();

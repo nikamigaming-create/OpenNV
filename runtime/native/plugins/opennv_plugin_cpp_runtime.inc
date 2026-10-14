@@ -7,7 +7,7 @@ void* __cdecl cpp_fiopen_a(const char*, int, int);
 void cpp_prepare(PluginIoRuntime& io, Reader& reader) {
     const auto count = reader.get<std::uint32_t>();
     if (count > 1) throw Fatal(ERROR_NOT_SUPPORTED, "C++ object imports require one exact selected Microsoft provider.");
-    if (!count) return;
+    if (!count) { parallel_hardware_prepare(io, reader); return; }
     auto provider = std::make_unique<CppRuntimeProvider>();
     provider->path = io_from_utf8(reader.text()); provider->sha = reader.text(); provider->declaration = reader.text();
     const auto exports = reader.get<std::uint32_t>();
@@ -21,6 +21,7 @@ void cpp_prepare(PluginIoRuntime& io, Reader& reader) {
         provider->exports.push_back({name, rva, code != 0, nullptr});
     }
     io.cpp = std::move(provider);
+    parallel_hardware_prepare(io, reader);
 }
 CppRuntimeProvider& cpp_owner() {
     auto& io = io_owner();

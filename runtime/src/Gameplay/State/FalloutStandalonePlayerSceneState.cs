@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
-    internal const string Schema = "opennv-standalone-Player-scene/v19";
+    internal const string Schema = "opennv-standalone-Player-scene/v21";
     internal FalloutStandalonePlayerSceneSource Source { get; }
     internal Guid Process => _process;
     internal string Stack => _stack;
@@ -34,6 +34,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     private string? _boundary, _failure;
     internal string? SaveBlocker => _retired ? "source-Player-scene-retired" : _failure ?? _boundary ??
         _controlHud?.SaveBlocker ?? (_historicalControlHud is not null && _controlHud is null ? "source-Player-cold-HUD-publication-unbound" : null) ??
+        _playerOpacity?.SaveBlocker ?? (_historicalPlayerOpacity is not null && _playerOpacity is null ? "source-Player-cold-opacity-publication-unbound" : null) ??
         (_historicalReferenceOrientation is not null && _referenceOrientation is null ? "source-Player-cold-reference-orientation-publication-unbound" : null) ??
         (_controlFields.Capture() is { WordAvailable: false } ? FalloutPlayerControlFieldsState.ObservedWriterBoundary :
             _controlFields.Capture().Failure) ??
@@ -91,6 +92,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         controlDisplay = _controlDisplay?.Capture() ?? _historicalControlDisplay,
         referenceOrientation = _referenceOrientation?.Capture() ?? _historicalReferenceOrientation,
         pointOfView = CaptureControlPointOfView(),
+        opacity = _playerOpacity?.State ?? (object?)_historicalPlayerOpacity,
+        followingServices = _followingServicesCall,
+        weaponContinuation = _weaponContinuation,
         actorMovementFlag = _actorMovementFlag,
         prelude = _prelude,
         cold = _cold,
@@ -264,6 +268,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (_first is { Released: null } && _livingFirst is not null)
             throw new InvalidOperationException("Actual first-person source field must release before Main scene retirement.");
         _referenceOrientation?.Retire();
+        _playerOpacity?.Retire();
+        _updateTeleportFade = null;
         _threadContext.Retire();
         _movementControl?.Retire();
         _movementPhysics = null;

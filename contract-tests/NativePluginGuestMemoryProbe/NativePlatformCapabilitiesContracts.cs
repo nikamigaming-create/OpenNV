@@ -29,9 +29,12 @@ internal static class NativePlatformCapabilitiesContracts
             NativePluginCppRuntimeImports.Owner("msvcp140.dll", NativePluginCppRuntimeImports.RandomDevice + "x") is null,
             "exact Microsoft uint32/cdecl decorated export selection");
         foreach (var name in new[] { "__std_create_threadpool_work", "__std_bulk_submit_threadpool_work",
-            "__std_wait_for_threadpool_work_callbacks", "__std_close_threadpool_work", "__std_parallel_algorithms_hw_threads" })
+            "__std_wait_for_threadpool_work_callbacks", "__std_close_threadpool_work" })
             Require(NativePluginPlatformImports.Owner("msvcp140_atomic_wait.dll", name) is null,
                 "worker callback/source lifetime remains explicitly unowned: " + name);
+        Require(NativePluginPlatformImports.Owner("msvcp140_atomic_wait.dll", "__std_parallel_algorithms_hw_threads") is not null &&
+            NativePluginPlatformImports.Owner("unselected.dll", "__std_parallel_algorithms_hw_threads") is null,
+            "exact real cached hardware provider is independent of worker callback lifetime");
         Console.WriteLine("OPENNV_NATIVE_PLATFORM_IMPORT_DECLARATIONS_PASS actualCallableProof=UNEXECUTED");
     }
 

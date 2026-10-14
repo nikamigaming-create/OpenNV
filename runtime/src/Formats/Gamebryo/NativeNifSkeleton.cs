@@ -2,7 +2,7 @@ using Godot;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
-internal sealed class RuntimeNativeNifSkeleton
+internal sealed partial class RuntimeNativeNifSkeleton
 {
     private readonly Dictionary<string, int> _boneIndices = new(StringComparer.Ordinal);
     private readonly List<(int ParentBone, FalloutNifGeometry Geometry)> _geometryAttachments = [];

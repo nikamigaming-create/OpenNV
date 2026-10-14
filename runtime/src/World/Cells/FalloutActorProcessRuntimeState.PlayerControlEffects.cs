@@ -10,7 +10,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         if (_cachedTimerNativeOwner is null || _cachedTimerNativeThread != Environment.CurrentManagedThreadId)
             throw new NotSupportedException("source-Player-controls-actual-Main-timer-publication-unbound");
         var timer = _cachedSourceTimer ?? throw new NotSupportedException("source-Player-controls-current-Main-delta-owner-unbound");
-        var current = timer.ReadControlDelta();
+        var current = timer.ReadScaledDelta();
         if (current.Process != _process || current.Source != _source.ExecutableSha256)
             throw new InvalidOperationException("Source controls selected another actual cached Main timer.");
         return timer;

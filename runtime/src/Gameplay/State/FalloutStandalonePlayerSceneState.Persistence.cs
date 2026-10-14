@@ -19,7 +19,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             _actorDistanceTimer, _actorDistanceCall, _idleAnimationCall, _moverFields, _movementCall, _actorMovementFlag,
             _controlObservations.ToArray(), _controlFields.Capture(), _threadContext.CaptureKindScopes(),
             _controlHud?.Capture() ?? _historicalControlHud, _controlDisplay?.Capture() ?? _historicalControlDisplay,
-            _referenceOrientation?.Capture() ?? _historicalReferenceOrientation, CaptureControlPointOfView());
+            _referenceOrientation?.Capture() ?? _historicalReferenceOrientation, CaptureControlPointOfView(),
+            _playerOpacity?.Capture() ?? _historicalPlayerOpacity, _followingServicesCall, _weaponContinuation);
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -56,6 +57,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _actorMovementFlag = saved.ActorMovementFlag;
         _historicalControlHud = saved.ControlHud; _historicalControlDisplay = saved.ControlDisplay;
         _historicalReferenceOrientation = saved.ReferenceOrientation;
+        _historicalPlayerOpacity = saved.Opacity; _followingServicesCall = saved.FollowingServices;
+        _weaponContinuation = saved.WeaponContinuation;
         RestoreControlPointOfView(saved.PointOfView!);
         _controlObservations.AddRange(saved.ControlObservations!);
         _observedControlIds.UnionWith(saved.ControlObservations!.Select(value => value.Command.Observation));
@@ -99,6 +102,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         ValidateControlObservations(saved);
         ValidateControlOwners(saved);
         ValidateControlPointOfView(saved);
+        ValidateFollowingServices(saved);
+        ValidatePlayerWeaponContinuation((saved.Stack, saved.Source.Main,
+            saved.FollowingServices, saved.WeaponContinuation));
         foreach (var owner in saved.FirstPersonHistory)
         {
             var native = owner.Publication;
@@ -158,6 +164,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     internal static void RequirePlayable(FalloutStandalonePlayerSceneSnapshot saved)
     {
         Validate(saved);
+        if (saved.Opacity is { } opacity) FalloutPlayerOpacityState.RequireComplete(opacity);
         if (saved.Retired || saved.Failure is not null || saved.Boundary is not null || saved.Clock is not null ||
             saved.ControlFields is { WordAvailable: false } or { Failure: not null } ||
             saved.ControlHud is { InitializationReturned: false } or { Failure: not null } or { Retired: true } or { ColdBindingFailure: not null } ||

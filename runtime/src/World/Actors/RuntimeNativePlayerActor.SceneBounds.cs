@@ -12,6 +12,17 @@ internal sealed partial class RuntimeNativePlayerActor
         if (Error is not null || !IsInsideTree() || IsQueuedForDeletion() ||
             !GodotObject.IsInstanceValid(Skeleton.Node) || !Skeleton.Node.IsInsideTree() || Skeleton.Node.IsQueuedForDeletion())
             throw new NotSupportedException("Player bound lost its actual assembled skeleton and current pose.");
+        if (LogicalScene is { } logical)
+        {
+            if (logical.Factory != SourceSceneFactory || !ReferenceEquals(Skeleton.LogicalScene, logical) ||
+                logical.SkeletonPath != Actor.Appearance.SkeletonPath || logical.SkeletonSha256 != Skeleton.Source.Sha256)
+                throw new InvalidDataException("Player radius borrower changed its actual logical model/source factory.");
+            // The current logical graph owns this sphere, including a nullable
+            // constructor bound and any reached failed source publication.
+            return logical.ReadCurrentRadiusBits();
+        }
+        // The separate, unbound native presentation path still samples native
+        // poses. It cannot produce fields for an authoritative logical scene.
         FalloutNifSphereBound? bound = null;
         foreach (var part in _sourceBoundParts)
             if (FalloutNifPoseBounds.Read(part, ReadPose) is { } next)

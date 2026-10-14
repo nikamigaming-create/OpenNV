@@ -23,6 +23,7 @@ internal sealed partial class NativePluginExecutionDomain
         var owner = _privateIo ?? throw new NotSupportedException("Original native I/O has no selected module-owned private storage.");
         using var reader = Reader(frame.Payload); var thread = reader.ReadUInt32(); var module = reader.ReadUInt64();
         var enteredLoader = IsEnteredOriginalLoaderIo(frame.Operation, module, parent);
+        if (!enteredLoader) RequireModulePrivateIo(RetainedNvseModule(module));
         if (thread != NativeThread || !enteredLoader && (_nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation))
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
         if (frame.Operation == WindowProcessCallback)
@@ -34,6 +35,11 @@ internal sealed partial class NativePluginExecutionDomain
         {
             if (enteredLoader) throw new NotSupportedException("Pre-entry standard FILE/C++ route publication is unowned.");
             return frame.Operation == CrtStandardCallback ? DispatchPrivateCrtStandard(parent, owner, reader) : DispatchPrivateCppRuntime(parent, owner, reader);
+        }
+        if (frame.Operation == ParallelHardwareCallback)
+        {
+            if (enteredLoader) throw new NotSupportedException("Pre-entry parallel hardware publication is unowned.");
+            return DispatchParallelHardware(parent, owner, reader);
         }
         if (frame.Operation is CrtSupportCallback or EnvironmentCallback or FileMetadataCallback)
         {

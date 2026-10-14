@@ -7,7 +7,7 @@ internal sealed record FalloutActorSourcePart(FalloutNpcAppearancePart Selection
 // One selected assembly factory, constructed from original source declarations
 // before native presentation. Parts retain separate source graphs: their skin,
 // equipment and runtime physical attachment writers cannot be inferred by name.
-internal sealed class FalloutActorSourceModel
+internal sealed partial class FalloutActorSourceModel
 {
     internal FalloutActorSourceModel(FalloutNpcAppearance appearance, FalloutNifPhysicalModel skeleton,
         IEnumerable<FalloutActorSourcePart> parts)

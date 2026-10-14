@@ -179,7 +179,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
             state.BindEmbeddedSkins();
             return new RuntimeNativeNifScene(root, state.NodeCount, state.SurfaceCount,
                 state.VertexCount, state.TriangleCount, state.CollisionBodyCount,
-                state.CollisionShapeCount, state.CollisionTriangleCount);
+                state.CollisionShapeCount, state.CollisionTriangleCount)
+            { GeometryMaterials = state.GeometryMaterials };
         }
         catch
         {
@@ -325,7 +326,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
             skeleton.Node.AddChild(result);
             return new RuntimeNativeNifScene(result, state.NodeCount, state.SurfaceCount,
                 state.VertexCount, state.TriangleCount, state.CollisionBodyCount,
-                state.CollisionShapeCount, state.CollisionTriangleCount);
+                state.CollisionShapeCount, state.CollisionTriangleCount)
+            { GeometryMaterials = state.GeometryMaterials };
         }
         catch
         {
@@ -1797,11 +1799,11 @@ internal static partial class RuntimeNativeNifMeshBuilder
         {
             var overridden = _materialOverride?.Invoke(_source, geometry);
             if (overridden is not null)
-                return overridden;
+                return RetainGeometryMaterial(geometry, overridden);
             var result = BuildMaterialCore(geometry, hairColor, texturePaths);
             if (result is not StandardMaterial3D && result.ResourceName is not
                 (NativeNifLightingMaterial.ResourceIdentity or NativeNifEffectMaterial.ResourceIdentity or NativeNifRefractionMaterial.ResourceIdentity))
-                return result;
+                return RetainGeometryMaterial(geometry, result);
             foreach (var reference in geometry.Properties.Where(reference => reference != -1))
             {
                 if (_source.ReadObject(reference) is not (FalloutNifMaterialProperty or
@@ -1820,7 +1822,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
                     shader.Controller >= 0 && NativeNifRefractionMaterial.HasDirectController(_source, shader))
                     _directControllerSequences.Add(NativeNifRefractionMaterial.DirectChannel(_source, shader, values));
             }
-            return result;
+            return RetainGeometryMaterial(geometry, result);
         }
 
         private Material BuildMaterialCore(FalloutNifGeometry geometry, Color? hairColor, IReadOnlyList<string>? texturePaths)
@@ -2525,7 +2527,10 @@ internal sealed record RuntimeNativeNifScene(
     int Triangles,
     int CollisionBodies,
     int CollisionShapes,
-    int CollisionTriangles);
+    int CollisionTriangles)
+{
+    internal IReadOnlyList<RuntimeNativeNifGeometryMaterial> GeometryMaterials { get; init; } = [];
+}
 
 internal sealed class RuntimeNativeNifPrototype
 {

@@ -14,7 +14,7 @@ internal sealed partial class FalloutPlayerControlHudState
             _ui.Factory, _root.Epoch, _sequence, _menuMode, _mode, _visibilityMask, _allowed, _messageHandle,
             _subtitle, _visibilityChanged, _pendingMessage, _displayInitialized, _initializationReturned, _display,
             _historicalTransitions ?? _context.CaptureMenuTransitions(), _call, _failure, _initialization,
-            _ui.CaptureComponentValues(CurrentTiles()), _message.Path, _cold, _retired, _coldBindingFailure, _lifetimes.ToArray());
+            _ui.CaptureComponentValues(CurrentTiles()), _message.Path, _cold, _retired, _coldBindingFailure, _lifetimes.ToArray(), _localTimerConstructor);
         Validate(saved, _source, _stack); return saved;
     }
     internal static void Validate(FalloutPlayerControlHudSnapshot saved, FalloutPlayerControlHudSource source, string stack)
@@ -43,6 +43,12 @@ internal sealed partial class FalloutPlayerControlHudState
                 lifetimes[0] != new FalloutPlayerControlHudLifetime(transfer.OriginProcess, transfer.OriginFactory) ||
                 lifetimes[^2] != new FalloutPlayerControlHudLifetime(transfer.PreviousProcess, transfer.PreviousFactory) : lifetimes.Count != 1))
             throw new InvalidDataException("Source HUD lost actual constructor/cold process and factory lifetimes.");
+        if (saved.LocalTimerConstructor is { } timer)
+        {
+            ValidateLocalTimerConstructor(timer);
+            if (timer.Process != lifetimes[0].Process || timer.HudFactory != lifetimes[0].Factory)
+                throw new InvalidDataException("Source HUD local timer replaced its original constructor process or owner.");
+        }
         if (saved.Tiles is not { Count: 18 } || saved.MessagePath is null || !saved.MessagePath.StartsWith("HUDMainMenu/Messages/", StringComparison.Ordinal))
             throw new InvalidDataException("Source HUD omitted its retained actual XML component values.");
         var paths = new[] { FalloutPlayerControlHudSource.Menu }.Concat(FalloutPlayerControlHudSource.VisibilityTiles.Select(name =>
@@ -143,6 +149,7 @@ internal sealed partial class FalloutPlayerControlHudState
         _pendingMessage = saved.PendingMessage; _displayInitialized = saved.DisplayInitialized;
         _initializationReturned = saved.InitializationReturned; _display = saved.Display; _initialization = saved.Initialization;
         _call = saved.Call; _failure = saved.Failure; _coldBindingFailure = saved.ColdBindingFailure;
+        _localTimerConstructor = saved.LocalTimerConstructor;
         if (_call is not null) _invocations.Add(_call.Invocation);
         if (saved.Transitions.Count != 0)
         {
@@ -157,5 +164,14 @@ internal sealed partial class FalloutPlayerControlHudState
         catch (Exception error) { _coldBindingFailure ??= error.Message; throw; }
         // Historical calls retain their actual source process, TLS scope and
         // XML-write order. No input-type call, clock query or command is replayed.
+    }
+
+    internal static void ValidateLocalTimerConstructor(FalloutPlayerControlHudTimerConstructor timer)
+    {
+        ArgumentNullException.ThrowIfNull(timer);
+        if (timer.Process == Guid.Empty || timer.HudFactory == Guid.Empty || timer.PauseCount != 0 ||
+            timer.FixedMillisecondsBits != 0 || timer.FractionalMillisecondsBits != 0 ||
+            timer.DeltaSecondsBits != 0 || timer.CachedMilliseconds != 0 || timer.StatusWord != 0)
+            throw new InvalidDataException("Source HUD local timer omitted its independent zero stores and actual wall tick construction.");
     }
 }

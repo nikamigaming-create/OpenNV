@@ -18,7 +18,7 @@ enum class NvseHostCall : std::uint32_t {
     source_field_method_declare = 24, source_field_method_publish = 25, source_field_method_execute = 26, source_field_method_retire = 27,
     logging_get_path = 28
 };
-enum class NvsePhase : std::uint32_t { mapped, querying, queried_true, queried_false, loading, loaded_true, loaded_false };
+enum class NvsePhase : std::uint32_t { mapped, querying, queried_true, queried_false, loading, loaded_true, loaded_false, retired };
 enum class NvseSerializationEvent : std::uint32_t { save, load, new_game, pre_load };
 constexpr std::uint32_t nvse_invalid_handle = 0xffffffffU;
 constexpr std::uint32_t nvse_expression_parser = 0x08000000U;
@@ -115,6 +115,7 @@ struct NvseRuntime {
     std::uint64_t next_dispatch = 0;
     NvseTables* tables = nullptr;
     std::uint32_t tables_extent = 0;
+    bool owns_tables = true;
     const char* directory = nullptr;
     const char* logging_path = nullptr;
     std::uint32_t logging_path_length = 0;

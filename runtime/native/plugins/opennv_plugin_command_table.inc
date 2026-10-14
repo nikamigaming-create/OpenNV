@@ -29,6 +29,7 @@ void command_table_declaration_text(Bytes& bytes, const char* source, const std:
     bytes.data.insert(bytes.data.end(), captured.begin(), captured.end());
 }
 void command_table_check(const NativeCommandPublication& publication) {
+    NvseExecutionScope source(publication.module);
     const auto observed = nvse_copy(&publication.descriptor);
     if (observed.execute) engine_command_executable(observed.execute);
     if (std::memcmp(&observed, &publication.original, sizeof(observed)) != 0 ||
@@ -55,19 +56,23 @@ const NvseCommandInfo* command_table_publish(Bytes response) {
     Reader reader{response.data}; const auto present = reader.get<std::uint32_t>();
     if (!present) { reader.finish(); return nullptr; }
     if (present != 1) throw Fatal(ERROR_INVALID_DATA, "CommandTable source disposition is not Boolean.");
+    const auto module = reader.get<std::uint64_t>();
     const auto source = reader.get<std::uint32_t>(), opcode = reader.get<std::uint32_t>();
     const auto registration = reader.get<std::uint64_t>(); const auto return_type = reader.get<std::uint32_t>(); reader.finish();
     const NvseRegisteredCommand* retained = nullptr;
-    for (const auto& candidate : state->nvse->commands)
+    const auto source_runtime = state->module_set ? nvse_module_record(module).runtime : state->nvse;
+    if (!state->module_set && module != state->module_id) throw Fatal(ERROR_INVALID_HANDLE, "CommandTable source has no same-process module owner.");
+    for (const auto& candidate : source_runtime->commands)
         if (candidate.original == source && candidate.opcode == opcode) { retained = &candidate; break; }
     if (!retained || return_type != retained->return_type || !registration)
-        throw Fatal(ERROR_INVALID_HANDLE, "CommandTable pointer has no exact original local command registration.");
+        throw Fatal(ERROR_INVALID_HANDLE, "CommandTable pointer has no exact original same-process command registration.");
     auto& owner = command_table_owner();
-    for (const auto& entry : owner.commands) if (entry->registration == registration) {
+    for (const auto& entry : owner.commands) if (entry->module == module && entry->registration == registration) {
         if (entry->descriptor.opcode != opcode) throw Fatal(ERROR_INVALID_DATA, "CommandTable registration reused an unrelated opcode.");
-        command_table_check(*entry); return &entry->descriptor;
+        command_table_check(*entry); entry->consumers.insert(state->module_id); return &entry->descriptor;
     }
-    auto entry = std::make_unique<NativeCommandPublication>(); entry->registration = registration;
+    auto entry = std::make_unique<NativeCommandPublication>(); entry->registration = registration; entry->module = module;
+    entry->consumers.insert(state->module_id);
     entry->descriptor = retained->source_descriptor;
     auto& descriptor = entry->descriptor;
     if (address(descriptor.execute) != retained->execute || address(descriptor.parse) != retained->parse ||
@@ -122,9 +127,10 @@ const NvsePluginInfo* command_table_plugin(Bytes response) {
     for (const auto& entry : owner.plugins) if (entry->generation == generation && entry->module == module) {
         if (entry->handle != handle || entry->name != name || entry->descriptor.info_version != info_version || entry->descriptor.version != version ||
             entry->descriptor.name != entry->name.c_str()) throw Fatal(ERROR_INVALID_DATA, "Published PluginInfo mutated or changed its source identity.");
-        return &entry->descriptor;
+        entry->consumers.insert(state->module_id); return &entry->descriptor;
     }
     auto entry = std::make_unique<NativePluginPublication>(); entry->generation = generation; entry->module = module;
+    entry->consumers.insert(state->module_id);
     entry->handle = handle; entry->name = name; entry->descriptor = {info_version, entry->name.c_str(), version};
     const auto* pointer = &entry->descriptor;
     command_table_scalar(CommandTableCall::publish_plugin, handle, address(pointer), pointer->name, static_cast<std::uint32_t>(module), generation);
@@ -169,5 +175,24 @@ const NvseCommandTableInterface nvse_command_table{2, command_table_start, comma
     command_table_parent, command_table_plugin_name, command_table_plugin_dll};
 void* command_table_interface_address() {
     command_table_owner(); return const_cast<NvseCommandTableInterface*>(&nvse_command_table);
+}
+void command_table_require_module_retirement(std::uint64_t module) {
+    if (!state->command_table) return;
+    for (const auto& publication : state->command_table->commands) if (publication->module == module)
+        for (const auto consumer : publication->consumers) if (consumer != module)
+            throw GuestArenaFailure(ERROR_BUSY, "Original command pointer remains borrowed by another living source DLL.");
+    for (const auto& publication : state->command_table->plugins) if (publication->module == module)
+        for (const auto consumer : publication->consumers) if (consumer != module)
+            throw GuestArenaFailure(ERROR_BUSY, "Original PluginInfo pointer remains borrowed by another living source DLL.");
+}
+void command_table_retire_module(std::uint64_t module) {
+    if (!state->command_table) return;
+    auto& owner = *state->command_table;
+    for (const auto& publication : owner.commands) publication->consumers.erase(module);
+    for (const auto& publication : owner.plugins) publication->consumers.erase(module);
+    owner.commands.erase(std::remove_if(owner.commands.begin(), owner.commands.end(),
+        [&](const auto& publication) { return publication->module == module; }), owner.commands.end());
+    owner.plugins.erase(std::remove_if(owner.plugins.begin(), owner.plugins.end(),
+        [&](const auto& publication) { return publication->module == module; }), owner.plugins.end());
 }
 void command_table_retire() { state->command_table.reset(); }

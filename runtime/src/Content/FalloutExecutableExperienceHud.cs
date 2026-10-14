@@ -5,6 +5,54 @@ namespace OpenNV.Runtime.Content;
 
 internal static partial class FalloutExecutableStringTable
 {
+    internal static void RequireExperienceSourceHudConstructor(string path, FalloutExperienceHudDeclaration declaration)
+    {
+        declaration.Validate();
+        if (declaration.ExecutableSha256 != FalloutSourceMainFamily.Fallout3)
+            throw new NotSupportedException("Source XP HUD construction is unowned for this executable family.");
+        var original = File.ReadAllBytes(path);
+        if (Convert.ToHexString(SHA256.HashData(original)).ToLowerInvariant() != declaration.ExecutableSha256)
+            throw new InvalidDataException("Source XP HUD construction changed its selected executable.");
+        var (code, image) = Load(original);
+        var tables = image.SourceClassTables(".?AVHUDMainMenu@@", 18).ToArray();
+        if (tables is not [var table]) throw new NotSupportedException("Source XP HUD lost its actual unique constructor class.");
+        var matches = 0;
+        for (var at = 0; at <= code.Length - 0x200; ++at)
+        {
+            if (!Match(code, at, [0xc7, 6]) || Word(code, at + 2) != table) continue;
+            var body = code.AsSpan(at, 0x200);
+            if (body.IndexOf(new byte[] { 0xc7, 0x86, 0x30, 2, 0, 0, 0, 0, 0, 0 }) < 0 ||
+                body.IndexOf(new byte[] { 0xc7, 0x86, 0x34, 2, 0, 0, 0, 0, 0, 0 }) < 0 ||
+                body.IndexOf(new byte[] { 0x66, 0xc7, 0x86, 0xd4, 1, 0, 0, 0, 0 }) < 0)
+                continue;
+            var clock = false;
+            for (var call = 0; call <= body.Length - 18; ++call)
+            {
+                if (body[call] != 0xff || body[call + 1] != 0x15 || image.ImportName(U32(body, call + 2)) != "GetTickCount") continue;
+                if (!body.Slice(call + 6, 8).SequenceEqual(new byte[] { 0x50, 0x8d, 0x8e, 0xf4, 1, 0, 0, 0xe8 }))
+                    throw new NotSupportedException("Source HUD wall tick lost its independent local timer constructor ingress.");
+                var child = checked(at + call + 18 + unchecked((int)U32(body, call + 14)));
+                byte[] constructor = [0x8b, 0x44, 0x24, 4, 0xc6, 1, 0,
+                    0xc7, 0x41, 4, 0, 0, 0, 0, 0xc7, 0x41, 8, 0, 0, 0, 0,
+                    0xc7, 0x41, 0x0c, 0, 0, 0, 0, 0xc7, 0x41, 0x10, 0, 0, 0, 0,
+                    0x89, 0x41, 0x14, 0x66, 0xc7, 0x41, 0x18, 0, 0, 0xc2, 4, 0];
+                if (child < 0 || child > code.Length - constructor.Length || !code.AsSpan(child, constructor.Length).SequenceEqual(constructor))
+                    throw new NotSupportedException("Source HUD independent timer lost its actual constructor-zero fields and retained wall tick.");
+                clock = true;
+            }
+            if (!clock) throw new NotSupportedException("Source XP HUD lost its genuine constructor wall tick ingress.");
+            ++matches;
+        }
+        if (matches != 1) throw new NotSupportedException("Source XP HUD queue/suppression constructor is absent or ambiguous.");
+        var consumer = ExperienceConsumer(code, image.Literal);
+        var flags = new HashSet<uint>();
+        for (var at = 0; at <= consumer.Length - 7; ++at)
+            if (consumer[at] == 0xf6 && consumer[at + 1] == 5 && consumer[at + 6] == 1)
+                flags.Add(U32(consumer, at + 2));
+        if (flags.Count != 1 || Word(image.ReadLoaderData(flags.Single(), 4), 0) != 1)
+            throw new NotSupportedException("Source XP HUD lost its independent loaded initial flag word.");
+    }
+
     // These are reviewed *image* contracts, not private addresses or a guessed
     // game-name selector. No modified/unknown image inherits an admitted clock.
     // The neutral consumer is shared; optimized SSE and framed x87 transports

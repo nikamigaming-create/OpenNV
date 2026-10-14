@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--audit-owned-player-opacity", var ownedOpacityData])
+{
+    Environment.ExitCode = PlayerOpacityContracts.AuditOwned(ownedOpacityData);
+    return;
+}
+
 if (args is ["--audit-owned-player-control-hud", var ownedControlHudData])
 {
     Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedPlayerControlHud(ownedControlHudData);
@@ -122,6 +128,7 @@ if (args is ["--player-thread-context-contracts"])
 if (args is ["--player-process-query-contracts"])
 {
     SourceMainScriptCallerContracts.RunPlayerProcessQueryContracts();
+    PlayerOpacityContracts.Run();
     return;
 }
 if (args is ["--audit-owned-player-scene-entry", var playerSceneData])

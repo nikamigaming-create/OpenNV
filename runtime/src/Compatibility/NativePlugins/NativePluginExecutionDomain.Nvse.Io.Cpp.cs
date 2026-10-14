@@ -14,17 +14,21 @@ internal sealed partial class NativePluginExecutionDomain
     private static void WriteCppProvider(BinaryWriter writer, NativePluginPrivateIo io)
     {
         var selection = io.CppProvider; writer.Write(selection is null ? 0U : 1U);
-        if (selection is null) return;
-        WriteText(writer, selection.Path); WriteText(writer, selection.Sha256); WriteText(writer, selection.SourceOwner);
-        writer.Write(checked((uint)selection.Exports.Count));
-        foreach (var item in selection.Exports)
-        { WriteText(writer, item.Name); writer.Write(item.Rva); writer.Write(item.Executable ? 1U : 0U); }
+        if (selection is not null)
+        {
+            WriteText(writer, selection.Path); WriteText(writer, selection.Sha256); WriteText(writer, selection.SourceOwner);
+            writer.Write(checked((uint)selection.Exports.Count));
+            foreach (var item in selection.Exports)
+            { WriteText(writer, item.Name); writer.Write(item.Rva); writer.Write(item.Executable ? 1U : 0U); }
+        }
+        WriteParallelHardwareProvider(writer, io);
     }
     private void PublishNativeCrtRuntime(NativeNvsePlugin plugin)
     {
         VerifyNvse(plugin);
+        if (IsSupplementalNvseModule(plugin)) return;
         var owner = _privateIo ?? throw new InvalidDataException("Mapped original module lost its source-private I/O owner.");
-        if (owner.CppProvider is null && owner.CrtProviders.Count == 0) return;
+        if (owner.CppProvider is null && owner.CrtProviders.Count == 0 && owner.ParallelHardwareProvider is null) return;
         if (_crtRuntimePublicationEntered) throw new InvalidOperationException("Entered native CRT runtime publication cannot replay.");
         _crtRuntimePublicationEntered = true;
         ++_callDepth;
@@ -35,7 +39,8 @@ internal sealed partial class NativePluginExecutionDomain
             var standardCount = reader.ReadUInt32(); var cppCount = reader.ReadUInt32();
             ReadCrtPureBindings(reader, owner, publicationCall); Finish(reader);
             if (standardCount != _crtStandardStreams.Count || cppCount != _cppRuntimeBindings.Count ||
-                (owner.CppProvider is not null) != _cppRuntimePublished)
+                (owner.CppProvider is not null) != _cppRuntimePublished ||
+                (owner.ParallelHardwareProvider is not null) != (_parallelHardwareBinding is not null))
                 throw new InvalidDataException("Actual CRT runtime publication lost an independently retained provider/standard stream.");
         }
         catch (Exception error) { plugin.Phase = NativeNvsePhase.Faulted; throw Fatal(error); }
@@ -78,6 +83,7 @@ internal sealed partial class NativePluginExecutionDomain
     }
     private void RequireCppRuntimeRetired()
     {
+        RequireParallelHardwareRetired();
         if (_cppRuntimePublished && !_cppRuntimeRetired) throw new InvalidDataException("Original C++ provider/global-object lifetime remains entered.");
         _privateIo?.RequireCppSourcesCurrent();
     }

@@ -9,6 +9,7 @@ internal sealed partial class NativePluginPrivateIo
     internal NativePluginCppRuntimeSelection? CppProvider => _cppSelection;
     private void InitializeCppProvider()
     {
+        InitializeParallelHardwareProvider();
         var selection = NativePluginCppRuntimeImports.Read(Selection.ModulePath, Selection.ModuleSha256);
         if (selection is null) return;
         _cppSelection = selection;
@@ -42,6 +43,7 @@ internal sealed partial class NativePluginPrivateIo
     private void DisposeCppSources()
     {
         var failures = new List<Exception>();
+        try { DisposeParallelHardwareSource(); } catch (Exception error) { failures.Add(error); }
         foreach (var lease in _cppSourceLeases.ToArray())
             try { lease.Dispose(); _cppSourceLeases.Remove(lease); } catch (Exception error) { failures.Add(error); }
         if (failures.Count != 0) throw new AggregateException("C++ source leases retain independent retirement failures.", failures);

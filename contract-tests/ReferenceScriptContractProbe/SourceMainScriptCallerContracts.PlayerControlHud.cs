@@ -44,6 +44,7 @@ internal static partial class SourceMainScriptCallerContracts
         var actualInterface = new FalloutStandaloneInterfaceState(FalloutStandaloneInterfaceSource.Read(main), stack, process);
         var context = new FalloutPlayerControlHudContext(source, stack, process, actualInterface, timer, clock, input, fields);
         var hud = new FalloutPlayerControlHudState(source, stack, process, ui, settings, thread, context);
+        Reject(() => hud.RequireLocalTimerConstructor());
         hud.Initialize(display, fields.ReadDisabledWord);
         var initialized = hud.Capture();
         Require(initialized is { InitializationReturned: true, Mode: 5, MenuMode: 8, VisibilityMask: 0, AllowedMask: 0xffff,
@@ -115,6 +116,7 @@ internal static partial class SourceMainScriptCallerContracts
         RunHudOverrideFaultContracts(main, stack);
         hud.Retire(); thread.Retire(); actualInterface.Retire(); input.Retire();
         RunPlayerPointOfViewContracts(main, stack);
+        RunExperienceSourceHudContracts(main, stack);
         Console.WriteLine("OPENNV_PLAYER_CONTROL_HUD_PASS authored=true actualSourceXml=true sharedInterfaceQueue=true " +
             "sourceConstructorDelta=true kind13PriorRestored=true disable0D=true processFalseZeroStores=true " +
             "noNativeBodyQuery=true coldTileValuesNoEffectReplay=true failedPrefixColdNoReplay=true completeGameplay=UNEXECUTED");

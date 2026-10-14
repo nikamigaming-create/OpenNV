@@ -16,6 +16,8 @@ internal sealed partial class FalloutExperienceNotifications
     internal void CompletedLevelMenuSubmitted(FalloutLevelUpMenuSession menu)
     {
         RequireHealthy();
+        _currentSourceEntered = true;
+        if (_sourceHud is not null) throw new NotSupportedException(FalloutExperienceSourceHud.FrameBoundary);
         try
         {
             if (!_nativeOwned || !_idlePresented || _display is not null || _pending.Count != 0)

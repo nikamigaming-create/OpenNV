@@ -199,6 +199,8 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             try { if (!MutexNamespaceOwnersRetired) ClearMutexNamespacesAfterChildExit(); } catch (Exception error) { failures.Add(error); }
             try { if (!WindowProcessOwnersRetired) ClearWindowProcessAfterChildExit(); } catch (Exception error) { failures.Add(error); }
             try { if (_privateIo is not null) ClearPrivateIo(); } catch (Exception error) { failures.Add(error); }
+            try { if (_nvseModuleSources.Count != 0 || _nvseFailedModuleSources.Count != 0 || _nvseHostSource is not null) ClearNvseCapabilities(); }
+            catch (Exception error) { failures.Add(error); }
             if (failures.Count != 0) throw FaultException(new AggregateException("Independent native source/section retries failed.", failures));
             return;
         }
@@ -209,7 +211,10 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             if (Fault is null)
             {
                 if (_module is not null) Unload(_module);
-                if (_nvsePlugin is not null) UnloadNvse(_nvsePlugin);
+                foreach (var function in _nvseFunctionBorrows.Values.ToArray())
+                    if (function.Live) ReleaseNvseFunction(function);
+                foreach (var plugin in NvseAutomaticRetirementOrder())
+                    if (plugin.Phase != NativeNvsePhase.Retired) UnloadNvse(plugin);
                 RequireSteamRetired();
                 RetireNativeImportProviders();
                 RetireProductWindowCalls();
@@ -311,7 +316,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                             (NativeNvseHostCall)frame.Operation is (NativeNvseHostCall.SourceFieldMethodDeclare or NativeNvseHostCall.SourceFieldMethodPublish or
                                 NativeNvseHostCall.SourceFieldMethodExecute or NativeNvseHostCall.SourceFieldMethodRetire));
                     if (!steamSourceCallback && !globalsSourceCallback && !fieldMethodSourceCallback && !IsOriginalLoaderCallback(operation, frame) && operation is not (NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
-                        NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.UnloadNvse or NativePluginDomainOperation.CrtRuntime or NativePluginDomainOperation.WindowProcess or NativePluginDomainOperation.SourceCallSites))
+                        NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.UnloadNvse or NativePluginDomainOperation.CrtRuntime or NativePluginDomainOperation.WindowProcess or NativePluginDomainOperation.SourceCallSites or NativePluginDomainOperation.NvseModuleSet))
                         throw new InvalidDataException($"A native callback arrived outside its executable call owner: operation={operation}, kind={frame.Kind}, event={frame.Operation}, depth={_callDepth}.");
                     DispatchCallback(frame, request); continue;
                 }
@@ -324,7 +329,9 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                     var expectedModules = operation switch
                     {
                         NativePluginDomainOperation.LoadAuthored or NativePluginDomainOperation.LoadNvse => status == 0 ? 1U : 0U,
-                        NativePluginDomainOperation.Unload or NativePluginDomainOperation.UnloadNvse => status == 0 ? 0U : 1U,
+                        NativePluginDomainOperation.Unload => status == 0 ? 0U : 1U,
+                        NativePluginDomainOperation.UnloadNvse => status == 0 ? checked(NativeModuleCount - 1) : NativeModuleCount,
+                        NativePluginDomainOperation.NvseModuleSet => status == 0 && BitConverter.ToUInt32(payload) == 0 ? checked(NativeModuleCount + 1) : NativeModuleCount,
                         NativePluginDomainOperation.Resolve or NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
                         NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or
                         NativePluginDomainOperation.NvseExpressionAbi or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.NvseExpressionStatistics or
@@ -335,7 +342,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         NativePluginDomainOperation.NvseObjectRefresh or NativePluginDomainOperation.NvseLocalAttachScript or
                         NativePluginDomainOperation.NvseFileMethods or NativePluginDomainOperation.NvseBinaryMethods or
                         NativePluginDomainOperation.NvseBinaryBind or NativePluginDomainOperation.NvseBinaryRetire or
-                        NativePluginDomainOperation.CrtRuntime => 1U,
+                        NativePluginDomainOperation.CrtRuntime => NativeModuleCount,
                         NativePluginDomainOperation.GuestCapabilities or NativePluginDomainOperation.GuestAllocate or
                         NativePluginDomainOperation.GuestRead or NativePluginDomainOperation.GuestWrite or
                         NativePluginDomainOperation.GuestRelease or NativePluginDomainOperation.GuestBindState or
@@ -343,7 +350,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                         NativePluginDomainOperation.WindowProcess => NativeModuleCount,
                         NativePluginDomainOperation.SourceCallSites or NativePluginDomainOperation.SourceGlobals or NativePluginDomainOperation.SourceFieldMethods => NativeModuleCount,
                         NativePluginDomainOperation.SteamProvider => NativeModuleCount,
-                        NativePluginDomainOperation.ImportProviders => _importProvidersRetiring ? 0U : NativeModuleCount,
+                        NativePluginDomainOperation.ImportProviders => NativeModuleCount,
                         _ => 0U,
                     };
                     if (liveModules != expectedModules) throw new InvalidDataException("Native module lifetime drifted across its request.");
@@ -383,8 +390,10 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         else if (++_callbackCount > _maximumCallbacks) throw new InvalidDataException("Native callback budget exceeded.");
         _lastCallback = frame.Id;
         var previous = _callbackOwner; _callbackOwner = frame.Id;
+        var previousModule = _nvsePlugin;
         try
         {
+            _ = SelectNvseCallbackModule(frame);
             uint value = 0; byte[]? typedReply = null;
             if (frame.Kind == NativePluginDomainMessage.IoCallback) typedReply = DispatchPrivateIo(frame, waitingCall);
             else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == SteamSourceHashEvent)
@@ -424,7 +433,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             WriteFrame(new(replyKind, frame.Operation, Generation, frame.Id, waitingCall,
                 typedReply ?? Payload(writer => writer.Write(value))));
         }
-        finally { _callbackOwner = previous; }
+        finally { _callbackOwner = previous; _nvsePlugin = previousModule; }
     }
 
     private void VerifyModule(NativePluginModule module)

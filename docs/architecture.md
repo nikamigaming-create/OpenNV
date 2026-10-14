@@ -18,6 +18,37 @@ input and removes process/draw callbacks while their owners are still alive.
 Scene reload constructs a fresh collector; old scene nodes cannot supply later
 telemetry.
 
+Player following services consume the returned movement Boolean and retain a
+distinct High teleport-fade invocation. The fade reads actual cached Main time
+and winning typed settings, commits source Float32 stores before its children,
+and retains failed prefixes. The Player opacity child reads the current C# Actor
+process and actual first-person logical scene. That scene owns ordered nullable
+children, shared shader-property identity, source poses and bounds; material alpha
+is independent of mutable shader alpha. Godot projects this state and supplies
+none of the opacity inputs. Cold reconstruction binds fresh source factories
+without replaying old calls. Complete canonical scene and rendered parity remain
+separate acceptance lanes.
+
+The following Player weapon/action/activity/status owner borrows the current
+Common process and actual campaign Actor value pool. Its action byte has the
+distinct original Player constructor writer; its activity and complete status
+context retain independent fields. Cache misses store the queried scalar before
+the valid mask, and cold reconstruction retains source history without replay.
+Unowned writers, weapon effects and later frame services remain visible.
+
+Native modules share one actual child address space, host core and command
+table. Each original image retains its own Query/Load context, module handle,
+IAT validation and borrowed function lifetime. Cross-module calls preserve the
+executing module and real ABI; retirement drains outstanding borrows before
+unloading. Supplemental I/O and constructor policies cannot borrow the primary
+module's authority. Missing policies and native-global cold owners refuse.
+
+Experience source HUD state borrows the original C# UI tree, Player HUD and
+display owner. Its local timer receipt comes from the actual HUD constructor,
+not a later presentation attachment. Rendering attaches independently. A reached
+unowned experience frame retains its exact request and refuses complete saving;
+it does not manufacture queue, transition, clock or voice advancement.
+
 The presentation toolchain is selected through runtime/godot-toolchain.json,
 currently official Godot 4.8-dev7 Mono with the matching managed SDK and .NET 10.
 Launcher, installer and gate reject engine/SDK drift. Godot's new mip-level

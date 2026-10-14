@@ -36,10 +36,9 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     private readonly Dictionary<ushort, (Module Module, NativeNvseCommand Command)> _commands = [];
     private bool _disposed;
     private int _active;
-    internal bool ChildDomainsExited => _modules.All(module => module.Domain.ChildExited) &&
-        _retiringDomains.All(domain => domain.ChildExited) && _retiringIos.All(io => io.FailedChildrenExited);
+    internal bool ChildDomainsExited => ActualDomains().All(domain => domain.ChildExited) && _retiringIos.All(io => io.FailedChildrenExited);
     internal bool ResourcesRetired => _disposed && _graphSource is null && _retiringIos.Count == 0 &&
-        _modules.All(module => module.Domain.ResourcesRetired) && _retiringDomains.All(domain => domain.ResourcesRetired);
+        ActualDomains().All(domain => domain.ResourcesRetired);
     internal string? ModuleFailure => string.Join("; ", Modules.Where(module => module.Query != true || module.Load != true ||
         module.Failure is not null || module.Unowned.Count != 0).Select(module => module.LogicalPath + ": Query=" + module.Query +
             ", Load=" + module.Load + "; " + (module.Failure ?? string.Join(", ", module.Unowned)))) is { Length: > 0 } failure ? failure : null;
@@ -144,39 +143,57 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             _failures.Add(new(admission.LogicalPath, physical, admission.Sha256, null, null, null, null, preEntry, [], false)); return;
         }
         NativePluginExecutionDomain? domain = null; NativeNvseHostSource? host = null; NativePluginPrivateIo? io = null;
-        NativeNvsePlugin? plugin = null;
+        NativeNvsePlugin? plugin = null; Module? published = null; var primary = false;
         try
         {
             var selection = _selection!;
-            host = NativeNvseHostSource.Open(_source.FalloutExecutablePath, selection.RuntimeSha256,
-                selection.NvsePath, selection.NvseSha256, _source.StackId, selection.NoGore, selection.EditionOwner);
-            io = FalloutNativePluginPrivateIo.Create(_source, physical, admission.Sha256, privateStateRoot,
-                admission.WriteScopes, admission.ReadDeclarations, admission.InputRoots, admission.ImportOwner, admission.NonIoImports);
-            io.BindSourceAddressSpace(host);
-            domain = new(companion, privateIo: io); io = null;
-            domain.BindCngSystemServiceBuild(companion);
-            domain.BindNativeImportProviderBuild(companion);
-            BindNativeWindowProcess(domain);
-            plugin = domain.LoadNvseImage(host, physical, admission.Sha256, sourcePluginHandle: admission.QueryHandle); host = null;
-            domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues, _records, domain, plugin));
-            domain.AttachNvseScriptInterface(plugin);
-            domain.AttachNvseCommandTable(plugin, new CampaignCommandTable(this));
-            if (_dataBindings is { } data) domain.AttachNvseData(plugin, new CampaignData(this, domain, plugin, data));
-            if (admission.Heap is { } heap) domain.ConfigureNvseValueHeap(plugin, heap);
-            if (admission.SourceFiles is { } files) domain.ConfigureNvseSourceFileMethods(plugin, files);
+            domain = _sharedDomain;
+            if (_sharedDomainFailure is { } lost)
+                throw new NotSupportedException("Selected original module cannot enter the failed shared process: " + lost);
+            if (domain is null)
+            {
+                if (_sharedDomainAttempted) throw new NotSupportedException("The selected shared original process cannot replay its failed constructor.");
+                _sharedDomainAttempted = true; primary = true;
+                host = NativeNvseHostSource.Open(_source.FalloutExecutablePath, selection.RuntimeSha256,
+                    selection.NvsePath, selection.NvseSha256, _source.StackId, selection.NoGore, selection.EditionOwner);
+                io = FalloutNativePluginPrivateIo.Create(_source, physical, admission.Sha256, privateStateRoot,
+                    admission.WriteScopes, admission.ReadDeclarations, admission.InputRoots, admission.ImportOwner, admission.NonIoImports);
+                io.BindSourceAddressSpace(host);
+                domain = new(companion, privateIo: io); io = null; _sharedDomain = domain;
+                domain.BindCngSystemServiceBuild(companion); domain.BindNativeImportProviderBuild(companion);
+                BindNativeWindowProcess(domain);
+                plugin = domain.LoadNvseImage(host, physical, admission.Sha256, sourcePluginHandle: admission.QueryHandle); host = null;
+            }
+            else
+            {
+                RequireSupplementalConstruction(admission);
+                plugin = domain.LoadCoResidentNvseImage(physical, admission.Sha256, admission.QueryHandle);
+            }
+            published = new(admission, domain, plugin); _modules.Add(published);
+            if (primary)
+            {
+                domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues, _records, domain, plugin));
+                domain.AttachNvseScriptInterface(plugin); domain.AttachNvseCommandTable(plugin, new CampaignCommandTable(this));
+                if (_dataBindings is { } data) domain.AttachNvseData(plugin, new CampaignData(this, domain, plugin, data));
+                if (admission.Heap is { } heap) domain.ConfigureNvseValueHeap(plugin, heap);
+                if (admission.SourceFiles is { } files) domain.ConfigureNvseSourceFileMethods(plugin, files);
+            }
             _ = domain.QueryNvse(plugin);
-            _modules.Add(new(admission, domain, plugin)); domain = null;
         }
         catch (Exception error)
         {
             var failure = error.ToString();
             domain ??= (error as NativePluginDomainFaultException)?.Owner;
-            try { domain?.Dispose(); } catch (Exception retirement) { failure += "\nNative retirement: " + retirement; }
-            if (domain is not null && !domain.ChildExited) _retiringDomains.Add(domain);
+            if (primary || published is not null || domain?.Fault is not null || error is NativePluginDomainFaultException)
+            {
+                RetainSharedDomainFailure(domain, failure);
+                try { domain?.Dispose(); } catch (Exception retirement) { failure += "\nNative retirement: " + retirement; }
+            }
             try { host?.Dispose(); } catch (Exception retirement) { failure += "\nSource retirement: " + retirement; }
             try { io?.Dispose(); }
             catch (Exception retirement) { if (io is not null) _retiringIos.Add(io); failure += "\nI/O retirement: " + retirement; }
-            _failures.Add(new(admission.LogicalPath, physical, admission.Sha256, domain?.Generation, domain?.ProcessId,
+            if (published is not null) published.ObjectFailure ??= failure;
+            else _failures.Add(new(admission.LogicalPath, physical, admission.Sha256, domain?.Generation, domain?.ProcessId,
                 plugin?.QueryReceipt?.Returned, plugin?.LoadReceipt?.Returned, failure,
                 plugin?.Registry.UnownedRequests.Select(row => row.Operation).ToArray() ?? [], domain?.NaturallyRetired ?? false));
         }
@@ -188,6 +205,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         catch (Exception error)
         {
             module.ObjectFailure = stage + ": " + error;
+            RetainSharedDomainFailure(module.Domain, module.ObjectFailure);
             // Preserve the original reached prefix and every callback. Never
             // release guest-callable owners until the exact child has exited.
             try { module.Domain.Dispose(); module.Retired = module.Domain.NaturallyRetired; }
@@ -291,24 +309,21 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         if (Environment.CurrentManagedThreadId != _thread) throw new InvalidOperationException("Native campaign retirement changed owner thread.");
         if (_active != 0) throw new InvalidOperationException("Native campaign cannot retire during an actual original call.");
         _disposed = true; var errors = new List<Exception>();
-        foreach (var module in _modules.AsEnumerable().Reverse())
+        foreach (var domain in ActualDomains())
         {
             try
             {
-                // Domain retirement keeps native objects/locals/source leases
-                // alive through actual FreeLibrary, then retires callbacks,
-                // mappings, data capabilities and the exact child process.
-                module.Domain.Dispose(); module.Retired = module.Domain.NaturallyRetired;
+                // One process retires its original DLLs in source order while
+                // keeping native objects and source leases through exact exit.
+                domain.Dispose();
             }
             catch (Exception error) { errors.Add(error); }
             finally
             {
-                try { module.Domain.Dispose(); module.Retired = module.Domain.NaturallyRetired; }
-                catch (Exception error) { errors.Add(error); }
+                foreach (var module in _modules.Where(module => ReferenceEquals(module.Domain, domain)))
+                    module.Retired = domain.NaturallyRetired;
             }
         }
-        foreach (var domain in _retiringDomains)
-            try { domain.Dispose(); } catch (Exception error) { errors.Add(error); }
         foreach (var io in _retiringIos.ToArray())
         {
             try { io.Dispose(); _retiringIos.Remove(io); }
@@ -318,8 +333,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
         {
             try
             {
-                if (_modules.Any(module => !module.Domain.ChildExited || !module.Domain.NaturallyRetired) ||
-                    _retiringDomains.Any(domain => !domain.ChildExited || !domain.NaturallyRetired))
+                if (ActualDomains().Any(domain => !domain.ChildExited))
                     throw new InvalidOperationException("Contributor source retirement requires verified native child closure.");
                 graph.RetireLoadedContributors(); _graphSource = null;
             }

@@ -7,8 +7,9 @@ internal sealed partial class FalloutActorProcessCommonState
     internal FalloutProcessCommonSnapshot Capture()
     {
         RequireNotBusy();
-        return new(Schema, _source.Contract, _stack, _process, _sequence, _current.Values.Select(CaptureWeaponObservationHistory).ToArray(),
-            _retired.Select(CaptureWeaponObservationHistory).ToArray(), _pending is null ? null : CaptureWeaponObservationHistory(_pending),
+        return new(Schema, _source.Contract, _stack, _process, _sequence, _current.Values.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).ToArray(),
+            _retired.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).ToArray(),
+            _pending is null ? null : CaptureFollowingObservationHistory(CaptureWeaponObservationHistory(_pending)),
             _transfer, _cold, _source.ExecutableSha256);
     }
     private void Restore(FalloutProcessCommonSnapshot saved)
@@ -93,7 +94,7 @@ internal sealed partial class FalloutActorProcessCommonState
                 throw new InvalidDataException("Cold living common process omitted its real actor gameplay lease.");
             if (entry.Body is { } body) RequireBody(body, entry.Source.Reference);
             ValidateSourceBodyEntry(entry);
-            ValidateSceneFields(entry, saved.ExecutableSha256);
+            ValidateSceneFields(entry, saved.ExecutableSha256, saved.Stack);
         }
         if (saved.Transfer is { } transfer)
         {

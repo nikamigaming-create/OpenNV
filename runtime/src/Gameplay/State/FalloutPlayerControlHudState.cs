@@ -32,6 +32,7 @@ internal sealed partial class FalloutPlayerControlHudState
     private FalloutPlayerControlHudColdHandoff? _cold;
     private IReadOnlyList<FalloutPlayerControlHudTransition>? _historicalTransitions;
     private string? _coldBindingFailure;
+    private FalloutPlayerControlHudTimerConstructor? _localTimerConstructor;
 
     internal Guid Factory => _factory;
     internal FalloutPlayerControlHudSource Source => _source;
@@ -43,7 +44,8 @@ internal sealed partial class FalloutPlayerControlHudState
 
     internal FalloutPlayerControlHudState(FalloutPlayerControlHudSource source, string stack, Guid process,
         FalloutUiComponentStore ui, FalloutNumericIniSettings settings, FalloutPlayerThreadContextState threadContext,
-        IFalloutPlayerControlHudContext context, FalloutPlayerControlHudSnapshot? saved = null)
+        IFalloutPlayerControlHudContext context, FalloutPlayerControlHudSnapshot? saved = null,
+        Func<uint>? readConstructorWallTick = null)
     {
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack);
         ArgumentNullException.ThrowIfNull(ui); ArgumentNullException.ThrowIfNull(settings);
@@ -53,6 +55,11 @@ internal sealed partial class FalloutPlayerControlHudState
             throw new InvalidDataException("Source HUD constructor selected foreign declarations, XML or current process.");
         _source = source; _stack = stack; _process = process; _ui = ui; _threadContext = threadContext; _context = context;
         context.RequireCurrent();
+        // The independent HUD timer is constructed before menu publication.
+        // A later driver or render callback cannot supply this original read.
+        // Cold history preserves the constructor receipt without sampling it.
+        if (saved is null && readConstructorWallTick is not null)
+            _localTimerConstructor = new(_process, _factory, readConstructorWallTick(), 0, 0, 0, 0, 0, 0);
         _root = ui.BindMenuRoot(FalloutPlayerControlHudSource.Menu);
         context.PublishMenu(_factory, ui, _root);
         _visibility = FalloutPlayerControlHudSource.VisibilityTiles.Select(name => ui.BindComponent(FalloutPlayerControlHudSource.Menu + "/" + name)).ToArray();
@@ -85,6 +92,13 @@ internal sealed partial class FalloutPlayerControlHudState
                 throw new InvalidDataException("Source HUD constructor lost its actual Main setting: " + name);
             return value;
         }
+    }
+
+    internal FalloutPlayerControlHudTimerConstructor RequireLocalTimerConstructor()
+    {
+        RequireCurrent();
+        return _localTimerConstructor ??
+            throw new NotSupportedException("source-HUD-independent-local-timer-constructor-unbound");
     }
 
     internal void Initialize(FalloutPlayerControlDisplayState display, Func<ushort> readCurrentPlayerFlags)

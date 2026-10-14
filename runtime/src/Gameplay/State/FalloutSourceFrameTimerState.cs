@@ -90,10 +90,10 @@ internal sealed partial class FalloutSourceFrameTimerState : IDisposable
         return new(_source.EngineSha256, _epoch, _cached);
     }
     internal float ScaledSeconds { get { RequireHealthy(); return _scaled; } }
-    internal FalloutSourceFrameDeltaRead ReadControlDelta()
+    internal FalloutSourceFrameDeltaRead ReadScaledDelta()
     {
         RequireHealthy();
-        // The source HUD directly reads the retained scalar, including its
+        // Source consumers read the retained scalar, including its
         // genuine constructor-zero phase before the first returned update.
         // A host delta or an entered/failed timer cannot supply this field.
         return new(_source.EngineSha256, _process, _epoch, _sequence, BitConverter.SingleToUInt32Bits(_scaled), HasReturnedUpdate);

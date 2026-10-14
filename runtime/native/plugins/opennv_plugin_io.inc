@@ -13,10 +13,10 @@ constexpr std::uint32_t io_open_api = 1, io_close_api = 2, io_read_api = 3, io_w
     io_seek_api = 10, io_size_api = 11, io_flush_api = 12;
 struct PluginIoRoute { std::uint64_t id; std::uint32_t error; std::wstring path; };
 void io_profile_result(const PluginIoRoute&, std::uint32_t, std::uint32_t, std::uint32_t, DWORD, bool);
-PluginIoRuntime& io_owner() {
+PluginIoRuntime& io_owner(const void* original_return = _ReturnAddress()) {
     if (!state || !state->io || GetCurrentThreadId() != state->thread)
         throw Fatal(ERROR_INVALID_THREAD_ID, "Native file API has no selected module/generation/thread owner.");
-    return *state->io;
+    nvse_require_primary_return(original_return); return *state->io;
 }
 std::wstring io_from_utf8(const std::string& bytes) {
     if (bytes.empty()) return {};
@@ -277,6 +277,7 @@ FARPROC WINAPI io_proc(HMODULE module, LPCSTR pointer) {
             if (auto* replacement = io_entry(name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = window_process_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = cpp_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
+        if (auto* replacement = parallel_hardware_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = synchronization_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = crt_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
         if (auto* replacement = cng_client_dynamic_entry(module, name)) return reinterpret_cast<FARPROC>(replacement);
@@ -387,8 +388,9 @@ void io_bind_imports(HMODULE image) {
             const auto crt_pure = crt_pure_import_name(library, name);
             auto* window_bound = window_process_import_entry(library, name, prior);
             auto* cpp_bound = cpp_import_entry(library, name, prior);
+            auto* parallel_bound = parallel_hardware_import_entry(library, name, prior);
             auto* synchronization_bound = synchronization_import_entry(library, name, prior);
-            auto* replacement = window_bound ? window_bound : cpp_bound ? cpp_bound : synchronization_bound ? synchronization_bound : platform ? io_entry(name) :
+            auto* replacement = window_bound ? window_bound : cpp_bound ? cpp_bound : parallel_bound ? parallel_bound : synchronization_bound ? synchronization_bound : platform ? io_entry(name) :
                 crt_file || crt_pure ? crt_import_entry(library, name, prior) : cng_client_import_entry(library, name, prior);
             if (!replacement) {
                 if (crt_file || crt_pure || !owner.non_io_imports.count(library + "!" + name)) throw Fatal(ERROR_NOT_SUPPORTED, "Imported function has neither actual native I/O nor selected non-I/O ownership.");
@@ -421,13 +423,13 @@ void io_flush_detach(const Frame& frame) {
     if (!state->io) return; auto& owner = *state->io; owner.loader_retiring = false;
     state->calls.push_back(frame.header.id);
     for (const auto& event : owner.pending) io_event(PluginIoFile{event.capability, reinterpret_cast<HANDLE>(event.handle), false}, event.api, event.count, event.error);
-    owner.pending.clear(); mutex_flush_detach(); mutex_namespace_retire(); crt_flush_detach(); crt_support_flush_detach(); cpp_retire(); crt_standard_retire(); find_flush_detach(); mapping_flush_detach(); shared_placement_flush_detach(); cng_client_flush_detach(); crypto_flush_detach(); state->calls.pop_back();
+    owner.pending.clear(); mutex_flush_detach(); mutex_namespace_retire(); crt_flush_detach(); crt_support_flush_detach(); cpp_retire(); parallel_hardware_retire(); crt_standard_retire(); find_flush_detach(); mapping_flush_detach(); shared_placement_flush_detach(); cng_client_flush_detach(); crypto_flush_detach(); state->calls.pop_back();
 }
 void io_retire() {
     if (!state->io) return; auto& owner = *state->io;
     if (!owner.files.empty() || !owner.pending.empty()) throw Fatal(ERROR_BUSY, "Selected native file capabilities remain after module retirement.");
     window_process_retire();
-    shared_placement_require_retired(); mutex_retire(); mutex_namespace_require_retired(); mapping_retire(); cng_client_require_retired(); crypto_retire(); cpp_require_retired(); crt_support_require_retired(); crt_retire(); find_retire(); owner.imports.clear();
+    shared_placement_require_retired(); mutex_retire(); mutex_namespace_require_retired(); mapping_retire(); cng_client_require_retired(); crypto_retire(); cpp_require_retired(); parallel_hardware_require_retired(); crt_support_require_retired(); crt_retire(); find_retire(); owner.imports.clear();
     if (owner.stdin_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdin_file)) throw Fatal(GetLastError(), "Native standard input boundary did not retire."); owner.stdin_file = INVALID_HANDLE_VALUE; }
     if (owner.stdout_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stdout_file)) throw Fatal(GetLastError(), "Native stdout diagnostic file did not retire."); owner.stdout_file = INVALID_HANDLE_VALUE; }
     if (owner.stderr_file != INVALID_HANDLE_VALUE) { if (!CloseHandle(owner.stderr_file)) throw Fatal(GetLastError(), "Native stderr diagnostic file did not retire."); owner.stderr_file = INVALID_HANDLE_VALUE; }

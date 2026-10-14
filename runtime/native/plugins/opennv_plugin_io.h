@@ -20,12 +20,21 @@
 namespace opennv_domain {
 struct PluginIoFile { std::uint64_t capability; HANDLE handle; bool writable; };
 struct PluginIoEvent { std::uint64_t capability; std::uint32_t api, handle, count, error; };
+struct ParallelHardwareProvider {
+    std::wstring path;
+    std::string sha, declaration;
+    std::uint32_t rva = 0;
+    HMODULE retained = nullptr;
+    void* actual = nullptr;
+    bool published = false, retiring = false, retired = false;
+};
 struct PluginIoRuntime {
     std::wstring root, logical_directory;
     std::set<std::string> non_io_imports;
     std::map<std::uint32_t, PluginIoFile> files;
     std::unique_ptr<PluginCrtRuntime> crt;
     std::unique_ptr<CppRuntimeProvider> cpp;
+    std::unique_ptr<ParallelHardwareProvider> parallel_hardware;
     std::unique_ptr<PluginCrtStandardRuntime> standard;
     std::unique_ptr<PluginCrtSupportRuntime> crt_support;
     std::unique_ptr<PluginFindRuntime> find;
