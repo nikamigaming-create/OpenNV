@@ -1,7 +1,7 @@
-// Only source-qualified PUSH pointer inputs are owned here. Model, forward
-// page sound and backward page sound are distinct slots in the same image
+// Only source-qualified PUSH pointer inputs are owned here. Model, page and focus
+// direction sound inputs are distinct slots in the same image
 // ledger/module-data table. No native target or receiver body is supplied.
-enum class SourcePointerPurpose : std::uint32_t { model, book_forward, book_backward };
+enum class SourcePointerPurpose : std::uint32_t { model, book_forward, book_backward, book_focus_previous, book_focus_next };
 struct SourcePointerOperand {
     SourcePointerPurpose purpose = SourcePointerPurpose::model;
     std::uint64_t module = 0, generation = 0, lease = 0;
@@ -17,8 +17,8 @@ SourcePointerOperand* source_pointer_purpose(SourcePointerPurpose purpose) {
 }
 SourcePointerPurpose source_book_purpose(Reader& reader) {
     const auto direction = reader.get<std::uint32_t>();
-    if (direction != 1 && direction != 2) throw Fatal(ERROR_INVALID_DATA, "Book pointer input has no typed direction.");
-    return direction == 1 ? SourcePointerPurpose::book_forward : SourcePointerPurpose::book_backward;
+    if (direction < 1 || direction > 4) throw Fatal(ERROR_INVALID_DATA, "Book pointer input has no typed page/focus role.");
+    return static_cast<SourcePointerPurpose>(direction);
 }
 
 std::array<std::uint8_t, 5> source_pointer_instruction(SourcePointerOperand& site) {
@@ -85,10 +85,11 @@ BOOL source_pointer_operand_protect(SourcePointerOperand& site, LPVOID pointer, 
     try {
         if (site.call_return && nvse_copy(old_access + 2) != address(module.image) + site.call_return)
             throw Fatal(ERROR_NOT_SUPPORTED, "Book pointer helper lost its exact original Load call return on the real stack.");
-        if (site.purpose == SourcePointerPurpose::book_backward) {
-            const auto* first = source_pointer_purpose(SourcePointerPurpose::book_forward);
+        if (site.purpose != SourcePointerPurpose::model && site.purpose != SourcePointerPurpose::book_forward) {
+            const auto previous = static_cast<SourcePointerPurpose>(static_cast<std::uint32_t>(site.purpose) - 1U);
+            const auto* first = source_pointer_purpose(previous);
             if (!first || first->module != site.module || first->failed || first->stage != 2)
-                throw Fatal(ERROR_INVALID_STATE, "Backward page input preceded the actual returned forward source helper.");
+                throw Fatal(ERROR_INVALID_STATE, "Book input preceded its actual returned source helper predecessor.");
         }
         source_pointer_buffer(site); const auto before = nvse_copy(old_access);
         const auto first = site.stage == 0;

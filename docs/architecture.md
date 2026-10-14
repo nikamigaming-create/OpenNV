@@ -40,6 +40,12 @@ the source constructor, model setter or old native release. Frame position reads
 and writes use the existing reference/change/file/thread owners with bounded
 interval receipts; ordinary command history keeps its separate semantics.
 
+Book page and focus sound inputs retain independent typed source fields while
+sharing one native pointer table, image lifetime and menu/audio consumer. Index
+controls store their current bounded selection before resolving the live winning
+SOUN and refreshing. Each native write retains its exact protection, store and
+restore prefix; a later failure cannot return or erase an earlier child.
+
 Lighting projection and complete Sky persistence are distinct typed paths.
 A streamed projection validates its winning climate, weather and region caches
 before entering source reset, then applies selected record-based weather after

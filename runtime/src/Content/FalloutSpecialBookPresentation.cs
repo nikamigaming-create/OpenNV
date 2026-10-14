@@ -7,6 +7,7 @@ internal sealed record FalloutSpecialBookPresentation(
 {
     internal const int MenuId = 1060;
     internal const int ReviewPage = 8;
+    internal const int MinimumReviewIndex = 1;
     internal int LastPage => ForwardSequences.Count;
     internal bool SinglePrecisionProjection { get; init; }
     internal float RadiansMultiplier { get; init; } = MathF.PI / 180;

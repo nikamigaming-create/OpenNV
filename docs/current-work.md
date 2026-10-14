@@ -52,13 +52,11 @@ Player services remain incomplete; startup identities do not admit gameplay.
 
 ## Verification and publication
 
-Main contains checked PR 203. Its runtime and three launcher CI checks passed
-before merge. Local main equals origin/main at
-`f88324fc1ab0f2a80975bc57cd0000a3ae1eb755`. The fresh movement branch preserves
-the original New Vegas save. Actor-time, cached-clock, independent
-read-owner, late-prefix, historical inhibition and JSON component checks pass.
-Compiled owned FO3 source and constructor audits pass. The Actor-time checkpoint
-passed the full pinned gate and selected owned Release construction audit.
+Main contains checked PR 204. All five CI checks passed on its corrected final
+revision before merge. Clean local main equals origin/main at
+`dbdda643424dbfd37203dbaca5d8071c4dc604f4`; the task PR is merged and its remote
+feature branch is removed. The original New Vegas save hash is unchanged.
+The current animation/Book-focus branch starts from that checked main.
 
 The rendering repair's authored checks pass for both source families, first
 climate entry, retained same-climate cache, changed-climate grid commit, cleared
@@ -114,6 +112,16 @@ Profiling identified repeated HUD source qualification; bounded verified-hash
 reuse reduces the selected movement-source audit from 41.1 to 26.9 seconds in a
 fresh process. This is not a whole-game load or frame-performance claim.
 
+The current Book-focus change builds without warnings and passes authored
+page/focus/model and actual owned FNV/TTW source checks. Review's index-register
+clobber negatives pass. An unchanged TTW run returns all four Book input roles,
+each with four real SDK/store/restore events and no input failure; the four prior
+model events remain returned. The next distinct mutation still refuses, child
+exit retires resources and publication losses remain zero. Complete TTW Load,
+Book audio, gameplay and saves remain unaccepted. The new change passes the full
+pinned gate and selected owned Release source audits; checked CI and merge remain
+publication requirements.
+
 Adversarial review before merge found failed model assembly/free, zero-retain
 binding leaks, health-gated retirement and omitted failed Actor children. Cleanup
 now distinguishes source reference counts from native binding lifetime, preserves
@@ -124,8 +132,13 @@ FO3 repeat returns both movement children, loads in 101.5 seconds (prior run
 322.6 seconds), then reaches the same tail boundary with zero publication loss.
 Observed Quit/Yes exits zero and disposes source owners; the original NV save hash
 is unchanged. These run timings are observations, not a general load-performance
-guarantee. The review corrections pass the full pinned gate and selected owned
-Release audit. CI must validate the corrected PR revision before merge.
+guarantee. The review corrections pass the full pinned gate, selected owned
+Release audit and all five CI checks; checked PR 204 is merged.
+
+A fresh unchanged FNV selection still refuses FNVXR/ShowOff constructor graphs
+and JIP's later image mutation. JIP's original Query/Load return before its
+message failure. Native child exit retires its resources with no publication
+losses. No selected module is removed to advance startup.
 
 Publish the checked source repair through a PR, merge it and verify clean local
 main equals origin/main before starting the next feature branch. Private owned
@@ -134,20 +147,20 @@ inputs, saves, selectors and captures are never public repository inputs.
 ## Next runtime owner
 
 Finish the following Player tail after the returned ordinary mover/Actor calls.
-The current batch composes reference-data construction, returned third-person
+The checked movement batch composes reference-data construction, returned third-person
 logical/native models and independent interior/exterior TES scalar stores. The
 enclosing original 3D loader and its AnimData writers remain separate, unaccepted
 owners; constructor-null pointers cannot survive a reached load writer. Current
-private work implements that tail/load ownership and the two reached TTW Book
-sound operands. Review also found and repaired a failed model factory's orphan
+private work implements that tail/load ownership. The next Book change adds the
+two reached focus operands after the returned page operands; it requires compiled,
+owned-source and actual original-module checks. Review also found and repaired a failed model factory's orphan
 cleanup; cold nonnull-model binding and historical model/movement joins now pass
 focused authored checks. Parent linkage and native root
 residency cannot supply TES or reference-data fields.
 
-Bind the entered mover/Actor children to actual Main/frame/thread/constructor
-epochs and retain their cold joins. Bound recurring position/change/file/thread
-receipts while preserving ordinary command semantics; do not create a second
-position authority or a per-frame command archive. Return the complete Player
+Preserve the returned mover/Actor children's actual Main/frame/thread/constructor
+epochs and cold joins, and the bounded position/change/file/thread receipts.
+Return the complete Player
 frame and real exit/bracket stores, then exercise ordinary input, healthy Pause,
 save, normal Quit and three cold Continues across a CELL transition. Finish the
 three requested routes and record them only when actual gameplay returns.

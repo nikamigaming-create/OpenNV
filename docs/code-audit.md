@@ -64,9 +64,13 @@ actual native SDK/store/restore handlers and shared module/image leases. Managed
 and native Debug builds and authored checks pass. The first owned source audit
 exposed an artificial writable restriction on its read-only CString input. The
 corrected readable, non-executable, fully file-backed data guard passes authored
-and owned audits. Actual unchanged TTW Load returns four SDK/store/restore events
-per direction, preserves the four model events, then refuses the next distinct
-mutation. Native resources retire on child exit. No complete module Load or Book
+and owned audits. The same service now retains two page and two focus inputs.
+Focus controls read their actual review/index bounds, store the new index before
+audio, and resolve the current winning SOUN through the existing menu consumer.
+Authored clobber negatives and owned source checks pass. Actual unchanged TTW
+Load returns four SDK/store/restore events per input, preserves the four model
+events, then refuses the next distinct mutation. Native resources retire on child
+exit without publication losses. No complete module Load or Book
 audio claim is accepted. The next Player-tail component passes authored and owned
 source checks but awaits genuine loaded animation owners in production.
 

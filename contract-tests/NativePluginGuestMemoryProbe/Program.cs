@@ -1,5 +1,17 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args is ["--test-native-book-focus"])
+{
+    NativeBookFocusSoundContracts.Run();
+    NativeBookFocusSourceContracts.Run();
+    return;
+}
+if (args is ["--test-native-book-focus-source", var focusRuntime, var focusPlugin])
+{
+    NativeBookFocusSourceContracts.RunOwnedSource(focusRuntime, focusPlugin);
+    return;
+}
+
 if (args is ["--test-native-book-sound"])
 {
     NativeBookSoundOperandContracts.Run();
@@ -225,6 +237,8 @@ NativeModuleConstructionContracts.RunDeclarations();
 NativeModelOperandContracts.Run();
 NativeBookSoundOperandContracts.Run();
 NativeBookSoundSourceContracts.Run();
+NativeBookFocusSoundContracts.Run();
+NativeBookFocusSourceContracts.Run();
 NativePlatformCapabilitiesContracts.Run();
 NativeCppStreamsContracts.RunDeclarations();
 NativeHeadlessUser32Contracts.Run();
