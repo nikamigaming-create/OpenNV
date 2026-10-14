@@ -192,10 +192,12 @@ public partial class NativeReferenceEventsAudit : Node
                 _ => Transform3D.Identity, 1, 1);
             root.AddChild(events);
             var area = root.GetChildren().OfType<Area3D>().Single();
-            Require(((BoxShape3D)area.GetChild<CollisionShape3D>(0).Shape).Size == new Vector3(8, 2, 4),
-                "XPRM half extents or source axis conversion differ.");
+            using (var triggerShape = area.GetChild<CollisionShape3D>(0).Shape)
+                Require(triggerShape is BoxShape3D box && box.Size == new Vector3(8, 2, 4),
+                    "XPRM half extents or source axis conversion differ.");
             player = new RuntimeNativePlayer { CollisionLayer = 1, CollisionMask = 1, Position = new Vector3(3, 0, 0) };
-            player.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 0.1f } });
+            using (var playerShape = new SphereShape3D { Radius = 0.1f })
+                player.AddChild(new CollisionShape3D { Shape = playerShape });
             AddChild(player);
             player.SetPhysicsProcess(false);
             player.SetProcessUnhandledInput(false);

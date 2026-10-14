@@ -141,6 +141,7 @@ internal sealed class FalloutNewGameBootstrap
                     break;
                 case FalloutReferenceEffectKind.ScriptPackage when change.Target == records.RuntimeFormKey(0x14):
                     if (change.Argument is { } package) _ = FalloutScriptPackage.Read(records.GetEffective(package));
+                    world.ObserveStandalonePlayerPackageCommand(change, "actual-new-game-bootstrap-Player-package-effect");
                     _playerPackages.Add(change);
                     break;
                 case FalloutReferenceEffectKind.Message when change.Message is { } messageCall:

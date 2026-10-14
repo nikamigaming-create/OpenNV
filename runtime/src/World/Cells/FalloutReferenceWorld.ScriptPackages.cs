@@ -30,6 +30,7 @@ internal sealed partial class FalloutReferenceWorld
         var state = Actor(actor);
         if (state.Deleted || state.DeletePending)
             throw new InvalidOperationException("Cannot assign a script package to a retired actor.");
+        ObserveActualActorPackageMutation(actor, package, "actual-world-script-package-request");
         if (package is null && state.ScriptPackage?.Package is null) return false;
         var source = package is { } key ? ScriptPackageSource(key) : default;
         var revision = checked(ActorScriptPackageRevision(actor) + 1);
@@ -80,6 +81,7 @@ internal sealed partial class FalloutReferenceWorld
             throw new InvalidOperationException("Superseded package selection cannot publish a begin event.");
         if (state.ScriptPackage is not { Package: { } assigned } slot || assigned != package ||
             slot.Revision != selectedRevision) return 0;
+        ObserveActualActorPackageMutation(actor, package, "actual-world-script-package-begin-publication");
         state.ScriptPackage = slot with { Pending = false };
         return slot.Revision;
     }
@@ -91,6 +93,7 @@ internal sealed partial class FalloutReferenceWorld
             assigned != package || slot.Revision != startedRevision) return false;
         var next = slot with { Revision = checked(slot.Revision + 1), Package = null, Sha256 = null, Pending = false };
         next.Validate();
+        ObserveActualActorPackageMutation(actor, null, "actual-world-script-package-retirement-publication");
         state.ScriptPackage = next;
         return true;
     }
@@ -125,6 +128,7 @@ internal sealed partial class FalloutReferenceWorld
         var choice = new FalloutActorPackageChoice(actor, ActorScriptPackageRevision(actor), package?.FormKey,
             package is null ? null : ScriptPackageSource(package.FormKey).Hash);
         _ = choice.Bind(records, state);
+        ObserveActualActorPackageMutation(actor, package?.FormKey, "actual-world-package-election-pending-choice");
         state.PendingPackageChoice = choice;
         return choice;
     }

@@ -223,7 +223,8 @@ public partial class NativeReferenceEventsAudit
                         feedback = RuntimeManualSaveFeedback.Describe(requests.Receipt)
                     }));
                 Reject(() => world.Capture());
-                Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = Godot.Key.F5, Keycode = Godot.Key.F5, Pressed = false });
+                using var saveRelease = new InputEventKey { PhysicalKeycode = Godot.Key.F5, Keycode = Godot.Key.F5, Pressed = false };
+                Input.ParseInputEvent(saveRelease);
                 var releaseLimit = Time.GetTicksMsec() + 2000;
                 while (sourceEvents.IsKeyPressed(63) && Time.GetTicksMsec() < releaseLimit)
                     await ToSignal(tree, SceneTree.SignalName.ProcessFrame);

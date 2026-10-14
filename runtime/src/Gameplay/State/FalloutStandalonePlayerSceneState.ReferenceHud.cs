@@ -52,7 +52,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         }
         var source = FalloutPlayerThreadContextSource.Reviewed(saved.Source.Main);
         if (saved.Prelude is not { FailedAt: FalloutStandaloneScenePreludeStep.InputManagerQuery or FalloutStandaloneScenePreludeStep.ActorProcessQuery or FalloutStandaloneScenePreludeStep.ActorSceneContinuation or FalloutStandaloneScenePreludeStep.QueuedSceneNodes or FalloutStandaloneScenePreludeStep.ProcessSceneUpdate or FalloutStandaloneScenePreludeStep.PostProcessContext or FalloutStandaloneScenePreludeStep.TimedActions or FalloutStandaloneScenePreludeStep.PlayerSceneContinuation } prefix ||
-            entry.Source != source.Identity || entry.Process != saved.CapturedProcess && saved.ColdHandoff?.PreviousProcess != entry.Process ||
+            entry.Source != source.Identity || !ChildBelongsToParentProcessLineage(saved, entry.Process) ||
             entry.Factory == Guid.Empty || entry.Main != prefix.Main || entry.MainOrdinal != prefix.MainOrdinal || entry.Thread <= 0 ||
             entry.BeforeKind != source.InitialKind || entry.CurrentKind != source.PlayerKind || entry.Initialized != 1 ||
             !entry.InitializerReturned || !entry.ScopeEntered)

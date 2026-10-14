@@ -18,8 +18,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         // this gameplay thread; preparation never captures that live lease.
         if (_controlFields.HasActualInput) _controlFields.RequireActualInput(current);
         else _controlFields.BindActualInput(current);
+        PublishFollowingFieldInput(current);
         var controls = new FalloutPlayerMovementControlState(FalloutPlayerMovementControlSource.Reviewed(Source.Main),
-            _stack, _process, _movementCall?.Control, _controlFields);
+            _stack, _process, _movementCall?.Control, _controlFields, _inhibition);
         if (_referenceOrientation is not null) controls.BindOrientation(_referenceOrientation);
         _inputManager = current; _movementControl = controls; _thread ??= Environment.CurrentManagedThreadId;
     }

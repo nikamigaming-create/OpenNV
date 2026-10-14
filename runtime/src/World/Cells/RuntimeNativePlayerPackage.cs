@@ -96,9 +96,15 @@ internal sealed partial class RuntimeNativePlayerPackage
         parity = "unmeasured"
     };
 
-    internal void Apply(FalloutFormKey? form)
+    internal void Apply(FalloutFormKey? form, FalloutReferenceScriptEffect? sourceEffect = null)
     {
         RequireHealthy();
+        if (sourceEffect is not null)
+        {
+            if (sourceEffect.Argument != form) throw new InvalidDataException("Package driver changed the original source request.");
+            _world.ObserveStandalonePlayerPackageCommand(sourceEffect, "actual-shared-script-host-Player-package-effect");
+        }
+        else _world.ObserveStandalonePlayerPackageMutation(Guid.NewGuid(), "actual-native-player-package-request", null, form, form is null);
         try { ApplyCore(form); }
         catch (Exception error)
         {
@@ -183,6 +189,7 @@ internal sealed partial class RuntimeNativePlayerPackage
     private void Assign(FalloutScriptPackage package, string hash, string eventName, bool retainSameIdle = false)
     {
         PrepareEvent(package, eventName);
+        _world.ObserveStandalonePlayerPackageMutation(Guid.NewGuid(), "actual-player-package-committed-assignment", null, package.Form, false);
         if (_package?.Form != package.Form) _results.Clear();
         _package = package;
         _packageHash = hash;

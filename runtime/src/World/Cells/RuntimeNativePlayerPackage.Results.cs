@@ -87,6 +87,7 @@ internal sealed partial class RuntimeNativePlayerPackage
         _player.ReleaseSourceCamera();
         if (action == "complete") { _complete = true; return; }
         if (action != "remove") throw new InvalidDataException("Player package end action is invalid.");
+        _world.ObserveStandalonePlayerPackageMutation(Guid.NewGuid(), "actual-player-package-committed-removal", null, null, true);
         checked { ++_assignmentRevision; }
         _package = null; _packageHash = null; _cursor = 0; _complete = false;
         _pendingPackage = null; _pendingPackageHash = null; _results.Clear();

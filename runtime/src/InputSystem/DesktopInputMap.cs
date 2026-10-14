@@ -9,9 +9,11 @@ internal static class DesktopInputMap
     {
         foreach (var binding in configuration.KeyBindings)
         {
+            using var input = CreateEvent(binding, true);
             ResetAction(binding.Action);
-            InputMap.ActionAddEvent(binding.Action, CreateEvent(binding, true));
+            InputMap.ActionAddEvent(binding.Action, input);
             var events = InputMap.ActionGetEvents(binding.Action);
+            using var eventArray = (Godot.Collections.Array)events;
             if (events.Count != 1 || events[0] is not InputEventKey key ||
                 key.PhysicalKeycode != ParseKey(binding.PhysicalKey))
                 throw new InvalidOperationException(
@@ -19,9 +21,11 @@ internal static class DesktopInputMap
         }
         foreach (var binding in configuration.MouseBindings)
         {
+            using var input = CreateEvent(binding, true);
             ResetAction(binding.Action);
-            InputMap.ActionAddEvent(binding.Action, CreateEvent(binding, true));
+            InputMap.ActionAddEvent(binding.Action, input);
             var events = InputMap.ActionGetEvents(binding.Action);
+            using var eventArray = (Godot.Collections.Array)events;
             if (events.Count != 1 || events[0] is not InputEventMouseButton mouse ||
                 mouse.ButtonIndex != ParseMouseButton(binding.Button))
                 throw new InvalidOperationException(
@@ -50,33 +54,42 @@ internal static class DesktopInputMap
         string physicalKey,
         string capability)
     {
+        var physical = ParseKey(physicalKey);
+        using var input = new InputEventKey { PhysicalKeycode = physical };
         ResetAction(action);
-        InputMap.ActionAddEvent(
-            action,
-            new InputEventKey { PhysicalKeycode = ParseKey(physicalKey) });
+        InputMap.ActionAddEvent(action, input);
         var events = InputMap.ActionGetEvents(action);
+        using var eventArray = (Godot.Collections.Array)events;
         if (events.Count != 1 || events[0] is not InputEventKey key ||
-            key.PhysicalKeycode != ParseKey(physicalKey))
+            key.PhysicalKeycode != physical)
             throw new InvalidOperationException(
                 $"The authored {capability} key did not retain its physical binding.");
     }
 
     internal static InputEventKey CreateEvent(
         DesktopKeyBindingConfiguration binding,
-        bool pressed) => new()
+        bool pressed)
+    {
+        var physical = ParseKey(binding.PhysicalKey);
+        return new()
         {
-            PhysicalKeycode = ParseKey(binding.PhysicalKey),
+            PhysicalKeycode = physical,
             Pressed = pressed,
             Echo = false,
         };
+    }
 
     internal static InputEventMouseButton CreateEvent(
         DesktopMouseBindingConfiguration binding,
-        bool pressed) => new()
+        bool pressed)
+    {
+        var button = ParseMouseButton(binding.Button);
+        return new()
         {
-            ButtonIndex = ParseMouseButton(binding.Button),
+            ButtonIndex = button,
             Pressed = pressed,
         };
+    }
 
     private static void ResetAction(string action)
     {

@@ -10,25 +10,40 @@ internal static class NativeScriptKeys
     internal static InputEvent Create(int code)
     {
         if (code >= FalloutInputLayout.FirstMouseButton)
-            return new InputEventMouseButton
+        {
+            // Validate before native allocation. An object initializer allocates
+            // its event before evaluating a fallible property value.
+            var button = code switch
             {
-                ButtonIndex = code switch
-                {
-                    FalloutInputLayout.MouseLeft => MouseButton.Left,
-                    FalloutInputLayout.MouseRight => MouseButton.Right,
-                    FalloutInputLayout.MouseMiddle => MouseButton.Middle,
-                    FalloutInputLayout.MouseExtra1 => MouseButton.Xbutton1,
-                    FalloutInputLayout.MouseExtra2 => MouseButton.Xbutton2,
-                    FalloutInputLayout.WheelUp => MouseButton.WheelUp,
-                    FalloutInputLayout.WheelDown => MouseButton.WheelDown,
-                    _ => throw new NotSupportedException($"DirectInput mouse binding {code} has no native button."),
-                }
+                FalloutInputLayout.MouseLeft => MouseButton.Left,
+                FalloutInputLayout.MouseRight => MouseButton.Right,
+                FalloutInputLayout.MouseMiddle => MouseButton.Middle,
+                FalloutInputLayout.MouseExtra1 => MouseButton.Xbutton1,
+                FalloutInputLayout.MouseExtra2 => MouseButton.Xbutton2,
+                FalloutInputLayout.WheelUp => MouseButton.WheelUp,
+                FalloutInputLayout.WheelDown => MouseButton.WheelDown,
+                _ => throw new NotSupportedException($"DirectInput mouse binding {code} has no native button."),
             };
+            return new InputEventMouseButton { ButtonIndex = button };
+        }
         foreach (var key in Enum.GetValues<Key>().Distinct())
             foreach (var location in key is Key.Shift or Key.Ctrl or Key.Alt
                 ? new[] { KeyLocation.Left, KeyLocation.Right } : [KeyLocation.Unspecified])
                 if (Code(key, location) == code) return new InputEventKey { PhysicalKeycode = key, Location = location };
         throw new NotSupportedException($"DirectInput keyboard binding {code} has no native physical key.");
+    }
+
+    // Factory events are caller-owned. InputMap retains separate native refs;
+    // releasing these wrappers does not erase the published action bindings.
+    internal static void DisposeCreatedEvents(IEnumerable<InputEvent> events, Exception? operationFailure)
+    {
+        List<Exception>? failures = null;
+        foreach (var input in events)
+            try { input.Dispose(); }
+            catch (Exception error) { (failures ??= []).Add(error); }
+        if (failures is null) return;
+        if (operationFailure is not null) failures.Insert(0, operationFailure);
+        throw new AggregateException("Created input-event retirement failed.", failures);
     }
 
     internal static IEnumerable<(int Key, bool Down)> Read(InputEvent input)

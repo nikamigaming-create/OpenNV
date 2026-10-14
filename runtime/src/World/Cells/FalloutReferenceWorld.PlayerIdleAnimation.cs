@@ -50,8 +50,7 @@ internal sealed partial class FalloutReferenceWorld
             throw new NotSupportedException("source-Player-idle-TLS-or-reference-render-model-root-factory-unbound");
         });
         public FalloutIdleSelectedObject? ReadSelectedObject() => FalloutIdlePackageSelection.Read(
-            () => before.IdlePrimaryPackage is null ? null :
-                throw new NotSupportedException("source-current-process-idle-primary-package-writer-unbound"),
+            () => (_packageRead = world.ReadStandalonePlayerIdlePackage(before, FalloutProcessPackageSlot.Primary)).Result,
             () => (_packageRead = world.ReadStandalonePlayerIdlePackage(before)).Result);
         public FalloutIdleSelectedObject? ReadAlternateObject() =>
             throw new NotSupportedException("source-Actor-idle-alternate-selected-object-factory-unbound");

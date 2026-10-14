@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.InputSystem;
 
 // Public DirectInput8 COM ABI. This owns real device interfaces in the Godot
 // process; it does not inject inputs into a retail process or a native child.
-internal sealed class WindowsDirectInputDevice : IDisposable
+internal sealed class WindowsDirectInputDevice : IDisposable, IFalloutOriginalInputDevices
 {
     private const int MouseAxisCount = 3;
     private const int MouseButtonsOffset = MouseAxisCount * sizeof(int);
@@ -16,6 +16,7 @@ internal sealed class WindowsDirectInputDevice : IDisposable
     internal nint Window { get; }
     private readonly byte[] _keyboardBytes = new byte[FalloutInputLayout.KeyboardKeyCount], _mouseBytes = new byte[MouseStateSize];
     private readonly List<nint> _formatMemory = [];
+    private FalloutDirectInputState? _sourceOwner;
     internal WindowsDirectInputDevice(nint window)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Complete native DirectInput requires Windows.");
@@ -41,6 +42,39 @@ internal sealed class WindowsDirectInputDevice : IDisposable
             System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(_mouseBytes.AsSpan(4)),
             System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(_mouseBytes.AsSpan(8)));
     }
+    internal void BindSourceOwner(FalloutDirectInputState owner)
+    {
+        RequireOwner(); owner.ReadManagerOwner();
+        if (_sourceOwner is not null || owner.Provider != FalloutInputProvider.WindowsDirectInput || owner.Window != checked((ulong)Window))
+            throw new InvalidOperationException("Source DirectInput devices changed their exact manager/window owner.");
+        _sourceOwner = owner;
+    }
+    public bool Present(FalloutOriginalInputDevice device) { RequireOwner(); return Device(device) != 0; }
+    public void RequireCurrent(FalloutDirectInputState owner)
+    {
+        RequireOwner();
+        if (!ReferenceEquals(_sourceOwner, owner) || !IsWindow(Window) ||
+            GetWindowThreadProcessId(Window, out var process) == 0 || process != Environment.ProcessId)
+            throw new InvalidOperationException("Source DirectInput device lost its actual manager or living product HWND.");
+        owner.ReadManagerOwner();
+    }
+    public int Acquire(FalloutOriginalInputDevice device)
+    { RequireOwner(); var pointer = Device(device); return Function<DeviceOperation>(pointer, 7)(pointer); }
+    public int Poll(FalloutOriginalInputDevice device)
+    { RequireOwner(); var pointer = Device(device); return Function<DeviceOperation>(pointer, 25)(pointer); }
+    public unsafe int ReadState(FalloutOriginalInputDevice device, Span<byte> destination)
+    {
+        RequireOwner(); var pointer = Device(device);
+        var extent = device == FalloutOriginalInputDevice.Keyboard ? FalloutInputLayout.KeyboardKeyCount : MouseStateSize;
+        if (destination.Length != extent) throw new InvalidDataException("Source DirectInput destination extent differs from its actual device format.");
+        fixed (byte* bytes = destination) return Function<GetState>(pointer, 9)(pointer, checked((uint)extent), (nint)bytes);
+    }
+    private nint Device(FalloutOriginalInputDevice device) => device switch
+    {
+        FalloutOriginalInputDevice.Keyboard => _keyboard,
+        FalloutOriginalInputDevice.Mouse => _mouse,
+        _ => throw new InvalidDataException("Source DirectInput device kind is invalid.")
+    };
     private nint Create(Guid kind, bool mouse)
     {
         Check(Function<CreateDevice>(_input, 3)(_input, ref kind, out var device, 0), "CreateDevice");
@@ -79,7 +113,7 @@ internal sealed class WindowsDirectInputDevice : IDisposable
     }
     private void Read(nint device, byte[] data)
     {
-        Check(Function<Acquire>(device, 7)(device), "Acquire");
+        Check(Function<DeviceOperation>(device, 7)(device), "Acquire");
         var pinned = GCHandle.Alloc(data, GCHandleType.Pinned);
         try { Check(Function<GetState>(device, 9)(device, checked((uint)data.Length), pinned.AddrOfPinnedObject()), "GetDeviceState complete extent"); }
         finally { pinned.Free(); }
@@ -94,7 +128,7 @@ internal sealed class WindowsDirectInputDevice : IDisposable
     {
         if (Environment.CurrentManagedThreadId != _thread) throw new InvalidOperationException("DirectInput retirement requires its creator thread.");
         foreach (var device in new[] { _mouse, _keyboard })
-            if (device != 0) { _ = Function<Acquire>(device, 8)(device); _ = Function<Release>(device, 2)(device); }
+            if (device != 0) { _ = Function<DeviceOperation>(device, 8)(device); _ = Function<Release>(device, 2)(device); }
         _mouse = _keyboard = 0;
         if (_input != 0) { _ = Function<Release>(_input, 2)(_input); _input = 0; }
         foreach (var memory in _formatMemory) Marshal.FreeHGlobal(memory);
@@ -109,7 +143,7 @@ internal sealed class WindowsDirectInputDevice : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int CreateDevice(nint self, ref Guid kind, out nint device, nint outer);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int SetFormat(nint self, ref DataFormat format);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int Cooperative(nint self, nint window, uint flags);
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int Acquire(nint self);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int DeviceOperation(nint self);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int GetState(nint self, uint bytes, nint output);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate uint Release(nint self);
     [DllImport("dinput8.dll", ExactSpelling = true)] private static extern int DirectInput8Create(nint module, uint version, ref Guid iid, out nint result, nint outer);

@@ -2,7 +2,7 @@ namespace OpenNV.Runtime.Content;
 
 internal static partial class FalloutExecutableStringTable
 {
-    private static void RequirePlayerInputManager(byte[] code, Image image, int getter)
+    private static (int Constructor, uint Slot) RequirePlayerInputManager(byte[] code, Image image, int getter)
     {
         if (getter < 0 || getter > code.Length - 6 || code[getter] != 0xa1 || code[getter + 5] != 0xc3)
             throw new NotSupportedException("Player current input-manager getter has an unowned effect or trailing child.");
@@ -28,5 +28,6 @@ internal static partial class FalloutExecutableStringTable
         if (new Guid(image.Read(Word(code, constructor + 0x41), 16)) != new Guid("bf798030-483a-4da2-aa99-5d64ed369700") ||
             new Guid(image.Read(Word(code, constructor + 0xa2), 16)) != new Guid("6f1d2b61-d5a0-11cf-bfc7-444553540000"))
             throw new NotSupportedException("Player input-manager factory changed its original DirectInput interface or keyboard identity.");
+        return (constructor, slot);
     }
 }

@@ -20,7 +20,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             _controlObservations.ToArray(), _controlFields.Capture(), _threadContext.CaptureKindScopes(),
             _controlHud?.Capture() ?? _historicalControlHud, _controlDisplay?.Capture() ?? _historicalControlDisplay,
             _referenceOrientation?.Capture() ?? _historicalReferenceOrientation, CaptureControlPointOfView(),
-            _playerOpacity?.Capture() ?? _historicalPlayerOpacity, _followingServicesCall, _weaponContinuation);
+            _playerOpacity?.Capture() ?? _historicalPlayerOpacity, _followingServicesCall, _weaponContinuation,
+            _inhibition.Capture(), _followingTimerFlag.Capture(), _followingContinuation);
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -59,6 +60,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _historicalReferenceOrientation = saved.ReferenceOrientation;
         _historicalPlayerOpacity = saved.Opacity; _followingServicesCall = saved.FollowingServices;
         _weaponContinuation = saved.WeaponContinuation;
+        _followingContinuation = saved.FollowingContinuation;
         RestoreControlPointOfView(saved.PointOfView!);
         _controlObservations.AddRange(saved.ControlObservations!);
         _observedControlIds.UnionWith(saved.ControlObservations!.Select(value => value.Command.Observation));
@@ -71,7 +73,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     {
         if (saved is null || saved.Schema != Schema || saved.Source is null || string.IsNullOrWhiteSpace(saved.Stack) ||
             saved.CapturedProcess == Guid.Empty || saved.Constructor == Guid.Empty || saved.Sequence < 0 ||
-            saved.CameraPosition is null || saved.CameraAngles is null || saved.FirstPersonHistory is null ||
+            saved.CameraPosition is null || saved.CameraAngles is null || saved.FirstPersonHistory is null || saved.ControlObservations is null ||
             saved.FirstPersonHistory.Select(owner => owner.Identity).Distinct().Count() != saved.FirstPersonHistory.Count ||
             saved.FirstPersonHistory.Select(owner => owner.Publication.Factory).Distinct().Count() != saved.FirstPersonHistory.Count ||
             saved.SceneMode > 1 || saved.MainHold > 1 || saved.PlayerView != 0 || saved.MainHold != 0 && saved.SceneMode == 0 ||
@@ -83,6 +85,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             saved.Failure is not null && string.IsNullOrWhiteSpace(saved.Failure))
             throw new InvalidDataException("Standalone scene omitted or invented its current source constructor/writer/ownership fields.");
         saved.Source.Validate();
+        ValidateControlPointOfView(saved);
         ValidateSceneReferenceQuery(saved);
         ValidateReferenceHud(saved);
         ValidateActorScalarReset(saved);
@@ -101,8 +104,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         ValidateMovementCall(saved);
         ValidateControlObservations(saved);
         ValidateControlOwners(saved);
-        ValidateControlPointOfView(saved);
         ValidateFollowingServices(saved);
+        ValidateInhibitionOwners(saved);
+        ValidateFollowingContinuation(saved);
         ValidatePlayerWeaponContinuation((saved.Stack, saved.Source.Main,
             saved.FollowingServices, saved.WeaponContinuation));
         foreach (var owner in saved.FirstPersonHistory)
@@ -110,7 +114,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             var native = owner.Publication;
             if (owner.Identity == Guid.Empty || owner.Stored < 1 || owner.Stored > saved.Sequence ||
                 owner.Released is { } end && (end <= owner.Stored || end > saved.Sequence) ||
-                native is null || native.Factory == Guid.Empty || native.Process == Guid.Empty || native.Source != saved.Source.Identity ||
+                native is null || native.Factory == Guid.Empty || !ChildBelongsToParentProcessLineage(saved, native.Process) || native.Source != saved.Source.Identity ||
                 native.Stack != saved.Stack || native.NativeRoot == 0 || string.IsNullOrWhiteSpace(native.Owner) ||
                 string.IsNullOrWhiteSpace(native.Resource) || !native.Resource.EndsWith(".nif", StringComparison.OrdinalIgnoreCase) ||
                 !FalloutAdvancementRuntimeReceipt.Digest(native.ResourceSha256))
@@ -118,8 +122,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         }
         if (saved.FirstPerson is { } current && !saved.FirstPersonHistory.Any(owner => owner == current))
             throw new InvalidDataException("Player scene current field is not its exact retained factory history.");
-        if (saved.FirstPerson is { Released: null } first && first.Publication.Process != saved.CapturedProcess &&
-            (saved.ColdHandoff is not { } cold || cold.PreviousProcess != first.Publication.Process))
+        if (saved.FirstPerson is { Released: null } first && !ChildBelongsToParentProcessLineage(saved, first.Publication.Process))
             throw new InvalidDataException("A foreign native root was promoted without its explicit historical cold handoff.");
         if (saved.ColdHandoff is { } handoff && (handoff.PreviousProcess == Guid.Empty || handoff.CurrentProcess != saved.CapturedProcess ||
             handoff.PreviousProcess == handoff.CurrentProcess || handoff.PreviousConstructor == Guid.Empty ||
@@ -155,7 +158,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             saved.CameraAngles != new FalloutStandaloneCameraAngles(0, 0))
             throw new InvalidDataException("Scene/camera fields lack their actual constructor or admitted source writer.");
         if (saved.Prelude is { } prelude && (saved.Clock is not { Step: FalloutStandaloneSceneClockStep.Failed } prefixClock ||
-            prelude.Main != prefixClock.Main || prelude.MainOrdinal != prefixClock.MainOrdinal || prelude.Entered < prefixClock.Entered ||
+            prelude.Invocation == Guid.Empty || prelude.Main != prefixClock.Main || prelude.MainOrdinal != prefixClock.MainOrdinal || prelude.Entered < prefixClock.Entered ||
             prelude.Changed < prelude.Entered || prelude.Changed > saved.Sequence || prelude.Step != FalloutStandaloneScenePreludeStep.Failed ||
             prelude.FailedAt is null || !Enum.IsDefined(prelude.FailedAt.Value) || prelude.FailedAt == FalloutStandaloneScenePreludeStep.Failed ||
             string.IsNullOrWhiteSpace(prelude.Failure) || prelude.Failure != saved.Failure))
@@ -166,6 +169,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         Validate(saved);
         if (saved.Opacity is { } opacity) FalloutPlayerOpacityState.RequireComplete(opacity);
         if (saved.Retired || saved.Failure is not null || saved.Boundary is not null || saved.Clock is not null ||
+            saved.Inhibition is { Retired: true } || saved.Inhibition!.Bytes.Any(value => !value.Available) ||
+            saved.FollowingTimerFlag is { Retired: true } or { Available: false } || saved.FollowingContinuation is not null ||
             saved.ControlFields is { WordAvailable: false } or { Failure: not null } ||
             saved.ControlHud is { InitializationReturned: false } or { Failure: not null } or { Retired: true } or { ColdBindingFailure: not null } ||
             saved.ControlHud is { } currentHud && currentHud.Tiles!.Any(tile => !tile.Alive || tile.Animated) ||

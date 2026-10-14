@@ -48,6 +48,12 @@ public partial class RuntimeCoordinator
             AddChild(input);
             if (!input.IsInsideTree() || input.GetParent() != this)
                 throw new InvalidOperationException("Actual DirectInput owner was not attached to its product lifetime.");
+            if (world.HasStandalonePlayerScene)
+            {
+                var scene = world.CampaignStandalonePlayerScene;
+                input.BindSourceQueries(world.ReadStandaloneOriginalInputSource(), scene.RequireOriginalInputInvocation,
+                    FalloutOriginalInputHookBinding.ManagedControls(input.State));
+            }
             await input.WaitForFirstSample(() => _nativeSessionTransitioning || _retiringNativeSession);
             GD.Print($"OPENNV_NATIVE_INPUT_ADMISSION phase=sample-published sample={input.State.Sample}");
             var inventory = new FalloutInventoryReferenceStore(records, world,

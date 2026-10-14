@@ -81,7 +81,8 @@ internal static class ActorProcessRuntimeContracts
             current.Scalars.FinalFirstBits is null && current.Scalars.ClockBits == 0xbf800000u &&
             saved.Transfer.GameplaySha256 == FalloutActorProcessCommonState.GameplayHash(state) && reads == 3,
             "Actual factory lost ordered old/new ownership, live gameplay state or a constructor-unwritten field.");
-        Require(saved.Current.Single(actor => actor.Source.Reference == Creature) == before.Current.Single(actor => actor.Source.Reference == Creature),
+        Require(JsonSerializer.Serialize(saved.Current.Single(actor => actor.Source.Reference == Creature)) ==
+            JsonSerializer.Serialize(before.Current.Single(actor => actor.Source.Reference == Creature)),
             "A process factory altered an unrelated creature's real common owner.");
         var hash = FalloutActorProcessCommonState.GameplayHash(state);
         using var restored = new FalloutActorProcessCommonState(source, Stack, key => Identity(source, key), _ =>

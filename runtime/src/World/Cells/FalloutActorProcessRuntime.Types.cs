@@ -44,15 +44,17 @@ internal sealed record FalloutProcessCommonEntry(FalloutCombatActorIdentity Sour
     FalloutDetectionProcessLevel Level, FalloutProcessCommonScalars Scalars,
     FalloutProcessGameplayLease? Gameplay, FalloutProcessCommonPhase Phase, string? Boundary,
     FalloutActorProcessBodyBinding? Body, long Changed, FalloutActorProcessFact<bool>? Source3D = null,
-    FalloutProcessSceneFields? SceneFields = null);
+    FalloutProcessSceneFields? SceneFields = null, FalloutProcessPackageSlots? Packages = null);
 internal sealed record FalloutProcessCommonTransfer(FalloutFormKey Actor, long BeforeEpoch, long NewEpoch,
     FalloutDetectionProcessLevel Before, FalloutDetectionProcessLevel After, string Owner,
     Guid GameplayOwnership, FalloutProcessGameplayState ObservedBeforeCopy, string GameplaySha256,
     bool OldOwnershipCleared, bool OldRetired, bool Published, bool Initialized, string? Failure, long Changed);
+internal sealed record FalloutProcessCommonPublication(Guid Process, Guid? PreviousProcess, long Sequence);
 internal sealed record FalloutProcessCommonSnapshot(string Schema, string Contract, string Stack, Guid CapturedProcess,
     long Sequence, IReadOnlyList<FalloutProcessCommonEntry> Current,
     IReadOnlyList<FalloutProcessCommonEntry> Retired, FalloutProcessCommonEntry? Pending, FalloutProcessCommonTransfer? Transfer,
-    FalloutActorProcessRuntimeHandoff? ColdHandoff, string ExecutableSha256);
+    FalloutActorProcessRuntimeHandoff? ColdHandoff, string ExecutableSha256,
+    IReadOnlyList<FalloutProcessCommonPublication>? Publications = null);
 
 internal sealed record FalloutActorProcessNodeBinding(byte PartType, string SourceNode, int? Block);
 internal sealed record FalloutActorProcessBodyBinding(FalloutFormKey Actor, string SkeletonPath,

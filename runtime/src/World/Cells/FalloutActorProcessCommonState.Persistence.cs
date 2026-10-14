@@ -7,10 +7,11 @@ internal sealed partial class FalloutActorProcessCommonState
     internal FalloutProcessCommonSnapshot Capture()
     {
         RequireNotBusy();
-        return new(Schema, _source.Contract, _stack, _process, _sequence, _current.Values.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).ToArray(),
-            _retired.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).ToArray(),
-            _pending is null ? null : CaptureFollowingObservationHistory(CaptureWeaponObservationHistory(_pending)),
-            _transfer, _cold, _source.ExecutableSha256);
+        return new(Schema, _source.Contract, _stack, _process, _sequence, _current.Values.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).Select(CapturePackageHistory).ToArray(),
+            _retired.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).Select(CapturePackageHistory).ToArray(),
+            _pending is null ? null : CapturePackageHistory(CaptureFollowingObservationHistory(CaptureWeaponObservationHistory(_pending))),
+            _transfer, _cold, _source.ExecutableSha256,
+            _packagePublications.Count == 0 ? null : Array.AsReadOnly(_packagePublications.ToArray()));
     }
     private void Restore(FalloutProcessCommonSnapshot saved)
     {
@@ -22,10 +23,17 @@ internal sealed partial class FalloutActorProcessCommonState
                 throw new InvalidDataException("Cold common state lost an exact current/historical source actor/base winner/master.");
         foreach (var current in saved.Current)
         {
-            _current.Add(current.Source.Reference, current);
+            _current.Add(current.Source.Reference, current.Phase is FalloutProcessCommonPhase.OldRetired or FalloutProcessCommonPhase.Retired
+                ? current : RepublishPackageFields(current));
         }
-        _retired.AddRange(saved.Retired); _pending = saved.Pending; _transfer = saved.Transfer; _sequence = saved.Sequence;
+        _retired.AddRange(saved.Retired); _pending = saved.Pending is { } pending ? RepublishPackageFields(pending) : null;
+        _transfer = saved.Transfer; _sequence = saved.Sequence;
         _cold = new(saved.CapturedProcess, _process, Next());
+        if (FalloutSourceMainFamily.IsFallout3(_source.ExecutableSha256))
+        {
+            _packagePublications.AddRange(saved.Publications!);
+            _packagePublications.Add(new(_process, saved.CapturedProcess, _cold.Sequence));
+        }
         // Native delegates/IDs never cross processes. Saved body declarations
         // remain source identity only and must match a fresh living binding.
     }
@@ -66,6 +74,7 @@ internal sealed partial class FalloutActorProcessCommonState
             throw new InvalidDataException("Cold common owner has no complete selected/current ownership snapshot.");
         if (FalloutActorProcessRuntimeDeclaration.ForExecutable(saved.ExecutableSha256).Contract != saved.Contract)
             throw new InvalidDataException("Cold common owner changed its executable and constructor contract.");
+        var packageProcesses = ValidatePackagePublications(saved);
         var ownership = new HashSet<Guid>();
         foreach (var retired in saved.Retired)
         {
@@ -95,6 +104,9 @@ internal sealed partial class FalloutActorProcessCommonState
             if (entry.Body is { } body) RequireBody(body, entry.Source.Reference);
             ValidateSourceBodyEntry(entry);
             ValidateSceneFields(entry, saved.ExecutableSha256, saved.Stack);
+            ValidatePackageFields(entry, saved.ExecutableSha256, saved.CapturedProcess, saved.Sequence,
+                entry.Phase is FalloutProcessCommonPhase.OldRetired or FalloutProcessCommonPhase.Retired && !ReferenceEquals(entry, saved.Pending),
+                packageProcesses);
         }
         if (saved.Transfer is { } transfer)
         {

@@ -56,14 +56,16 @@ constructor timer independently of rendering. Its reached unowned frame retains
 the request and refuses complete saving without inventing queue, tile, clock or
 voice advancement.
 
-Ordinary headless input reaches Boy selection, name entry and character-creation
-completion at CG00 stage 65 with zero diagnostic publication failures. Normal
-Quit exits zero and retires all 288 prototypes and source owners without late
-disposed-node reads or leak warnings. Failure-path checks also drain independent
+Fresh ordinary headless New Game reaches CG00 stage 8 with zero diagnostic
+publication failures. The actual opening script assigns a Player package before
+the first Player frame; its original assignment/effect owner is unfinished.
+Earlier downstream child returns cannot admit stale constructor-null package
+fields after that assignment. Normal Quit exits zero and retires all 288
+prototypes and source owners without retirement leaks. Failure-path checks drain independent
 first-person fields, bodies/world and clocks while retaining rejected releases
 for genuine retry. This qualifies shutdown of the reached state only.
 
-Whole Player/Main return remains refused at the following weapon frame services.
+Whole Player/Main now refuses at the original primary-package assignment owner.
 Ordinary Create New Save fails without committing a slot. Independent menu
 transition, actor registration/process, experience and physical-contact owners
 also block saving. Complete gameplay saving, cold Continue and quest routes
@@ -100,19 +102,42 @@ cost, allocations, memory and thread scaling remain unqualified.
 
 ## Verification and next executable outcome
 
-The complete required pinned 4.8 gate passes Release/Debug builds, formatting,
-analyzers, contracts, native domains, desktop launchers and native Godot checks.
-The selected owned FO3 audit has 36 passes, one expected absent desktop-input
-factory and one unfinished offline Player physical child among 38 checks. Its
+The following/input candidate passes its Debug build and focused contracts.
+Movement and following services borrow one four-field inhibition owner with
+ordered constructor/callback history. Current and primary package objects retain
+all six independent fields and the original Low-to-High transfer. Actual command,
+assignment and direct mutation ingress invalidate unowned fields before getters.
+Three cold component cycles preserve exact process/factory histories without
+replaying input, native physics, constructor or callback effects.
+
+Original input has distinct engine current/previous buffers and managed hook
+caches. Source queries retain integer counts and keyboard/mouse order; source
+device polls preserve acquisition and destination-write failures. Command events
+collect independently from the normal engine poll. CPU platform construction
+and current controller selection have separate owners. Authored Player calls
+retain rising/held/falling Ready Item queries and stop before independent global
+or weapon effects. This does not qualify a complete Player/Main frame.
+
+The following/input candidate passes the complete required pinned 4.8 gate,
+final package-history contracts and independent review. Native input-map events
+and temporary collision-shape wrappers now release explicitly on success and
+failure. The native contact/input audit exits cleanly and rejects partial
+mapping preparation without losing the previous native bindings. The gate covers
+Release/Debug builds, formatting/analyzers, contracts, native domains, launchers
+and native Godot checks, including locomotion. Its selected owned FO3
+audit has 38 passes, one expected absent desktop-input factory and one unfinished
+offline Player physical child among 40 checks. The new original-input source
+selector and package/field constructor checks pass. The physical child's
 actual failure remains visible despite the separate successful live physical
 child. Owned native HUD and first-person model checks pass. Component passes
 never certify complete saving, gameplay, a campaign or matched retail parity.
 
-Next, share the actual four Player inhibition fields and their constructor/writer
-history, borrow the existing Actor life predicate, and own the two complete,
-distinct current/primary package states. Then implement original Ready Item
-input edge/count queries and following services until repeated Player/Main
-frames return. Qualify complete save/Quit/cold Continue. Native mods next need
+Next, own the actual AddScriptPackage/current-package assignment, package
+lifetime, retained source GameHour and reached Actor/High callbacks. Restore field
+availability only after genuine source writers return. Then own shared Ready
+Item hold state, independent caller latches and the mandatory following Interface
+service, until repeated Player/Main frames return. Qualify complete
+save/Quit/cold Continue. Native mods next need
 shared process resources with independent module I/O and constructor policies,
 followed by the actual command-task producer. Continue closing canonical
 controller/contact owners, then finish and record the three ordinary quest

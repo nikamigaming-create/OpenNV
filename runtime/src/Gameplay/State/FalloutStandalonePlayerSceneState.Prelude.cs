@@ -17,7 +17,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             clock.Main != main || clock.MainOrdinal != ordinal || _prelude is not null)
             throw new InvalidOperationException("Player initial virtual prefix changed its actual clock/Main invocation.");
         var fault = _reentry; _writing = true;
-        _prelude = new(main, ordinal, Next(), _sequence, FalloutStandaloneScenePreludeStep.ViewRequests, null, null);
+        _prelude = new(main, ordinal, Next(), _sequence, FalloutStandaloneScenePreludeStep.ViewRequests, null, null, Guid.NewGuid());
         try
         {
             if (_viewRequest != 0) throw new NotSupportedException("source-Player-original-two-byte-view-request-child-unowned");
@@ -76,7 +76,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             UpdateMovementPrefix(main, ordinal);
             UpdateFollowingServices(main, ordinal, readScaledTimer);
             UpdatePlayerWeaponServices(main, ordinal);
-            throw new NotSupportedException("source-Player-following-weapon-frame-services-unbound");
+            UpdatePlayerFollowingContinuation(main, ordinal);
+            throw new InvalidOperationException("Following Player prefix returned across an unowned continuation.");
         }
         catch (Exception error)
         {

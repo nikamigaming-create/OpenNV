@@ -18,18 +18,18 @@ internal static partial class SourceMainScriptCallerContracts
             "FO3 semantic input state disagreed with the source command defaults or explicit POV argument.");
         RunObservedPlayerControlCommands(source, stack);
         var input = FalloutDirectInputState.CreateHeadless(stack, new(_ => null)); input.Publish(new byte[256], new byte[8], 0, 0, 0);
-        var current = new FalloutPlayerMovementControlState(source, stack, Guid.NewGuid());
+        var current = AuthoredMovementControl(source, stack, Guid.NewGuid());
         current.BindConfiguration(Ini(invert: true));
-        Reject(() => current.ExecutePrefix(Guid.NewGuid(), 1, 0x3ca3d70a, 0, input));
+        Reject(() => ExecuteAuthoredMovement(current, Guid.NewGuid(), 1, 0x3ca3d70a, 0, input));
         var missing = current.Capture();
         Require(missing is { Failure: FalloutPlayerMovementControlState.WorldFovBoundary,
             Call: { Configuration.InvertY.Number: 1, FieldsRead.DisabledWord: 0, Axes: { X: 0, Y: 0, Wheel: 0 }, WorldFov: null } },
             "Zero cached axes bypassed actual layered configuration, independent Player fields or world-projection getter.");
-        var completed = new FalloutPlayerMovementControlState(source, stack, Guid.NewGuid());
+        var completed = AuthoredMovementControl(source, stack, Guid.NewGuid());
         completed.BindConfiguration(Ini(invert: false)); var main = Guid.NewGuid();
         var owner = new AuthoredControlOrientation(source, stack, completed.Capture().CapturedProcess, main);
         completed.BindOrientation(owner);
-        Require(!completed.ExecutePrefix(main, 1, 0x3ca3d70a, 0, input), "Actual zero-axis source control child changed its false return.");
+        Require(!ExecuteAuthoredMovement(completed, main, 1, 0x3ca3d70a, 0, input), "Actual zero-axis source control child changed its false return.");
         var returned = completed.Capture();
         Require(owner.Reads.SequenceEqual(new[] { "fov", "yaw", "pitch" }) && returned is
             { Failure: null, OrientationStores: 2, Call: { Returned: true, Result: false, Step: FalloutPlayerMovementControlStep.Returned } } &&
@@ -40,11 +40,11 @@ internal static partial class SourceMainScriptCallerContracts
         Reject(() => FalloutPlayerMovementControlState.Validate(returned with { Call = returned.Call! with { Axes = new(1, 0, 0) } }));
         Reject(() => FalloutPlayerMovementControlState.Validate(returned with { OrientationStores = 1 }));
         var saved = JsonSerializer.Deserialize<FalloutPlayerMovementControlSnapshot>(JsonSerializer.Serialize(returned))!;
-        var cold = new FalloutPlayerMovementControlState(source, stack, Guid.NewGuid(), saved);
+        var cold = AuthoredMovementControl(source, stack, Guid.NewGuid(), saved);
         Require(owner.Reads.Count == 3 && cold.Capture().Call == saved.Call && cold.Capture().Fields!.Factory != saved.Fields!.Factory,
             "Cold controls replayed historical world/reference reads or promoted the previous Player field factory.");
         RunReturnedPlayerControlColdPublication();
-        var suppressed = new FalloutPlayerMovementControlState(source, stack, Guid.NewGuid());
+        var suppressed = AuthoredMovementControl(source, stack, Guid.NewGuid());
         suppressed.BindConfiguration(Ini(invert: true));
         var effects = new AuthoredControlFlagEffects(source, stack, suppressed.Capture().CapturedProcess);
         suppressed.Fields.ApplyCommand(Guid.NewGuid(), "authored-source-script", new(false, [false, false, false, false, true, false, false]), effects);
@@ -54,12 +54,12 @@ internal static partial class SourceMainScriptCallerContracts
         var suppressionMain = Guid.NewGuid();
         var suppressedOwner = new AuthoredControlOrientation(source, stack, suppressed.Capture().CapturedProcess, suppressionMain);
         suppressed.BindOrientation(suppressedOwner);
-        Require(!suppressed.ExecutePrefix(suppressionMain, 1, 0, 0, input) && suppressed.Capture().Call!.Axes == new FalloutPlayerControlAxes(0, 0, 0),
+        Require(!ExecuteAuthoredMovement(suppressed, suppressionMain, 1, 0, 0, input) && suppressed.Capture().Call!.Axes == new FalloutPlayerControlAxes(0, 0, 0),
             "Independent looking-disable bit failed to suppress all three axes after source inversion.");
-        var inverted = new FalloutPlayerMovementControlState(source, stack, Guid.NewGuid()); inverted.BindConfiguration(Ini(invert: true));
+        var inverted = AuthoredMovementControl(source, stack, Guid.NewGuid()); inverted.BindConfiguration(Ini(invert: true));
         input.Publish(new byte[256], new byte[8], 0, int.MinValue, 0);
         var invertedMain = Guid.NewGuid(); var invertedOwner = new AuthoredControlOrientation(source, stack, inverted.Capture().CapturedProcess, invertedMain);
-        inverted.BindOrientation(invertedOwner); Reject(() => inverted.ExecutePrefix(invertedMain, 1, 0, 0, input));
+        inverted.BindOrientation(invertedOwner); Reject(() => ExecuteAuthoredMovement(inverted, invertedMain, 1, 0, 0, input));
         Require(inverted.Capture() is { Failure: FalloutPlayerMovementControlState.MotionBoundary,
             OrientationStores: 2, Call: { Axes.Y: int.MinValue, Returned: false } },
             "Source Int32 invert-Y overflow changed its wrapped value or bypassed later orientation writer ownership.");
@@ -103,14 +103,15 @@ internal static partial class SourceMainScriptCallerContracts
         var initial = warm.Owner.Capture();
         var warmInput = FalloutDirectInputState.CreateHeadless(stack, new(_ => null));
         warmInput.Publish(new byte[256], new byte[8], 0, 0, 0);
-        var warmControl = new FalloutPlayerMovementControlState(source, stack, initial.CapturedProcess,
+        var warmControl = AuthoredMovementControl(source, stack, initial.CapturedProcess,
             fields: warm.Owner.StandalonePlayerScene.ControlFields);
         warmControl.Fields.BindActualInput(warmInput);
         warmControl.BindConfiguration(Settings(false));
         var warmOrientation = new MainInvocationControlOrientation(source, stack, initial.CapturedProcess, warm.Owner);
         warmControl.BindOrientation(warmOrientation);
+        RequireAuthoredMovementMain(warmControl, warmOrientation.RequireCurrent);
         warm.Host.DuringPlayer = invocation => warmOrientation.Enter(invocation,
-            () => Require(!warmControl.ExecutePrefix(invocation.Identity, invocation.Ordinal, 0x3ca3d70a, 0, warmInput),
+            () => Require(!ExecuteAuthoredMovement(warmControl, invocation.Identity, invocation.Ordinal, 0x3ca3d70a, 0, warmInput),
                 "Warm current Main changed the source zero-axis return."));
         using (warm.Bind()) warm.Owner.ExecuteMainScriptCaller(71, .02f).GetAwaiter().GetResult();
         var saved = JsonSerializer.Deserialize<FalloutPlayerMovementControlSnapshot>(JsonSerializer.Serialize(warmControl.Capture())) ??
@@ -120,7 +121,7 @@ internal static partial class SourceMainScriptCallerContracts
         var process = cold.Owner.Capture().CapturedProcess;
         var input = FalloutDirectInputState.CreateHeadless(stack, new(_ => null));
         input.Publish(new byte[256], new byte[8], 0, 0, 0);
-        var control = new FalloutPlayerMovementControlState(source, stack, process, saved, cold.Owner.StandalonePlayerScene.ControlFields);
+        var control = AuthoredMovementControl(source, stack, process, saved, cold.Owner.StandalonePlayerScene.ControlFields);
         control.Fields.BindActualInput(input);
         var orientation = new MainInvocationControlOrientation(source, stack, process, cold.Owner);
         Reject(() => control.BindOrientation(warmOrientation));
@@ -135,16 +136,18 @@ internal static partial class SourceMainScriptCallerContracts
         thread.Start(); thread.Join();
         Require(threadFailure is InvalidOperationException, "Cold orientation publication acquired a foreign thread.");
         control.BindOrientation(orientation); control.BindConfiguration(Settings(false));
+        RequireAuthoredMovementMain(control, orientation.RequireCurrent);
         Reject(() => control.BindOrientation(orientation));
         Reject(() => control.BindConfiguration(Settings(false)));
         Require(JsonSerializer.Serialize(control.Capture().Call) == history && orientation.Reads.Count == 0 &&
             warmOrientation.Reads.Count == 3 && control.Capture().CacheStores == saved.CacheStores,
             "Cold dependency publication mutated the historical call or replayed input/orientation stores.");
-        var rejectedInput = new FalloutPlayerMovementControlState(source, stack, process, saved, control.Fields);
+        var rejectedInput = AuthoredMovementControl(source, stack, process, saved, control.Fields);
+        RequireAuthoredMovementMain(rejectedInput, orientation.RequireCurrent);
         cold.Host.DuringPlayer = invocation => orientation.Enter(invocation, () =>
         {
-            Reject(() => rejectedInput.ExecutePrefix(invocation.Identity, invocation.Ordinal, 0x3ca3d70a, 0, warmInput));
-            Require(!control.ExecutePrefix(invocation.Identity, invocation.Ordinal, 0x3ca3d70a, 0, input),
+            Reject(() => ExecuteAuthoredMovement(rejectedInput, invocation.Identity, invocation.Ordinal, 0x3ca3d70a, 0, warmInput));
+            Require(!ExecuteAuthoredMovement(control, invocation.Identity, invocation.Ordinal, 0x3ca3d70a, 0, input),
                 "Cold current Main changed the source zero-axis return.");
         });
         using (cold.Bind()) cold.Owner.ExecuteMainScriptCaller(1, .02f).GetAwaiter().GetResult();
@@ -171,11 +174,11 @@ internal static partial class SourceMainScriptCallerContracts
         Reject(() => control.BindConfiguration(Settings(false)));
         Reject(() => control.BindOrientation(orientation));
         var sequence = returned.Sequence;
-        Reject(() => control.ExecutePrefix(Guid.NewGuid(), call.MainOrdinal, 0, 0, input));
-        Reject(() => control.ExecutePrefix(call.Main, call.MainOrdinal + 1, 0, 0, input));
+        Reject(() => ExecuteAuthoredMovement(control, Guid.NewGuid(), call.MainOrdinal, 0, 0, input));
+        Reject(() => ExecuteAuthoredMovement(control, call.Main, call.MainOrdinal + 1, 0, 0, input));
         Require(control.Capture().Sequence == sequence, "A replayed current Main entered controls or changed its completed receipt.");
         cold.Host.DuringPlayer = invocation => orientation.Enter(invocation,
-            () => Require(!control.ExecutePrefix(invocation.Identity, invocation.Ordinal, 0x3ca3d70a, 0, input),
+            () => Require(!ExecuteAuthoredMovement(control, invocation.Identity, invocation.Ordinal, 0x3ca3d70a, 0, input),
                 "The next actual current Main could not reuse its published control dependencies."));
         using (cold.Bind()) cold.Owner.ExecuteMainScriptCaller(2, .02f).GetAwaiter().GetResult();
         Require(control.Capture() is { Call: { Returned: true, MainOrdinal: 3 }, CacheStores: 6, OrientationStores: 6 } &&

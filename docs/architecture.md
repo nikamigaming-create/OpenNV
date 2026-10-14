@@ -36,6 +36,28 @@ context retain independent fields. Cache misses store the queried scalar before
 the valid mask, and cold reconstruction retains source history without replay.
 Unowned writers, weapon effects and later frame services remain visible.
 
+Movement and following Player services borrow one inhibition owner. Its original
+constructor stores and selected callbacks retain their order and the unwritten
+first callback argument stays unknown. Current writers invalidate their own
+fields before later reads. Independent current and primary package objects retain
+all six fields and the initial Low-to-High four-field transfer. Each child is
+bound to the actual Main, Player process, epoch and invocation. Cold history
+retains the complete process/factory lineage without replaying old calls.
+
+Original control queries borrow the same input manager and profile bindings.
+Engine current/previous keyboard and mouse buffers are separate from managed
+hook caches. Device polling owns buffer copies, acquisition failures and actual
+destination writes; queries never poll or consume taps. CPU platform services
+own mouse constructor effects and controller selection independently of graphics.
+Ready Item retains ordered rising, held and falling integer-count queries before
+its independent global or weapon effects. A reached unavailable child retains
+its failed prefix and cannot qualify a complete frame or save.
+
+Godot input maps and collision nodes retain their native event and shape
+references. Adapters release temporary managed wrappers after publication and
+on failed preparation. Preparing a remap completes before changing the map;
+an unsupported key preserves prior bindings while releasing the prepared prefix.
+
 Native modules share one actual child address space, host core and command
 table. Each original image retains its own Query/Load context, module handle,
 IAT validation and borrowed function lifetime. Cross-module calls preserve the

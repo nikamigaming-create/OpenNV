@@ -15,6 +15,9 @@ internal static class FalloutActorProcessRuntimeSaveContract
         FalloutActorProcessRuntimeState.Validate(runtime); FalloutActorProcessRuntimeState.RequireStandaloneMainPlayable(runtime);
         FalloutActorProcessRuntimeState.RequireCurrentGlobalTime(runtime);
         FalloutActorProcessCommonState.Validate(common);
+        if (runtime.StandaloneMain?.Scene.FollowingContinuation is { } following)
+            foreach (var read in new[] { following.Current, following.Primary }.OfType<FalloutProcessPackageRead>())
+                FalloutProcessPackageState.ValidateRead(read, common.ExecutableSha256, common.Stack, common);
         FalloutActorProcessManager.ValidateShape(processes);
         if (runtime.Contract != common.Contract || runtime.Stack != common.Stack || runtime.Stack != processes.Stack ||
             runtime.Player != processes.Player || runtime.MainFrame.Boundary is not null ||

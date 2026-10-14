@@ -80,7 +80,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         }
         if (saved.Prelude is not { } prefix || saved.Clock is not { } clock ||
             query.Main != prefix.Main || query.MainOrdinal != prefix.MainOrdinal || query.Process == Guid.Empty ||
-            query.Process != saved.CapturedProcess && saved.ColdHandoff?.PreviousProcess != query.Process ||
+            !ChildBelongsToParentProcessLineage(saved, query.Process) ||
             query.Entered <= prefix.Entered || query.Changed < query.Entered || query.Changed > saved.Sequence ||
             query.Input != saved.SceneReference || query.Result is not null ||
             query.Returned != (query.Failure is null) || query.Returned && !query.GetterReturned ||
