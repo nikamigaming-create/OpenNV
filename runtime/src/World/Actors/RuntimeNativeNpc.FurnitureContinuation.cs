@@ -83,7 +83,7 @@ internal partial class RuntimeNativeNpc
         _findFurniture = source.Procedure == 0 ? FalloutFindFurniturePackage.Read(package) : null;
         _packageIdles = new(source, _idleReplays, idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
         RestorePackageIdleState(saved.IdleState);
-        _furnitureIdles = new(_aiStack, Appearance.SkeletonPath);
+        _furnitureIdles = new(_aiStack, Appearance.SkeletonPath, _aiGlobals);
         _furnitureSearchRemaining = saved.SearchRemaining;
         _sitting = saved.Phase == 3 ? 1 : saved.Phase;
         _furnitureEntry = _sitting == 2 ? clip : null;

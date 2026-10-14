@@ -220,7 +220,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         _playerActorValues.BindConstantModifiers(_playerSkills.Modifiers);
         _vitals = FalloutPlayerVitals.PrepareFromActorValues(pluginStack, _playerActorValues, restore?.State.Vitals);
         _playerSkills.BindAbilityConditions(PlayerProgressCondition);
-        _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries);
+        _experience = new(pluginStack, _vitals, () => _playerSkills.PerkEntries, _globals);
         InitializePlayerProgress(restore is null ? null : restore.State.PlayerProgress ??
             throw new InvalidDataException("Current player progress is absent."));
         ConfigureExperienceNotifications(restore is null ? null : restore.State.ExperienceNotifications ??
@@ -246,7 +246,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             throw new InvalidDataException("Current process queue continuation is absent."));
         _ingestibles = new(pluginStack, inventory, _vitals,
             FalloutBodyPartData.Read(pluginStack.GetEffective(pluginStack.RuntimeFormKey(0x1d))),
-            _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore);
+            _playerSkills.Value, _playerSkills.HasPerk, () => _scripts.Session.Hardcore, _globals);
         if (restore?.State.Ingestibles is { } ingestibles) _ingestibles.Restore(ingestibles);
         _player.ConfigureExplosionExposure(() => _activeCell, amount =>
         {
@@ -364,7 +364,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded, _scripts.References,
             CurrentActorPackage, _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount,
             reference => ReferencePresentation().TryResolve(reference), ReferenceDistance, ReferenceInZone, ActorSitting,
-            _scripts.References!.GetDeadCount);
+            _scripts.References!.GetDeadCount, _globals);
         AddChild(_speech);
         ConfigureConversation();
         AttachSourceActorPerception();
@@ -696,7 +696,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         AddChild(_traitEntry);
         _traitEntry.Accepted += AcceptTraits;
         _traitEntry.Failed += error => ExecutionError = error.Message;
-        try { _traitEntry.Configure(_pluginStack, contract, Traits, PlayerLevel, EvaluateMessageCondition); }
+        try { _traitEntry.Configure(_pluginStack, contract, Traits, PlayerLevel, EvaluateMessageCondition, _globals); }
         catch
         {
             _traitEntry.Accepted -= AcceptTraits;

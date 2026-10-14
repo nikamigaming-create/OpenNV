@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 
@@ -222,7 +223,7 @@ internal partial class RuntimeNativePlayer
         try
         {
             first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient);
-            third = new(records, content, appearance, weapon, false, UnitsToMeters, ambient);
+            third = ConstructReferenceModel(() => new(records, content, appearance, weapon, false, UnitsToMeters, ambient));
             if (first.Error is not null || third.Error is not null) throw new NotSupportedException(first.Error ?? third.Error);
             third.ConfigureBodyContacts(CollisionLayer);
             third.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());
@@ -302,7 +303,11 @@ internal partial class RuntimeNativePlayer
             PresentationChanged?.Invoke();
             Activity.SetWeaponDrawn(weapon is not null && _weaponHandling.Drawn);
         }
-        finally { first?.Free(); third?.Free(); }
+        finally
+        {
+            NativeNifSceneRetirement.Drain("Unpublished Player presentation",
+                [() => first?.Free(), () => { if (third is not null) CleanupUnpublishedReferenceModel(third); }]);
+        }
     }
 
     private Godot.Collections.Array<Rid> SelfQueryBodies

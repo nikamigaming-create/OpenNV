@@ -25,7 +25,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         if (restore is not null && (restore.State.PlayerSkillValues is null || restore.State.PlayerAbilityScripts is null))
             throw new InvalidDataException("Current gameplay restore requires complete player skill/effect authority.");
         _playerAbilities = new(_pluginStack, _playerSkills.SelectedConstantEffects, _playerSkills.AbilityCondition,
-            restore?.State.PlayerAbilityScripts);
+            restore?.State.PlayerAbilityScripts, _globals);
         var executor = new FalloutReferenceScripts(_pluginStack, _scripts.References!, _quests,
             new(AbilityCurrentFurniture, ApplyReferenceEffect, _scripts.MessageResults.Take,
                 actor => (_speech ?? throw new NotSupportedException("Ability speech query requires initialized native speech.")).IsTalking(actor),

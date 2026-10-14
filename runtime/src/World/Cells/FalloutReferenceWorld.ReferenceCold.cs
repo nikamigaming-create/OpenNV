@@ -16,7 +16,8 @@ internal sealed partial class FalloutReferenceWorld
         _sourcePlayerReferencePosition = new(source, records, scene.Stack, fields.Actor,
             scene.Process, scene.Constructor, RequireActualReferencePosition, saved.Position);
         _sourceReferenceChanges = new(source, scene.Stack, scene.Process, _sourceReferenceChangeConstructor,
-            RequireActualReferencePosition, saved.Changes);
+            RequireActualReferencePosition, saved.Changes,
+            scene.ThreadContext.RetainCurrentFrameReferenceChangeRead);
         _sourceReferenceFormFiles = new(files, records, scene.Stack, scene.Process, scene.Constructor,
             fields.Actor, RequireActualReferencePosition, saved.FormFiles);
         scene.ThreadContext.BindReferenceChangeFlags(source, saved.ThreadReferenceFlags);

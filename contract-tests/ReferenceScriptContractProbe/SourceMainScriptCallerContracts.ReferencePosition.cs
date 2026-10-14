@@ -142,7 +142,7 @@ internal static partial class SourceMainScriptCallerContracts
         internal string? FailChild;
         public Guid Factory { get; } = Guid.NewGuid();
         internal ReferencePositionFixture(ReferencePositionFixtureSnapshot? saved = null, bool constructGrid = true,
-            FalloutPluginStack? original = null, FalloutPlayerMovementControlSource? controls = null)
+            FalloutPluginStack? original = null, FalloutPlayerMovementControlSource? controls = null, byte[]? appendedRows = null)
         {
             _ownsRecords = original is null;
             if (_ownsRecords)
@@ -152,7 +152,7 @@ internal static partial class SourceMainScriptCallerContracts
                 Row("TES4", 0, Part("HEDR", new byte[12])),
                 Row("NPC_", 7, Part("EDID", "Player\0"u8.ToArray()), Part("ACBS", new byte[24]), Part("RNAM", BitConverter.GetBytes(0x19u))),
                 Row("RACE", 0x19, Part("EDID", "Race\0"u8.ToArray())), Row("DOBJ", 0x31, Part("DATA", new byte[84])),
-                SavedBorrowCells(), ActorAssignmentFixtureRows()));
+                SavedBorrowCells(), ActorAssignmentFixtureRows(), appendedRows ?? []));
             Records = FalloutPluginStack.Load(_directory, ["PositionFixture.esm"]);
             }
             else { Records = original!; Stack = original!.OwnedSource!.StackId; }
@@ -172,7 +172,7 @@ internal static partial class SourceMainScriptCallerContracts
             Initializer = new(FalloutReferenceScriptExtraInitializerSource.Reviewed(fieldSource), Records, Fields, Thread, invocation =>
             { if (invocation != _script) throw new InvalidOperationException("Authored Script initializer left its actual scope."); });
             Position = new(Source, Records, Stack, Actor, Thread.Process, Fields.Constructor, RequireCurrent, saved?.Position);
-            Changes = new(Source, Stack, Thread.Process, Guid.NewGuid(), RequireCurrent, saved?.Changes);
+            Changes = new(Source, Stack, Thread.Process, Guid.NewGuid(), RequireCurrent, saved?.Changes, Thread.RetainCurrentFrameReferenceChangeRead);
             Files = new(FalloutReferenceFormFileSource.Reviewed(Source), Records, Stack, Thread.Process, Fields.Constructor, Actor, RequireCurrent, saved?.Files);
             Cells = new(FalloutInitialPlacementCellsSource.Reviewed(Source), Records, Stack, Guid.NewGuid(), Guid.NewGuid(), RequireCurrent, saved?.Cells);
             RestoreSavedBorrowFixture(saved?.SavedBorrow);
@@ -217,7 +217,7 @@ internal static partial class SourceMainScriptCallerContracts
         { Events.Add("cells"); Require(Cells.ReadSelectedCell(invocation).Cell is null, "Actual nonnull CELL requires a separate transform."); return supplied; }
         public void SetInitialPlacementYaw(FalloutReferencePositionInvocation invocation) { RequireCurrent(invocation); Events.Add("yaw"); }
         public void ClearStartupChangeSuppression(FalloutReferencePositionInvocation invocation) { Events.Add("clear"); _ = Changes.ClearStartupSuppression(invocation); }
-        public FalloutSourceThreadReferenceFlagsRead ReadThreadFlags(FalloutReferencePositionInvocation invocation) => Thread.ReadReferenceChangeFlags(invocation.Call, Factory, () => RequireCurrent(invocation));
+        public FalloutSourceThreadReferenceFlagsRead ReadThreadFlags(FalloutReferencePositionInvocation invocation) => Thread.ReadReferenceChangeFlags(invocation, Factory, () => RequireCurrent(invocation));
         public uint ReadSourceFormId(FalloutReferencePositionInvocation invocation) { RequireCurrent(invocation); return Records.RuntimeFormId(invocation.Actor.Reference); }
         public bool ReadDataHandlerSuppression(FalloutReferencePositionInvocation invocation, uint sourceFormId) => throw new InvalidOperationException("Actual reference flags lack DataHandler selector bit5.");
         internal ReferencePositionFixtureSnapshot Capture() => JsonSerializer.Deserialize<ReferencePositionFixtureSnapshot>(JsonSerializer.Serialize(
@@ -229,7 +229,7 @@ internal static partial class SourceMainScriptCallerContracts
         private static byte[] Join(params byte[][] values) => values.SelectMany(value => value).ToArray();
         public void Dispose()
         {
-            try { RetireReferenceAggregateFixture(); Position.Retire(); Changes.Retire(); Files.Retire(); Cells.Retire(); Fields.Retire(); Thread.Retire(); Common.Dispose(); if (_ownsRecords) Records.Dispose(); }
+            try { _frameReceiptData?.Retire(); RetireReferenceAggregateFixture(); Position.Retire(); Changes.Retire(); Files.Retire(); Cells.Retire(); Fields.Retire(); Thread.Retire(); Common.Dispose(); if (_ownsRecords) Records.Dispose(); }
             finally { if (_ownsRecords) Directory.Delete(_directory, true); }
         }
     }

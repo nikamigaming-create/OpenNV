@@ -37,7 +37,8 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
             ConditionalButtons: fields.Any(field => field.Signature == "CTDA"));
     }
 
-    internal FalloutSourceMessage ResolveButtons(FalloutPluginStack records, Func<FalloutCondition, float> evaluate)
+    internal FalloutSourceMessage ResolveButtons(FalloutPluginStack records, Func<FalloutCondition, float> evaluate,
+        FalloutGlobalState? globals = null)
     {
         if (!ConditionalButtons) return this;
         var record = records.GetEffective(Form);
@@ -50,7 +51,7 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
             groups[^1].Add(FalloutCondition.Read(record, field.Data.Span));
         }
         if (groups.Count != Buttons.Count) throw new InvalidDataException("Message button/source count differs.");
-        var visible = Enumerable.Range(0, groups.Count).Where(index => FalloutCondition.AllPass(groups[index], evaluate)).ToArray();
+        var visible = Enumerable.Range(0, groups.Count).Where(index => FalloutCondition.AllPass(groups[index], evaluate, globals: globals)).ToArray();
         if (visible.Length == 0) throw new InvalidOperationException("Message has no eligible source buttons.");
         return this with { Buttons = visible.Select(index => Buttons[index]).ToArray(), ButtonIndices = visible };
     }
@@ -262,6 +263,7 @@ internal sealed partial class FalloutQuestScripts
     private readonly Dictionary<FalloutFormKey, string> _unbound = [];
     private readonly FalloutPlayerInventory _inventory;
     private readonly FalloutGlobalState? _globals;
+    internal FalloutGlobalState? Globals => _globals;
     private readonly Queue<FalloutSourceMessage> _messages = [];
     private readonly FalloutQuestScriptInitialization _initialization;
     internal FalloutReferenceWorld? References { get; }

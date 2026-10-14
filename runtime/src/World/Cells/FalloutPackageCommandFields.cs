@@ -36,7 +36,9 @@ internal sealed partial class FalloutActorPackageCommandFields
     internal string? SaveBlocker => _busy ? "source-package-command-field-consumer-in-flight" : _retired ?
         "source-package-command-field-owner-retired" : _failure ?? _scriptInitializer?.SaveBlocker ??
         (_savedScriptInitialization is not null && _scriptInitializer is null ? "source-cold-Script-initializer-current-binding-unbound" : null) ??
-        _availability.Values.FirstOrDefault(value => !value.Available)?.Boundary;
+        _availability.Values.FirstOrDefault(value => !value.Available)?.Boundary ?? _lateAnimationWriter ?? _animationNodeMembership?.Writer ??
+        (_historicalAnimationTailFields?.Membership is not null && _animationNodeMembership is null ?
+            "source-cold-reference-Extra41-publication-unbound" : null);
     internal object State => new
     {
         source = Source.Identity,
@@ -72,6 +74,7 @@ internal sealed partial class FalloutActorPackageCommandFields
         _requireActualInvocation = requireActualInvocation;
         var admission = construction ?? saved?.Construction ?? new("actual-selected-Actor-package-command-field-constructor");
         Construction = admission with { ClosedLanes = admission.ClosedLanes is { } lanes ? Array.AsReadOnly(lanes.ToArray()) : null };
+        RestoreAnimationTailFields(saved?.AnimationTail);
         ValidateConstruction(Construction);
         foreach (var lane in Enum.GetValues<FalloutPackageCommandFieldLane>())
         {
@@ -138,7 +141,8 @@ internal sealed partial class FalloutActorPackageCommandFields
             Epoch, Construction, _sequence, CloneValues(_values), Array.AsReadOnly(_availability.Values.ToArray()),
             Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_operations.Select(CloneOperation).ToArray()), _retired,
             _scriptInitializer?.Capture() ?? (_savedScriptInitialization is { } script ? FalloutReferenceScriptExtraInitializer.CloneSnapshot(script) : null),
-            _scriptInitializationOperations.Count == 0 ? null : Array.AsReadOnly(_scriptInitializationOperations.Select(CloneScriptInitializationOperation).ToArray()));
+            _scriptInitializationOperations.Count == 0 ? null : Array.AsReadOnly(_scriptInitializationOperations.Select(CloneScriptInitializationOperation).ToArray()),
+            CaptureAnimationTailFields());
         Validate(snapshot, Source, Stack, Actor); return snapshot;
     }
     internal void Retire() { RequireSnapshot(); _retired = true; }
@@ -197,6 +201,8 @@ internal sealed partial class FalloutActorPackageCommandFields
     }
     private void RequireLane(FalloutPackageCommandFieldLane lane)
     {
+        if (lane == FalloutPackageCommandFieldLane.Animation && _lateAnimationWriter is { } animationWriter)
+            throw new NotSupportedException(animationWriter);
         if (lane == FalloutPackageCommandFieldLane.ScriptExtra && _savedScriptInitialization is not null && _scriptInitializer is null)
             throw new NotSupportedException("source-cold-Script-initializer-current-binding-unbound");
         if (lane == FalloutPackageCommandFieldLane.ScriptExtra && _scriptInitializer?.SaveBlocker is { } scriptFailure)

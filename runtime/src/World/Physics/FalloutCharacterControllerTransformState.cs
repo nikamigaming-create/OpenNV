@@ -40,6 +40,16 @@ internal sealed class FalloutCharacterControllerTransformState
             BitConverter.UInt32BitsToSingle(FalloutPhysicalConstructorInputs.PhysicalToSourceBits)));
     }
 
+    internal FalloutPhysicalVector3 ReadReferencePositionBits(FalloutCharacterControllerProxyTransform current)
+    {
+        var rotated = RotateOffset(_offset, current.Rotation);
+        var scale = BitConverter.UInt32BitsToSingle(FalloutPhysicalConstructorInputs.PhysicalToSourceBits);
+        return FalloutPhysicalVector3.FromValues(
+            FalloutPhysicalFloat32.Multiply(FalloutPhysicalFloat32.Subtract(current.Translation.XValue, rotated.XValue), scale),
+            FalloutPhysicalFloat32.Multiply(FalloutPhysicalFloat32.Subtract(current.Translation.YValue, rotated.YValue), scale),
+            FalloutPhysicalFloat32.Multiply(FalloutPhysicalFloat32.Subtract(current.Translation.ZValue, rotated.ZValue), scale));
+    }
+
     internal uint ReadHeightDeltaBits(uint scalarBits)
     {
         var scalar = BitConverter.UInt32BitsToSingle(scalarBits);

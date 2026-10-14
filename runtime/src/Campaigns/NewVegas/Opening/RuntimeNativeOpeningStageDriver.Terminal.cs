@@ -33,7 +33,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             target => ReferencePresentation().GetOpenState(target));
         foreach (var item in saved)
             _terminalMenus.Add(item.Reference, FalloutTerminalMenu.RestoreClosed(_pluginStack, item, stages,
-                RequireTerminalAdmission, conditions.Evaluate, ExecuteTerminalSelection));
+                RequireTerminalAdmission, conditions.Evaluate, ExecuteTerminalSelection, _globals));
         _restoreTerminalResults = null;
     }
 
@@ -86,7 +86,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         var conditions = new FalloutTerminalConditions(_pluginStack, _quests, world,
             target => ReferencePresentation().GetOpenState(target));
         var menu = new FalloutTerminalMenu(_pluginStack, reference, RequireTerminalAdmission,
-            conditions.Evaluate, ExecuteTerminalSelection);
+            conditions.Evaluate, ExecuteTerminalSelection, _globals);
         _terminalMenus[reference] = menu;
         return menu;
     }

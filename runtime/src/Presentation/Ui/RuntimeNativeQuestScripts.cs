@@ -168,7 +168,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         try
         {
             message = message.ResolveButtons(_records, condition => (EvaluateMessageCondition ??
-                throw new NotSupportedException("Message condition has no gameplay owner."))(condition));
+                throw new NotSupportedException("Message condition has no gameplay owner."))(condition), Scripts.Globals);
             _current = message;
             _layer.AddChild(new NativeOwnedMessageMenu(message, _records, choice =>
             {

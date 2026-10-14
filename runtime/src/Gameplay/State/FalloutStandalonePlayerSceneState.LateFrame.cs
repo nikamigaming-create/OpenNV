@@ -130,7 +130,15 @@ internal sealed partial class FalloutStandalonePlayerSceneState
                 _lateFrameCall = _lateFrameCall with { DefaultVector = vector?.Invocation == moverInvocation ? vector : null }; Publish();
             }
             Step(FalloutPlayerLateFrameStep.MoverDelta);
-            throw new NotSupportedException(LateMoverDeltaBoundary);
+            var updateMover = _updateLateMoverDelta ?? throw new NotSupportedException(LateMoverDeltaBoundary);
+            try { updateMover(invocation); }
+            finally
+            {
+                var delta = _lateMoverDelta?.LastCall;
+                _lateFrameCall = _lateFrameCall with { MoverDelta = delta?.Invocation == invocation ? delta : null }; Publish();
+            }
+            Step(FalloutPlayerLateFrameStep.Tail);
+            throw new NotSupportedException(FalloutPlayerFollowingContinuation.LateTailBoundary);
         }
         catch (Exception error)
         {

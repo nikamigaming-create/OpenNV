@@ -6,6 +6,7 @@ internal static partial class ConversationContracts
 {
     internal static void Run()
     {
+        ResultOnlyInfoContracts();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-conversation-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var file = Path.Combine(directory, "Dialogue.esm");
@@ -99,10 +100,11 @@ internal static partial class ConversationContracts
                 "An ineligible empty INFO prevented selection or executed its result.");
             calls.Clear();
             var selectedEmpty = Create();
-            Reject(() => selectedEmpty.Start(Key(0x900), Key(0x813)));
-            Require(selectedEmpty.Phase == "failed" && calls.Count == 0 && selectedEmpty.Response is null &&
-                selectedEmpty.Error!.Contains("zero-response", StringComparison.Ordinal),
-                "An unowned selected empty INFO ran effects or fabricated speech.");
+            selectedEmpty.Start(Key(0x900), Key(0x813));
+            Require(selectedEmpty.Phase == "choices" && calls.SequenceEqual([(0x99au, true), (0x99au, false)]) &&
+                selectedEmpty.Response is null && selectedEmpty.ResponseGeneration == 0 && selectedEmpty.ResultOnlyCompletions == 1,
+                "Selected result-only INFO lost its effects or fabricated speech.");
+            calls.Clear();
             conversation.Start(Key(0x900), Key(0x800));
             Require(conversation.Info!.Record.FormKey == Key(0x910) && calls.SequenceEqual([(0x910u, true)]), "Greeting priority/start state or begin result changed.");
             conversation.CompleteResponse();

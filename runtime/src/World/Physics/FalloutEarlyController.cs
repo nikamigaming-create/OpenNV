@@ -28,7 +28,7 @@ internal sealed partial class FalloutEarlyController : IFalloutPlayerTransferCon
     internal FalloutEarlyControllerPhantom Phantom { get; }
     internal FalloutEarlyControllerProxy Proxy { get; }
     internal FalloutControllerContactState Contact => _contact;
-    internal string? SaveBlocker => _busy || _readingPostProcess ? "source-early-controller-consumer-in-flight" : _failure ?? PostProcessFieldSaveBlocker ??
+    internal string? SaveBlocker => _busy || _readingPostProcess ? "source-early-controller-consumer-in-flight" : _failure ?? ActorMovementSaveBlocker ?? _moverDeltaFields.QueueBoundary ?? PostProcessFieldSaveBlocker ??
         (_retired ? "source-early-controller-retired" : null);
     internal FalloutEarlyController(FalloutEarlyControllerFactory factory, FalloutEarlyControllerLineage lineage,
         FalloutEarlyControllerDescriptorSnapshot descriptor, FalloutCharacterStateContext state,
@@ -123,7 +123,7 @@ internal sealed partial class FalloutEarlyController : IFalloutPlayerTransferCon
         _stores.Add(new(checked(++_sequence), field, bits, xyz, fourth, count));
     internal FalloutEarlyControllerSnapshot Capture() => new(Schema, Lineage, Identity, Descriptor, _state.Snapshot, _contact.Snapshot,
         Phantom.Capture(), Proxy.Capture(), _scalar, _flags, _selector, _actorScaleBits, _stores.ToArray(), _resets.ToArray(), _failure, _retired,
-        FalloutEarlyControllerConvexGeometry.CanonicalBoundary, CapturePostProcessFields());
+        FalloutEarlyControllerConvexGeometry.CanonicalBoundary, CapturePostProcessFields(), CaptureMoverDelta(), CaptureActorMovement());
     internal void RetireUnleased()
     {
         if (_retired) return; _factory.RequireLifetime();

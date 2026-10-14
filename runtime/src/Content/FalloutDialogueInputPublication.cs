@@ -13,10 +13,10 @@ internal sealed class FalloutDialogueInputPublication
     internal void Publish(string phase, ulong response)
     {
         if (_retired) throw new InvalidOperationException("A retired dialogue view cannot accept another source publication.");
-        if (phase is not ("speaking" or "choices") || response == 0)
+        if (phase is not ("speaking" or "choices" or "continuing") || phase == "speaking" && response == 0)
             throw new InvalidDataException("Dialogue input has no current source response/choice publication.");
         Current = new(checked(Current.View + 1), 0, response, phase);
-        Submitted = false;
+        Submitted = phase == "continuing";
     }
     internal FalloutDialogueInputToken RebuildRows()
     {

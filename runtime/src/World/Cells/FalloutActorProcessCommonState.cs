@@ -46,6 +46,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
             "source-Actor-weapon-drawn-observed-writer-unbound:" + weapon.Source.Reference :
         SourcePackageSaveBlocker is { } package ? package : ActorAssignmentSaveBlocker is { } assignment ? assignment :
         EarlyControllerSaveBlocker is { } controller ? controller :
+        MoverDeltaProcessSaveBlocker is { } mover ? mover :
         _current.Values.FirstOrDefault(entry => entry.SceneFields?.WeaponContinuation is { ActionAvailable: false, Initialization: not null } or
         { ActivityAvailable: false } or { CacheAvailable: false }) is { } following ?
             "source-Actor-following-weapon-observed-writer-unbound:" + following.Source.Reference : null;

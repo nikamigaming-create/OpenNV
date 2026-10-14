@@ -32,7 +32,7 @@ internal sealed partial class FalloutPlayerAbilityScripts
         var lifetime = new FalloutScriptedActiveEffect(_records,
             _records.RuntimeFormKey(FalloutPlayerActorValues.PlayerReference), definition, generation,
             saved?.Timeline?.LastClockMutation ?? Clock.LastConsumedMutation, NextGeneration, Execute,
-            saved?.Timeline, saved?.Locals, saved?.Compiled);
+            saved?.Timeline, saved?.Locals, saved?.Compiled, _globals);
         var entry = new Entry(definition, saved ?? initial, lifetime);
         entry.State = CaptureEntry(entry);
         return entry;

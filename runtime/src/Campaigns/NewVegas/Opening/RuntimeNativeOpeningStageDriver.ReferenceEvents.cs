@@ -127,7 +127,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         results.BindCampaignChallengeRewards();
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
-            EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true);
+            EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true, globals: _globals);
         _scripts.References!.ExecutePerkQuestStage = ExecutePlayerPerkQuestStage;
         RestoreStageResults();
         _scriptHost = _scriptHost with
@@ -180,7 +180,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
             _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting,
-            _scripts.References!.GetDeadCount, ownedResults: results.ExecuteResultOwned);
+            _scripts.References!.GetDeadCount, ownedResults: results.ExecuteResultOwned, globals: _globals);
         AddChild(_conversation);
     }
 

@@ -57,7 +57,7 @@ internal sealed class FalloutLevelUpMenuCatalogue
         new FalloutLevelUpPerkChoice(perk.Form, perk.SourceSha256, perk.MaximumRank)).ToArray();
 
     internal bool Eligible(FalloutFormKey form, int gainedLevel, Func<FalloutFormKey, int> rank,
-        Func<FalloutCondition, float> evaluate)
+        Func<FalloutCondition, float> evaluate, FalloutGlobalState? globals = null)
     {
         var perk = Perks.SingleOrDefault(perk => perk.Form == form) ??
             throw new InvalidDataException("Level-up eligibility does not own this source PERK.");
@@ -69,7 +69,7 @@ internal sealed class FalloutLevelUpMenuCatalogue
         if (gainedLevel < 2 || acquired < 0 || acquired > perk.MaximumRank)
             throw new InvalidDataException("Level-up eligibility has an invalid level or acquired rank.");
         return gainedLevel >= perk.MinimumLevel && acquired < perk.MaximumRank &&
-            FalloutCondition.AllPass(perk.Conditions, evaluate, evaluateRunOn: true);
+            FalloutCondition.AllPass(perk.Conditions, evaluate, evaluateRunOn: true, globals: globals);
     }
 
     internal void RequireSession(FalloutLevelUpMenuSession session)

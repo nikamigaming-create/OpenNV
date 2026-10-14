@@ -80,7 +80,8 @@ internal sealed partial class FalloutSourceReferencePositionState
         if (_current is not null) { _fault++; throw new InvalidOperationException("Entered reference fields cannot be captured."); }
         var saved = new FalloutReferencePositionSnapshot(Schema, Source, Stack, Actor, Process, Factory, Constructor,
             _sequence, _values, Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_calls.Select(CloneCall).ToArray()),
-            new Dictionary<FalloutReferencePositionLane, string>(_writers), _retired);
+            new Dictionary<FalloutReferencePositionLane, string>(_writers), _retired,
+            Array.AsReadOnly(_frameReceipts.Runs.Select(ClonePositionFrames).ToArray()));
         Validate(saved, Source, Stack, Actor); return saved;
     }
     internal void Retire()
@@ -135,8 +136,15 @@ internal sealed partial class FalloutSourceReferencePositionState
         var writers = Enum.GetValues<FalloutReferencePositionLane>().ToDictionary(value => value, _ => PrefixBoundary);
         long sequence = 0; var ids = new HashSet<Guid>(); var threads = new Dictionary<Guid, int>(); var lastPublication = -1;
         var prefixCount = 0; FalloutReferencePositionCall? startup = null; var configuredCount = 0;
-        foreach (var call in saved.Calls)
+        var history = PositionHistory(saved).ToArray();
+        foreach (var item in history)
         {
+            if (item.Frames is { } frames)
+            {
+                ValidatePositionFrames(frames, saved, publications, threads, ref lastPublication, ref sequence, ref values, writers);
+                continue;
+            }
+            var call = item.Call!;
             var invocation = call.Invocation;
             invocation.ValidatePackageCaller();
             if (call.Source != source.Identity || invocation.Call == Guid.Empty || !ids.Add(invocation.Call) || invocation.Actor != actor ||
@@ -190,7 +198,7 @@ internal sealed partial class FalloutSourceReferencePositionState
                 if (prefix.Returned)
                     foreach (var lane in new[] { FalloutReferencePositionLane.PositionMode,
                         FalloutReferencePositionLane.Scale, FalloutReferencePositionLane.PersistentCell, FalloutReferencePositionLane.ActorYawMode,
-                        FalloutReferencePositionLane.ActorAssignmentByte, FalloutReferencePositionLane.FollowerExtra }) writers.Remove(lane);
+                        FalloutReferencePositionLane.ActorAssignmentByte, FalloutReferencePositionLane.FollowerExtra, FalloutReferencePositionLane.ReferenceKind }) writers.Remove(lane);
             }
             if (call.InvalidatedLane is { } invalidated)
             {
@@ -221,6 +229,6 @@ internal sealed partial class FalloutSourceReferencePositionState
             writers.Any(value => !saved.UnownedWriters.TryGetValue(value.Key, out var boundary) || boundary != value.Value))
             throw new InvalidDataException("Reference snapshot changed its current state or writer availability.");
         FalloutReferencePublicationSequence.Validate(saved.Publications.Select(value => (value.Process, value.PublishedSequence)),
-            saved.Calls.Select(value => (value.Invocation.ReferenceProcess, value.Entered, value.Changed)), saved.Sequence);
+            history.Select(value => (value.Process, value.Entered, value.Changed)), saved.Sequence);
     }
 }

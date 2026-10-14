@@ -282,6 +282,8 @@ internal sealed partial class FalloutEarlyControllerFactory
             throw new InvalidDataException("Cold detached controller lost its source/native/state-context/descriptor lineage.");
         saved.Lineage.Actor.Validate();
         FalloutEarlyController.ValidatePostProcessFields(saved.PostProcessFields);
+        if (saved.MoverDelta is { } delta) FalloutEarlyController.ValidateMoverDelta(delta);
+        if (saved.ActorMovement is { } movement) FalloutEarlyController.ValidateActorMovement(movement);
         if (saved.Descriptor.Model is null || saved.Descriptor != Descriptor(saved.Descriptor.Player,
             saved.Descriptor.AllocatedFilter, saved.Descriptor.Model) ||
             saved.Descriptor.Model.Model is not null ||

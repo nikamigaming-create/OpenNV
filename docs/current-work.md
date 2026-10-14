@@ -25,8 +25,10 @@ inhibition timer and bytes, Actor-time, and default XY/Z mover stores. The Scene
 argument equals the actual cached Main timer value. The winning signed hardware
 thread count is two; it is independent of the exterior buffer setting.
 
-The next actual failure is the late mover-delta virtual. Diagnostics retain that
-World failure and its returned children with zero recorded publication losses.
+The fresh movement run also returns the late mover-delta and its nonnull-data
+Actor movement child, including the real controller and base-reference position
+owner. The next actual failure is the following Player tail. Diagnostics retain
+that World failure and its returned children with zero recorded publication losses.
 Escape opens Pause; the observed Quit/Yes controls exit normally with code zero
 and dispose the source owners. This is faulted-session cleanup, not a healthy
 Player frame, save/Continue or repeated-frame proof.
@@ -50,8 +52,10 @@ Player services remain incomplete; startup identities do not admit gameplay.
 
 ## Verification and publication
 
-Main contains checked PR 202. The current branch is based on synchronized main
-and preserves the original New Vegas save. Actor-time, cached-clock, independent
+Main contains checked PR 203. Its runtime and three launcher CI checks passed
+before merge. Local main equals origin/main at
+`f88324fc1ab0f2a80975bc57cd0000a3ae1eb755`. The fresh movement branch preserves
+the original New Vegas save. Actor-time, cached-clock, independent
 read-owner, late-prefix, historical inhibition and JSON component checks pass.
 Compiled owned FO3 source and constructor audits pass. The Actor-time checkpoint
 passed the full pinned gate and selected owned Release construction audit.
@@ -62,10 +66,66 @@ override preservation, invalid projection rejection and retained source owners.
 A fabricated full snapshot remains refused. Shader checks cover Model 2/3,
 distinct semantic banks, stages, masks, modifiers and reserved declaration/token
 controls. Actual selected owned climate and celestial decode/emit audits pass.
-The full pinned gate passes on the combined current branch, including Release/
+The published timing/rendering repair passed the full pinned gate, including Release/
 Debug, formatting/analyzers, contracts, launcher and actual headless native
 project audits. Selected owned Release FO3 constructor, climate and celestial
-decode/emit checks pass. Publication through the checked PR is next.
+decode/emit checks pass.
+
+The movement/global-condition/dialogue batch builds with zero warnings. Focused
+mover, movement-field and native controller checks pass. The existing setter,
+change-map, form-file and thread owners pass 100,000 authored frame calls with
+bounded receipts and three JSON/cold component cycles. Owned movement source
+qualification passes after correcting a derived constructor offset. An ordinary
+FO3 rerun then exposed an INI provenance/stack identity comparison; the repair
+borrows the actual injected record stack's numeric settings. The next ordinary
+run returns mover-delta and its Actor movement child, then refuses the following
+Player tail. Normal Quit/Yes exits zero and disposes source owners. No complete
+Player/Main frame, gameplay save or native cold Continue is accepted.
+
+Live comparison-global conditions now retain raw FormIDs and use the owning
+plugin's masters and shared current globals. Authored operator/owner/cold checks
+pass; the selected FO3 corpus audit verifies 778 such operands. Silent player
+INFOs run the actual Begin/End and link owners without an audio response. Their
+authored and compiled-result/cold checks pass; the owned corpus is classified
+without forcing quest state. Fresh cold model bindings now preserve a complete
+authored NIF logical graph, fields and materials through three JSON process
+reconstructions, without replaying constructors/setters or old native releases.
+Tampered bindings and graphs refuse. This does not prove the native factory or
+campaign Continue. Complete native dialogue/save/Continue and route acceptance
+remain open. The combined batch passes the full pinned gate: Release/Debug C#,
+formatting/analyzers, contract probes, both native configurations, launcher and
+Godot physics/navigation checks. Selected owned Release movement/tail, conditions,
+silent-INFO and Book source audits pass. Checked CI/merge and local-main equality
+remain publication requirements.
+
+The next Player-tail component builds and passes authored three-cycle checks and
+owned source qualification. Its death timer, shared Scene bracket, mandatory
+animation reads and pair/Extra list owners remain individual children. Production
+does not return this child using stale constructor-null animation pointers: the
+selected first/Common animation loader and complete tail are still unfinished.
+
+TTW's unchanged selected stack now returns both Book page sound pointer writes,
+with four actual native SDK/store/restore events per direction and no Book
+failures. The prior four model events remain returned. The original module next
+refuses a distinct image mutation; child exit retires resources and Godot exits
+one. Complete Load, Book audio and gameplay remain unaccepted. The Book's read-only
+data extent and owning consumer checks pass authored and owned-source audits.
+Profiling identified repeated HUD source qualification; bounded verified-hash
+reuse reduces the selected movement-source audit from 41.1 to 26.9 seconds in a
+fresh process. This is not a whole-game load or frame-performance claim.
+
+Adversarial review before merge found failed model assembly/free, zero-retain
+binding leaks, health-gated retirement and omitted failed Actor children. Cleanup
+now distinguishes source reference counts from native binding lifetime, preserves
+adopted models after later assembly failure, and retires graphs after successful
+source release. Failed Actor calls are retained by invocation in their mover.
+Focused failure, aggregate-join and independent-JSON checks pass. A fresh ordinary
+FO3 repeat returns both movement children, loads in 101.5 seconds (prior run
+322.6 seconds), then reaches the same tail boundary with zero publication loss.
+Observed Quit/Yes exits zero and disposes source owners; the original NV save hash
+is unchanged. These run timings are observations, not a general load-performance
+guarantee. The review corrections pass the full pinned gate and selected owned
+Release audit. CI must validate the corrected PR revision before merge.
 
 Publish the checked source repair through a PR, merge it and verify clean local
 main equals origin/main before starting the next feature branch. Private owned
@@ -73,14 +133,16 @@ inputs, saves, selectors and captures are never public repository inputs.
 
 ## Next runtime owner
 
-Implement the reached mover-delta and enclosing nonnull Actor movement body.
-Private candidates retain qualified source associations but remain uncompiled,
-unexecuted and unpromoted. Production composition must publish reference-data
-construction at its real constructor, the returned third-person model at genuine
-3D load, and the existing TES current-CELL scalar at the original interior/
-exterior load writers. Parent linkage, rendered roots and first-person resources
-cannot supply those fields. Reuse the same Common/controller, reference XYZ,
-orientation, control words, camera, numeric INI and speed-cache owners.
+Finish the following Player tail after the returned ordinary mover/Actor calls.
+The current batch composes reference-data construction, returned third-person
+logical/native models and independent interior/exterior TES scalar stores. The
+enclosing original 3D loader and its AnimData writers remain separate, unaccepted
+owners; constructor-null pointers cannot survive a reached load writer. Current
+private work implements that tail/load ownership and the two reached TTW Book
+sound operands. Review also found and repaired a failed model factory's orphan
+cleanup; cold nonnull-model binding and historical model/movement joins now pass
+focused authored checks. Parent linkage and native root
+residency cannot supply TES or reference-data fields.
 
 Bind the entered mover/Actor children to actual Main/frame/thread/constructor
 epochs and retain their cold joins. Bound recurring position/change/file/thread

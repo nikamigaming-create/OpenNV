@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 using System.Xml.Linq;
 using Godot;
 using OpenNV.Runtime.Content;
@@ -42,11 +43,12 @@ internal sealed partial class NativeOwnedTraitMenu : Control
 
     internal NativeOwnedTraitMenu(FalloutPluginStack records, FalloutTraitMenuContract contract,
         IReadOnlyList<FalloutNativeTraitIdentity> current, int playerLevel, Func<FalloutCondition, float> evaluate,
-        Action<IReadOnlyList<FalloutNativeTraitIdentity>> accepted, Action<Exception> failed)
+        Action<IReadOnlyList<FalloutNativeTraitIdentity>> accepted, Action<Exception> failed,
+        FalloutGlobalState? globals = null)
     {
         Name = "TraitMenu"; ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Ignore;
         _records = records; _accepted = accepted; _failed = failed;
-        _selection = new(records, contract, current, playerLevel, evaluate);
+        _selection = new(records, contract, current, playerLevel, evaluate, globals);
         var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/trait_menu.xml")).Elements("menu").Single();
         _tiles = new(menu, name => FalloutGameSettingStrings.Read(records, name));
         XElement Named(string name) => menu.DescendantsAndSelf().Single(tile => (string?)tile.Attribute("name") == name);

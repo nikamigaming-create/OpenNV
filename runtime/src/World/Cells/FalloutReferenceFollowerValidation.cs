@@ -15,19 +15,21 @@ internal sealed class FalloutReferenceFollowerValidation
     {
         FalloutSourceReferencePositionState.Validate(reference, reference.Source, reference.Stack, reference.Actor);
         _reference = reference; _source = FalloutReferenceFollowerSource.Reviewed(reference.Source).Identity;
-        var grouped = reference.Calls.GroupBy(call => call.Invocation.ReferenceProcess)
+        var grouped = FalloutSourceReferencePositionState.PositionHistory(reference).GroupBy(item => item.Process)
             .ToDictionary(group => group.Key, group => group.ToArray());
         Guid? extra = null, payload = null; var available = false;
         foreach (var publication in reference.Publications)
         {
             Store(publication.PublishedSequence!.Value);
-            foreach (var call in grouped.GetValueOrDefault(publication.Process) ?? [])
-            {
-                extra = call.After.FollowerExtra; payload = call.After.FollowerPayload;
-                if (call.Prefix is { Returned: true }) available = true;
-                if (call.InvalidatedLane == FalloutReferencePositionLane.FollowerExtra) available = false;
-                Store(call.Changed);
-            }
+            foreach (var item in grouped.GetValueOrDefault(publication.Process) ?? [])
+                foreach (var call in item.Call is { } ordinary ? new[] { ordinary } :
+                    item.Frames!.FirstCalls.Concat(item.Frames.LastCalls).DistinctBy(row => row.Changed))
+                {
+                    extra = call.After.FollowerExtra; payload = call.After.FollowerPayload;
+                    if (call.Prefix is { Returned: true }) available = true;
+                    if (call.InvalidatedLane == FalloutReferencePositionLane.FollowerExtra) available = false;
+                    Store(call.Changed);
+                }
             void Store(long changed) => _boundaries.Add((publication.Process, publication.Factory, publication.Constructor, changed),
                 new(extra, payload, available));
         }

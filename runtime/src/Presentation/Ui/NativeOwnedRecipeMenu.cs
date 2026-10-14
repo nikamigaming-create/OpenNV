@@ -8,6 +8,7 @@ namespace OpenNV.Runtime.Presentation.Ui;
 internal sealed partial class NativeOwnedRecipeMenu : Control
 {
     private readonly FalloutPluginStack _records;
+    private readonly FalloutGlobalState? _globals;
     private readonly FalloutPlayerInventory _inventory;
     private readonly IReadOnlyList<FalloutRecipe> _recipes;
     private readonly Func<FalloutCondition, float> _evaluateCondition;
@@ -27,12 +28,12 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
     internal NativeOwnedRecipeMenu(FalloutPluginStack records, FalloutPlayerInventory inventory,
         FalloutRecipeCategory category, IReadOnlyList<FalloutRecipe> recipes,
         Func<FalloutCondition, float> evaluateCondition, Func<int, float> skillValue,
-        Action<FalloutRecipe> craft, Action close)
+        Action<FalloutRecipe> craft, Action close, FalloutGlobalState? globals = null)
     {
         Name = "OwnedRecipeMenu";
         ProcessMode = ProcessModeEnum.Always;
         MouseFilter = MouseFilterEnum.Stop;
-        _records = records; _inventory = inventory; _category = category; _recipes = recipes;
+        _records = records; _globals = globals; _inventory = inventory; _category = category; _recipes = recipes;
         _evaluateCondition = evaluateCondition; _skillValue = skillValue; _craft = craft; _close = close;
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         AddChild(new ColorRect
@@ -166,7 +167,7 @@ internal sealed partial class NativeOwnedRecipeMenu : Control
     {
         try
         {
-            if (!FalloutCondition.AllPass(recipe.Conditions, _evaluateCondition, evaluateRunOn: true))
+            if (!FalloutCondition.AllPass(recipe.Conditions, _evaluateCondition, evaluateRunOn: true, globals: _globals))
                 return (false, false, "requirements not met");
         }
         catch (Exception error)

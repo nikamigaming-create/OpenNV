@@ -67,7 +67,7 @@ internal partial class RuntimeNativePlayer
         var actor = _thirdPerson?.Actor ?? throw new NotSupportedException("Player knockdown has no actual source body.");
         if (!actor.IsInsideTree()) throw new NotSupportedException("Player knockdown body is detached.");
         var records = _physicalRecords!; var content = RuntimeLiveContentSource.Current!;
-        _playerRecoveryTree = new(records, actor.Appearance.SkeletonPath, 106);
+        _playerRecoveryTree = new(records, actor.Appearance.SkeletonPath, 106, _combatGlobals);
         // Preparation inspects all possible source leaves; it executes no CTDA,
         // consumes no random value and invents no selected recovery branch.
         foreach (var idle in _playerRecoveryTree.CandidateLeaves)

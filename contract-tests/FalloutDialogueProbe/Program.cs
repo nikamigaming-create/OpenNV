@@ -23,7 +23,11 @@ if (args is ["--inspect-idle-tree", var treeRoot, var modelPrefix])
             record.FormKey, editorId = record.ReadSubrecords().Where(field => field.Signature == "EDID")
                 .Select(field => FalloutDialogueTopic.Text(field.Data.Span)).SingleOrDefault(),
             branch.Model, branch.Parent, branch.Previous, branch.Group,
-            conditions = branch.Conditions.Select(c => new { c.Function, c.Flags, c.Comparison, c.Argument1, c.Argument2, c.RunOn, c.Reference }),
+            conditions = branch.Conditions.Select(c => new
+            {
+                c.Function, c.Flags, comparison = c.UsesComparisonGlobal ? (float?)null : c.Comparison,
+                comparisonGlobalRaw = c.GlobalComparison?.RawFormId, c.Argument1, c.Argument2, c.RunOn, c.Reference
+            }),
         }));
     }
     return;

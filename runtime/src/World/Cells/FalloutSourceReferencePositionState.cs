@@ -9,7 +9,7 @@ namespace OpenNV.Runtime.World.Cells;
 // rendered transforms and native controller poses are independent consumers.
 internal sealed partial class FalloutSourceReferencePositionState
 {
-    internal const string Schema = "opennv-source-reference-position/v2";
+    internal const string Schema = "opennv-source-reference-position/v3";
     internal const string PrefixBoundary = "source-reference-position-constructor-current-writer-prefix-unbound";
     internal const string AdjustedBoundary = "source-reference-adjusted-position-bounds-and-scratch-ring-unbound";
     private readonly FalloutPluginStack _records;
@@ -35,7 +35,7 @@ internal sealed partial class FalloutSourceReferencePositionState
     internal FalloutReferencePositionCall? ConfiguredStartup { get; private set; }
     internal bool HasConstructedPrefix => LastPrefix is not null;
     internal string? SaveBlocker => _current is not null ? "source-reference-position-in-flight" :
-        _retired ? "source-reference-position-retired" : _calls.FirstOrDefault(value => !value.Returned)?.Failure ??
+        _retired ? "source-reference-position-retired" : _failure ??
         _writers.Values.FirstOrDefault();
 
     internal FalloutSourceReferencePositionState(FalloutReferencePositionSource source, FalloutPluginStack records,
@@ -57,6 +57,7 @@ internal sealed partial class FalloutSourceReferencePositionState
             _values = saved.Values; _sequence = saved.Sequence;
             _writers.Clear(); foreach (var writer in saved.UnownedWriters) _writers.Add(writer.Key, writer.Value);
             _publications.AddRange(saved.Publications); _calls.AddRange(saved.Calls.Select(CloneCall));
+            _frameReceipts.Restore(saved.FrameRuns); _failure = _calls.FirstOrDefault(value => !value.Returned)?.Failure;
             foreach (var call in _calls) _invocations.Add(call.Invocation.Call);
             LastPrefix = _calls.LastOrDefault(value => value.Prefix is not null)?.Prefix;
             ConstructorStartup = _calls.LastOrDefault(value => value.Kind == "constructor-startup-position");
@@ -97,7 +98,7 @@ internal sealed partial class FalloutSourceReferencePositionState
         });
         foreach (var lane in new[] { FalloutReferencePositionLane.PositionMode,
             FalloutReferencePositionLane.Scale, FalloutReferencePositionLane.PersistentCell, FalloutReferencePositionLane.ActorYawMode,
-            FalloutReferencePositionLane.ActorAssignmentByte, FalloutReferencePositionLane.FollowerExtra }) _writers.Remove(lane);
+            FalloutReferencePositionLane.ActorAssignmentByte, FalloutReferencePositionLane.FollowerExtra, FalloutReferencePositionLane.ReferenceKind }) _writers.Remove(lane);
         return LastPrefix!;
     }
 
@@ -291,7 +292,8 @@ internal sealed partial class FalloutSourceReferencePositionState
     {
         ObjectDisposedException.ThrowIf(_retired, this);
         if (_current is not null) { _fault++; throw new InvalidOperationException("Reference position reentered its actual writer."); }
-        if (!_invocations.Add(invocation.Call)) throw new InvalidOperationException("Reference position replayed an original invocation.");
+        PrepareFramePosition(invocation, kind);
+        if (invocation.Frame is null && !_invocations.Add(invocation.Call)) throw new InvalidOperationException("Reference position replayed an original invocation.");
         var scope = new Scope(invocation, kind, ++_sequence, _values, _fault);
         if (kind == "constructed-reference-field-prefix")
             scope.Prefix = new(Source.Identity, Factory, Constructor, invocation, Actor.BaseSha256, null, null, false, false, null);
@@ -307,7 +309,8 @@ internal sealed partial class FalloutSourceReferencePositionState
         var call = new FalloutReferencePositionCall(scope.Invocation, Source.Identity, Factory, scope.Entered,
             changed, scope.Kind, scope.Step, scope.Before, _values, Array.AsReadOnly(scope.Stores.ToArray()), returned,
             failure, scope.Flags, scope.BaseKind, scope.Persistent, scope.Worldspace, scope.Change, scope.Prefix, scope.Invalidated, scope.WriterBoundary);
-        _calls.Add(call);
+        RetainPositionCall(call);
+        _failure ??= failure;
         if (scope.Kind == "constructor-startup-position") ConstructorStartup = call;
         if (scope.Kind == "configured-startup-position") ConfiguredStartup = call;
         return call;
@@ -336,6 +339,7 @@ internal sealed partial class FalloutSourceReferencePositionState
     {
         ObjectDisposedException.ThrowIf(_retired, this); ArgumentNullException.ThrowIfNull(invocation);
         invocation.ValidatePackageCaller();
+        if (invocation.Frame is null) _frameReceipts.Seal();
         if (invocation.Call == Guid.Empty || invocation.Actor != Actor || invocation.ReferenceProcess != Process ||
             invocation.ReferenceConstructor != Constructor || invocation.CommonProcess == Guid.Empty || invocation.Epoch < 1 ||
             invocation.ThreadId != Environment.CurrentManagedThreadId || !Enum.IsDefined(invocation.Ingress) ||

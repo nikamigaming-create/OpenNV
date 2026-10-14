@@ -7,7 +7,7 @@ namespace OpenNV.Runtime.World.Cells;
 // creates a replacement map or treats source loading as an unconditional skip.
 internal sealed partial class FalloutSourceReferenceChangeManager
 {
-    internal const string Schema = "opennv-source-reference-change-map/v1";
+    internal const string Schema = "opennv-source-reference-change-map/v2";
     private readonly Action<FalloutReferencePositionInvocation> _requireActual;
     private readonly Dictionary<uint, FalloutReferenceChangeEntry> _entries = [];
     private readonly List<FalloutReferenceChangeEntry> _pending = [];
@@ -28,16 +28,17 @@ internal sealed partial class FalloutSourceReferenceChangeManager
     internal Guid Constructor { get; }
     internal FalloutReferenceChangeCall? StartupFlagClear { get; private set; }
     internal string? SaveBlocker => _current is not null ? "source-reference-change-map-in-flight" :
-        _retired ? "source-reference-change-map-retired" : _writerBoundary ?? _calls.FirstOrDefault(value => !value.Returned)?.Failure;
+        _retired ? "source-reference-change-map-retired" : _writerBoundary ?? _failure;
 
     internal FalloutSourceReferenceChangeManager(FalloutReferencePositionSource source, string stack,
         Guid process, Guid constructor, Action<FalloutReferencePositionInvocation> requireActual,
-        FalloutReferenceChangeSnapshot? saved = null)
+        FalloutReferenceChangeSnapshot? saved = null, Action? retainCurrentFrameThreadRead = null)
     {
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack); ArgumentNullException.ThrowIfNull(requireActual);
         if (process == Guid.Empty || constructor == Guid.Empty)
             throw new InvalidDataException("Reference change manager lacks its actual shared constructor/process.");
         Source = source; Stack = stack; Process = process; Constructor = constructor; _requireActual = requireActual;
+        _retainFrameThreadRead = retainCurrentFrameThreadRead;
         if (saved is not null)
         {
             Validate(saved, source, stack);
@@ -45,6 +46,7 @@ internal sealed partial class FalloutSourceReferenceChangeManager
                 throw new InvalidDataException("Cold change manager reused its process, constructor or retirement.");
             _sequence = saved.Sequence; _managerFlags = saved.ManagerFlags; _writerBoundary = saved.WriterBoundary;
             _publications.AddRange(saved.Publications); _calls.AddRange(saved.Calls.Select(CloneCall));
+            _frameReceipts.Restore(saved.FrameRuns); _failure = _calls.FirstOrDefault(value => !value.Returned)?.Failure;
             foreach (var entry in saved.Entries) _entries.Add(entry.SourceFormId, entry);
             _pending.AddRange(saved.PendingEntries ?? []);
             foreach (var data in saved.Data ?? []) _data.Add(data.Identity, new(data));
@@ -154,6 +156,7 @@ internal sealed partial class FalloutSourceReferenceChangeManager
     {
         ObjectDisposedException.ThrowIf(_retired, this);
         if (_current is not null) { _fault++; throw new InvalidOperationException("Shared reference change manager reentered."); }
+        PrepareFrameChange(invocation, kind, mask, force);
         var scope = new Scope(invocation, kind, mask, force, ++_sequence, _managerFlags, _fault); _current = scope;
         try { Guard(scope); action(scope); Guard(scope); scope.Step = FalloutReferenceChangeStep.Returned; return Complete(scope, true, null); }
         catch (Exception error) { Complete(scope, false, string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message); throw; }
@@ -165,7 +168,8 @@ internal sealed partial class FalloutSourceReferenceChangeManager
             checked(++_sequence), scope.Step, scope.Mask, scope.Force, scope.ManagerBefore, _managerFlags,
             scope.Flags, scope.ThreadFlags, scope.FormId, scope.Before, scope.After,
             Array.AsReadOnly(scope.Stores.ToArray()), returned, failure, scope.DataHandler, scope.Suppressed, scope.Writer, scope.Kind);
-        _calls.Add(call); if (scope.Kind == "startup-manager-flag-one-clear") StartupFlagClear = call; return call;
+        RetainChangeCall(call); _failure ??= failure;
+        if (scope.Kind == "startup-manager-flag-one-clear") StartupFlagClear = call; return call;
     }
     private void Store(Scope scope, FalloutReferenceChangeStep step, uint? bits = null, Guid? entry = null, Guid? data = null)
     { scope.Step = step; scope.Stores.Add(new(step, checked(++_sequence), bits, entry, data)); }

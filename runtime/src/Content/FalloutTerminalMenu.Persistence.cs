@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutTerminalClosedStageFailure(int Statement, int StatementCount,
@@ -47,9 +48,9 @@ internal sealed partial class FalloutTerminalMenu
 
     private FalloutTerminalMenu(FalloutPluginStack records, FalloutTerminalClosedSnapshot saved,
         Action<FalloutFormKey> requireAdmission, Func<FalloutFormKey, FalloutCondition, float> evaluateCondition,
-        Action<FalloutTerminalSelection> executeSelection)
+        Action<FalloutTerminalSelection> executeSelection, FalloutGlobalState? globals)
     {
-        _records = records; _requireAdmission = requireAdmission; _evaluateCondition = evaluateCondition;
+        _records = records; _globals = globals; _requireAdmission = requireAdmission; _evaluateCondition = evaluateCondition;
         _executeSelection = executeSelection; Reference = saved.Reference; _referenceHash = saved.ReferenceHash;
         RootPage = FalloutTerminal.Read(records, saved.Root); CurrentPage = FalloutTerminal.Read(records, saved.Page);
         Generation = saved.Generation; Active = false;
@@ -64,11 +65,12 @@ internal sealed partial class FalloutTerminalMenu
 
     internal static FalloutTerminalMenu RestoreClosed(FalloutPluginStack records, FalloutTerminalClosedSnapshot saved,
         IReadOnlyList<FalloutQuestStageResultSnapshot> stageResults, Action<FalloutFormKey> requireAdmission,
-        Func<FalloutFormKey, FalloutCondition, float> evaluateCondition, Action<FalloutTerminalSelection> executeSelection)
+        Func<FalloutFormKey, FalloutCondition, float> evaluateCondition, Action<FalloutTerminalSelection> executeSelection,
+        FalloutGlobalState? globals = null)
     {
         ValidateClosed(records, [saved], stageResults);
         // A closed owner restores no visible rows and executes no predicate or result.
-        return new(records, saved, requireAdmission, evaluateCondition, executeSelection);
+        return new(records, saved, requireAdmission, evaluateCondition, executeSelection, globals);
     }
 
     internal static void ValidateClosed(FalloutPluginStack records, IReadOnlyList<FalloutTerminalClosedSnapshot> saved,

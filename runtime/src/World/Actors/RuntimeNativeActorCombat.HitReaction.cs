@@ -43,7 +43,7 @@ internal sealed partial class RuntimeNativeActorCombat
         FalloutCondition? failedCondition = null;
         try
         {
-            _hitReactionTree ??= new(_records, _skeletonPath);
+            _hitReactionTree ??= new(_records, _skeletonPath, globals: _context?.Globals);
             var selected = _hitReactionTree.Select(condition =>
             {
                 var before = _state.HitReactionRandom.State;

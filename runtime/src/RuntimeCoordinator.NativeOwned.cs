@@ -1389,6 +1389,8 @@ public partial class RuntimeCoordinator
             throw new InvalidOperationException("New Game player has no admitted source placement.");
         var transform = startupPlacement is not null ? NativePlayerPlacementTransform(startupPlacement) : Transform3D.Identity;
         _nativePlayer = new RuntimeNativePlayer { ProcessMode = ProcessModeEnum.Disabled };
+        _nativePlayer.BindStandaloneReferenceModelLoad(_nativeReferences ??
+            throw new InvalidOperationException("Player model loading has no actual source World."));
         _nativePlayer.ActivateReference = collider => _nativeReferenceEvents?.TryActivate(collider) == true;
         _nativePlayer.NoActivationFeedback = () =>
             (_nativeQuestScripts ?? throw new InvalidOperationException("Native activation feedback has no quest session."))

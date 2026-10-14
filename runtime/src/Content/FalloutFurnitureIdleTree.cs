@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
@@ -10,10 +11,12 @@ internal sealed record FalloutIdleBranch(FalloutPluginRecord Record, string Mode
 internal sealed class FalloutFurnitureIdleTree
 {
     private readonly IReadOnlyList<FalloutIdleBranch> _branches;
+    private readonly FalloutGlobalState? _globals;
     private readonly IReadOnlyDictionary<string, int> _pluginOrder;
 
-    internal FalloutFurnitureIdleTree(FalloutPluginStack stack, string skeletonPath)
+    internal FalloutFurnitureIdleTree(FalloutPluginStack stack, string skeletonPath, FalloutGlobalState? globals = null)
     {
+        _globals = globals;
         _pluginOrder = stack.Plugins.ToDictionary(value => value.Plugin.Name, value => value.LoadOrderIndex, StringComparer.OrdinalIgnoreCase);
         var directory = skeletonPath[..skeletonPath.LastIndexOf('/')];
         _branches = stack.EffectiveRecords("IDLE").Select(record => (record, fields: record.ReadSubrecords().ToArray()))
@@ -42,7 +45,7 @@ internal sealed class FalloutFurnitureIdleTree
         var roots = _branches.Where(branch => branch.Parent is null &&
             !branch.Model.EndsWith(".kf", StringComparison.OrdinalIgnoreCase) &&
             branch.Conditions.Any(condition => condition.Function is 159 or 49) &&
-            FalloutCondition.AllPass(branch.Conditions, evaluate)).ToArray();
+            FalloutCondition.AllPass(branch.Conditions, evaluate, globals: _globals)).ToArray();
         if (roots.Length != 1) throw new NotSupportedException($"Furniture procedure has {roots.Length} eligible source roots: {string.Join(',', roots.Select(value => value.Record.FormKey))}.");
         return Visit(roots[0], new HashSet<FalloutFormKey>()) ??
             throw new NotSupportedException("Furniture procedure has no eligible source KF leaf.");
@@ -54,7 +57,7 @@ internal sealed class FalloutFurnitureIdleTree
             foreach (var child in Order(_branches.Where(value => value.Parent == branch.Record.FormKey)
                 .OrderBy(value => _pluginOrder[value.Record.FormKey.OwnerPlugin]).ToArray()))
             {
-                if (!FalloutCondition.AllPass(child.Conditions, evaluate)) continue;
+                if (!FalloutCondition.AllPass(child.Conditions, evaluate, globals: _globals)) continue;
                 var result = Visit(child, new(ancestors));
                 if (result is not null) return result;
                 if ((child.Group & 0x80) != 0) return null;

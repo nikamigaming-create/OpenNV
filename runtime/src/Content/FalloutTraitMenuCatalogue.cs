@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutPerkDeclaration(bool Trait, byte MinimumLevel, byte Ranks,
@@ -35,7 +36,7 @@ internal static class FalloutTraitMenuCatalogue
     }
 
     internal static bool Eligible(FalloutPluginStack records, FalloutNativeTraitIdentity trait,
-        int playerLevel, Func<FalloutCondition, float> evaluate)
+        int playerLevel, Func<FalloutCondition, float> evaluate, FalloutGlobalState? globals = null)
     {
         if (playerLevel < 1) throw new InvalidDataException("Trait selection has an invalid player level.");
         var record = records.GetEffective(records.RuntimeFormKey(trait.RuntimeFormId));
@@ -44,7 +45,7 @@ internal static class FalloutTraitMenuCatalogue
         if (declaration.Ranks == 0)
             throw new NotSupportedException($"Trait {record.FormKey} has no selectable rank owner.");
         return playerLevel >= declaration.MinimumLevel &&
-            FalloutCondition.AllPass(declaration.Conditions, evaluate, evaluateRunOn: true);
+            FalloutCondition.AllPass(declaration.Conditions, evaluate, evaluateRunOn: true, globals: globals);
     }
 
     internal static void Validate(FalloutPluginStack records, IReadOnlyList<FalloutNativeTraitIdentity> selection)

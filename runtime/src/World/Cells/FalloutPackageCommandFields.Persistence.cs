@@ -51,11 +51,20 @@ internal sealed partial class FalloutActorPackageCommandFields
         var scriptCalls = ValidateScriptInitializationHistory(saved, source, stack, actor);
         var scriptOperations = saved.ScriptInitializationOperations ?? [];
         var history = saved.Operations.Select(operation => (operation.Entered, Command: (FalloutPackageCommandFieldOperation?)operation,
-            Script: (FalloutScriptExtraInitializationFieldOperation?)null)).Concat(scriptOperations.Select(operation =>
-            (operation.Entered, Command: (FalloutPackageCommandFieldOperation?)null, Script: (FalloutScriptExtraInitializationFieldOperation?)operation)))
+            Script: (FalloutScriptExtraInitializationFieldOperation?)null, Animation: (FalloutReferenceAnimationLoadWriter?)null)).Concat(scriptOperations.Select(operation =>
+            (operation.Entered, Command: (FalloutPackageCommandFieldOperation?)null, Script: (FalloutScriptExtraInitializationFieldOperation?)operation,
+                Animation: (FalloutReferenceAnimationLoadWriter?)null)))
+            .Concat((saved.AnimationTail?.LoadWriters ?? []).Select(operation => (operation.Entered,
+                Command: (FalloutPackageCommandFieldOperation?)null, Script: (FalloutScriptExtraInitializationFieldOperation?)null,
+                Animation: (FalloutReferenceAnimationLoadWriter?)operation)))
             .OrderBy(value => value.Entered);
         foreach (var entry in history)
         {
+            if (entry.Animation is { } animation)
+            {
+                ValidateAnimationPointerOperation(animation, saved, ref values, ref sequence, sourceThreads, publicationOrder, ref lastPublication);
+                continue;
+            }
             if (entry.Script is { } script)
             {
                 ValidateScriptInitializationOperation(script, scriptCalls, ref values, available, ref sequence,
@@ -126,6 +135,7 @@ internal sealed partial class FalloutActorPackageCommandFields
             saved.Availability.Select(value => value.Lane).Distinct().Count() != available.Count ||
             saved.Availability.Any(value => !available.TryGetValue(value.Lane, out var expected) || value != expected))
             throw new InvalidDataException("Package command current fields/availability disagree with their original ordered writers.");
+        ValidateAnimationTailFields(saved);
     }
 
     private static void ValidateOperation(FalloutPackageCommandFieldOperation operation, FalloutPackageCommandFieldValues before,

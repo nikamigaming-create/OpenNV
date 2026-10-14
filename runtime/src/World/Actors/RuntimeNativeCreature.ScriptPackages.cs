@@ -19,7 +19,7 @@ internal sealed partial class RuntimeNativeCreature
     private FalloutPluginRecord? SelectSourcePackage(bool reevaluateScript)
         => _aiWorld!.SelectActorPackage(Appearance.Reference!.Value, PackageCondition,
             _aiState!.Templates, _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true,
-            reevaluateScript, PackageLocationReached(_packageEvents?.Active?.Form));
+            reevaluateScript, PackageLocationReached(_packageEvents?.Active?.Form), _aiGlobals);
 
     private void RestoreScriptPackageLifecycle()
     {

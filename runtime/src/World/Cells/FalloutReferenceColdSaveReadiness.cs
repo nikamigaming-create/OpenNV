@@ -9,6 +9,7 @@ internal static class FalloutReferenceColdSaveReadiness
     internal static void RequireCurrentFields(FalloutProcessCommonSnapshot common, FalloutStandalonePlayerSceneSnapshot scene)
     {
         var reference = common.ReferenceOwners ?? throw new NotSupportedException("source-save-current-reference-owner-graph-unbound");
+        FalloutReferenceModelDataSaveContract.ValidateOwned(common, scene);
         foreach (var fields in common.CommandFields ?? [])
             if (fields.Availability.Any(value =>
                     (value.Lane is FalloutPackageCommandFieldLane.ScriptExtra or FalloutPackageCommandFieldLane.SavedPosition or

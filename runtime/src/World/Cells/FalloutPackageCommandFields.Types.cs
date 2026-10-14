@@ -50,7 +50,8 @@ internal sealed record FalloutPackageCommandFieldSnapshot(string Schema, Fallout
     IReadOnlyList<FalloutPackageCommandFieldPublication> Publications,
     IReadOnlyList<FalloutPackageCommandFieldOperation> Operations, bool Retired,
     FalloutReferenceScriptExtraInitializerSnapshot? ScriptInitialization = null,
-    IReadOnlyList<FalloutScriptExtraInitializationFieldOperation>? ScriptInitializationOperations = null);
+    IReadOnlyList<FalloutScriptExtraInitializationFieldOperation>? ScriptInitializationOperations = null,
+    FalloutReferenceAnimationTailFieldSnapshot? AnimationTail = null);
 internal sealed record FalloutPackageCommandEventMark(FalloutPackageCommandFieldInvocation Invocation,
     FalloutFormKey Package, uint Mask, long Entered, long Changed, bool? Result,
     IReadOnlyList<FalloutPackageCommandFieldStore> Stores, bool Returned, string? Failure);

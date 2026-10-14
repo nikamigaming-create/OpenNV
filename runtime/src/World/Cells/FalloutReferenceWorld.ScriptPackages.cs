@@ -47,7 +47,8 @@ internal sealed partial class FalloutReferenceWorld
     // election. They remain authoritative when the override is retired.
     internal FalloutPluginRecord? SelectActorPackage(FalloutFormKey actor, Func<FalloutCondition, float> evaluate,
         FalloutActorTemplateSelection? templates, FalloutGameTime? clock, FalloutFormKey? current, bool done,
-        bool reevaluateScript = true, bool locationReached = false)
+        bool reevaluateScript = true, bool locationReached = false,
+        OpenNV.Runtime.Gameplay.State.FalloutGlobalState? globals = null)
     {
         FalloutReferencePackageEvents.RequireActor(records, actor);
         var state = Actor(actor);
@@ -71,7 +72,7 @@ internal sealed partial class FalloutReferenceWorld
                 return previous.Record;
         }
         return FalloutAiPackages.Select(records, state.Base, evaluate, templates, clock,
-            evaluateRunOn: true, eligible: candidate => PackageEligible(actor, candidate, clock, current, done));
+            evaluateRunOn: true, eligible: candidate => PackageEligible(actor, candidate, clock, current, done), globals: globals);
     }
 
     internal long BeginActorScriptPackage(FalloutFormKey actor, FalloutFormKey package, long selectedRevision)

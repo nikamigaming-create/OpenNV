@@ -89,6 +89,8 @@ public partial class RuntimeCoordinator
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); Check();
             }
             RequireMainPlayerPublishedTarget(world, _nativeActiveCell!.Cell.FormKey);
+            if (world.HasStandalonePlayerScene)
+                world.CommitStandaloneTesCellLoad(invocation, _nativeActiveCell.Cell.FormKey);
             ConsumeActualCellSkyMode(invocation, world, _nativeActiveCell.Cell.FormKey);
             if (world.SourceLinkedPlayerConstructed)
                 world.CommitSourcePlayerLinkedCell(invocation, _nativeActiveCell.Cell.FormKey, () =>
@@ -149,6 +151,7 @@ public partial class RuntimeCoordinator
         owner.ObserveForCapture();
         if (world.ReadMainPlayerSourceCell(target.Source.Cell).Source != target.Source)
             throw new InvalidDataException("Player attachment changed winning target CELL/world bytes.");
+        if (world.HasStandalonePlayerScene) world.CommitStandaloneTesCellLoad(invocation, target.Source.Cell);
         ConsumeActualCellSkyMode(invocation, world, target.Source.Cell);
         var previous = _nativeActiveCell ?? throw new InvalidOperationException("Player attachment has no current source graph.");
         // Retain the exact already-published union. Selecting a different

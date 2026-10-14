@@ -10,6 +10,7 @@ internal sealed partial class FalloutEarlyController
         _scalar = saved.ResetScalarBits; _flags = saved.Flags; _selector = saved.PlayerPropertySelector;
         _actorScaleBits = saved.ActorScaleBits; _failure = saved.Failure;
         _postProcessFields = saved.PostProcessFields;
+        RestoreMoverDelta(saved.MoverDelta); RestoreActorMovement(saved.ActorMovement);
         _stores.AddRange(saved.Stores); _resets.AddRange(saved.Resets);
         _sequence = _stores.Count == 0 ? 0 : _stores[^1].Sequence;
     }

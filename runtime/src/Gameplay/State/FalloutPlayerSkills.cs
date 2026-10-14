@@ -100,7 +100,7 @@ internal sealed partial class FalloutPlayerSkills
             }
             foreach (var form in ConstantEffects())
                 foreach (var effect in OwnedModifiers(form))
-                    if (effect.ActorValue == value && FalloutCondition.AllPass(effect.Conditions, Condition)) initial += effect.Amount;
+                    if (effect.ActorValue == value && FalloutCondition.AllPass(effect.Conditions, Condition, globals: _globals)) initial += effect.Amount;
             return Math.Clamp(initial, value is >= 5 and <= 11 ? 1 : 0, value is >= 5 and <= 11 ? 10 : 100);
         }
         finally { _evaluating.Remove(value); }
@@ -108,7 +108,7 @@ internal sealed partial class FalloutPlayerSkills
 
     internal IReadOnlyList<FalloutAbilityModifier> Modifiers(int actorValue, FalloutActorValuePool pool) => ConstantEffects()
         .SelectMany(form => OwnedModifiers(form)).Where(effect => effect.ActorValue == actorValue && effect.Pool == pool &&
-            FalloutCondition.AllPass(effect.Conditions, Condition)).ToArray();
+            FalloutCondition.AllPass(effect.Conditions, Condition, globals: _globals)).ToArray();
 
     internal void BindAbilityConditions(Func<FalloutCondition, float> evaluate)
     {

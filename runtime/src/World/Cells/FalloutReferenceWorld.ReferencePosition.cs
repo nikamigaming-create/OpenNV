@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Physics;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -42,7 +43,8 @@ internal sealed partial class FalloutReferenceWorld
         _sourcePlayerReferencePosition = new(source, records, scene.Stack, fields.Actor,
             scene.Process, scene.Constructor, RequireActualReferencePosition);
         _sourceReferenceChanges = new(source, scene.Stack, scene.Process, _sourceReferenceChangeConstructor,
-            RequireActualReferencePosition);
+            RequireActualReferencePosition,
+            retainCurrentFrameThreadRead: scene.ThreadContext.RetainCurrentFrameReferenceChangeRead);
         _sourceReferenceFormFiles = new(formFiles, records, scene.Stack, scene.Process, scene.Constructor,
             fields.Actor, RequireActualReferencePosition);
         scene.ThreadContext.BindReferenceChangeFlags(source);
@@ -54,7 +56,7 @@ internal sealed partial class FalloutReferenceWorld
     }
 
     private T WithActualReferencePosition<T>(FalloutReferencePositionIngress ingress,
-        Func<FalloutReferencePositionInvocation, T> action)
+        Func<FalloutReferencePositionInvocation, T> action, FalloutReferenceFrameReceipt? frame = null)
     {
         if (_enteredReferencePosition is not null)
             throw new InvalidOperationException("Source reference owner reentered its actual caller.");
@@ -63,7 +65,7 @@ internal sealed partial class FalloutReferenceWorld
         var common = ProcessCommon.ReadSceneQueries(owner.Actor.Reference, actor.Epoch);
         var invocation = new FalloutReferencePositionInvocation(Guid.NewGuid(), actor.Source, owner.Process,
             owner.Constructor, common.Process, actor.Epoch, Environment.CurrentManagedThreadId, ingress,
-            ingress == FalloutReferencePositionIngress.PackageCommand ? _enteredPackageCommand?.SourceCommand : null);
+            ingress == FalloutReferencePositionIngress.PackageCommand ? _enteredPackageCommand?.SourceCommand : null, frame);
         _enteredReferencePosition = invocation;
         try { RequireActualReferencePosition(invocation); return action(invocation); }
         finally { _enteredReferencePosition = null; }
@@ -97,6 +99,25 @@ internal sealed partial class FalloutReferenceWorld
             if (controller.Actor != invocation.Actor || controller.CommonProcess != invocation.CommonProcess ||
                 controller.Constructor != invocation.ReferenceConstructor || controller.Epoch != invocation.Epoch)
                 throw new InvalidDataException("Physical descriptor borrowed another source reference constructor.");
+        }
+        if (invocation.Frame is { } frame)
+        {
+            RequireActualPlayerActorMovement(frame.Parent);
+            var call = _sourcePlayerActorMovement?.LastCall ??
+                throw new InvalidOperationException("Frame reference child lost its entered Actor movement owner.");
+            var selected = frame.Operation switch
+            {
+                FalloutReferenceFrameOperation.Borrow => call.Step is FalloutPlayerActorMovementStep.FormKind or
+                    FalloutPlayerActorMovementStep.RawPosition or FalloutPlayerActorMovementStep.Position or
+                    FalloutPlayerActorMovementStep.Status or FalloutPlayerActorMovementStep.CorrectionPosition or
+                    FalloutPlayerActorMovementStep.TesCell,
+                FalloutReferenceFrameOperation.AngleReset => call.Step == FalloutPlayerActorMovementStep.AngleReset,
+                FalloutReferenceFrameOperation.CorrectPosition => call.Step == FalloutPlayerActorMovementStep.ActorPosition,
+                FalloutReferenceFrameOperation.BasePosition => call.Step == FalloutPlayerActorMovementStep.BasePosition,
+                _ => false
+            };
+            if (call.Invocation != frame.Parent || !selected || call.Failure is not null || call.Returned)
+                throw new InvalidOperationException("Reference receipt left its actual reached Actor movement child.");
         }
         else if (invocation.Ingress == FalloutReferencePositionIngress.PackageCommand)
         {
@@ -152,6 +173,7 @@ internal sealed partial class FalloutReferenceWorld
         _sourceReferenceChanges?.Retire(); _sourceReferenceChanges = null;
         _sourceReferenceFormFiles?.Retire(); _sourceReferenceFormFiles = null;
         _sourceInitialPlacementCells?.Retire(); _sourceInitialPlacementCells = null;
+        _sourcePlayerModelData?.Retire(); _sourcePlayerModelData = null;
     }
 
     private FalloutStandaloneReferenceOwnersSnapshot? CaptureStandaloneReferenceOwners()
@@ -167,6 +189,6 @@ internal sealed partial class FalloutReferenceWorld
             _sourceReferenceBaseAssignment, _sourceReferenceActorResponse, _sourceReferenceFormFiles.Capture(),
             _sourceInitialPlacementCells.Capture(),
             _sourceLinkedPlayerParentHistory?.Capture(_sourceLinkedPlayerParentRevision, _sourceLinkedPlayerParent),
-            _sourceDataHandlerLoading?.Capture());
+            _sourceDataHandlerLoading?.Capture(), _sourcePlayerModelData?.Capture(), _sourcePlayerMoverSpeed?.Capture());
     }
 }

@@ -79,7 +79,7 @@ public partial class RuntimeCoordinator
                 });
             }
             var owner = new FalloutNativePluginCampaign(records, quests, scripts, companion, privateRoot, declarations,
-                new(input.State, inventory), modelPath);
+                new(input.State, inventory), modelPath, CreateNativeSpecialBookPageSounds(source, records, scripts, world));
             world.NativePlugins = owner; _nativePluginCampaign = owner;
             _nativeQuestScripts!.BindDirectInput(input.State);
         }

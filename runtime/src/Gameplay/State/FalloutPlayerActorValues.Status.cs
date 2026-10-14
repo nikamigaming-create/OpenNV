@@ -25,9 +25,9 @@ internal sealed partial class FalloutPlayerActorValues
         _statusValues = declaration.Values.ToDictionary(value => value.Index, _ => new FalloutActorValue(0));
     }
     internal bool IsStatusValue(int value) => _statusValues.ContainsKey(value);
-    internal bool IsStatusValue(string name) => _statusSource?.Values.Any(value =>
+    internal bool IsStatusValue(string name) => IsMoverValue(name) || _statusSource?.Values.Any(value =>
         value.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
-    internal int StatusValue(string name) => _statusSource?.Values.SingleOrDefault(value =>
+    internal int StatusValue(string name) => IsMoverValue(name) ? MoverValue(name) : _statusSource?.Values.SingleOrDefault(value =>
         value.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Index ??
         throw new NotSupportedException("Player status value has no selected source descriptor: " + name);
     private float ReadCurrentFloat32(int value)
@@ -41,7 +41,7 @@ internal sealed partial class FalloutPlayerActorValues
         return current + damage;
     }
     private FalloutPlayerStatusValuesSnapshot? CaptureStatusValues() => _statusSource is null ? null :
-        new(StatusSchema, _statusSource, new Dictionary<int, FalloutActorValue>(_statusValues));
+        new(StatusSchema, _statusSource, _statusValues.Where(pair => _moverSource is null || !MoverValueIds.Contains(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value));
     private Dictionary<int, FalloutActorValue> RestoreStatusValues(FalloutPlayerStatusValuesSnapshot? saved)
     {
         if (saved is null)

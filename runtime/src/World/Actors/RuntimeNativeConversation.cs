@@ -59,6 +59,7 @@ internal partial class RuntimeNativeConversation : Node
         choices = _conversation.Choices,
         pending = _pending.Count,
         responseGeneration = _conversation.ResponseGeneration,
+        resultOnlyCompletions = _conversation.ResultOnlyCompletions,
         nativeResponseGeneration = _nativeResponse?.Generation,
         beginResultsEntered = _conversation.BeginResultsEntered,
         endResultsEntered = _conversation.EndResultsEntered,
@@ -85,7 +86,8 @@ internal partial class RuntimeNativeConversation : Node
         Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
         Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
         Func<FalloutFormKey, int>? deadCount = null,
-        Func<FalloutDialogueInfo, FalloutFormKey, bool, FalloutScriptResultReceipt>? ownedResults = null)
+        Func<FalloutDialogueInfo, FalloutFormKey, bool, FalloutScriptResultReceipt>? ownedResults = null,
+        OpenNV.Runtime.Gameplay.State.FalloutGlobalState? globals = null)
     {
         ArgumentNullException.ThrowIfNull(requireGameplayAdmission);
         if (records.OwnedSource is not null && ownedResults is null)
@@ -111,7 +113,7 @@ internal partial class RuntimeNativeConversation : Node
         _conversation = new(records, quests, condition => _conditions!.Evaluate(condition),
             (info, begin) => results(info, _dialogueSubject, begin), saidInfos, dialogueRandom,
             ownedResults is null ? null : (info, begin) => ownedResults(info, _dialogueSubject, begin), () => _dialogueSubject,
-            requireGameplayAdmission);
+            requireGameplayAdmission, globals);
     }
 
     internal void Request(FalloutFormKey speaker, FalloutFormKey target, FalloutFormKey? topic, Action? completed = null)
@@ -129,6 +131,12 @@ internal partial class RuntimeNativeConversation : Node
         try
         {
             if (_speech.Error is { } error && (_conversation.Phase != "closed" || _pending.Count != 0)) throw new InvalidOperationException(error);
+            if (_conversation.Phase == "continuing")
+            {
+                _conversation.ContinueResultOnly();
+                Present();
+                return;
+            }
             if (_pending.Count == 0 || _speech.IsDialogueBusy(_pending.Peek().Speaker)) return;
             _requireGameplayAdmission();
             var request = _pending.Dequeue(); _speaker = request.Speaker; _completed = request.Completed;

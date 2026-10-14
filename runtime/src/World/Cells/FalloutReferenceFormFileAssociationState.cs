@@ -11,13 +11,14 @@ internal sealed record FalloutReferenceFormFileCall(FalloutReferencePositionInvo
 internal sealed record FalloutReferenceFormFileSnapshot(string Schema, FalloutReferenceFormFileSource Source,
     string Stack, Guid Process, Guid Factory, Guid Constructor, FalloutCombatActorIdentity Actor, long Sequence,
     IReadOnlyList<FalloutReferenceFormFileDependency> Files, IReadOnlyList<FalloutReferencePositionPublication> Publications,
-    IReadOnlyList<FalloutReferenceFormFileCall> Calls, string? Writer, bool Retired);
+    IReadOnlyList<FalloutReferenceFormFileCall> Calls, string? Writer, bool Retired,
+    IReadOnlyList<FalloutReferenceFrameRun<FalloutReferenceFormFileCall>>? FrameRuns = null);
 
 // The original association list is a real reference field. It does not borrow
 // the winning record's plugin or synthesize an active file from load order.
-internal sealed class FalloutReferenceFormFileAssociationState
+internal sealed partial class FalloutReferenceFormFileAssociationState
 {
-    internal const string Schema = "opennv-reference-form-files/v1";
+    internal const string Schema = "opennv-reference-form-files/v2";
     private readonly Action<FalloutReferencePositionInvocation> _requireActual;
     private readonly List<FalloutReferencePositionPublication> _publications = [];
     private readonly List<FalloutReferenceFormFileCall> _calls = [];
@@ -34,7 +35,7 @@ internal sealed class FalloutReferenceFormFileAssociationState
     internal Guid Constructor { get; }
     internal FalloutCombatActorIdentity Actor { get; }
     internal string? SaveBlocker => _busy ? "source-reference-form-files-in-flight" : _retired ?
-        "source-reference-form-files-retired" : _writer ?? _calls.FirstOrDefault(value => !value.Returned)?.Failure;
+        "source-reference-form-files-retired" : _writer ?? _failure;
 
     internal FalloutReferenceFormFileAssociationState(FalloutReferenceFormFileSource source, FalloutPluginStack records,
         string stack, Guid process, Guid constructor, FalloutCombatActorIdentity actor,
@@ -51,6 +52,7 @@ internal sealed class FalloutReferenceFormFileAssociationState
             if (saved.Process == process || saved.Factory == Factory || saved.Constructor == constructor || saved.Retired || !saved.Files.SequenceEqual(_files))
                 throw new InvalidDataException("Cold reference form files changed original files or reused their constructor.");
             _sequence = saved.Sequence; _writer = saved.Writer; _publications.AddRange(saved.Publications); _calls.AddRange(saved.Calls);
+            _frameReceipts.Restore(saved.FrameRuns); _failure = _calls.FirstOrDefault(value => !value.Returned)?.Failure;
         }
         _publications.Add(new(Process, Factory, Constructor, saved?.Process, saved?.Factory, _sequence));
     }
@@ -66,6 +68,7 @@ internal sealed class FalloutReferenceFormFileAssociationState
     {
         if (_busy) { _fault++; throw new InvalidOperationException("Reference form-file getter reentered."); }
         ObjectDisposedException.ThrowIf(_retired, this);
+        PrepareFrameFile(invocation, writer);
         var entered = checked(++_sequence); var fault = _fault; _busy = true;
         FalloutReferenceFormFileRead? read = null; string? failure = null;
         try
@@ -84,9 +87,10 @@ internal sealed class FalloutReferenceFormFileAssociationState
         catch (Exception error) { failure = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message; throw; }
         finally
         {
-            _calls.Add(new(invocation, entered, checked(++_sequence), writer, read, failure is null, failure)); _busy = false;
+            RetainFileCall(new(invocation, entered, checked(++_sequence), writer, read, failure is null, failure));
+            _failure ??= failure; _busy = false;
         }
-        return _calls[^1];
+        return _lastFileCall!;
 
         void Guard()
         {
@@ -104,7 +108,8 @@ internal sealed class FalloutReferenceFormFileAssociationState
     {
         if (_busy) { _fault++; throw new InvalidOperationException("Entered reference form files cannot be captured."); }
         var saved = new FalloutReferenceFormFileSnapshot(Schema, Source, Stack, Process, Factory, Constructor, Actor, _sequence,
-            _files, Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_calls.ToArray()), _writer, _retired);
+            _files, Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_calls.ToArray()), _writer, _retired,
+            Array.AsReadOnly(_frameReceipts.Runs.ToArray()));
         Validate(saved, Source, Stack, Actor); return saved;
     }
     internal void Retire()
@@ -133,8 +138,15 @@ internal sealed class FalloutReferenceFormFileAssociationState
             throw new InvalidDataException("Form-file snapshot omitted its current field owner.");
         long sequence = 0; string? writer = null; var threads = new Dictionary<Guid, int>(); var ordinal = -1;
         var order = saved.Publications.Select((value, index) => (value.Process, index)).ToDictionary(value => value.Process, value => value.index);
-        foreach (var call in saved.Calls)
+        var history = FileHistory(saved).ToArray();
+        foreach (var item in history)
         {
+            if (item.Frames is { } frames)
+            {
+                ValidateFileFrames(frames, saved, owners, threads, ref ordinal, ref sequence, writer);
+                continue;
+            }
+            var call = item.Call!;
             var invocation = call.Invocation; invocation.ValidatePackageCaller();
             if (!owners.TryGetValue(invocation.ReferenceProcess, out var owner) || invocation.ReferenceConstructor != owner.Constructor ||
                 invocation.Actor != actor || invocation.Call == Guid.Empty || invocation.CommonProcess == Guid.Empty || invocation.Epoch < 1 ||
@@ -150,6 +162,6 @@ internal sealed class FalloutReferenceFormFileAssociationState
         }
         if (sequence != saved.Sequence || writer != saved.Writer) throw new InvalidDataException("Form-file current history differs from its snapshot.");
         FalloutReferencePublicationSequence.Validate(saved.Publications.Select(value => (value.Process, value.PublishedSequence)),
-            saved.Calls.Select(value => (value.Invocation.ReferenceProcess, value.Entered, value.Changed)), saved.Sequence);
+            history.Select(value => (value.Process, value.Entered, value.Changed)), saved.Sequence);
     }
 }

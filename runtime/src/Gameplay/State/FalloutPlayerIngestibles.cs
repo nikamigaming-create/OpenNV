@@ -12,7 +12,7 @@ internal sealed record FalloutIngestibleUse(FalloutFormKey? Sound, Func<FalloutI
 // Timers store magnitudes selected at consumption, never recomputed on reload.
 internal sealed partial class FalloutPlayerIngestibles(FalloutPluginStack records, FalloutPlayerInventory inventory,
     FalloutPlayerVitals vitals, FalloutBodyPartData bodyParts, Func<int, float> actorValue,
-    Func<FalloutFormKey, bool> hasPerk, Func<bool> hardcore)
+    Func<FalloutFormKey, bool> hasPerk, Func<bool> hardcore, FalloutGlobalState? globals = null)
 {
     private readonly Dictionary<FalloutFormKey, FalloutIngestible> _definitions = [];
     private readonly List<FalloutIngestibleActiveEffect> _active = [];
@@ -32,7 +32,7 @@ internal sealed partial class FalloutPlayerIngestibles(FalloutPluginStack record
             throw new NotSupportedException($"Ingestible {form} requires its flags, script or addiction owner.");
         if (source.Effects.All(effect => (effect.Flags & 5) == 5))
             throw new NotSupportedException("Poison application requires its equipped-weapon owner.");
-        var selected = source.Effects.Where(effect => FalloutCondition.AllPass(effect.Conditions, Condition)).ToArray();
+        var selected = source.Effects.Where(effect => FalloutCondition.AllPass(effect.Conditions, Condition, globals: globals)).ToArray();
         var scriptUse = PrepareScriptedEffects(source, selected);
         var before = vitals.State;
         var after = before;

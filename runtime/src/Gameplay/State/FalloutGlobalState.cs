@@ -19,7 +19,7 @@ internal sealed partial class FalloutGlobalState
     }
 
     internal static FalloutGlobalState Read(FalloutPluginStack records) =>
-        new(records.EffectiveRecords("GLOB").Select(FalloutGlobal.Read));
+        new(records, records.EffectiveRecords("GLOB").Select(FalloutGlobal.Read));
     internal IReadOnlyCollection<FalloutGlobal> Sources => _sources.Values;
     internal FalloutGlobal Source(FalloutFormKey form) => _sources.TryGetValue(form, out var source) ? source :
         throw new InvalidDataException($"Global {form} has no winning source owner.");

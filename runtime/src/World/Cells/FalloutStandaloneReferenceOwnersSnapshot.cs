@@ -16,4 +16,6 @@ internal sealed record FalloutStandaloneReferenceOwnersSnapshot(
     FalloutReferenceFormFileSnapshot FormFiles,
     FalloutInitialPlacementCellSnapshot InitialCells,
     FalloutReferenceParentCellSnapshot? Parent = null,
-    FalloutDataHandlerLoadingSnapshot? DataHandlerLoading = null);
+    FalloutDataHandlerLoadingSnapshot? DataHandlerLoading = null,
+    FalloutReferenceModelDataSnapshot? ModelData = null,
+    FalloutPlayerMoverSpeedCacheSnapshot? MoverSpeed = null);

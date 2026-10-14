@@ -48,6 +48,7 @@ internal partial class RuntimeNativeSpeech : Node
     private FaceGenLipConfiguration _lipConfiguration = null!;
     private Func<FalloutFormKey, float> _questStage = null!;
     private FalloutQuestState? _quests;
+    private OpenNV.Runtime.Gameplay.State.FalloutGlobalState? _globals;
     private FalloutDialogueQuestSelection? _selection;
     private Func<bool>? _playerFemale;
     private Func<FalloutFormKey, FalloutFormKey>? _actorRace;
@@ -228,13 +229,15 @@ internal partial class RuntimeNativeSpeech : Node
         Func<FalloutFormKey, Node3D?>? presentation = null,
         Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
         Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
-        Func<FalloutFormKey, int>? deadCount = null)
+        Func<FalloutFormKey, int>? deadCount = null,
+        OpenNV.Runtime.Gameplay.State.FalloutGlobalState? globals = null)
     {
         _stack = stack;
         _lipConfiguration = lipConfiguration;
         _questStage = questStage;
         _quests = quests;
-        _selection = quests is null ? null : new(stack, quests);
+        _globals = globals;
+        _selection = quests is null ? null : new(stack, quests, globals);
         _playerFemale = playerFemale;
         _actorRace = actorRace;
         _actorValue = actorValue;

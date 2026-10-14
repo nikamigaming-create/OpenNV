@@ -81,6 +81,16 @@ internal sealed partial class FalloutPlayerReferenceOrientationOwner
             call.Returned && call.Failure is not null || !call.Returned && call.Failure is null ||
             call.Failure is not null && saved.Failure is null || call.Consumer == Guid.Empty)
             throw new InvalidDataException("Cold reference orientation changed its actual failed or returned writer prefix.");
+        if (call.Ingress == "raw-reference-vector-reset")
+        {
+            if (call.Axis is not null || call.ArgumentBits != 0 || call.BeforeBits is null || call.StoredBits != 0 ||
+                call.Step is not (FalloutReferenceOrientationStep.ChangeCallback or FalloutReferenceOrientationStep.Returned) ||
+                call.ChangeMask != 2 || call.Consumer is null || saved.Stores < 4 ||
+                (saved.Placement is null || call.Changed > saved.Placement.Changed) &&
+                    (saved.XBits != 0 || saved.YBits != 0 || saved.ZBits != 0))
+                throw new InvalidDataException("Cold raw vector reset omitted its three stores, normalization or mask2 callback.");
+            return;
+        }
         if (call.Axis is not { } axis)
         {
             if (call.Ingress is not ("virtual-yaw-delta" or "Player-pitch-delta") ||

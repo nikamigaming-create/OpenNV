@@ -8,7 +8,7 @@ internal sealed record FalloutConversationChoiceSnapshot(FalloutFormKey Topic, F
 internal sealed record FalloutConversationSnapshot(string Schema, string Phase, ulong Generation,
     FalloutFormKey? SpeakerBase, FalloutFormKey? Info, string? InfoSha256, int ResponseIndex,
     IReadOnlyList<FalloutFormKey> AddedTopics, IReadOnlyList<FalloutConversationChoiceSnapshot> Choices,
-    FalloutScriptResultReceipt? Begin, FalloutScriptResultReceipt? End)
+    FalloutScriptResultReceipt? Begin, FalloutScriptResultReceipt? End, ulong ResultOnlyCompletions = 0)
 {
     internal const string ExpectedSchema = "opennv-conversation-continuation/v1";
     internal void RequireSource(FalloutPluginStack records, FalloutFormKey caller)
@@ -16,7 +16,7 @@ internal sealed record FalloutConversationSnapshot(string Schema, string Phase, 
         if (Schema != ExpectedSchema || Phase is not ("closed" or "choices") || AddedTopics is null || Choices is null ||
             AddedTopics.Distinct().Count() != AddedTopics.Count || Choices.Any(choice => choice is null) ||
             Choices.Select(choice => choice.Topic).Distinct().Count() != Choices.Count ||
-            Generation == 0 && AddedTopics.Count != 0)
+            Generation == 0 && ResultOnlyCompletions == 0 && AddedTopics.Count != 0)
             throw new InvalidDataException("Conversation continuation shape/source topics are invalid.");
         foreach (var topic in AddedTopics)
             if (records.GetEffective(topic).Signature != "DIAL")
@@ -28,7 +28,7 @@ internal sealed record FalloutConversationSnapshot(string Schema, string Phase, 
                 throw new InvalidDataException("Closed conversation contains an invented active source/receipt.");
             return;
         }
-        if (Generation == 0 || SpeakerBase is not { } speaker || Info is not { } key || Begin is null || End is null || Choices.Count == 0)
+        if (SpeakerBase is not { } speaker || Info is not { } key || Begin is null || End is null || Choices.Count == 0)
             throw new InvalidDataException("Settled conversation lacks its genuine source/committed-result state.");
         if (records.GetEffective(speaker).Signature is not ("NPC_" or "CREA" or "TACT"))
             throw new InvalidDataException("Conversation base speaker has no source dialogue actor type.");
@@ -36,9 +36,11 @@ internal sealed record FalloutConversationSnapshot(string Schema, string Phase, 
         if (record.Signature != "INFO" || Hash(record.ReadData()) != InfoSha256)
             throw new InvalidDataException("Current conversation INFO differs from its winning source bytes.");
         var info = FalloutDialogueTopic.Decode(record);
+        if (info.Responses.Count == 0 ? ResultOnlyCompletions == 0 : Generation == 0)
+            throw new InvalidDataException("Settled conversation omitted its actual response or result-only completion owner.");
         if (ResponseIndex != info.Responses.Count || (info.Flags & 1) != 0)
             throw new InvalidDataException("Conversation choices do not follow the completed source responses.");
-        FalloutDialogueTopic.RequireFlags(info, conversation: true, randomSelection: true, immediateResults: true);
+        FalloutDialogueTopic.RequireFlags(info, conversation: true, randomSelection: true, immediateResults: true, allowResultOnly: true);
         Begin.Require(FalloutScriptScope.Dialogue(record, true), caller);
         End.Require(FalloutScriptScope.Dialogue(record, false), caller);
         IEnumerable<FalloutFormKey> sourceTopics = info.Choices.Count != 0 ? info.Choices :
@@ -60,7 +62,8 @@ internal sealed record FalloutConversationSnapshot(string Schema, string Phase, 
             var prompt = next.Prompt ?? (fields.Length == 1 ? FalloutDialogueTopic.Text(fields[0].Data.Span) :
                 throw new InvalidDataException("Conversation choice has no unique source prompt."));
             if (prompt != choice.Text) throw new InvalidDataException("Conversation choice text is not its actual source prompt.");
-            FalloutDialogueTopic.RequireFlags(next, conversation: true, randomSelection: true, immediateResults: true);
+            FalloutDialogueTopic.RequireFlags(next, conversation: FalloutDialogueTopic.Type(records, choice.Topic) == 0,
+                randomSelection: true, immediateResults: true, allowResultOnly: true);
         }
         // Eligibility can change while a menu is displayed. Choose rechecks it
         // through the shared selector; cold validation must not select or draw.

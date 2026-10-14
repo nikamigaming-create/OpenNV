@@ -132,7 +132,7 @@ internal partial class RuntimeNativeSpeech
             foreach (var saved in snapshot.ActiveRadio ?? [])
             {
                 var radio = new FalloutRadioConversation(_stack, _references!,
-                    _quests ?? throw new InvalidOperationException("Active radio has no quest state."), EvaluateRadioCondition, _questStage, _said, _dialogueRandom);
+                    _quests ?? throw new InvalidOperationException("Active radio has no quest state."), EvaluateRadioCondition, _questStage, _said, _dialogueRandom, _globals);
                 radio.RestoreActiveState(saved.Conversation);
                 var station = radio.Station!.Reference;
                 var voice = new Voice(station, new AudioStreamPlayer { Name = "OwnedActorVoice" });

@@ -34,6 +34,12 @@ their actual writer and process histories during cold admission. Scalar and
 vector stores commit in source order; a later failed movement or animation child
 keeps those stores visible without returning the enclosing Player frame.
 
+Reference model data retains its independent source field and complete C# logical
+graph. A cold binding reconstructs fresh graph/native lifetimes without replaying
+the source constructor, model setter or old native release. Frame position reads
+and writes use the existing reference/change/file/thread owners with bounded
+interval receipts; ordinary command history keeps its separate semantics.
+
 Lighting projection and complete Sky persistence are distinct typed paths.
 A streamed projection validates its winning climate, weather and region caches
 before entering source reset, then applies selected record-based weather after

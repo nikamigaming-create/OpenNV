@@ -7,15 +7,16 @@ internal enum FalloutReferencePositionIngress
 { ControllerConstruction, ConstructorStartup, ConfiguredStartup, ActorPosition, PackageCommand, CellAttachment, ReferenceScale, ReferenceMode, CopyOrLoad, BaseAssignment }
 internal sealed record FalloutReferencePositionInvocation(Guid Call, FalloutCombatActorIdentity Actor,
     Guid ReferenceProcess, Guid ReferenceConstructor, Guid CommonProcess, long Epoch, int ThreadId,
-    FalloutReferencePositionIngress Ingress, Guid? PackageCommand = null)
+    FalloutReferencePositionIngress Ingress, Guid? PackageCommand = null, FalloutReferenceFrameReceipt? Frame = null)
 {
     internal void ValidatePackageCaller()
     {
+        Frame?.Validate(this);
         if ((Ingress == FalloutReferencePositionIngress.PackageCommand) != (PackageCommand is not null) || PackageCommand == Guid.Empty)
             throw new InvalidDataException("Reference child lost its original entered package command.");
     }
 }
-internal enum FalloutReferencePositionLane { Position, PositionMode, Scale, PersistentCell, ActorYawMode, ActorAssignmentByte, FollowerExtra }
+internal enum FalloutReferencePositionLane { Position, PositionMode, Scale, PersistentCell, ActorYawMode, ActorAssignmentByte, FollowerExtra, ReferenceKind }
 internal enum FalloutReferencePositionStep
 {
     Entered, SourcePrefix, ConfiguredCell, ConfiguredX, InitialPlacement, PersistentPredicate, KindPredicate,
@@ -24,7 +25,7 @@ internal enum FalloutReferencePositionStep
 }
 internal sealed record FalloutReferencePositionValues(FalloutPackageRawPosition Position, byte PositionMode,
     uint Scale, FalloutFormKey? PersistentCell, bool PersistentCellPresent, uint ActorYawMode = 0, byte ActorAssignmentByte = 0,
-    Guid? FollowerExtra = null, Guid? FollowerPayload = null);
+    Guid? FollowerExtra = null, Guid? FollowerPayload = null, byte ReferenceKind = FalloutPlayerActorMovementSource.CharacterFormKind);
 internal sealed record FalloutReferencePositionStore(FalloutReferencePositionStep Step, long Changed,
     uint? Bits = null, FalloutFormKey? Form = null, bool? Present = null);
 internal sealed record FalloutReferencePositionPublication(Guid Process, Guid Factory, Guid Constructor,
@@ -62,7 +63,8 @@ internal sealed record FalloutReferencePositionSnapshot(string Schema, FalloutRe
     string Stack, FalloutCombatActorIdentity Actor, Guid Process, Guid Factory, Guid Constructor, long Sequence,
     FalloutReferencePositionValues Values, IReadOnlyList<FalloutReferencePositionPublication> Publications,
     IReadOnlyList<FalloutReferencePositionCall> Calls,
-    IReadOnlyDictionary<FalloutReferencePositionLane, string> UnownedWriters, bool Retired);
+    IReadOnlyDictionary<FalloutReferencePositionLane, string> UnownedWriters, bool Retired,
+    IReadOnlyList<FalloutReferenceFrameRun<FalloutReferencePositionCall>>? FrameRuns = null);
 
 internal interface IFalloutReferencePositionConsumers
 {

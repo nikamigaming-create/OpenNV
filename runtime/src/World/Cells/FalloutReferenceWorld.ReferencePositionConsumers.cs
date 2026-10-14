@@ -55,7 +55,7 @@ internal sealed partial class FalloutReferenceWorld
         public void ClearStartupChangeSuppression(FalloutReferencePositionInvocation invocation)
         { RequireCurrent(invocation); _ = world._sourceReferenceChanges!.ClearStartupSuppression(invocation); }
         public FalloutSourceThreadReferenceFlagsRead ReadThreadFlags(FalloutReferencePositionInvocation invocation) =>
-            world.CampaignStandalonePlayerScene.ThreadContext.ReadReferenceChangeFlags(invocation.Call, Factory,
+            world.CampaignStandalonePlayerScene.ThreadContext.ReadReferenceChangeFlags(invocation, Factory,
                 () => RequireCurrent(invocation));
         public uint ReadSourceFormId(FalloutReferencePositionInvocation invocation)
         { RequireCurrent(invocation); return world.NativeSourceRecords.RuntimeFormId(invocation.Actor.Reference); }

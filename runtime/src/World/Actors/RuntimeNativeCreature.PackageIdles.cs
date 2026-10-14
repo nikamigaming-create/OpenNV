@@ -21,7 +21,7 @@ internal sealed partial class RuntimeNativeCreature
 
     private void BindCollectionCapture()
     {
-        _collectionConditions = new(_aiRecords!);
+        _collectionConditions = new(_aiRecords!, _aiGlobals);
         _aiState!.CapturePackageCollection = _collectionCapture = CaptureCollection;
         if (_aiState.PackageCollection is { } saved)
         {

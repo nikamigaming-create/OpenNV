@@ -1,5 +1,17 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args is ["--test-native-book-sound"])
+{
+    NativeBookSoundOperandContracts.Run();
+    NativeBookSoundSourceContracts.Run();
+    return;
+}
+if (args is ["--test-native-book-sound-source", var bookRuntime, var bookPlugin])
+{
+    NativeBookSoundSourceContracts.RunOwnedSource(bookRuntime, bookPlugin);
+    return;
+}
+
 if (args is ["--test-native-model-operand"])
 {
     NativeModelOperandContracts.Run();
@@ -211,6 +223,8 @@ NativeCoResidentModuleContracts.RunDeclarations();
 NativeFileSizeContracts.RunDeclarations();
 NativeModuleConstructionContracts.RunDeclarations();
 NativeModelOperandContracts.Run();
+NativeBookSoundOperandContracts.Run();
+NativeBookSoundSourceContracts.Run();
 NativePlatformCapabilitiesContracts.Run();
 NativeCppStreamsContracts.RunDeclarations();
 NativeHeadlessUser32Contracts.Run();

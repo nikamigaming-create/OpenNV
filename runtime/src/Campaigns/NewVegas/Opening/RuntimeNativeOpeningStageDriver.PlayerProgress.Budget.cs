@@ -9,7 +9,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     {
         if (requested < 0) throw new InvalidDataException("Source level-up point request is negative.");
         var adjusted = FalloutPlayerPerkNumericEffects.Apply(22, requested,
-            _playerSkills.PerkEntries, PlayerProgressCondition);
+            _playerSkills.PerkEntries, PlayerProgressCondition, _globals);
         var points = MathF.Truncate(adjusted);
         if (points < 0 || (double)points > int.MaxValue)
             throw new NotSupportedException("Source level-up skill points exceed admitted signed menu storage.");

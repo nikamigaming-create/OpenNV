@@ -159,8 +159,8 @@ void source_call_site_transition(SourceCallSite& site, std::uint32_t action, DWO
 BOOL WINAPI source_call_site_protect(LPVOID pointer, SIZE_T bytes, DWORD access, PDWORD old_access) {
     const auto incoming = GetLastError(); const auto caller = _ReturnAddress();
     return nvse_adapter([&]() -> BOOL {
-        if (source_model_operand_request(pointer, bytes))
-            return source_model_operand_protect(pointer, bytes, access, old_access, caller, incoming);
+        if (auto* operand = source_pointer_operand_request(pointer, bytes))
+            return source_pointer_operand_protect(*operand, pointer, bytes, access, old_access, caller, incoming);
         if (!source_call_site_image_range(pointer, bytes)) {
             SourceCallSite* attempted = nullptr;
             if (source_call_sites) for (const auto& site : source_call_sites->sites)

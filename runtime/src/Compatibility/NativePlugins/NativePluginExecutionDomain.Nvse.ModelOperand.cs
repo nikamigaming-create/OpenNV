@@ -147,15 +147,9 @@ internal sealed partial class NativePluginExecutionDomain
             field.Source.Operand < cohort || (ulong)field.Source.Operand + 4 > end || old != _raceMenuProtection ||
             protection != requested || protection is not (0x20 or 0x40))
             throw new InvalidDataException("Model protection changed its actual old access or SDK page cohort.");
-        _raceMenuProtection = protection;
-        foreach (var site in _sourceCallSites.Values)
-        {
-            if ((ulong)site.Source.Address >= end || (ulong)site.Source.Address + (uint)site.Extent <= cohort) continue;
-            site.Protection = protection;
-            if (ReadSourceCallSiteCode(site, RetainedNvseModule(site.Module), site.DefaultTarget, protection) != site.Code)
-                throw new InvalidDataException("A neighboring source CALL changed during model operand protection.");
-        }
+        PublishPointerProtectionCohort(cohort, cohortBytes, protection);
     }
+
     private byte[] ReadModelInstruction()
     {
         var host = _nvseHostSource!;
