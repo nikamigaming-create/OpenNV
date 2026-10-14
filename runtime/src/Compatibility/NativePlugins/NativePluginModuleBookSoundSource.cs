@@ -8,13 +8,15 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 internal sealed class NativePluginModuleBookSoundSource
 {
     internal string Sha256 { get; }
-    internal string Family => "PE32/Load/independent-Book-direction-PUSH-inputs/shared-CString/SafeWrite32";
+    internal string Family { get; }
     internal uint LoadRva { get; }
     internal uint WriterRva { get; }
     internal uint ProtectReturnRva => checked(WriterRva + 25);
     internal uint RestoreReturnRva => checked(WriterRva + 43);
     internal uint ForwardCallRva { get; }
     internal uint BackwardCallRva { get; }
+    internal uint FirstCallRva => ForwardCallRva;
+    internal uint SecondCallRva => BackwardCallRva;
     internal uint BufferRva { get; }
     internal uint Capacity => checked((uint)InitialBytes.Length);
     internal uint ImageBytes { get; }
@@ -27,9 +29,9 @@ internal sealed class NativePluginModuleBookSoundSource
     private readonly byte[] _pairCode;
     private readonly uint _protectionSlot;
     private NativePluginModuleBookSoundSource(NativePluginImageDeclaration image, FalloutSpecialBookPageSoundModuleAssociation association,
-        NativePluginConstructorImage source, uint load, uint imageBytes)
+        NativePluginConstructorImage source, uint load, uint imageBytes, string family)
     {
-        _path = image.Path; Sha256 = image.Sha256; _imports = image.Imports.ToArray(); _exports = image.Exports.ToArray();
+        _path = image.Path; Sha256 = image.Sha256; Family = family; _imports = image.Imports.ToArray(); _exports = image.Exports.ToArray();
         LoadRva = load; WriterRva = source.ToRva(association.Writer); BufferRva = source.ToRva(association.Buffer);
         ForwardCallRva = source.ToRva(association.ForwardCall); BackwardCallRva = source.ToRva(association.BackwardCall);
         ImageBytes = imageBytes; EditorId = association.EditorId; InitialBytes = [.. source.Read(BufferRva, association.Capacity)];
@@ -49,7 +51,21 @@ internal sealed class NativePluginModuleBookSoundSource
         var association = FalloutExecutableStringTable.ReadSpecialBookPageSoundModule(field, bytes, loads[0].Rva);
         if (association is null) return null;
         input.Position = 0; using var pe = new PEReader(input, PEStreamOptions.LeaveOpen);
-        return new(image, association, new(pe, input, image), loads[0].Rva, checked((uint)pe.PEHeaders.PEHeader!.SizeOfImage));
+        return new(image, association, new(pe, input, image), loads[0].Rva, checked((uint)pe.PEHeaders.PEHeader!.SizeOfImage), "PE32/Load/independent-Book-page-PUSH-inputs/shared-CString/SafeWrite32");
+    }
+    internal static NativePluginModuleBookSoundSource? ReadFocus(NativePluginImageDeclaration image, FalloutSpecialBookPageSoundsSource page,
+        FalloutSpecialBookFocusSoundsSource focus)
+    {
+        if (!image.Imports.Any(row => row.Name == "VirtualProtect")) return null;
+        using var input = NativeNvseHostSource.Lease(image.Path, image.Sha256, dll: true);
+        var bytes = new byte[checked((int)input.Length)]; input.ReadExactly(bytes);
+        var loads = image.Exports.Where(row => row.Name == "NVSEPlugin_Load").ToArray();
+        if (loads.Length != 1) throw new InvalidDataException("Book focus source has no unique original Load export.");
+        var association = FalloutExecutableStringTable.ReadSpecialBookFocusSoundModule(page, focus, bytes, loads[0].Rva);
+        if (association is null) return null;
+        input.Position = 0; using var pe = new PEReader(input, PEStreamOptions.LeaveOpen);
+        return new(image, association, new(pe, input, image), loads[0].Rva, checked((uint)pe.PEHeaders.PEHeader!.SizeOfImage),
+            "PE32/Load/independent-Book-focus-PUSH-inputs/shared-CString/SafeWrite32");
     }
     internal void Check(NativePluginImageDeclaration image)
     {

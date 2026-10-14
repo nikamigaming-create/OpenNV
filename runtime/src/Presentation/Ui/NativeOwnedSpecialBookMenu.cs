@@ -24,7 +24,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     private long _menuSoundOccurrence;
     private FalloutSpecialBookPageSoundsConsumer? _pageSounds;
     private IReadOnlyList<int> _values = [];
-    private int _page, _index = 1;
+    private int _page, _index = FalloutSpecialBookPresentation.MinimumReviewIndex;
     private bool _turning, _submitted;
     internal string? Error { get; private set; }
     internal FalloutSpecialBookPresentation Declaration => _declaration;
@@ -64,6 +64,9 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     {
         try
         {
+            if (pageSounds?.FocusSource is { } focus && (focus.Selection.ReviewPage != FalloutSpecialBookPresentation.ReviewPage ||
+                focus.Selection.MinimumIndex != FalloutSpecialBookPresentation.MinimumReviewIndex || focus.Selection.MaximumIndex != FalloutSpecialAllocationSession.AttributeCount))
+                throw new NotSupportedException("Book focus source bounds differ from the actual adapter index fields.");
             _pageSounds = pageSounds?.BorrowConsumer();
             Name = "SPECIALBookMenu"; ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Stop;
             LayoutMode = 1; AnchorsPreset = (int)LayoutPreset.FullRect; AnchorRight = 1; AnchorBottom = 1;
@@ -207,9 +210,12 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     private void SelectIndex(int direction)
     {
         if (_page != FalloutSpecialBookPresentation.ReviewPage) return;
-        var next = Math.Clamp(_index + direction, 1, FalloutSpecialAllocationSession.AttributeCount);
+        var next = Math.Clamp(_index + direction, FalloutSpecialBookPresentation.MinimumReviewIndex, FalloutSpecialAllocationSession.AttributeCount);
         if (_index == next) return;
-        _index = next; Play("OBJBookSpecialFocus"); Refresh();
+        _index = next;
+        if (_pageSounds is { } input) Play(input.ResolveFocusCurrent(direction, _records));
+        else Play("OBJBookSpecialFocus");
+        Refresh();
     }
     private void Change(int attribute, int direction)
     {

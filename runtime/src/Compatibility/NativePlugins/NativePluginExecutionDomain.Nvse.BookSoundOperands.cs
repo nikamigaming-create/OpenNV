@@ -4,7 +4,7 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 internal sealed record NativeSourceBookSoundOperandEvent(FalloutSourceCStringInputInvocation Invocation,
-    FalloutSpecialBookPageDirection Direction, uint Action, uint Caller, uint Address, uint Extent, uint Requested,
+    FalloutSpecialBookSoundInput Direction, uint Action, uint Caller, uint Address, uint Extent, uint Requested,
     uint Output, uint OldBefore, uint OldAfter, uint SdkResult, uint LastError, uint Protection,
     string RuntimeSha256, string ModuleSha256, string StackSha256, string Family, string? Failure = null);
 
@@ -13,13 +13,14 @@ internal sealed partial class NativePluginExecutionDomain
     private sealed class BookSoundOperand(FalloutSourceCStringInput field)
     {
         internal readonly FalloutSourceCStringInput Field = field;
+        internal NativePluginModuleBookSoundSource? Source;
         internal ulong Lease;
         internal uint Protection = 0x20, Output;
     }
     private FalloutSpecialBookPageSounds? _bookPageSounds;
     private NativePluginModuleBookSoundSource? _bookSoundSource;
     private NativeNvsePlugin? _bookSoundModule;
-    private readonly Dictionary<FalloutSpecialBookPageDirection, BookSoundOperand> _bookSoundOperands = [];
+    private readonly Dictionary<FalloutSpecialBookSoundInput, BookSoundOperand> _bookSoundOperands = [];
     private readonly List<NativeSourceBookSoundOperandEvent> _bookSoundEvents = [];
     internal IReadOnlyList<NativeSourceBookSoundOperandEvent> SourceBookSoundOperandEvents => _bookSoundEvents.AsReadOnly();
     internal void BindNvseSpecialBookPageSounds(NativeNvsePlugin primary, FalloutSpecialBookPageSounds fields)
@@ -31,10 +32,19 @@ internal sealed partial class NativePluginExecutionDomain
             throw new InvalidDataException("Book page inputs changed their actual selected executable/shared domain.");
         RequireSourceAddressSpace(host); fields.Source.CheckSame(FalloutSpecialBookPageSoundsSource.Read(host.RuntimePath));
         _bookPageSounds = fields;
-        foreach (var direction in new[] { FalloutSpecialBookPageDirection.Forward, FalloutSpecialBookPageDirection.Backward })
-            _bookSoundOperands.Add(direction, new(fields.Field(direction)));
-        fields.Bind(this, RequireBookSoundCurrent, ReadNativeBookSound);
+        _bookSoundOperands.Add(FalloutSpecialBookSoundInput.PageForward, new(fields.Field(FalloutSpecialBookPageDirection.Forward)));
+        _bookSoundOperands.Add(FalloutSpecialBookSoundInput.PageBackward, new(fields.Field(FalloutSpecialBookPageDirection.Backward)));
+        if (fields.FocusSource is { } focus)
+        {
+            focus.CheckSame(FalloutSpecialBookFocusSoundsSource.Read(host.RuntimePath));
+            _bookSoundOperands.Add(FalloutSpecialBookSoundInput.FocusPrevious, new(fields.FocusField(FalloutSpecialBookFocusDirection.Previous)));
+            _bookSoundOperands.Add(FalloutSpecialBookSoundInput.FocusNext, new(fields.FocusField(FalloutSpecialBookFocusDirection.Next)));
+        }
+        fields.Bind(this, RequireBookSoundCurrent, direction => ReadNativeBookSound(direction == FalloutSpecialBookPageDirection.Forward
+            ? FalloutSpecialBookSoundInput.PageForward : FalloutSpecialBookSoundInput.PageBackward),
+            direction => ReadNativeBookSound(direction == FalloutSpecialBookFocusDirection.Previous ? FalloutSpecialBookSoundInput.FocusPrevious : FalloutSpecialBookSoundInput.FocusNext));
     }
+
     private void RequireBookSoundCurrent()
     {
         VerifyOwner(); _nvseHostSource!.Check(Generation);
@@ -47,24 +57,36 @@ internal sealed partial class NativePluginExecutionDomain
         RequireNvseEmptyCall(); var source = NativePluginModuleBookSoundSource.Read(_nvseModuleDeclarations[plugin.Module], fields.Source);
         if (source is null) return;
         if (_bookSoundSource is not null) throw new NotSupportedException("A second original module cannot substitute Book input producers.");
+        var focus = fields.FocusSource is { } selectedFocus ? NativePluginModuleBookSoundSource.ReadFocus(_nvseModuleDeclarations[plugin.Module], fields.Source, selectedFocus) : null;
+        if (focus is not null && (focus.WriterRva != source.WriterRva || focus.LoadRva != source.LoadRva || focus.FirstCallRva != source.SecondCallRva + 17))
+            throw new InvalidDataException("Book focus changed its actual immediate page-pair/helper predecessor.");
         _bookSoundSource = source; _bookSoundModule = plugin;
+        _bookSoundOperands[FalloutSpecialBookSoundInput.PageForward].Source = source;
+        _bookSoundOperands[FalloutSpecialBookSoundInput.PageBackward].Source = source;
+        if (focus is not null)
+        {
+            _bookSoundOperands[FalloutSpecialBookSoundInput.FocusPrevious].Source = focus;
+            _bookSoundOperands[FalloutSpecialBookSoundInput.FocusNext].Source = focus;
+        }
         try
         {
-            foreach (var direction in new[] { FalloutSpecialBookPageDirection.Forward, FalloutSpecialBookPageDirection.Backward })
+            foreach (var pair in _bookSoundOperands.OrderBy(pair => pair.Key))
             {
-                var slot = _bookSoundOperands[direction]; var input = slot.Field.Source;
+                var slot = pair.Value; if (slot.Source is not { } actual) continue;
+                var input = slot.Field.Source;
+                var first = pair.Key is FalloutSpecialBookSoundInput.PageForward or FalloutSpecialBookSoundInput.FocusPrevious;
                 using var reader = Exchange(NativePluginDomainOperation.NvseModuleSet, Payload(writer =>
                 {
-                    writer.Write(6U); writer.Write((uint)direction); writer.Write(plugin.Module); writer.Write(input.Instruction); writer.Write(input.Pointer);
-                    writer.Write(source.LoadRva); writer.Write(source.ProtectReturnRva); writer.Write(source.RestoreReturnRva);
-                    writer.Write(checked((direction == FalloutSpecialBookPageDirection.Forward ? source.ForwardCallRva : source.BackwardCallRva) + 5));
-                    writer.Write(source.BufferRva); writer.Write(source.Capacity); writer.Write(source.InitialBytes.AsSpan());
+                    writer.Write(6U); writer.Write((uint)pair.Key); writer.Write(plugin.Module); writer.Write(input.Instruction); writer.Write(input.Pointer);
+                    writer.Write(actual.LoadRva); writer.Write(actual.ProtectReturnRva); writer.Write(actual.RestoreReturnRva);
+                    writer.Write(checked((first ? actual.FirstCallRva : actual.SecondCallRva) + 5));
+                    writer.Write(actual.BufferRva); writer.Write(actual.Capacity); writer.Write(actual.InitialBytes.AsSpan());
                 }));
                 slot.Lease = reader.ReadUInt64(); var instruction = reader.ReadUInt32(); var pointer = reader.ReadUInt32();
                 slot.Protection = reader.ReadUInt32(); Finish(reader);
-                if (slot.Lease == 0 || instruction != input.Instruction || pointer != checked(plugin.Image + source.BufferRva) || slot.Protection != 0x20 ||
+                if (slot.Lease == 0 || instruction != input.Instruction || pointer != checked(plugin.Image + actual.BufferRva) || slot.Protection != 0x20 ||
                     !ReadBookSoundInstruction(slot).AsSpan().SequenceEqual(input.Preimage.AsSpan()) ||
-                    !ReadBookSoundBuffer().AsSpan().SequenceEqual(source.InitialBytes.AsSpan()))
+                    !ReadBookSoundBuffer(slot).AsSpan().SequenceEqual(actual.InitialBytes.AsSpan()))
                     throw new InvalidDataException("Book input publication lost its independent source/module data/image lease.");
             }
         }
@@ -72,10 +94,10 @@ internal sealed partial class NativePluginExecutionDomain
     }
     private uint DispatchNvseBookSoundOperand(Frame frame, ulong parent, BinaryReader reader)
     {
-        var direction = (FalloutSpecialBookPageDirection)reader.ReadUInt32();
+        var direction = (FalloutSpecialBookSoundInput)reader.ReadUInt32();
         if (!_bookSoundOperands.TryGetValue(direction, out var slot)) throw new InvalidDataException("Book callback has no actual typed direction field.");
         var plugin = _bookSoundModule ?? throw new InvalidDataException("Book callback lost its retained original module.");
-        var source = _bookSoundSource!; var field = slot.Field;
+        var source = slot.Source ?? throw new InvalidDataException("Book callback has no entered source producer."); var field = slot.Field;
         var call = new FalloutSourceCStringInputInvocation(Generation, ProcessId, plugin.Module, NativeThread, parent, frame.Id);
         var action = reader.ReadUInt32(); var caller = reader.ReadUInt32(); var address = reader.ReadUInt32(); var extent = reader.ReadUInt32();
         var requested = reader.ReadUInt32(); var output = reader.ReadUInt32(); var before = reader.ReadUInt32(); var after = reader.ReadUInt32();
@@ -105,7 +127,7 @@ internal sealed partial class NativePluginExecutionDomain
             if (action == 0)
             {
                 if (cohort != 0 || cohortBytes != 0 || result != 0 || after != before || protection != slot.Protection ||
-                    direction == FalloutSpecialBookPageDirection.Backward && _bookSoundOperands[FalloutSpecialBookPageDirection.Forward].Field.Phase != FalloutSourceCStringInputPhase.Returned)
+                    !BookPredecessorReturned(direction))
                     throw new InvalidDataException("Book protection entry invented a previous direction return or SDK/page result.");
                 slot.Output = output; field.EnterProtect(this, call, ReadBookSoundInstruction(slot), before);
             }
@@ -121,7 +143,7 @@ internal sealed partial class NativePluginExecutionDomain
             {
                 if (result != 0 || before != after || protection != slot.Protection || cohort != 0 || cohortBytes != 0)
                     throw new InvalidDataException("Book DWORD observation invented a protection result.");
-                var buffer = ReadBookSoundBuffer();
+                var buffer = ReadBookSoundBuffer(slot);
                 if (!buffer.AsSpan().SequenceEqual(source.InitialBytes.AsSpan())) throw new NotSupportedException("Book module CString has an unowned source writer.");
                 field.ObserveStore(this, call, ReadBookSoundInstruction(slot), checked(plugin.Image + source.BufferRva), FalloutExecutableStringTable.ReadSoundEditorIdBytes(buffer));
             }
@@ -137,6 +159,12 @@ internal sealed partial class NativePluginExecutionDomain
         }
         catch (Exception failure)
         { _bookSoundEvents[^1] = observation with { Failure = failure.Message }; field.Fail(this, call, failure.Message); throw; }
+    }
+    private bool BookPredecessorReturned(FalloutSpecialBookSoundInput input)
+    {
+        if (input == FalloutSpecialBookSoundInput.PageForward) return true;
+        var previous = (FalloutSpecialBookSoundInput)checked((uint)input - 1);
+        return _bookSoundOperands.TryGetValue(previous, out var slot) && slot.Lease != 0 && slot.Field.Phase == FalloutSourceCStringInputPhase.Returned;
     }
     private void ApplyBookSoundProtection(BookSoundOperand slot, uint result, uint protection, uint cohort, uint cohortBytes, uint old, uint requested)
     {
@@ -173,29 +201,29 @@ internal sealed partial class NativePluginExecutionDomain
         var host = _nvseHostSource!;
         return _process.ReadSourceModelOperand(slot.Field.Source.Instruction, host.SourceAddressSpace.ImageBase, host.SourceAddressSpace.ImageBytes, slot.Protection);
     }
-    private byte[] ReadBookSoundBuffer()
+    private byte[] ReadBookSoundBuffer(BookSoundOperand slot)
     {
-        var source = _bookSoundSource ?? throw new InvalidDataException("Book CString has no retained producer.");
+        var source = slot.Source ?? throw new InvalidDataException("Book CString has no retained producer.");
         var module = _bookSoundModule ?? throw new InvalidDataException("Book CString has no actual module.");
         return _process.ReadModuleModelBuffer(module.Image, source.ImageBytes, source.BufferRva, source.Capacity);
     }
-    private string ReadNativeBookSound(FalloutSpecialBookPageDirection direction)
+    private string ReadNativeBookSound(FalloutSpecialBookSoundInput direction)
     {
         var slot = _bookSoundOperands[direction]; var field = slot.Field;
-        if (_bookSoundSource is null) return field.Source.Value;
+        if (slot.Source is not { } source) return field.Source.Value;
         var instruction = ReadBookSoundInstruction(slot);
         if (instruction[0] != 0x68 || BinaryPrimitives.ReadUInt32LittleEndian(instruction.AsSpan(1)) != field.Pointer)
             throw new InvalidDataException("Book pointer changed outside its retained original store history.");
         if (field.Pointer == field.Source.Pointer) return field.Source.Value;
-        var buffer = ReadBookSoundBuffer();
-        if (!buffer.AsSpan().SequenceEqual(_bookSoundSource.InitialBytes.AsSpan())) throw new NotSupportedException("Book module CString needs its actual current-copy writer.");
+        var buffer = ReadBookSoundBuffer(slot);
+        if (!buffer.AsSpan().SequenceEqual(source.InitialBytes.AsSpan())) throw new NotSupportedException("Book module CString needs its actual current-copy writer.");
         return FalloutExecutableStringTable.ReadSoundEditorIdBytes(buffer);
     }
     private void RetireNvseSpecialBookPageSounds(NativeNvsePlugin plugin)
     {
         if (!ReferenceEquals(plugin, _bookSoundModule)) return;
         _bookPageSounds!.RequireRetirement(this);
-        foreach (var direction in new[] { FalloutSpecialBookPageDirection.Backward, FalloutSpecialBookPageDirection.Forward })
+        foreach (var direction in _bookSoundOperands.Keys.OrderDescending())
         {
             var slot = _bookSoundOperands[direction]; if (slot.Lease == 0) continue;
             using var reader = Exchange(NativePluginDomainOperation.NvseModuleSet, Payload(writer =>

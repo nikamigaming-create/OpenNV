@@ -19,11 +19,39 @@ internal static partial class FalloutExecutableStringTable
     internal static FalloutSpecialBookPageSoundModuleAssociation? ReadSpecialBookPageSoundModuleAssociation(byte[] code,
         uint codeBase, uint load, FalloutSpecialBookPageSoundsSource source, Func<uint, int, bool> readable,
         Func<uint, string?> literal, Func<uint, int, byte[]> read, Func<uint, string?> import)
+        => ReadBookSoundPairAssociation(code, codeBase, load, source.Input(FalloutSpecialBookPageDirection.Forward),
+            source.Input(FalloutSpecialBookPageDirection.Backward), readable, literal, read, import);
+
+    internal static FalloutSpecialBookPageSoundModuleAssociation? ReadSpecialBookFocusSoundModule(FalloutSpecialBookPageSoundsSource page,
+        FalloutSpecialBookFocusSoundsSource focus, byte[] plugin, uint loadRva)
+    {
+        focus.CheckPageOwner(page); page.CheckSame(ReadSpecialBookPageSounds(page.RuntimePath));
+        focus.CheckSame(ReadSpecialBookFocusSounds(focus.RuntimePath)); var (code, image) = Load(plugin);
+        return ReadSpecialBookFocusSoundModuleAssociation(code, image.CodeBase, checked(image.Base + loadRva), page, focus,
+            image.IsReadableDataExtent, image.Literal, image.Read, image.ImportName);
+    }
+    internal static FalloutSpecialBookPageSoundModuleAssociation? ReadSpecialBookFocusSoundModuleAssociation(byte[] code, uint codeBase, uint load,
+        FalloutSpecialBookPageSoundsSource page, FalloutSpecialBookFocusSoundsSource focus, Func<uint, int, bool> readable,
+        Func<uint, string?> literal, Func<uint, int, byte[]> read, Func<uint, string?> import)
+    {
+        focus.CheckPageOwner(page);
+        var selected = ReadBookSoundPairAssociation(code, codeBase, load, focus.Input(FalloutSpecialBookFocusDirection.Previous),
+            focus.Input(FalloutSpecialBookFocusDirection.Next), readable, literal, read, import);
+        if (selected is null) return null;
+        var previous = ReadSpecialBookPageSoundModuleAssociation(code, codeBase, load, page, readable, literal, read, import)
+            ?? throw new NotSupportedException("Book focus module omitted its actual preceding page pair.");
+        if (selected.ForwardCall - 12 != previous.BackwardCall + 5 || selected.Writer != previous.Writer)
+            throw new NotSupportedException("Book focus pair changed its immediate reached Load edge or actual shared DWORD helper.");
+        return selected;
+    }
+    private static FalloutSpecialBookPageSoundModuleAssociation? ReadBookSoundPairAssociation(byte[] code, uint codeBase, uint load,
+        FalloutSourceCStringInputSource firstInput, FalloutSourceCStringInputSource secondInput, Func<uint, int, bool> readable,
+        Func<uint, string?> literal, Func<uint, int, byte[]> read, Func<uint, string?> import)
     {
         byte[] Operand(uint value)
         { var bytes = new byte[5]; bytes[0] = 0xb9; BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(1), value); return bytes; }
-        var hasForward = code.AsSpan().IndexOf(Operand(source.Input(FalloutSpecialBookPageDirection.Forward).Operand)) >= 0;
-        var hasBackward = code.AsSpan().IndexOf(Operand(source.Input(FalloutSpecialBookPageDirection.Backward).Operand)) >= 0;
+        var hasForward = code.AsSpan().IndexOf(Operand(firstInput.Operand)) >= 0;
+        var hasBackward = code.AsSpan().IndexOf(Operand(secondInput.Operand)) >= 0;
         if (!hasForward && !hasBackward) return null;
         if (!hasForward || !hasBackward) throw new NotSupportedException("Book source module has an incomplete independent page input pair.");
         var rows = InterfaceSoundInstructions(code, codeBase, load); var boundaries = rows.Select(row => row.At).ToHashSet();
@@ -35,8 +63,8 @@ internal static partial class FalloutExecutableStringTable
             var body = code.AsSpan(at, 29);
             if (body[5] != 0xb9 || !body.Slice(10, 2).SequenceEqual(new byte[] { 0x8b, 0xd6 }) || body[12] != 0xe8 ||
                 !body.Slice(17, 2).SequenceEqual(new byte[] { 0x8b, 0xd6 }) || body[19] != 0xb9 || body[24] != 0xe8 ||
-                U32(body, 6) != source.Input(FalloutSpecialBookPageDirection.Forward).Operand ||
-                U32(body, 20) != source.Input(FalloutSpecialBookPageDirection.Backward).Operand) continue;
+                U32(body, 6) != firstInput.Operand ||
+                U32(body, 20) != secondInput.Operand) continue;
             if (new[] { 5, 10, 12, 17, 19, 24 }.Any(offset => !boundaries.Contains(at + offset)))
                 throw new InvalidDataException("Book module sound pair enters a source instruction operand.");
             var writer = checked(at + 17 + BinaryPrimitives.ReadInt32LittleEndian(body[13..]));

@@ -20,7 +20,7 @@ public partial class RuntimeCoordinator
         }, () =>
         {
             if (field is { ActiveConsumers: not 0 }) throw new InvalidOperationException("Book sound inputs retain actual menu/audio consumers.");
-        }, records);
+        }, records, FalloutSpecialBookFocusSoundsSource.Read(source.FalloutExecutablePath));
         return field;
     }
 }
