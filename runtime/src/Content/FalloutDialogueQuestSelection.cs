@@ -1,23 +1,26 @@
+using OpenNV.Runtime.Gameplay.State;
 namespace OpenNV.Runtime.Content;
 
 // Quest-level conditions apply to both scripted speech and player dialogue.
 // Only immutable headers are cached; every selection reads the live quest and
 // evaluates conditions in that request's speaker/listener context.
-internal sealed class FalloutDialogueQuestSelection(FalloutPluginStack records, FalloutQuestState quests)
+internal sealed class FalloutDialogueQuestSelection(FalloutPluginStack records, FalloutQuestState quests,
+    FalloutGlobalState? globals = null)
 {
     private readonly Dictionary<FalloutFormKey, (int Priority, IReadOnlyList<FalloutCondition> Conditions)> _headers = [];
 
     internal bool Eligible(FalloutFormKey quest, Func<FalloutCondition, float> evaluate) => quests.IsRunning(quest) &&
-        FalloutCondition.AllPass(Header(quest).Conditions, evaluate, evaluateRunOn: true);
+        FalloutCondition.AllPass(Header(quest).Conditions, evaluate, evaluateRunOn: true, globals: globals);
 
     internal int Priority(FalloutFormKey quest) => Header(quest).Priority;
 
     internal FalloutDialogueInfo? Select(FalloutDialogueTopic topic, FalloutFormKey speakerBase,
         IReadOnlySet<FalloutFormKey> said, Func<FalloutFormKey, float> stage, Func<FalloutCondition, float> evaluate,
-        Func<uint, uint>? random = null, bool npcConversation = false, bool immediateResults = false, bool radio = false) => topic.Select(speakerBase, said, stage, evaluate,
+        Func<uint, uint>? random = null, bool npcConversation = false, bool immediateResults = false, bool radio = false,
+        bool allowResultOnly = false) => topic.Select(speakerBase, said, stage, evaluate,
             quest => Eligible(quest, evaluate), Priority,
             conversation: FalloutDialogueTopic.Type(records, topic.Topic.FormKey) == 0, random: random,
-            npcConversation: npcConversation, immediateResults: immediateResults, radio: radio);
+            npcConversation: npcConversation, immediateResults: immediateResults, radio: radio, globals: globals, allowResultOnly: allowResultOnly);
 
     private (int Priority, IReadOnlyList<FalloutCondition> Conditions) Header(FalloutFormKey quest)
     {

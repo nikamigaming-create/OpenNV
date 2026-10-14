@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
@@ -6,13 +7,14 @@ internal sealed record FalloutSourceThreadReferenceFlagsRead(string Source, Guid
     Guid Invocation, Guid ConsumerFactory, int Thread, long Sequence, byte Initialized, uint Flags);
 internal sealed record FalloutSourceThreadReferenceFlagsCall(string Source, Guid Process, Guid Factory,
     Guid Invocation, Guid ConsumerFactory, int Thread, long Entered, long Changed,
-    uint Before, uint After, bool? Enabled, bool Returned, string? Failure, string? WriterBoundary = null);
+    uint Before, uint After, bool? Enabled, bool Returned, string? Failure, string? WriterBoundary = null, FalloutReferencePositionInvocation? ReferenceInvocation = null);
 internal sealed record FalloutSourceThreadReferenceFlagsPublication(Guid Process, Guid Factory,
     Guid? PreviousProcess = null, Guid? PreviousFactory = null);
 internal sealed record FalloutSourceThreadReferenceFlagsSnapshot(string Source, Guid Process, Guid Factory,
     long Sequence, uint Flags, string? WriterBoundary,
     IReadOnlyList<FalloutSourceThreadReferenceFlagsPublication> Publications,
-    IReadOnlyList<FalloutSourceThreadReferenceFlagsCall> Calls);
+    IReadOnlyList<FalloutSourceThreadReferenceFlagsCall> Calls,
+    IReadOnlyList<FalloutReferenceFrameRun<FalloutSourceThreadReferenceFlagsCall>>? FrameRuns = null);
 
 internal sealed partial class FalloutPlayerThreadContextState
 {
@@ -26,7 +28,7 @@ internal sealed partial class FalloutPlayerThreadContextState
     private bool _referenceFlagsBusy;
     private string? _referenceFlagWriterBoundary;
     internal string? ReferenceChangeFlagsSaveBlocker => _referenceFlagsBusy ? "source-thread-reference-flags-in-flight" :
-        _referenceFlagWriterBoundary ?? _referenceFlagCalls.FirstOrDefault(value => !value.Returned)?.Failure;
+        _referenceFlagWriterBoundary ?? _referenceFrameFailure;
 
     internal void BindReferenceChangeFlags(FalloutReferencePositionSource source,
         FalloutSourceThreadReferenceFlagsSnapshot? saved = null)
@@ -43,6 +45,8 @@ internal sealed partial class FalloutPlayerThreadContextState
             _referenceChangeFlags = saved.Flags; _referenceFlagSequence = saved.Sequence;
             _referenceFlagWriterBoundary = saved.WriterBoundary;
             _referenceFlagPublications.AddRange(saved.Publications); _referenceFlagCalls.AddRange(saved.Calls);
+            _referenceFrameReceipts.Restore(saved.FrameRuns);
+            _referenceFrameFailure = _referenceFlagCalls.FirstOrDefault(value => !value.Returned)?.Failure;
             foreach (var call in saved.Calls.Where(value => value.Enabled is not null || value.WriterBoundary is not null))
                 _referenceFlagInvocations.Add(call.Invocation);
         }
@@ -70,7 +74,7 @@ internal sealed partial class FalloutPlayerThreadContextState
     }
 
     private FalloutSourceThreadReferenceFlagsCall RunReferenceFlags(Guid invocation, Guid consumerFactory,
-        bool? enabled, string? boundary, Action requireCurrent)
+        bool? enabled, string? boundary, Action requireCurrent, FalloutReferencePositionInvocation? frameInvocation = null)
     {
         ArgumentNullException.ThrowIfNull(requireCurrent);
         if (_referenceFlagsBusy)
@@ -80,6 +84,7 @@ internal sealed partial class FalloutPlayerThreadContextState
             _referenceFlagThread is { } thread && thread != Environment.CurrentManagedThreadId ||
             (enabled is not null || boundary is not null) && !_referenceFlagInvocations.Add(invocation))
             throw new InvalidOperationException("Reference flags lost the actual source thread or repeated its invocation.");
+        PrepareFrameThreadRead(frameInvocation, enabled, boundary);
         var before = _referenceChangeFlags; var entered = checked(++_referenceFlagSequence);
         var fault = _referenceFlagFault;
         _referenceFlagsBusy = true; string? failure = null;
@@ -104,12 +109,13 @@ internal sealed partial class FalloutPlayerThreadContextState
         finally
         {
             _referenceFlagThread ??= Environment.CurrentManagedThreadId;
-            _referenceFlagCalls.Add(new(source.Identity, _process, _factory, invocation, consumerFactory,
+            RetainFrameThreadCall(new(source.Identity, _process, _factory, invocation, consumerFactory,
                 Environment.CurrentManagedThreadId, entered, checked(++_referenceFlagSequence), before,
-                _referenceChangeFlags, enabled, failure is null, failure, boundary));
+                _referenceChangeFlags, enabled, failure is null, failure, boundary), frameInvocation);
+            _referenceFrameFailure ??= failure;
             _referenceFlagsBusy = false;
         }
-        return _referenceFlagCalls[^1];
+        return _lastReferenceFrameCall!;
 
         void Guard()
         {
@@ -127,7 +133,8 @@ internal sealed partial class FalloutPlayerThreadContextState
         var source = _referenceFlagsSource ?? throw new NotSupportedException("source-thread-reference-flags-constructor-unbound");
         var saved = new FalloutSourceThreadReferenceFlagsSnapshot(source.Identity, _process, _factory,
             _referenceFlagSequence, _referenceChangeFlags, _referenceFlagWriterBoundary,
-            Array.AsReadOnly(_referenceFlagPublications.ToArray()), Array.AsReadOnly(_referenceFlagCalls.ToArray()));
+            Array.AsReadOnly(_referenceFlagPublications.ToArray()), Array.AsReadOnly(_referenceFlagCalls.ToArray()),
+            Array.AsReadOnly(_referenceFrameReceipts.Runs.ToArray()));
         ValidateReferenceChangeFlags(saved, source); return saved;
     }
 
@@ -153,8 +160,14 @@ internal sealed partial class FalloutPlayerThreadContextState
             throw new InvalidDataException("Reference flags omitted their current fresh publication.");
         uint flags = 0; long sequence = 0; string? boundary = null; var ids = new HashSet<Guid>();
         var threads = new Dictionary<Guid, int>(); var lastPublication = -1;
-        foreach (var call in saved.Calls)
+        foreach (var item in ThreadReferenceFrameHistory(saved))
         {
+            if (item.Frames is { } frames)
+            {
+                ValidateThreadReferenceFrames(frames, saved, publications, threads, ref lastPublication, ref sequence, flags, boundary);
+                continue;
+            }
+            var call = item.Call!;
             if (call.Source != source.Identity || call.Invocation == Guid.Empty ||
                 (call.Enabled is not null || call.WriterBoundary is not null) && !ids.Add(call.Invocation) ||
                 call.ConsumerFactory == Guid.Empty || call.Thread < 1 ||

@@ -56,6 +56,12 @@ public partial class RuntimeCoordinator
                 !ReferenceEquals(_nativePluginStack, records) || !ReferenceEquals(_nativeReferences, world))
                 throw new InvalidOperationException("Player Actor-time left its actual calendar, records or World lifetime.");
         });
+        world.PrepareStandalonePlayerMoverDelta(records.IniSettings, () =>
+        {
+            if (_retiringNativeSession || !ReferenceEquals(_nativePluginStack, records) ||
+                !ReferenceEquals(_nativeReferences, world))
+                throw new InvalidOperationException("Player movement left its actual records or World lifetime.");
+        });
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)

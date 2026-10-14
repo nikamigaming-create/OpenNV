@@ -57,14 +57,16 @@ internal sealed partial class FalloutConversation
     }
     private void ExecuteConversationResult(FalloutDialogueInfo info, bool begin)
     {
+        requireGameplayAdmission?.Invoke();
         if (begin) BeginResultsEntered = true; else EndResultsEntered = true;
-        if (ownedResults is null) { results(info, begin); return; }
+        if (ownedResults is null) { results(info, begin); requireGameplayAdmission?.Invoke(); return; }
         var scope = FalloutScriptScope.Dialogue(info.Record, begin);
         scope.RequireSource(records.GetEffective(info.Record.FormKey));
         var caller = (resultCaller ?? throw new InvalidOperationException("Owned conversation results have no real caller producer."))();
         var receipt = ownedResults(info, begin);
         receipt.Require(scope, caller);
         if (begin) _beginReceipt = receipt; else _endReceipt = receipt;
+        requireGameplayAdmission?.Invoke();
     }
     internal FalloutConversationSnapshot CaptureContinuation()
     {
@@ -72,7 +74,7 @@ internal sealed partial class FalloutConversation
             throw new NotSupportedException("Conversation capture requires a settled source choice or closed owner; active results/audio remain unowned.");
         var added = AddedTopics;
         if (Phase == "closed") return new(FalloutConversationSnapshot.ExpectedSchema, Phase,
-            ResponseGeneration, null, null, null, 0, added, [], null, null);
+            ResponseGeneration, null, null, null, 0, added, [], null, null, ResultOnlyCompletions);
         var info = Info ?? throw new InvalidOperationException("Settled choices lost their actual INFO owner.");
         if (_beginReceipt is null || _endReceipt is null || _ending || ResponseIndex != info.Responses.Count)
             throw new NotSupportedException("Settled choices have no genuine completed Begin/End result receipts.");
@@ -80,17 +82,18 @@ internal sealed partial class FalloutConversation
             choice.Text, Hash(records.GetEffective(choice.Topic).ReadData()), Hash(records.GetEffective(choice.Info).ReadData()))).ToArray();
         var saved = new FalloutConversationSnapshot(FalloutConversationSnapshot.ExpectedSchema, Phase,
             ResponseGeneration, _speaker, info.Record.FormKey, Hash(info.Record.ReadData()), ResponseIndex,
-            added, choices, _beginReceipt, _endReceipt);
+            added, choices, _beginReceipt, _endReceipt, ResultOnlyCompletions);
         saved.RequireSource(records, (resultCaller ?? throw new InvalidOperationException("Conversation continuation has no result caller."))());
         return saved;
     }
     internal void RestoreContinuation(FalloutConversationSnapshot saved, FalloutFormKey caller)
     {
-        if (Phase != "closed" || ResponseGeneration != 0 || Error is not null || _mutating || _responseEntered)
+        if (Phase != "closed" || ResponseGeneration != 0 || ResultOnlyCompletions != 0 || Error is not null || _mutating || _responseEntered)
             throw new InvalidOperationException("Conversation continuation requires a fresh source owner.");
         saved.RequireSource(records, caller);
         requireGameplayAdmission?.Invoke();
         ResponseGeneration = saved.Generation;
+        ResultOnlyCompletions = saved.ResultOnlyCompletions;
         foreach (var added in saved.AddedTopics) _added.Add(added);
         if (saved.Phase == "closed") return;
         _speaker = saved.SpeakerBase!.Value;

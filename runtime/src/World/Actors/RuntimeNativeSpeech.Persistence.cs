@@ -113,7 +113,7 @@ internal partial class RuntimeNativeSpeech
         foreach (var radio in snapshot.FinishedRadio ?? [])
         {
             var conversation = new FalloutRadioConversation(_stack, world,
-                _quests ?? throw new InvalidOperationException("Saved radio has no quest state."), EvaluateRadioCondition, _questStage, _said, _dialogueRandom);
+                _quests ?? throw new InvalidOperationException("Saved radio has no quest state."), EvaluateRadioCondition, _questStage, _said, _dialogueRandom, _globals);
             conversation.RestoreFinishedState(radio);
             _radioConversations.Add(radio.Station.Reference, conversation);
         }

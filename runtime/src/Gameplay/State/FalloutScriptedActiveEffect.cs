@@ -35,6 +35,7 @@ internal sealed class FalloutScriptedActiveEffect
 {
     internal const string Schema = "opennv-scripted-active-effect-timeline/v1";
     private readonly FalloutPluginStack _records;
+    private readonly FalloutGlobalState? _globals;
     private readonly FalloutFormKey _target;
     private readonly FalloutPluginRecord _script;
     private readonly Func<long> _nextGeneration;
@@ -57,9 +58,9 @@ internal sealed class FalloutScriptedActiveEffect
         FalloutAbilityScript definition, long generation, ulong creationMutation, Func<long> nextGeneration,
         Func<FalloutCompiledActiveEffectInvocation, FalloutCompiledActiveEffectReceipt> execute,
         FalloutScriptedEffectTimeline? restore = null, IReadOnlyList<FalloutScriptEffectLocalCell>? locals = null,
-        FalloutCompiledActiveEffectSnapshot? compiled = null)
+        FalloutCompiledActiveEffectSnapshot? compiled = null, FalloutGlobalState? globals = null)
     {
-        _records = records; _target = target; _nextGeneration = nextGeneration; _execute = execute;
+        _records = records; _globals = globals; _target = target; _nextGeneration = nextGeneration; _execute = execute;
         Source = FalloutScriptedEffectSource.Read(records, definition); _script = records.GetEffective(definition.Script);
         if (restore is null && (locals is not null || compiled is not null) || restore is not null && (locals is null || compiled is null))
             throw new InvalidDataException("Active effect lost its complete current timeline/cells/event-list state.");
@@ -165,7 +166,7 @@ internal sealed class FalloutScriptedActiveEffect
 
     private void PollConditions(Func<FalloutCondition, float> condition)
     {
-        var pass = FalloutCondition.AllPass(Source.Conditions, condition);
+        var pass = FalloutCondition.AllPass(Source.Conditions, condition, globals: _globals);
         if (pass && !_state.Applied && _state.FinishApplied && !_state.Expired)
         {
             if (!Compiled.Finished) throw new InvalidDataException("Condition restart reached an unretired original event list.");

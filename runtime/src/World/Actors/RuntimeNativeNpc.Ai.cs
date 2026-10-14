@@ -196,7 +196,7 @@ internal partial class RuntimeNativeNpc
         Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null)
     {
         _aiStack = stack;
-        _idleConditions = new(stack);
+        _idleConditions = new(stack, globals);
         _factions = FalloutAiPackages.ReadFactions(stack, Appearance.Npc, _templates);
         _liveFactions = factions;
         _questState = quests;

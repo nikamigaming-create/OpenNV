@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Content;
@@ -6,9 +7,10 @@ namespace OpenNV.Runtime.Content;
 // the remote actor supplying a particular line's voice. Neither is a proxy NPC.
 internal sealed partial class FalloutRadioConversation(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutQuestState quests, Func<FalloutFormKey, FalloutCondition, float> evaluate,
-    Func<FalloutFormKey, float> stage, IReadOnlySet<FalloutFormKey> said, Func<uint, uint>? random = null)
+    Func<FalloutFormKey, float> stage, IReadOnlySet<FalloutFormKey> said, Func<uint, uint>? random = null,
+    FalloutGlobalState? globals = null)
 {
-    private readonly FalloutDialogueQuestSelection _selection = new(records, quests);
+    private readonly FalloutDialogueQuestSelection _selection = new(records, quests, globals);
     internal FalloutRadioStation? Station { get; private set; }
     internal FalloutFormKey? Topic { get; private set; }
     internal FalloutDialogueInfo? Info { get; private set; }

@@ -15,7 +15,11 @@ internal sealed record FalloutProcessSceneFields(FalloutProcessWeaponEntry? Weap
     FalloutProcessOpacityFields? Opacity = null, FalloutActorTeleportFadeFields? TeleportFade = null,
     FalloutProcessTeleportFadeUpdate? TeleportCall = null,
     FalloutProcessWeaponContinuationFields? WeaponContinuation = null,
-    FalloutProcessPackageStartFields? PackageStart = null)
+    FalloutProcessPackageStartFields? PackageStart = null,
+    FalloutMoverDeltaProcessFields? MoverDelta = null,
+    FalloutProcessAnimationQueueFields? AnimationPairs = null,
+    string? AnimationContextWriter = null,
+    FalloutProcessAnimationContextInvalidation? AnimationContextLoad = null)
 {
     internal static FalloutProcessSceneFields Constructed => new(null, null);
 }
@@ -44,6 +48,7 @@ internal sealed partial class FalloutActorProcessCommonState
         var fields = current.Level is FalloutDetectionProcessLevel.High or FalloutDetectionProcessLevel.MiddleHigh
             ? current.SceneFields ?? throw new NotSupportedException("source-Actor-scene-process-MiddleHigh-fields-unconstructed")
             : FalloutProcessSceneFields.Constructed;
+        if (fields.AnimationContextWriter is { } animationWriter) throw new NotSupportedException(animationWriter);
         return new(_process, _stack, _source.ExecutableSha256, current.Source, epoch, current.Level, lease.Ownership,
             current.Changed, fields.WeaponEntry, fields.AnimationContext, fields.IdlePrimaryPackage, fields.ActorValueCache);
     }
@@ -62,7 +67,9 @@ internal sealed partial class FalloutActorProcessCommonState
                 Opacity = FalloutProcessOpacityFields.Constructed,
                 TeleportFade = FalloutActorTeleportFadeFields.Constructed,
                 WeaponContinuation = FalloutProcessWeaponContinuationFields.Constructed,
-                PackageStart = FalloutProcessPackageStartFields.Constructed
+                PackageStart = FalloutProcessPackageStartFields.Constructed,
+                MoverDelta = FalloutMoverDeltaProcessFields.Constructed,
+                AnimationPairs = FalloutProcessAnimationQueueFields.Constructed
             }
             : FalloutProcessSceneFields.Constructed with
             {
@@ -70,7 +77,8 @@ internal sealed partial class FalloutActorProcessCommonState
                 WeaponDrawn = FalloutProcessWeaponDrawnFields.Constructed,
                 Opacity = FalloutProcessOpacityFields.Constructed,
                 WeaponContinuation = FalloutProcessWeaponContinuationFields.Constructed,
-                PackageStart = FalloutProcessPackageStartFields.Constructed
+                PackageStart = FalloutProcessPackageStartFields.Constructed,
+                AnimationPairs = FalloutProcessAnimationQueueFields.Constructed
             } : null;
 
     internal FalloutProcessPlayerSceneUpdate UpdatePlayerScene(FalloutFormKey actor, long epoch)
@@ -122,6 +130,8 @@ internal sealed partial class FalloutActorProcessCommonState
         ValidateMovementFlagFields(entry);
         ValidatePhysicalActivityFields(entry);
         ValidateWeaponDrawnFields(entry);
+        ValidateMoverDeltaProcessFields(entry, executable);
+        ValidatePlayerAnimationQueueFields(entry, executable);
         ValidateOpacityFields(entry, executable, stack);
         ValidateWeaponContinuationFields(entry);
     }

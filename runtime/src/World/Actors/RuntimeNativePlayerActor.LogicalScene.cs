@@ -10,8 +10,8 @@ internal sealed partial class RuntimeNativePlayerActor
     internal FalloutActorLogicalScene? LogicalScene => Actor.SourceModel.LogicalScene;
     internal FalloutActorLogicalScene BindLogicalScene(FalloutActorLogicalSceneSnapshot? saved = null)
     {
-        if (!_first || Error is not null || _idle is null)
-            throw new NotSupportedException("Logical first-person publication requires its actual returned source role and animation selection.");
+        if (Error is not null || _idle is null)
+            throw new NotSupportedException("Logical Player model publication requires its actual returned source role and animation selection.");
         var scene = Actor.SourceModel.ConstructLogicalScene(saved);
         RequireCompleteLogicalAttachmentGraph(scene);
         Skeleton.BindLogicalScene(scene);

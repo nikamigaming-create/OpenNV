@@ -280,7 +280,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         var layer = new CanvasLayer { Layer = 94 };
         var menu = new NativeOwnedRecipeMenu(_pluginStack, _inventory, category, recipes, EvaluateRecipeCondition,
             value => _playerSkills.Value(value), recipe => _inventory.Craft(_pluginStack, recipe, SourcePlayerLevel, _globals),
-            CloseRecipeMenu);
+            CloseRecipeMenu, _globals);
         _recipeLayer = layer;
         _recipeMenu = menu;
         AddChild(layer);

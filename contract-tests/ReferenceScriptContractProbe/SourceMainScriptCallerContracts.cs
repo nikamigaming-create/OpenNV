@@ -17,6 +17,11 @@ internal static partial class SourceMainScriptCallerContracts
         SourceMenuLifecycleContracts.Run();
         RunLateActorTimeContracts();
         RunLateFramePrefixContracts();
+        RunPlayerMoverDeltaContracts();
+        RunPlayerActorMovementContracts();
+        RunPlayerReturnTailContracts();
+        RunReferenceFrameReceiptContracts();
+        ConditionGlobalContracts.Run();
         RunMainMenuBoundaryContracts();
         RunProductRefusalContracts();
         SuccessfulOrderAndCold(); FailedSteamPrefixAndCold(); ShortCircuitAndForbiddenReentry(); ActualMissingHost();

@@ -37,7 +37,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         };
         entry.Configure((accept, fail) =>
         {
-            var menu = new NativeOwnedSpecialBookMenu(_pluginStack, SpecialAllocationBinding, budget, accept, fail);
+            var menu = new NativeOwnedSpecialBookMenu(_pluginStack, SpecialAllocationBinding, budget, accept, fail,
+                _scripts?.References?.NativePlugins?.SpecialBookPageSounds);
             return new(menu, () => menu.State);
         }, () => _player.ModalInput, _player.SetModalInput);
         if (entry.Error is not null) throw new NotSupportedException(entry.Error);

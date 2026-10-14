@@ -109,7 +109,7 @@ internal partial class RuntimeNativePlayer
         {
             try
             {
-                var tree = new FalloutFurnitureIdleTree(records, body.Appearance.SkeletonPath);
+                var tree = new FalloutFurnitureIdleTree(records, body.Appearance.SkeletonPath, _combatGlobals);
                 _furnitureBody = body;
                 foreach (var state in new[] { 2, 1, 4 })
                 {

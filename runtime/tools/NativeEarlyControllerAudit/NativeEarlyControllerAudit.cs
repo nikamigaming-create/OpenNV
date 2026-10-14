@@ -43,6 +43,8 @@ public partial class NativeEarlyControllerAudit : Node
             ExerciseConstructorFailure(source, inputs, actor, stack, reentry: false);
             ExerciseConstructorFailure(source, inputs, actor, stack, reentry: true);
             ExerciseColdResources(source, inputs, actor, stack);
+            ExerciseMoverDelta(source, inputs);
+            ExerciseControlledActorMovement(source, inputs);
             GD.Print($"OPENNV_NATIVE_EARLY_CONTROLLER_PASS ownedSource={content is not null} nativeArea=true sourceShapes=91 " +
                 "detachedNoDefaultSpace=true actualCommonPointer=true threeIndependentProcessOwners=true realManagerAndProxy=true " +
                 "propertyOwners=true constructorAndResetFailurePrefixes=true sourceKind16=true nativeRetirement=true " +

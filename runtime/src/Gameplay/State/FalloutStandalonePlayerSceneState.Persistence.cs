@@ -23,7 +23,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             _referenceOrientation?.Capture() ?? _historicalReferenceOrientation, CaptureControlPointOfView(),
             _playerOpacity?.Capture() ?? _historicalPlayerOpacity, _followingServicesCall, _weaponContinuation,
             _inhibition.Capture(), _followingTimerFlag.Capture(), _followingContinuation, mover,
-            _lateActorTime?.Capture() ?? _historicalLateActorTime, CaptureLateFrame());
+            _lateActorTime?.Capture() ?? _historicalLateActorTime, CaptureLateFrame(),
+            _lateMoverDelta?.Capture() ?? _historicalMoverDelta, _actorMovement?.Capture() ?? _historicalActorMovement);
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -65,6 +66,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _followingContinuation = saved.FollowingContinuation;
         _historicalLateActorTime = saved.LateActorTime;
         _historicalLateFrame = saved.LateFrame;
+        _historicalMoverDelta = saved.MoverDelta;
+        _historicalActorMovement = saved.ActorMovement;
         RestoreControlPointOfView(saved.PointOfView!);
         _controlObservations.AddRange(saved.ControlObservations!);
         _observedControlIds.UnionWith(saved.ControlObservations!.Select(value => value.Command.Observation));
@@ -119,6 +122,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         ValidateFollowingContinuation(saved);
         ValidateLateActorTime(saved);
         ValidateLateFrame(saved);
+        ValidatePlayerMoverOwners(saved);
         ValidatePlayerWeaponContinuation((saved.Stack, saved.Source.Main,
             saved.FollowingServices, saved.WeaponContinuation));
         foreach (var owner in saved.FirstPersonHistory)

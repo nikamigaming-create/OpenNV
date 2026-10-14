@@ -18,7 +18,7 @@ internal partial class RuntimeNativeSpeech
                 _radioConversations.Add(station, conversation = new(_stack,
                     _references ?? throw new InvalidOperationException("Radio has no reference world."),
                     _quests ?? throw new InvalidOperationException("Radio has no quest state."), EvaluateRadioCondition,
-                    _questStage, _said, _dialogueRandom));
+                    _questStage, _said, _dialogueRandom, _globals));
             if (IsDialogueBusy(station))
                 throw new NotSupportedException("Radio interruption requires its retained result/cursor owner.");
             conversation.Start(station, topic);

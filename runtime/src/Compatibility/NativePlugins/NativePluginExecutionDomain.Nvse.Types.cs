@@ -12,7 +12,7 @@ internal enum NativeNvseHostCall : uint
     EngineGlobalPublish = 20, EngineTlsPublish = 21, EngineGlobalRetire = 22, EngineTlsRetire = 23,
     SourceFieldMethodDeclare = 24, SourceFieldMethodPublish = 25, SourceFieldMethodExecute = 26, SourceFieldMethodRetire = 27,
     LoggingGetPath = 28,
-    SourceModelOperand = 29,
+    SourceModelOperand = 29, SourceBookSoundOperand = 30,
 }
 internal enum NativeNvsePhase { Mapped, Querying, QueriedTrue, QueriedFalse, Loading, LoadedTrue, LoadedFalse, Retired, Faulted }
 internal enum NativeNvseSerializationEvent : uint { Save, Load, NewGame, PreLoad }

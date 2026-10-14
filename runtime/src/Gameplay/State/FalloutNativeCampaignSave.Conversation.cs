@@ -18,7 +18,9 @@ internal static partial class FalloutNativeCampaignSave
                 throw new InvalidDataException("Closed campaign conversation contains an invented active source/receipt.");
         }
         else if (saved.Speaker is null || saved.DialogueSubject is null || state.SpeakerBase is null || state.Info is null ||
-            state.Generation == 0 || state.ResponseIndex <= 0 || state.Begin is null || state.End is null || state.Choices.Count == 0)
+            state.Generation == 0 && state.ResultOnlyCompletions == 0 || state.ResponseIndex < 0 ||
+            state.ResponseIndex == 0 && state.ResultOnlyCompletions == 0 ||
+            state.Begin is null || state.End is null || state.Choices.Count == 0)
             throw new InvalidDataException("Saved choices have no completed real participants/results.");
     }
     private static void ValidateConversationSource(FalloutPluginStack records, FalloutNativeCampaignState state)

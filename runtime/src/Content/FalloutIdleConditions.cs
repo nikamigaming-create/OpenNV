@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 using System.Buffers.Binary;
 
 namespace OpenNV.Runtime.Content;
@@ -6,7 +7,7 @@ internal sealed record FalloutIdleConditionDecision(FalloutFormKey Candidate, bo
     FalloutFormKey? StoppedAt, int ConditionsEvaluated);
 
 /// <summary>Package admission evaluates the candidate before its source ancestors.</summary>
-internal sealed class FalloutIdleConditions(FalloutPluginStack stack)
+internal sealed class FalloutIdleConditions(FalloutPluginStack stack, FalloutGlobalState? globals = null)
 {
     private readonly Dictionary<FalloutFormKey, Entry> _entries = [];
     internal FalloutIdleConditionDecision? LastDecision { get; private set; }
@@ -21,7 +22,7 @@ internal sealed class FalloutIdleConditions(FalloutPluginStack stack)
         {
             if (!visited.Add(form)) throw new InvalidDataException("Package IDLE parent cycle.");
             var entry = Read(form);
-            if (!FalloutCondition.AllPass(entry.Conditions, condition => { evaluated++; return evaluate(condition); }))
+            if (!FalloutCondition.AllPass(entry.Conditions, condition => { evaluated++; return evaluate(condition); }, globals: globals))
             {
                 LastDecision = new(idle, false, form, evaluated);
                 return false;

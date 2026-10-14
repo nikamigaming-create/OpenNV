@@ -44,6 +44,7 @@ internal sealed partial class FalloutReferenceWorld
         _sourcePlayerReferencePosition?.SaveBlocker ?? _sourceReferenceChanges?.SaveBlocker ??
         _sourceReferenceFormFiles?.SaveBlocker ??
         _sourceInitialPlacementCells?.SaveBlocker ??
+        _sourcePlayerModelData?.SaveBlocker ?? _sourcePlayerMoverSpeed?.SaveBlocker ??
         (HasStandalonePlayerScene ? CampaignStandalonePlayerScene.ThreadContext.ReferenceChangeFlagsSaveBlocker : null) ??
         _sourcePackageFields.Values.FirstOrDefault(fields => fields.OwnedFieldsSaveBlocker is not null)?.OwnedFieldsSaveBlocker;
 

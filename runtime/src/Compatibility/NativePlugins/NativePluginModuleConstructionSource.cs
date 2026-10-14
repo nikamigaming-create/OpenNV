@@ -165,6 +165,11 @@ internal sealed class NativePluginConstructorImage
     }
     internal NativePluginImageImport Import(uint slot) => _imports.TryGetValue(slot, out var row) ? row :
         throw new NotSupportedException("Original constructor indirect entry is not its named source IAT.");
+    internal void RequireReadableData(uint rva, uint count)
+    {
+        if (!OpenNV.Runtime.Content.FalloutSourceModuleDataBorrow.HasCompleteReadableData(_pe.PEHeaders, _input.Length, rva, count))
+            throw new NotSupportedException("Original module input leaves its complete readable non-executable source data.");
+    }
     internal void RequireWritable(uint rva, uint count)
     {
         if (!_pe.PEHeaders.SectionHeaders.Any(row => row.SectionCharacteristics.HasFlag(SectionCharacteristics.MemWrite) &&

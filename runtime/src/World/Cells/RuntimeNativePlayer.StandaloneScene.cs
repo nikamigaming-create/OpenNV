@@ -66,7 +66,8 @@ internal partial class RuntimeNativePlayer
         try
         {
             NativeNifSceneRetirement.Drain("Actual Player standalone scene",
-                [ReleaseStandaloneFirstPersonScene, RetireStandaloneLivingPhysics]);
+                [ReleaseStandaloneFirstPersonScene, ReleaseStandaloneReferenceModel,
+                    () => _thirdPerson?.RetireLogicalScene(), RetireStandaloneLivingPhysics]);
         }
         finally
         {

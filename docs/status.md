@@ -17,7 +17,8 @@ The latest first Player frame returns its real nonnull controller context and
 post-action children and its Current/Primary idle-package query. The latest
 ordinary run also returns the late Flags setter, independent inhibition timer
 and bytes, Actor-time body and XY/Z stores using actual cached Main time. It next
-fails at the late mover-delta virtual. The fresh run publishes
+also returns mover-delta and its nonnull-data Actor movement child. It next
+fails at the following Player tail. The fresh run publishes
 that shared World failure without recorded publication losses. Earlier package
 diagnostics called a failed gameplay getter; dedicated retained-field observation
 repairs that loss. The latest ordinary headless session opens Pause through

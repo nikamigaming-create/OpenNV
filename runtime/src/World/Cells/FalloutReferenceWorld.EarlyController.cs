@@ -35,6 +35,7 @@ internal sealed partial class FalloutReferenceWorld
         var owned = records.OwnedSource ?? throw new NotSupportedException("source-early-controller-owned-image-unbound");
         var source = FalloutExecutableStringTable.ReadEarlyController(owned.FalloutExecutablePath,
             fields.Source, scene.ThreadContext.Source);
+        ConstructStandaloneReferenceModelData(source);
         var settings = FalloutPhysicalEffectiveSettings.Read(name => FalloutGameSettingFloats.ReadRetained(records,
             name, nameof(PrepareStandaloneEarlyPlayerController)));
         var inputs = new FalloutPhysicalConstructorInputs(source.Fields.Controls.Main.EngineSha256, settings);

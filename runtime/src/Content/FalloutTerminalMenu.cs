@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -16,6 +17,7 @@ internal sealed record FalloutTerminalSelectionReceipt(FalloutTerminalSelection 
 internal sealed partial class FalloutTerminalMenu
 {
     private readonly FalloutPluginStack _records;
+    private readonly FalloutGlobalState? _globals;
     private readonly Action<FalloutFormKey> _requireAdmission;
     private readonly Func<FalloutFormKey, FalloutCondition, float> _evaluateCondition;
     private readonly Action<FalloutTerminalSelection> _executeSelection;
@@ -52,9 +54,9 @@ internal sealed partial class FalloutTerminalMenu
     internal FalloutTerminalMenu(FalloutPluginStack records, FalloutFormKey reference,
         Action<FalloutFormKey> requireAdmission,
         Func<FalloutFormKey, FalloutCondition, float> evaluateCondition,
-        Action<FalloutTerminalSelection> executeSelection)
+        Action<FalloutTerminalSelection> executeSelection, FalloutGlobalState? globals = null)
     {
-        _records = records;
+        _records = records; _globals = globals;
         _requireAdmission = requireAdmission ?? throw new ArgumentNullException(nameof(requireAdmission));
         _evaluateCondition = evaluateCondition ?? throw new ArgumentNullException(nameof(evaluateCondition));
         _executeSelection = executeSelection ?? throw new ArgumentNullException(nameof(executeSelection));
@@ -192,7 +194,7 @@ internal sealed partial class FalloutTerminalMenu
     }
 
     private bool Eligible(FalloutTerminalEntry entry) => FalloutCondition.AllPass(entry.Conditions,
-        condition => _evaluateCondition(Reference, condition), evaluateRunOn: true);
+        condition => _evaluateCondition(Reference, condition), evaluateRunOn: true, globals: _globals);
 
     private void RequireReady(bool allowResult = false)
     {

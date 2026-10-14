@@ -14,7 +14,8 @@ internal sealed partial class FalloutSourceReferenceChangeManager
             Array.AsReadOnly(_buckets.Select(value => (IReadOnlyList<Guid>)Array.AsReadOnly(value.ToArray())).ToArray()),
             Array.AsReadOnly(_calls.Select(CloneCall).ToArray()), _writerBoundary, _retired,
             _pending.Count == 0 ? null : Array.AsReadOnly(_pending.ToArray()),
-            _data.Count == 0 ? null : Array.AsReadOnly(_data.Values.Select(value => value.Capture()).ToArray()));
+            _data.Count == 0 ? null : Array.AsReadOnly(_data.Values.Select(value => value.Capture()).ToArray()),
+            Array.AsReadOnly(_frameReceipts.Runs.Select(CloneChangeFrames).ToArray()));
         Validate(saved, Source, Stack); return saved;
     }
     internal void Retire()
@@ -55,8 +56,14 @@ internal sealed partial class FalloutSourceReferenceChangeManager
         var ids = new HashSet<Guid>(); var threads = new Dictionary<Guid, int>(); long sequence = 0;
         uint manager = FalloutReferencePositionSource.InitialChangeManagerFlags; string? boundary = null;
         var lastPublication = -1; var clearCount = 0;
-        foreach (var call in saved.Calls)
+        foreach (var item in ChangeHistory(saved))
         {
+            if (item.Frames is { } frames)
+            {
+                ValidateChangeFrames(frames, saved, publications, threads, entries, ref lastPublication, ref sequence, manager, boundary);
+                continue;
+            }
+            var call = item.Call!;
             var invocation = call.Invocation; invocation.Actor.Validate(); invocation.ValidatePackageCaller();
             if (call.Source != source.Identity || invocation.Call == Guid.Empty || invocation.ReferenceConstructor == Guid.Empty ||
                 invocation.CommonProcess == Guid.Empty || invocation.Epoch < 1 || invocation.ThreadId < 1 ||

@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 namespace OpenNV.Runtime.Content;
 
 /// <summary>Hit-context IDLE selection from winning records, independent of actor identity.</summary>
@@ -5,6 +6,7 @@ internal sealed class FalloutHitReactionTree
 {
     private readonly Dictionary<FalloutFormKey, FalloutIdleBranch> _branches;
     private readonly FalloutIdleBranch[] _roots;
+    private readonly FalloutGlobalState? _globals;
     private readonly Dictionary<string, int> _pluginOrder;
     private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutIdleBranch>> _children = [];
     internal IReadOnlyList<FalloutFormKey> Roots => _roots.Select(value => value.Record.FormKey).ToArray();
@@ -30,8 +32,10 @@ internal sealed class FalloutHitReactionTree
         }
     }
 
-    internal FalloutHitReactionTree(FalloutPluginStack records, string skeletonPath, ushort contextFunction = 391)
+    internal FalloutHitReactionTree(FalloutPluginStack records, string skeletonPath, ushort contextFunction = 391,
+        FalloutGlobalState? globals = null)
     {
+        _globals = globals;
         var directory = skeletonPath[..skeletonPath.LastIndexOf('/')];
         _pluginOrder = records.Plugins.ToDictionary(value => value.Plugin.Name, value => value.LoadOrderIndex, StringComparer.OrdinalIgnoreCase);
         _branches = records.EffectiveRecords("IDLE")
@@ -60,7 +64,7 @@ internal sealed class FalloutHitReactionTree
         bool Pass(FalloutIdleBranch branch)
         {
             visited.Add(branch.Record.FormKey);
-            return FalloutCondition.AllPass(branch.Conditions, evaluate);
+            return FalloutCondition.AllPass(branch.Conditions, evaluate, globals: _globals);
         }
         // Hit-context roots are distinguished by their predicates (including
         // GetHitLocation), never by EDID, an actor whitelist or KF spelling.

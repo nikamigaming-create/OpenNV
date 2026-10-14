@@ -177,6 +177,7 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         try
         {
             RequireCurrent(invocation);
+            _fields.InvalidateAnimationNodeMembershipFromInitializer(invocation, Factory, writer, boundary);
             var invalidated = _fields.InvalidateScriptInitialization(invocation, Factory, boundary);
             scope.Stores.AddRange(invalidated.Stores); return Complete(scope, true, null);
         }

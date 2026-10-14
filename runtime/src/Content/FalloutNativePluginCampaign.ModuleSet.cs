@@ -48,6 +48,7 @@ internal sealed partial class FalloutNativePluginCampaign
             domain.ResourcesRetired,
             ModuleReadIo = domain.NvseLastModuleReadIoReceipt,
             ModelOperand = domain.SourceModelOperandEvents,
+            BookSoundOperands = domain.SourceBookSoundOperandEvents,
             Modules = domain.NvseModules.Select(module => new
             {
                 module.Module,

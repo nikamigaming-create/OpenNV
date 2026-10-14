@@ -75,7 +75,7 @@ internal sealed partial class NativePluginExecutionDomain
         if (plugin.Phase != NativeNvsePhase.QueriedTrue || info is null || info.InfoVersion != 1 || info.Name.IsNull || info.Name.Bytes.IsEmpty)
             throw new InvalidOperationException("Original NVSE Load requires its actual successful Query and typed PluginInfo.");
         if (sourceLoadHandle is 0 or uint.MaxValue) throw new ArgumentOutOfRangeException(nameof(sourceLoadHandle));
-        PrepareNvseRaceMenuModelPath(plugin);
+        PrepareNvseRaceMenuModelPath(plugin); PrepareNvseSpecialBookPageSounds(plugin);
         return InvokeNvseInitialization(plugin, load: true, sourceLoadHandle);
     }
     private NativeNvseInitializationReceipt InvokeNvseInitialization(NativeNvsePlugin plugin, bool load, uint? sourceLoadHandle = null)
@@ -100,7 +100,7 @@ internal sealed partial class NativePluginExecutionDomain
             VerifyOwner(); return receipt;
         }
         catch (NativePluginDomainRefusal) { throw; }
-        catch (Exception error) { FailRaceMenuModelCall(plugin, error); plugin.Phase = NativeNvsePhase.Faulted; throw Fatal(error); }
+        catch (Exception error) { FailRaceMenuModelCall(plugin, error); FailBookSoundCall(plugin, error); plugin.Phase = NativeNvsePhase.Faulted; throw Fatal(error); }
         finally { --_callDepth; }
     }
     // Caller must publish the genuine authoritative event and its source-defined
@@ -144,7 +144,7 @@ internal sealed partial class NativePluginExecutionDomain
     }
     internal NativeNvseRetirementReceipt UnloadNvse(NativeNvsePlugin plugin)
     {
-        VerifyNvse(plugin); RequireNvseEmptyCall(); RetireNvseRaceMenuModelPath(plugin);
+        VerifyNvse(plugin); RequireNvseEmptyCall(); RetireNvseSpecialBookPageSounds(plugin); RetireNvseRaceMenuModelPath(plugin);
         RequireNvseFunctionsIdle(plugin); RequireNvseSourceFilesIdle(); RequireNvseBinaryIdle(); ++_callDepth;
         _cngOriginalUnloading = true;
         try
@@ -194,6 +194,7 @@ internal sealed partial class NativePluginExecutionDomain
                     sourceServices && _nvseData is not null ? _nvseDataVersion : 0, sourceServices && _nvseLogging is not null); break;
             case NativeNvseHostCall.LoggingGetPath: value = DispatchNvseLogging(frame, parent, reader, plugin); break;
             case NativeNvseHostCall.SourceModelOperand: value = DispatchNvseModelOperand(frame, parent, reader); break;
+            case NativeNvseHostCall.SourceBookSoundOperand: value = DispatchNvseBookSoundOperand(frame, parent, reader); break;
             case NativeNvseHostCall.SetOpcode: value = registry.SetOpcode(frame.Id, reader.ReadUInt32()); break;
             case NativeNvseHostCall.RegisterCommand:
                 {
@@ -261,7 +262,7 @@ internal sealed partial class NativePluginExecutionDomain
         if (!ChildExited) throw new InvalidOperationException("Native source/capability owners require verified exact child closure.");
         ClearEngineCommandsAfterChildExit();
         ClearSourceCallSitesAfterChildExit();
-        ClearRaceMenuModelAfterChildExit();
+        ClearRaceMenuModelAfterChildExit(); ClearBookSoundsAfterChildExit();
         ClearSourceFieldMethodsAfterChildExit();
         ClearEngineGlobalsAfterChildExit();
         ClearNvseBinaryAfterChildClosure();

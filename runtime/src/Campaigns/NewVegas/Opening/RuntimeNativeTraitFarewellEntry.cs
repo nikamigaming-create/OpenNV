@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Presentation.Ui;
@@ -14,11 +15,12 @@ internal partial class RuntimeNativeTraitEntry : CanvasLayer
     internal event Action<Exception>? Failed;
 
     internal void Configure(FalloutPluginStack records, FalloutTraitMenuContract contract,
-        IReadOnlyList<FalloutNativeTraitIdentity> current, int playerLevel, Func<FalloutCondition, float> evaluate)
+        IReadOnlyList<FalloutNativeTraitIdentity> current, int playerLevel, Func<FalloutCondition, float> evaluate,
+        FalloutGlobalState? globals = null)
     {
         Name = "NativeTraitEntry"; Layer = 120;
         ProcessMode = ProcessModeEnum.Always;
-        _menu = new(records, contract, current, playerLevel, evaluate, selection => Accepted?.Invoke(selection), error => Failed?.Invoke(error));
+        _menu = new(records, contract, current, playerLevel, evaluate, selection => Accepted?.Invoke(selection), error => Failed?.Invoke(error), globals);
         AddChild(_menu);
         Input.MouseMode = Input.MouseModeEnum.Visible;
         _pausedTree = GetTree();

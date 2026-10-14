@@ -36,7 +36,8 @@ internal sealed class FalloutWeaponSpread
 
     internal float PlayerMedianDeviationDegrees(FalloutWeaponShot shot, float skill, float strength,
         bool aiming, bool moving, bool running, bool sneaking, bool leftArmCrippled, bool rightArmCrippled,
-        IReadOnlyList<FalloutPerkEntry> perks, Func<FalloutCondition, float> evaluateCondition)
+        IReadOnlyList<FalloutPerkEntry> perks, Func<FalloutCondition, float> evaluateCondition,
+        FalloutGlobalState? globals = null)
     {
         ArgumentNullException.ThrowIfNull(shot);
         ArgumentNullException.ThrowIfNull(perks);
@@ -68,7 +69,7 @@ internal sealed class FalloutWeaponSpread
         foreach (var perk in perks.Where(perk => perk.Entry == 34))
         {
             perk.RequireActorConditionScope();
-            if (perk.Conditions.Count != 0 && !FalloutCondition.AllPass(perk.Conditions, evaluateCondition)) continue;
+            if (perk.Conditions.Count != 0 && !FalloutCondition.AllPass(perk.Conditions, evaluateCondition, globals: globals)) continue;
             playerSpread = perk.Function switch
             {
                 1 => perk.Value,

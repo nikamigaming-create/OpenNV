@@ -24,7 +24,8 @@ internal sealed record FalloutReferenceChangeSnapshot(string Schema, FalloutRefe
     IReadOnlyList<FalloutReferenceChangePublication> Publications, IReadOnlyList<FalloutReferenceChangeEntry> Entries,
     IReadOnlyList<IReadOnlyList<Guid>> Buckets, IReadOnlyList<FalloutReferenceChangeCall> Calls,
     string? WriterBoundary, bool Retired, IReadOnlyList<FalloutReferenceChangeEntry>? PendingEntries = null,
-    IReadOnlyList<FalloutReferenceChangeDataSnapshot>? Data = null);
+    IReadOnlyList<FalloutReferenceChangeDataSnapshot>? Data = null,
+    IReadOnlyList<FalloutReferenceFrameRun<FalloutReferenceChangeCall>>? FrameRuns = null);
 internal sealed record FalloutReferenceChangeDataSnapshot(Guid Identity, string Producer, byte[] Bytes);
 
 // This is actual retained data storage. Pointer presence is meaningful even

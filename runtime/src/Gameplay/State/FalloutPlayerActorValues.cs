@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record FalloutPlayerActorValuesSnapshot(string Schema, uint Reference, FalloutFormKey Player,
     string PlayerWinner, string PlayerSha256, FalloutFormKey StatsOwner, string StatsWinner, string StatsSha256,
-    IReadOnlyDictionary<int, FalloutActorValue> Values, FalloutPlayerStatusValuesSnapshot? StatusValues = null);
+    IReadOnlyDictionary<int, FalloutActorValue> Values, FalloutPlayerStatusValuesSnapshot? StatusValues = null, FalloutPlayerMoverActorValuesSnapshot? MoverValues = null);
 
 // Mutable engine-created player values. Source constant effects are evaluated
 // into their evidenced pools on demand; they are never saved a second time.
@@ -54,7 +54,7 @@ internal sealed partial class FalloutPlayerActorValues
         _statusValues.TryGetValue(actorValue, out value) ? value :
         throw new NotSupportedException($"Player actor value {actorValue} has no base/formula pool owner.");
 
-    internal float ReadBase(int actorValue) => Value(actorValue).Base;
+    internal float ReadBase(int actorValue) => ReadMoverBase(actorValue);
     // Source-selected consumers apply their own descriptor/getter bounds to
     // this Float32 sum. UI/permanent reads retain their independent bounds.
     internal float ReadRawPermanent(int actorValue) => Evaluate(actorValue, () => ReadBase(actorValue) +
@@ -93,7 +93,8 @@ internal sealed partial class FalloutPlayerActorValues
 
     internal FalloutSpecialAllocationBinding AllocationBinding => new("engine-player-special-pools", ReadPermanent, WriteBaseInteger);
 
-    internal void WriteBaseInteger(int actorValue, int value) => Publish(actorValue, Value(actorValue) with { Base = value });
+    internal void WriteBaseInteger(int actorValue, int value)
+    { MarkMoverBaseOverride(actorValue); Publish(actorValue, Value(actorValue) with { Base = value }); }
 
     internal void AddModifier(int actorValue, FalloutActorValuePool pool, float amount)
     {
@@ -113,7 +114,7 @@ internal sealed partial class FalloutPlayerActorValues
     {
         var value = SignedInteger(argument);
         var actorValue = IsStatusValue(name) ? StatusValue(name) : SpecialValue(name);
-        if (_statusSource?.Values.Any(source => source.Index == actorValue && source.HasChangeCallback) == true)
+        if (MoverValueHasCallback(actorValue) || _statusSource?.Values.Any(source => source.Index == actorValue && source.HasChangeCallback) == true)
             throw new NotSupportedException("Player status command has an unbound independent source change callback: " + name);
         switch (operation.ToLowerInvariant())
         {
@@ -176,7 +177,7 @@ internal sealed partial class FalloutPlayerActorValues
 
     internal FalloutPlayerActorValuesSnapshot Capture() => new(SnapshotSchema, PlayerReference,
         _source.Player, _source.PlayerWinner, _source.PlayerSha256, _source.StatsOwner, _source.StatsWinner, _source.StatsSha256,
-        new Dictionary<int, FalloutActorValue>(_values), CaptureStatusValues());
+        new Dictionary<int, FalloutActorValue>(_values), CaptureStatusValues(), CaptureMoverValues());
 
     internal void Restore(FalloutPlayerActorValuesSnapshot snapshot)
     {
@@ -188,6 +189,7 @@ internal sealed partial class FalloutPlayerActorValues
         var replacement = snapshot.Values.ToDictionary(pair => pair.Key, pair => pair.Value);
         _values = replacement;
         _statusValues = status;
+        RestoreMoverValues(snapshot.MoverValues);
         Changed?.Invoke();
     }
 
@@ -195,6 +197,7 @@ internal sealed partial class FalloutPlayerActorValues
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         if (snapshot.StatusValues is { } status) ValidateStatusValues(status);
+        if (snapshot.MoverValues is { } mover) ValidateMoverValues(mover);
         if (snapshot.Schema != SnapshotSchema || snapshot.Reference != PlayerReference || snapshot.Player.ObjectId == 0 ||
             snapshot.StatsOwner.ObjectId == 0 || string.IsNullOrWhiteSpace(snapshot.PlayerWinner) || string.IsNullOrWhiteSpace(snapshot.StatsWinner) ||
             !Hash(snapshot.PlayerSha256) || !Hash(snapshot.StatsSha256) || snapshot.Values is null || snapshot.Values.Count != 7 ||

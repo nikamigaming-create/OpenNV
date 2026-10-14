@@ -70,28 +70,30 @@ internal sealed partial class FalloutReferencePackageOwnerValidation
                 throw new InvalidDataException("Reference aggregate duplicated an original source package command.");
         }
         BuildPositionIndex();
-        foreach (var call in threadFlags.Calls.Where(value => value.Enabled is null && value.WriterBoundary is null && value.Returned))
+        var frameThreadReads = new FalloutReferenceFrameReadIndex(threadFlags);
+        foreach (var call in FalloutPlayerThreadContextState.ThreadReferenceFrameEndpoints(threadFlags).Where(value => value.Enabled is null && value.WriterBoundary is null && value.Returned))
         {
             var read = new FalloutSourceThreadReferenceFlagsRead(call.Source, call.Process, call.Factory,
                 call.Invocation, call.ConsumerFactory, call.Thread, call.Changed, 1, call.After);
             _threadReads.Add((call.Process, call.Factory, call.Changed), read);
         }
-        foreach (var call in changes.Calls)
+        foreach (var call in FalloutSourceReferenceChangeManager.ChangeEndpoints(changes))
         {
             _changeCalls.Add((call.Factory, call.Changed), call);
             RequireReferenceCaller(call.Invocation);
             if (call.ReferenceFlags is { } flags) RequireFlags(flags, call.Invocation.CommonProcess, call.Invocation.Epoch);
             if (call.ThreadFlags is { } read &&
-                (!_threadReads.TryGetValue((read.Process, read.Factory, read.Sequence), out var actual) || actual != read))
+                (!_threadReads.TryGetValue((read.Process, read.Factory, read.Sequence), out var actual) || actual != read) &&
+                !frameThreadReads.Contains(read, call.Invocation))
                 throw new InvalidDataException("Reference change thread read has no identical retained actual getter call.");
             if (call.Invocation.PackageCommand is { } command) Add(_packageChanges, command, call);
         }
-        foreach (var call in formFiles.Calls)
+        foreach (var call in FalloutReferenceFormFileAssociationState.FileEndpoints(formFiles))
         {
             RequireReferenceCaller(call.Invocation);
             if (call.Invocation.PackageCommand is { } command) Add(_packageFiles, command, call);
         }
-        foreach (var call in position.Calls)
+        foreach (var call in FalloutSourceReferencePositionState.PositionEndpoints(position))
             if (call.Change is { } child &&
                 (!_changeCalls.TryGetValue((child.Factory, child.Changed), out var actual) || !SameChange(actual, child)))
                 throw new InvalidDataException("Reference position mask2 receipt has no identical retained manager child.");
@@ -131,7 +133,7 @@ internal sealed partial class FalloutReferencePackageOwnerValidation
 
     private void BuildPositionIndex()
     {
-        var groups = _position.Calls.GroupBy(value => value.Invocation.ReferenceProcess).ToDictionary(value => value.Key, value => value.ToArray());
+        var groups = FalloutSourceReferencePositionState.PositionHistory(_position).GroupBy(value => value.Process).ToDictionary(value => value.Key, value => value.ToArray());
         var values = new FalloutReferencePositionValues(new(0, 0, 0), 0, FalloutReferencePositionSource.InitialScale, null, false);
         long sequence = 0; var xyz = false; var mode = false; var persistent = false;
         var filePublications = _files.Publications.ToDictionary(value => value.Process);
@@ -145,24 +147,26 @@ internal sealed partial class FalloutReferencePackageOwnerValidation
                 throw new InvalidDataException("Reference/file/change owners changed their independent actual process associations.");
             sequence = publication.PublishedSequence!.Value;
             Store();
-            foreach (var call in groups.GetValueOrDefault(publication.Process) ?? [])
-            {
-                _positionCalls.Add(call.Invocation.Call, call);
-                RequireReferenceCaller(call.Invocation);
-                if (call.Flags is { } flags) RequireFlags(flags, call.Invocation.CommonProcess, call.Invocation.Epoch);
-                values = call.After; sequence = call.Changed;
-                if (call.Stores.Any(value => value.Step == FalloutReferencePositionStep.PositionZ)) xyz = true;
-                if (call.Stores.Any(value => value.Step == FalloutReferencePositionStep.PositionMode)) mode = true;
-                if (call.Stores.Any(value => value.Step == FalloutReferencePositionStep.PersistentCell)) persistent = true;
-                if (call.Prefix is { Returned: true }) { mode = true; persistent = true; }
-                switch (call.InvalidatedLane)
+            foreach (var item in groups.GetValueOrDefault(publication.Process) ?? [])
+                foreach (var call in item.Call is { } ordinary ? new[] { ordinary } :
+                    item.Frames!.FirstCalls.Concat(item.Frames.LastCalls).DistinctBy(row => row.Changed))
                 {
-                    case FalloutReferencePositionLane.Position: xyz = false; break;
-                    case FalloutReferencePositionLane.PositionMode: mode = false; break;
-                    case FalloutReferencePositionLane.PersistentCell: persistent = false; break;
+                    _positionCalls.Add(call.Invocation.Call, call);
+                    RequireReferenceCaller(call.Invocation);
+                    if (call.Flags is { } flags) RequireFlags(flags, call.Invocation.CommonProcess, call.Invocation.Epoch);
+                    values = call.After; sequence = call.Changed;
+                    if (call.Stores.Any(value => value.Step == FalloutReferencePositionStep.PositionZ)) xyz = true;
+                    if (call.Stores.Any(value => value.Step == FalloutReferencePositionStep.PositionMode)) mode = true;
+                    if (call.Stores.Any(value => value.Step == FalloutReferencePositionStep.PersistentCell)) persistent = true;
+                    if (call.Prefix is { Returned: true }) { mode = true; persistent = true; }
+                    switch (call.InvalidatedLane)
+                    {
+                        case FalloutReferencePositionLane.Position: xyz = false; break;
+                        case FalloutReferencePositionLane.PositionMode: mode = false; break;
+                        case FalloutReferencePositionLane.PersistentCell: persistent = false; break;
+                    }
+                    Store();
                 }
-                Store();
-            }
             void Store() => _positions.Add((publication.Process, publication.Factory, publication.Constructor, sequence), new(values, xyz, mode, persistent));
         }
     }

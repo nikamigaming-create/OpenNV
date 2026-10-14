@@ -30,6 +30,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     private readonly FalloutNativePluginCampaignSelection? _selection;
     private readonly FalloutNativePluginDataBindings? _dataBindings;
     public FalloutRaceMenuModelPath? RaceMenuModelPath { get; }
+    public FalloutSpecialBookPageSounds? SpecialBookPageSounds { get; }
     private readonly List<Module> _modules = [];
     private readonly List<NativePluginExecutionDomain> _retiringDomains = [];
     private readonly List<NativePluginPrivateIo> _retiringIos = [];
@@ -46,11 +47,12 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
 
     internal FalloutNativePluginCampaign(FalloutPluginStack records, FalloutQuestState quests,
         FalloutQuestScripts scripts, string companion, string privateStateRoot, FalloutNativePluginCampaignSelection? selection,
-        FalloutNativePluginDataBindings? dataBindings = null, FalloutRaceMenuModelPath? modelPath = null)
+        FalloutNativePluginDataBindings? dataBindings = null, FalloutRaceMenuModelPath? modelPath = null,
+        FalloutSpecialBookPageSounds? pageSounds = null)
     {
         _records = records; _source = records.OwnedSource ?? throw new NotSupportedException("Native campaign has no exact owned content source.");
         _quests = quests; _scripts = scripts; _world = scripts.References ?? throw new NotSupportedException("Native campaign has no actual reference world.");
-        _selection = selection; _dataBindings = dataBindings; RaceMenuModelPath = modelPath;
+        _selection = selection; _dataBindings = dataBindings; RaceMenuModelPath = modelPath; SpecialBookPageSounds = pageSounds;
         if (!ReferenceEquals(_world.NativeSourceRecords, records) || !ReferenceEquals(quests.NativeSourceRecords, records))
             throw new InvalidDataException("Native campaign world/quest/selected records differ.");
         var paths = _source.NativePluginResourcePaths().Where(path =>
@@ -174,6 +176,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             if (primary)
             {
                 if (RaceMenuModelPath is { } modelPath) domain.BindNvseRaceMenuModelPath(plugin, modelPath);
+                if (SpecialBookPageSounds is { } pageSounds) domain.BindNvseSpecialBookPageSounds(plugin, pageSounds);
                 domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues, _records, domain, plugin));
                 domain.AttachNvseScriptInterface(plugin); domain.AttachNvseCommandTable(plugin, new CampaignCommandTable(this));
                 if (_dataBindings is { } data) domain.AttachNvseData(plugin, new CampaignData(this, domain, plugin, data));
@@ -281,6 +284,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     {
         RequireCurrent();
         if (RaceMenuModelPath is { Phase: not FalloutRaceMenuModelPathPhase.Source } modelPath) modelPath.RequireColdOwned();
+        if (SpecialBookPageSounds is { HasNativeLifetime: true } pageSounds) pageSounds.RequireColdOwned();
         if (ModuleFailure is { } failure) throw new NotSupportedException("Selected native module state is incomplete: " + failure);
         if (_active != 0) throw new InvalidOperationException("An original native caller still owns campaign state.");
         RequireDataIdleForSave();

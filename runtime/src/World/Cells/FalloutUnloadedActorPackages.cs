@@ -91,7 +91,7 @@ internal sealed partial class FalloutUnloadedActorPackages(FalloutPluginStack re
             var selected = pendingChoice is not null ? pendingChoice.Bind(records, state) :
                 world.SelectActorPackage(actor, condition => Evaluate(actor, condition),
                     templates, clock, events.Active?.Form, events.Done, reevaluateScript,
-                    world.RetainedPackageLocationReached(actor, events.Active?.Form));
+                    world.RetainedPackageLocationReached(actor, events.Active?.Form), globals);
             var selectionRevision = world.ActorScriptPackageRevision(actor);
             if (world.HasRetainedNativePackageState(actor) && (events.Active?.Form != selected?.FormKey ||
                 state.ScriptPackage is { Pending: true }))

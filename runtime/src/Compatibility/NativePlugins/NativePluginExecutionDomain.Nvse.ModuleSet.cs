@@ -107,7 +107,7 @@ internal sealed partial class NativePluginExecutionDomain
             (NativeNvseHostCall.QueryInterface or NativeNvseHostCall.SetOpcode or NativeNvseHostCall.RegisterCommand or
              NativeNvseHostCall.RegisterListener or NativeNvseHostCall.SerializationCallback or NativeNvseHostCall.Unsupported or
              NativeNvseHostCall.DispatchMessage or NativeNvseHostCall.DeliveredMessage or
-             NativeNvseHostCall.BeginSerialization or NativeNvseHostCall.DeliveredSerialization or NativeNvseHostCall.SourceModelOperand))
+             NativeNvseHostCall.BeginSerialization or NativeNvseHostCall.DeliveredSerialization or NativeNvseHostCall.SourceModelOperand or NativeNvseHostCall.SourceBookSoundOperand))
             throw new NotSupportedException("Additional original module requires its own current engine object/service callback owner.");
     }
     private NativeNvsePlugin? SelectNvseCallbackModule(Frame frame)

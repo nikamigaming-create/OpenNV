@@ -28,6 +28,7 @@ internal sealed partial class FalloutPlayerAbilityScripts : IFalloutAbilityScrip
         internal FalloutCompiledActiveEffectExecution Compiled => Lifetime.Compiled;
     }
     private readonly FalloutPluginStack _records;
+    private readonly FalloutGlobalState? _globals;
     private readonly Func<IReadOnlyList<FalloutFormKey>> _selection;
     private readonly Func<FalloutCondition, float> _condition;
     private readonly FalloutAbilityModifiers _declarations;
@@ -39,9 +40,10 @@ internal sealed partial class FalloutPlayerAbilityScripts : IFalloutAbilityScrip
     private long _generation;
 
     internal FalloutPlayerAbilityScripts(FalloutPluginStack records, Func<IReadOnlyList<FalloutFormKey>> selection,
-        Func<FalloutCondition, float> condition, FalloutPlayerAbilityScriptsSnapshot? restore = null)
+        Func<FalloutCondition, float> condition, FalloutPlayerAbilityScriptsSnapshot? restore = null,
+        FalloutGlobalState? globals = null)
     {
-        _records = records; _selection = selection; _condition = condition; _declarations = new(records);
+        _records = records; _globals = globals; _selection = selection; _condition = condition; _declarations = new(records);
         _player = FalloutPlayerActorValueSource.Read(records);
         if (restore is null) return;
         Validate(restore);

@@ -1,3 +1,4 @@
+using OpenNV.Runtime.Gameplay.State;
 using System.Globalization;
 
 namespace OpenNV.Runtime.Content;
@@ -9,6 +10,7 @@ internal sealed class FalloutTraitMenuSelection
 {
     private readonly FalloutTraitMenuContract _contract;
     private readonly FalloutPluginStack _records;
+    private readonly FalloutGlobalState? _globals;
     private readonly int _playerLevel;
     private readonly Func<FalloutCondition, float> _evaluate;
     private readonly List<FalloutNativeTraitIdentity> _selected;
@@ -18,10 +20,11 @@ internal sealed class FalloutTraitMenuSelection
     internal int Remaining => Maximum - _selected.Count;
 
     internal FalloutTraitMenuSelection(FalloutPluginStack records, FalloutTraitMenuContract contract,
-        IReadOnlyList<FalloutNativeTraitIdentity> current, int playerLevel, Func<FalloutCondition, float> evaluate)
+        IReadOnlyList<FalloutNativeTraitIdentity> current, int playerLevel, Func<FalloutCondition, float> evaluate,
+        FalloutGlobalState? globals = null)
     {
         FalloutTraitMenuCatalogue.Validate(records, contract, current);
-        _records = records; _contract = contract; _selected = [.. current]; _playerLevel = playerLevel; _evaluate = evaluate;
+        _records = records; _globals = globals; _contract = contract; _selected = [.. current]; _playerLevel = playerLevel; _evaluate = evaluate;
         Choices = contract.Traits.Select(trait =>
         {
             var record = records.GetEffective(records.RuntimeFormKey(trait.RuntimeFormId));
@@ -36,7 +39,7 @@ internal sealed class FalloutTraitMenuSelection
             if (Text("EDID") != trait.EditorId || Text("FULL") != trait.DisplayName)
                 throw new InvalidDataException("Trait menu identity differs from its winning PERK.");
             return new FalloutTraitMenuChoice(trait, Text("DESC") ?? "", Text("ICON"),
-                FalloutTraitMenuCatalogue.Eligible(records, trait, playerLevel, evaluate));
+                FalloutTraitMenuCatalogue.Eligible(records, trait, playerLevel, evaluate, globals));
         }).OrderBy(choice => choice.Trait.DisplayName, StringComparer.Ordinal).ToArray();
     }
 
@@ -44,7 +47,7 @@ internal sealed class FalloutTraitMenuSelection
     {
         if (!Choices.Any(choice => choice.Trait == trait)) throw new InvalidDataException("Trait menu choice is outside its source contract.");
         if (_selected.Remove(trait)) return true;
-        if (!FalloutTraitMenuCatalogue.Eligible(_records, trait, _playerLevel, _evaluate)) return false;
+        if (!FalloutTraitMenuCatalogue.Eligible(_records, trait, _playerLevel, _evaluate, _globals)) return false;
         if (_selected.Count >= Maximum) return false;
         _selected.Add(trait); return true;
     }
@@ -53,7 +56,7 @@ internal sealed class FalloutTraitMenuSelection
     {
         var selected = _selected.OrderBy(trait => trait.RuntimeFormId).ToArray();
         FalloutTraitMenuCatalogue.Validate(_records, _contract, selected);
-        if (selected.Any(trait => !FalloutTraitMenuCatalogue.Eligible(_records, trait, _playerLevel, _evaluate)))
+        if (selected.Any(trait => !FalloutTraitMenuCatalogue.Eligible(_records, trait, _playerLevel, _evaluate, _globals)))
             throw new InvalidDataException("Selected trait is no longer eligible in the authoritative player state.");
         return selected;
     }

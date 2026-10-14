@@ -4,6 +4,72 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--player-return-tail-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerReturnTailContracts();
+    return;
+}
+
+if (args is ["--audit-owned-player-movement-source", var movementDataRoot])
+{
+    using var content = RuntimeLiveContentSource.Open(movementDataRoot, RuntimeLiveContentSource.Fallout3Game);
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    using var runtime = FalloutAdvancementRuntimeSource.Open(records);
+    var main = FalloutMainScriptCallerSource.Read(FalloutImmediateScriptSource.Read(runtime.Receipt));
+    var controls = FalloutPlayerMovementControlSource.Reviewed(main);
+    var early = FalloutExecutableStringTable.ReadEarlyController(content.FalloutExecutablePath,
+        FalloutPackageCommandFieldsSource.Reviewed(controls), FalloutPlayerThreadContextSource.Reviewed(main));
+    SourceMainScriptCallerContracts.AuditOwnedPlayerMoverDeltaSource(records, early);
+    SourceMainScriptCallerContracts.AuditOwnedPlayerActorMovementSource(records, early);
+    var mover = FalloutPlayerMoverDeltaSource.Reviewed(early);
+    var movement = FalloutExecutableStringTable.ReadPlayerActorMovement(content.FalloutExecutablePath, mover,
+        FalloutInitialPlacementCellsSource.Reviewed(FalloutReferencePositionSource.Reviewed(early.Fields)),
+        FalloutPlayerWorldOrientationSource.Reviewed(controls));
+    var tail = SourceMainScriptCallerContracts.AuditOwnedPlayerReturnTailSource(records, movement,
+        FalloutStandalonePlayerSceneSource.Read(main));
+    Console.WriteLine("OPENNV_OWNED_PLAYER_RETURN_TAIL_SOURCE_PASS " + JsonSerializer.Serialize(tail));
+    return;
+}
+
+if (args is ["--condition-global-contracts"])
+{
+    ConditionGlobalContracts.Run();
+    return;
+}
+
+if (args is ["--audit-owned-condition-globals", var conditionDataRoot, var conditionCampaign, .. var conditionPlugins])
+{
+    using var content = RuntimeLiveContentSource.Open(conditionDataRoot, conditionCampaign,
+        activePlugins: conditionPlugins.Length == 0 ? null : conditionPlugins);
+    using var records = FalloutPluginStack.Load(content.PluginSources);
+    ConditionGlobalContracts.RunOwned(records);
+    return;
+}
+
+if (args is ["--audit-owned-result-only-info", var infoDataRoot, var infoCampaign, .. var infoPlugins])
+{
+    OwnedResultOnlyInfoProbe.Run(infoDataRoot, infoCampaign, infoPlugins);
+    return;
+}
+
+if (args is ["--player-mover-delta-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerMoverDeltaContracts();
+    return;
+}
+
+if (args is ["--player-actor-movement-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerActorMovementContracts();
+    return;
+}
+
+if (args is ["--reference-frame-receipt-contracts"])
+{
+    SourceMainScriptCallerContracts.RunReferenceFrameReceiptContracts();
+    return;
+}
+
 if (args is ["--audit-owned-celestial-programs", var celestialDataRoot])
 {
     SourceSkyTransferContracts.AuditOwnedCelestialPrograms(celestialDataRoot);

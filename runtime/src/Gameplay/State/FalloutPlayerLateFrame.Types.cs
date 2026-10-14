@@ -6,7 +6,7 @@ internal enum FalloutPlayerLateFrameStep
 {
     ViewRequest, CurrentView, DisabledControls, MoverFlags, SharedTimer,
     SecondInhibition, FirstInhibition, ViewComparison, ActorTime,
-    DefaultVector, MoverDelta, Failed,
+    DefaultVector, MoverDelta, Tail, Failed,
 }
 
 internal sealed record FalloutPlayerLateFrameCall(string Source, string Stack,
@@ -17,7 +17,8 @@ internal sealed record FalloutPlayerLateFrameCall(string Source, string Stack,
     uint? SharedTimerBits = null, IReadOnlyList<FalloutPlayerInhibitionRead>? InhibitionReads = null,
     byte? DesiredView = null, byte? ComparedView = null,
     FalloutPlayerLateActorTimeCall? ActorTime = null,
-    FalloutActorMoverFrameStoreOperation? DefaultVector = null, string? Failure = null);
+    FalloutActorMoverFrameStoreOperation? DefaultVector = null, string? Failure = null,
+    FalloutPlayerMoverDeltaCall? MoverDelta = null);
 
 internal sealed record FalloutPlayerLateFrameSnapshot(FalloutPlayerLateFramePrefixSource Source,
     string Stack, Guid Process, Guid Constructor, byte ViewRequest, uint InhibitionTimerBits,

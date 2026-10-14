@@ -31,7 +31,7 @@ internal partial class RuntimeNativeNpc
         var selected = _aiReferenceState?.PendingPackageChoice is { } choice ? choice.Bind(_aiStack!, _aiReferenceState) :
             world.SelectActorPackage(Appearance.Reference!.Value, EvaluateSelectionCondition,
                 _templates, _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true,
-                reevaluateScript ?? !_bindingInitialBase, PackageLocationReached(_packageEvents?.Active?.Form));
+                reevaluateScript ?? !_bindingInitialBase, PackageLocationReached(_packageEvents?.Active?.Form), _aiGlobals);
         if (_aiReferenceState is not null) _aiReferenceState.SelectionFailure = null;
         return new(selected, selected is null ? null : FalloutScriptPackage.Read(selected), ScriptPackageRevision,
             selected is not null && _aiReferenceState?.ScriptPackage?.Package == selected.FormKey);

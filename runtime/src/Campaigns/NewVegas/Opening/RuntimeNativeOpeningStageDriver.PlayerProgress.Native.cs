@@ -45,7 +45,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             level => new(catalogue.Skills.Select(skill => skill.ActorValue).ToArray(),
                 _playerSkills.ReadUnmodifiedSkill, _playerSkills.WriteUnmodifiedSkill,
                 skill => checked((int)_playerSkills.Value(skill)), _playerSkills.IsTaggedSkill, admitSkillBudget,
-                catalogue.Choices, perk => catalogue.Eligible(perk, level, Rank, PlayerProgressCondition), Rank, acquirePerkRank),
+                catalogue.Choices, perk => catalogue.Eligible(perk, level, Rank, PlayerProgressCondition, _globals), Rank, acquirePerkRank),
             PresentNativeLevelUp));
         _levelUpCatalogue = catalogue; _nativeAdvancementBound = true;
     }

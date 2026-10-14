@@ -222,7 +222,7 @@ internal partial class RuntimeNativePlayer
         try
         {
             first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient);
-            third = new(records, content, appearance, weapon, false, UnitsToMeters, ambient);
+            third = ConstructReferenceModel(() => new(records, content, appearance, weapon, false, UnitsToMeters, ambient));
             if (first.Error is not null || third.Error is not null) throw new NotSupportedException(first.Error ?? third.Error);
             third.ConfigureBodyContacts(CollisionLayer);
             third.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());

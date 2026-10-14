@@ -34,6 +34,7 @@ internal interface IFalloutNativePluginCampaign : IDisposable
 {
     IReadOnlyList<FalloutNativePluginCampaignModule> Modules { get; }
     FalloutRaceMenuModelPath? RaceMenuModelPath { get; }
+    FalloutSpecialBookPageSounds? SpecialBookPageSounds { get; }
     bool ContainsOpcode(ushort opcode);
     FalloutCompiledCommandDeclaration? Declaration(ushort opcode);
     FalloutScriptValue Invoke(FalloutNativePluginSourceCall call);

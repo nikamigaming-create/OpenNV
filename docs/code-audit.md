@@ -35,6 +35,41 @@ and observation succeeded but establishes no matched gameplay or pixel parity.
 
 ## What is actually preventing progress
 
+The subsequent movement batch compiles and its focused field/controller checks
+pass, including 100,000 existing position/change calls with bounded receipts.
+Owned source execution exposed and corrected a constructor-relative selector
+offset. Ordinary construction then exposed a false INI provenance/stack identity
+check; the repair now borrows the actual injected numeric settings owner.
+Complete movement is still unaccepted. Review also found failed-model factory
+cleanup and cold nonnull-model reconstruction gaps; cleanup is repaired and a
+separate cold graph/binding repair passes complete authored NIF graph preservation,
+fresh identities and historical-read joins through three JSON reconstructions.
+The ordinary FO3 repeat returns both mover-delta and its nonnull-data Actor
+movement child, then refuses the following Player tail. Observed Quit/Yes exits
+zero with source-owner disposal. Complete Player/Main, save and native Continue
+remain unaccepted. The full reference-contract suite also caught an FO3-only
+field validator applied to NV; its source-family predicate is corrected and the
+suite passes.
+
+A16 now uses typed raw GLOB operands and the actual owning plugin/live globals.
+Authored operator, changed-value, caller and cold checks pass. A selected FO3
+corpus audit resolves 778 comparison-global operands without running condition
+functions. A17 now runs silent player INFO Begin/End/link effects without voice
+publication; authored and compiled-result three-cycle tests pass. Native quest,
+dialogue, complete save/Continue and retail parity remain unaccepted. These
+executed component repairs supersede the original restrictions in A16/A17 below.
+
+The reached TTW Book pointer mutation now has independent direction operands,
+actual native SDK/store/restore handlers and shared module/image leases. Managed
+and native Debug builds and authored checks pass. The first owned source audit
+exposed an artificial writable restriction on its read-only CString input. The
+corrected readable, non-executable, fully file-backed data guard passes authored
+and owned audits. Actual unchanged TTW Load returns four SDK/store/restore events
+per direction, preserves the four model events, then refuses the next distinct
+mutation. Native resources retire on child exit. No complete module Load or Book
+audio claim is accepted. The next Player-tail component passes authored and owned
+source checks but awaits genuine loaded animation owners in production.
+
 The critical defects are a mixture of missing behavior and authored admission
 rules which reject valid state. They require different repairs. Removing every
 `NotSupportedException` would hide real missing behavior. Conversely, retaining

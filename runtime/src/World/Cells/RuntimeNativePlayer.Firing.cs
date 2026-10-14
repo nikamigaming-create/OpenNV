@@ -33,7 +33,7 @@ internal partial class RuntimeNativePlayer
         Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks,
         Func<FalloutCondition, float> evaluateCondition, Action<FalloutWeaponDamage, byte> damageSelf)
     {
-        _damage = new(records, _presentationInventory!, actorValue, perks, evaluateCondition);
+        _damage = new(records, _presentationInventory!, actorValue, perks, evaluateCondition, globals);
         _combatActorValue = actorValue;
         _combatPerks = perks;
         _combatCondition = evaluateCondition;
@@ -76,7 +76,7 @@ internal partial class RuntimeNativePlayer
             .PlayerMedianDeviationDegrees(shot, actorValue(shot.SkillActorValue), actorValue(5), aiming,
                 moving, Sprinting, sneaking: false, leftArmCrippled: arms.Left, rightArmCrippled: arms.Right,
                 (_combatPerks ?? throw new InvalidOperationException("Player perk owner is absent."))(),
-                _combatCondition ?? throw new InvalidOperationException("Player condition owner is absent."));
+                _combatCondition ?? throw new InvalidOperationException("Player condition owner is absent."), _combatGlobals);
     }
 
     private void RequestWeaponFire()

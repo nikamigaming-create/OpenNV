@@ -42,7 +42,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private FalloutPluginRecord RecoveryIdle(bool faceUp)
     {
-        _recoveryTree ??= new(_records, _skeletonPath, 106);
+        _recoveryTree ??= new(_records, _skeletonPath, 106, _context?.Globals);
         return _recoveryTree.Select(condition => condition.Function switch
         {
             106 => faceUp ? 1 : 0,

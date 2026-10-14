@@ -89,7 +89,7 @@ internal sealed class FalloutNewGameBootstrap
             }
             return executor.StageSteps(owner, fields, "");
         },
-            condition => FalloutPlatformConditions.Evaluate(condition) ?? quests.Evaluate(condition), canContinue);
+            condition => FalloutPlatformConditions.Evaluate(condition) ?? quests.Evaluate(condition), canContinue, globals: globals);
         Host = new((quest, stage) => () => _stages.Enter(quest, stage),
             _ => throw new NotSupportedException("Startup player actor-value query has no player state owner."),
             executor.ExecuteProgram, executor.InvokeFunction, GameTime: gameTime,
