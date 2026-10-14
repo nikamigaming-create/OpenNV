@@ -11,14 +11,14 @@ internal static partial class SourceMainScriptCallerContracts
         var source = FalloutPlayerMovementControlSource.Reviewed(main);
         var stack = new string('2', 64); var process = Guid.NewGuid(); var invocation = Guid.NewGuid();
         var input = FalloutDirectInputState.CreateHeadless(stack, new(_ => null));
-        var control = new FalloutPlayerMovementControlState(source, stack, process);
+        var control = AuthoredMovementControl(source, stack, process);
         var initial = control.Capture();
         Require(initial is { CacheStores: 0, Call: null, Failure: null } && initial.Inhibition == FalloutPlayerControlInhibition.Constructed,
             "Player control construction replayed input or global cache stores.");
         Reject(() => input.ReadRelativeMouseAxis(1));
         input.Publish(new byte[256], new byte[8], 7, -11, -120);
         var before = input.Capture();
-        Reject(() => control.ExecutePrefix(invocation, 1, 0x3ca3d70a, 0xcc00, input));
+        Reject(() => ExecuteAuthoredMovement(control, invocation, 1, 0x3ca3d70a, 0xcc00, input));
         var failed = control.Capture();
         Require(failed is { CacheStores: 2, Failure: FalloutPlayerMovementControlState.ConfigurationBoundary } &&
             failed.Call is { Returned: false, Step: FalloutPlayerMovementControlStep.Configuration } call &&
@@ -32,32 +32,32 @@ internal static partial class SourceMainScriptCallerContracts
             input.ReadRelativeMouseAxis(0) == 0 && input.ReadRelativeMouseAxis(uint.MaxValue) == 0,
             "Relative mouse getter polled, cleared the retained cache or changed source out-of-range results.");
         var saved = JsonSerializer.Deserialize<FalloutPlayerMovementControlSnapshot>(JsonSerializer.Serialize(failed))!;
-        var cold = new FalloutPlayerMovementControlState(source, stack, Guid.NewGuid(), saved);
+        var cold = AuthoredMovementControl(source, stack, Guid.NewGuid(), saved);
         var coldBefore = cold.Capture();
         Require(coldBefore.Factory != saved.Factory && coldBefore.CapturedProcess != saved.CapturedProcess &&
             coldBefore.CacheStores == saved.CacheStores && coldBefore.Call!.InputFactory == saved.Call!.InputFactory &&
             coldBefore.Call.MouseReads.SequenceEqual(saved.Call.MouseReads),
             "Cold Player controls promoted an old input factory or replayed cache/input operations.");
-        Reject(() => cold.ExecutePrefix(Guid.NewGuid(), 2, 0, 0, input));
+        Reject(() => ExecuteAuthoredMovement(cold, Guid.NewGuid(), 2, 0, 0, input));
         Require(cold.Capture().Sequence == coldBefore.Sequence, "Failed cold controls replayed their reached source prefix.");
         Reject(() => FalloutPlayerMovementControlState.Validate(saved with { CacheStores = 1 }));
         Reject(() => FalloutPlayerMovementControlState.Validate(saved with { Call = saved.Call! with { Returned = true } }));
         Reject(() => FalloutPlayerMovementControlState.Validate(saved with
         { Call = saved.Call! with { MouseReads = saved.Call.MouseReads.Reverse().ToArray() } }));
-        Reject(() => new FalloutPlayerMovementControlState(source, stack, saved.CapturedProcess, saved));
+        Reject(() => AuthoredMovementControl(source, stack, saved.CapturedProcess, saved));
         var foreign = FalloutDirectInputState.CreateHeadless(new('3', 64), new(_ => null));
-        var foreignControl = new FalloutPlayerMovementControlState(source, stack, process);
-        Reject(() => foreignControl.ExecutePrefix(Guid.NewGuid(), 1, 0, 0, foreign));
+        var foreignControl = AuthoredMovementControl(source, stack, process);
+        Reject(() => ExecuteAuthoredMovement(foreignControl, Guid.NewGuid(), 1, 0, 0, foreign));
         Require(foreignControl.Capture() is { CacheStores: 0, Call.InputFactory: null },
             "Foreign current input crossed the cache-clear boundary.");
         var unavailable = FalloutDirectInputState.CreateHeadless(stack, new(_ => null));
-        var unavailableControl = new FalloutPlayerMovementControlState(source, stack, process);
-        Reject(() => unavailableControl.ExecutePrefix(Guid.NewGuid(), 1, 0, 0, unavailable));
+        var unavailableControl = AuthoredMovementControl(source, stack, process);
+        Reject(() => ExecuteAuthoredMovement(unavailableControl, Guid.NewGuid(), 1, 0, 0, unavailable));
         Require(unavailableControl.Capture() is { CacheStores: 2, Call.Step: FalloutPlayerMovementControlStep.MouseAxes } missing &&
             missing.Call.MouseReads.Count == 0 && missing.Call.InputFactory == unavailable.Factory,
             "Unpublished input became zero axes or erased the preceding genuine cache stores.");
-        var wrongArguments = new FalloutPlayerMovementControlState(source, stack, process);
-        Reject(() => wrongArguments.ExecutePrefix(Guid.NewGuid(), 1, 0, 4, input));
+        var wrongArguments = AuthoredMovementControl(source, stack, process);
+        Reject(() => ExecuteAuthoredMovement(wrongArguments, Guid.NewGuid(), 1, 0, 4, input));
         Require(wrongArguments.Capture() is { Sequence: 0, Call: null }, "Wrong source arguments entered Player controls.");
         Exception? threadFailure = null;
         var thread = new Thread(() => { try { control.Capture(); } catch (Exception error) { threadFailure = error; } });

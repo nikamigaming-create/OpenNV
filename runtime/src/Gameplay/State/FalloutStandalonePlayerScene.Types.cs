@@ -27,7 +27,7 @@ internal sealed record FalloutStandaloneInputManagerQuery(Guid Main, long MainOr
 internal sealed record FalloutStandaloneActorScalarReset(Guid Main, long MainOrdinal, long Entered, long Changed,
     IReadOnlyList<uint?> Fields, int Stores, bool Returned);
 internal sealed record FalloutStandaloneScenePreludeCall(Guid Main, long MainOrdinal, long Entered, long Changed,
-    FalloutStandaloneScenePreludeStep Step, FalloutStandaloneScenePreludeStep? FailedAt, string? Failure);
+    FalloutStandaloneScenePreludeStep Step, FalloutStandaloneScenePreludeStep? FailedAt, string? Failure, Guid Invocation);
 internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, FalloutStandalonePlayerSceneSource Source,
     string Stack, Guid CapturedProcess, Guid Constructor, long Sequence, byte SceneMode, byte MainHold,
     byte PlayerView, uint ClockKind, uint Numerator, uint Denominator, byte SceneBracket,
@@ -59,7 +59,10 @@ internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, Fallo
     FalloutPlayerPointOfViewSnapshot? PointOfView = null,
     FalloutPlayerOpacitySnapshot? Opacity = null,
     FalloutStandaloneFollowingServicesCall? FollowingServices = null,
-    FalloutPlayerWeaponContinuationCall? WeaponContinuation = null);
+    FalloutPlayerWeaponContinuationCall? WeaponContinuation = null,
+    FalloutPlayerInhibitionSnapshot? Inhibition = null,
+    FalloutPlayerFollowingTimerFlagSnapshot? FollowingTimerFlag = null,
+    FalloutPlayerFollowingContinuationCall? FollowingContinuation = null);
 
 // These are individual source children. A supplied delegate is not a completion
 // receipt; the source call records its actual returned child and committed prefix.

@@ -31,7 +31,8 @@ internal sealed partial class FalloutNativePluginCampaign
             bindings.Input.Sample,
             bindings.Input.Revision,
             bindings.Input.Failure,
-            bindings.Input.NativeReaders
+            bindings.Input.NativeReaders,
+            Original = bindings.Input.HasSourceControlQueries ? bindings.Input.CaptureSourceInput() : null
         } : null,
         InventoryFrameActive = _dataBindings?.Inventory.HasFrame,
         InventoryEntries = _dataBindings?.Inventory.Entries.Count,

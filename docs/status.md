@@ -39,8 +39,8 @@ owned construction and cold-association checks. The actual compiled startup
 command selects five controls and returns its source camera-mode/shared-scalar
 null branch. Its nonnull camera child remains refused after the byte store.
 Three cold component cycles preserve HUD/POV constructor and effect history.
-Native headless input reaches character-creation completion at CG00 stage 65;
-physical and zero-input control children return. Complete Player/Main return
+Physical and zero-input control children have bounded native/component returns.
+Complete Player/Main return
 and gameplay saving remain unaccepted. The current C# teleport-fade and mutable
 logical-scene repair passes authored parent/failure/cold tests and an actual FO3
 executable/NIF/KF audit with 180 scene objects and 28 shader properties. Live
@@ -48,7 +48,25 @@ Player invocation returns fade and opacity with 28 actual shader writes. Native
 material borrowing and retirement checks pass; rendered final pixels and
 canonical graft/bound/blend parity remain unverified. The following genuine
 weapon/action/activity/status child also returns with the actual campaign value
-pool and retained source cache. Later Player frame services remain refused.
+pool and retained source cache in bounded child checks. Fresh New Game currently
+stops earlier at CG00 stage 8: the opening script's Player package assignment has
+no completed original writer/effect owner. Current/primary package objects now
+retain six independent fields, and real assignment ingress invalidates stale
+constructor state before source getters. One inhibition owner is shared by
+movement and following services; three cold component cycles retain exact
+process/factory history without replay.
+
+Original input queries have distinct engine current/previous buffers and managed
+hook caches, ordered integer counts, failed acquisition/state-read prefixes and
+independent CPU platform construction/controller selection. Command collection
+does not advance engine buffers before the normal poll. Authored Player calls
+retain Ready Item mode 1/0/2 queries and refuse their following unowned effects.
+Fresh headless diagnostics retain the actual constructor, CPU controller poll
+and complete command-device buffers with zero publication failures. Original
+joystick/gamepad behavior, matched poll timing and complete Player/Main return
+remain unverified. Ordinary Create New Save fails without committing a slot;
+normal Quit exits zero and retires the reached state. Cold Continue and quest
+videos remain unaccepted.
 Experience HUD owns the actual source UI and constructor timer independently
 of rendering; its reached unowned frame remains a complete-save blocker.
 

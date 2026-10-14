@@ -22,7 +22,8 @@ internal sealed record FalloutPlayerMovementControlCall(Guid Main, long MainOrdi
     FalloutPlayerControlFieldsSnapshot? FieldsRead = null, FalloutPlayerControlAxes? Axes = null,
     FalloutPlayerControlWorldFovRead? WorldFov = null, uint? FovScaleBits = null,
     FalloutPlayerControlYawRead? Yaw = null, uint? YawBits = null,
-    FalloutPlayerControlPitchRead? Pitch = null, uint? PitchBits = null, bool? Result = null);
+    FalloutPlayerControlPitchRead? Pitch = null, uint? PitchBits = null, bool? Result = null,
+    Guid Invocation = default, IReadOnlyList<FalloutPlayerInhibitionRead>? InhibitionReads = null, bool? Inhibited = null);
 internal sealed record FalloutPlayerMovementControlSnapshot(string Schema, FalloutPlayerMovementControlSource Source,
     string Stack, Guid CapturedProcess, Guid Factory, long Sequence, uint Mode,
     FalloutPlayerControlInhibition Inhibition, byte JoystickAvailable, byte JoystickSuppressed,
@@ -30,7 +31,8 @@ internal sealed record FalloutPlayerMovementControlSnapshot(string Schema, Fallo
     FalloutPlayerMovementControlCall? Call, string? Failure, bool Retired,
     FalloutPlayerControlConfigurationSnapshot? Configuration = null,
     FalloutPlayerControlFieldsSnapshot? Fields = null, byte CameraMode = 0,
-    uint YawCache = 0, uint PitchCache = 0, long OrientationStores = 0, byte ControllerCameraMode = 0);
+    uint YawCache = 0, uint PitchCache = 0, long OrientationStores = 0, byte ControllerCameraMode = 0,
+    FalloutPlayerInhibitionSnapshot? InhibitionOwner = null);
 
 // C# owns this source call independently of Actor's physical utility, camera
 // presentation, keyboard control bindings, process flags and thread epilogue.
@@ -41,7 +43,9 @@ internal sealed record FalloutPlayerMovementControlSnapshot(string Schema, Fallo
 // loading-worker preparation. Its source thread remains fixed for its lifetime.
 internal sealed partial class FalloutPlayerMovementControlState
 {
-    internal const string Schema = "opennv-Player-movement-control/v2";
+    internal const string Schema = "opennv-Player-movement-control/v3";
+    internal const string InhibitionOwnerBoundary = "source-Player-movement-control-shared-inhibition-owner-unbound";
+    internal const string InhibitedBoundary = "source-Player-movement-control-inhibited-Boolean-continuation-unbound";
     internal const string ConfigurationBoundary = "source-Player-movement-control-invert-Y-configuration-unbound";
     internal const string WorldFovBoundary = "source-Player-movement-control-current-world-projection-FOV-unbound";
     internal const string WheelBoundary = "source-Player-movement-control-wheel-view-services-unbound";
@@ -52,7 +56,7 @@ internal sealed partial class FalloutPlayerMovementControlState
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private long _sequence, _cacheStores, _orientationStores, _reentry;
     private uint _mode;
-    private FalloutPlayerControlInhibition _inhibition = FalloutPlayerControlInhibition.Constructed;
+    private readonly FalloutPlayerInhibitionState? _inhibition;
     private byte _joystickAvailable, _joystickSuppressed;
     private uint _firstCacheWord, _secondCacheWord;
     private uint _yawCache, _pitchCache;
@@ -66,11 +70,15 @@ internal sealed partial class FalloutPlayerMovementControlState
     private bool _writing, _retired, _currentInvocationEntered;
 
     internal FalloutPlayerMovementControlState(FalloutPlayerMovementControlSource source, string stack,
-        Guid process, FalloutPlayerMovementControlSnapshot? saved = null, FalloutPlayerControlFieldsState? fields = null)
+        Guid process, FalloutPlayerMovementControlSnapshot? saved = null, FalloutPlayerControlFieldsState? fields = null,
+        FalloutPlayerInhibitionState? inhibition = null)
     {
         source.Validate(); ArgumentException.ThrowIfNullOrWhiteSpace(stack);
         if (process == Guid.Empty) throw new ArgumentException("Player movement/control needs its actual Main process.", nameof(process));
         _source = source; _stack = stack; _process = process;
+        _inhibition = inhibition;
+        if (inhibition is not null && (inhibition.Source.Controls != source || inhibition.Stack != stack || inhibition.Process != process))
+            throw new InvalidOperationException("Player movement/control selected a foreign shared inhibition owner.");
         Fields = fields ?? new(source, stack, process, saved?.Fields);
         var currentFields = Fields.Capture();
         if (currentFields.Source != source.Identity || currentFields.Stack != stack || currentFields.Process != process)
@@ -79,7 +87,7 @@ internal sealed partial class FalloutPlayerMovementControlState
         Validate(saved);
         if (saved.Source != source || saved.Stack != stack || saved.CapturedProcess == process || saved.Retired)
             throw new InvalidDataException("Cold Player movement/control changed source/stack/process or resurrected retirement.");
-        _sequence = saved.Sequence; _mode = saved.Mode; _inhibition = saved.Inhibition;
+        _sequence = saved.Sequence; _mode = saved.Mode;
         _joystickAvailable = saved.JoystickAvailable; _joystickSuppressed = saved.JoystickSuppressed;
         _firstCacheWord = saved.FirstCacheWord; _secondCacheWord = saved.SecondCacheWord;
         _cacheStores = saved.CacheStores; _call = saved.Call; _failure = saved.Failure;
@@ -108,7 +116,7 @@ internal sealed partial class FalloutPlayerMovementControlState
     }
 
     internal bool ExecutePrefix(Guid main, long ordinal, uint sceneArgument, ushort moverWord,
-        FalloutDirectInputState input, byte firstArgument = 0, byte lastArgument = 0)
+        FalloutDirectInputState input, byte firstArgument = 0, byte lastArgument = 0, Guid invocation = default)
     {
         RequireOwner(); ArgumentNullException.ThrowIfNull(input);
         if (_failure is { } failure) throw new NotSupportedException(failure);
@@ -121,13 +129,21 @@ internal sealed partial class FalloutPlayerMovementControlState
         _currentInvocationEntered = true;
         _writing = true; var fault = _reentry;
         _call = new(main, ordinal, Next(), _sequence, sceneArgument, moverWord, firstArgument, lastArgument,
-            FalloutPlayerMovementControlStep.SourceMode, null, null, null, 0, [], false, null, _process);
+            FalloutPlayerMovementControlStep.SourceMode, null, null, null, 0, [], false, null, _process, Invocation: invocation, InhibitionReads: []);
         try
         {
             if (_mode != 0) throw new NotSupportedException("source-Player-movement-control-nonzero-mode-producer-unbound");
             Step(FalloutPlayerMovementControlStep.Inhibition);
-            if (_inhibition != FalloutPlayerControlInhibition.Constructed)
-                throw new NotSupportedException("source-Player-movement-control-inhibition-writer-unbound");
+            var inhibition = _inhibition ?? throw new NotSupportedException(InhibitionOwnerBoundary);
+            var inhibitionReads = new List<FalloutPlayerInhibitionRead>(4);
+            var predicate = inhibition.ReadCurrent(FalloutPlayerInhibitionConsumer.Movement, new(main, ordinal, invocation), read =>
+            {
+                inhibitionReads.Add(read); _call = (_call ?? throw new InvalidOperationException("Entered controls lost their source call."))
+                    with
+                { InhibitionReads = inhibitionReads.ToArray(), Changed = Next() };
+            });
+            _call = _call with { Inhibited = predicate.Result, Changed = Next() };
+            if (predicate.Result) throw new NotSupportedException(InhibitedBoundary);
             Step(FalloutPlayerMovementControlStep.InputOwner);
             var current = input.ReadManagerOwner();
             if (!ReferenceEquals(current, input) || current.Source != _stack)
@@ -221,10 +237,13 @@ internal sealed partial class FalloutPlayerMovementControlState
     internal FalloutPlayerMovementControlSnapshot Capture()
     {
         RequireOwner(allowRetired: true);
+        var inhibition = _inhibition?.Capture();
+        var values = inhibition is null ? FalloutPlayerControlInhibition.Constructed :
+            new(inhibition.Bytes[0].Value, inhibition.Bytes[1].Value, inhibition.Bytes[2].Value, inhibition.Bytes[3].Value);
         var saved = new FalloutPlayerMovementControlSnapshot(Schema, _source, _stack, _process, _factory,
-            _sequence, _mode, _inhibition, _joystickAvailable, _joystickSuppressed, _firstCacheWord,
+            _sequence, _mode, values, _joystickAvailable, _joystickSuppressed, _firstCacheWord,
             _secondCacheWord, _cacheStores, _call, _failure, _retired, _configuration?.Fields ?? _historicalConfiguration,
-            Fields.Capture(), _cameraMode, _yawCache, _pitchCache, _orientationStores, _controllerCameraMode);
+            Fields.Capture(), _cameraMode, _yawCache, _pitchCache, _orientationStores, _controllerCameraMode, inhibition);
         Validate(saved); return saved;
     }
 

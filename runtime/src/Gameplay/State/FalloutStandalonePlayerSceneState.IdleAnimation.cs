@@ -104,7 +104,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             result.Before.Changed != detection.Changed || result.Changed < result.Before.Changed || result.Trace is null ||
             result.Trace.Models is null || result.Trace.Models.Count > 2 ||
             result.Trace.Models.Any(node => node is not null &&
-                (node.Process != saved.CapturedProcess && saved.ColdHandoff?.PreviousProcess != node.Process ||
+                (!ChildBelongsToParentProcessLineage(saved, node.Process) ||
                     node.Factory == Guid.Empty || node.NativeRoot == 0)) ||
             call.Returned && !result.Trace.Returned || result.Trace.Returned == (result.Trace.Failure is not null) ||
             !result.Trace.Returned && result.Trace.Failure != call.Failure ||

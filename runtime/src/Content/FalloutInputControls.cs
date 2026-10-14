@@ -40,6 +40,12 @@ internal sealed class FalloutInputControls(Func<string, string?> source, string?
         return Code(type == 0 ? value.Keyboard : value.Mouse, type);
     }
 
+    internal FalloutControlBinding ReadSourceBinding(int control)
+    {
+        if ((uint)control >= Count) throw new InvalidDataException("Original control binding requires its actual ordinary action index.");
+        return Load()[control];
+    }
+
     internal void Set(uint control, uint key, uint type = 0)
     {
         ValidateType(type);

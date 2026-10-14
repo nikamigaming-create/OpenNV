@@ -221,15 +221,16 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         CollisionMask = configuration.Player.CollisionMask;
         FloorSnapLength = configuration.Player.CapsuleRadiusMeters;
         FloorMaxAngle = Mathf.DegToRad(configuration.Player.MaximumWalkableSlopeDegrees);
+        using var capsule = new CapsuleShape3D
+        {
+            Radius = configuration.Player.CapsuleRadiusMeters,
+            Height = configuration.Player.CapsuleHeightMeters,
+        };
         AddChild(new CollisionShape3D
         {
             Name = "NativePlayerCapsule",
             Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters,
-            Shape = new CapsuleShape3D
-            {
-                Radius = configuration.Player.CapsuleRadiusMeters,
-                Height = configuration.Player.CapsuleHeightMeters,
-            },
+            Shape = capsule,
         });
         _camera = new Camera3D
         {
@@ -299,7 +300,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         ObserveSaveInput(inputEvent, "unhandled");
         if (_xr is not null) return;
         if (_gameplayInput is { Provider: FalloutInputProvider.HeadlessCommands } commands &&
-            NativeScriptKeys.Read(inputEvent).Any(value => value.Down && !commands.Pressed((uint)value.Key)))
+            NativeScriptKeys.Read(inputEvent).Any(value => value.Down && !(commands.HasSourceControlQueries
+                ? commands.ReadCommandEventPermission((uint)value.Key, value.Down).Allowed
+                : commands.Pressed((uint)value.Key))))
         {
             GetViewport().SetInputAsHandled(); return;
         }

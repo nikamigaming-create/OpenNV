@@ -57,9 +57,9 @@ internal static partial class SourceMainScriptCallerContracts
             Require(coldReturned is { Returned: true, Status: { PoolQueried: false } } && cold.PoolReads == 0 &&
                 coldReturned.Action?.Process.Process != first.Action?.Process.Process &&
                 coldReturned.Action?.Process.GameplayOwnership == first.Action?.Process.GameplayOwnership &&
-                coldReturned.Status?.Context == first.Status?.Context &&
-                JsonSerializer.Serialize(cold.Common.Capture().Current) == JsonSerializer.Serialize(queried.Current),
+                coldReturned.Status?.Context == first.Status?.Context,
                 "Cold current getters replayed constructor/pool stores or reused a prior actual Common factory.");
+            RequireColdCommonFields(saved, cold.Common.Capture());
             saved = cold.Common.Capture();
         }
         var currentStatus = first.Status ?? throw new InvalidDataException("Authored returned call omitted current status.");

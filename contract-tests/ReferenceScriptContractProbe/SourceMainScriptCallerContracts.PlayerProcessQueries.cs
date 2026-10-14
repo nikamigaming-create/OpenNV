@@ -21,6 +21,7 @@ internal static partial class SourceMainScriptCallerContracts
         RunPlayerMovementIntegration();
         RunPlayerCachedTimerReadContracts();
         RunPlayerWeaponContinuationContracts();
+        RunPlayerFollowingPrefixContracts();
         var main = FalloutMainScriptCallerSource.Read(new(FalloutSourceMainFamily.Fallout3, new('1', 64),
             FalloutImmediateScriptSource.ContractForEngine(FalloutSourceMainFamily.Fallout3)));
         var source = FalloutActorProcessRuntimeDeclaration.ForExecutable(main.EngineSha256);
@@ -184,6 +185,7 @@ internal static partial class SourceMainScriptCallerContracts
             restoredCurrent.Changed == expectedCurrent.Changed && restoredCurrent.Epoch == expectedCurrent.Epoch &&
             restoredCurrent.Gameplay == expectedCurrent.Gameplay && postRead == 1,
             "Cold common restoration replayed timer stores or lost dynamic process cells.");
+        RequireColdCommonFields(currentSerialized, currentCold.Capture());
         Reject(() => common.UpdatePostActions(player, 2, () => 1));
         var lowPost = common.UpdatePostActions(npc, 1, () => throw new InvalidOperationException("Low post-action virtual polled a timer."));
         Require(lowPost is { Stores: 0, BeforeScalars: null, AfterScalars: null, ScaledTimerBits: null },

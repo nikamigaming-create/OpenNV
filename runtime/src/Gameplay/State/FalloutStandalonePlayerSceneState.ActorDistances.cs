@@ -88,7 +88,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         {
             if (call.ArgumentBits is not null || call.SettingBits is not null && call.Sort is not { Returned: true } ||
                 call.Returned && (call.SettingBits is null || call.Sort is not { Returned: true }) ||
-                call.Sort is { } sort && (sort.Process != saved.CapturedProcess && saved.ColdHandoff?.PreviousProcess != sort.Process ||
+                call.Sort is { } sort && (!ChildBelongsToParentProcessLineage(saved, sort.Process) ||
                     sort.Source != FalloutStandaloneInterfaceSource.Read(saved.Source.Main).Identity || sort.Stack != saved.Stack))
                 throw new InvalidDataException("Actor-distance sort lost its real interface owner or reset-before-return ordering.");
             if (call.SettingBits is { } setting) expected = expected.Reset(BitConverter.UInt32BitsToSingle(setting));

@@ -18,6 +18,7 @@ internal static partial class SourceMainScriptCallerContracts
         var main = FalloutMainScriptCallerSource.Read(FalloutImmediateScriptSource.Read(runtime.Receipt));
         var controls = FalloutPlayerMovementControlSource.Reviewed(main);
         var weaponSource = FalloutExecutableStringTable.ReadPlayerWeaponContinuation(content.FalloutExecutablePath, controls);
+        var followingSource = FalloutExecutableStringTable.ReadPlayerFollowingContinuation(content.FalloutExecutablePath, controls);
         _ = FalloutExecutableStringTable.ReadPlayerReferenceHud(content.FalloutExecutablePath, main);
         var before = SHA256.HashData(File.ReadAllBytes(content.FalloutExecutablePath));
         var source = FalloutExecutableStringTable.ReadPlayerControlHud(content.FalloutExecutablePath, controls);
@@ -45,6 +46,7 @@ internal static partial class SourceMainScriptCallerContracts
         try
         {
             scene.PublishControlCommandInput(input);
+            scene.PublishFollowingFieldInput(input);
             var display = new FalloutPlayerControlDisplayState(source, content.StackId, process);
             display.ApplyDeclaredConfiguration(settings);
             display.PublishCurrentLayout(Guid.NewGuid(), "owned-offline-source-display-layout", () => fields.RequireActualInput(input));
@@ -83,6 +85,8 @@ internal static partial class SourceMainScriptCallerContracts
                 _ => throw new InvalidOperationException("Owned POV constructor queried a native body."));
             common.Construct(player, 1, FalloutDetectionProcessLevel.High);
             var weaponConstructor = AuditOwnedPlayerWeaponConstructor(records, common, scene, input, weaponSource);
+            var followingConstructor = AuditOwnedPlayerFollowingConstruction(records, common, scene.PlayerInhibition,
+                scene.Capture().FollowingTimerFlag ?? throw new InvalidDataException("Owned following audit omitted its actual timer byte."), followingSource);
             var observation = new FalloutPlayerControlCommandObservation(program.Source.FormKey,
                 "owned-offline-original-compiled-control-command", Guid.NewGuid(), command.Enable, command.Arguments);
             var fighting = new FalloutPlayerControlFightingOwner(controls, content.StackId, process, common, player, 1,
@@ -109,6 +113,7 @@ internal static partial class SourceMainScriptCallerContracts
                 tileValues = saved.Tiles, sourceReadOnly = true, framesRecorded = false,
                 xpConstructor,
                 weaponConstructor,
+                followingConstructor,
                 originalCompiledControl = new { source = program.Source.FormKey, program.Scope.ScopeSha256,
                     program.ProgramSha256, instruction.Offset, originalOperands = command.Arguments, mask = controlCall.Mask,
                     controlCall.Returned, pointOfView = returned.PointOfView },

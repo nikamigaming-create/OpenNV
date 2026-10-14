@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
-    internal const string Schema = "opennv-standalone-Player-scene/v21";
+    internal const string Schema = "opennv-standalone-Player-scene/v22";
     internal FalloutStandalonePlayerSceneSource Source { get; }
     internal Guid Process => _process;
     internal string Stack => _stack;
@@ -33,6 +33,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     private FalloutStandaloneInputManagerQuery? _inputManagerQuery;
     private string? _boundary, _failure;
     internal string? SaveBlocker => _retired ? "source-Player-scene-retired" : _failure ?? _boundary ??
+        _inhibition.SaveBlocker ?? _followingTimerFlag.SaveBlocker ??
         _controlHud?.SaveBlocker ?? (_historicalControlHud is not null && _controlHud is null ? "source-Player-cold-HUD-publication-unbound" : null) ??
         _playerOpacity?.SaveBlocker ?? (_historicalPlayerOpacity is not null && _playerOpacity is null ? "source-Player-cold-opacity-publication-unbound" : null) ??
         (_historicalReferenceOrientation is not null && _referenceOrientation is null ? "source-Player-cold-reference-orientation-publication-unbound" : null) ??
@@ -95,6 +96,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         opacity = _playerOpacity?.State ?? (object?)_historicalPlayerOpacity,
         followingServices = _followingServicesCall,
         weaponContinuation = _weaponContinuation,
+        inhibition = _inhibition.Capture(),
+        followingTimerFlag = _followingTimerFlag.Capture(),
+        followingContinuation = _followingContinuation,
         actorMovementFlag = _actorMovementFlag,
         prelude = _prelude,
         cold = _cold,
@@ -113,6 +117,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         var controls = FalloutPlayerMovementControlSource.Reviewed(source.Main);
         _pointOfViewSource = FalloutPlayerPointOfViewSource.Reviewed(controls);
         _controlFields = new(controls, stack, process, saved?.ControlFields);
+        var following = FalloutPlayerFollowingContinuationSource.Reviewed(controls);
+        _inhibition = new(following, stack, process, _constructor, RequireInhibitionInvocation, saved?.Inhibition);
+        _followingTimerFlag = new(following, stack, process, _constructor, RequireFollowingContinuationInvocation, saved?.FollowingTimerFlag);
         if (saved is not null) Restore(saved);
         else _pointOfViewLifetimes.Add(new(_process, _constructor, 0));
     }
@@ -272,6 +279,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _updateTeleportFade = null;
         _threadContext.Retire();
         _movementControl?.Retire();
+        _inhibition.Retire();
+        _followingTimerFlag.Retire();
         _movementPhysics = null;
         _inputManager = null;
         _readProcessQueries = null;

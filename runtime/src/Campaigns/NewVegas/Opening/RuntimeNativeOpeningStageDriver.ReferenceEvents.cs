@@ -350,7 +350,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                     if (_scripts.References!.ApplyActorScriptPackage(effect.Target.Value, effect.Argument))
                         EvaluateActorPackages(effect.Target.Value, false);
                 }
-                else _playerPackage!.Apply(effect.Argument);
+                else _playerPackage!.Apply(effect.Argument, effect);
                 break;
             case FalloutReferenceEffectKind.ImageSpace:
                 if (effect.Enable) _imageSpaceState.Apply(FalloutImageSpaceModifierReader.Read(_pluginStack.GetEffective(effect.Target!.Value)));

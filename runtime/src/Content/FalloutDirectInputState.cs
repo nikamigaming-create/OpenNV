@@ -27,11 +27,12 @@ internal readonly record struct FalloutDirectInputControlChange(int Key,
     FalloutDirectInputKey Before, FalloutDirectInputKey After);
 internal sealed record FalloutDirectInputSnapshot(string Source, ulong Window, ulong Sample,
     long Revision, IReadOnlyList<FalloutDirectInputKey> Keys, int MouseX, int MouseY, int MouseWheel,
-    bool Acquired, string? AcquisitionFailure, FalloutInputProvider Provider = FalloutInputProvider.WindowsDirectInput);
+    bool Acquired, string? AcquisitionFailure, FalloutInputProvider Provider = FalloutInputProvider.WindowsDirectInput,
+    FalloutOriginalInputSnapshot? Original = null);
 
 // Each declared provider supplies the complete keyboard and mouse extent to
 // one control/script owner. Headless samples do not certify Windows acquisition.
-internal sealed class FalloutDirectInputState
+internal sealed partial class FalloutDirectInputState
 {
     internal const int KeyCount = FalloutInputLayout.KeyCount;
     private readonly int _thread = Environment.CurrentManagedThreadId;
@@ -73,7 +74,8 @@ internal sealed class FalloutDirectInputState
 
     internal void Publish(ReadOnlySpan<byte> keyboard, ReadOnlySpan<byte> mouse, int x, int y, int wheel)
     {
-        RequireOwner();
+        RequireOwner(); RequireIdleOriginal();
+        if (HasSourceControlQueries) throw new InvalidOperationException("Bound original input requires the actual per-device poll producer.");
         if (keyboard.Length != FalloutInputLayout.KeyboardKeyCount || mouse.Length != FalloutInputLayout.MouseButtonCount)
             throw new InvalidDataException("DirectInput publication lacks the complete original keyboard/mouse extent.");
         var edges = new List<(int Key, bool Down)>();
@@ -82,18 +84,7 @@ internal sealed class FalloutDirectInputState
             var raw = key < FalloutInputLayout.FirstMouseButton ? keyboard[key] != 0 :
                 key < FalloutInputLayout.WheelUp ? mouse[key - FalloutInputLayout.FirstMouseButton] != 0 :
                 key == FalloutInputLayout.WheelUp ? wheel > 0 : wheel < 0;
-            var before = _keys[key];
-            var inserted = !before.ScriptDisabled && (before.Hold || before.Tap);
-            var game = raw && !before.UserDisabled || inserted;
-            var after = before with
-            {
-                Raw = raw,
-                Game = game,
-                Inserted = inserted,
-                Tap = before.ScriptDisabled && before.Tap
-            };
-            _keys[key] = after;
-            if (before.Game != after.Game) edges.Add((key, after.Game));
+            _ = PublishHookKey(key, raw, edges);
         }
         _x = x; _y = y; _wheel = wheel; Sample = checked(Sample + 1); ++Revision;
         Failure = null; _acquired = true;
@@ -104,13 +95,20 @@ internal sealed class FalloutDirectInputState
 
     internal void DeviceUnavailable(string failure)
     {
-        RequireOwner(); _acquired = false; Failure = failure;
+        RequireOwner(); RequireIdleOriginal(); _acquired = false; Failure = failure;
+        if (HasSourceControlQueries)
+        {
+            _keyboardKnown = _mouseKnown = false;
+            _originalSelection = null; ++_bufferRevision;
+        }
         // Preserve the last observed bytes; unavailable is not all-released.
     }
     internal FalloutDirectInputSnapshot Capture()
     {
         RequireCurrent();
-        return new(Source, Window, Sample, Revision, _keys.ToArray(), _x, _y, _wheel, _acquired, Failure, Provider);
+        RequireIdleOriginal();
+        return new(Source, Window, Sample, Revision, _keys.ToArray(), _x, _y, _wheel, _acquired, Failure, Provider,
+            HasSourceControlQueries ? CaptureSourceInput() : null);
     }
     internal bool Pressed(uint key, uint flags = 0)
     {
@@ -122,7 +120,7 @@ internal sealed class FalloutDirectInputState
     }
     internal void SetDisable(uint key, bool disabled, uint mask = 0)
     {
-        RequireOwner(); if (key >= KeyCount) return;
+        RequireOwner(); RequireIdleOriginal(); if (key >= KeyCount) return;
         if (mask == 0) mask = 3;
         var value = _keys[key];
         _keys[key] = value with
@@ -132,13 +130,13 @@ internal sealed class FalloutDirectInputState
         }; ++Revision;
     }
     internal void SetHold(uint key, bool held)
-    { RequireOwner(); if (key < KeyCount) { _keys[key] = _keys[key] with { Hold = held }; ++Revision; } }
+    { RequireOwner(); RequireIdleOriginal(); if (key < KeyCount) { _keys[key] = _keys[key] with { Hold = held }; ++Revision; } }
     internal void Tap(uint key)
-    { RequireOwner(); if (key < KeyCount) { _keys[key] = _keys[key] with { Tap = true }; ++Revision; } }
+    { RequireOwner(); RequireIdleOriginal(); if (key < KeyCount) { _keys[key] = _keys[key] with { Tap = true }; ++Revision; } }
 
     internal void PublishNativeControls(IReadOnlyList<FalloutDirectInputControlChange> changes)
     {
-        RequireCurrent();
+        RequireCurrent(); RequireIdleOriginal();
         if (changes.Select(value => value.Key).Distinct().Count() != changes.Count)
             throw new InvalidDataException("Native DirectInput mutation repeats a key.");
         foreach (var change in changes)
@@ -180,6 +178,12 @@ internal sealed class FalloutDirectInputState
     internal int ReadRelativeMouseAxis(uint axis)
     {
         RequireCurrent();
+        if (HasSourceControlQueries)
+        {
+            if (axis is not (1 or 2 or 3)) return 0;
+            if (!_mouseKnown) throw new NotSupportedException("source-original-relative-mouse-current-writer-unowned");
+            return System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(_engineMouse.AsSpan(checked(((int)axis - 1) * sizeof(int))));
+        }
         return axis switch { 1 => _x, 2 => _y, 3 => _wheel, _ => 0 };
     }
     internal IDisposable RetainNativeReader()
@@ -188,7 +192,7 @@ internal sealed class FalloutDirectInputState
     }
     internal void Retire()
     {
-        RequireOwner();
+        RequireOwner(); RequireIdleOriginal();
         if (NativeReaders != 0) throw new InvalidOperationException("Actual native generations still retain this device/input owner.");
         _acquired = false; _retired = true;
     }
@@ -212,5 +216,19 @@ internal sealed class FalloutDirectInputState
     {
         ObjectDisposedException.ThrowIf(_retired, this);
         if (Environment.CurrentManagedThreadId != _thread) throw new InvalidOperationException("DirectInput state belongs to the product input thread.");
+    }
+    private bool PublishHookKey(int key, bool raw, List<(int Key, bool Down)> edges)
+    {
+        var before = _keys[key];
+        var (game, inserted) = ReadHookFilter(before, raw);
+        var after = before with { Raw = raw, Game = game, Inserted = inserted, Tap = before.ScriptDisabled && before.Tap };
+        _keys[key] = after;
+        if (before.Game != after.Game) edges.Add((key, after.Game));
+        return game;
+    }
+    private static (bool Game, bool Inserted) ReadHookFilter(FalloutDirectInputKey fields, bool raw)
+    {
+        var inserted = !fields.ScriptDisabled && (fields.Hold || fields.Tap);
+        return (raw && !fields.UserDisabled || inserted, inserted);
     }
 }

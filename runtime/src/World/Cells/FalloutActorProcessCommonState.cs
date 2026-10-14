@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // reselects a package, replays an event or recreates modifier pools.
 internal sealed partial class FalloutActorProcessCommonState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-common/v12";
+    internal const string Schema = "opennv-actor-process-common/v14";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;
@@ -33,6 +33,8 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         ArgumentNullException.ThrowIfNull(identity); ArgumentNullException.ThrowIfNull(gameplay); ArgumentNullException.ThrowIfNull(body);
         _source = source; _stack = stack; _identity = identity; _gameplay = gameplay; _body = body;
         if (restore is not null) Restore(restore);
+        else if (FalloutSourceMainFamily.IsFallout3(_source.ExecutableSha256))
+            _packagePublications.Add(new(_process, null, 0));
     }
     internal bool HasActor(FalloutFormKey actor) => _current.ContainsKey(actor);
     internal string? SaveBlocker => _busy || _followingStatusReading ? "actual-process-common-owner-consumer-in-flight" :
@@ -42,6 +44,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
             "actual-process-common:" + failed.Source.Reference + ":" + failed.Boundary :
         _current.Values.FirstOrDefault(entry => entry.SceneFields?.WeaponDrawn is { Available: false }) is { } weapon ?
             "source-Actor-weapon-drawn-observed-writer-unbound:" + weapon.Source.Reference :
+        SourcePackageSaveBlocker is { } package ? package :
         _current.Values.FirstOrDefault(entry => entry.SceneFields?.WeaponContinuation is { ActionAvailable: false, Initialization: not null } or
         { ActivityAvailable: false } or { CacheAvailable: false }) is { } following ?
             "source-Actor-following-weapon-observed-writer-unbound:" + following.Source.Reference : null;
@@ -55,6 +58,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         pending = _pending,
         transfer = _transfer,
         cold = _cold,
+        publications = _packagePublications.Count == 0 ? null : Array.AsReadOnly(_packagePublications.ToArray()),
         saveBlocker = SaveBlocker
     };
 
@@ -73,7 +77,8 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         var sequence = Next();
         _current.Add(actor, new(source, epoch, level, FalloutProcessCommonScalars.Constructed,
             new(source, Guid.NewGuid(), epoch, sequence, false), FalloutProcessCommonPhase.Constructed, null, null, sequence,
-            SceneFields: ConstructSceneFields(level)));
+            SceneFields: ConstructSceneFields(level), Packages: ConstructSourcePackageSlots(source, epoch, level,
+                source.EnginePlayer ? FalloutProcessPackageConstructionKind.InitialPlayerConstructor : FalloutProcessPackageConstructionKind.IndependentProcessConstructor)));
     }
     internal void Copy(FalloutActorProcessFactorySnapshot factory) => Operation(factory, () =>
     {
@@ -87,13 +92,15 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         var ownership = Guid.NewGuid(); var sequence = Next();
         _pending = new(old.Source, factory.NewEpoch, factory.After, old.Scalars,
             new(old.Source, ownership, factory.NewEpoch, sequence, false), FalloutProcessCommonPhase.Copied, null, null, sequence,
-            SceneFields: ConstructSceneFields(factory.After));
+            SceneFields: ConstructSceneFields(factory.After), Packages: ConstructSourcePackageSlots(old.Source, factory.NewEpoch, factory.After,
+                FalloutProcessPackageConstructionKind.ReplacementProcessConstructor));
         // The selected Low constructors own null in both move-and-clear child
         // slots. Any reached creation of such a child must first bind its own
         // typed owner, or retain a common boundary. A nonnull opaque pointer is
         // never admitted as a successfully transferred owner.
         _transfer = new(factory.Actor, factory.BeforeEpoch, factory.NewEpoch, factory.Before, factory.After,
             factory.Owner, ownership, gameplay, GameplayHash(gameplay), true, false, false, false, null, sequence);
+        TransferLowPackageFields(old, _pending);
     });
     internal void RetireOld(FalloutActorProcessFactorySnapshot factory) => Operation(factory, () =>
     {
@@ -245,6 +252,6 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
     {
         if (_disposed) return; RequireNotBusy();
         if (_transfer is { Initialized: false }) throw new NotSupportedException("Actual common process retirement retains an unfinished old/new ownership transfer.");
-        _disposed = true; _current.Clear(); _retired.Clear(); _weaponObservations.Clear(); _followingObservations.Clear(); _pending = null;
+        _disposed = true; _current.Clear(); _retired.Clear(); _weaponObservations.Clear(); _followingObservations.Clear(); _packageLedgers.Clear(); _pending = null;
     }
 }

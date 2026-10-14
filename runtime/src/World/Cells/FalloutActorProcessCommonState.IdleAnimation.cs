@@ -9,6 +9,7 @@ internal sealed record FalloutProcessIdleAnimationUpdate(FalloutProcessSceneQuer
 internal sealed partial class FalloutActorProcessCommonState
 {
     internal FalloutProcessIdleAnimationUpdate? LastIdleAnimationUpdate { get; private set; }
+    private FalloutProcessSceneQuery? _idlePackageScope;
     internal FalloutProcessIdleAnimationUpdate UpdateIdleAnimation(FalloutFormKey actor, long epoch,
         IFalloutActorIdleAnimationConsumers consumers)
     {
@@ -16,7 +17,7 @@ internal sealed partial class FalloutActorProcessCommonState
         var initial = current.SceneFields?.IdleAnimation;
         if (before.Level == FalloutDetectionProcessLevel.High && initial is null)
             throw new InvalidDataException("High idle update omitted its independent constructor fields.");
-        _busy = true; var fault = _callbackFault;
+        _busy = true; _idlePackageScope = before; var fault = _callbackFault;
         try
         {
             FalloutActorIdleAnimationUpdate.Execute(before.Level, consumers,
@@ -24,7 +25,7 @@ internal sealed partial class FalloutActorProcessCommonState
             return LastIdleAnimationUpdate!;
         }
         catch (Exception error) { HoldMutation(actor, error.Message); throw; }
-        finally { _busy = false; }
+        finally { _idlePackageScope = null; _busy = false; }
         void Store(FalloutActorIdleAnimationFields value)
         {
             Check(); current = Require(actor);

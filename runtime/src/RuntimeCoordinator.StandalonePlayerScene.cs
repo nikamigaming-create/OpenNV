@@ -15,6 +15,8 @@ public partial class RuntimeCoordinator
         if (_nativeWorldProjectionTarget is not null || _nativeWorldProjectionWorld is not null)
             throw new InvalidOperationException("Player construction still owns another actual World projection target.");
         var scene = world.CampaignStandalonePlayerScene;
+        scene.PublishFollowingFieldInput((_nativeDirectInput ??
+            throw new InvalidOperationException("Player construction has no actual source input manager.")).PlayerManager());
         var source = world.PrepareStandaloneWorldOrientationSource();
         bool Living() => ReferenceEquals(_nativeReferences, world) && IsInsideTree() && !IsQueuedForDeletion();
         _nativeWorldProjectionWorld = world;
@@ -33,6 +35,7 @@ public partial class RuntimeCoordinator
             throw new InvalidOperationException("Player controls have no actual source UI store."),
             (_nativeDirectInput ?? throw new InvalidOperationException("Player controls have no actual current input manager.")).PlayerManager());
         world.InitializeStandalonePlayerWeaponActionConstructor();
+        world.PrepareStandalonePlayerFollowingContinuation();
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)

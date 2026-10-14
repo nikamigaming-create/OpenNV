@@ -86,6 +86,16 @@ if (args is ["--headless-input-contracts"])
     HeadlessInputContracts.Run();
     return;
 }
+if (args is ["--original-input-contracts"])
+{
+    OriginalInputContracts.Run();
+    return;
+}
+if (args is ["--owned-original-input-contracts", var originalInputData])
+{
+    Environment.ExitCode = OriginalInputContracts.AuditOwned(originalInputData);
+    return;
+}
 
 if (args is ["--audit-owned-player-status-values", var statusData])
 {
@@ -1545,6 +1555,7 @@ PlayerActorValueContracts.Run();
 PerkParameterContracts.Run();
 InputControlContracts.Run();
 HeadlessInputContracts.Run();
+OriginalInputContracts.Run();
 PlayerWorldOrientationContracts.Run();
 PlayerMoveContracts.Run();
 LoadingScreenContracts.Run();

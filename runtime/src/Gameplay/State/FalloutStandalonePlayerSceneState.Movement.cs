@@ -114,7 +114,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             try
             {
                 controls.ExecutePrefix(main, ordinal, argument,
-                (ushort)(current & FalloutPlayerMovementControlSource.MoverMask), input); Check();
+                (ushort)(current & FalloutPlayerMovementControlSource.MoverMask), input,
+                    invocation: _prelude?.Invocation ?? throw new InvalidOperationException("Movement lost its entered Prelude invocation.")); Check();
             }
             finally
             {
@@ -196,11 +197,24 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         FalloutPlayerMovementControlState.Validate(control);
         if (control.Source != FalloutPlayerMovementControlSource.Reviewed(saved.Source.Main) || control.Stack != saved.Stack ||
             control.CapturedProcess != input.Process || control.Retired || child.Main != call.Main || child.MainOrdinal != call.MainOrdinal ||
+            saved.Prelude?.Invocation != child.Invocation || child.Invocation == Guid.Empty ||
             child.ArgumentBits != argument || child.MoverWord != (ushort)(saved.MoverFields.Flags & FalloutPlayerMovementControlSource.MoverMask) ||
             control.Failure != call.Failure || child.Returned != call.Returned || child.InputFactory is { } factory && (factory != input.Factory ||
                 child.InputWindow != input.Window || child.InputProvider != input.Provider) ||
             child.MouseReads.Any(read => read.Sample != input.Sample || read.Revision != input.Revision))
             throw new InvalidDataException("Player controls changed their actual input/source owner, scene argument or masked mover word.");
+        if (child.InhibitionReads is { Count: > 0 } reads)
+        {
+            var source = FalloutPlayerFollowingContinuationSource.Reviewed(control.Source);
+            var owner = saved.Inhibition ?? throw new InvalidDataException("Movement omitted its shared inhibition field owner.");
+            foreach (var read in reads)
+            {
+                FalloutPlayerInhibitionState.RequireHistoricalPublication(owner, source, saved.Stack, read.Process, read.Factory);
+                if (read.Revision > owner.Sequence || read.Caller.Invocation != child.Invocation ||
+                    read.Caller.Main != call.Main || read.Caller.Ordinal != call.MainOrdinal)
+                    throw new InvalidDataException("Movement inhibition lost its actual shared field revision or caller.");
+            }
+        }
     }
 
     private static void ValidateMovementPhysics(FalloutStandalonePlayerSceneSnapshot saved,

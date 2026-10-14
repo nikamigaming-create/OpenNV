@@ -5,6 +5,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
@@ -154,7 +155,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _screenSplatters.Clear();
                 break;
             case "removescriptpackage" when arguments.Count == 0 && _pluginStack.RuntimeFormId(target) == 0x14:
-                _playerPackage!.Apply(null);
+                _playerPackage!.Apply(null, new(FalloutReferenceEffectKind.ScriptPackage, source, target));
                 break;
             case "playidle" when arguments.Count == 1:
                 // PlayIdle's animation name is encoded as a string argument,
