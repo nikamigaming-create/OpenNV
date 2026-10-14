@@ -11,6 +11,13 @@ preparation pauses new Main delivery and drains its actual entered call before
 acquiring audio, tree, driver and input leases. Cleanup restores only settings
 whose mutation was acquired and resumes Main admission last.
 
+Pause uses the shared C# Interface stack, menu lifecycle, input fields, image
+fields and Scene thread owner. Godot publishes the actual winning StartMenu tree
+and adapts the user's button input. Closing returns the source transition and
+mouse-buffer child before quiet mode, then releases the native root. Cold save
+validation joins retained menu children to their real Interface constructors,
+image writes and thread scopes across process lifetimes.
+
 Standalone Player startup constructs source control fields, HUD and logical
 World camera owners before the compiled bootstrap consumes them. HUD uses the
 winning XML and the same C# Interface transition queue. World projection and raw

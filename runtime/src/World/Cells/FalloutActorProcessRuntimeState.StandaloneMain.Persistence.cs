@@ -60,7 +60,7 @@ internal sealed partial class FalloutActorProcessRuntimeState
         }
         var saved = runtime.StandaloneMain ?? throw new InvalidDataException("Current FO3 save omitted its real Main/Player continuation.");
         ValidateStandaloneMain(saved, runtime);
-        OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceState.RequirePlayable(saved.Interface);
+        OpenNV.Runtime.Gameplay.State.FalloutStandaloneInterfaceState.RequireSaving(saved.Interface);
         OpenNV.Runtime.Gameplay.State.FalloutStandalonePlayerSceneState.RequirePlayable(saved.Scene);
         if (saved.MainCaller.CachedTail is { } tail && tail.RendererClock is not
             { LastPublication: { Prefix: OpenNV.Runtime.Gameplay.State.FalloutRendererClockPrefix.Returned, Failure: null } })

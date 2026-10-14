@@ -87,7 +87,8 @@ Remove contradictory admission guards and implement genuinely missing behavior.
 
 ## Verification and next owner
 
-PR 200 is merged into main. This work branch is based on synchronized origin/main
+PR 201 is merged into main; all five GitHub checks passed and clean local main
+equals origin/main. The new work branch is based on that synchronized main
 and preserves the existing New Vegas save. Debug builds and focused loading,
 follower, mover, Parent, reference and animation checks pass. The selected owned
 FO3 startup audit passes on the actual birth CELL, including source-qualified
@@ -96,7 +97,22 @@ failed-context, conversation fault-admission and managed retirement checks pass.
 The full pinned runtime gate passes, including Release/Debug, formatting,
 analyzers, contracts, launcher and native project checks. Selected owned Release
 birth-CELL and Debug/Release idle-field audits also pass. The original New Vegas
-save remains unchanged. Checked publication is the remaining step for this block.
+save remains unchanged. The persistent full-game goal is active. Source menu
+lifecycle and held-Player bodies are connected to the actual production owners.
+The full pinned gate and selected owned Release menu-source audit pass on the
+current menu checkpoint. Regressions cover missing children, actual input values,
+image/thread joins, connected cold constructor history and three component cycles.
+A fresh ordinary headless FO3 run reaches the same late-frame failure, then opens
+Pause through Escape, resumes through the observed menu, returns mode 4 to mode 1
+with an empty stack, reopens with a distinct source root and quits through the
+observed confirmation. Exit code is zero and source owners are disposed.
+Diagnostics report no publication loss during those steps. Live menu summaries
+are bounded; complete saves retain the owner histories. This proves menu and
+faulted-session cleanup only, not a healthy Player frame or save/Continue.
+The next Actor-time body and shared clock qualifier are prepared privately;
+actual Scene/World integration and executed checks remain required. Repeated-frame
+state and the reached mover delta are being repaired against their actual owners.
+Checked publication of the validated menu checkpoint is next.
 
 Implement the reached late Player-frame tail, complete the Player frame and connect
 movement, controller, reference fields and shared functional-fault handling.

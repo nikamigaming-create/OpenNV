@@ -14,7 +14,8 @@ internal sealed partial class FalloutDirectInputState
             Freeze(_engineMouse), Freeze(_previousMouse), Freeze(_modeFourMouse), Freeze(_controller), Freeze(_previousController),
             _swap, _doubleClickMilliseconds, _controllerSuppression, _menuWord,
             new(_keyboardKnown, _previousKeyboardKnown, _mouseKnown, _previousMouseKnown, _modeFourKnown,
-                _swapKnown, _suppressionKnown, _menuKnown), _originalConstruction, _originalSelection, _originalPoll, _originalQuery, _originalWriter);
+                _swapKnown, _suppressionKnown, _menuKnown), _originalConstruction, _originalSelection, _originalPoll, _originalQuery, _originalWriter,
+            _originalMenuWordWrites.ToArray(), _originalMenuClose, _originalMenuMouseFlushes.ToArray(), _originalMenuCloses.ToArray());
     }
     internal void RetainHistoricalSourceInput(FalloutOriginalInputSnapshot historical, Action<FalloutInputInvocation> requireHistorical)
     {
@@ -39,7 +40,10 @@ internal sealed partial class FalloutDirectInputState
                 ModeFourMouse = Freeze(historical.ModeFourMouse),
                 Controller = Freeze(historical.Controller),
                 PreviousController = Freeze(historical.PreviousController),
-                Query = historical.Query is { } old ? old with { Observations = Array.AsReadOnly(old.Observations.ToArray()) } : null
+                Query = historical.Query is { } old ? old with { Observations = Array.AsReadOnly(old.Observations.ToArray()) } : null,
+                MenuWordWrites = Array.AsReadOnly((historical.MenuWordWrites ?? []).ToArray()),
+                MenuClose = historical.MenuClose is { } close ? close with { Observations = Array.AsReadOnly(close.Observations.ToArray()) } : null,
+                MenuMouseFlushes = Array.AsReadOnly((historical.MenuMouseFlushes ?? []).ToArray())
             };
         }
         finally { _originalBusy = false; }

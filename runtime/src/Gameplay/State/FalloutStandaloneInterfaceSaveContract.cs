@@ -10,7 +10,7 @@ internal static class FalloutStandaloneInterfaceSaveContract
     {
         if (runtime.StandaloneMain is not { } main) return;
         var saved = main.Interface;
-        FalloutStandaloneInterfaceState.RequirePlayable(saved);
+        FalloutStandaloneInterfaceState.RequireSaving(saved);
         var source = records.OwnedSource ?? throw new InvalidDataException("Cold interface has no actual selected source.");
         if (saved.Source.Main != main.Source || saved.Stack != source.StackId || saved.CapturedProcess != runtime.CapturedProcess)
             throw new InvalidDataException("Cold interface changed its actual Main/stack/process.");

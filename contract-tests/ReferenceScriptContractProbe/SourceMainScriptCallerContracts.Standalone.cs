@@ -171,6 +171,7 @@ internal static partial class SourceMainScriptCallerContracts
         }
         internal IDisposable Bind() => new StandaloneLeases(Owner.BindMainPlayerCell(_player, "authored-FO3-player"),
             Owner.BindMainScriptCaller(Host, "authored-FO3-main"));
+        internal void BindHeldMenu(Action<FalloutMainPlayerCellInvocation> read) { _player.DuringHeldChild = read; Host.Menu = true; }
         internal IDisposable BindProduction() => new StandaloneLeases(Owner.BindMainPlayerCell(_player, "authored-FO3-player"),
             Owner.BindMainScriptCaller(new FalloutCampaignMainScriptConsumers(Host.Source, _ => false, Session), "offline-production-Main-consumers"));
         internal void BindActualScenePrefix(FalloutPlayerReferenceHudState hud)

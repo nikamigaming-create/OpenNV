@@ -14,6 +14,7 @@ internal static partial class FalloutNativeCampaignSave
         }
         var saved = state.SourceMainImages ?? throw new InvalidDataException("Current standalone save omitted its actual Main image manager.");
         FalloutImageSpaceState.ValidateSourceMainImages(saved);
+        FalloutStandaloneMenuSaveContract.Validate(main.Interface, saved.MenuStack, main.Scene.MenuKindScopes, main.Scene.InputManagerQuery);
         if (saved.Process != state.ActorProcessRuntime!.CapturedProcess || saved.Last is { Returned: false } ||
             saved.Last is { } image && image.ClockAfter != main.MainCaller.ContextTimeBits)
             throw new InvalidDataException("Saved image manager changed its actual current Main process/context clock.");

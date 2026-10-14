@@ -18,8 +18,12 @@ post-action children and its Current/Primary idle-package query. It next fails
 at the unfinished inhibited/life late Player-frame tail. The fresh run publishes
 that shared World failure without recorded publication losses. Earlier package
 diagnostics called a failed gameplay getter; dedicated retained-field observation
-repairs that loss. Investigations were stopped explicitly, with no normal Quit
-proof. Retained controller-history checks
+repairs that loss. The latest ordinary headless session opens Pause through
+Escape, resumes through the actual menu, returns the source stack to quiet mode,
+then reopens and quits through the actual confirmation. Normal process exit is
+zero and source owners are disposed. This proves menu and faulted-session cleanup;
+it does not prove a healthy Player frame, gameplay save or cold Continue.
+Retained controller-history checks
 pass three JSON/new-scene cycles, with whole-product cold state still unaccepted.
 Returned mover parent
 joins and JSON child equality are repaired with regression checks; complete

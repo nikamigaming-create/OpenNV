@@ -12,7 +12,7 @@ internal sealed partial class FalloutUiComponentStore
     internal IReadOnlyList<FalloutUiComponentValues> CaptureComponentValues(IReadOnlyList<FalloutUiComponentBinding> components)
     {
         var values = components.ToDictionary(binding => binding.Path, binding =>
-            (Alive: binding.Factory == Factory && binding.Epoch == Epoch && _tiles.TryGetValue(binding.Path, out var tile) && !IsDetached(tile),
+            (Alive: HasLivingComponent(binding),
                 Floats: new List<FalloutUiFloatValue>(), Strings: new List<FalloutUiStringValue>()), StringComparer.OrdinalIgnoreCase);
         var animated = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in _floatOverrides)

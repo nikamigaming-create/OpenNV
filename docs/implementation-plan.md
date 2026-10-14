@@ -13,10 +13,10 @@ advances gameplay, saves complete authoritative state, quits through the normal
 menu and continues in a new process. Component audit passes are supporting checks;
 they do not complete this deliverable.
 
-1. Repair the reached idle-package query against the actual Current/Primary slot
-   and winning runtime package. Loading transfer, package cleanup and controller
-   context/post-action children now return in the ordinary FO3 run. Keep failed
-   diagnostics fresh without admitting gameplay after the retained fault.
+1. Implement the reached inhibited/life late Player tail using current runtime
+   owners. Loading transfer, controller context/post-actions and the actual
+   Current/Primary idle query now return. Complete source Pause/Save transitions
+   and the held-Player child while retaining the same input, image and UI owners.
 2. Return the complete Player/Main gameplay frame and exercise ordinary movement
    and quest input. Fix the next actual behavioral failure on this same path.
 3. Publish a complete save through the normal game UI, Quit normally, then cold

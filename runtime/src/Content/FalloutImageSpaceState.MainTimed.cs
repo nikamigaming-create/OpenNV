@@ -15,7 +15,7 @@ internal sealed record FalloutSourceImageSpaceMainSnapshot(string Source, Guid P
     IReadOnlyList<FalloutSourceImageSpaceInstance> Instances, IReadOnlyList<Guid> List, bool UpdatesEnabled,
     FalloutSourceImageSpaceAccumulatorSnapshot Fields, FalloutSourceImageSpaceMainCall? Last, FalloutSourceImageSpaceOutput? Output,
     IReadOnlyList<Guid> Processes, IReadOnlyList<FalloutSourceImageCurveCache> Curves, FalloutSourceImageSpaceDofConstructor DofConstructor,
-    FalloutSourceImageSpaceMenuCall? Menu = null);
+    FalloutSourceImageSpaceMenuCall? Menu = null, FalloutSourceMenuImageFields? MenuStack = null);
 
 internal sealed partial class FalloutImageSpaceState
 {
@@ -62,7 +62,7 @@ internal sealed partial class FalloutImageSpaceState
         _sourceImageUpdates = saved.UpdatesEnabled; _sourceImageFields.Restore(saved.Fields);
         foreach (var row in saved.Instances) _sourceImageInstances.Add(row.Identity, row);
         _sourceImageList.AddRange(saved.List); _sourceImageLast = saved.Last; _sourceImageOutput = saved.Output;
-        _sourceImageMenuLast = saved.Menu;
+        _sourceImageMenuLast = saved.Menu; RestoreSourceMenuStackEffect(saved.MenuStack);
         _sourceImageProcesses.Clear(); _sourceImageProcesses.AddRange(saved.Processes); _sourceImageProcesses.Add(process);
         foreach (var curve in saved.Curves) _sourceImageCurves.Add((curve.Program, curve.Channel), curve with { Value = (uint[])curve.Value.Clone() });
         // Native association deliberately remains absent. A fresh current

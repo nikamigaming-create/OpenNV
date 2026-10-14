@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.InputSystem;
 
 // Public DirectInput8 COM ABI. This owns real device interfaces in the Godot
 // process; it does not inject inputs into a retail process or a native child.
-internal sealed class WindowsDirectInputDevice : IDisposable, IFalloutOriginalInputDevices
+internal sealed partial class WindowsDirectInputDevice : IDisposable, IFalloutOriginalInputDevices
 {
     private const int MouseAxisCount = 3;
     private const int MouseButtonsOffset = MouseAxisCount * sizeof(int);
