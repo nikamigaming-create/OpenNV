@@ -36,6 +36,7 @@ struct CrtStream {
     void* pointer;
     bool writable;
     std::wstring mode;
+    std::uint64_t module = 0;
 };
 struct CrtEvent {
     std::uint64_t provider, route;

@@ -27,7 +27,7 @@ internal sealed partial class NativePluginExecutionDomain
                 _crtStreams.Values.Any(row => row.Address == stream))
                 throw new InvalidDataException("Standard output lacks its genuine public FILE/descriptor/private kernel identity.");
             var route = owner.BindStandardRoute(parent, index);
-            _crtStreams.Add(route.Id, new(provider, route.Id, stream, true, "a", "actual-UCRT-standard-output:" + index));
+            _crtStreams.Add(route.Id, new(provider, route.Id, stream, true, "a", "actual-UCRT-standard-output:" + index) { Module = _nvsePlugin!.Module });
             _crtStandardStreams.Add(index, new(index, provider, route.Id, stream, descriptor, handle));
             _crtDescriptors.Add(descriptor, (provider, route.Id, stream, handle, false));
             return Payload(writer => writer.Write(route.Id));

@@ -22,6 +22,8 @@ internal sealed partial class FalloutReferenceWorld
         current = _currentPackageCommand,
         calls = _sourcePackageCommands.ToArray(),
         referenceScriptInitialization = _sourceReferenceScriptInitializer?.Capture(),
+        referencePosition = SourceReferencePositionState,
+        earlyController = SourceEarlyControllerState,
         saveBlocker = SourcePackageCommandSaveBlocker
     };
     internal object? SourcePackageCommandSummary => _sourcePackageRegistry is null ? null : new
@@ -34,6 +36,11 @@ internal sealed partial class FalloutReferenceWorld
     internal string? SourcePackageCommandSaveBlocker => _enteredPackageCommand is not null ?
         "source-package-command-in-flight" : _firstFailedPackageCommand is { } failed ?
         "source-package-command:" + failed.Failure : _sourceReferenceScriptInitializer?.SaveBlocker ??
+        _sourceEarlyControllerHelperFailure ?? _sourceEarlyControllerFactory?.SaveBlocker ??
+        _sourcePlayerReferencePosition?.SaveBlocker ?? _sourceReferenceChanges?.SaveBlocker ??
+        _sourceReferenceFormFiles?.SaveBlocker ??
+        _sourceInitialPlacementCells?.SaveBlocker ??
+        (HasStandalonePlayerScene ? CampaignStandalonePlayerScene.ThreadContext.ReferenceChangeFlagsSaveBlocker : null) ??
         _sourcePackageFields.Values.FirstOrDefault(fields => fields.SaveBlocker is not null)?.SaveBlocker;
 
     internal void PrepareStandaloneSourcePackageCommands()
@@ -105,6 +112,10 @@ internal sealed partial class FalloutReferenceWorld
             if (!fields.HasConstructedPlayerAnimationInitialization)
                 _ = fields.InitializeConstructedPlayerAnimation(invocation,
                     FalloutInstallationSettings.Read(CampaignPlayerRuntimeSource.OwnedSource));
+            if (!fields.HasConstructedSavedPositionInitialization)
+                _ = fields.InitializeConstructedPlayerSavedPosition(invocation,
+                    _sourcePlayerReferencePosition?.LastPrefix ??
+                        throw new NotSupportedException("source-package-SavedPosition-current-reference-prefix-unbound"));
             _ = FalloutSourcePackageAssignment.Execute(invocation, effect.Source, package, producer,
                 new SourcePackageCommandConsumers(this, fields), call =>
                 { _currentPackageCommand = call; observe?.Invoke(call); });
@@ -152,7 +163,8 @@ internal sealed partial class FalloutReferenceWorld
         var captured = common with
         {
             CommandFields = Array.AsReadOnly(_sourcePackageFields.Values.Select(fields => fields.Capture()).ToArray()),
-            PackageCommands = Array.AsReadOnly(_sourcePackageCommands.ToArray())
+            PackageCommands = Array.AsReadOnly(_sourcePackageCommands.ToArray()),
+            ReferenceOwners = CaptureStandaloneReferenceOwners()
         };
         ValidateSourcePackageCommandChildren(captured);
         return captured;

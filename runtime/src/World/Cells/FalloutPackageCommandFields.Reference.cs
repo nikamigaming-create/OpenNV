@@ -27,16 +27,30 @@ internal sealed partial class FalloutActorPackageCommandFields
             }
             else RequireLane(FalloutPackageCommandFieldLane.RotationZ);
             scope.SavedPositionCall = scope.SavedPositionCall! with { RotationZ = rotation };
-            var position = ReadPosition(scope);
-            scope.SavedPositionCall = scope.SavedPositionCall with { Position = position };
-            RequireLane(FalloutPackageCommandFieldLane.ParentCell);
-            var cell = _values.ParentCell;
-            scope.SavedPositionCall = scope.SavedPositionCall with { ParentCell = cell, ParentCellReturned = true };
+            var positionRead = consumers?.ReadCurrentReferencePosition(invocation);
+            if (consumers is not null) RequireReferenceConsumer(scope, consumers);
+            if (positionRead is not null) RequirePositionRead(positionRead, invocation);
+            var position = positionRead?.Position ?? ReadPosition(scope);
+            scope.SavedPositionCall = scope.SavedPositionCall with { Position = position, PositionRead = positionRead };
+            var parentRead = consumers?.ReadCurrentReferenceParentCell(invocation);
+            if (consumers is not null) RequireReferenceConsumer(scope, consumers);
+            if (parentRead is not null) RequireParentRead(parentRead, invocation);
+            else RequireLane(FalloutPackageCommandFieldLane.ParentCell);
+            var cell = parentRead is null ? _values.ParentCell : parentRead.Cell;
+            scope.SavedPositionCall = scope.SavedPositionCall with { ParentCell = cell, ParentCellReturned = true, ParentRead = parentRead };
             if (consumers is null) throw new NotSupportedException(WorldspaceBoundary);
             RequireReferenceConsumer(scope, consumers);
             scope.SavedPositionCall = scope.SavedPositionCall with { Consumer = consumers.Factory };
-            var worldspace = consumers.ReadWorldspace(invocation, cell); RequireReferenceConsumer(scope, consumers); ValidateForm(worldspace);
-            scope.SavedPositionCall = scope.SavedPositionCall with { Worldspace = worldspace, WorldspaceReturned = true };
+            var worldspaceRead = consumers.ReadCurrentReferenceWorldspace(invocation); RequireReferenceConsumer(scope, consumers);
+            if (worldspaceRead is not null)
+            {
+                RequireWorldspaceRead(worldspaceRead, invocation);
+                if (parentRead is null || worldspaceRead.Parent != parentRead)
+                    throw new InvalidDataException("Saved position changed its current ParentCELL between original getter calls.");
+            }
+            var worldspace = worldspaceRead is null ? consumers.ReadWorldspace(invocation, cell) : worldspaceRead.Worldspace;
+            RequireReferenceConsumer(scope, consumers); ValidateForm(worldspace);
+            scope.SavedPositionCall = scope.SavedPositionCall with { Worldspace = worldspace, WorldspaceReturned = true, WorldspaceRead = worldspaceRead };
             RequireLane(FalloutPackageCommandFieldLane.SavedPosition);
             if (_values.SavedPosition is null)
             {
@@ -63,6 +77,12 @@ internal sealed partial class FalloutActorPackageCommandFields
             false, null, false, null, _values.SavedPosition, _values.SavedPosition, [], false, false, null));
         return LastSavedPositionCall!;
     }
+    private void RequirePositionRead(FalloutReferencePositionRead read, FalloutPackageCommandFieldInvocation invocation) =>
+        ValidatePositionBorrow(read, invocation, Source, Stack);
+    private void RequireParentRead(FalloutReferenceParentCellRead read, FalloutPackageCommandFieldInvocation invocation) =>
+        ValidateParentBorrow(read, invocation, Source, Stack);
+    private void RequireWorldspaceRead(FalloutReferenceWorldspaceRead read, FalloutPackageCommandFieldInvocation invocation) =>
+        ValidateWorldspaceBorrow(read, invocation, Source, Stack);
     private void RequireReferenceConsumer(FieldScope scope, IFalloutPackageReferenceFieldConsumers consumers)
     {
         Guard(scope);

@@ -1,7 +1,7 @@
 constexpr std::uint32_t crt_support_callback = 24;
 
 PluginCrtSupportRuntime& crt_support_owner() {
-    auto& owner = io_owner();
+    auto& owner = crt_io_owner();
     if (!owner.crt_support) owner.crt_support = std::make_unique<PluginCrtSupportRuntime>();
     return *owner.crt_support;
 }
@@ -9,8 +9,8 @@ void crt_owned_callback(std::uint32_t operation, const Bytes& payload) {
     auto& owner = crt_support_owner();
     // One ordered queue contains ordinary FILE, alias and environment receipts.
     // Detach cannot reverse close/lock/buffer order by using separate queues.
-    if (io_owner().loader_retiring) { owner.pending.push_back({operation, payload.data}); return; }
-    auto response = io_host(operation, payload); Reader receipt{response.data};
+    if (crt_io_owner().loader_retiring) { owner.pending.push_back({operation, payload.data, false, state->module_id}); return; }
+    auto response = crt_host(operation, payload); Reader receipt{response.data};
     if (receipt.get<std::uint32_t>() != 1) throw Fatal(ERROR_INVALID_DATA, "Actual CRT result has no complete correlated parent receipt.");
     receipt.finish();
 }
@@ -19,7 +19,7 @@ void crt_defer_heap_receipt(const NvseHeapEvent& event) {
         throw Fatal(ERROR_INVALID_STATE, "Deferred heap result lost its actual original-loader/caller lifetime.");
     Bytes request; request.put(event.capability); request.put(event.pointer); request.put(event.length);
     request.put(event.operation); request.put(event.abi); request.put(event.receiver);
-    crt_support_owner().pending.push_back({value_heap_event, request.data, true});
+    crt_support_owner().pending.push_back({value_heap_event, request.data, true, state->module_id});
 }
 CrtSupportState& crt_support_state(void* pointer) {
     const auto stream = crt_stream(pointer);
@@ -113,8 +113,8 @@ void crt_support_report(const CrtSupportState& value, CrtSupportKind kind, std::
     else { CrtSupportCall entered(value.stream); crt_owned_callback(crt_support_callback, request); }
 }
 void crt_support_closed(void* pointer, int result, DWORD last) {
-    if (!io_owner().crt_support) return;
-    auto& entries = io_owner().crt_support->streams; const auto found = entries.find(address(pointer));
+    if (!crt_io_owner().crt_support) return;
+    auto& entries = crt_io_owner().crt_support->streams; const auto found = entries.find(address(pointer));
     if (found == entries.end()) return;
     auto retired = *found->second; retired.buffer = {}; retired.base_cell = nullptr; retired.pointer_cell = nullptr; retired.count_cell = nullptr;
     // FILE is already invalid, including fclose's flush-failure result. Never
@@ -130,15 +130,16 @@ void crt_support_report_preserving_error(const CrtSupportState& value, CrtSuppor
     crt_restore_error(provider, status); SetLastError(last);
 }
 void crt_support_flush_detach() {
-    if (!io_owner().crt_support) return; auto& pending = io_owner().crt_support->pending;
+    if (!crt_io_owner().crt_support) return; auto& pending = crt_io_owner().crt_support->pending;
     while (!pending.empty()) {
         const auto entry = pending.front(); Bytes payload; payload.data = entry.payload;
+        NvseExecutionScope source_module(entry.module);
         if (entry.heap) {
             if (entry.operation != value_heap_event || values_caller_id() != 0 || values_scalar(value_heap_event, payload) != 1)
                 throw Fatal(ERROR_INVALID_DATA, "Deferred heap result lacks its actual correlated zero-caller lifetime receipt.");
         }
         else crt_owned_callback(entry.operation, payload);
-        pending.erase(pending.begin());
+        pending.pop_front();
     }
 }
 void crt_support_require_retired() {

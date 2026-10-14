@@ -86,6 +86,8 @@ void* cpp_dynamic_entry(HMODULE module, const std::string& name) {
     const auto declaration = std::find_if(owner.exports.begin(), owner.exports.end(), [&](const auto& item) { return item.name == name; });
     if (declaration == owner.exports.end())
         throw Fatal(ERROR_NOT_SUPPORTED, "Dynamic C++ lookup lacks its exact original source export declaration.");
+    if (!declaration->primary)
+        throw Fatal(ERROR_NOT_SUPPORTED, "Primary dynamic C++ lookup cannot borrow an additional module's source declaration.");
     if (name == cpp_open_wide) return reinterpret_cast<void*>(cpp_fiopen_w);
     if (name == cpp_open_narrow) return reinterpret_cast<void*>(cpp_fiopen_a);
     if (!declaration->actual) throw Fatal(ERROR_INVALID_STATE, "Dynamic C++ method/global has no actual provider publication.");

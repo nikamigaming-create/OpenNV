@@ -23,7 +23,7 @@ internal sealed partial class NativePluginExecutionDomain
         var owner = _privateIo ?? throw new NotSupportedException("Original native I/O has no selected module-owned private storage.");
         using var reader = Reader(frame.Payload); var thread = reader.ReadUInt32(); var module = reader.ReadUInt64();
         var enteredLoader = IsEnteredOriginalLoaderIo(frame.Operation, module, parent);
-        if (!enteredLoader && frame.Operation is not (FileSizeCallback or ModuleReadCallback)) RequireModulePrivateIo(RetainedNvseModule(module));
+        if (!enteredLoader && frame.Operation is not (FileSizeCallback or ModuleReadCallback) && !HasModuleDiagnosticCallback(module, frame.Operation)) RequireModulePrivateIo(RetainedNvseModule(module));
         if (thread != NativeThread || !enteredLoader && (_nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation))
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
         if (frame.Operation == FileSizeCallback)
@@ -91,7 +91,7 @@ internal sealed partial class NativePluginExecutionDomain
         }
         if (frame.Operation == ProfileResultCallback) return DispatchPrivateProfile(frame, parent, owner, reader);
         if (frame.Operation is >= FindBeginCallback and <= FindBackendCallback) return DispatchPrivateFind(frame, parent, owner, reader);
-        if (frame.Operation is >= CrtProvider and <= CrtPathResult) return DispatchPrivateCrt(frame, parent, owner, reader);
+        if (frame.Operation is >= CrtProvider and <= CrtPathResult) return DispatchPrivateCrt(frame, parent, module, owner, reader);
         switch (frame.Operation)
         {
             case 1:

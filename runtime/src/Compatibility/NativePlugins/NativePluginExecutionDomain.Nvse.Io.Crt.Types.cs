@@ -13,15 +13,17 @@ internal enum NativePluginCrtOperation : uint
 internal sealed record NativePluginCrtStatus(int Errno, uint DosError, bool StreamStatusAvailable, int EndOfFile, int Error);
 internal sealed record NativePluginCrtReceipt(ulong Sequence, ulong Generation, ulong Parent, ulong Provider,
     ulong Route, uint Stream, NativePluginCrtOperation Operation, ulong Argument, ulong Requested,
-    long Result, NativePluginCrtStatus Status, bool StreamRetired, string DeclarationOwner);
+    long Result, NativePluginCrtStatus Status, bool StreamRetired, string DeclarationOwner)
+{ internal ulong Module { get; init; } }
 internal sealed record NativePluginCrtStream(ulong Provider, ulong Route, uint Address, bool Writable,
-    string Mode, string SourceOwner);
+    string Mode, string SourceOwner)
+{ internal ulong Module { get; init; } }
 
 internal sealed partial class NativePluginExecutionDomain
 {
     private const uint CrtProvider = 5, CrtRoute = 6, CrtOpened = 7, CrtEvent = 8, CrtPathResult = 9;
     private readonly Dictionary<ulong, (NativePluginCrtProviderSelection Selection, uint Module)> _crtProviders = [];
     private readonly Dictionary<ulong, NativePluginCrtStream> _crtStreams = [];
-    private readonly Dictionary<ulong, (ulong Provider, string Mode, bool Writable)> _crtRoutes = [];
+    private readonly Dictionary<ulong, (ulong Provider, string Mode, bool Writable, ulong Module)> _crtRoutes = [];
     internal IReadOnlyList<NativePluginCrtReceipt> NvseCrtReceipts => _privateIo?.CrtReceipts ?? [];
 }

@@ -18,14 +18,17 @@ an edit, but has a black birth background and proves no quest or save/Continue.
 
 ## Current executable result
 
-The latest ordinary FO3 New Game executes the opening compiled AddScriptPackage
-synchronously. StartEvent, StartCallback and procedure zero return. Independent
-Script initialization and current-view/Common-null animation selection return
-through their actual owners. Raw rotation borrows the shared reference
-orientation owner and returns. SavedPosition next refuses current XYZ/mode
-ownership before loading the Vault; the process exits one. Final failure
-publication has zero telemetry/capture loss. No complete save, normal menu Quit,
-cold Continue or quest route is accepted for this reached candidate state.
+The latest ordinary FO3 startup returns both XYZ/reset writes, source form-file
+persistence, initial TES/grid selection and yaw. The compiled opening package
+returns its current XYZ, ParentCELL, Worldspace, persistent-CELL fallback and
+Saved18 stores. It next refuses the actual Actor package-assignment status and
+Current-arm consumers. ParentCELL construction now precedes package queries on
+the same existing World field; later CELL-list publication cannot replace it.
+Grid qualification and repeated legitimate thread-flag reads pass the selected
+owned/source and focused regression checks.
+Final publication has zero telemetry loss. Failed startup drains readers and
+disposes source owners without a reported native leak.
+No complete save, normal menu Quit, cold Continue or quest route is accepted.
 
 Earlier bounded FO3 runs reached CG00 stage 100 and normal Quit, but could not
 complete the authoritative Player frame or save. Those results do not admit
@@ -35,8 +38,9 @@ retains the missing writer instead of continuing through it.
 The unchanged selected mod stacks retain FNV's 10 plugins/three native modules
 and TTW's 18 plugins/six modules. Both latest ordinary starts exit one without a
 complete save. JIP Query/Load return; PostLoad still needs the typed image
-mutation/code-site/task-dispatch producer. Original XR, ShowOff and TTW NVSE
-construction refuses before module entry. JohnnyGuitar retains four parallel
+mutation/code-site/task-dispatch producer. TTW NVSE returns original construction
+and Query, then refuses its terminal model-path pointer mutation during Load.
+Original XR and ShowOff construction refuse before module entry. JohnnyGuitar retains four parallel
 worker imports and Stewie 81 imports. Every selected module remains in scope;
 no writable table, fabricated queue or module omission supplies acceptance.
 
@@ -65,15 +69,28 @@ and 17 joints, retire them and reconstruct fresh native resources. Logical scene
 checks construct 180 objects and write 28 actual shader properties. These results
 do not qualify the earlier controller or complete Player/Main.
 
-The new early slot-one rounded-convex native resource passes the owned headless
-shape audit: 91 actual leaves, 24 faces, 40 edges, 18 vertices and 224 collision
-queries, with shared cache/failure/retirement checks. Source radius is retained.
-Canonical packed hull bytes remain unqualified; original controller construction
-and its phantom/proxy/reset have not yet run through production.
+The early rounded-convex resource passes the owned shape audit. The new owned
+headless controller audit also passes real detached Area/phantom/proxy, retained
+Common field, eleven-slot manager, kind16, properties, reset and failed-resource
+retirement. Twelve bounded Float32 fixtures pass. Full reference construction now
+qualifies final Base/model/ParentCELL null stores independently of allocator
+payload. Complete canonical bytes and whole-world cold native resource restoration
+remain unqualified; this component audit does not accept gameplay. Three owned-data
+native cold resource cycles now pass fresh Areas/shapes, actual Common pointers,
+retained XYZ, failure/cleanup and unchanged constructor/group/kind histories.
 
-Protocol 40 uses one actual shared native domain, independent original module
-contexts and borrowed function lifetimes. Real two-DLL Debug and Release callers
-pass shared GetFileSizeEx and supplemental read-only file/profile/module-name
+Protocol 42 uses one actual shared native domain, independent original module
+contexts and borrowed function lifetimes. Its rebuilt native domain and real
+supplemental read caller pass. Shared GetFileSizeEx and read-only I/O pass the
+complete Release gate. The original dynamic CRT source structure passes selected
+TTW qualification and authored negative cases. The ordinary selected TTW run
+returns original attach and Query through its actual
+module-bound diagnostic CRT service. The real original-DLL caller audit passes
+genuine sharing failures/retries, the all-six-fail arm and destructor file close.
+TTW Load next refuses an unowned typed terminal model-path pointer mutation.
+JIP Query/Load return; its later PostLoad task producer remains separate. XR,
+ShowOff, JohnnyGuitar and Stewie independently retain their unresolved failures.
+The I/O capabilities cover GetFileSizeEx and supplemental read-only file/profile/module-name
 calls, including a sparse file larger than 4 GiB, original Win32 outputs/errors,
 shared routes/HANDLEs, x86 ABI, failed prefixes and fresh retirement. Original
 unowned TLS/CRT/DllMain effects refuse before LoadLibrary. Native-global cold
@@ -81,30 +98,35 @@ saving remains unfinished. Indexed retirement is O(V+E).
 
 ## Validation and next owner
 
-The final combined candidate passes the required pinned Godot runtime gate:
+The published base passes the required pinned Godot runtime gate:
 Release/Debug builds, formatting/analyzers, full contract probes, native domains,
 launcher checks and native Godot loading. Focused package/field/Script/animation,
 raw-orientation and shape checks pass. The selected owned HUD/mover/source audit
 passes again in Release, including three cold component cycles. Its 36.4-second
 measurement is source-reader work, not loading or frame-performance acceptance.
 
+The current source-controller branch passes the complete pinned runtime gate,
+including Release/Debug builds, formatting/analyzers, contract probes, native
+domains, launcher checks and native Godot loading. The selected owned reference
+startup audit passes in Debug and Release, including three cold scalar-owner
+cycles. The original TTW diagnostic-file caller passes in both configurations.
+The owned Godot controller audit passes construction/reset, three native cold
+component cycles and retirement. These audits retain their authored callback and
+unexecuted whole-Player boundaries.
+
 The toolchain is official Godot 4.8-dev7 Mono with matching managed SDK and
 .NET 10.0.401. Direct owned DDS uploads still lack accepted streaming residency,
 budgets and memory/frame/thread measurements. An enabled streaming setting is
 not an accepted streaming implementation.
 
-Next bind the distinct early source Player controller before model/3D
-publication: shared state manager, numerical contact fields, real detached
-phantom/proxy, actual thread-kind16 scope, one Common process field, source
-property/filter stores and startup XYZ reset. The late NIF/body/height adapter
-cannot replace this factory. Keep Common, Runtime/Main and thread process
-lineages independent and connect them through actual World guards.
-
-Own both startup raw position writes, adjusted-position mode, ParentCELL,
-Worldspace/persistent-CELL fallback, saved Extra and change-manager effects.
-Pending transfer and rendered pose cannot supply current reference fields.
-Finish Actor assignment, High and linked-reference joins before admitting the
-logical mover reset. Then close repeated Player/Main and complete-save owners,
+Next own Actor assignment, its actual shared status word, linked-reference joins,
+direct Common animation context and High reset before admitting the logical mover
+reset. Source loading-byte construction and writers require independent proof.
+Bind whole-world cold controller resources and validate reference, Script flag,
+ParentCELL, Saved18 and change-map histories across their retained publications.
+Current aggregate reference-owner history is not sufficient for a complete save;
+the whole-world cold resource blocker remains active. Pending transfer and rendered
+pose cannot supply current reference fields. Then close repeated Player/Main and complete-save owners,
 leave the Vault for Megaton and finish/depart Goodsprings. Finish the unchanged
 TTW/mod owners and all three recorded save/Continue quest runs.
 

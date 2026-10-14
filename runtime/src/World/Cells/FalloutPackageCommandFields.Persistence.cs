@@ -110,6 +110,17 @@ internal sealed partial class FalloutActorPackageCommandFields
                 if (operation.Returned)
                     available[FalloutPackageCommandFieldLane.Animation] = new(FalloutPackageCommandFieldLane.Animation, true, null);
             }
+            if (operation.SavedPositionInitialization is { } savedInitialization)
+            {
+                var publication = saved.Publications.Single(value => value.Process == invocation.Process);
+                if (savedInitialization.FieldsFactory != publication.Factory || savedInitialization.Constructor != publication.Constructor ||
+                    saved.Operations.Count(value => value.SavedPositionInitialization is not null) != 1 ||
+                    operation.Returned && saved.Operations.Any(value => value.Entered < operation.Entered &&
+                        (value.InvalidatedLane == FalloutPackageCommandFieldLane.SavedPosition || value.Stores.Any(store => IsSavedPositionField(store.Field)))))
+                    throw new InvalidDataException("SavedPosition constructor admission replayed or crossed an actual Extra writer.");
+                if (operation.Returned)
+                    available[FalloutPackageCommandFieldLane.SavedPosition] = new(FalloutPackageCommandFieldLane.SavedPosition, true, null);
+            }
         }
         if (sequence != saved.Sequence || !EquivalentValues(values, saved.Values) ||
             saved.Availability.Select(value => value.Lane).Distinct().Count() != available.Count ||
@@ -122,7 +133,7 @@ internal sealed partial class FalloutActorPackageCommandFields
     {
         FalloutPackageCommandField[] expected = operation.Kind switch
         {
-            "current-position-getter" or "selected-animation-context-getter" or "observed-unowned-writer" or AnimationInitializationKind => [],
+            "current-position-getter" or "selected-animation-context-getter" or "observed-unowned-writer" or AnimationInitializationKind or SavedInitializationKind => [],
             "current-position-store" => [FalloutPackageCommandField.PositionX, FalloutPackageCommandField.PositionY, FalloutPackageCommandField.PositionZ],
             "current-ParentCELL-store" => [FalloutPackageCommandField.ParentCell],
             "raw-rotation-Z-store" => [FalloutPackageCommandField.RotationZ],
@@ -148,10 +159,11 @@ internal sealed partial class FalloutActorPackageCommandFields
             !available[FalloutPackageCommandFieldLane.ScriptExtra].Available && (operation.Stores.Count != 0 || operation.Returned))
             throw new InvalidDataException("Package event operation admitted an unclosed preceding Script Extra writer.");
         if (operation.Kind == "saved-position-Extra-and-reference-change" && operation.Stores.Count != 0 &&
-            (!available[FalloutPackageCommandFieldLane.PositionMode].Available || before.PositionMode != 0 ||
-             !available[FalloutPackageCommandFieldLane.Position].Available ||
+            (operation.SavedPositionCall?.PositionRead is null && (!available[FalloutPackageCommandFieldLane.PositionMode].Available || before.PositionMode != 0 ||
+             !available[FalloutPackageCommandFieldLane.Position].Available) ||
              !available[FalloutPackageCommandFieldLane.RotationZ].Available && operation.SavedPositionCall?.RotationRead is null ||
-             !available[FalloutPackageCommandFieldLane.ParentCell].Available || !available[FalloutPackageCommandFieldLane.SavedPosition].Available))
+             !available[FalloutPackageCommandFieldLane.ParentCell].Available && operation.SavedPositionCall?.ParentRead is null ||
+             !available[FalloutPackageCommandFieldLane.SavedPosition].Available))
             throw new InvalidDataException("Saved-position stores bypassed unavailable current reference or Extra fields.");
         if (operation.Kind == "current-position-getter" && operation.Returned &&
             (!available[FalloutPackageCommandFieldLane.PositionMode].Available || before.PositionMode != 0 ||
@@ -168,8 +180,17 @@ internal sealed partial class FalloutActorPackageCommandFields
         if ((operation.Kind == "package-event-marker") != (operation.EventMark is not null) ||
             (operation.Kind == "selected-animation-context-getter") != (operation.AnimationRead is not null) ||
             (operation.Kind == "saved-position-Extra-and-reference-change") != (operation.SavedPositionCall is not null) ||
-            (operation.Kind == AnimationInitializationKind) != (operation.AnimationInitialization is not null))
+            (operation.Kind == AnimationInitializationKind) != (operation.AnimationInitialization is not null) ||
+            (operation.Kind == SavedInitializationKind) != (operation.SavedPositionInitialization is not null))
             throw new InvalidDataException("Command fields omitted or borrowed a sibling child receipt.");
+        if (operation.SavedPositionInitialization is { } savedInitialization)
+        {
+            RequireReceipt(savedInitialization.Invocation, savedInitialization.Entered, savedInitialization.Changed,
+                savedInitialization.Returned, savedInitialization.Failure, operation);
+            if (savedInitialization.Source != source.Identity || savedInitialization.FieldsFactory == Guid.Empty || savedInitialization.Constructor == Guid.Empty)
+                throw new InvalidDataException("SavedPosition constructor receipt changed its actual field authority.");
+            if (savedInitialization.Returned) ValidateSavedPrefix(savedInitialization.Prefix, operation.Invocation, source);
+        }
         if (operation.AnimationInitialization is { } initialization)
         {
             RequireReceipt(initialization.Invocation, initialization.Entered, initialization.Changed,
@@ -221,14 +242,25 @@ internal sealed partial class FalloutActorPackageCommandFields
         {
             RequireReceipt(saved.Invocation, saved.Entered, saved.Changed, saved.Returned, saved.Failure, operation);
             if (!saved.Stores.SequenceEqual(operation.Stores) || saved.Before != before.SavedPosition || saved.After != after.SavedPosition ||
-                saved.Position is { } position && position != before.Position ||
+                saved.Position is { } position && position != (saved.PositionRead?.Position ?? before.Position) ||
                 saved.RotationZ is { } rotation && rotation != (saved.RotationRead?.ZBits ?? before.RotationZ) ||
-                saved.ParentCellReturned && (saved.Position is null || saved.ParentCell != before.ParentCell) ||
+                saved.ParentCellReturned && (saved.Position is null || saved.ParentCell != (saved.ParentRead is { } parent ? parent.Cell : before.ParentCell)) ||
                 saved.WorldspaceReturned && (!saved.ParentCellReturned || saved.Consumer is null) ||
                 saved.Consumer == Guid.Empty || !saved.WorldspaceReturned && saved.Worldspace is not null ||
                 saved.ChangeEntered && !saved.WorldspaceReturned || saved.Returned && !saved.ChangeEntered ||
                 saved.Stores.Count != 0 && !saved.WorldspaceReturned)
                 throw new InvalidDataException("Saved-position receipt changed command-time position/space, failed stores or callback order.");
+            if (saved.PositionRead is { } positionRead)
+            { ValidatePositionBorrow(positionRead, operation.Invocation, source, stack); if (saved.Position != positionRead.Position) throw new InvalidDataException("Saved XYZ differs from its actual borrowed read."); }
+            if (saved.ParentRead is { } parentRead)
+            { ValidateParentBorrow(parentRead, operation.Invocation, source, stack); if (!saved.ParentCellReturned || saved.ParentCell != parentRead.Cell) throw new InvalidDataException("Saved CELL differs from its actual borrowed read."); }
+            if (saved.WorldspaceRead is { } worldspaceRead)
+            {
+                ValidateWorldspaceBorrow(worldspaceRead, operation.Invocation, source, stack);
+                if (!saved.WorldspaceReturned || saved.Worldspace != worldspaceRead.Worldspace || saved.ParentRead != worldspaceRead.Parent ||
+                    saved.PositionRead is { } xyz && (xyz.Process != worldspaceRead.Process || xyz.Factory != worldspaceRead.Factory || xyz.Constructor != worldspaceRead.Constructor))
+                    throw new InvalidDataException("Saved Worldspace/XYZ/CELL borrows changed their actual joined reference owners.");
+            }
             if (saved.RotationRead is { } read && (read.Source != source.Controls.Identity || read.Stack != stack ||
                 read.Process == Guid.Empty || read.Factory == Guid.Empty || read.Constructor == Guid.Empty ||
                 read.Reference != operation.Invocation.Actor.Reference || read.Base != operation.Invocation.Actor.Base ||

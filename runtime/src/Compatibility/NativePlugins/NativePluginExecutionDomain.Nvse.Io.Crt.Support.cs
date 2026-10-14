@@ -41,13 +41,13 @@ internal sealed partial class NativePluginExecutionDomain
             // The preceding ordinary close receipt remains the failure authority.
             if (_crtStreams.ContainsKey(route) || !_crtSupportClosing.TryGetValue(stream, out var closed) || closed.Route != route || closed.Provider != provider ||
                 previous is not null && (previous.Route != route || previous.Provider != provider) ||
-                depth != 0 || buffer != 0 || baseCell != 0 || pointerCell != 0 || countCell != 0)
+                closed.Module != _nvsePlugin!.Module || depth != 0 || buffer != 0 || baseCell != 0 || pointerCell != 0 || countCell != 0)
                 throw new InvalidDataException("CRT buffer closure has an absent, still-live or locked FILE owner.");
             _crtSupport.Remove(stream); _crtSupportClosing.Remove(stream);
         }
         else
         {
-            if (!_crtStreams.TryGetValue(route, out var file) || file.Address != stream || file.Provider != provider ||
+            if (!_crtStreams.TryGetValue(route, out var file) || file.Address != stream || file.Provider != provider || file.Module != _nvsePlugin!.Module ||
                 previous is not null && (previous.Route != route || previous.Provider != provider))
                 throw new InvalidDataException("CRT support operation targets a foreign/closed FILE lifetime.");
             if (bufferOwner == NativePluginCrtBufferOwner.SharedNativeHeap &&
@@ -95,7 +95,7 @@ internal sealed partial class NativePluginExecutionDomain
     private void RequireCrtSourceBuffer(uint pointer, uint length)
     {
         var image = _nvsePlugin ?? throw new InvalidDataException("CRT module buffer has no actual native image.");
-        RequireModulePrivateIo(image);
+        if (IsSupplementalNvseModule(image) && !_moduleDiagnosticSources.ContainsKey(image.Module)) RequireModulePrivateIo(image);
         if (!_nvseModuleSources.TryGetValue(image.Module, out var source))
             throw new InvalidDataException("CRT module buffer lost its exact retained original source.");
         var position = source.Position;

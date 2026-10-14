@@ -241,6 +241,15 @@ if ($LASTEXITCODE -ne 0 -or $livingText -match $godotFailurePattern -or
 }
 Write-Output 'OPENNV_NATIVE_LIVING_PHYSICS_PASS actualPhysicsServer=true sourceLinks=true currentMemberships=true coldBodies=true coldStructuralRegistry=true allocatorPreserved=true'
 
+$earlyControllerOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeEarlyControllerAudit/NativeEarlyControllerAudit.tscn 2>&1
+$earlyControllerText = $earlyControllerOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $earlyControllerText -match $godotFailurePattern -or
+    $earlyControllerText -notmatch 'OPENNV_NATIVE_EARLY_CONTROLLER_PASS' -or
+    $earlyControllerText -notmatch 'detachedNoDefaultSpace=true') {
+    throw "OpenNV early detached controller construction/reset failed:`n$earlyControllerText"
+}
+Write-Output 'OPENNV_NATIVE_EARLY_CONTROLLER_PASS actualPhysicsServer=true sourceKind16=true detachedNoDefaultSpace=true gameplay=unexecuted'
+
 $locomotionOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeLocomotionAudit/NativeLocomotionAudit.tscn 2>&1
 $locomotionText = $locomotionOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $locomotionText -match $godotFailurePattern -or

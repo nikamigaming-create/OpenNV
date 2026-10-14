@@ -37,6 +37,9 @@ public partial class RuntimeCoordinator
         world.InitializeStandalonePlayerWeaponActionConstructor();
         world.PrepareStandalonePlayerFollowingContinuation();
         world.PrepareStandaloneSourcePackageCommands();
+        world.PrepareStandaloneReferencePositionOwners();
+        world.PrepareStandaloneEarlyPlayerController(_configuration.World.GameUnitsToMeters);
+        world.InitializeStandaloneReferenceStartupPositions();
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)

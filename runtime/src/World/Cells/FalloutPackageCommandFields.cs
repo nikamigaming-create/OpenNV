@@ -97,6 +97,7 @@ internal sealed partial class FalloutActorPackageCommandFields
             LastAnimationRead = _operations.LastOrDefault(value => value.AnimationRead is not null)?.AnimationRead;
             LastSavedPositionCall = _operations.LastOrDefault(value => value.SavedPositionCall is not null)?.SavedPositionCall;
             LastAnimationInitialization = _operations.LastOrDefault(value => value.AnimationInitialization is not null)?.AnimationInitialization;
+            LastSavedPositionInitialization = _operations.LastOrDefault(value => value.SavedPositionInitialization is not null)?.SavedPositionInitialization;
         }
     }
 
@@ -168,10 +169,12 @@ internal sealed partial class FalloutActorPackageCommandFields
             { Changed = changed, After = _values.SavedPosition, Stores = stores, Returned = returned, Failure = failure };
         if (scope.AnimationInitialization is { } initialization)
             LastAnimationInitialization = scope.AnimationInitialization = initialization with { Changed = changed, Returned = returned, Failure = failure };
+        if (scope.SavedPositionInitialization is { } savedInitialization)
+            LastSavedPositionInitialization = scope.SavedPositionInitialization = savedInitialization with { Changed = changed, Returned = returned, Failure = failure };
         scope.Completed = new(scope.Invocation, scope.Kind, scope.Entered, changed,
             stores, returned, failure, scope.InvalidatedLane,
             scope.InvalidationBoundary, scope.PublishedRows is { } rows ? Array.AsReadOnly(rows.ToArray()) : null, scope.EventFactory,
-            scope.EventMark, scope.AnimationRead, scope.SavedPositionCall, scope.AnimationInitialization);
+            scope.EventMark, scope.AnimationRead, scope.SavedPositionCall, scope.AnimationInitialization, scope.SavedPositionInitialization);
         _operations.Add(scope.Completed);
     }
     private void Guard(FieldScope scope)
@@ -224,6 +227,7 @@ internal sealed partial class FalloutActorPackageCommandFields
         internal FalloutPackageCommandAnimationRead? AnimationRead { get; set; }
         internal FalloutPackageCommandAnimationInitialization? AnimationInitialization { get; set; }
         internal FalloutPackageCommandSavedPositionCall? SavedPositionCall { get; set; }
+        internal FalloutPackageCommandSavedPositionInitialization? SavedPositionInitialization { get; set; }
         internal FalloutPackageCommandFieldOperation? Completed { get; set; }
     }
 }

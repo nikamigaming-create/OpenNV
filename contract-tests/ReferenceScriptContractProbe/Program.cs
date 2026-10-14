@@ -16,6 +16,24 @@ if (args is ["--early-controller-shape-contracts"])
     return;
 }
 
+if (args is ["--early-controller-contracts"])
+{
+    SourceMainScriptCallerContracts.RunEarlyControllerContracts();
+    return;
+}
+
+if (args is ["--reference-position-contracts"])
+{
+    SourceMainScriptCallerContracts.RunReferencePositionOwnershipContracts();
+    return;
+}
+
+if (args is ["--audit-owned-reference-startup", var ownedReferenceStartup])
+{
+    Environment.ExitCode = SourceMainScriptCallerContracts.AuditOwnedReferenceStartup(ownedReferenceStartup);
+    return;
+}
+
 if (args is ["--reference-script-initialization-contracts"])
 {
     SourceMainScriptCallerContracts.RunReferenceScriptExtraInitializationContracts();
@@ -1571,6 +1589,8 @@ EscortContracts.Run();
 SourceMainScriptCallerContracts.RunSourcePackageAssignmentContracts();
 SourceMainScriptCallerContracts.RunActorMoverContracts();
 SourceMainScriptCallerContracts.RunEarlyControllerConvexGeometryContracts();
+SourceMainScriptCallerContracts.RunEarlyControllerContracts();
+SourceMainScriptCallerContracts.RunReferencePositionOwnershipContracts();
 SourceMainScriptCallerContracts.RunReferenceScriptExtraInitializationContracts();
 SourceMainScriptCallerContracts.RunPlayerPackageCommandFieldContracts();
 SourceMainScriptCallerContracts.RunPlayerPackageAnimationInitializationContracts();

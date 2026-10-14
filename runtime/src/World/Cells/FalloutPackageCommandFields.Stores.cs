@@ -149,6 +149,8 @@ internal sealed partial class FalloutActorPackageCommandFields
         Stores = Array.AsReadOnly(value.Stores.ToArray()),
         PublishedRows = value.PublishedRows is { } rows ? Array.AsReadOnly(rows.ToArray()) : null,
         EventMark = value.EventMark is { } mark ? mark with { Stores = Array.AsReadOnly(mark.Stores.ToArray()) } : null,
-        SavedPositionCall = value.SavedPositionCall is { } saved ? saved with { Stores = Array.AsReadOnly(saved.Stores.ToArray()) } : null
+        SavedPositionCall = value.SavedPositionCall is { } saved ? saved with { Stores = Array.AsReadOnly(saved.Stores.ToArray()) } : null,
+        SavedPositionInitialization = value.SavedPositionInitialization is { } initialization ? initialization with
+        { Prefix = initialization.Prefix with { Dependencies = initialization.Prefix.Dependencies is { } dependencies ? Array.AsReadOnly(dependencies.ToArray()) : null } } : null
     };
 }

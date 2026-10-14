@@ -319,6 +319,21 @@ public partial class RuntimeCoordinator
             catch (Exception publicationFailure)
             { GD.PushError($"OPENNV_STARTUP_FAILURE_PUBLICATION_LOSS {publicationFailure}"); }
             GD.PushError($"OPENNV_GODOT_RUNTIME_FAIL {failure}");
+            try
+            {
+                await DrainNativeSourceReaders();
+                _runtimeLiveHarness?.Retire();
+                RetireNativeExperienceHud();
+                RetireCurrentImagePhase();
+                await RetireNativeCellAndHdrConsumers();
+                StopNativeOpenXr();
+                _retiringNativeSession = true;
+            }
+            catch (Exception cleanup)
+            {
+                RetainNativeCampaignLoadFailure(cleanup);
+                GD.PushError($"OPENNV_STARTUP_FAILURE_RETIREMENT {cleanup}");
+            }
             GetTree().Quit(1);
         }
     }

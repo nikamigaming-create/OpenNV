@@ -42,7 +42,12 @@ internal sealed partial class NativePluginExecutionDomain
                 throw new InvalidDataException("Co-resident source declaration changed after its retained file lease.");
             moduleRead ??= NativePluginModuleReadIoSource.Read(declaration, io.Selection.StackSha256);
             moduleRead?.Check(declaration, io.Selection.StackSha256);
-            NativePluginCoResidentImports.Require(declaration, moduleRead);
+            var construction = moduleRead?.ConstructorSource ?? NativePluginModuleConstructionSource.Read(declaration, io.Selection.StackSha256);
+            construction.Check(declaration, io.Selection.StackSha256);
+            var diagnostic = NativePluginModuleDiagnosticCrtSource.Read(declaration, io.Selection.StackSha256, construction);
+            var cpp = NativePluginModuleCppSource.Read(declaration); cpp?.Check(declaration, io);
+            NativePluginCoResidentImports.Require(declaration, moduleRead, cpp);
+            BeginModuleConstruction(construction, cpp);
             entered = true; ++_callDepth;
             using var reader = Exchange(NativePluginDomainOperation.NvseModuleSet, Payload(writer =>
             {
@@ -50,16 +55,20 @@ internal sealed partial class NativePluginExecutionDomain
                 writer.Write(checked((uint)declaration.Imports.Count));
                 foreach (var item in declaration.Imports)
                 { WriteText(writer, item.Library.ToLowerInvariant()); WriteText(writer, item.Name!); writer.Write(item.SlotRva); }
+                WriteModuleConstruction(writer, construction, io);
+                WriteModuleCppSource(writer, cpp);
+                WriteModuleDiagnosticSource(writer, diagnostic);
             }));
             var id = reader.ReadUInt64(); var image = reader.ReadUInt32(); var handle = reader.ReadUInt32();
             var interfaces = reader.ReadUInt32(); var query = reader.ReadUInt32(); var load = reader.ReadUInt32();
-            var boundReads = reader.ReadUInt32(); Finish(reader);
+            var boundReads = reader.ReadUInt32(); var boundDiagnostic = reader.ReadUInt32(); Finish(reader);
             if (id == 0 || image == 0 || interfaces == 0 || query == 0 || load == 0 || handle != sourcePluginHandle ||
-                interfaces != _primaryNvseModule!.Interface || boundReads != (moduleRead?.BoundImports ?? 0))
+                interfaces != _primaryNvseModule!.Interface || boundReads != (moduleRead?.BoundImports ?? 0) || boundDiagnostic != (diagnostic is null ? 0U : 1U))
                 throw new InvalidDataException("Co-resident module lost its actual shared interface/image/export publication.");
             var plugin = new NativeNvsePlugin(Generation, id, handle, image, interfaces, query, load, path, expectedSha256.ToUpperInvariant());
             RegisterNvseModule(plugin, source, declaration); source = null!;
             if (moduleRead is not null) _moduleReadSources.Add(plugin.Module, moduleRead);
+            if (diagnostic is not null) _moduleDiagnosticSources.Add(plugin.Module, diagnostic);
             return plugin;
         }
         catch (NativePluginDomainRefusal) { throw; }
@@ -67,6 +76,8 @@ internal sealed partial class NativePluginExecutionDomain
         finally
         {
             if (entered) --_callDepth;
+            _enteredModuleConstruction = null;
+            _enteredModuleCpp = null;
             if (source is not null)
             {
                 if (entered && Fault is not null && !ChildExited) _nvseFailedModuleSources.Add(source);
@@ -90,7 +101,7 @@ internal sealed partial class NativePluginExecutionDomain
     {
         if (_nvsePlugin is not { } plugin || !IsSupplementalNvseModule(plugin)) return;
         if (frame.Kind == NativePluginDomainMessage.IoCallback)
-        { if (frame.Operation is not (FileSizeCallback or ModuleReadCallback)) RequireModulePrivateIo(plugin); return; }
+        { if (frame.Operation is not (FileSizeCallback or ModuleReadCallback) && !HasModuleDiagnosticCallback(plugin.Module, frame.Operation)) RequireModulePrivateIo(plugin); return; }
         if (frame.Kind != NativePluginDomainMessage.NvseCallback) return;
         if (frame.Operation != CommandTableEvent && (NativeNvseHostCall)frame.Operation is not
             (NativeNvseHostCall.QueryInterface or NativeNvseHostCall.SetOpcode or NativeNvseHostCall.RegisterCommand or
@@ -126,6 +137,7 @@ internal sealed partial class NativePluginExecutionDomain
         foreach (var source in _nvseFailedModuleSources.ToArray())
             try { source.Dispose(); _nvseFailedModuleSources.Remove(source); } catch (Exception failure) { failures.Add(failure); }
         _nvseLiveModules = 0; _nvsePlugin = null;
+        ClearModuleConstructionAfterChildExit();
         foreach (var function in _nvseFunctionBorrows.Values) function.Live = false;
         _nvseFunctionBorrows.Clear();
         if (failures.Count != 0) throw new AggregateException("Original module source leases did not all retire.", failures);

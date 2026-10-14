@@ -43,6 +43,7 @@ internal sealed partial class NativePluginPrivateIo
     private void DisposeCppSources()
     {
         var failures = new List<Exception>();
+        try { DisposeConstructorProvider(); } catch (Exception error) { failures.Add(error); }
         try { DisposeParallelHardwareSource(); } catch (Exception error) { failures.Add(error); }
         foreach (var lease in _cppSourceLeases.ToArray())
             try { lease.Dispose(); _cppSourceLeases.Remove(lease); } catch (Exception error) { failures.Add(error); }

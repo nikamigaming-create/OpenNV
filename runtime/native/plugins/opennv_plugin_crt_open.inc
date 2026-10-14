@@ -35,22 +35,26 @@ std::string crt_path_bytes(const std::wstring& path) {
     return bytes;
 }
 struct CrtRoute { std::uint64_t id; std::wstring path; };
-CrtRoute crt_route(CrtProvider& provider, std::uint32_t api, const std::wstring& mode, const std::wstring& path, bool writable) {
+CrtRoute crt_route(CrtProvider& provider, std::uint32_t api, const std::wstring& mode, const std::wstring& path, bool writable, const CrtOpenProducer& source = {}) {
     crt_register(provider); Bytes request; request.put(provider.id); request.put(api); request.text(io_utf8(mode));
-    request.put(writable ? 1U : 0U); request.text(io_utf8(path)); auto response = io_host(crt_route_event, request); Reader result{response.data};
+    request.put(writable ? 1U : 0U); request.text(io_utf8(path));
+    request.put(source.caller); request.put(source.sharing); request.put(source.cell); request.put(source.value); request.put(source.attempt);
+    auto response = crt_host(crt_route_event, request); Reader result{response.data};
     CrtRoute route{result.get<std::uint64_t>(), io_native_path(io_from_utf8(result.text()))}; result.finish();
     if (!route.id || route.path.empty()) throw Fatal(ERROR_INVALID_DATA, "CRT path has no exact selected/private decision."); return route;
 }
-template<class Open> void* crt_open_actual(const std::wstring& path, const std::wstring& mode, Open open) {
+template<class Open> void* crt_open_actual(const std::wstring& path, const std::wstring& mode, Open open, const CrtOpenProducer& source = {}) {
+    const auto incoming = GetLastError();
     auto& provider = crt_active_provider(); const auto writable = crt_writable_mode(mode);
-    const auto route = crt_route(provider, 1, mode, path, writable); auto* stream = open(provider, route.path); const auto last = GetLastError();
+    const auto initial = crt_status(provider); const auto route = crt_route(provider, 1, mode, path, writable, source);
+    crt_restore_error(provider, initial); SetLastError(incoming); auto* stream = open(provider, route.path); const auto last = GetLastError();
     const auto status = crt_status(provider, stream);
     if (stream) {
         // Retain the genuine returned pointer before requesting a C# receipt.
         // A callback failure cannot discard a still-open original-provider FILE.
         auto& streams = crt_owner().streams;
         if (streams.count(address(stream))) throw Fatal(ERROR_INVALID_HANDLE, "CRT returned an already-live opaque stream pointer.");
-        try { streams.emplace(address(stream), CrtStream{provider.id, route.id, stream, writable, mode}); }
+        try { streams.emplace(address(stream), CrtStream{provider.id, route.id, stream, writable, mode, state->module_id}); }
         catch (...) {
             // Ownership has not been published. Retire only this newly created
             // real CRT stream; a failed close remains a terminal refusal.
@@ -77,9 +81,13 @@ void* __cdecl crt_fopen_w(const wchar_t* path, const wchar_t* mode) {
     }); });
 }
 void* __cdecl crt_fsopen_a(const char* path, const char* mode, int sharing) {
-    return nvse_adapter([&] { return crt_open_actual(crt_path_a(path), io_ansi(mode), [&](CrtProvider& provider, const std::wstring& target) {
+    const auto* caller = _ReturnAddress(); const auto incoming = GetLastError();
+    return nvse_adapter([&] {
+        const auto declared = crt_path_a(path); const auto access = io_ansi(mode); CrtDiagnosticOpen producer(caller, declared, access, sharing);
+        SetLastError(incoming); auto* stream = crt_open_actual(declared, access, [&](CrtProvider& provider, const std::wstring& target) {
         const auto bytes = crt_path_bytes(target); return crt_export<void* (__cdecl*)(const char*, const char*, int)>(provider, "_fsopen")(bytes.c_str(), mode, sharing);
-    }); });
+        }, producer.declaration); producer.returned(stream); return stream;
+    });
 }
 void* __cdecl crt_fsopen_w(const wchar_t* path, const wchar_t* mode, int sharing) {
     return nvse_adapter([&] { return crt_open_actual(io_wide(path), io_wide(mode), [&](CrtProvider& provider, const std::wstring& target) {

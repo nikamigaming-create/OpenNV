@@ -96,6 +96,7 @@ internal sealed partial class FalloutActorProcessCommonState
         var process = ReadSceneQueries(actor, epoch);
         var context = process.Level is FalloutDetectionProcessLevel.High or FalloutDetectionProcessLevel.MiddleHigh
             ? Require(actor).SceneFields!.PostSceneContext : null;
+        RequireCurrentSceneController(actor, epoch, context);
         return new(process, context);
     }
 
@@ -113,8 +114,9 @@ internal sealed partial class FalloutActorProcessCommonState
     {
         var expected = FalloutSourceMainFamily.IsFallout3(executable) &&
             entry.Level is FalloutDetectionProcessLevel.High or FalloutDetectionProcessLevel.MiddleHigh;
-        if (expected != (entry.SceneFields is not null) || entry.SceneFields is { WeaponEntry: not null } or { AnimationContext: not null } or { SceneUpdateMask: not 0 } or { PostSceneContext: not null } or { ActionCondition: not 0 } or { Action9Condition: not 0 } or { IdlePrimaryPackage: not null } or { ActorValueCache: not null })
+        if (expected != (entry.SceneFields is not null) || entry.SceneFields is { WeaponEntry: not null } or { AnimationContext: not null } or { SceneUpdateMask: not 0 } or { ActionCondition: not 0 } or { Action9Condition: not 0 } or { IdlePrimaryPackage: not null } or { ActorValueCache: not null })
             throw new InvalidDataException("Process scene fields lost their constructor or admitted a missing inventory/animation writer.");
+        ValidateEarlyControllerField(entry, executable, stack);
         ValidatePostActionFields(entry);
         ValidateIdleAnimationFields(entry);
         ValidateMovementFlagFields(entry);

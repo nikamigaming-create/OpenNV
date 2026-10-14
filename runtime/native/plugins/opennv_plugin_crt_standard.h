@@ -6,7 +6,10 @@
 #include <vector>
 
 namespace opennv_domain {
-struct CppRuntimeExport { std::string name; std::uint32_t rva = 0; bool code = false; void* actual = nullptr; };
+struct CppRuntimeExport {
+    std::string name; std::uint32_t rva = 0; bool code = false; void* actual = nullptr;
+    bool primary = true;
+};
 struct CppRuntimeProvider {
     std::wstring path; std::string sha, declaration;
     HMODULE retained = nullptr;

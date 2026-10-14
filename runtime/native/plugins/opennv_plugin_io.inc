@@ -70,14 +70,14 @@ std::string io_utf8(const std::wstring& text) {
         throw Fatal(GetLastError(), "Native file path UTF-8 conversion drifted.");
     return bytes;
 }
-Bytes io_host(std::uint32_t operation, const Bytes& payload) {
-    auto& owner = io_owner();
+Bytes io_host_bound(PluginIoRuntime& owner, std::uint32_t operation, const Bytes& payload) {
     if (owner.loader_retiring) throw Fatal(ERROR_NOT_SUPPORTED, "A new file route cannot call C# under the original DLL loader lock.");
     Bytes data; data.put(state->module_id); data.data.insert(data.data.end(), payload.data.begin(), payload.data.end());
     auto result = perform_callback_bytes(Kind::io_callback, operation, data);
     if (callback_fault.load()) throw Fatal(callback_fault.load(), state->callback_reason[0] ? state->callback_reason : "Native private I/O callback failed.");
     ++owner.callbacks; return result;
 }
+Bytes io_host(std::uint32_t operation, const Bytes& payload) { return io_host_bound(io_owner(), operation, payload); }
 PluginIoRoute io_resolve(std::uint32_t api, std::uint32_t action, const std::wstring& path) {
     Bytes request; request.put(api); request.put(action); request.text(io_utf8(path));
     auto result = io_host(io_route, request); Reader reader{result.data};

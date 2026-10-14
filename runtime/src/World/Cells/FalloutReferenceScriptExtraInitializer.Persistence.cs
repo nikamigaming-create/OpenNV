@@ -39,8 +39,12 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         var ids = new HashSet<Guid>(); var threads = new Dictionary<Guid, int>();
         uint flags = FalloutReferenceScriptExtraInitializerSource.ConstructorFlags; long sequence = 0; var lastPublication = -1;
         string? boundary = null; var priorReturned = false; var failed = false;
+        var flagWrites = saved.ReferenceFlagWrites ?? [];
+        var flagWriteIndex = 0;
         foreach (var call in saved.Calls)
         {
+            while (flagWriteIndex < flagWrites.Count && flagWrites[flagWriteIndex].Entered < call.Entered)
+                FlagWrite(flagWrites[flagWriteIndex++]);
             if (call is null || call.Source is null || call.Source.Identity != source.Identity || call.Invocation is not { } invocation ||
                 invocation.Initialization == Guid.Empty || !ids.Add(invocation.Initialization) || invocation.Actor != actor || invocation.Epoch != saved.Epoch ||
                 invocation.ThreadId < 1 || !publications.TryGetValue(invocation.Process, out var publication) ||
@@ -68,8 +72,37 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
             }
             flags = call.FlagsAfter; failed |= !call.Returned;
         }
+        while (flagWriteIndex < flagWrites.Count) FlagWrite(flagWrites[flagWriteIndex++]);
         if (flags != saved.ReferenceFlags || boundary != saved.WriterBoundary)
             throw new InvalidDataException("Script initializer current flags or writer refusal disagree with their ordered source history.");
+
+        void FlagWrite(FalloutReferenceInitializedFlagWrite write)
+        {
+            var invocation = write.Invocation;
+            if (write.Source != source.Identity || invocation.Call == Guid.Empty || !ids.Add(invocation.Call) ||
+                invocation.Actor != actor || invocation.Epoch != saved.Epoch || invocation.ThreadId < 1 ||
+                !publications.TryGetValue(invocation.CommonProcess, out var publication) ||
+                invocation.ReferenceProcess != publication.Value.ThreadProcess ||
+                invocation.ReferenceConstructor != publication.Value.Constructor || write.Factory != publication.Value.Factory ||
+                write.FieldsFactory != publication.Value.FieldsFactory || publication.Ordinal < lastPublication ||
+                write.Entered != ++sequence || write.Changed != ++sequence || write.Before != flags ||
+                write.Returned != (write.Failure is null) || write.Failure is { Length: 0 } ||
+                threads.TryGetValue(invocation.CommonProcess, out var thread) && thread != invocation.ThreadId)
+                throw new InvalidDataException("Reference initialized writer changed its actual ordered flag owner.");
+            if (write.Mask == FalloutReferenceBaseAssignmentInputs.DestructibleReferenceFlag)
+            {
+                if (write.BaseAssignment is not { } assignment || write.Initialized != assignment.Destructible)
+                    throw new InvalidDataException("Reference Base flag store omitted its actual selected component inputs.");
+                assignment.Validate(FalloutReferencePositionSource.Reviewed(source.Fields), actor);
+            }
+            else if (write.Mask != FalloutReferenceScriptExtraInitializerSource.InitializedFlag || write.BaseAssignment is not null)
+                throw new InvalidDataException("Reference scalar writer borrowed another flag mask or source child.");
+            var after = write.Initialized ? flags | write.Mask : flags & ~write.Mask;
+            if (write.Returned ? write.After != after : write.After != flags && write.After != after)
+                throw new InvalidDataException("Reference initialized writer invented a flag store or lost a failed prefix.");
+            flags = write.After; lastPublication = publication.Ordinal;
+            threads.TryAdd(invocation.CommonProcess, invocation.ThreadId); failed |= !write.Returned;
+        }
     }
 
     private static void ValidateCall(FalloutReferenceScriptExtraInitializationCall call, FalloutPlayerThreadContextSource threadSource,
@@ -155,7 +188,11 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         Stores = Array.AsReadOnly(call.Stores.ToArray())
     };
     internal static FalloutReferenceScriptExtraInitializerSnapshot CloneSnapshot(FalloutReferenceScriptExtraInitializerSnapshot snapshot) => snapshot with
-    { Publications = Array.AsReadOnly(snapshot.Publications.ToArray()), Calls = Array.AsReadOnly(snapshot.Calls.Select(CloneCall).ToArray()) };
+    {
+        Publications = Array.AsReadOnly(snapshot.Publications.ToArray()),
+        Calls = Array.AsReadOnly(snapshot.Calls.Select(CloneCall).ToArray()),
+        ReferenceFlagWrites = snapshot.ReferenceFlagWrites is { } writes ? Array.AsReadOnly(writes.ToArray()) : null
+    };
     private static bool EquivalentSnapshot(FalloutReferenceScriptExtraInitializerSnapshot first, FalloutReferenceScriptExtraInitializerSnapshot second) =>
         JsonSerializer.Serialize(first) == JsonSerializer.Serialize(second);
 }

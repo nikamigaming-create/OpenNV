@@ -1,5 +1,6 @@
 #pragma once
 #include "opennv_plugin_nvse.h"
+#include "opennv_plugin_module_diagnostic_crt.h"
 #include <map>
 
 namespace opennv_domain {
@@ -9,6 +10,7 @@ struct NvseModuleRecord {
     std::shared_ptr<NvseRuntime> runtime;
     std::uint32_t calls = 0, borrows = 0;
     bool supplemental = false, retired = false;
+    std::unique_ptr<ModuleDiagnosticCrt> diagnostic;
 };
 struct NvseCallableBorrow {
     std::uint64_t id = 0, caller = 0, provider = 0;
