@@ -62,7 +62,8 @@ internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, Fallo
     FalloutPlayerWeaponContinuationCall? WeaponContinuation = null,
     FalloutPlayerInhibitionSnapshot? Inhibition = null,
     FalloutPlayerFollowingTimerFlagSnapshot? FollowingTimerFlag = null,
-    FalloutPlayerFollowingContinuationCall? FollowingContinuation = null);
+    FalloutPlayerFollowingContinuationCall? FollowingContinuation = null,
+    FalloutActorMoverSnapshot? ActorMover = null);
 
 // These are individual source children. A supplied delegate is not a completion
 // receipt; the source call records its actual returned child and committed prefix.

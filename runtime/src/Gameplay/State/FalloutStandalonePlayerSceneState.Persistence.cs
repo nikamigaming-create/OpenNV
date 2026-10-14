@@ -10,18 +10,19 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (_first is { Released: null, Publication: { } publication } && publication.Process == _process &&
             _livingFirst is not null && _failure is null && _boundary is null && !ReadLiving(_livingFirst))
             throw new InvalidOperationException("Captured current first-person source ownership lost its native body.");
+        var mover = _actorMover.Capture();
         var saved = new FalloutStandalonePlayerSceneSnapshot(Schema, Source, _stack, _process, _constructor, _sequence,
             _scene, _hold, _view, _clockKind, _numerator, _denominator, _bracket, _cameraPosition, _cameraAngles,
             _first, _history.ToArray(), _clock, _camera, _cold, _boundary, _failure, _retired,
             _viewRequest, _viewRequestArgument, _countdownEnabled, _countdownBits, _referenceScratch, _prelude, _sceneReference, _sceneReferenceArgument, _referenceQuery, _referenceHudCall, _actorScalarReset, _threadContextEntry, _inputManagerQuery, _actorProcessQuery,
             _sceneScalars, _sceneScalarCall, _queuedReferences.References, _sceneQueueCall, _processSceneUpdate, _postProcessContext,
             _timedActions.Capture(), _timedActionsSuppressed, _timedActionsCall, _postActionFields, _postActionsCall,
-            _actorDistanceTimer, _actorDistanceCall, _idleAnimationCall, _moverFields, _movementCall, _actorMovementFlag,
+            _actorDistanceTimer, _actorDistanceCall, _idleAnimationCall, mover.Values.Player, _movementCall, _actorMovementFlag,
             _controlObservations.ToArray(), _controlFields.Capture(), _threadContext.CaptureKindScopes(),
             _controlHud?.Capture() ?? _historicalControlHud, _controlDisplay?.Capture() ?? _historicalControlDisplay,
             _referenceOrientation?.Capture() ?? _historicalReferenceOrientation, CaptureControlPointOfView(),
             _playerOpacity?.Capture() ?? _historicalPlayerOpacity, _followingServicesCall, _weaponContinuation,
-            _inhibition.Capture(), _followingTimerFlag.Capture(), _followingContinuation);
+            _inhibition.Capture(), _followingTimerFlag.Capture(), _followingContinuation, mover);
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -54,7 +55,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _postActionFields = saved.PostActionFields!; _postActionsCall = saved.PostActionsCall;
         _actorDistanceTimer = saved.ActorDistanceTimer!; _actorDistanceCall = saved.ActorDistanceCall;
         _idleAnimationCall = saved.IdleAnimationCall;
-        _moverFields = saved.MoverFields!; _movementCall = saved.MovementCall;
+        _movementCall = saved.MovementCall;
         _actorMovementFlag = saved.ActorMovementFlag;
         _historicalControlHud = saved.ControlHud; _historicalControlDisplay = saved.ControlDisplay;
         _historicalReferenceOrientation = saved.ReferenceOrientation;
@@ -86,6 +87,12 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             throw new InvalidDataException("Standalone scene omitted or invented its current source constructor/writer/ownership fields.");
         saved.Source.Validate();
         ValidateControlPointOfView(saved);
+        if (saved.ActorMover is not { } mover || mover.Process != saved.CapturedProcess ||
+            mover.Constructor != saved.Constructor || mover.Values.Player != saved.MoverFields)
+            throw new InvalidDataException("Player scene lost its same mutable logical mover and exact constructor lifetime.");
+        FalloutActorMoverState.Validate(mover,
+            FalloutActorMoverSource.Reviewed(FalloutPlayerMovementControlSource.Reviewed(saved.Source.Main)),
+            saved.Stack, saved.PointOfView!.Lifetimes);
         ValidateSceneReferenceQuery(saved);
         ValidateReferenceHud(saved);
         ValidateActorScalarReset(saved);
@@ -171,6 +178,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (saved.Retired || saved.Failure is not null || saved.Boundary is not null || saved.Clock is not null ||
             saved.Inhibition is { Retired: true } || saved.Inhibition!.Bytes.Any(value => !value.Available) ||
             saved.FollowingTimerFlag is { Retired: true } or { Available: false } || saved.FollowingContinuation is not null ||
+            saved.ActorMover is { Retired: true } || saved.ActorMover!.Operations.Any(operation => !operation.Returned) ||
+            saved.ActorMover.Availability.Any(lane => !lane.Available) ||
             saved.ControlFields is { WordAvailable: false } or { Failure: not null } ||
             saved.ControlHud is { InitializationReturned: false } or { Failure: not null } or { Retired: true } or { ColdBindingFailure: not null } ||
             saved.ControlHud is { } currentHud && currentHud.Tiles!.Any(tile => !tile.Alive || tile.Animated) ||

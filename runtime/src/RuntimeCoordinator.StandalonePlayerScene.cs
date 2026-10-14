@@ -36,6 +36,7 @@ public partial class RuntimeCoordinator
             (_nativeDirectInput ?? throw new InvalidOperationException("Player controls have no actual current input manager.")).PlayerManager());
         world.InitializeStandalonePlayerWeaponActionConstructor();
         world.PrepareStandalonePlayerFollowingContinuation();
+        world.PrepareStandaloneSourcePackageCommands();
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)

@@ -10,7 +10,7 @@ namespace OpenNV.Runtime.World.Cells;
 // reselects a package, replays an event or recreates modifier pools.
 internal sealed partial class FalloutActorProcessCommonState : IDisposable
 {
-    internal const string Schema = "opennv-actor-process-common/v14";
+    internal const string Schema = "opennv-actor-process-common/v15";
     private readonly FalloutActorProcessRuntimeDeclaration _source;
     private readonly string _stack;
     private readonly Func<FalloutFormKey, FalloutCombatActorIdentity> _identity;
@@ -93,7 +93,8 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
         _pending = new(old.Source, factory.NewEpoch, factory.After, old.Scalars,
             new(old.Source, ownership, factory.NewEpoch, sequence, false), FalloutProcessCommonPhase.Copied, null, null, sequence,
             SceneFields: ConstructSceneFields(factory.After), Packages: ConstructSourcePackageSlots(old.Source, factory.NewEpoch, factory.After,
-                FalloutProcessPackageConstructionKind.ReplacementProcessConstructor));
+                FalloutProcessPackageConstructionKind.ReplacementProcessConstructor))
+        { RequestFlagStores = Array.AsReadOnly(old.RequestFlagStores.ToArray()) };
         // The selected Low constructors own null in both move-and-clear child
         // slots. Any reached creation of such a child must first bind its own
         // typed owner, or retain a common boundary. A nonnull opaque pointer is

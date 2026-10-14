@@ -176,6 +176,7 @@ public partial class RuntimeCoordinator
                 actorProcesses = playerDriver.ActorProcessState,
                 actualProcessRuntime = playerDriver.ActualProcessRuntimeState,
                 actualProcessCommon = playerDriver.ActualProcessCommonState,
+                sourcePackageCommands = detailed ? _nativeReferences?.SourcePackageCommandState : _nativeReferences?.SourcePackageCommandSummary,
                 actorUpdates = playerDriver.ActorUpdateState,
                 cellProcesses = detailed ? playerDriver.CellProcessState : playerDriver.CellProcessSummary,
                 advancementRuntime = playerDriver.PlayerAdvancementRuntimeState,
@@ -311,6 +312,12 @@ public partial class RuntimeCoordinator
         catch (Exception failure)
         {
             if (_pendingSaveActivation is not null) RejectNativePendingLoad(failure);
+            else RetainNativeLoadFailureDiagnostic(RetainNativeCampaignLoadFailure(failure));
+            // New Game can fail before a normal collector tick. Freeze its
+            // reached source failure while the actual owners still exist.
+            try { _runtimeLiveHarness?.PublishFinalState(); }
+            catch (Exception publicationFailure)
+            { GD.PushError($"OPENNV_STARTUP_FAILURE_PUBLICATION_LOSS {publicationFailure}"); }
             GD.PushError($"OPENNV_GODOT_RUNTIME_FAIL {failure}");
             GetTree().Quit(1);
         }

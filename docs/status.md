@@ -21,7 +21,7 @@ acceptance remain open.
 
 ## Current Player and physics capability
 
-FO3 ordinary New Game loads its Vault birth cell. Shared source menus, name
+Earlier FO3 ordinary New Game loads its Vault birth cell. Shared source menus, name
 input, character creation, quests/scripts, image-menu effects and source audio
 have bounded working paths and retained failures. Earlier rendered character
 creation reaches CG00 stage 100 and normal Quit retires source resources. These
@@ -55,6 +55,15 @@ retain six independent fields, and real assignment ingress invalidates stale
 constructor state before source getters. One inhibition owner is shared by
 movement and following services; three cold component cycles retain exact
 process/factory history without replay.
+
+The synchronous opening package owner now returns StartEvent, StartCallback and
+procedure zero. Independent Script initialization and animation selection use
+actual current owners; raw rotation borrows the shared reference orientation.
+The latest ordinary candidate fails next at current position/mode ownership,
+before loading the Vault, with zero final diagnostic loss. Shared PACK instances,
+six-field slots, logical mover and ordered partial command stores retain fresh
+cold component lifetimes. Whole Player construction, complete saving and routes
+remain unfinished.
 
 Original input queries have distinct engine current/previous buffers and managed
 hook caches, ordered integer counts, failed acquisition/state-read prefixes and
@@ -95,7 +104,7 @@ refuse complete saves rather than publishing a partial slot.
 
 FNV and TTW resolve their selected 10/18 plugins with three/six native modules.
 Neither current stack produces a complete gameplay save. JIP Query/Load and
-protocol 39 pass in the actual shared native domain; callback 50 reaches a
+protocol 40 pass in the actual shared native domain; callback 50 reaches a
 task-dispatch mutation without the real source command task queue producer.
 Production has no per-DLL fallback. Supplemental original modules retain
 independent import/I/O/constructor admission failures before entry. JohnnyGuitar
@@ -118,6 +127,12 @@ shared context, original function ABI, borrowed lifetimes, retirement and the
 real MSVC hardware-thread-count provider. The latest unchanged selected mod
 retries still fail; these component results do not establish mod compatibility.
 
+Shared GetFileSizeEx and supplemental read-only file/profile/module-name calls
+pass real two-DLL Debug and Release callers, including a sparse file larger than
+4 GiB, shared handles/routes, exact errors, failed prefixes and fresh retirement.
+Original XR, ShowOff and TTW NVSE construction still refuses before module entry;
+the new read capability does not qualify their independent CRT/DllMain effects.
+
 ## Toolchain and verification
 
 The shared engine pin is official Godot 4.8-dev7 Mono, Godot.NET.Sdk 4.8.0-dev.7
@@ -132,6 +147,13 @@ control-writer refusal, no complete save and normal source-owner retirement.
 The FO3 audit distinguishes the expected absent desktop-input factory from the
 actual unfinished Player continuation; an expected input boundary cannot excuse
 an engine failure.
+
+The latest selected owned HUD/mover/Script/animation audit passes in Release,
+including source selectors and three cold component cycles. The full pinned
+runtime gate passes after the shared mover input-publication repair. The new
+owned early-controller native shape audit constructs 91 real rounded-convex
+leaves and verifies 224 collision queries plus cache/failure cleanup. It does
+not yet execute the original controller or certify canonical packed hull bytes.
 
 Original two-DLL caller checks pass in Debug and Release. Automatic retirement
 uses indexed O(V+E) provider/consumer order; duplicate publications are

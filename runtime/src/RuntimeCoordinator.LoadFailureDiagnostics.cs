@@ -9,7 +9,7 @@ public partial class RuntimeCoordinator
     private sealed record NativeLoadFailureDiagnostic(long CapturedUtcTicks, ulong NativeFrame,
         string Error, string? Campaign, string? Source, JsonElement MainCaller,
         JsonElement MainPlayer, JsonElement PendingCell, JsonElement ImageModifiers,
-        JsonElement MainImages, JsonElement NativeImages,
+        JsonElement MainImages, JsonElement NativeImages, JsonElement PackageCommand,
         IReadOnlyList<string> CaptureFailures);
 
     private NativeLoadFailureDiagnostic? _nativeLoadFailureDiagnostic;
@@ -49,8 +49,9 @@ public partial class RuntimeCoordinator
             failure = _nativeMainImageApplication?.Effect.SourceDrawFailure,
             operational = _nativeMainImageApplication?.Effect.Operational
         });
+        var package = Capture("PackageCommand", () => _nativeReferences?.SourcePackageCommandState);
         _nativeLoadFailureDiagnostic = new(DateTime.UtcNow.Ticks, Engine.GetProcessFrames(), failure.ToString(),
             _options.GetValueOrDefault("campaign"), RuntimeLiveContentSource.Current?.StackId,
-            caller, player, pending, modifiers, images, native, captureFailures);
+            caller, player, pending, modifiers, images, native, package, captureFailures);
     }
 }

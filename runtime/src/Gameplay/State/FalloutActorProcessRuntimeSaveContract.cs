@@ -15,6 +15,15 @@ internal static class FalloutActorProcessRuntimeSaveContract
         FalloutActorProcessRuntimeState.Validate(runtime); FalloutActorProcessRuntimeState.RequireStandaloneMainPlayable(runtime);
         FalloutActorProcessRuntimeState.RequireCurrentGlobalTime(runtime);
         FalloutActorProcessCommonState.Validate(common);
+        FalloutReferenceWorld.ValidateSourcePackageCommandChildren(common);
+        if (FalloutSourceMainFamily.IsFallout3(common.ExecutableSha256) &&
+            (common.PackageRegistry is null || common.CommandFields is not { Count: > 0 } || common.PackageCommands is null ||
+                !common.PackageRegistry.CountAuthorityAvailable || common.PackageRegistry.Packages.Any(package =>
+                    !package.CountAvailable || !package.ProcedureAvailable || !package.FlagsAvailable) ||
+                common.CommandFields.Any(fields => fields.Availability.Any(lane => !lane.Available) || fields.Operations.Any(operation => !operation.Returned) ||
+                    fields.ScriptInitialization is not { Calls.Count: > 0 } || fields.ScriptInitialization.Calls.Any(call => !call.Returned || call.InvalidatedWriter is not null)) ||
+                common.PackageCommands.Any(call => call.Step != FalloutSourcePackageAssignmentStep.Returned)))
+            throw new NotSupportedException("Current save retains unclosed source package constructors, fields, counts or command consumers.");
         if (runtime.StandaloneMain?.Scene.FollowingContinuation is { } following)
             foreach (var read in new[] { following.Current, following.Primary }.OfType<FalloutProcessPackageRead>())
                 FalloutProcessPackageState.ValidateRead(read, common.ExecutableSha256, common.Stack, common);
@@ -39,6 +48,51 @@ internal static class FalloutActorProcessRuntimeSaveContract
             if (actor.Source != process.Source || actor.Epoch != process.Epoch || !process.Retired && actor.Level != process.Level ||
                 (actor.Phase == FalloutProcessCommonPhase.Retired) != process.Retired)
                 throw new InvalidDataException("Common state differs from its actual retained process class/epoch/lifetime.");
+        }
+        if (runtime.StandaloneMain?.Scene.ActorMover is { } mover)
+        {
+            var player = actors[runtime.Player];
+            if (mover.Actor != player.Source)
+                throw new InvalidDataException("Saved logical mover is not bound to the actual campaign Player source.");
+            var commonProcesses = common.Publications!.Select(publication => publication.Process).ToHashSet();
+            var epochs = common.Current.Concat(common.Retired).Select(actor => (actor.Source, actor.Epoch)).ToHashSet();
+            foreach (var operation in mover.Operations)
+            {
+                if (!commonProcesses.Contains(operation.Invocation.Process) ||
+                    !epochs.Contains((operation.Invocation.Actor, operation.Invocation.Epoch)))
+                    throw new InvalidDataException("Saved logical mover lost its real Common command/process/Actor epoch.");
+                // No production parent currently publishes the complete linked
+                // and High reset owners. Authored joined child tests cannot
+                // authorize a campaign save with invented parent receipts.
+                if (operation.Join is not null)
+                    throw new NotSupportedException("Current save requires actual linked-reference and High package-reset parent ownership.");
+            }
+        }
+        if (runtime.StandaloneMain?.Scene is { } scene)
+        {
+            var sceneLifetimes = scene.PointOfView!.Lifetimes.Select(lifetime => (lifetime.Process, lifetime.Constructor)).ToHashSet();
+            var rotationPublications = scene.ReferenceOrientation?.Publications?.Select(value => (value.Process, value.Factory)).ToHashSet() ?? [];
+            foreach (var fields in common.CommandFields ?? [])
+            {
+                if (fields.ScriptInitialization is { } initialization)
+                    foreach (var publication in initialization.Publications)
+                        if (!sceneLifetimes.Contains((publication.ThreadProcess, publication.Constructor)))
+                            throw new InvalidDataException("Saved Script initializer substituted an unrelated scene/thread constructor lifetime.");
+                foreach (var operation in fields.Operations)
+                {
+                    if (operation.AnimationRead?.ViewRead is { } view &&
+                        (!sceneLifetimes.Contains((view.Process, view.Constructor)) || view.View != scene.PlayerView))
+                        throw new InvalidDataException("Saved package animation view substituted another scene lifetime or current view field.");
+                    if (operation.SavedPositionCall?.RotationRead is { } rotation &&
+                        (!sceneLifetimes.Contains((rotation.Process, rotation.Constructor)) ||
+                            !rotationPublications.Contains((rotation.Process, rotation.Factory)) ||
+                            rotation.Reference != runtime.Player || scene.ReferenceOrientation is not { } orientation ||
+                            rotation.Base != orientation.Binding.Base || rotation.Source != orientation.Source.Controls.Identity ||
+                            rotation.Process == orientation.CapturedProcess &&
+                                (rotation.Sequence > orientation.Sequence || rotation.Sequence == orientation.Sequence && rotation.ZBits != orientation.ZBits)))
+                        throw new InvalidDataException("Saved package rotation substituted a foreign reference factory or uncommitted raw field.");
+                }
+            }
         }
     }
 

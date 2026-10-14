@@ -15,6 +15,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         else _inhibition.BindActualInput(input);
         if (_followingTimerFlag.HasActualInput) _followingTimerFlag.RequireActualInput(input);
         else _followingTimerFlag.BindActualInput(input);
+        _actorMover.BindActualInput(input);
     }
 
     private void RequireInhibitionInvocation(FalloutPlayerInhibitionConsumer consumer, FalloutPlayerSourceCaller caller)

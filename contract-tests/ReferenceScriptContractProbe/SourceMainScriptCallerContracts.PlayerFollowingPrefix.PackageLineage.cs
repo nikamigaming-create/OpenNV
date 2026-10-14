@@ -21,7 +21,8 @@ internal static partial class SourceMainScriptCallerContracts
         { Process = current.Process with { Changed = constructor.Sequence + 1 } }, executable, warm.Stack, constructor));
         foreach (var words in new[]
         {
-            current.Fields.Fields with { Procedure = Guid.NewGuid() }, current.Fields.Fields with { Extra = 1 },
+            current.Fields.Fields with { Context = Guid.NewGuid() },
+            current.Fields.Fields with { Extra = new(new("authored.esm", 1), FalloutPackageExtraKind.Reference) },
             current.Fields.Fields with { Index = 0 }, current.Fields.Fields with { TimeBits = 0 },
             current.Fields.Fields with { Flags = 1 }
         })

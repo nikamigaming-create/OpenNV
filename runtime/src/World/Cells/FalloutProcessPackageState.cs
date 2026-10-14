@@ -6,10 +6,10 @@ internal enum FalloutProcessPackageSlot { Current, Primary }
 internal enum FalloutProcessPackageConstructionKind { IndependentProcessConstructor, InitialPlayerConstructor, ReplacementProcessConstructor }
 [Flags]
 internal enum FalloutProcessPackageWriterTarget { Current = 1, Primary = 2, Both = 3 }
-internal sealed record FalloutProcessPackageWords(FalloutFormKey? Package, Guid? Procedure, uint Extra,
+internal sealed record FalloutProcessPackageWords(FalloutFormKey? Package, Guid? Context, FalloutPackageExtraReference? Extra,
     int Index, uint TimeBits, uint Flags)
 {
-    internal static FalloutProcessPackageWords Constructed => new(null, null, 0, -1,
+    internal static FalloutProcessPackageWords Constructed => new(null, null, null, -1,
         FalloutPlayerFollowingContinuationSource.PackageUnsetTimeBits, 0);
 }
 internal sealed record FalloutProcessPackageConstruction(Guid Owner, Guid Process, string Source,
@@ -27,7 +27,8 @@ internal sealed record FalloutProcessPackageFields(string Source, FalloutProcess
     FalloutProcessPackageWords Fields, bool Available, long Changed,
     IReadOnlyList<FalloutProcessPackageWriterObservation> Observations,
     FalloutProcessPackageMove? InitialMove = null,
-    IReadOnlyList<FalloutProcessPackagePublication>? Publications = null);
+    IReadOnlyList<FalloutProcessPackagePublication>? Publications = null,
+    IReadOnlyList<FalloutPackageStateMutation>? Mutations = null);
 internal sealed record FalloutProcessPackageSlots(FalloutProcessPackageFields Current,
     FalloutProcessPackageFields? Primary, long ConstructedEpoch, FalloutProcessPackageConstructionKind ConstructionKind,
     FalloutProcessPackageFields? RetiredInitialLow = null);
@@ -38,17 +39,18 @@ internal sealed record FalloutProcessPackageRead(FalloutProcessSceneQuery Proces
 // pointer getters do not initialize a procedure, borrow a driver, run clear,
 // adjust a refcount or read time. Real assignment remains unavailable until
 // those source writers and reached effects have owners.
-internal static class FalloutProcessPackageState
+internal static partial class FalloutProcessPackageState
 {
     internal const string CurrentWriterBoundary = "source-current-process-package-assignment-writer-unbound";
     internal const string PrimaryWriterBoundary = "source-primary-process-package-assignment-writer-unbound";
     internal static string Source(string executable)
     {
         if (executable != FalloutSourceMainFamily.Fallout3) throw new NotSupportedException("Original process package fields are unreviewed for this image.");
-        return FalloutAdvancementRuntimeReceipt.Hash(executable + "\0source-package-state/v2;" +
+        return FalloutAdvancementRuntimeReceipt.Hash(executable + "\0source-package-state/v3;" +
             "Base-current-MiddleHigh-primary-independent-six-field-construction;" +
-            "null-package-null-procedure-zero-extra-minus-one-index-minus-one-time-zero-flags;" +
-            "Low-copy-package-procedure-index-time-move-and-old-clear-with-extra-flags-untouched;" +
+            "null-package-null-context-null-typed-extra-minus-one-index-minus-one-time-zero-flags;" +
+            "Low-copy-package-context-index-time-move-and-old-clear-with-extra-flags-untouched;" +
+            "ordered-pointer-equality-clear-retain-current-GameHour-six-field-setter-failed-prefix;" +
             "observed-current-primary-writers-invalidate-before-current-getter;" +
             "complete-field-factory-lineage-borrows-actual-Common-process-publications;no-cold-effect-replay");
     }
@@ -86,14 +88,14 @@ internal static class FalloutProcessPackageState
         var sourceAfter = source.Fields with
         {
             Package = null,
-            Procedure = null,
+            Context = null,
             Index = -1,
             TimeBits = FalloutPlayerFollowingContinuationSource.PackageUnsetTimeBits
         };
         var destinationAfter = destination.Fields with
         {
             Package = source.Fields.Package,
-            Procedure = source.Fields.Procedure,
+            Context = source.Fields.Context,
             Index = source.Fields.Index,
             TimeBits = source.Fields.TimeBits
         };
@@ -126,12 +128,13 @@ internal static class FalloutProcessPackageState
         var fields = FalloutProcessPackageWords.Constructed; var factory = Guid.NewGuid();
         var publication = new FalloutProcessPackagePublication(process, factory);
         return new(source, slot, new(factory, process, source, producer, slot, fields),
-            publication, fields, true, 0, [], Publications: Array.AsReadOnly(new[] { publication }));
+            publication, fields, true, 0, [], Publications: Array.AsReadOnly(new[] { publication }), Mutations: []);
     }
 
     internal static FalloutProcessPackageFields Capture(FalloutProcessPackageFields fields) => fields with
     {
         Observations = Array.AsReadOnly(fields.Observations.ToArray()),
+        Mutations = fields.Mutations is { } mutations ? Array.AsReadOnly(mutations.Select(FreezeMutation).ToArray()) : null,
         Publications = fields.Publications is { } publications ? Array.AsReadOnly(publications.ToArray()) : null
     };
 
@@ -170,7 +173,7 @@ internal static class FalloutProcessPackageState
                 move.SourceFactory != initial.Constructor.Owner || move.DestinationFactory != saved.Current.Constructor.Owner ||
                 move.SourceFactory == move.DestinationFactory || move.DestinationStores != 4 || move.SourceStores != 4 ||
                 move.SourceBefore != FalloutProcessPackageWords.Constructed || move.DestinationBefore != FalloutProcessPackageWords.Constructed ||
-                move.SourceAfter != initial.Fields || move.DestinationAfter != saved.Current.Fields)
+                move.SourceAfter != initial.Fields || move.DestinationAfter != FalloutProcessPackageWords.Constructed)
                 throw new InvalidDataException("Player initial package field transfer lost its exact four-word move/clear.");
             if (commonPublications is { Count: > 0 } &&
                 (initial.Constructor.Process != commonPublications[0].Process || saved.Current.Constructor.Process != initial.Constructor.Process ||
@@ -220,9 +223,10 @@ internal static class FalloutProcessPackageState
         if (entry.Level != process.Level || lease.Retired || lease.Ownership != process.GameplayOwnership || lease.Source != process.Actor ||
             lease.ProcessEpoch != process.Epoch || process.Changed < lease.Changed || process.Changed > entry.Changed ||
             publications is not null && processIndex + 1 < publications.Count && process.Changed >= publications[processIndex + 1].Sequence ||
-            fields.Source != actual.Source || fields.Fields != actual.Fields || fields.InitialMove != actual.InitialMove ||
+            fields.Source != actual.Source || fields.Fields != FieldsAt(actual, process.Changed) || fields.InitialMove != actual.InitialMove ||
             fields.Publications!.Count > actualPublications.Count || !fields.Publications.SequenceEqual(actualPublications.Take(fields.Publications.Count)) ||
-            !fields.Observations.SequenceEqual(actual.Observations.TakeWhile(item => item.Changed <= process.Changed)))
+            !fields.Observations.SequenceEqual(actual.Observations.TakeWhile(item => item.Changed <= process.Changed)) ||
+            !MutationPrefixEquals(fields.Mutations, (actual.Mutations ?? []).TakeWhile(item => item.Changed <= process.Changed)))
             throw new InvalidDataException("Package getter changed its actual constructor, full fields, move, factory or historical writer prefix.");
     }
 
@@ -246,7 +250,7 @@ internal static class FalloutProcessPackageState
             !Enum.IsDefined(fields.Slot) || constructor.Owner == Guid.Empty || constructor.Process == Guid.Empty || constructor.Source != source ||
             constructor.Slot != fields.Slot || constructor.Producer != producer || constructor.Fields != FalloutProcessPackageWords.Constructed ||
             process is { } current && latest.Process != current || fields.Changed < 0 || fields.Changed > sequence || fields.Observations is null ||
-            fields.Available != (fields.Observations.Count == 0) || fields.Fields != FalloutProcessPackageWords.Constructed ||
+            fields.Mutations is null ||
             fields.Publications is not { Count: > 0 } publications || latest != publications[^1] ||
             publications[0] != new FalloutProcessPackagePublication(constructor.Process, constructor.Owner) || retiredLow && publications.Count != 1)
             throw new InvalidDataException("Package field lost its complete selected constructor, values or current publication.");
@@ -283,8 +287,7 @@ internal static class FalloutProcessPackageState
             }
             previousProcess = publicationIndex; changed = observation.Changed;
         }
-        if (changed != fields.Changed)
-            throw new InvalidDataException("Package field omitted its last actual writer revision.");
+        ValidateMutations(fields, source, epoch, sequence, common, commonIndices, publications);
         if (fields.InitialMove is { } move && (move.SourceFactory == Guid.Empty || move.DestinationFactory == Guid.Empty ||
             move.SourceFactory == move.DestinationFactory || !factories.Contains(move.SourceFactory) && !factories.Contains(move.DestinationFactory) ||
             move.DestinationStores != 4 || move.SourceStores != 4 || move.SourceBefore != FalloutProcessPackageWords.Constructed ||

@@ -9,12 +9,29 @@ internal sealed partial class FalloutPlayerReferenceOrientationOwner
         RequireOwner(allowFailure: true);
         var saved = new FalloutPlayerReferenceOrientationSnapshot(Schema, _source, Stack, Process, Factory, Binding,
             _sequence, _x, _y, _z, _stores, _playerFov, _playerFovSetting, _playerFovInvocation, _playerFovReturned,
-            _placement, _call, _failure, _retired, _projection.World, _projection.CurrentRootFactory);
+            _placement, _call, _failure, _retired, _projection.World, _projection.CurrentRootFactory,
+            Array.AsReadOnly(_publications.ToArray()));
         Validate(saved); return saved;
     }
 
     internal static void Validate(FalloutPlayerReferenceOrientationSnapshot saved)
     {
+        ArgumentNullException.ThrowIfNull(saved);
+        if (saved.Publications is not { Count: > 0 })
+            throw new InvalidDataException("Reference orientation omitted its original and current factory publications.");
+        var processes = new HashSet<Guid>(); var factories = new HashSet<Guid>();
+        FalloutPlayerReferenceOrientationPublication? previous = null;
+        foreach (var publication in saved.Publications)
+        {
+            if (publication is null || publication.Process == Guid.Empty || publication.Factory == Guid.Empty ||
+                !processes.Add(publication.Process) || !factories.Add(publication.Factory) ||
+                (previous is null ? publication.PreviousProcess is not null || publication.PreviousFactory is not null :
+                    publication.PreviousProcess != previous.Process || publication.PreviousFactory != previous.Factory))
+                throw new InvalidDataException("Reference orientation repeated or detached a cold factory publication.");
+            previous = publication;
+        }
+        if (previous!.Process != saved.CapturedProcess || previous.Factory != saved.Factory)
+            throw new InvalidDataException("Reference orientation omitted its current actual factory publication.");
         saved.Source.Validate(); saved.Binding.Validate();
         if (saved.Schema != Schema || !saved.Binding.IsCharacter || string.IsNullOrWhiteSpace(saved.Stack) || saved.CapturedProcess == Guid.Empty ||
             saved.Factory == Guid.Empty || saved.ProjectionWorld == Guid.Empty || saved.ProjectionRootFactory == Guid.Empty ||

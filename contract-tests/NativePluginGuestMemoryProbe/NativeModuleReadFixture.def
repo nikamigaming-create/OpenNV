@@ -1,0 +1,5 @@
+EXPORTS
+  NVSEPlugin_Query=NVSEPlugin_Query
+  NVSEPlugin_Load=NVSEPlugin_Load
+  ModuleReadProbe=_ModuleReadProbe@4
+  ModuleReadError=_ModuleReadError@0

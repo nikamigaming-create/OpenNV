@@ -4,6 +4,41 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--actor-mover-contracts"])
+{
+    SourceMainScriptCallerContracts.RunActorMoverContracts();
+    return;
+}
+
+if (args is ["--early-controller-shape-contracts"])
+{
+    SourceMainScriptCallerContracts.RunEarlyControllerConvexGeometryContracts();
+    return;
+}
+
+if (args is ["--reference-script-initialization-contracts"])
+{
+    SourceMainScriptCallerContracts.RunReferenceScriptExtraInitializationContracts();
+    return;
+}
+
+if (args is ["--source-package-assignment-contracts"])
+{
+    SourceMainScriptCallerContracts.RunSourcePackageAssignmentContracts();
+    return;
+}
+if (args is ["--package-command-field-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerPackageCommandFieldContracts();
+    SourceMainScriptCallerContracts.RunPlayerPackageAnimationInitializationContracts();
+    return;
+}
+if (args is ["--package-state-mutation-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPackageStateMutationContracts();
+    return;
+}
+
 if (args is ["--audit-owned-player-opacity", var ownedOpacityData])
 {
     Environment.ExitCode = PlayerOpacityContracts.AuditOwned(ownedOpacityData);
@@ -1533,6 +1568,13 @@ NpcDialogueLinkContracts.Run();
 RadioContracts.Run();
 PatrolContracts.Run();
 EscortContracts.Run();
+SourceMainScriptCallerContracts.RunSourcePackageAssignmentContracts();
+SourceMainScriptCallerContracts.RunActorMoverContracts();
+SourceMainScriptCallerContracts.RunEarlyControllerConvexGeometryContracts();
+SourceMainScriptCallerContracts.RunReferenceScriptExtraInitializationContracts();
+SourceMainScriptCallerContracts.RunPlayerPackageCommandFieldContracts();
+SourceMainScriptCallerContracts.RunPlayerPackageAnimationInitializationContracts();
+SourceMainScriptCallerContracts.RunPackageStateMutationContracts();
 PackageDataContracts.Run();
 EditorTravelContracts.Run();
 TravelContracts.Run();

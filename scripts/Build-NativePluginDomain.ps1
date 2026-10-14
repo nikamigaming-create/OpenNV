@@ -114,6 +114,17 @@ try {
         "/Fo$output/move-file-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
         "/DEF:$fixtureSource/NativeCrtFixture.def", "/OUT:$fixtures/opennv_move_file_fixture.dll",
         "/IMPLIB:$output/move-file-fixture.lib", 'kernel32.lib')
+    foreach ($sizeVariant in @(@{Suffix='primary';Defines=@()}, @{Suffix='peer';Defines=@('/DOPENNV_FILE_SIZE_PEER')})) {
+        Invoke-Compile (@('/GS-', '/LD') + $sizeVariant.Defines + @(
+            (Join-Path $fixtureSource 'NativeFileSizeFixture.cpp'), "/Fo$output/file-size-$($sizeVariant.Suffix)-fixture.obj",
+            '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF', "/DEF:$fixtureSource/NativeFileSizeFixture.def",
+            "/OUT:$fixtures/opennv_file_size_$($sizeVariant.Suffix).dll",
+            "/IMPLIB:$output/file-size-$($sizeVariant.Suffix)-fixture.lib", 'kernel32.lib'))
+    }
+    Invoke-Compile @('/GS-', '/O2', '/LD', (Join-Path $fixtureSource 'NativeModuleReadFixture.cpp'),
+        "/Fo$output/module-read-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF',
+        "/DEF:$fixtureSource/NativeModuleReadFixture.def", "/OUT:$fixtures/opennv_module_read_fixture.dll",
+        "/IMPLIB:$output/module-read-fixture.lib", 'kernel32.lib')
     foreach ($moduleVariant in @(@{Suffix='primary';Defines=@();Libraries=@('msvcprt.lib')},
             @{Suffix='secondary';Defines=@('/DOPENNV_CORESIDENT_SECONDARY');Libraries=@()})) {
         Invoke-Compile (@('/GS-', '/LD') + $moduleVariant.Defines + @(
@@ -141,6 +152,9 @@ try {
     $files += 'fixtures/opennv_logging_fixture.dll'
     $files += 'fixtures/opennv_source_suppression_fixture.dll'
     $files += 'fixtures/opennv_move_file_fixture.dll'
+    $files += 'fixtures/opennv_file_size_primary.dll'
+    $files += 'fixtures/opennv_file_size_peer.dll'
+    $files += 'fixtures/opennv_module_read_fixture.dll'
     $files += 'fixtures/opennv_co_resident_primary.dll'
     $files += 'fixtures/opennv_co_resident_secondary.dll'
     $files += 'fixtures/opennv_platform_capabilities_fixture.dll'

@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
@@ -7,7 +8,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 // by the genuine current input manager; getters do not bind their first caller.
 internal sealed class FalloutPlayerInhibitionState
 {
-    internal const string Schema = "opennv-Player-inhibition/v1";
+    internal const string Schema = "opennv-Player-inhibition/v2";
     internal const string ObservedWriterBoundary = "source-Player-current-inhibition-observed-writer-unbound";
     private readonly FalloutPlayerFollowingContinuationSource _source;
     private readonly string _stack;
@@ -144,6 +145,31 @@ internal sealed class FalloutPlayerInhibitionState
         _history.Add(new(observation, producer, _process, _factory, Next(), FalloutPlayerInhibitionOperation.UnownedWriter, lane, null, null, false));
     }
 
+    internal void StorePackageAssignmentFourth(FalloutPackageCommandFieldInvocation invocation,
+        Action<FalloutPackageCommandFieldInvocation> requireActualCommand)
+    {
+        RequireOwner(); ArgumentNullException.ThrowIfNull(invocation); ArgumentNullException.ThrowIfNull(requireActualCommand);
+        if (!invocation.Actor.EnginePlayer || invocation.ThreadId != Environment.CurrentManagedThreadId)
+            throw new InvalidOperationException("Package Fourth store requires the actual completed-prefix Player command.");
+        _writing = true; var fault = _fault;
+        try
+        {
+            Guard(); RequireObservation(invocation.SourceCommand);
+            _bytes[(int)FalloutPlayerInhibitionLane.Fourth] = new(1, true);
+            _history.Add(new(invocation.SourceCommand, "actual-AddScriptPackage-Player-Fourth-store", _process, _factory,
+                Next(), FalloutPlayerInhibitionOperation.PackageAssignmentStore, FalloutPlayerInhibitionLane.Fourth, 1, null, false)
+            { PackageCommand = invocation });
+            Guard();
+        }
+        finally { _writing = false; }
+        void Guard()
+        {
+            requireActualCommand(invocation);
+            if (_fault != fault || _thread != Environment.CurrentManagedThreadId || _retired)
+                throw new InvalidOperationException("Package Fourth guard swallowed source reentry or changed its current Player owner.");
+        }
+    }
+
     internal FalloutPlayerInhibitionSnapshot Capture()
     {
         RequireImmutableSnapshot();
@@ -159,7 +185,10 @@ internal sealed class FalloutPlayerInhibitionState
         // another thread before actual input publication. This neither binds
         // a gameplay thread nor permits a field getter or writer there.
         if (_reading || _writing || _inputFactory is not null && _thread != Environment.CurrentManagedThreadId)
+        {
+            _fault = checked(_fault + 1);
             throw new InvalidOperationException("Entered/published Player inhibition cannot be captured or retired from a foreign source thread.");
+        }
     }
 
     private void ConstructorStore(FalloutPlayerInhibitionLane lane, FalloutPlayerInhibitionOperation operation)
@@ -213,6 +242,12 @@ internal sealed class FalloutPlayerInhibitionState
                 !publications.Contains((entry.Process, entry.Factory)) ||
                 entry.Observation != Guid.Empty && !observed.Add(entry.Observation))
                 throw new InvalidDataException("Player inhibition changed its actual historical writer/process identity or order.");
+            if (entry.Operation == FalloutPlayerInhibitionOperation.PackageAssignmentStore ?
+                entry.PackageCommand is not { } command || command.SourceCommand != entry.Observation || command.Process == Guid.Empty ||
+                command.Epoch < 1 || command.ThreadId < 1 || !command.Actor.EnginePlayer || entry.Lane != FalloutPlayerInhibitionLane.Fourth ||
+                entry.Value != 1 || entry.CallbackArgument is not null || entry.CallbackReturned ||
+                entry.Producer != "actual-AddScriptPackage-Player-Fourth-store" : entry.PackageCommand is not null)
+                throw new InvalidDataException("Player inhibition lost its distinct actual package-command Fourth store.");
             if (index < 6)
             {
                 var callback = index is 3 or 5;

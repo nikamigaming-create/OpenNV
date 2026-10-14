@@ -44,7 +44,10 @@ internal sealed record FalloutProcessCommonEntry(FalloutCombatActorIdentity Sour
     FalloutDetectionProcessLevel Level, FalloutProcessCommonScalars Scalars,
     FalloutProcessGameplayLease? Gameplay, FalloutProcessCommonPhase Phase, string? Boundary,
     FalloutActorProcessBodyBinding? Body, long Changed, FalloutActorProcessFact<bool>? Source3D = null,
-    FalloutProcessSceneFields? SceneFields = null, FalloutProcessPackageSlots? Packages = null);
+    FalloutProcessSceneFields? SceneFields = null, FalloutProcessPackageSlots? Packages = null)
+{
+    public IReadOnlyList<FalloutProcessPackageRequestFlagStore> RequestFlagStores { get; init; } = [];
+}
 internal sealed record FalloutProcessCommonTransfer(FalloutFormKey Actor, long BeforeEpoch, long NewEpoch,
     FalloutDetectionProcessLevel Before, FalloutDetectionProcessLevel After, string Owner,
     Guid GameplayOwnership, FalloutProcessGameplayState ObservedBeforeCopy, string GameplaySha256,
@@ -54,7 +57,10 @@ internal sealed record FalloutProcessCommonSnapshot(string Schema, string Contra
     long Sequence, IReadOnlyList<FalloutProcessCommonEntry> Current,
     IReadOnlyList<FalloutProcessCommonEntry> Retired, FalloutProcessCommonEntry? Pending, FalloutProcessCommonTransfer? Transfer,
     FalloutActorProcessRuntimeHandoff? ColdHandoff, string ExecutableSha256,
-    IReadOnlyList<FalloutProcessCommonPublication>? Publications = null);
+    IReadOnlyList<FalloutProcessCommonPublication>? Publications = null,
+    FalloutPackageRegistrySnapshot? PackageRegistry = null,
+    IReadOnlyList<FalloutPackageCommandFieldSnapshot>? CommandFields = null,
+    IReadOnlyList<FalloutSourcePackageAssignmentCall>? PackageCommands = null);
 
 internal sealed record FalloutActorProcessNodeBinding(byte PartType, string SourceNode, int? Block);
 internal sealed record FalloutActorProcessBodyBinding(FalloutFormKey Actor, string SkeletonPath,

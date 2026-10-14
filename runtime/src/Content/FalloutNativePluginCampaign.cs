@@ -166,8 +166,8 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             }
             else
             {
-                RequireSupplementalConstruction(admission);
-                plugin = domain.LoadCoResidentNvseImage(physical, admission.Sha256, admission.QueryHandle);
+                var moduleRead = RequireSupplementalConstruction(admission);
+                plugin = domain.LoadCoResidentNvseImage(physical, admission.Sha256, admission.QueryHandle, moduleRead);
             }
             published = new(admission, domain, plugin); _modules.Add(published);
             if (primary)

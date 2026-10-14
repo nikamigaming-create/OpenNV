@@ -59,8 +59,8 @@ internal static partial class SourceMainScriptCallerContracts
         var package = call.Current!;
         foreach (var words in new[]
         {
-            package.Fields.Fields with { Procedure = Guid.NewGuid() },
-            package.Fields.Fields with { Extra = 1 },
+            package.Fields.Fields with { Context = Guid.NewGuid() },
+            package.Fields.Fields with { Extra = new(new("authored.esm", 1), FalloutPackageExtraKind.Reference) },
             package.Fields.Fields with { Index = 0 },
             package.Fields.Fields with { TimeBits = 0 },
             package.Fields.Fields with { Flags = 1 }

@@ -19,6 +19,7 @@ internal static partial class SourceMainScriptCallerContracts
         var controls = FalloutPlayerMovementControlSource.Reviewed(main);
         var weaponSource = FalloutExecutableStringTable.ReadPlayerWeaponContinuation(content.FalloutExecutablePath, controls);
         var followingSource = FalloutExecutableStringTable.ReadPlayerFollowingContinuation(content.FalloutExecutablePath, controls);
+        var moverSource = FalloutExecutableStringTable.ReadActorMover(content.FalloutExecutablePath, controls);
         _ = FalloutExecutableStringTable.ReadPlayerReferenceHud(content.FalloutExecutablePath, main);
         var before = SHA256.HashData(File.ReadAllBytes(content.FalloutExecutablePath));
         var source = FalloutExecutableStringTable.ReadPlayerControlHud(content.FalloutExecutablePath, controls);
@@ -87,6 +88,9 @@ internal static partial class SourceMainScriptCallerContracts
             var weaponConstructor = AuditOwnedPlayerWeaponConstructor(records, common, scene, input, weaponSource);
             var followingConstructor = AuditOwnedPlayerFollowingConstruction(records, common, scene.PlayerInhibition,
                 scene.Capture().FollowingTimerFlag ?? throw new InvalidDataException("Owned following audit omitted its actual timer byte."), followingSource);
+            var packageCommandFields = AuditOwnedPackageCommandFields(records, common, controls);
+            var packageState = AuditOwnedPackageState(records, common, controls);
+            var referenceScriptInitialization = AuditOwnedReferenceScriptExtraInitializer(records, common, controls);
             var observation = new FalloutPlayerControlCommandObservation(program.Source.FormKey,
                 "owned-offline-original-compiled-control-command", Guid.NewGuid(), command.Enable, command.Arguments);
             var fighting = new FalloutPlayerControlFightingOwner(controls, content.StackId, process, common, player, 1,
@@ -95,6 +99,9 @@ internal static partial class SourceMainScriptCallerContracts
             scene.ApplySourceControlCommand(observation, new FalloutPlayerControlFlagConsumers(controls, content.StackId, process,
                 observation.Observation, fields, hud, fighting, scene));
             var returned = scene.Capture();
+            Require(returned.ActorMover is { } mover && mover.Source == moverSource &&
+                mover.Values.Player == returned.MoverFields && mover.Values.InheritedFlags == FalloutActorMoverSource.InitialInheritedFlags,
+                "Owned source controls borrowed a different logical mover or aliased its inherited and Player words.");
             var currentPointOfView = returned.PointOfView ?? throw new InvalidDataException("Owned command omitted its actual POV fields.");
             Require(returned is { PlayerView: 0, FirstPerson: null, ControlFields: { DisabledWord: 0x1f, FlagStores: 2, Call.Returned: true },
                 PointOfView: { DesiredViewStores: 1, SharedScalarStores: 1, SharedScalarBits: 0, DesiredView: 0, Calls.Count: 1 } } &&
@@ -114,6 +121,9 @@ internal static partial class SourceMainScriptCallerContracts
                 xpConstructor,
                 weaponConstructor,
                 followingConstructor,
+                packageCommandFields,
+                packageState,
+                referenceScriptInitialization,
                 originalCompiledControl = new { source = program.Source.FormKey, program.Scope.ScopeSha256,
                     program.ProgramSha256, instruction.Offset, originalOperands = command.Arguments, mask = controlCall.Mask,
                     controlCall.Returned, pointOfView = returned.PointOfView },

@@ -423,6 +423,18 @@ internal sealed partial class RuntimeLiveHarness : Node
         _lastStatePublicationFailure = error.Message;
     }
 
+    internal void PublishFinalState()
+    {
+        if (_retired) throw new InvalidOperationException("Retired diagnostics cannot read a campaign failure.");
+        // Drain the earlier immutable snapshot before capturing this final
+        // state, then finish its write before the source owners retire.
+        try { CompleteStateWrite(); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }
+        PublishState();
+        try { CompleteStateWrite(); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }
+    }
+
     private void CompleteStateWrite()
     {
         var pending = _stateWrite;

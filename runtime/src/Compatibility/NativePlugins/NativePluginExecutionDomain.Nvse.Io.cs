@@ -23,9 +23,19 @@ internal sealed partial class NativePluginExecutionDomain
         var owner = _privateIo ?? throw new NotSupportedException("Original native I/O has no selected module-owned private storage.");
         using var reader = Reader(frame.Payload); var thread = reader.ReadUInt32(); var module = reader.ReadUInt64();
         var enteredLoader = IsEnteredOriginalLoaderIo(frame.Operation, module, parent);
-        if (!enteredLoader) RequireModulePrivateIo(RetainedNvseModule(module));
+        if (!enteredLoader && frame.Operation is not (FileSizeCallback or ModuleReadCallback)) RequireModulePrivateIo(RetainedNvseModule(module));
         if (thread != NativeThread || !enteredLoader && (_nvsePlugin is null || module != _nvsePlugin.Module || _nvsePlugin.Generation != Generation))
             throw new InvalidDataException("Native I/O callback has a foreign thread/module/generation.");
+        if (frame.Operation == FileSizeCallback)
+        {
+            if (enteredLoader) throw new NotSupportedException("Pre-entry shared-HANDLE size interception remains unowned.");
+            return DispatchSharedFileSize(parent, module, reader);
+        }
+        if (frame.Operation == ModuleReadCallback)
+        {
+            if (enteredLoader) throw new NotSupportedException("Module read I/O cannot enter through an unbound original loader/TLS callback.");
+            return DispatchModuleReadIo(parent, module, reader);
+        }
         if (frame.Operation == WindowProcessCallback)
         {
             if (enteredLoader) throw new NotSupportedException("Original pre-entry USER32/process callback interception remains unowned.");
@@ -122,6 +132,7 @@ internal sealed partial class NativePluginExecutionDomain
     }
     private void RequirePrivateIoRetired()
     {
+        RequireNativeFileSizeRetired(); RequireModuleReadIoRetired();
         if (_ioFiles.Count != 0) throw new InvalidDataException("Original module retirement retains native file handles.");
         RequireSharedPlacementsSourceReleased();
         RequirePrivateMutexesRetired(); RequirePrivateMappingsRetired(); RequirePrivateCryptoRetired();
@@ -131,6 +142,7 @@ internal sealed partial class NativePluginExecutionDomain
     private void ClearPrivateIo()
     {
         if (!ChildExited) throw new InvalidOperationException("Native I/O source/provider cleanup requires verified child closure.");
+        RequireNativeFileSizeRetired(); RequireModuleReadIoRetired();
         List<Exception> failures = [];
         try { ClearWindowProcessAfterChildExit(); } catch (Exception error) { failures.Add(error); }
         try

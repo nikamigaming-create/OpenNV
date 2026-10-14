@@ -1,5 +1,33 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args.Length == 6 && args[0] == "--test-native-module-read")
+{
+    NativeModuleReadContracts.Run(args[1], args[2], args[3], args[4], args[5]);
+    return;
+}
+if (args is ["--test-native-module-read-declarations"])
+{
+    NativeModuleReadContracts.RunDeclarations();
+    return;
+}
+if (args.Length >= 2 && args[0] == "--test-native-module-read-owned-construction")
+{
+    NativeModuleReadContracts.RunOwnedConstruction(args[1..]);
+    return;
+}
+
+if (args.Length == 6 && args[0] == "--test-native-file-size")
+{
+    NativeFileSizeContracts.Run(args[1], args[2], args[3], args[4], args[5]);
+    return;
+}
+
+if (args is ["--test-native-file-size-declarations"])
+{
+    NativeFileSizeContracts.RunDeclarations();
+    return;
+}
+
 if (args.Length == 6 && args[0] == "--test-native-module-set")
 {
     NativeCoResidentModuleContracts.Run(args[1], args[2], args[3], args[4], args[5]);
@@ -147,6 +175,8 @@ if (args.Length != 0)
 
 NativeEngineCommandLeafContracts.Run();
 NativeCoResidentModuleContracts.RunDeclarations();
+NativeFileSizeContracts.RunDeclarations();
+NativeModuleReadContracts.RunDeclarations();
 NativePlatformCapabilitiesContracts.Run();
 NativeCppStreamsContracts.RunDeclarations();
 NativeHeadlessUser32Contracts.Run();

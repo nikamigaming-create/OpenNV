@@ -1,15 +1,20 @@
+using OpenNV.Runtime.World.Cells;
+
 namespace OpenNV.Runtime.Gameplay.State;
 
 // Lane names retain the source ordering already used by movement. They are
 // independent source bytes, not control permissions or action Boolean aliases.
 internal enum FalloutPlayerInhibitionLane { First, Second, Third, Fourth }
-internal enum FalloutPlayerInhibitionOperation { ConstructorLiteral, ConstructorCompletedLoop, SelectedVoidCallback, ZeroSetter, UnownedWriter }
+internal enum FalloutPlayerInhibitionOperation { ConstructorLiteral, ConstructorCompletedLoop, SelectedVoidCallback, ZeroSetter, UnownedWriter, PackageAssignmentStore }
 internal enum FalloutPlayerInhibitionConsumer { Movement, Following }
 internal sealed record FalloutPlayerSourceCaller(Guid Main, long Ordinal, Guid Invocation);
 internal sealed record FalloutPlayerInhibitionByte(byte Value, bool Available);
 internal sealed record FalloutPlayerInhibitionEntry(Guid Observation, string Producer, Guid Process, Guid Factory,
     long Changed, FalloutPlayerInhibitionOperation Operation, FalloutPlayerInhibitionLane Lane,
-    byte? Value, bool? CallbackArgument, bool CallbackReturned);
+    byte? Value, bool? CallbackArgument, bool CallbackReturned)
+{
+    public FalloutPackageCommandFieldInvocation? PackageCommand { get; init; }
+}
 internal sealed record FalloutPlayerInhibitionRead(string Source, string Stack, Guid Process, Guid Factory,
     FalloutPlayerSourceCaller Caller, FalloutPlayerInhibitionConsumer Consumer, long Revision,
     FalloutPlayerInhibitionLane Lane, byte Value);

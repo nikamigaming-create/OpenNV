@@ -45,6 +45,7 @@ void nvse_module_set_load(const Frame& frame, Reader& reader) {
     const auto nt = nvse_copy(reinterpret_cast<const IMAGE_NT_HEADERS32*>(reinterpret_cast<const unsigned char*>(actual) + dos.e_lfanew));
     if (nt.Signature != IMAGE_NT_SIGNATURE || nt.FileHeader.Machine != IMAGE_FILE_MACHINE_I386 || nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC)
         throw Fatal(ERROR_BAD_EXE_FORMAT, "Additional original mapping lost its x86 PE declaration.");
+    std::uint32_t bound_reads = 0;
     for (const auto& declaration : imports) {
         if (declaration.slot > nt.OptionalHeader.SizeOfImage || 4U > nt.OptionalHeader.SizeOfImage - declaration.slot)
             throw Fatal(ERROR_INVALID_ADDRESS, "Additional original IAT leaves its mapped source image.");
@@ -56,20 +57,28 @@ void nvse_module_set_load(const Frame& frame, Reader& reader) {
             throw Fatal(ERROR_INVALID_DATA, "Additional original IAT is not its actual Windows named export.");
         // Source-code mutations retain their real existing typed refusal.
         // An additional DLL never receives a raw VirtualProtect escape.
-        if (auto* adapter = source_call_site_api(declaration.name)) {
+        auto* adapter = shared_file_size_import_entry(declaration.library, declaration.name, original);
+        if (!adapter) {
+            adapter = module_read_io_import_entry(declaration.library, declaration.name, original);
+            if (adapter) ++bound_reads;
+        }
+        if (!adapter) adapter = source_call_site_api(declaration.name);
+        if (adapter) {
             DWORD previous = 0;
             if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &previous))
                 throw Fatal(GetLastError(), "Additional source protection adapter could not enter its IAT store.");
             *slot = adapter; DWORD ignored = 0;
             if (!VirtualProtect(slot, sizeof(void*), previous, &ignored))
                 throw Fatal(GetLastError(), "Additional source protection adapter did not restore its original IAT page.");
+            if (nvse_copy(slot) != adapter)
+                throw Fatal(ERROR_INVALID_DATA, "Additional original API adapter lost its actual IAT readback.");
         }
     }
     runtime.query = address(reinterpret_cast<void*>(GetProcAddress(actual, "NVSEPlugin_Query")));
     runtime.load = address(reinterpret_cast<void*>(GetProcAddress(actual, "NVSEPlugin_Load")));
     nvse_executable(reinterpret_cast<void*>(runtime.query)); nvse_executable(reinterpret_cast<void*>(runtime.load));
     Bytes result; result.put(id); result.put(address(actual)); result.put(handle);
-    result.put(address(runtime.tables)); result.put(runtime.query); result.put(runtime.load);
+    result.put(address(runtime.tables)); result.put(runtime.query); result.put(runtime.load); result.put(bound_reads);
     reply(frame, ERROR_SUCCESS, "", result);
 }
 

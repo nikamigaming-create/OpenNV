@@ -18,6 +18,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         RequireIdle();
         if (_controlFields.HasActualInput) _controlFields.RequireActualInput(input);
         else _controlFields.BindActualInput(input);
+        PublishFollowingFieldInput(input);
         _thread ??= Environment.CurrentManagedThreadId;
     }
 

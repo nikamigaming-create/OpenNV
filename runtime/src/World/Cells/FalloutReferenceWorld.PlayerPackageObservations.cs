@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutReferenceWorld
 {
-    private sealed record PlayerPackageEffectObservation(Guid Observation);
+    private sealed record PlayerPackageEffectObservation(Guid Observation, FalloutSourcePackageAssignmentCall? Call = null);
     private readonly ConditionalWeakTable<FalloutReferenceScriptEffect, PlayerPackageEffectObservation> _playerPackageEffects = new();
 
     // The identity belongs to this executed C# observation, not a retail script
@@ -17,12 +17,41 @@ internal sealed partial class FalloutReferenceWorld
         if (!HasStandalonePlayerScene) return Guid.Empty;
         if (effect.Kind != FalloutReferenceEffectKind.ScriptPackage || effect.Target != _enginePlayer)
             throw new InvalidDataException("Player package ingress requires its actual typed source command/target.");
-        if (_playerPackageEffects.TryGetValue(effect, out var previous)) return previous.Observation;
+        if (_playerPackageEffects.TryGetValue(effect, out var previous))
+        {
+            if (previous.Call is { Step: not FalloutSourcePackageAssignmentStep.Returned } failed)
+                throw new NotSupportedException("Source package command attachment retains its original failure: " + failed.Failure);
+            return previous.Observation;
+        }
+        if (_sourcePackageRegistry is not null && effect.Argument is not null)
+        {
+            FalloutSourcePackageAssignmentCall? executed = null;
+            try
+            {
+                var call = ExecuteSourceAddScriptPackage(effect, producer, call => executed = call);
+                _playerPackageEffects.Add(effect, new(call.Invocation.SourceCommand, call));
+                return call.Invocation.SourceCommand;
+            }
+            catch
+            {
+                if (executed is { } call)
+                    _playerPackageEffects.Add(effect, new(call.Invocation.SourceCommand, call));
+                throw;
+            }
+        }
         var observation = Guid.NewGuid();
         ObserveStandalonePlayerPackageMutation(observation, producer, effect.Source, effect.Argument, effect.Argument is null);
         CampaignStandalonePlayerScene.PlayerInhibition.ObserveUnownedWriter(observation, producer, FalloutPlayerInhibitionLane.Fourth);
         _playerPackageEffects.Add(effect, new(observation));
         return observation;
+    }
+
+    internal FalloutSourcePackageAssignmentCall? BorrowReturnedSourcePackageCommand(FalloutReferenceScriptEffect effect)
+    {
+        if (!_playerPackageEffects.TryGetValue(effect, out var actual) || actual.Call is null) return null;
+        if (actual.Call.Step != FalloutSourcePackageAssignmentStep.Returned || actual.Call.Result != true)
+            throw new NotSupportedException("Source package driver cannot attach an unreturned command.");
+        return actual.Call;
     }
 
     internal void ObserveStandalonePlayerPackageMutation(Guid observation, string producer,

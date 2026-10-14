@@ -13,6 +13,11 @@ internal sealed partial class FalloutActorProcessCommonState
         internal readonly List<FalloutProcessPackageWriterObservation> Primary = initial.Primary?.Observations.ToList() ?? [];
         internal readonly HashSet<Guid> Ids = initial.Current.Observations.Concat(initial.Primary?.Observations ?? [])
             .Select(item => item.Observation).ToHashSet();
+        internal readonly List<FalloutPackageStateMutation> CurrentMutations = initial.Current.Mutations?.ToList() ?? [];
+        internal readonly List<FalloutPackageStateMutation> PrimaryMutations = initial.Primary?.Mutations?.ToList() ?? [];
+        internal readonly HashSet<(Guid Command, FalloutProcessPackageSlot Slot, FalloutPackageStateOperation Operation)> Commands =
+            (initial.Current.Mutations ?? []).Concat(initial.Primary?.Mutations ?? [])
+                .Select(call => (call.Invocation.SourceCommand, call.Slot, call.Operation)).ToHashSet();
     }
     private readonly Dictionary<FalloutFormKey, Dictionary<long, PackageLedger>> _packageLedgers = new(FalloutFormKeyComparer.Instance);
     private readonly List<FalloutProcessCommonPublication> _packagePublications = [];
@@ -99,11 +104,25 @@ internal sealed partial class FalloutActorProcessCommonState
                 ? FalloutProcessPackageState.Invalidate(packages.Primary!, receipt, ledger.Primary) : packages.Primary
         };
         _current[actor] = current with { Packages = updated, Changed = changed };
+        if (_packageRegistry is { } registry)
+        {
+            var invocation = new FalloutPackageCommandFieldInvocation(observation, current.Source, _process, epoch, Environment.CurrentManagedThreadId);
+            var affected = new[] { (target & FalloutProcessPackageWriterTarget.Current) != 0 ? packages.Current : null,
+                (target & FalloutProcessPackageWriterTarget.Primary) != 0 ? packages.Primary : null }.OfType<FalloutProcessPackageFields>().ToArray();
+            if (affected.Any(fields => !fields.Available) || requestedPackage is null && !remove)
+                registry.RetainUnownedCountAuthority(invocation, producer);
+            else
+            {
+                var forms = affected.Select(fields => fields.Fields.Package).Append(requestedPackage).OfType<FalloutFormKey>()
+                    .Distinct(FalloutFormKeyComparer.Instance);
+                foreach (var form in forms) registry.RetainUnownedLifetime(invocation, form, producer);
+            }
+        }
     }
 
     private string? SourcePackageSaveBlocker => _current.Values.FirstOrDefault(entry => entry.Packages is
     { Current.Available: false } or { Primary.Available: false }) is { } failed
-        ? "source-process-package-observed-assignment-unbound:" + failed.Source.Reference : null;
+        ? "source-process-package-writer-incomplete:" + failed.Source.Reference : _packageRegistry?.SaveBlocker;
 
     private static void ValidatePackageFields(FalloutProcessCommonEntry entry, string executable, Guid process, long sequence, bool historical,
         IReadOnlyList<FalloutProcessCommonPublication>? publications)

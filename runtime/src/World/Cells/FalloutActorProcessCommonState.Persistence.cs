@@ -11,7 +11,8 @@ internal sealed partial class FalloutActorProcessCommonState
             _retired.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).Select(CapturePackageHistory).ToArray(),
             _pending is null ? null : CapturePackageHistory(CaptureFollowingObservationHistory(CaptureWeaponObservationHistory(_pending))),
             _transfer, _cold, _source.ExecutableSha256,
-            _packagePublications.Count == 0 ? null : Array.AsReadOnly(_packagePublications.ToArray()));
+            _packagePublications.Count == 0 ? null : Array.AsReadOnly(_packagePublications.ToArray()),
+            _packageRegistry?.Capture() ?? _preparedColdPackageRegistry);
     }
     private void Restore(FalloutProcessCommonSnapshot saved)
     {
@@ -28,6 +29,7 @@ internal sealed partial class FalloutActorProcessCommonState
         }
         _retired.AddRange(saved.Retired); _pending = saved.Pending is { } pending ? RepublishPackageFields(pending) : null;
         _transfer = saved.Transfer; _sequence = saved.Sequence;
+        _preparedColdPackageRegistry = saved.PackageRegistry;
         _cold = new(saved.CapturedProcess, _process, Next());
         if (FalloutSourceMainFamily.IsFallout3(_source.ExecutableSha256))
         {
@@ -75,6 +77,7 @@ internal sealed partial class FalloutActorProcessCommonState
         if (FalloutActorProcessRuntimeDeclaration.ForExecutable(saved.ExecutableSha256).Contract != saved.Contract)
             throw new InvalidDataException("Cold common owner changed its executable and constructor contract.");
         var packageProcesses = ValidatePackagePublications(saved);
+        var packageProcessIds = packageProcesses?.Select(publication => publication.Process).ToHashSet();
         var ownership = new HashSet<Guid>();
         foreach (var retired in saved.Retired)
         {
@@ -88,9 +91,9 @@ internal sealed partial class FalloutActorProcessCommonState
             entry.Source.Validate();
             if (entry.Epoch < 1 || !Enum.IsDefined(entry.Level) || !Enum.IsDefined(entry.Phase) || entry.Scalars is null ||
                 entry.Changed < 1 || entry.Changed > saved.Sequence || entry.Boundary is not null && string.IsNullOrWhiteSpace(entry.Boundary) ||
-                entry.Epoch == 1 && entry.Level != (entry.Source.EnginePlayer ? FalloutDetectionProcessLevel.High : FalloutDetectionProcessLevel.Low) ||
-                entry.Scalars != FalloutProcessCommonScalars.Constructed)
+                entry.Epoch == 1 && entry.Level != (entry.Source.EnginePlayer ? FalloutDetectionProcessLevel.High : FalloutDetectionProcessLevel.Low))
                 throw new InvalidDataException("Cold common field/class lacks its real source constructor or admitted writer.");
+            ValidatePackageCommandFlags(entry, saved.ExecutableSha256, saved.Stack, packageProcessIds);
             if (entry.Gameplay is { } lease)
             {
                 if (lease.Source != entry.Source || lease.Ownership == Guid.Empty || !ownership.Add(lease.Ownership) ||
@@ -133,6 +136,7 @@ internal sealed partial class FalloutActorProcessCommonState
         if (saved.ColdHandoff is { } cold && (cold.PreviousProcess == Guid.Empty || cold.CurrentProcess != saved.CapturedProcess ||
             cold.PreviousProcess == cold.CurrentProcess || cold.Sequence < 1 || cold.Sequence > saved.Sequence))
             throw new InvalidDataException("Cold common owner lost its genuine new-process handoff.");
+        ValidatePackageRegistryAssociations(saved);
     }
     // v9 adds FO3's independent signed process activity. New Vegas v7/v8
     // retains the same field graph and can bind a fresh current owner.

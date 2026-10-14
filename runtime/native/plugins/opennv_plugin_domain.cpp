@@ -17,6 +17,8 @@
 #include "opennv_plugin_array_objects.h"
 #include "opennv_plugin_value_heap.h"
 #include "opennv_plugin_io.h"
+#include "opennv_plugin_file_size.h"
+#include "opennv_plugin_module_read_io.h"
 #include "opennv_plugin_window_process.h"
 #include "opennv_plugin_import_providers.h"
 #include "opennv_plugin_source_locals.h"
@@ -493,6 +495,9 @@ void* parallel_hardware_import_entry(const std::string&, const std::string&, voi
 void* parallel_hardware_dynamic_entry(HMODULE, const std::string&);
 void parallel_hardware_publish();
 void parallel_hardware_retire();
+BOOL WINAPI io_shared_size_ex(HANDLE, PLARGE_INTEGER);
+void shared_file_size_require_retired();
+void module_read_io_require_retired();
 void parallel_hardware_require_retired();
 void crt_standard_retire();
 void crt_prepare_preentry_standard();
@@ -562,6 +567,8 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_array_objects.inc"
 #include "opennv_plugin_value_heap.inc"
 #include "opennv_plugin_io.inc"
+#include "opennv_plugin_file_size.inc"
+#include "opennv_plugin_module_read_io.inc"
 #include "opennv_plugin_io_move.inc"
 #include "opennv_plugin_mutexes.inc"
 #include "opennv_plugin_mutex_namespace.inc"
