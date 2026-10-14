@@ -43,7 +43,7 @@ internal sealed class FalloutPlayerControlHudContext : IFalloutPlayerControlHudC
     }
     public FalloutPlayerControlHudFrame ReadTransitionFrame()
     {
-        RequireCurrent(); var delta = _timer.ReadControlDelta(); var mode = _clock.ReadMainControlMode(Process);
+        RequireCurrent(); var delta = _timer.ReadScaledDelta(); var mode = _clock.ReadMainControlMode(Process);
         if (delta.Source != Source.Controls.Main.EngineSha256 || delta.Process != Process)
             throw new InvalidOperationException("HUD transition selected another actual cached source timer.");
         if (mode == 4) throw new NotSupportedException("source-HUD-control-mode-four-current-divisor-unbound");

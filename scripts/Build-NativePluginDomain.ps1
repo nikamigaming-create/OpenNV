@@ -114,6 +114,14 @@ try {
         "/Fo$output/move-file-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
         "/DEF:$fixtureSource/NativeCrtFixture.def", "/OUT:$fixtures/opennv_move_file_fixture.dll",
         "/IMPLIB:$output/move-file-fixture.lib", 'kernel32.lib')
+    foreach ($moduleVariant in @(@{Suffix='primary';Defines=@();Libraries=@('msvcprt.lib')},
+            @{Suffix='secondary';Defines=@('/DOPENNV_CORESIDENT_SECONDARY');Libraries=@()})) {
+        Invoke-Compile (@('/GS-', '/LD') + $moduleVariant.Defines + @(
+            (Join-Path $fixtureSource 'NativeCoResidentModuleFixture.cpp'), "/Fo$output/co-resident-$($moduleVariant.Suffix)-fixture.obj",
+            '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF', "/DEF:$fixtureSource/NativeCoResidentModuleFixture.def",
+            "/OUT:$fixtures/opennv_co_resident_$($moduleVariant.Suffix).dll",
+            "/IMPLIB:$output/co-resident-$($moduleVariant.Suffix)-fixture.lib", 'kernel32.lib') + $moduleVariant.Libraries)
+    }
     foreach ($platformVariant in @(@{Suffix='capabilities';Defines=@()}, @{Suffix='break';Defines=@('/DOPENNV_PLATFORM_BREAK_UNHANDLED')})) {
         $platformArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/LD') + $platformVariant.Defines + @(
             (Join-Path $fixtureSource 'NativePlatformCapabilitiesFixture.cpp'), "/Fo$output/platform-$($platformVariant.Suffix)-fixture.obj",
@@ -133,6 +141,8 @@ try {
     $files += 'fixtures/opennv_logging_fixture.dll'
     $files += 'fixtures/opennv_source_suppression_fixture.dll'
     $files += 'fixtures/opennv_move_file_fixture.dll'
+    $files += 'fixtures/opennv_co_resident_primary.dll'
+    $files += 'fixtures/opennv_co_resident_secondary.dll'
     $files += 'fixtures/opennv_platform_capabilities_fixture.dll'
     $files += 'fixtures/opennv_platform_break_fixture.dll'
     $files += 'providers/cng/bcrypt.dll'

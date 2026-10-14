@@ -16,12 +16,14 @@ internal sealed partial class NativePluginExecutionDomain
             throw new InvalidDataException("Native exception does not belong to the actual companion thread.");
         var operation = (NativePluginDomainOperation)frame.Operation;
         var nvseCall = operation is NativePluginDomainOperation.NvseQuery or NativePluginDomainOperation.NvseLoad or
-            NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand;
+            NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.NvseModuleSet;
         var stageOwned = operation switch
         {
             NativePluginDomainOperation.Call => observed.Stage == "authored scalar call",
             NativePluginDomainOperation.NvseQuery => observed.Stage == "NVSEPlugin_Query",
             NativePluginDomainOperation.NvseLoad => observed.Stage == "NVSEPlugin_Load",
+            NativePluginDomainOperation.NvseModuleSet => observed.Stage == "original cross-image callable" &&
+                _nvseFunctionBorrows.Values.Any(function => function.Live && function.Entered && function.Address == observed.InvocationEntry),
             _ => false
         };
         // Original synchronous Dispatch may enter a registered listener inside

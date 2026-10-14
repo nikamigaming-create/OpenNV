@@ -14,7 +14,7 @@ internal static class NativePluginPlatformImports
         "AcquireSRWLockExclusive", "AcquireSRWLockShared", "TryAcquireSRWLockShared", "ReleaseSRWLockExclusive", "ReleaseSRWLockShared",
         "SleepConditionVariableSRW", "WakeAllConditionVariable", "WakeConditionVariable", "Sleep",
         "GetModuleHandleA", "GetModuleHandleW", "GetModuleFileNameA", "GetModuleFileNameW", "DisableThreadLibraryCalls", "GetStartupInfoW", "GetStdHandle",
-        "GetLastError", "SetLastError", "IsDebuggerPresent", "IsProcessorFeaturePresent", "SetUnhandledExceptionFilter", "DebugBreak",
+        "GetLastError", "SetLastError", "IsDebuggerPresent", "IsProcessorFeaturePresent", "SetUnhandledExceptionFilter", "DebugBreak", "RaiseException",
         "UnhandledExceptionFilter", "TerminateProcess", "LocalFree", "LocalAlloc", "FormatMessageA", "FormatMessageW",
         "AreFileApisANSI", "MultiByteToWideChar", "WideCharToMultiByte", "GetLocaleInfoEx", "GetACP", "GetCPInfo", "GetStringTypeW",
     };
@@ -48,6 +48,7 @@ internal static class NativePluginPlatformImports
     };
     internal static string? Owner(string library, string name)
     {
+        if (NativePluginParallelHardwareImports.Owner(library, name) is { } parallelOwner) return parallelOwner;
         if (NativePluginCrtPureImports.Owns(library, name)) return "actual-selected-x86-CRT-export:" + library + "!" + name;
         if (NativePluginWindowProcessImports.Owner(library, name) is { } windowOwner) return windowOwner;
         if (NativePluginCppRuntimeImports.Owner(library, name) is { } cppOwner) return cppOwner;

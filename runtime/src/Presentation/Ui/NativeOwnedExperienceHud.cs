@@ -44,7 +44,7 @@ internal sealed partial class NativeOwnedExperienceHud : Control
         }
         catch (Exception error)
         {
-            owner.RetainFailure(error);
+            if (!owner.HasSourceHud) owner.RetainFailure(error);
             if (GodotObject.IsInstanceValid(result)) result!.Free();
             throw;
         }
@@ -107,6 +107,15 @@ internal sealed partial class NativeOwnedExperienceHud : Control
     }
     private void Layout()
     {
+        if (_owner.SourceHud is { } source)
+        {
+            var fields = source.ReadDisplay();
+            Size = GetViewportRect().Size; Scale = Vector2.One;
+            _tiles.Screen = new(BitConverter.UInt32BitsToSingle(fields.LogicalWidthBits),
+                BitConverter.UInt32BitsToSingle(fields.LogicalHeightBits));
+            _tiles.ResolutionConverter = 1;
+            return;
+        }
         // The executable positions the tile in its actual render extent and
         // selected safe-zone inputs. This owner adds no fitted reference size.
         Size = _tiles.Screen = GetViewportRect().Size; Scale = Vector2.One; _tiles.ResolutionConverter = 1;
@@ -132,6 +141,11 @@ internal sealed partial class NativeOwnedExperienceHud : Control
         try
         {
             if (!ObserveNativeUpdateLifetime()) return;
+            if (_owner.SourceHud is { } source)
+            {
+                BorrowSourceTiles(source);
+                _tiles.ValidateDrawing(); QueueRedraw(); return;
+            }
             var admission = _admission();
             Visible = admission == FalloutExperienceNotificationAdmission.Ready;
             if (admission == FalloutExperienceNotificationAdmission.Ready && !IsVisibleInTree())
@@ -176,6 +190,7 @@ internal sealed partial class NativeOwnedExperienceHud : Control
     }
     private void ValidatePublication(FalloutExperienceNotificationFrame? frame)
     {
+        if (_owner.SourceHud is { } source) { source.RequireCurrent(); return; }
         if (_tiles.Number(_source.Menu, "visible") <= 0 || _tiles.Number(_source.Tile("XPMeter"), "visible") <= 0)
             throw new NotSupportedException("XP source/script parent suppression has no admitted phase retirement owner.");
         var opacity = _settings.Number(_source.Declaration.OpacitySetting) * 255;
@@ -194,6 +209,7 @@ internal sealed partial class NativeOwnedExperienceHud : Control
         try
         {
             if (!ObserveNativeUpdateLifetime()) return;
+            if (_owner.HasSourceHud) { _tiles.Draw(this); return; }
             ValidatePublication(_drawFrame);
             _tiles.Draw(this); _submittedFrame = _drawFrame;
             _submittedIdleRevision = _drawFrame is null ? _owner.IdleRevision(_view) : null;
@@ -203,6 +219,7 @@ internal sealed partial class NativeOwnedExperienceHud : Control
     private void FramePresented()
     {
         if (Error is not null || !IsVisibleInTree() || _retiring) return;
+        if (_owner.HasSourceHud) return;
         var submitted = _submittedFrame; var idle = _submittedIdleRevision;
         _submittedFrame = null;
         _submittedIdleRevision = null;
@@ -257,8 +274,25 @@ internal sealed partial class NativeOwnedExperienceHud : Control
     private void Fail(Exception error)
     {
         var first = Error is null;
-        Error ??= error.Message; _owner.RetainFailure(error); _drawFrame = null; _submittedFrame = null; _submittedIdleRevision = null;
+        Error ??= error.Message;
+        if (!_owner.HasSourceHud) _owner.RetainFailure(error);
+        _drawFrame = null; _submittedFrame = null; _submittedIdleRevision = null;
         if (first) GD.PushError($"OPENNV_EXPERIENCE_NOTIFICATION_FAIL {error.Message}");
+    }
+
+    private void BorrowSourceTiles(FalloutExperienceSourceHud source)
+    {
+        source.RequireCurrent();
+        _tiles.Bind(_source.Menu, "visible", source.ReadRootFloat("visible"));
+        foreach (var name in FalloutExperienceHudSource.Tiles)
+        {
+            var tile = _source.Tile(name);
+            foreach (var trait in new[] { "visible", "alpha", "x", "y" })
+                _tiles.Bind(tile, trait, source.ReadFloat(name, trait));
+            if (tile.Name == "text") _tiles.Text[tile] = source.ReadString(name);
+        }
+        Visible = source.ReadRootFloat("visible") > 0;
+        _drawFrame = null; _submittedFrame = null; _submittedIdleRevision = null;
     }
     public override void _ExitTree()
     {

@@ -6,7 +6,7 @@ constexpr DWORD nvse_missing_owner_exception = 0xe04e5653U;
 NvseRuntime& nvse_owner() {
     if (!state || GetCurrentThreadId() != state->thread || !state->nvse || state->calls.empty())
         throw Fatal(ERROR_INVALID_THREAD_ID, "NVSE callback lacks its actual module/call/thread owner.");
-    data_sync_if_bound();
+    if (nvse_primary_services()) data_sync_if_bound();
     return *state->nvse;
 }
 struct NvseInvocation {
@@ -15,7 +15,7 @@ struct NvseInvocation {
         if (owner.invocation_depth >= max_call_depth)
             throw Fatal(ERROR_STACK_OVERFLOW, "Original NVSE invocation/callback depth exceeded its native owner.");
         ++owner.invocation_depth;
-        try { data_sync_if_bound(); }
+        try { if (nvse_primary_services()) data_sync_if_bound(); }
         catch (...) { --owner.invocation_depth; throw; }
     }
     ~NvseInvocation() { --owner.invocation_depth; }
@@ -98,7 +98,7 @@ std::uint32_t nvse_host(NvseHostCall call, const Bytes& payload) {
     RaiseException(nvse_missing_owner_exception, EXCEPTION_NONCONTINUABLE, 0, nullptr);
     std::abort();
 }
-template<class F> auto nvse_adapter(F action) -> decltype(action()) {
+template<class F> auto nvse_adapter(F action, const void* original_return = _ReturnAddress()) -> decltype(action()) {
     if (!state || GetCurrentThreadId() != state->thread) {
         callback_fault.store(ERROR_INVALID_THREAD_ID);
         RaiseException(nvse_missing_owner_exception, EXCEPTION_NONCONTINUABLE, 0, nullptr);
@@ -106,7 +106,7 @@ template<class F> auto nvse_adapter(F action) -> decltype(action()) {
     }
     DWORD diagnostic_parameter_count = 0;
     const ULONG_PTR* diagnostic_parameters = nullptr;
-    try { return action(); }
+    try { NvseCallbackModuleScope module_scope(original_return); return action(); }
     catch (const Fatal& error) {
         remember_native_exception(state->first_guarded_exception, error);
         retain_callback_fault(error.code, error.what());
@@ -193,7 +193,8 @@ void* __cdecl nvse_query_interface(std::uint32_t id) {
 std::uint32_t __cdecl nvse_plugin_handle() {
     return nvse_adapter([&] {
         auto& owner = nvse_owner();
-        return owner.phase == NvsePhase::querying || owner.phase == NvsePhase::loading ? owner.handle : nvse_invalid_handle;
+        (void)owner;
+        return state->loading_handle ? state->loading_handle : nvse_invalid_handle;
     });
 }
 const char* __cdecl nvse_runtime_directory() { return nvse_adapter([] { return nvse_owner().directory; }); }
@@ -207,12 +208,12 @@ void nvse_check_call(const CallReceipt& receipt, const std::string& stage, std::
     // Do not let a post-call declaration/state validation replace the actual
     // caught native context or its earlier typed callback failure prefix.
     nvse_check_exception(receipt, stage, entry);
-    engine_commands_validate_all();
+    if (nvse_primary_services()) engine_commands_validate_all();
     command_table_validate_all();
     if (callback_fault.load()) throw Fatal(callback_fault.load(), state->callback_reason[0] ? state->callback_reason : "NVSE callback ownership failed.");
     if (receipt.stack_delta != 0 || receipt.preserved_registers != 7)
         throw Fatal(ERROR_INVALID_DATA, "Original NVSE ABI violated stack or EBX/ESI/EDI preservation.");
-    data_sync_if_bound();
+    if (nvse_primary_services()) data_sync_if_bound();
 }
 bool nvse_equal(const std::string& first, const std::string& second) {
     // Public identifiers here use ASCII folding. Keep other raw declaration
@@ -229,12 +230,18 @@ bool nvse_equal(const std::string& first, const std::string& second) {
 }
 bool nvse_listen_impl(std::uint32_t handle, const char* sender, NvseMessageCallback function) {
     auto& owner = nvse_owner(); nvse_executable(reinterpret_cast<void*>(function));
+    if (!sender && state->module_set) {
+        for (const auto& peer : state->module_set->modules)
+            if (!peer.second->retired && peer.first != state->module_id && peer.second->runtime->phase == NvsePhase::loaded_true)
+                nvse_unowned("NVSE NULL-sender listener requires its real loaded-peer subscriptions and delivery owner");
+    }
     Bytes bytes; bytes.put(handle); nvse_text(bytes, sender, true); bytes.put(address(reinterpret_cast<void*>(function)));
     const auto accepted = nvse_host(NvseHostCall::register_listener, bytes); ++owner.listener_events;
     if (accepted > 1) throw Fatal(ERROR_INVALID_DATA, "NVSE listener reply is not Boolean.");
     if (!accepted) return false;
     // NULL subscribes to other currently loaded plugins, excluding NVSE/self.
-    // This generation owns one actual plugin; there are no such recipients.
+    // With no currently loaded peer there are no such recipients. Nonempty
+    // peer subscriptions remain refused before publishing an empty success.
     if (!sender) return true;
     const auto name = nvse_string(sender, false);
     const auto source = nvse_equal(name, "NVSE") ? 0U : nvse_equal(name, owner.name) ? owner.handle : nvse_invalid_handle;
@@ -415,6 +422,7 @@ void nvse_stage(const Frame& frame, bool load_stage) {
     state->transaction_callbacks = 0; owner.interface_calls = 0;
     if (load_stage) owner.handle = load_handle;
     state->calls.push_back(frame.header.id); owner.phase = load_stage ? NvsePhase::loading : NvsePhase::querying;
+    NvseLoadingScope loading_scope(owner.handle);
     CallReceipt receipt{};
     { NvseInvocation invocation(owner);
       if (load_stage) InvokeNvseOneGuarded(reinterpret_cast<void*>(owner.load), address(&owner.tables->core), &receipt);
@@ -475,31 +483,53 @@ void unload_nvse(const Frame& frame) {
     if (!state->nvse || !state->module || module != state->module_id || !state->calls.empty()) {
         reply(frame, ERROR_INVALID_HANDLE, "NVSE retirement lacks its empty current module owner."); return;
     }
+    nvse_module_set_require_retirement(module);
+    command_table_require_module_retirement(module);
+    const auto primary = nvse_primary_services();
     const auto image = state->module; const auto tables = state->nvse->tables;
     state->nvse->interface_calls = 0; state->transaction_callbacks = 0;
-    if (state->value_heap) state->value_heap->loader_retiring = true;
-    if (state->io) state->io->loader_retiring = true;
-    if (!cng_original_free_library(frame, image)) throw Fatal(GetLastError(), "Original NVSE module FreeLibrary failed.");
-    values_heap_flush_detach(frame);
-    io_flush_detach(frame);
-    window_process_flush_detach(frame);
+    if (primary) {
+        if (state->value_heap) state->value_heap->loader_retiring = true;
+        if (state->io) state->io->loader_retiring = true;
+        if (!cng_original_free_library(frame, image)) throw Fatal(GetLastError(), "Original NVSE module FreeLibrary failed.");
+        values_heap_flush_detach(frame); io_flush_detach(frame); window_process_flush_detach(frame);
+    } else {
+        state->calls.push_back(frame.header.id);
+        try {
+            LoaderInvocation loader;
+            if (!FreeLibrary(image)) throw Fatal(GetLastError(), "Additional original DLL FreeLibrary failed.");
+            loader.finish(); state->calls.pop_back();
+        } catch (...) { state->calls.pop_back(); throw; }
+    }
     if (callback_fault.load()) throw Fatal(callback_fault.load(), "Original NVSE detach attempted an unowned callback.");
     MEMORY_BASIC_INFORMATION memory{};
     if (!VirtualQuery(image, &memory, sizeof(memory)) || memory.State != MEM_FREE)
         throw Fatal(ERROR_INVALID_DATA, "Original NVSE image mapping remains after retirement.");
     // Unlike authored modules, an unchanged DLL does not provide our private
     // TLS/DllMain counters. Do not fabricate detach cardinality evidence.
-    if (!VirtualFree(tables, 0, MEM_RELEASE)) throw Fatal(GetLastError(), "NVSE interface pages did not retire.");
-    state->nvse->tables = nullptr;
-    if (!VirtualQuery(tables, &memory, sizeof(memory)) || memory.State != MEM_FREE)
-        throw Fatal(ERROR_INVALID_DATA, "NVSE interface mapping remains after retirement.");
-    state->data.reset();
-    engine_commands_retire(frame);
-    source_call_sites_retire(frame);
-    source_field_methods_retire(frame);
-    source_globals_retire(frame);
-    command_table_retire(); expression_retire(); array_objects_retire(frame); values_heap_retire(); values_retire(); source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
-    Bytes data; nvse_counters(data); data.put(0U); data.put(0U);
+    if (primary) {
+        state->data.reset(); engine_commands_retire(frame); source_call_sites_retire(frame);
+        source_field_methods_retire(frame); source_globals_retire(frame);
+        expression_retire(); array_objects_retire(frame); values_heap_retire(); values_retire();
+        source_locals_retire_all(); binary_files_retire_all(); source_files_retire(); source_objects_retire_all(); io_retire();
+    }
+    command_table_retire_module(module);
+    const auto last = nvse_module_set_retire_record(module);
+    if (last) {
+        command_table_retire();
+        if (!VirtualFree(tables, 0, MEM_RELEASE)) throw Fatal(GetLastError(), "Shared NVSE interface pages did not retire.");
+        if (!VirtualQuery(tables, &memory, sizeof(memory)) || memory.State != MEM_FREE)
+            throw Fatal(ERROR_INVALID_DATA, "Shared NVSE interface mapping remains after final module retirement.");
+        if (state->module_set) {
+            state->module_set->shared_tables = nullptr;
+            for (const auto& entry : state->module_set->modules) entry.second->runtime->tables = nullptr;
+        }
+    } else {
+        if (!VirtualQuery(tables, &memory, sizeof(memory)) || memory.State != MEM_COMMIT || memory.Protect != PAGE_READONLY)
+            throw Fatal(ERROR_INVALID_DATA, "A surviving original DLL lost its actual shared interface mapping.");
+    }
+    Bytes data; nvse_counters(data); data.put(0U); data.put(last ? 0U : 1U);
+    if (!state->module_set) state->nvse->tables = nullptr;
     state->nvse.reset(); state->module = nullptr; state->module_id = 0;
     reply(frame, ERROR_SUCCESS, "", data);
 }

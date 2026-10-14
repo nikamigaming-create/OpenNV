@@ -94,8 +94,10 @@ internal sealed partial class NativePluginExecutionDomain
     }
     private void RequireCrtSourceBuffer(uint pointer, uint length)
     {
-        var source = _nvseModuleSource ?? throw new InvalidDataException("CRT module buffer lost its exact retained original source.");
         var image = _nvsePlugin ?? throw new InvalidDataException("CRT module buffer has no actual native image.");
+        RequireModulePrivateIo(image);
+        if (!_nvseModuleSources.TryGetValue(image.Module, out var source))
+            throw new InvalidDataException("CRT module buffer lost its exact retained original source.");
         var position = source.Position;
         try
         {

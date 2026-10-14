@@ -186,6 +186,17 @@ internal static partial class SourceMainScriptCallerContracts
                     () => Owner.ReadStandalonePlayerScaledSeconds(invocation));
             };
         }
+        internal void BindPlayerCachedTimerRead(Action<FalloutMainPlayerCellInvocation> observe)
+        {
+            _player.SceneAvailable = true;
+            _player.DuringSceneClock = Owner.StoreStandalonePlayerSceneClock;
+            _player.DuringSceneChild = (invocation, alternate) =>
+            {
+                if (alternate) throw new InvalidOperationException("Cached timer fixture entered free camera.");
+                Owner.EnterStandalonePlayerSceneVirtual(invocation);
+                observe(invocation);
+            };
+        }
         public void Dispose() { _globalTimeLease?.Dispose(); _fadeLease.Dispose(); Owner.Dispose(); SourceQueue.Dispose(); _interface.Retire(); }
     }
     private sealed class StandaloneLeases(IDisposable player, IDisposable main) : IDisposable

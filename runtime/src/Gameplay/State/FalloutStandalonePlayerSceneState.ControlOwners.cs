@@ -65,7 +65,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         {
             FalloutPlayerControlHudState.Validate(hud, source, saved.Stack);
             FalloutPlayerControlDisplayState.Validate(display, source, saved.Stack);
-            if (hud.Process != display.Process || hud.Process != saved.CapturedProcess && saved.ColdHandoff is null ||
+            if (hud.Process != display.Process || !ChildBelongsToParentProcessLineage(saved, hud.Process) ||
                 hud.Display is { } read && (read.Factory != (hud.ColdHandoff?.OriginDisplayFactory ?? display.Factory) || read.Sequence > display.Sequence))
                 throw new InvalidDataException("Player HUD/display retained a foreign current/cold source field owner.");
         }
@@ -73,7 +73,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         {
             FalloutPlayerReferenceOrientationOwner.Validate(orientation);
             if (orientation.Source.Controls != source.Controls || orientation.Stack != saved.Stack ||
-                orientation.CapturedProcess != saved.CapturedProcess && saved.ColdHandoff is null)
+                !ChildBelongsToParentProcessLineage(saved, orientation.CapturedProcess))
                 throw new InvalidDataException("Player reference orientation came from another source process/stack.");
         }
     }

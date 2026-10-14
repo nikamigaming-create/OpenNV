@@ -5,6 +5,7 @@
 #include "opennv_plugin_steam.h"
 #include "opennv_plugin_guest_arena.h"
 #include "opennv_plugin_nvse.h"
+#include "opennv_plugin_module_set.h"
 #include "opennv_plugin_command_table.h"
 #include "opennv_plugin_engine_commands.h"
 #include "opennv_plugin_source_call_sites.h"
@@ -33,6 +34,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <intrin.h>
 
 using namespace opennv_domain;
 static_assert(sizeof(void*) == 4, "Build this companion with the x86 toolchain.");
@@ -102,6 +104,7 @@ static std::uint32_t InvokeGuarded(void* function, Abi abi, void* receiver,
 
 #include "opennv_plugin_nvse_call.h"
 #include "opennv_plugin_source_call_sites_call.h"
+#include "opennv_plugin_module_call.h"
 #include "opennv_plugin_expression_call.h"
 #include "opennv_plugin_steam_call.h"
 #include "opennv_plugin_steam_callbacks_call.h"
@@ -225,7 +228,9 @@ struct State {
     std::exception_ptr first_guarded_exception;
     bool retired = false;
     GuestArena arena;
-    std::unique_ptr<NvseRuntime> nvse;
+    std::shared_ptr<NvseRuntime> nvse;
+    std::unique_ptr<NvseModuleSet> module_set;
+    std::uint32_t loading_handle = 0;
     std::unique_ptr<NativeCommandTableRuntime> command_table;
     std::unique_ptr<NvseDataRuntime> data;
     std::unique_ptr<NvseExpressionRuntime> expressions;
@@ -253,7 +258,9 @@ void lifetime_bytes(Bytes& bytes) {
     bytes.put(value.calls); bytes.put(value.callbacks);
 }
 void reply(const Frame& request, DWORD error, const std::string& reason, Bytes data = {}) {
-    Bytes bytes; bytes.put(error); bytes.put(state->module ? 1U : 0U); bytes.text(reason);
+    std::uint32_t count = state->module ? 1U : 0U;
+    if (state->module_set) count = state->module_set->live;
+    Bytes bytes; bytes.put(error); bytes.put(count); bytes.text(reason);
     bytes.data.insert(bytes.data.end(), data.data.begin(), data.data.end());
     send(Kind::reply, request.header.operation, state->generation, request.header.id, request.header.parent, bytes);
 }
@@ -427,6 +434,8 @@ void source_call_sites_retire(const Frame&);
 void source_globals_retire(const Frame&);
 void source_field_methods_retire(const Frame&);
 void command_table_retire();
+void command_table_require_module_retirement(std::uint64_t);
+void command_table_retire_module(std::uint64_t);
 void expression_initialize(void*);
 void expression_retire();
 void* values_interface(std::uint32_t);
@@ -479,6 +488,12 @@ void* cpp_import_entry(const std::string&, const std::string&, void*);
 void* cpp_dynamic_entry(HMODULE, const std::string&);
 void cpp_retire();
 void cpp_require_retired();
+void parallel_hardware_prepare(PluginIoRuntime&, Reader&);
+void* parallel_hardware_import_entry(const std::string&, const std::string&, void*);
+void* parallel_hardware_dynamic_entry(HMODULE, const std::string&);
+void parallel_hardware_publish();
+void parallel_hardware_retire();
+void parallel_hardware_require_retired();
 void crt_standard_retire();
 void crt_prepare_preentry_standard();
 void crt_standard_before_close(void*);
@@ -536,6 +551,7 @@ void cng_shared_service_abandon(CngSystemService&);
 void cng_shared_service_require_retired(CngSystemService&);
 void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_window_process_forward.inc"
+#include "opennv_plugin_module_context.inc"
 #include "opennv_plugin_nvse.inc"
 #include "opennv_plugin_data.inc"
 #include "opennv_plugin_command_table.inc"
@@ -558,6 +574,7 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_environment.inc"
 #include "opennv_plugin_crt_support_members.inc"
 #include "opennv_plugin_cpp_runtime.inc"
+#include "opennv_plugin_parallel_hardware.inc"
 #include "opennv_plugin_synchronization.inc"
 #include "opennv_plugin_crt_standard.inc"
 #include "opennv_plugin_crt_descriptors.inc"
@@ -579,6 +596,7 @@ void cng_shared_service_step(const Frame&, Reader&, CngServiceStep);
 #include "opennv_plugin_source_call_sites.inc"
 #include "opennv_plugin_source_globals.inc"
 #include "opennv_plugin_source_field_methods.inc"
+#include "opennv_plugin_module_set.inc"
 #include "opennv_plugin_source_publication.inc"
 #include "opennv_plugin_source_files.inc"
 #include "opennv_plugin_binary_files.inc"
@@ -691,6 +709,7 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
         frame.header.operation != static_cast<std::uint32_t>(Operation::retire))
         throw Fatal(ERROR_NOT_SUPPORTED, "First-party CNG service admits no module, original DLL, object, file or call operation.");
 #endif
+    auto module_scope = nvse_request_module(frame);
     try { switch (static_cast<Operation>(frame.header.operation)) {
     case Operation::hello: {
         Reader reader{frame.payload}; reader.finish(); Bytes data;
@@ -699,6 +718,7 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     }
     case Operation::load_authored: load(frame); break;
     case Operation::load_nvse: load_nvse(frame); break;
+    case Operation::nvse_module_set: nvse_module_set_operation(frame); break;
     case Operation::source_address_space: source_image_address_space(frame); break;
     case Operation::source_call_sites: source_call_sites_operation(frame); break;
     case Operation::source_globals: source_globals_operation(frame); break;
@@ -787,7 +807,7 @@ void dispatch_request(const Frame& frame, std::uint64_t expected_parent) {
     }
     case Operation::retire: {
         Reader reader{frame.payload}; reader.finish();
-        if (state->module || !state->calls.empty()) { reply(frame, ERROR_BUSY, "An active module or call prevents retirement."); break; }
+        if (state->module || (state->module_set && state->module_set->live) || !state->calls.empty()) { reply(frame, ERROR_BUSY, "An active module or call prevents retirement."); break; }
         steam_require_retired();
         cng_system_service_require_retired();
         import_providers_require_retired();

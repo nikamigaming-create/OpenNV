@@ -5,12 +5,11 @@ namespace OpenNV.Runtime.Compatibility.NativePlugins;
 internal sealed partial class NativePluginExecutionDomain
 {
     private NativeNvsePlugin? _nvsePlugin;
-    private FileStream? _nvseModuleSource;
     private NativeNvseHostSource? _nvseHostSource;
     private uint _nvseCallbackCount, _nvseCallbackBudget;
     private bool _nvseImageAttempted;
-    private uint NativeModuleCount => _module is null && _nvsePlugin is null ? 0U : 1U;
-    internal NativeNvsePlugin? NvsePlugin => _nvsePlugin;
+    private uint NativeModuleCount => _module is not null ? 1U : _nvseLiveModules;
+    internal NativeNvsePlugin? NvsePlugin => _primaryNvseModule is { Phase: not NativeNvsePhase.Retired } ? _primaryNvseModule : _nvsePlugin;
 
     internal NativeNvsePlugin LoadNvseImage(NativeNvseHostSource host, string originalDll, string expectedSha256,
         uint maximumInterfaceCallbacks = 16384, uint sourcePluginHandle = 1)
@@ -48,7 +47,7 @@ internal sealed partial class NativePluginExecutionDomain
                 throw new InvalidDataException("Original NVSE image has no actual module/interface/Query/Load capability.");
             var plugin = new NativeNvsePlugin(Generation, module, handle, image, nativeInterface, query, load, path, expectedSha256.ToUpperInvariant());
             CompleteOriginalLoaderAttempt(module);
-            VerifyOwner(); _nvsePlugin = plugin; _nvseModuleSource = source; return plugin;
+            VerifyOwner(); RegisterNvseModule(plugin, source, NativePluginImageDeclarations.Read(path, dll: true)); return plugin;
         }
         catch (NativePluginDomainRefusal)
         {
@@ -144,28 +143,31 @@ internal sealed partial class NativePluginExecutionDomain
     }
     internal NativeNvseRetirementReceipt UnloadNvse(NativeNvsePlugin plugin)
     {
-        VerifyNvse(plugin); RequireNvseEmptyCall(); RequireNvseSourceFilesIdle(); RequireNvseBinaryIdle(); ++_callDepth;
+        VerifyNvse(plugin); RequireNvseEmptyCall(); RequireNvseFunctionsIdle(plugin); RequireNvseSourceFilesIdle(); RequireNvseBinaryIdle(); ++_callDepth;
         _cngOriginalUnloading = true;
         try
         {
             using var reader = Exchange(NativePluginDomainOperation.UnloadNvse, Payload(writer => writer.Write(plugin.Module)));
             var counts = ReadNvseCounts(reader); var image = reader.ReadUInt32(); var interfaces = reader.ReadUInt32(); Finish(reader);
             CheckNvseCounts(plugin, counts);
-            if (image != 0 || interfaces != 0) throw new InvalidDataException("Original NVSE image/interface mapping remains after retirement.");
-            RequireEngineCommandRetirement();
-            RequireSourceCallSiteRetirement();
-            RequireSourceFieldMethodsRetired();
-            RequireEngineGlobalsRetired();
-            RequirePrivateIoRetired();
-            RetireNativeImportProviders();
-            RequireNvseHeapRetired();
-            var receipt = new NativeNvseRetirementReceipt(counts, false, false); plugin.Retirement = receipt;
+            if (_nvseLiveModules == 0 || image != 0 || interfaces != (_nvseLiveModules > 1 ? 1U : 0U))
+                throw new InvalidDataException("Original image retirement lost its independent shared-interface lifetime.");
+            --_nvseLiveModules;
+            if (!IsSupplementalNvseModule(plugin))
+            {
+                RequireEngineCommandRetirement(); RequireSourceCallSiteRetirement(); RequireSourceFieldMethodsRetired();
+                RequireEngineGlobalsRetired(); RequirePrivateIoRetired(); RequireNvseHeapRetired();
+            }
+            if (_nvseLiveModules == 0) RetireNativeImportProviders();
+            var receipt = new NativeNvseRetirementReceipt(counts, false, interfaces == 1); plugin.Retirement = receipt;
             plugin.Registry.Retire(); plugin.Phase = NativeNvsePhase.Retired;
+            ForgetNvsePublicationProvider(plugin.Module);
             // FreeLibrary has retired the original native publications. The
             // source files, graphs and host leases still belong to this living
             // process generation and close in ClearNvseCapabilities only after
             // its actual child exit. Preserve them through failed retirement.
-            _nvsePlugin = null; VerifyOwner(); return receipt;
+            _nvsePlugin = _nvseModules.Values.FirstOrDefault(row => row.Phase is not (NativeNvsePhase.Retired or NativeNvsePhase.Faulted));
+            VerifyOwner(); return receipt;
         }
         catch (NativePluginDomainRefusal) { throw; }
         catch (Exception error) { plugin.Phase = NativeNvsePhase.Faulted; throw Fatal(error); }
@@ -175,14 +177,19 @@ internal sealed partial class NativePluginExecutionDomain
     {
         using var reader = Reader(frame.Payload);
         var thread = reader.ReadUInt32(); var module = reader.ReadUInt64(); var handle = reader.ReadUInt32();
-        var plugin = _nvsePlugin ?? throw new InvalidDataException("NVSE callback has no retained original image.");
+        var plugin = RetainedNvseModule(module);
+        _nvsePlugin = plugin;
         if (thread != NativeThread || plugin.Generation != Generation || plugin.Module != module || plugin.Handle != handle)
             throw new InvalidDataException("NVSE callback belongs to a foreign module/handle/thread/generation.");
         var registry = plugin.Registry;
         uint value;
         switch ((NativeNvseHostCall)frame.Operation)
         {
-            case NativeNvseHostCall.QueryInterface: value = registry.QueryInterface(frame.Id, reader.ReadUInt32(), _nvseValues is not null, _nvseScriptInterface, _nvseCommandTable is not null, _nvseData is null ? 0 : _nvseDataVersion, _nvseLogging is not null); break;
+            case NativeNvseHostCall.QueryInterface:
+                var sourceServices = !IsSupplementalNvseModule(plugin);
+                value = registry.QueryInterface(frame.Id, reader.ReadUInt32(), sourceServices && _nvseValues is not null,
+                    sourceServices && _nvseScriptInterface, _nvseCommandTable is not null,
+                    sourceServices && _nvseData is not null ? _nvseDataVersion : 0, sourceServices && _nvseLogging is not null); break;
             case NativeNvseHostCall.LoggingGetPath: value = DispatchNvseLogging(frame, parent, reader, plugin); break;
             case NativeNvseHostCall.SetOpcode: value = registry.SetOpcode(frame.Id, reader.ReadUInt32()); break;
             case NativeNvseHostCall.RegisterCommand:
@@ -199,7 +206,12 @@ internal sealed partial class NativePluginExecutionDomain
                         parametersAddress, name, alias, help, parameters.MoveToImmutable(), execute, parse, evaluate, EngineCommandBinding(execute)); break;
                 }
             case NativeNvseHostCall.RegisterListener:
-                { var registeredHandle = reader.ReadUInt32(); var sender = ReadNvseText(reader); value = registry.RegisterListener(frame.Id, registeredHandle, sender, reader.ReadUInt32()); break; }
+                {
+                    var registeredHandle = reader.ReadUInt32(); var sender = ReadNvseText(reader); var function = reader.ReadUInt32();
+                    if (sender.IsNull && _nvseModules.Values.Any(peer => !ReferenceEquals(peer, plugin) && peer.Phase == NativeNvsePhase.LoadedTrue))
+                        throw new NotSupportedException("NVSE NULL-sender listener requires its real loaded-peer subscriptions and delivery owner.");
+                    value = registry.RegisterListener(frame.Id, registeredHandle, sender, function); break;
+                }
             case NativeNvseHostCall.SerializationCallback:
                 { var registeredHandle = reader.ReadUInt32(); var @event = (NativeNvseSerializationEvent)reader.ReadUInt32(); value = registry.RegisterSerialization(frame.Id, registeredHandle, @event, reader.ReadUInt32()); break; }
             case NativeNvseHostCall.Unsupported: registry.Missing(frame.Id, ReadText(reader)); value = 0; break;
@@ -254,19 +266,15 @@ internal sealed partial class NativePluginExecutionDomain
         ClearNvseCommandTable();
         ClearNvseLocalCapabilities(); ClearNvseValueCapabilities(); _nvseHeapDeclaration = null;
         ClearNvseExpressionCapabilities(); ClearNvseSourceObjects();
-        if (_nvsePlugin is not null)
-        {
-            _nvsePlugin.Registry.Retire();
-            _nvsePlugin.Phase = NativeNvsePhase.Faulted;
-        }
-        _nvsePlugin = null; _nvseModuleSource?.Dispose(); _nvseModuleSource = null;
+        RetireNvseModuleSourcesAfterChildExit();
         _nvseHostSource?.Retire(Generation); _nvseHostSource = null;
     }
     private void VerifyNvse(NativeNvsePlugin plugin)
     {
         VerifyOwner();
-        if (!ReferenceEquals(_nvsePlugin, plugin) || plugin.Generation != Generation || plugin.Phase == NativeNvsePhase.Retired)
+        if (!_nvseModules.TryGetValue(plugin.Module, out var retained) || !ReferenceEquals(retained, plugin) || plugin.Generation != Generation || plugin.Phase == NativeNvsePhase.Retired)
             throw new InvalidOperationException("Original NVSE module belongs to a stale image/process generation.");
+        _nvsePlugin = plugin;
         _nvseHostSource!.Check(Generation);
     }
     private void RequireNvseEmptyCall()

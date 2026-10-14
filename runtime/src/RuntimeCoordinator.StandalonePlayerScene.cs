@@ -32,6 +32,7 @@ public partial class RuntimeCoordinator
         world.PrepareStandalonePlayerControlEffects(_nativeUi ??
             throw new InvalidOperationException("Player controls have no actual source UI store."),
             (_nativeDirectInput ?? throw new InvalidOperationException("Player controls have no actual current input manager.")).PlayerManager());
+        world.InitializeStandalonePlayerWeaponActionConstructor();
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)
@@ -49,6 +50,9 @@ public partial class RuntimeCoordinator
     private void BindStandalonePlayerScene(FalloutReferenceWorld world)
     {
         if (!world.HasStandalonePlayerScene) return;
+        world.BindStandalonePlayerOpacity(() => (_nativePlayer ??
+            throw new InvalidOperationException("Opacity publication has no actual Player assembly."))
+            .ReadStandaloneFirstPersonLogicalScene(world));
         (_nativePlayer ?? throw new InvalidOperationException("Main scene binding has no actual native player.")).BindStandalonePlayerScene(world);
         (_nativeGameplayHud ?? throw new InvalidOperationException("Main scene binding has no actual native HUD.")).BindStandaloneReferenceHud(world.CampaignStandalonePlayerScene);
         world.CampaignStandalonePlayerScene.BindInputManager(

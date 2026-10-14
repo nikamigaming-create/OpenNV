@@ -59,6 +59,9 @@ Cold Continue reconstructs those resources around validated gameplay state.
 | Headless native imports | Native import binding validates the original provider and signature. `NativePluginHeadlessUser32` owns the actual product thread and SDK keyboard layout/conversion calls; reached operations requiring a window or a Win32 message-queue keyboard producer still refuse. |
 | Native Logging | The selected xNVSE ABI exposes its actual readonly fastcall table and original ANSI configuration bytes. Declared diagnostic writes map to private output with module/thread/lifetime receipts; this does not supply other missing native interfaces or gameplay functions. |
 | Selected CRT functions | Six source-selected string/conversion/math imports retain the genuine x86 provider and original IAT pointer. Binding verifies the original file, executable export and mapped coordinate; ST0 and XMM0 ABIs never pass through managed math substitutes. CRT thread error/floating cold state remains a separate save requirement. |
+| Player fade and opacity | `FalloutActorTeleportFade` owns source Float32 stores and failure prefixes. `FalloutPlayerOpacityState` consumes the current process and C# logical scene; Godot borrows actual material resources to project mutable shader alpha. Material alpha remains independent. |
+| Player weapon continuation | `FalloutPlayerWeaponContinuation` owns constructor/action/activity/status fields and ordered cache stores. It borrows the actual current Actor value pool and refuses missing writers or effects. |
+| Native module process | `NativePluginExecutionDomain` owns the shared process and original module/function lifetimes. Each source retains separate Query/Load context. Supplemental I/O/constructors and pending native globals remain explicit admission/save boundaries. |
 | Persistence | Completed authoritative state is validated before publication. `RuntimeAtomicSaveFile` owns bounded filesystem publication; it never replays gameplay effects. |
 | Live diagnostic status | `RuntimeSaveRequestStatusView` and `FalloutCellProcessesSummary` read current identities, counts and every failure without copying detailed process graphs or entering save capture. Explicit detailed state retains those graphs; status is not a reusable save. |
 
@@ -102,15 +105,21 @@ The explicit headless route still uses Godot as its process, input and physics
 host. Renderer independence does not mean that the current product has a separate
 standalone simulation executable.
 
-Actual FO3 startup reaches the Vault birth cell, then the shared Player frame
-fails at its unimplemented independent Actor collision-body utility. Some model,
-pose and physics publication remains coupled to native scene construction.
-Those owners must be separated without bypassing source behavior. Complete
-gameplay saves remain refused while the frame is unfinished. A birth-cell repeat
-now reaches CG00 stage 100 through ordinary character creation and exits normally
-with zero telemetry loss. Manual saving remains deferred by the incomplete source
-invocation and cancellation produces no complete gameplay save. Its prior native crash remains a
-diagnostic until repeatable complete-game teardown is established.
+Actual FO3 startup reaches the Vault birth cell and ordinary headless character
+creation reaches CG00 stage 65. The physical and zero-input control children
+return; the whole Player frame still refuses its following services. The latest
+normal Quit retires all 288 prototypes and source owners with zero diagnostic
+publication failures and no late disposed-node reads. Complete gameplay saves
+remain refused by independent Player/Main, menu-transition, actor-process,
+experience and physical-contact owners.
+
+The current fade repair gives C# the mutable logical NIF graph, ordered nullable
+children, shared shader-property identities, current bounds and independent
+material/shader alpha. Authored parent/child failure and cold tests and the actual
+FO3 executable/NIF/KF audit pass. Production headless fade/opacity and following
+weapon/status invocations return. Native material lifetime checks pass. Rendered
+final pixels and canonical graft/bound/blend parity still require separate checks. Some pose
+and physics publication remains coupled to native scene construction.
 
 Component contracts verify adapter boundaries and cold reconstruction. They do
 not establish the requested Goodsprings, Vault or Megaton routes. The current

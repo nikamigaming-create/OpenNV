@@ -57,5 +57,5 @@ static void InvokeNvseOneGuarded(void* function, std::uint32_t argument, opennv_
 inline opennv_domain::NvseRuntime::~NvseRuntime() {
     // Rejected admission never publishes these pages. Published retirement uses
     // the checked release below; this is construction/fatal-path ownership only.
-    if (tables) VirtualFree(tables, 0, MEM_RELEASE);
+    if (tables && owns_tables) VirtualFree(tables, 0, MEM_RELEASE);
 }

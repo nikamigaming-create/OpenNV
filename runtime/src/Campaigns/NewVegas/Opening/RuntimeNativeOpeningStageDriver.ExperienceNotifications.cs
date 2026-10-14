@@ -40,6 +40,15 @@ internal partial class RuntimeNativeOpeningStageDriver
         _experienceUiClock = new(restore?.LevelClockMilliseconds ?? 0);
     }
 
+    internal void BindExperienceSourceHud(FalloutUiComponentStore ui, FalloutPlayerControlHudState hud,
+        FalloutPlayerControlDisplayState display)
+    {
+        var source = ExperienceHudSource;
+        var live = _pluginStack.OwnedSource ?? throw new InvalidOperationException("XP source publication lost its actual installation.");
+        FalloutExecutableStringTable.RequireExperienceSourceHudConstructor(live.FalloutExecutablePath, source.Declaration);
+        ExperienceNotifications.BindSourceHud(new(source, ui, hud, display, ExperienceNotifications.PreparedSourceHudRestore));
+    }
+
     // Called only after this actual gameplay node enters the tree. Its child
     // joins real tree-pause notifications before HUD publication; a temporary
     // Always-mode source-save drain cannot resume the global engine timer.

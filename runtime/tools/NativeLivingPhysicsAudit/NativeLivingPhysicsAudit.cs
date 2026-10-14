@@ -11,6 +11,7 @@ public partial class NativeLivingPhysicsAudit : Node
         try
         {
             ExerciseSynthetic();
+            ExerciseSceneOpacity();
             var args = OS.GetCmdlineUserArgs();
             if (args.Length != 0)
             {

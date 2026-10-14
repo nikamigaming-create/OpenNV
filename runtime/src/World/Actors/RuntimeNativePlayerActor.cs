@@ -56,6 +56,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         seconds = _seconds,
         bones = Skeleton.Node.GetBoneCount(),
         error = Error,
+        logicalMaterials = LogicalMaterialState,
         trackedBody = _trackedBodyView ? XrHandState : null,
         visibility = BodyVisibilityState,
         movement = _movementPath,
@@ -81,9 +82,11 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     internal void PosePipBoy(double seconds, float raised = 1, double? buttonSeconds = null)
     {
         if (!_first) throw new InvalidOperationException("Pip-Boy hand pose needs the first-person source skeleton.");
+        if (raised < 1) Skeleton.RefuseUnownedLogicalPose("source-logical-scene-PipBoy-native-basis-interpolation-writer-unowned");
         var clip = PipBoyClip;
         var time = clip.Sequence.StartTime + (float)Math.Clamp(buttonSeconds ?? PipBoyDuration, 0, PipBoyDuration);
         _pipBoyIdle ??= ClipPath(FalloutActorIdleSource.Resolve(_records, Actor.Appearance.Female ? "PipboyWaverFemale" : "PipboyWaver").AnimationPath);
+        LogicalScene?.ResetBonePoses(_idle!.Sequence.TargetName);
         Skeleton.Node.ResetBonePoses();
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);
         _idle!.ApplySourceTime(_idle.Sequence.StartTime);
@@ -216,12 +219,8 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             SelectMovement(delta, movement, grounded);
             Skeleton.Node.ResetBonePoses();
             Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);
-            var count = 0;
-            if (_idle is not null) _animationLayers[count++] = (_idle, SourceTime(_idle, _seconds));
-            if (_movement is not null) _animationLayers[count++] = (_movement, SourceTime(_movement, _movementSeconds));
-            if (_active is not null && _active != _idle) _animationLayers[count++] = (_active, SourceTime(_active, _seconds));
-            if (_drawn && _grip is not null) _animationLayers[count++] = (_grip, SourceTime(_grip, _seconds));
-            if (_actionClip is not null) _animationLayers[count++] = (_actionClip, SourceTime(_actionClip, _actionSeconds));
+            LogicalScene?.ResetBonePoses(_idle.Sequence.TargetName);
+            var count = CurrentSourceLayers();
             RuntimeNativeNifAnimation.ApplyLayers(_animationLayers.AsSpan(0, count));
             PublishWeaponActionParent();
         }

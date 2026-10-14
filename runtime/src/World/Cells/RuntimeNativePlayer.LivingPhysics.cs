@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Physics;
@@ -50,6 +51,7 @@ internal partial class RuntimeNativePlayer
         private long _revision;
         private string? _failure;
         private bool _retired, _reportedReturn;
+        private bool _retiring, _utilityRetired, _worldRetired, _clockRetired;
 
         internal PlayerLivingPhysicsOwner(RuntimeNativePlayer player, FalloutReferenceWorld world)
         {
@@ -85,6 +87,7 @@ internal partial class RuntimeNativePlayer
         public void RequireCurrent()
         {
             RequireThread(); ObjectDisposedException.ThrowIf(_retired, this);
+            if (_retiring) throw new InvalidOperationException("Player living physics retains an entered or failed retirement.");
             if (!ReferenceEquals(_player._standaloneSceneWorld, _world) || !ReferenceEquals(_player._livingPhysics, this) ||
                 _world.CampaignStandalonePlayerScene.Process != Process || _world.CampaignStandalonePlayerScene.Stack != Stack ||
                 !GodotObject.IsInstanceValid(_player) || !_player.IsInsideTree() || _player.IsQueuedForDeletion() ||
@@ -275,9 +278,27 @@ internal partial class RuntimeNativePlayer
         }
         public void Dispose()
         {
-            if (_retired) return; RequireRetirement(); _utility.Dispose();
-            foreach (var model in _models) model.Dispose(); _models.Clear();
-            _physicalWorld.Dispose(); _clock.Dispose(); _retired = true;
+            if (_retired) return; RequireThread(); _retiring = true;
+            // Each retained resource validates its own actual lifetime below.
+            // A prior world/backend failure must not gate independent clock or
+            // utility retirement, including on a genuine cleanup retry.
+            try
+            {
+                NativeNifSceneRetirement.Drain("Player living physical resources", Resources());
+                _retired = true;
+            }
+            finally
+            {
+                if (_models.Count == 0) _viewFactory = _referenceFactory = null;
+            }
+            IEnumerable<Action> Resources()
+            {
+                yield return () => { if (!_utilityRetired) { _utility.Dispose(); _utilityRetired = true; } };
+                foreach (var model in _models.ToArray())
+                    yield return () => { model.Dispose(); _models.Remove(model); };
+                yield return () => { if (!_worldRetired) { _physicalWorld.Dispose(); _worldRetired = true; } };
+                yield return () => { if (!_clockRetired) { _clock.Dispose(); _clockRetired = true; } };
+            }
         }
     }
 }

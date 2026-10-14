@@ -14,6 +14,20 @@ internal sealed partial class FalloutReferenceWorld
 
     internal bool StandalonePlayerControlEffectsAttempted => _standaloneControlAttempted;
 
+    internal FalloutPlayerControlHudState RequireStandalonePlayerControlHud()
+    {
+        RequireStandaloneControlPublication();
+        return _standaloneControlHud ??
+            throw new NotSupportedException("source-Player-control-actual-HUD-constructor-unbound");
+    }
+
+    internal FalloutPlayerControlDisplayState RequireStandalonePlayerControlDisplay()
+    {
+        RequireStandaloneControlPublication();
+        return _standaloneControlDisplay ??
+            throw new NotSupportedException("source-Player-control-actual-display-constructor-unbound");
+    }
+
     internal void PrepareStandalonePlayerControlEffects(FalloutUiComponentStore ui, FalloutDirectInputState input)
     {
         ObjectDisposedException.ThrowIf(_disposed, this); ArgumentNullException.ThrowIfNull(ui); ArgumentNullException.ThrowIfNull(input);
@@ -38,7 +52,8 @@ internal sealed partial class FalloutReferenceWorld
             }
             _standaloneControlHudContext = new(source, scene.Stack, scene.Process, StandaloneInterface,
                 ProcessRuntime.RequirePlayerControlTimer(), ProcessRuntime.RequirePlayerControlModeOwner(), input, scene.ControlFields);
-            _standaloneControlHud = new(source, scene.Stack, scene.Process, ui, records.IniSettings, scene.ThreadContext, _standaloneControlHudContext, savedHud);
+            _standaloneControlHud = new(source, scene.Stack, scene.Process, ui, records.IniSettings, scene.ThreadContext,
+                _standaloneControlHudContext, savedHud, new FalloutNativeSourceTickCounter().Read);
             scene.BindControlHud(_standaloneControlHud, _standaloneControlDisplay);
             if (savedHud is null) _standaloneControlHud.Initialize(_standaloneControlDisplay, scene.ControlFields.ReadDisabledWord);
         }

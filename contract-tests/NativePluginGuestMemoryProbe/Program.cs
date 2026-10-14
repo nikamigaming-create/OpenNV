@@ -1,5 +1,11 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args.Length == 6 && args[0] == "--test-native-module-set")
+{
+    NativeCoResidentModuleContracts.Run(args[1], args[2], args[3], args[4], args[5]);
+    return;
+}
+
 if (args is ["--test-native-cpp-stream-declarations"])
 {
     NativeCppStreamsContracts.RunDeclarations();
@@ -140,6 +146,7 @@ if (args.Length != 0)
 }
 
 NativeEngineCommandLeafContracts.Run();
+NativeCoResidentModuleContracts.RunDeclarations();
 NativePlatformCapabilitiesContracts.Run();
 NativeCppStreamsContracts.RunDeclarations();
 NativeHeadlessUser32Contracts.Run();

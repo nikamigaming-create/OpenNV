@@ -10,6 +10,22 @@ internal static partial class FalloutNativeCampaignSave
             throw new InvalidDataException("Campaign XP notification validation has no selected owned source."));
         if (state.ExperienceNotifications is null || state.ExperienceNotifications.Contract != source.Contract)
             throw new InvalidDataException("Campaign XP notifications differ from the selected executable, menu or settings.");
+        if (source.Declaration.ExecutableSha256 == FalloutSourceMainFamily.Fallout3)
+        {
+            var publication = state.ExperienceNotifications.SourceHud ??
+                throw new InvalidDataException("FO3 campaign XP state omitted its actual source HUD constructor publication.");
+            FalloutExperienceSourceHud.Validate(publication);
+            if (publication.Contract != source.Contract || publication.Stack != records.OwnedSource!.StackId)
+                throw new InvalidDataException("FO3 XP source publication changed its selected XML/source graph.");
+            var runtime = state.ActorProcessRuntime ??
+                throw new InvalidDataException("FO3 XP source publication omitted its actual retained process.");
+            var scene = runtime.StandaloneMain?.Scene ??
+                throw new InvalidDataException("FO3 XP source publication omitted its actual source Player scene.");
+            FalloutExperienceSourceHud.ValidateAssociation(publication,
+                scene.ControlHud ?? throw new InvalidDataException("FO3 XP source publication omitted its actual shared HUD."),
+                scene.ControlDisplay ?? throw new InvalidDataException("FO3 XP source publication omitted its actual retained display."),
+                runtime.CapturedProcess, runtime.Stack);
+        }
         ValidateAdvancementFrameSource(state, source.Declaration);
         ValidateCombatGroupSource(records, state, source.Declaration);
         ValidateActorPerceptionSource(records, state);

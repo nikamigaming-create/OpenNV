@@ -1,0 +1,13 @@
+EXPORTS
+    NVSEPlugin_Query=NVSEPlugin_Query
+    NVSEPlugin_Load=NVSEPlugin_Load
+    ModuleTask0=_ModuleTask0@0
+    ModuleTask1=_ModuleTask1@4
+    ModuleTask4=_ModuleTask4@16
+    ModuleRelay=_ModuleRelay@16
+    ModuleRead=_ModuleRead@4
+    ModuleCdecl4=ModuleCdecl4
+    ModuleListenNull=_ModuleListenNull@0
+    ModuleCallCommand=_ModuleCallCommand@4
+    ModuleRaise=_ModuleRaise@0
+    ModuleHardware=_ModuleHardware@0

@@ -14,8 +14,9 @@ internal static partial class SourceMainScriptCallerContracts
         var stack = new string('2', 64); var player = new FalloutFormKey("MovementIntegrationFixture.esm", 0x14);
         FalloutCombatActorIdentity Identity(FalloutFormKey actor) => new(actor, new("MovementIntegrationFixture.esm", 7),
             "ENGINE_PLAYER", 0, main.EngineSha256, "NPC_", 0, new('4', 64), true);
-        foreach (var failure in new[] { "none", "update", "current", "reentry", "capture", "observed", "post-observed", "returned" })
+        foreach (var failure in new[] { "none", "update", "current", "reentry", "capture", "observed", "post-observed", "returned", "opacity", "opacity-failed", "weapon", "weapon-failed" })
         {
+            var movementReturns = failure is "returned" or "opacity" or "opacity-failed" or "weapon" or "weapon-failed";
             using var common = new FalloutActorProcessCommonState(declaration, stack, Identity,
                 _ => throw new InvalidOperationException("Movement integration copied gameplay."),
                 _ => throw new InvalidOperationException("Movement integration borrowed a native body."));
@@ -36,8 +37,8 @@ internal static partial class SourceMainScriptCallerContracts
                 "Movement integration did not prepare its source scene on an independent loading worker.");
             var scene = prepared!;
             var input = FalloutDirectInputState.CreateHeadless(stack, new(_ => null));
-            input.Publish(new byte[256], new byte[8], failure == "returned" ? 0 : 9,
-                failure == "returned" ? 0 : -13, failure == "returned" ? 0 : -120);
+            input.Publish(new byte[256], new byte[8], movementReturns ? 0 : 9,
+                movementReturns ? 0 : -13, movementReturns ? 0 : -120);
             var inputBefore = input.Capture();
             var beforePublication = scene.Capture();
             Require(OnMovementFixtureThread(() => scene.BindInputManager(input)) is InvalidOperationException &&
@@ -50,7 +51,7 @@ internal static partial class SourceMainScriptCallerContracts
             manager.PublishManager(native.Publication(manager, FalloutStandaloneInterfaceObjectRole.PipBoyManager, stack), native.ReadLiving);
             var idle = new AuthoredIdleConsumers { ModelOverride = () => scene.ReadSelectedIdleModel(() => null) };
             scene.BindInputManager(input); scene.BindActorProcessQueries(() => common.ReadSceneQueries(player, 1));
-            if (failure is "observed" or "post-observed" or "returned")
+            if (failure is "observed" or "post-observed" || movementReturns)
             {
                 scene.BindMovementControlConfiguration(new(
                     [new(FalloutPlayerControlConfiguration.InvertYName, FalloutIniCollection.Prefs, 0),
@@ -72,7 +73,11 @@ internal static partial class SourceMainScriptCallerContracts
             scene.BindActorDistances(manager, () => 20, _ => throw new InvalidOperationException("Empty distance list queried a body."), () => 3);
             scene.BindIdleAnimation(_ => common.UpdateIdleAnimation(player, 1, idle), () => common.LastIdleAnimationUpdate);
             scene.BindMovementFlags(() => common.ReadAndClearPlayerMovementFlags(player, 1));
-            var orientation = failure == "returned" ? BindMovementIntegrationOrientation(scene, player) : null;
+            var orientation = movementReturns ? BindMovementIntegrationOrientation(scene, player) : null;
+            if (failure is "opacity" or "opacity-failed" or "weapon" or "weapon-failed")
+                BindMovementIntegrationOpacity(scene, common, player, failure == "opacity-failed");
+            if (failure is "weapon" or "weapon-failed")
+                BindMovementIntegrationWeapon(scene, common, player, failure == "weapon-failed");
             var admission = FalloutActorPhysicalRegistrationPredicate.Execute(uint.MaxValue,
                 new PhysicalRegistrationFixture(FalloutActorPhysicalAdmissionSource.Reviewed(main), player,
                     common.ReadPhysicalActivity(player, 1))
@@ -93,12 +98,13 @@ internal static partial class SourceMainScriptCallerContracts
             physics.EnableCurrentFailure();
             var invocation = Guid.NewGuid(); scene.StoreSceneClock(invocation, 1, 0x3ca3d70a); scene.EnterSceneVirtual(invocation, 1);
             Reject(() => scene.ExecuteInitialVirtualPrefix(invocation, 1, () => { }, hud,
-                () => throw new InvalidOperationException("Constructed timers unexpectedly polled a provider.")));
+                () => failure is "opacity" or "opacity-failed" or "weapon" or "weapon-failed" ? .25f :
+                    throw new InvalidOperationException("Constructed timers unexpectedly polled a provider.")));
             if (failure == "post-observed") scene.ObserveSourceControlCommand(new(player,
                 "authored-actual-shared-script-host-effect", Guid.NewGuid(), true, [true, false, false]));
             var saved = scene.Capture(); var call = saved.MovementCall!;
             Require(call.Physics is { } physical && physical.Factory == physics.Factory && physical.CapturedProcess == scene.Process &&
-                physical.Admission == admission && call.Returned == (failure == "returned") && saved.SceneBracket == 1 &&
+                physical.Admission == admission && call.Returned == movementReturns && saved.SceneBracket == 1 &&
                 saved.ThreadContextEntry is { CurrentKind: 52, ScopeEntered: true },
                 "Player movement lost its physical child history or falsely closed its unfinished frame/thread scope.");
             Require(input.Sample == inputBefore.Sample && input.Revision == inputBefore.Revision,
@@ -120,13 +126,31 @@ internal static partial class SourceMainScriptCallerContracts
                 Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
                 { MovementCall = call with { Physics = call.Physics! with { Frame = call.Physics.Frame! with { Main = Guid.NewGuid() } } } }));
             }
-            else if (failure == "returned")
+            else if (movementReturns)
             {
                 Require(call is { Step: "returned", Returned: true, Failure: null,
                     Physics.Frame.Returned: true, Control: { Failure: null, Call: { Returned: true, Result: false,
                         Step: FalloutPlayerMovementControlStep.Returned, MouseReads.Count: 3 } } } &&
-                    saved.Failure == "source-Player-following-movement-frame-services-unbound",
+                    saved.Failure == (failure switch
+                    {
+                        "returned" => "source-Player-following-movement-frame-services-unbound",
+                        "opacity-failed" => "authored-current-opacity-branch-failed",
+                        "weapon" => "source-Player-following-weapon-frame-services-unbound",
+                        "weapon-failed" => "source-Player-following-activity-or-status-source-effects-unbound",
+                        _ => "source-Player-following-teleport-frame-services-unbound"
+                    }),
                     "Returned movement children were relabeled as failed or promoted the unfinished whole Player frame.");
+                if (failure != "returned") RequireMovementIntegrationOpacity(saved, failure == "opacity-failed");
+                if (failure is "weapon" or "weapon-failed")
+                {
+                    var weapon = saved.WeaponContinuation!;
+                    Require(weapon is { Action.Value: 0, Activity.Value: 0, Status.PoolQueried: true, Status.AfterFlags: 0x20 } &&
+                        weapon.Returned == (failure == "weapon") && weapon.EffectsRequired == (failure == "weapon-failed") &&
+                        weapon.Invocation == saved.FollowingServices!.Invocation,
+                        "Following weapon services lost the actual constructor, current status cache or failed effects prefix.");
+                    Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
+                    { WeaponContinuation = weapon with { Invocation = Guid.NewGuid() } }));
+                }
                 Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
                 { MovementCall = call with { Returned = false } }));
                 Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
@@ -174,7 +198,9 @@ internal static partial class SourceMainScriptCallerContracts
             Require(OnMovementFixtureThread(() => preparedCold = new(scene.Source, stack, Guid.NewGuid(), roundTrip)) is null,
                 "Cold diagnostic history required the old live gameplay thread during owned-data preparation.");
             var cold = preparedCold!;
-            Require(cold.Capture().MovementCall == roundTrip.MovementCall && physics.CurrentReads == currentReads && physics.Updates == updates,
+            Require(cold.Capture().MovementCall == roundTrip.MovementCall && cold.Capture().FollowingServices == roundTrip.FollowingServices &&
+                cold.Capture().Opacity == roundTrip.Opacity && cold.Capture().WeaponContinuation == roundTrip.WeaponContinuation &&
+                physics.CurrentReads == currentReads && physics.Updates == updates,
                 "Cold Player history replayed physical/input owners or promoted historical factories.");
             Reject(() => cold.BindMovementPhysics(physics));
             Reject(() => FalloutStandalonePlayerSceneState.RequirePlayable(cold.Capture()));
@@ -184,6 +210,79 @@ internal static partial class SourceMainScriptCallerContracts
         Console.WriteLine("OPENNV_PLAYER_MOVEMENT_INTEGRATION_PASS physicsBeforeControls=true failedPhysicalPrefix=true " +
             "sameMainInputAndClock=true workerPreparationThenGameplayPublication=true foreignThreadRefused=true " +
             "returnedChildrenRetained=true coldHistoryOnly=true unfinishedFrameRefused=true nativePhysics=AUTHORED_TRANSPORT gameplay=UNEXECUTED");
+    }
+
+    private static void BindMovementIntegrationOpacity(FalloutStandalonePlayerSceneState scene,
+        FalloutActorProcessCommonState common, FalloutFormKey player, bool fail)
+    {
+        var source = FalloutPlayerOpacitySource.Reviewed(FalloutPlayerMovementControlSource.Reviewed(scene.Source.Main));
+        var opacity = new FalloutPlayerOpacityState(source, scene.Stack, scene.Process,
+            scene.ReadOpacityFirstPerson, () => null,
+            scene.ReadOpacityScaledTimerBits, _ => fail ? throw new NotSupportedException("authored-current-opacity-branch-failed") :
+                BitConverter.SingleToUInt32Bits(1), scene.RequireOpacityInvocation);
+        scene.BindPlayerOpacity(opacity, (main, ordinal, invocation, owner) =>
+        {
+            scene.RequireOpacityInvocation(main, ordinal);
+            Require(!owner.SkipTeleportUpdate(() => throw new InvalidOperationException("Zero teleport gates queried current state.")),
+                "Constructor-zero gates skipped actual High update.");
+            try
+            {
+                return common.UpdateTeleportFade(source, player, 1, invocation,
+                    (_, read, store) => owner.BindTeleportConsumers(main, ordinal, invocation, read, store));
+            }
+            finally
+            {
+                if (common.ReadTeleportFadeReceipt(player, 1) is { } receipt)
+                    scene.ObservePlayerTeleportFade(receipt);
+            }
+        });
+    }
+
+    private static void RequireMovementIntegrationOpacity(FalloutStandalonePlayerSceneSnapshot saved, bool failed)
+    {
+        var call = saved.FollowingServices!;
+        Require(call is { ControlResult: false, MovementWord: 0, Teleport: not null } &&
+            call.Teleport.Trace.Invocation == call.Invocation && call.Main == saved.MovementCall!.Main &&
+            call.MainOrdinal == saved.MovementCall.MainOrdinal && saved.Opacity is not null,
+            "Following services lost their actual movement Boolean or independent fade invocation.");
+        if (failed) Require(call is { Step: FalloutStandaloneFollowingServicesStep.Failed,
+            FailedAt: FalloutStandaloneFollowingServicesStep.TeleportFade,
+            Teleport.Trace: { Step: FalloutActorTeleportFadeStep.Failed, FailedAt: FalloutActorTeleportFadeStep.Timer,
+                TimerBits: 0x3e800000, SecondsBits: null, Result: null } },
+            "Failed setting child erased its current cached timer prefix or invented an opacity return.");
+        else Require(call is { Step: FalloutStandaloneFollowingServicesStep.Returned, TeleportSkipped: false,
+            Teleport: { AfterFields.FadeBits: 0x3e800000, Trace: { Step: FalloutActorTeleportFadeStep.Returned, OpacityReturned: true } } } &&
+            saved.Opacity!.Call is { EffectiveStored: true, Step: FalloutPlayerOpacityStep.Returned, FirstPersonFactory: null },
+            "Actual High/opacity children failed to return before the later whole Player boundary.");
+        Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
+        { FollowingServices = call with { Invocation = Guid.NewGuid() } }));
+        Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with
+        { FollowingServices = call with { MovementWord = 1 } }));
+        RequireFollowingTeleportReceiptNegatives(saved);
+    }
+
+    private static void BindMovementIntegrationWeapon(FalloutStandalonePlayerSceneState scene,
+        FalloutActorProcessCommonState common, FalloutFormKey player, bool positiveStatus)
+    {
+        var source = FalloutPlayerWeaponContinuationSource.Reviewed(FalloutPlayerMovementControlSource.Reviewed(scene.Source.Main));
+        common.InitializePlayerWeaponActionConstructor(player, 1, source, scene.Capture().Constructor,
+            () => Require(scene.Capture().Clock is null, "Authored weapon constructor replayed in a frame."));
+        FalloutPlayerWeaponContinuationCall? latest = null;
+        var consumers = new MovementWeaponConsumers(scene, common, player, positiveStatus);
+        scene.BindPlayerWeaponContinuation(source, (main, ordinal, invocation) =>
+            FalloutPlayerWeaponContinuation.Execute(source, scene.Stack, scene.Process, main, ordinal, invocation,
+                consumers, call => latest = call), () => latest);
+    }
+
+    private sealed class MovementWeaponConsumers(FalloutStandalonePlayerSceneState scene,
+        FalloutActorProcessCommonState common, FalloutFormKey player, bool positiveStatus) : IFalloutPlayerWeaponContinuationConsumers
+    {
+        public void RequireCurrent(Guid main, long ordinal, Guid invocation) => scene.RequireWeaponContinuationInvocation(main, ordinal, invocation);
+        public FalloutProcessWeaponActionRead ReadAction() => common.ReadPlayerWeaponAction(player, 1);
+        public bool ReadSuppression() => throw new InvalidOperationException("Constructor-zero action read skipped global.");
+        public FalloutProcessSceneQuery ReadWeaponEntry() => throw new InvalidOperationException("Constructor-zero action read skipped weapon entry.");
+        public FalloutProcessWeaponActivityRead ReadActivity() => common.ReadPlayerWeaponActivity(player, 1);
+        public FalloutProcessActorStatusRead ReadStatus() => common.ReadPlayerFollowingStatus(player, 1, () => positiveStatus ? 1 : 0);
     }
 
     private static FalloutWorldProjectionPublication BindMovementIntegrationOrientation(

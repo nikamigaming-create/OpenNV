@@ -149,7 +149,7 @@ void crt_standard_runtime(const Frame& frame) {
         if (state->io->crt) for (const auto& provider : state->io->crt->providers)
             for (const auto& library : provider->imports) if (library.second.count("__acrt_iob_func")) needs_standard = true;
         if (needs_standard) { crt_publish_standard(1); crt_publish_standard(2); }
-        standard.published = true; cpp_publish();
+        standard.published = true; cpp_publish(); parallel_hardware_publish();
         Bytes result; result.put(static_cast<std::uint32_t>(std::count_if(standard.streams.begin(), standard.streams.end(),
             [](const auto& row) { return row.second.published; })));
         result.put(state->io->cpp ? static_cast<std::uint32_t>(state->io->cpp->exports.size()) : 0U);

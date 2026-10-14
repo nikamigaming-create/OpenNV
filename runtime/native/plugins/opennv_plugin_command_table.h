@@ -1,5 +1,6 @@
 #pragma once
 #include "opennv_plugin_nvse.h"
+#include <set>
 
 namespace opennv_domain {
 // Public xNVSE CommandTable v2. JIP's 36-byte client prefix ends before the
@@ -25,6 +26,8 @@ enum class CommandTableCall : std::uint32_t {
 };
 struct NativeCommandPublication {
     std::uint64_t registration = 0;
+    std::uint64_t module = 0;
+    std::set<std::uint64_t> consumers;
     NvseCommandInfo descriptor{}, original{};
     std::string name, alias, help, expected_name, expected_alias, expected_help;
     std::vector<NvseRegisteredParameter> parameters;
@@ -32,6 +35,7 @@ struct NativeCommandPublication {
 };
 struct NativePluginPublication {
     std::uint64_t generation = 0, module = 0;
+    std::set<std::uint64_t> consumers;
     std::uint32_t handle = 0;
     std::string name;
     NvsePluginInfo descriptor{};

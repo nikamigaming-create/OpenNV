@@ -17,6 +17,7 @@ internal static partial class SourceMainScriptCallerContracts
         using var runtime = FalloutAdvancementRuntimeSource.Open(records);
         var main = FalloutMainScriptCallerSource.Read(FalloutImmediateScriptSource.Read(runtime.Receipt));
         var controls = FalloutPlayerMovementControlSource.Reviewed(main);
+        var weaponSource = FalloutExecutableStringTable.ReadPlayerWeaponContinuation(content.FalloutExecutablePath, controls);
         _ = FalloutExecutableStringTable.ReadPlayerReferenceHud(content.FalloutExecutablePath, main);
         var before = SHA256.HashData(File.ReadAllBytes(content.FalloutExecutablePath));
         var source = FalloutExecutableStringTable.ReadPlayerControlHud(content.FalloutExecutablePath, controls);
@@ -37,7 +38,8 @@ internal static partial class SourceMainScriptCallerContracts
         var input = FalloutDirectInputState.CreateHeadless(content.StackId, new(_ => null));
         var thread = scene.ThreadContext;
         var currentInterface = new FalloutStandaloneInterfaceState(FalloutStandaloneInterfaceSource.Read(main), content.StackId, process);
-        using var timer = new FalloutSourceFrameTimerState(FalloutSourceFrameTimer.Read(runtime.Receipt), new FalloutNativeSourceTickCounter(), process);
+        var counter = new FalloutNativeSourceTickCounter();
+        using var timer = new FalloutSourceFrameTimerState(FalloutSourceFrameTimer.Read(runtime.Receipt), counter, process);
         using var clock = new FalloutRendererClockState(FalloutRendererClockConfiguration.Read(records, main), process);
         FalloutPlayerControlHudState? hud = null;
         try
@@ -48,10 +50,19 @@ internal static partial class SourceMainScriptCallerContracts
             display.PublishCurrentLayout(Guid.NewGuid(), "owned-offline-source-display-layout", () => fields.RequireActualInput(input));
             var ui = FalloutUiComponentStore.Open(records, content);
             var context = new FalloutPlayerControlHudContext(source, content.StackId, process, currentInterface, timer, clock, input, fields);
-            hud = new(source, content.StackId, process, ui, settings, thread, context);
+            hud = new(source, content.StackId, process, ui, settings, thread, context, readConstructorWallTick: counter.Read);
             scene.BindControlHud(hud, display);
             hud.Initialize(display, fields.ReadDisabledWord);
+            var experienceSource = new FalloutExperienceHudSource(records, content);
+            FalloutExecutableStringTable.RequireExperienceSourceHudConstructor(content.FalloutExecutablePath, experienceSource.Declaration);
+            var xpSource = new FalloutExperienceSourceHud(experienceSource, ui, hud, display);
+            var xpConstructor = xpSource.Capture();
+            Require(xpConstructor.InitialQueueItems == 0 && xpConstructor.InitialSuppression == 0 &&
+                xpConstructor.HudFactory == hud.Factory && xpConstructor.UiFactory == ui.Factory &&
+                xpConstructor.Tiles.Count == 9 && xpConstructor.Tiles.All(tile => tile.Alive && !tile.Animated),
+                "Owned XP constructor did not retain the actual HUD/children or required graphics to publish state.");
             var saved = hud.Capture(); var dimensions = display.Capture();
+            FalloutExperienceSourceHud.ValidateAssociation(xpConstructor, saved, dimensions, process, content.StackId);
             var allowed = selected[0].Number == 0 ? 0xffbfu : 0xffffu;
             Require(saved is { InitializationReturned: true, Mode: 5, MenuMode: 8, VisibilityMask: 0,
                 Call: { Returned: true, Allocation: { EnteredKind: 13, RestoredKind: 59, Returned: true },
@@ -71,6 +82,7 @@ internal static partial class SourceMainScriptCallerContracts
                 _ => throw new InvalidOperationException("Owned POV constructor queried unrelated gameplay pools."),
                 _ => throw new InvalidOperationException("Owned POV constructor queried a native body."));
             common.Construct(player, 1, FalloutDetectionProcessLevel.High);
+            var weaponConstructor = AuditOwnedPlayerWeaponConstructor(records, common, scene, input, weaponSource);
             var observation = new FalloutPlayerControlCommandObservation(program.Source.FormKey,
                 "owned-offline-original-compiled-control-command", Guid.NewGuid(), command.Enable, command.Arguments);
             var fighting = new FalloutPlayerControlFightingOwner(controls, content.StackId, process, common, player, 1,
@@ -95,6 +107,8 @@ internal static partial class SourceMainScriptCallerContracts
                 actualWinningXml = true, retainedInterfaceQueue = true, currentSourceDisplay = dimensions,
                 hudInitializationReturned = saved.InitializationReturned, saved.AllowedMask,
                 tileValues = saved.Tiles, sourceReadOnly = true, framesRecorded = false,
+                xpConstructor,
+                weaponConstructor,
                 originalCompiledControl = new { source = program.Source.FormKey, program.Scope.ScopeSha256,
                     program.ProgramSha256, instruction.Offset, originalOperands = command.Arguments, mask = controlCall.Mask,
                     controlCall.Returned, pointOfView = returned.PointOfView },

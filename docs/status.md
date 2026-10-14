@@ -40,8 +40,17 @@ command selects five controls and returns its source camera-mode/shared-scalar
 null branch. Its nonnull camera child remains refused after the byte store.
 Three cold component cycles preserve HUD/POV constructor and effect history.
 Native headless input reaches character-creation completion at CG00 stage 65;
-physical and zero-input control children return. Complete Player/Main return,
-teleport-fade/scene-opacity ownership and gameplay saving remain unaccepted.
+physical and zero-input control children return. Complete Player/Main return
+and gameplay saving remain unaccepted. The current C# teleport-fade and mutable
+logical-scene repair passes authored parent/failure/cold tests and an actual FO3
+executable/NIF/KF audit with 180 scene objects and 28 shader properties. Live
+Player invocation returns fade and opacity with 28 actual shader writes. Native
+material borrowing and retirement checks pass; rendered final pixels and
+canonical graft/bound/blend parity remain unverified. The following genuine
+weapon/action/activity/status child also returns with the actual campaign value
+pool and retained source cache. Later Player frame services remain refused.
+Experience HUD owns the actual source UI and constructor timer independently
+of rendering; its reached unowned frame remains a complete-save blocker.
 
 The C# living world owns body admission, identifiers, current islands and
 constraint master/slave order. Real Godot PhysicsServer resources work headlessly.
@@ -68,14 +77,14 @@ refuse complete saves rather than publishing a partial slot.
 
 FNV and TTW resolve their selected 10/18 plugins with three/six native modules.
 Neither current stack produces a complete gameplay save. JIP Query/Load and
-protocol 38 pass; callback 50 now reaches a task-dispatch mutation without the
-real source command task queue producer. The unchanged TTW retry now retains
-five JohnnyGuitar and 81 Stewie callable imports; TTW NVSE's four import
-refusals are cleared, without qualifying its full behavior. FNV XR requires
-Console/PlayerControls interfaces, ShowOff requires its Data native class/cache/
-extra-data producer, and XR unload retains a child EOF. Selected modules stay
-loaded into the compatibility denominator; no support claim follows from Query
-or Load alone.
+protocol 39 pass in the actual shared native domain; callback 50 reaches a
+task-dispatch mutation without the real source command task queue producer.
+Production has no per-DLL fallback. Supplemental original modules retain
+independent import/I/O/constructor admission failures before entry. JohnnyGuitar
+now retains four parallel-worker imports and Stewie 81 imports; XR, ShowOff and
+TTW NVSE need independent supplemental bindings. Their later interfaces, native
+data/cache and retirement still require acceptance. Every selected module stays
+in the compatibility denominator; no support claim follows from Query or Load.
 
 Shared native-domain, source import/ABI, guest memory, protection/cache,
 source-image identity and retirement contracts have bounded tested owners.
@@ -86,23 +95,30 @@ this is installation admission, not playable TTW acceptance.
 New actual x86 callers pass the reached paired file moves, Windows SRW and
 breakpoint behavior, real startup/private standard handles, MSVC entropy and
 stream position/state methods. They verify real provider addresses, ABI,
-exceptions, retirement and fresh retries. The complete selected mod stacks
-must still be retried; these component results do not establish mod compatibility.
+exceptions, retirement and fresh retries. Actual two-DLL callers also verify
+shared context, original function ABI, borrowed lifetimes, retirement and the
+real MSVC hardware-thread-count provider. The latest unchanged selected mod
+retries still fail; these component results do not establish mod compatibility.
 
 ## Toolchain and verification
 
 The shared engine pin is official Godot 4.8-dev7 Mono, Godot.NET.Sdk 4.8.0-dev.7
-and .NET SDK 10.0.401. Matching export templates are verified. The previously
-published full gate passes Release/Debug builds, formatting/analyzers, contract
+and .NET SDK 10.0.401. Matching export templates are verified. The complete
+current gate passes Release/Debug builds, formatting/analyzers, contract
 probes, native plugin domains, desktop launcher tests and native Godot loading.
-The living-physics candidate also passes its complete combined gate.
-NativeLivingPhysicsAudit is now included. The selected owned FO3 audit has 33
-passes, one expected input boundary and one failed offline Player child among 35
+NativeLivingPhysicsAudit includes actual material failure, independent resource
+cleanup and genuine source-field retry. The selected owned FO3 audit has 36
+passes, one expected input boundary and one failed offline Player child among 38
 checks. Fresh native FO3 verifies physical return, zero telemetry loss, observed
 control-writer refusal, no complete save and normal source-owner retirement.
 The FO3 audit distinguishes the expected absent desktop-input factory from the
 actual unfinished Player continuation; an expected input boundary cannot excuse
 an engine failure.
+
+Original two-DLL caller checks pass in Debug and Release. Automatic retirement
+uses indexed O(V+E) provider/consumer order; duplicate publications are
+idempotent and cycles refuse before an orderly unload receipt. This does not
+qualify unchanged selected mod behavior or native-global cold saves.
 
 Godot 4.8 texture streaming is enabled. Direct owned DDS uploads still show zero
 streamed/budget bytes with 1.37-1.68 GB total texture memory through FO3 birth and

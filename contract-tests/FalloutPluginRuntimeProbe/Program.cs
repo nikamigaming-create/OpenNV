@@ -7,6 +7,13 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
+if (args.Length >= 3 && args[0] == "--audit-plugin-payload")
+{
+    using var payloadStack = FalloutPluginStack.Load(args[1], args[2..]);
+    PluginPayloadReadAudit.Run(payloadStack);
+    return;
+}
+
 if (args is ["--native-plugin-discovery-contracts"])
 {
     NativePluginDiscoveryContracts.Run();

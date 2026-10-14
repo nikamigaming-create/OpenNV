@@ -44,19 +44,22 @@ internal sealed partial class NativePluginExecutionDomain
                 case NativeNvseCommandTableCall.ByOpcode:
                 case NativeNvseCommandTableCall.ByName:
                     command = call == NativeNvseCommandTableCall.ByOpcode ? authority.ByOpcode(argument) : authority.ByName(name);
-                    if (command is not null) RequireLocalCommand(command, plugin);
-                    Record(); return Payload(writer =>
+                    if (command is not null) RequireProcessCommand(command, plugin);
+                    Record();
+                    if (command is not null) RetainNvsePublicationProvider(command.Module, plugin);
+                    return Payload(writer =>
                     {
                         writer.Write(command is not null ? 1U : 0U);
                         if (command is null) return;
+                        writer.Write(command.Module);
                         writer.Write(command.SourceAddress); writer.Write(command.AssignedOpcode); writer.Write(command.Registration);
                         writer.Write((uint)command.ReturnType);
                     });
                 case NativeNvseCommandTableCall.PublishCommand:
                     command = authority.ByOpcode(argument) ?? throw new InvalidDataException("Native command publication has no actual registration.");
-                    RequireLocalCommand(command, plugin);
+                    RequireProcessCommand(command, plugin);
                     if (nativeAddress == 0 || command.SourceAddress != source || command.Registration != registration ||
-                        _nvseCommandPublications.Values.Any(row => row.Command.Registration == registration && row.Address != nativeAddress))
+                        _nvseCommandPublications.Values.Any(row => row.Command.Module == command.Module && row.Command.Registration == registration && row.Address != nativeAddress))
                         throw new InvalidDataException("Native command publication changed its registered source/ordinal/pointer lifetime.");
                     RequirePublicationDeclaration(reader, command);
                     var publication = new NativeNvseCommandPublication(nativeAddress, command);
@@ -72,18 +75,18 @@ internal sealed partial class NativePluginExecutionDomain
                     if (!_nvseCommandPublications.TryGetValue(nativeAddress, out var retained) || retained.Command.AssignedOpcode != argument)
                         throw new InvalidDataException("CommandTable metadata pointer has no retained actual publication.");
                     command = authority.ByOpcode(argument) ?? throw new InvalidDataException("Published native command lost its live registration.");
-                    RequireLocalCommand(command, plugin);
+                    RequireProcessCommand(command, plugin);
                     if (!ReferenceEquals(command, retained.Command))
                         throw new InvalidDataException("Published native command has an unjoined replacement/mutation owner.");
                     if (call == NativeNvseCommandTableCall.ParentPlugin)
-                    { var owner = authority.Parent(command); Record(); return PluginReply(owner); }
+                    { var owner = authority.Parent(command); Record(); return PluginReply(owner, plugin); }
                     if (call == NativeNvseCommandTableCall.RequiredVersion && command.AssignedOpcode < 0x2000)
                         throw new NotSupportedException("CommandTable required release requires its original core release-boundary catalogue.");
                     Record(); return Payload(writer => writer.Write(call == NativeNvseCommandTableCall.ReturnType ? (uint)command.ReturnType : uint.MaxValue));
                 case NativeNvseCommandTableCall.PluginByName:
                 case NativeNvseCommandTableCall.PluginByDll:
                     var found = authority.Plugin(name, call == NativeNvseCommandTableCall.PluginByDll);
-                    Record(); return PluginReply(found);
+                    Record(); return PluginReply(found, plugin);
                 case NativeNvseCommandTableCall.PublishPlugin:
                     var loaded = authority.LoadedModules().SingleOrDefault(row => row.Generation == registration && row.Module == source && row.Handle == argument)
                         ?? throw new InvalidDataException("PluginInfo publication has no actual completed module source owner.");
@@ -109,18 +112,29 @@ internal sealed partial class NativePluginExecutionDomain
             _nvseCommandTableCallbacks.Add(new(Generation, frame.Id, parent, call, argument, nativeAddress, command?.AssignedOpcode, command?.Registration, null));
         }
     }
-    private static byte[] PluginReply(NativeNvseCommandTableModule? module) => Payload(writer =>
+    private byte[] PluginReply(NativeNvseCommandTableModule? module, NativeNvsePlugin consumer)
     {
-        writer.Write(module is not null ? 1U : 0U); if (module is null) return;
-        writer.Write(module.Generation); writer.Write(module.Module); writer.Write(module.Handle);
-        writer.Write(module.Info.InfoVersion); writer.Write(module.Info.Version);
-        writer.Write(checked((uint)module.Info.Name.Bytes.Length)); writer.Write(module.Info.Name.Bytes.AsSpan());
-    });
-    private void RequireLocalCommand(NativeNvseCommand command, NativeNvsePlugin plugin)
+        if (module is not null)
+        {
+            if (module.Generation != Generation)
+                throw new NotSupportedException("PluginInfo has no retained original module in this actual x86 process generation.");
+            RetainNvsePublicationProvider(module.Module, consumer);
+        }
+        return Payload(writer =>
+        {
+            writer.Write(module is not null ? 1U : 0U); if (module is null) return;
+            writer.Write(module.Generation); writer.Write(module.Module); writer.Write(module.Handle);
+            writer.Write(module.Info.InfoVersion); writer.Write(module.Info.Version);
+            writer.Write(checked((uint)module.Info.Name.Bytes.Length)); writer.Write(module.Info.Name.Bytes.AsSpan());
+        });
+    }
+    private void RequireProcessCommand(NativeNvseCommand command, NativeNvsePlugin plugin)
     {
-        if (command.Generation != Generation || command.Module != plugin.Module || command.PluginHandle != plugin.Handle ||
-            !plugin.Registry.Commands.Any(row => ReferenceEquals(row, command)))
-            throw new NotSupportedException("CommandTable command belongs to another real x86 child; cross-domain COMMAND_ARGS/object/parser/hook execution is not owned.");
+        var source = _nvseModules.GetValueOrDefault(command.Module);
+        if (command.Generation != Generation || source is null || source.Phase is NativeNvsePhase.Retired or NativeNvsePhase.Faulted ||
+            command.PluginHandle != source.Handle || !source.Registry.Commands.Any(row => ReferenceEquals(row, command)))
+            throw new NotSupportedException("CommandTable command has no retained original registration in this actual x86 address space.");
+        VerifyNvse(plugin);
     }
     private static void RequirePublicationDeclaration(BinaryReader reader, NativeNvseCommand command)
     {
@@ -142,6 +156,8 @@ internal sealed partial class NativePluginExecutionDomain
     private void ClearNvseCommandTable()
     {
         _nvseCommandPublications.Clear(); _nvsePluginPublications.Clear(); _nvseCommandTable = null;
+        _nvsePublicationProviders.Clear();
+        _nvsePublicationConsumers.Clear();
         // Histories survive retirement; their pointers cannot be invoked again.
     }
 }

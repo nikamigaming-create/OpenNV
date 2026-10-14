@@ -44,11 +44,14 @@ internal sealed partial class FalloutActorProcessRuntimeState
     internal float ReadStandalonePlayerScaledSeconds(FalloutMainPlayerCellInvocation invocation)
     {
         RequireMainPlayerCellChild(invocation, FalloutMainPlayerCellStep.SceneChild);
-        _ = (_mainCachedTail ?? throw new InvalidOperationException("Player scalar update lost its actual Main tail."))
-            .ReadReturnedRendererClock(invocation.Main);
         var timer = _cachedSourceTimer ?? throw new InvalidOperationException("Player scalar update lost its actual Main timer.");
-        if (!timer.HasReturnedUpdate) throw new InvalidOperationException("Player scalar update read an unreturned source timer.");
-        return timer.ScaledSeconds;
+        // Player runs before the current Main timer/renderer suffix. This is a
+        // read of the existing source scalar, including constructor zero; it
+        // cannot require a later publication or borrow the delivered host delta.
+        var current = timer.ReadScaledDelta();
+        if (current.Process != _process || current.Source != MainScriptCallerSource().EngineSha256)
+            throw new InvalidOperationException("Player scalar update changed its actual source timer constructor.");
+        return BitConverter.UInt32BitsToSingle(current.ScaledSecondsBits);
     }
     internal void RequireStandaloneSceneNativeRetirement() => RequireMainScriptClosureBoundary(retiring: true);
     internal void RequireStandaloneSceneReplacement()
