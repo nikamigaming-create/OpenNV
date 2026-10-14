@@ -154,6 +154,8 @@ internal sealed partial class FalloutReferenceWorld
             thread.CapturePhysicsInitializationScopes(), _sourcePlayerReferencePosition.Capture(),
             _sourceReferenceChanges.Capture(), thread.CaptureReferenceChangeFlags(), _sourceEarlyControllerHelperFailure,
             _sourceReferenceBaseAssignment, _sourceReferenceActorResponse, _sourceReferenceFormFiles.Capture(),
-            _sourceInitialPlacementCells.Capture());
+            _sourceInitialPlacementCells.Capture(),
+            _sourceLinkedPlayerParentHistory?.Capture(_sourceLinkedPlayerParentRevision, _sourceLinkedPlayerParent),
+            _sourceDataHandlerLoading?.Capture());
     }
 }

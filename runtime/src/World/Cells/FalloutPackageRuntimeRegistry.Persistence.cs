@@ -9,7 +9,8 @@ internal sealed partial class FalloutPackageRuntimeRegistry
         RequireCurrent();
         return new(Schema, Source, _stack, Factory, _sequence, Array.AsReadOnly(_packages.Values.Select(package =>
             new FalloutPackageRuntimeSnapshot(package.Form, package.RecordSha256, package.Kind, package.SourceFlags, package.Procedure, package.Flags,
-                package.LifetimeCount, package.ProcedureAvailable, package.FlagsAvailable, package.CountAvailable, Array.AsReadOnly(package.History.ToArray()))).ToArray()),
+                package.LifetimeCount, package.ProcedureAvailable, package.FlagsAvailable, package.CountAvailable, Array.AsReadOnly(package.History.ToArray()),
+                package.Target.Capture())).ToArray()),
             Array.AsReadOnly(_publications.ToArray()), _countAuthorityAvailable, Array.AsReadOnly(_countAuthorityObservations.ToArray()));
     }
     private void Restore(FalloutPackageRegistrySnapshot saved)
@@ -24,6 +25,7 @@ internal sealed partial class FalloutPackageRuntimeRegistry
             package.Procedure = state.Procedure; package.Flags = state.Flags; package.RestoreCount(state.LifetimeCount);
             package.ProcedureAvailable = state.ProcedureAvailable; package.FlagsAvailable = state.FlagsAvailable;
             package.CountAvailable = state.CountAvailable;
+            package.Target.Restore(state.Target ?? throw new InvalidDataException("Cold PACK omitted its actual target field owner."));
             RetainUnavailable(package);
             package.History.AddRange(state.History);
         }
@@ -60,7 +62,11 @@ internal sealed partial class FalloutPackageRuntimeRegistry
                 package.RecordSha256 is not { Length: 64 } || !package.RecordSha256.All(Uri.IsHexDigit) || package.History is null)
                 throw new InvalidDataException("Package registry has a foreign, duplicate or incomplete winning object.");
             int count = 0, procedure = -1; var flags = package.SourceFlags; long previous = 0;
-            var procedureAvailable = true; var flagsAvailable = true; var countAvailable = true;
+            var procedureAvailable = true; var flagsAvailable = true; var countAvailable = true; var targetAvailable = true;
+            var target = package.Target ?? throw new InvalidDataException("Mutable PACK omitted its target constructor/load/writer owner.");
+            FalloutPackageRuntimeTargetFields.Validate(target);
+            if (target.Package != package.Form || target.RecordSha256 != package.RecordSha256 || target.Publications.Count != publications.Count)
+                throw new InvalidDataException("Mutable PACK target borrowed another winning object.");
             foreach (var mutation in package.History)
             {
                 if (mutation is null || mutation.Package != package.Form || mutation.Sequence <= previous || mutation.Sequence > saved.Sequence ||
@@ -86,13 +92,15 @@ internal sealed partial class FalloutPackageRuntimeRegistry
                     case FalloutPackageRuntimeMutationKind.UnownedProcedure: procedureAvailable = false; break;
                     case FalloutPackageRuntimeMutationKind.UnownedFlags: flagsAvailable = false; break;
                     case FalloutPackageRuntimeMutationKind.UnownedLifetime: countAvailable = false; break;
+                    case FalloutPackageRuntimeMutationKind.UnownedTarget: targetAvailable = false; break;
                 }
                 if (mutation.AfterCount != count || mutation.AfterProcedure != procedure || mutation.AfterFlags != flags)
                     throw new InvalidDataException("Package mutation changed a field outside its actual admitted writer.");
                 previous = mutation.Sequence;
             }
             if (package.LifetimeCount != count || package.Procedure != procedure || package.Flags != flags ||
-                package.ProcedureAvailable != procedureAvailable || package.FlagsAvailable != flagsAvailable || package.CountAvailable != countAvailable)
+                package.ProcedureAvailable != procedureAvailable || package.FlagsAvailable != flagsAvailable || package.CountAvailable != countAvailable ||
+                target.Available != targetAvailable)
                 throw new InvalidDataException("Package mutable fields differ from their exact retained writer history.");
         }
         if (sequences.Count != saved.Sequence) throw new InvalidDataException("Package registry omitted an entered mutation sequence.");

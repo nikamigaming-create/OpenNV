@@ -6,6 +6,7 @@ internal sealed partial class FalloutActorProcessCommonState
 {
     internal FalloutProcessCommonSnapshot Capture()
     {
+        RequireActorAssignmentCapture();
         RequireNotBusy();
         return new(Schema, _source.Contract, _stack, _process, _sequence, _current.Values.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).Select(CapturePackageHistory).Select(CaptureEarlyControllerField).ToArray(),
             _retired.Select(CaptureWeaponObservationHistory).Select(CaptureFollowingObservationHistory).Select(CapturePackageHistory).ToArray(),
@@ -36,6 +37,7 @@ internal sealed partial class FalloutActorProcessCommonState
             _packagePublications.AddRange(saved.Publications!);
             _packagePublications.Add(new(_process, saved.CapturedProcess, _cold.Sequence));
         }
+        RepublishActorAssignmentFields();
         // Native delegates/IDs never cross processes. Saved body declarations
         // remain source identity only and must match a fresh living binding.
     }
@@ -94,6 +96,7 @@ internal sealed partial class FalloutActorProcessCommonState
                 entry.Epoch == 1 && entry.Level != (entry.Source.EnginePlayer ? FalloutDetectionProcessLevel.High : FalloutDetectionProcessLevel.Low))
                 throw new InvalidDataException("Cold common field/class lacks its real source constructor or admitted writer.");
             ValidatePackageCommandFlags(entry, saved.ExecutableSha256, saved.Stack, packageProcessIds);
+            ValidateActorAssignmentFields(entry, saved.ExecutableSha256, saved.Stack, packageProcessIds);
             if (entry.Gameplay is { } lease)
             {
                 if (lease.Source != entry.Source || lease.Ownership == Guid.Empty || !ownership.Add(lease.Ownership) ||

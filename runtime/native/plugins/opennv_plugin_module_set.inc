@@ -103,6 +103,8 @@ void nvse_module_set_operation(const Frame& frame) {
     if (!state->module_set || !state->calls.empty() || state->loading_handle)
         throw Fatal(ERROR_BUSY, "Cross-image callable operation has no idle actual module-set lifetime.");
     auto& owner = *state->module_set;
+    if (action == 4) { source_model_operand_bind(frame, reader); return; }
+    if (action == 5) { source_model_operand_retire(frame, reader); return; }
     if (action == 1) {
         const auto caller = reader.get<std::uint64_t>(), provider = reader.get<std::uint64_t>();
         const auto name = reader.text(); const auto rva = reader.get<std::uint32_t>();

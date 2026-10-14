@@ -487,6 +487,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     private string RaceMenuModel(string command)
     {
+        if (command.Equals("showracemenu", StringComparison.OrdinalIgnoreCase) &&
+            _scripts?.References?.NativePlugins?.RaceMenuModelPath is { } input)
+            return input.ReadCurrentModel();
         if (!_raceMenuDevicesRead)
         {
             var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Race menu has no owned source.");
@@ -535,7 +538,9 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         };
         try
         {
-            entry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter(), modelPath);
+            var modelInput = _raceMenuCommand.Equals("showracemenu", StringComparison.OrdinalIgnoreCase)
+                ? _scripts?.References?.NativePlugins?.RaceMenuModelPath : null;
+            entry.Configure(_raceSexContract, _character, _pluginStack, _imageSpacePresenter(), modelPath, modelInput);
             _raceSexEntry = entry;
         }
         catch

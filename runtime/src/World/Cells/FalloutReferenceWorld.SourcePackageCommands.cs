@@ -24,6 +24,8 @@ internal sealed partial class FalloutReferenceWorld
         referenceScriptInitialization = _sourceReferenceScriptInitializer?.Capture(),
         referencePosition = SourceReferencePositionState,
         earlyController = SourceEarlyControllerState,
+        actorAssignment = _currentActorPackageAssignment,
+        dataHandlerLoading = _sourceDataHandlerLoading?.Capture(),
         saveBlocker = SourcePackageCommandSaveBlocker
     };
     internal object? SourcePackageCommandSummary => _sourcePackageRegistry is null ? null : new
@@ -37,6 +39,7 @@ internal sealed partial class FalloutReferenceWorld
         "source-package-command-in-flight" : _firstFailedPackageCommand is { } failed ?
         "source-package-command:" + failed.Failure : _sourceReferenceScriptInitializer?.SaveBlocker ??
         _sourceEarlyControllerHelperFailure ?? _sourceEarlyControllerFactory?.SaveBlocker ??
+        _sourceDataHandlerLoading?.SaveBlocker ?? _processCommon?.ActorAssignmentSaveBlocker ??
         _sourcePlayerReferencePosition?.SaveBlocker ?? _sourceReferenceChanges?.SaveBlocker ??
         _sourceReferenceFormFiles?.SaveBlocker ??
         _sourceInitialPlacementCells?.SaveBlocker ??
@@ -56,7 +59,14 @@ internal sealed partial class FalloutReferenceWorld
         var assignment = FalloutExecutableStringTable.ReadPackageAssignment(owned.FalloutExecutablePath, source);
         if (FalloutExecutableStringTable.ReadActorMover(owned.FalloutExecutablePath, source.Controls) != scene.ActorMover.Source)
             throw new InvalidDataException("Source package command selected a different actual logical mover constructor/reset graph.");
-        if (_processCommonRestore is { } restored) ValidateSourcePackageCommandChildren(restored);
+        if (_processCommonRestore is { } restored)
+        {
+            ValidateSourcePackageCommandChildren(restored);
+            if (restored.ReferenceOwners is not { } reference || _processRuntimeRestore is not { } runtime)
+                throw new NotSupportedException("source-cold-package-reference-owner-graph-unbound");
+            _ = new FalloutReferencePackageOwnerValidation(records, restored, reference.Position,
+                reference.Changes, reference.ThreadReferenceFlags, reference.FormFiles, reference.Parent, runtime);
+        }
         var registry = new FalloutPackageRuntimeRegistry(records, source.Controls.Main.EngineSha256, scene.Stack,
             _processCommonRestore?.PackageRegistry);
         try
@@ -150,10 +160,12 @@ internal sealed partial class FalloutReferenceWorld
         FalloutPackageCommandFieldInvocation invocation)
     {
         RequireActualSourcePackageCommand(invocation);
-        // The same real mover is already used by Player getters. Its package
-        // reset cannot run before the distinct linked-reference and High
-        // reset children have returned through their actual source owner.
-        throw new NotSupportedException("source-Actor-package-linked-reference-and-High-reset-join-unbound");
+        if (_enteredActorMoverJoin is not { } join || _currentActorPackageAssignment is not
+            { Step: FalloutActorAssignmentStep.MoverReset } call || call.Invocation != invocation ||
+            call.PackageMutation != join.PackageStore || call.Linked?.MoverReceipt != join.LinkedReference ||
+            call.HighReset?.MoverReceipt != join.HighReset)
+            throw new NotSupportedException("source-Actor-package-linked-reference-and-High-reset-join-unbound");
+        return join;
     }
 
     private FalloutProcessCommonSnapshot CaptureSourcePackageCommandChildren(FalloutProcessCommonSnapshot common)
@@ -167,6 +179,10 @@ internal sealed partial class FalloutReferenceWorld
             ReferenceOwners = CaptureStandaloneReferenceOwners()
         };
         ValidateSourcePackageCommandChildren(captured);
+        if (captured.ReferenceOwners is { } reference)
+            _ = new FalloutReferencePackageOwnerValidation(records, captured, reference.Position,
+                reference.Changes, reference.ThreadReferenceFlags, reference.FormFiles, reference.Parent,
+                ProcessRuntime.Capture());
         return captured;
     }
 
@@ -215,10 +231,14 @@ internal sealed partial class FalloutReferenceWorld
 
     private void RetireSourcePackageCommands()
     {
-        if (_enteredPackageCommand is not null || _enteredReferenceScriptInitialization is not null)
+        if (_enteredPackageCommand is not null || _enteredReferenceScriptInitialization is not null ||
+            _enteredDataHandlerLoading is not null || _enteredActorMoverJoin is not null)
             throw new NotSupportedException("source-package-command-or-reference-initialization-retirement-in-flight");
         foreach (var fields in _sourcePackageFields.Values) fields.Retire();
         _sourcePackageRegistry?.Dispose(); _sourcePackageRegistry = null;
         _sourcePackageFieldsSource = null; _sourcePackageAssignmentSource = null;
+        _sourceActorPackageAssignment = null; _sourceDataHandlerLoading = null;
+        _currentActorPackageAssignment = null;
+        _sourcePackageGlobals = null; _sourcePackageGameHour = null; _requireSourcePackageGlobals = null;
     }
 }

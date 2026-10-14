@@ -29,6 +29,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     private readonly FalloutReferenceWorld _world;
     private readonly FalloutNativePluginCampaignSelection? _selection;
     private readonly FalloutNativePluginDataBindings? _dataBindings;
+    public FalloutRaceMenuModelPath? RaceMenuModelPath { get; }
     private readonly List<Module> _modules = [];
     private readonly List<NativePluginExecutionDomain> _retiringDomains = [];
     private readonly List<NativePluginPrivateIo> _retiringIos = [];
@@ -45,11 +46,11 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
 
     internal FalloutNativePluginCampaign(FalloutPluginStack records, FalloutQuestState quests,
         FalloutQuestScripts scripts, string companion, string privateStateRoot, FalloutNativePluginCampaignSelection? selection,
-        FalloutNativePluginDataBindings? dataBindings = null)
+        FalloutNativePluginDataBindings? dataBindings = null, FalloutRaceMenuModelPath? modelPath = null)
     {
         _records = records; _source = records.OwnedSource ?? throw new NotSupportedException("Native campaign has no exact owned content source.");
         _quests = quests; _scripts = scripts; _world = scripts.References ?? throw new NotSupportedException("Native campaign has no actual reference world.");
-        _selection = selection; _dataBindings = dataBindings;
+        _selection = selection; _dataBindings = dataBindings; RaceMenuModelPath = modelPath;
         if (!ReferenceEquals(_world.NativeSourceRecords, records) || !ReferenceEquals(quests.NativeSourceRecords, records))
             throw new InvalidDataException("Native campaign world/quest/selected records differ.");
         var paths = _source.NativePluginResourcePaths().Where(path =>
@@ -172,6 +173,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
             published = new(admission, domain, plugin); _modules.Add(published);
             if (primary)
             {
+                if (RaceMenuModelPath is { } modelPath) domain.BindNvseRaceMenuModelPath(plugin, modelPath);
                 domain.AttachNvseValues(plugin, new FalloutNativePluginValues(_scripts.ScriptValues, _records, domain, plugin));
                 domain.AttachNvseScriptInterface(plugin); domain.AttachNvseCommandTable(plugin, new CampaignCommandTable(this));
                 if (_dataBindings is { } data) domain.AttachNvseData(plugin, new CampaignData(this, domain, plugin, data));
@@ -278,6 +280,7 @@ internal sealed partial class FalloutNativePluginCampaign : IFalloutNativePlugin
     public void RequireIdleForSave()
     {
         RequireCurrent();
+        if (RaceMenuModelPath is { Phase: not FalloutRaceMenuModelPathPhase.Source } modelPath) modelPath.RequireColdOwned();
         if (ModuleFailure is { } failure) throw new NotSupportedException("Selected native module state is incomplete: " + failure);
         if (_active != 0) throw new InvalidOperationException("An original native caller still owns campaign state.");
         RequireDataIdleForSave();

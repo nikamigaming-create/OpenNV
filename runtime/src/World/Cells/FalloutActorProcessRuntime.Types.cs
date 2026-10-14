@@ -48,6 +48,7 @@ internal sealed record FalloutProcessCommonEntry(FalloutCombatActorIdentity Sour
 {
     public IReadOnlyList<FalloutProcessPackageRequestFlagStore> RequestFlagStores { get; init; } = [];
     public FalloutProcessEarlyControllerFieldSnapshot? EarlyController { get; init; }
+    public FalloutProcessActorAssignmentFields? ActorAssignment { get; init; }
 }
 internal sealed record FalloutProcessCommonTransfer(FalloutFormKey Actor, long BeforeEpoch, long NewEpoch,
     FalloutDetectionProcessLevel Before, FalloutDetectionProcessLevel After, string Owner,

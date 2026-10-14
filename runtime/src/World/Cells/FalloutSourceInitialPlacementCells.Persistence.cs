@@ -123,5 +123,7 @@ internal sealed partial class FalloutSourceInitialPlacementCells
         if (saved.Sequence != sequence || saved.Diameter != diameter || saved.CurrentCell != current || !saved.Slots.SequenceEqual(slots) ||
             saved.Writers.Count != writers.Count || writers.Any(value => !saved.Writers.TryGetValue(value.Key, out var boundary) || value.Value != boundary))
             throw new InvalidDataException("Current TES fields differ from their complete source store history.");
+        FalloutReferencePublicationSequence.Validate(saved.Publications.Select(value => (value.Process, value.PublishedSequence)),
+            saved.Calls.Select(value => (value.Process, value.Entered, value.Changed)), saved.Sequence);
     }
 }

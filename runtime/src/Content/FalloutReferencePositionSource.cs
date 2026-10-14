@@ -5,10 +5,11 @@ internal sealed record FalloutReferencePositionSource(FalloutPackageCommandField
     internal const uint PositionChangeMask = 2, SavedPositionChangeMask = 0x800;
     internal const uint InitialScale = 0x3f800000, InitialChangeManagerFlags = 1;
     internal const int ChangeBucketCount = 5039;
-    private const string Rules = "source-FO3-reference-position-and-change-map/v1;" +
+    private const string Rules = "source-FO3-reference-position-and-change-map/v2;" +
         "reference-raw-XYZ-positive-zero-ParentCELL-null-scale-positive-one-Extra-list-empty;" +
         "Actor-adjusted-position-byte-zero-distinct-from-current-PlayerMover-movement-word;" +
         "Actor-raw-yaw-selection-word-zero-distinct-from-existing-neutral-life-and-Common-activity;" +
+        "independent-Actor-assignment-byte-zero-construction-current-command-zero-store-and-writer-barrier;" +
         "current-mode-zero-returns-raw-XYZ-nonzero-requires-independent-bounds-and-scratch-ring;" +
         "form-file-persistent-predicate-before-pure-BaseForm-kind-selector;" +
         "NPC-kind-false-skips-Worldspace-detach-attach-before-paired-XY-then-Z-stores;" +

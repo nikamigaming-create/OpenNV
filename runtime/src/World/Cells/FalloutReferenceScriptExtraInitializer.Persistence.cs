@@ -75,6 +75,10 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         while (flagWriteIndex < flagWrites.Count) FlagWrite(flagWrites[flagWriteIndex++]);
         if (flags != saved.ReferenceFlags || boundary != saved.WriterBoundary)
             throw new InvalidDataException("Script initializer current flags or writer refusal disagree with their ordered source history.");
+        var publicationCalls = saved.Calls.Select(value => (Process: value.Invocation.Process, value.Entered, value.Changed))
+            .Concat(flagWrites.Select(value => (Process: value.Invocation.CommonProcess, value.Entered, value.Changed)))
+            .OrderBy(value => value.Entered).ToArray();
+        FalloutReferencePublicationSequence.Validate(saved.Publications.Select(value => (value.Process, value.PublishedSequence)), publicationCalls, sequence);
 
         void FlagWrite(FalloutReferenceInitializedFlagWrite write)
         {

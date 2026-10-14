@@ -33,6 +33,7 @@ internal sealed record FalloutNativePluginSourceCall(FalloutFormKey Owner, Fallo
 internal interface IFalloutNativePluginCampaign : IDisposable
 {
     IReadOnlyList<FalloutNativePluginCampaignModule> Modules { get; }
+    FalloutRaceMenuModelPath? RaceMenuModelPath { get; }
     bool ContainsOpcode(ushort opcode);
     FalloutCompiledCommandDeclaration? Declaration(ushort opcode);
     FalloutScriptValue Invoke(FalloutNativePluginSourceCall call);

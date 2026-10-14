@@ -1,5 +1,16 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args is ["--test-native-model-operand"])
+{
+    NativeModelOperandContracts.Run();
+    return;
+}
+if (args is ["--test-native-model-operand-source", var modelRuntime, var modelPlugin])
+{
+    NativeModelOperandContracts.RunOwnedSource(modelRuntime, modelPlugin);
+    return;
+}
+
 if (args is ["--test-native-module-diagnostic-source", var diagnosticSource])
 {
     NativeModuleDiagnosticContracts.RunOwnedSource(diagnosticSource);
@@ -199,6 +210,7 @@ NativeEngineCommandLeafContracts.Run();
 NativeCoResidentModuleContracts.RunDeclarations();
 NativeFileSizeContracts.RunDeclarations();
 NativeModuleConstructionContracts.RunDeclarations();
+NativeModelOperandContracts.Run();
 NativePlatformCapabilitiesContracts.Run();
 NativeCppStreamsContracts.RunDeclarations();
 NativeHeadlessUser32Contracts.Run();

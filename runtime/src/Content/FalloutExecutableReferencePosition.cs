@@ -29,6 +29,7 @@ internal static partial class FalloutExecutableStringTable
             var initializedActor = Call(actor + 0xe9);
             Need(initializedActor + 0x9d, [0xc7, 0x86, 0xfc, 0, 0, 0, 0, 0, 0, 0], "same existing neutral Actor life constructor word");
             Need(initializedActor + 0x312, [0xc7, 0x86, 0x9c, 1, 0, 0, 0, 0, 0, 0], "independent Actor yaw selection constructor word");
+            Need(initializedActor + 0x1e1, [0xc6, 0x86, 0xf8, 0, 0, 0, 0], "independent Actor assignment constructor byte");
             Need(Get(0x214), [0x8b, 0x81, 0x9c, 1, 0, 0, 0xc3], "same current Actor yaw selection getter");
             Need(reference + 0x7d, [0xc7, 0x46, 0x38, 0, 0, 0x80, 0x3f], "independent positive-one reference scale constructor");
             var setter = Get(0x2a8); var basis = Call(setter + 0x24);

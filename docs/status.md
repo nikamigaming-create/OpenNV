@@ -63,7 +63,11 @@ The latest candidate constructs and retains the real detached early controller,
 returns winning Base and both startup XYZ/reset writes, form-file persistence,
 TES/grid selection and yaw. Its compiled package current XYZ, ParentCELL,
 Worldspace, persistent-CELL fallback and Saved18 stores return. The next actual
-refusal is Actor package assignment's shared status and Current-arm consumers.
+refusal is the cleanup loading byte's pre-command record-load history. Actor
+assignment returns its same status/byte owners, winning target, Current setter,
+direct Common animation and linked-null cleanup before this failure. Twelve-byte
+PTDT source records preserve their real omitted zero tail; synthetic and owned
+target checks pass three cold component cycles.
 Failed startup now drains
 and retires its source/native owners without a reported leak, with zero final
 diagnostic loss. Shared PACK instances,
@@ -119,11 +123,13 @@ TTW NVSE need independent supplemental bindings. Their later interfaces, native
 data/cache and retirement still require acceptance. Every selected module stays
 in the compatibility denominator; no support claim follows from Query or Load.
 
-Protocol 42 returns TTW NVSE's original construction and Query through its actual
+Protocol 43 returns TTW NVSE's original construction and Query through its actual
 module-bound diagnostic CRT service. Debug and Release original-DLL audits pass
-real sharing failures, ordered retries and destructor close. TTW Load next refuses
-its terminal model-path pointer mutation. No complete native-global cold save is
-accepted.
+real sharing failures, ordered retries and destructor close. The unchanged TTW
+Load also returns its first source RaceSex model-operand mutation through actual
+VirtualProtect, pointer store, readback and protection restore. A distinct next
+mutation remains refused. Receiver construction, final pixels and complete
+native-global cold saving remain unaccepted.
 
 Shared native-domain, source import/ABI, guest memory, protection/cache,
 source-image identity and retirement contracts have bounded tested owners.
@@ -142,8 +148,8 @@ retries still fail; these component results do not establish mod compatibility.
 Shared GetFileSizeEx and supplemental read-only file/profile/module-name calls
 pass real two-DLL Debug and Release callers, including a sparse file larger than
 4 GiB, shared handles/routes, exact errors, failed prefixes and fresh retirement.
-Original XR, ShowOff and TTW NVSE construction still refuses before module entry;
-the new read capability does not qualify their independent CRT/DllMain effects.
+Original XR and ShowOff construction still refuse before module entry;
+the read capability does not qualify their independent CRT/DllMain effects.
 
 ## Toolchain and verification
 

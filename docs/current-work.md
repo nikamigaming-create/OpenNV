@@ -21,8 +21,11 @@ an edit, but has a black birth background and proves no quest or save/Continue.
 The latest ordinary FO3 startup returns both XYZ/reset writes, source form-file
 persistence, initial TES/grid selection and yaw. The compiled opening package
 returns its current XYZ, ParentCELL, Worldspace, persistent-CELL fallback and
-Saved18 stores. It next refuses the actual Actor package-assignment status and
-Current-arm consumers. ParentCELL construction now precedes package queries on
+Saved18 stores. The actual Actor assignment now returns its same status and byte
+reads, byte-zero store, mutable target derivation, Current setter, direct Common
+animation read and linked-null cleanup. High reset retains its preceding stores
+and next refuses the cleanup loading byte's pre-command record-load history.
+ParentCELL construction now precedes package queries on
 the same existing World field; later CELL-list publication cannot replace it.
 Grid qualification and repeated legitimate thread-flag reads pass the selected
 owned/source and focused regression checks.
@@ -39,7 +42,9 @@ The unchanged selected mod stacks retain FNV's 10 plugins/three native modules
 and TTW's 18 plugins/six modules. Both latest ordinary starts exit one without a
 complete save. JIP Query/Load return; PostLoad still needs the typed image
 mutation/code-site/task-dispatch producer. TTW NVSE returns original construction
-and Query, then refuses its terminal model-path pointer mutation during Load.
+and Query. Its first RaceSex model-operand mutation now returns the actual
+VirtualProtect call, pointer store, readback and protection restore. Load next
+refuses a distinct mutation whose typed source extent remains unowned.
 Original XR and ShowOff construction refuse before module entry. JohnnyGuitar retains four parallel
 worker imports and Stewie 81 imports. Every selected module remains in scope;
 no writable table, fabricated queue or module omission supplies acceptance.
@@ -79,7 +84,7 @@ remain unqualified; this component audit does not accept gameplay. Three owned-d
 native cold resource cycles now pass fresh Areas/shapes, actual Common pointers,
 retained XYZ, failure/cleanup and unchanged constructor/group/kind histories.
 
-Protocol 42 uses one actual shared native domain, independent original module
+Protocol 43 uses one actual shared native domain, independent original module
 contexts and borrowed function lifetimes. Its rebuilt native domain and real
 supplemental read caller pass. Shared GetFileSizeEx and read-only I/O pass the
 complete Release gate. The original dynamic CRT source structure passes selected
@@ -87,7 +92,11 @@ TTW qualification and authored negative cases. The ordinary selected TTW run
 returns original attach and Query through its actual
 module-bound diagnostic CRT service. The real original-DLL caller audit passes
 genuine sharing failures/retries, the all-six-fail arm and destructor file close.
-TTW Load next refuses an unowned typed terminal model-path pointer mutation.
+The unchanged TTW Load returns its first source RaceSex model-operand mutation,
+including the real SDK outputs and equal-text pointer replacement. The next
+distinct mutation remains refused. The shared field is borrowed by the existing
+RaceSex device consumer; later receiver construction and rendered parity remain
+independent. Native-global cold state is still unavailable.
 JIP Query/Load return; its later PostLoad task producer remains separate. XR,
 ShowOff, JohnnyGuitar and Stewie independently retain their unresolved failures.
 The I/O capabilities cover GetFileSizeEx and supplemental read-only file/profile/module-name
@@ -105,7 +114,7 @@ raw-orientation and shape checks pass. The selected owned HUD/mover/source audit
 passes again in Release, including three cold component cycles. Its 36.4-second
 measurement is source-reader work, not loading or frame-performance acceptance.
 
-The current source-controller branch passes the complete pinned runtime gate,
+The merged source-controller repair passes the complete pinned runtime gate,
 including Release/Debug builds, formatting/analyzers, contract probes, native
 domains, launcher checks and native Godot loading. The selected owned reference
 startup audit passes in Debug and Release, including three cold scalar-owner
@@ -114,17 +123,36 @@ The owned Godot controller audit passes construction/reset, three native cold
 component cycles and retirement. These audits retain their authored callback and
 unexecuted whole-Player boundaries.
 
+PR 199 is merged; local main and origin/main are synchronized. The next block
+uses a fresh feature branch for the reached Actor assignment, retained reference
+history validation and the source RaceSex model-path mutation. ParentCELL now
+retains constructor and Main-child writer receipts on its existing World field;
+authored current-lineage and failed-prefix checks pass. Typed Saved18 component
+checks and aggregate retained-owner joins pass, including three authored cold
+cycles and coherent tamper rejection. The new Actor assignment graph and actual
+shared GameHour binding pass Debug builds, focused failed-prefix checks and the
+ordinary product repeat. The owned audit validates winning package targets and
+three cold component cycles, including actual twelve-byte PTDT reads into the
+source-zeroed sixteen-byte buffer. The combined pinned runtime gate and selected
+owned reference/model-source checks pass in Release. The block is ready for a
+checked PR; source publication does not qualify gameplay.
+
 The toolchain is official Godot 4.8-dev7 Mono with matching managed SDK and
 .NET 10.0.401. Direct owned DDS uploads still lack accepted streaming residency,
 budgets and memory/frame/thread measurements. An enabled streaming setting is
 not an accepted streaming implementation.
 
-Next own Actor assignment, its actual shared status word, linked-reference joins,
-direct Common animation context and High reset before admitting the logical mover
-reset. Source loading-byte construction and writers require independent proof.
+The immediate functional milestone is one ordinary FO3 load/play/save session,
+normal Quit and cold Continue, repeated through a CELL transition. Defer unrelated
+native fixtures and presentation audits until that path works.
+
+Next own the actual cleanup loading byte's selected record-load preservation and
+writer/callback edges, then finish High reset, the logical mover join and current
+follower Extra membership. The bulk-loader byte is independent of this cleanup
+field; an unload/teardown zero cannot supply a record-load return.
 Bind whole-world cold controller resources and validate reference, Script flag,
 ParentCELL, Saved18 and change-map histories across their retained publications.
-Current aggregate reference-owner history is not sufficient for a complete save;
+Validated aggregate reference-owner history is not sufficient for a complete save;
 the whole-world cold resource blocker remains active. Pending transfer and rendered
 pose cannot supply current reference fields. Then close repeated Player/Main and complete-save owners,
 leave the Vault for Megaton and finish/depart Goodsprings. Finish the unchanged

@@ -47,7 +47,7 @@ internal sealed partial class FalloutSourceInitialPlacementCells
             _publications.AddRange(saved.Publications); _calls.AddRange(saved.Calls.Select(CloneCall));
             GridConstruction = _calls.LastOrDefault(value => value.Kind == "original-grid-constructor");
         }
-        _publications.Add(new(Process, Factory, Constructor, saved?.Process, saved?.Factory));
+        _publications.Add(new(Process, Factory, Constructor, saved?.Process, saved?.Factory, _sequence));
     }
     internal FalloutInitialPlacementCellCall ConstructGrid(FalloutReferencePositionInvocation invocation, FalloutIniValue setting,
         Action<uint>? storeActualIniValue = null)

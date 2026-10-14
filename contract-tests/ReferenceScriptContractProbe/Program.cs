@@ -4,6 +4,12 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--actor-package-assignment-contracts"])
+{
+    SourceMainScriptCallerContracts.RunActorPackageAssignmentContracts();
+    return;
+}
+
 if (args is ["--actor-mover-contracts"])
 {
     SourceMainScriptCallerContracts.RunActorMoverContracts();
@@ -25,6 +31,12 @@ if (args is ["--early-controller-contracts"])
 if (args is ["--reference-position-contracts"])
 {
     SourceMainScriptCallerContracts.RunReferencePositionOwnershipContracts();
+    return;
+}
+
+if (args is ["--reference-parent-history-contracts"])
+{
+    ParentHistoryContracts.Run();
     return;
 }
 
@@ -1591,7 +1603,9 @@ SourceMainScriptCallerContracts.RunActorMoverContracts();
 SourceMainScriptCallerContracts.RunEarlyControllerConvexGeometryContracts();
 SourceMainScriptCallerContracts.RunEarlyControllerContracts();
 SourceMainScriptCallerContracts.RunReferencePositionOwnershipContracts();
+ParentHistoryContracts.Run();
 SourceMainScriptCallerContracts.RunReferenceScriptExtraInitializationContracts();
+SourceMainScriptCallerContracts.RunActorPackageAssignmentContracts();
 SourceMainScriptCallerContracts.RunPlayerPackageCommandFieldContracts();
 SourceMainScriptCallerContracts.RunPlayerPackageAnimationInitializationContracts();
 SourceMainScriptCallerContracts.RunPackageStateMutationContracts();
