@@ -67,7 +67,8 @@ internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, Fallo
     FalloutPlayerLateActorSnapshot? LateActorTime = null,
     FalloutPlayerLateFrameSnapshot? LateFrame = null,
     FalloutPlayerMoverDeltaSnapshot? MoverDelta = null,
-    FalloutPlayerActorMovementSnapshot? ActorMovement = null);
+    FalloutPlayerActorMovementSnapshot? ActorMovement = null,
+    FalloutPlayerViewSnapshot? ViewFields = null);
 
 // These are individual source children. A supplied delegate is not a completion
 // receipt; the source call records its actual returned child and committed prefix.

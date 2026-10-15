@@ -1,5 +1,16 @@
 using OpenNV.Runtime.Compatibility.NativePlugins;
 
+if (args is ["--test-native-empty-crt-construction"])
+{
+    NativeEmptyCrtConstructorContracts.RunDeclarations();
+    return;
+}
+if (args is ["--test-native-empty-crt-source", var emptyCrtPlugin, var nonemptyCrtPlugin, var memoryCrtPlugin])
+{
+    NativeEmptyCrtConstructorContracts.RunOwned(emptyCrtPlugin, nonemptyCrtPlugin, memoryCrtPlugin);
+    return;
+}
+
 if (args is ["--test-native-book-focus"])
 {
     NativeBookFocusSoundContracts.Run();
@@ -234,6 +245,7 @@ NativeEngineCommandLeafContracts.Run();
 NativeCoResidentModuleContracts.RunDeclarations();
 NativeFileSizeContracts.RunDeclarations();
 NativeModuleConstructionContracts.RunDeclarations();
+NativeEmptyCrtConstructorContracts.RunDeclarations();
 NativeModelOperandContracts.Run();
 NativeBookSoundOperandContracts.Run();
 NativeBookSoundSourceContracts.Run();

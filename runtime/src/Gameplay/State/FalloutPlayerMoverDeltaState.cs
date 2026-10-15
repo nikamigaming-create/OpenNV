@@ -84,7 +84,14 @@ internal sealed partial class FalloutPlayerMoverDeltaState
                 var first = _owners.Fields.ReadMoverDeltaFirstAnimation(invocation, CheckCurrent);
                 LastCall = LastCall with { FirstAnimation = first, Changed = Next() }; Check();
                 if (selected is not null && first.Context is not null)
-                { Step(FalloutPlayerMoverDeltaStep.AnimationEquality); throw new NotSupportedException("source-Player-mover-delta-AnimData-group-equality-unbound"); }
+                {
+                    Step(FalloutPlayerMoverDeltaStep.AnimationEquality);
+                    var firstGroup = Context(first.Context.Value).ReadMovementGroup(invocation, CheckCurrent);
+                    LastCall = LastCall with { AnimationGroups = [firstGroup], Changed = Next() };
+                    var commonGroup = Context(selected.Value).ReadMovementGroup(invocation, CheckCurrent);
+                    LastCall = LastCall with { AnimationGroups = [firstGroup, commonGroup], Changed = Next() };
+                    if (commonGroup.Word == firstGroup.Word) selected = first.Context;
+                }
                 if (selected is null) selected = first.Context;
                 LastCall = LastCall with { SelectedAnimation = selected, Changed = Next() };
             }
@@ -114,7 +121,13 @@ internal sealed partial class FalloutPlayerMoverDeltaState
             if (overridden)
             { Step(FalloutPlayerMoverDeltaStep.Override); throw new NotSupportedException("source-Actor-mover-delta-special-vector-extraction-and-rotation-unbound"); }
             if (selected is not null)
-            { Step(FalloutPlayerMoverDeltaStep.AnimationVector); throw new NotSupportedException(AnimationBoundary); }
+            {
+                Step(FalloutPlayerMoverDeltaStep.AnimationVector); var currentFlags = ReadFlags();
+                var vectorRead = Context(selected.Value).ReadMovementVector(invocation, currentFlags,
+                    () => (_owners.ReadAnimationActorMode ?? throw new NotSupportedException("source-animation-vector-raw-Actor19C-owner-unbound"))(invocation),
+                    () => (_owners.ReadAnimationScale ?? throw new NotSupportedException("source-animation-vector-current-reference-scale-owner-unbound"))(invocation), CheckCurrent);
+                LastCall = LastCall with { AnimationMovement = vectorRead, Delta = vectorRead.Delta, Changed = Next() };
+            }
             Step(FalloutPlayerMoverDeltaStep.Controller); ReadController(contact: true);
             if ((mover.Flags & FalloutPlayerMoverDeltaSource.DirectionMask) != 0)
             { Step(FalloutPlayerMoverDeltaStep.Direction); throw new NotSupportedException("source-Player-mover-delta-directed-AnimData-length-and-current-speed-unbound"); }
@@ -188,6 +201,12 @@ internal sealed partial class FalloutPlayerMoverDeltaState
 
         void CheckCurrent(FalloutPlayerLateFrameInvocation current)
         { if (current != invocation) throw new InvalidOperationException("Mover delta leaf changed its actual caller."); Check(); }
+        FalloutSourceAnimationContextState Context(Guid identity)
+        {
+            var context = (_owners.RequireAnimationContext ?? throw new NotSupportedException(AnimationBoundary))(identity);
+            if (context.Identity != identity) throw new InvalidOperationException("Mover delta selected another current animation object.");
+            Check(); return context;
+        }
         void Check()
         {
             RequireInvocation(invocation); _requireLifetime();

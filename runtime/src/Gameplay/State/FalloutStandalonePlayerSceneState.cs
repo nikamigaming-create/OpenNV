@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
     internal Guid Constructor => _constructor;
-    internal const string Schema = "opennv-standalone-Player-scene/v27";
+    internal const string Schema = "opennv-standalone-Player-scene/v28";
     internal FalloutStandalonePlayerSceneSource Source { get; }
     internal Guid Process => _process;
     internal string Stack => _stack;
@@ -34,7 +34,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     private FalloutStandaloneInputManagerQuery? _inputManagerQuery;
     private string? _boundary, _failure;
     internal string? SaveBlocker => _retired ? "source-Player-scene-retired" : _failure ?? _boundary ??
-        _inhibition.SaveBlocker ?? _followingTimerFlag.SaveBlocker ?? _actorMover.SaveBlocker ??
+        ViewSaveBlocker ?? _inhibition.SaveBlocker ?? _followingTimerFlag.SaveBlocker ?? _actorMover.SaveBlocker ??
         _lateActorTime?.SaveBlocker ?? (_historicalLateActorTime is not null && _lateActorTime is null ? "source-Player-cold-Actor-time-publication-unbound" : null) ??
         _lateMoverDelta?.SaveBlocker ?? _actorMovement?.SaveBlocker ??
         (_historicalMoverDelta is not null && _lateMoverDelta is null ? "source-Player-cold-mover-publication-unbound" : null) ??
@@ -134,6 +134,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _followingTimerFlag = new(following, stack, process, _constructor, RequireFollowingContinuationInvocation, saved?.FollowingTimerFlag);
         if (saved is not null) Restore(saved);
         else _pointOfViewLifetimes.Add(new(_process, _constructor, 0));
+        ConstructViewOwner(saved);
     }
     private long Next() => _sequence = checked(_sequence + 1);
     private void RequireThread()

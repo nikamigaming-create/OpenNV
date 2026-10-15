@@ -3,173 +3,89 @@
 ## Acceptance
 
 Recover ordinary Fallout 3, New Vegas and Tale of Two Wastelands gameplay with
-complete saves and unchanged selected mod stacks. Complete the Vault 101 quest
-and reach Megaton; complete and depart Goodsprings; complete TTW's Vault route,
-reach Megaton and complete a Megaton quest. Each route must save authoritative
-state, Quit normally and Continue in three new process lifetimes through CELL
-transitions. Deliver phone-friendly H.264/AAC fast-start videos of the actual runs.
-None of these complete runs, gameplay saves or cold Continues is accepted.
+complete saves and unchanged selected mod stacks. Complete Vault 101 and reach
+Megaton; complete and depart Goodsprings; complete TTW's Vault route, reach
+Megaton and complete a Megaton quest. Each route must save authoritative state,
+Quit normally and Continue in three new process lifetimes through CELL changes.
+Deliver phone-friendly H.264/AAC fast-start videos of the actual runs. None of
+these complete runs, gameplay saves or cold Continues is accepted.
 
 C# owns gameplay and persistence in headless, desktop and OpenXR. Godot adapts
-input, native physics resources and presentation. Every object, transition,
-event, voice, UI element, draw, frame and pixel remains in the parity denominator.
-Matched retail evidence is required for a parity claim.
+input, native physics resources and presentation. Matched retail evidence across
+state, events, timing, audio, UI and final pixels is required for a parity claim.
 
-## Current executable result
+## Verified executable state
 
-The latest ordinary FO3 New Game returns the opening package command and birth
-CELL transfer, with all 1,610 references and ten genuine engine-static plane and
-portal bases retained. Its first Player frame returns controller context,
-post-action children, Current/Primary idle query, late Flags setter, independent
-inhibition timer and bytes, Actor-time, and default XY/Z mover stores. The Scene
-argument equals the actual cached Main timer value. The winning signed hardware
-thread count is two; it is independent of the exterior buffer setting.
+The latest ordinary FO3 New Game returns the opening package and birth-CELL
+transfer with all 1,610 references and ten genuine engine-static plane/portal
+bases. Its first Player frame returns controller context, post-action children,
+Current/Primary idle query, Flags, inhibition, Actor-time, XY/Z stores, late
+mover-delta and its nonnull-data Actor movement child. The next actual failure is
+the following Player tail. Its argument is the actual cached Main timer; the
+winning signed hardware thread count is two, independent of the exterior buffer.
 
-The fresh movement run also returns the late mover-delta and its nonnull-data
-Actor movement child, including the real controller and base-reference position
-owner. The next actual failure is the following Player tail. Diagnostics retain
-that World failure and its returned children with zero recorded publication losses.
-Escape opens Pause; the observed Quit/Yes controls exit normally with code zero
-and dispose the source owners. This is faulted-session cleanup, not a healthy
-Player frame, save/Continue or repeated-frame proof.
+The latest FO3 load took 101.5 seconds. Diagnostics retained the failed World
+prefix and returned movement children with zero publication losses. Observed
+Escape/Pause and Quit/Yes exited normally with code zero and disposed source
+owners. This is faulted-session cleanup, not a healthy Player/Main frame,
+ordinary movement, quest progress, gameplay save or cold Continue.
 
-Four newly requested diagnostic rendering screenshots were captured from live
-owned files: Sunny and Cheyenne indoors, and distinct daytime/night exterior
-views. Source placement and enable state are retained. These are rendering
-views, not ordinary gameplay, quest or matched-retail evidence. Only the four
-requested PNGs are retained; failed temporary PNGs were removed. Recording is off.
+New Vegas and TTW retain their selected 10/18 plugins and three/six native
+modules. The latest unchanged FNV startup passes the former FNVXR empty-CRT
+constructor declaration boundary and next refuses an independent co-resident
+BCrypt import. ShowOff retains its distinct client/initializer failure. JIP's
+original Query/Load return before a later image mutation fails. Child exit
+retires resources; diagnostics report no publication loss. No selected module is
+removed to advance startup.
 
-The visual check exposed and repaired first-entry weather erasure, streamed
-lighting projection restoration, missing image-phase construction and a shader
-reader restricted to Model 3 despite the selected owned package using Model 2.
-Selected lighting weather is reported separately from original source weather
-fields. Moon/current-CELL, complete weather frames, missing source references,
-SpeedTree geometry and pixel parity remain visible and unaccepted.
+The latest unchanged TTW run returns all four Book page/focus input roles, with
+four real native SDK/store/restore events each and no Book input failure. Four
+prior model events remain returned. Its next distinct image mutation still
+refuses. Complete module Load, Book audio and FNV/TTW gameplay remain unaccepted.
 
-FNV/TTW retain their selected 10/18 plugins and three/six native modules.
-Native imports, PostLoad, later mutations, cold globals and unfinished Main/
-Player services remain incomplete; startup identities do not admit gameplay.
+Four requested fresh rendering screenshots show source-placed Sunny and
+Cheyenne indoors and distinct daytime/night exterior views. These are diagnostic
+views, not gameplay or matched-retail evidence. Only four requested PNGs are
+retained. Recording remains off during development and checks.
 
-## Verification and publication
+## Current repair and checks
 
-Main contains checked PR 204. All five CI checks passed on its corrected final
-revision before merge. Clean local main equals origin/main at
-`dbdda643424dbfd37203dbaca5d8071c4dc604f4`; the task PR is merged and its remote
-feature branch is removed. The original New Vegas save hash is unchanged.
-The current animation/Book-focus branch starts from that checked main.
+The loaded-animation branch implements independent first-person/Common C#
+contexts, original KF sampling, sequence clocks, model resources, movement
+reads, same-Scene temporary view writes and preparation early returns. It does
+not yet compose the enclosing production Player loader or ordinary action/group
+activation. Full AnimData cold reconstruction and the complete tail remain open;
+constructor-null pointers cannot survive a reached animation-load writer.
 
-The rendering repair's authored checks pass for both source families, first
-climate entry, retained same-climate cache, changed-climate grid commit, cleared
-override preservation, invalid projection rejection and retained source owners.
-A fabricated full snapshot remains refused. Shader checks cover Model 2/3,
-distinct semantic banks, stages, masks, modifiers and reserved declaration/token
-controls. Actual selected owned climate and celestial decode/emit audits pass.
-The published timing/rendering repair passed the full pinned gate, including Release/
-Debug, formatting/analyzers, contracts, launcher and actual headless native
-project audits. Selected owned Release FO3 constructor, climate and celestial
-decode/emit checks pass.
+Adversarial cleanup fixes drain independent contexts after a failed binding
+teardown, retry only pending binding retirement, retain failed source release
+and reject lifecycle callback reentry. Authored failure checks pass. Focused
+pose/resource/pointer/view and preparation checks pass. Selected owned Release
+movement, loaded-animation, post-animation and empty-CRT source audits pass.
+The full pinned gate passes Release/Debug builds, formatting/analyzers, contract
+probes, both native configurations, launcher tests and native Godot
+physics/navigation/project checks. Builds report zero warnings. These are
+component/source checks, not accepted gameplay or parity.
 
-The movement/global-condition/dialogue batch builds with zero warnings. Focused
-mover, movement-field and native controller checks pass. The existing setter,
-change-map, form-file and thread owners pass 100,000 authored frame calls with
-bounded receipts and three JSON/cold component cycles. Owned movement source
-qualification passes after correcting a derived constructor offset. An ordinary
-FO3 rerun then exposed an INI provenance/stack identity comparison; the repair
-borrows the actual injected record stack's numeric settings. The next ordinary
-run returns mover-delta and its Actor movement child, then refuses the following
-Player tail. Normal Quit/Yes exits zero and disposes source owners. No complete
-Player/Main frame, gameplay save or native cold Continue is accepted.
+## Publication and next owner
 
-Live comparison-global conditions now retain raw FormIDs and use the owning
-plugin's masters and shared current globals. Authored operator/owner/cold checks
-pass; the selected FO3 corpus audit verifies 778 such operands. Silent player
-INFOs run the actual Begin/End and link owners without an audio response. Their
-authored and compiled-result/cold checks pass; the owned corpus is classified
-without forcing quest state. Fresh cold model bindings now preserve a complete
-authored NIF logical graph, fields and materials through three JSON process
-reconstructions, without replaying constructors/setters or old native releases.
-Tampered bindings and graphs refuse. This does not prove the native factory or
-campaign Continue. Complete native dialogue/save/Continue and route acceptance
-remain open. The combined batch passes the full pinned gate: Release/Debug C#,
-formatting/analyzers, contract probes, both native configurations, launcher and
-Godot physics/navigation checks. Selected owned Release movement/tail, conditions,
-silent-INFO and Book source audits pass. Checked CI/merge and local-main equality
-remain publication requirements.
+Checked PRs 204 and 205 are merged. Clean local main was verified equal to
+origin/main at c843fa600ac73c12dd5569322ec647f2eb7ad481. The loaded-animation
+branch starts from that main; its checked PR publication is next. The original
+New Vegas save remains unchanged. Private owned inputs, saves, selectors,
+captures and reverse-engineering evidence stay outside public repository inputs.
 
-The next Player-tail component builds and passes authored three-cycle checks and
-owned source qualification. Its death timer, shared Scene bracket, mandatory
-animation reads and pair/Extra list owners remain individual children. Production
-does not return this child using stale constructor-null animation pointers: the
-selected first/Common animation loader and complete tail are still unfinished.
+Finish genuine outer Player 3D loading around the actual first/third model
+factories, independent resources and animation pointer stores, shared view
+writes and mandatory following children. Bind the same contexts to movement
+and the complete tail. A real owned Common idle currently exposes a missing
+HeadTrack float channel; its C# logical-scene owner is being implemented.
+The current presentation animation tick would overwrite loaded C# poses;
+prepare its projection of the shared poses before binding the real manager.
 
-TTW's unchanged selected stack now returns both Book page sound pointer writes,
-with four actual native SDK/store/restore events per direction and no Book
-failures. The prior four model events remain returned. The original module next
-refuses a distinct image mutation; child exit retires resources and Godot exits
-one. Complete Load, Book audio and gameplay remain unaccepted. The Book's read-only
-data extent and owning consumer checks pass authored and owned-source audits.
-Profiling identified repeated HUD source qualification; bounded verified-hash
-reuse reduces the selected movement-source audit from 41.1 to 26.9 seconds in a
-fresh process. This is not a whole-game load or frame-performance claim.
-
-The current Book-focus change builds without warnings and passes authored
-page/focus/model and actual owned FNV/TTW source checks. Review's index-register
-clobber negatives pass. An unchanged TTW run returns all four Book input roles,
-each with four real SDK/store/restore events and no input failure; the four prior
-model events remain returned. The next distinct mutation still refuses, child
-exit retires resources and publication losses remain zero. Complete TTW Load,
-Book audio, gameplay and saves remain unaccepted. The new change passes the full
-pinned gate and selected owned Release source audits; checked CI and merge remain
-publication requirements.
-
-Adversarial review before merge found failed model assembly/free, zero-retain
-binding leaks, health-gated retirement and omitted failed Actor children. Cleanup
-now distinguishes source reference counts from native binding lifetime, preserves
-adopted models after later assembly failure, and retires graphs after successful
-source release. Failed Actor calls are retained by invocation in their mover.
-Focused failure, aggregate-join and independent-JSON checks pass. A fresh ordinary
-FO3 repeat returns both movement children, loads in 101.5 seconds (prior run
-322.6 seconds), then reaches the same tail boundary with zero publication loss.
-Observed Quit/Yes exits zero and disposes source owners; the original NV save hash
-is unchanged. These run timings are observations, not a general load-performance
-guarantee. The review corrections pass the full pinned gate, selected owned
-Release audit and all five CI checks; checked PR 204 is merged.
-
-A fresh unchanged FNV selection still refuses FNVXR/ShowOff constructor graphs
-and JIP's later image mutation. JIP's original Query/Load return before its
-message failure. Native child exit retires its resources with no publication
-losses. No selected module is removed to advance startup.
-
-Publish the checked source repair through a PR, merge it and verify clean local
-main equals origin/main before starting the next feature branch. Private owned
-inputs, saves, selectors and captures are never public repository inputs.
-
-## Next runtime owner
-
-Finish the following Player tail after the returned ordinary mover/Actor calls.
-The checked movement batch composes reference-data construction, returned third-person
-logical/native models and independent interior/exterior TES scalar stores. The
-enclosing original 3D loader and its AnimData writers remain separate, unaccepted
-owners; constructor-null pointers cannot survive a reached load writer. Current
-private work implements that tail/load ownership. The next Book change adds the
-two reached focus operands after the returned page operands; it requires compiled,
-owned-source and actual original-module checks. Review also found and repaired a failed model factory's orphan
-cleanup; cold nonnull-model binding and historical model/movement joins now pass
-focused authored checks. Parent linkage and native root
-residency cannot supply TES or reference-data fields.
-
-Preserve the returned mover/Actor children's actual Main/frame/thread/constructor
-epochs and cold joins, and the bounded position/change/file/thread receipts.
-Return the complete Player
-frame and real exit/bracket stores, then exercise ordinary input, healthy Pause,
-save, normal Quit and three cold Continues across a CELL transition. Finish the
-three requested routes and record them only when actual gameplay returns.
-
-Continue the adversarial review of production callers and authority. Textual
-inventory coverage is separate from semantic review and executed acceptance.
-Critical open work also includes exterior tree/loading and directed-door
-callbacks, NV/TTW source-family services, complete mod execution and save state,
-physical OpenXR acceptance and measured streaming/thread/frame performance.
-
-The pinned toolchain is official Godot 4.8-dev7 Mono, its matching managed SDK,
-and .NET 10.0.401. Temporary recording stays off during development and checks.
+Then return complete Player/Main frames, exercise ordinary input, healthy Pause,
+normal Save/Quit and three cold Continues across a CELL transition. Finish the
+three quest routes and record their actual gameplay. Complete mod execution,
+exterior/door callbacks, physical OpenXR acceptance and measured streaming,
+thread and frame performance remain required. Use the pinned official Godot
+4.8-dev7 Mono, matching managed SDK and .NET 10.0.401.

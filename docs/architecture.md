@@ -40,6 +40,15 @@ the source constructor, model setter or old native release. Frame position reads
 and writes use the existing reference/change/file/thread owners with bounded
 interval receipts; ordinary command history keeps its separate semantics.
 
+Loaded animation contexts bind independent first-person and Common pointers to
+their actual logical model and resource owners. C# samples original KF channels
+into that same logical graph and retains bounded sequence-clock and movement
+state. Temporary animation-loader and frame view writes use the existing Scene
+field. These components still require the enclosing production Player loader,
+ordinary action/group selection and complete cold-state composition. Resource
+retirement drains independent contexts, commits source reference release once
+and keeps a failed final binding available for a separate retry.
+
 Book page and focus sound inputs retain independent typed source fields while
 sharing one native pointer table, image lifetime and menu/audio consumer. Index
 controls store their current bounded selection before resolving the live winning

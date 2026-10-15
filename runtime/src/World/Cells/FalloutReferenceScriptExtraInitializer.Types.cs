@@ -35,7 +35,8 @@ internal sealed record FalloutReferenceScriptExtraInitializerSnapshot(string Sch
     uint ReferenceFlags, FalloutFormKey? Template, string? WriterBoundary,
     IReadOnlyList<FalloutReferenceScriptExtraInitializerPublication> Publications,
     IReadOnlyList<FalloutReferenceScriptExtraInitializationCall> Calls,
-    IReadOnlyList<FalloutReferenceInitializedFlagWrite>? ReferenceFlagWrites = null);
+    IReadOnlyList<FalloutReferenceInitializedFlagWrite>? ReferenceFlagWrites = null,
+    IReadOnlyList<FalloutReferenceAnimationFlagWrite>? AnimationFlagWrites = null);
 internal sealed record FalloutReferenceInitializedFlagWrite(FalloutReferencePositionInvocation Invocation,
     string Source, Guid Factory, Guid FieldsFactory, long Entered, long Changed,
     uint Before, uint After, bool Initialized, bool Returned, string? Failure,
