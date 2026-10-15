@@ -23,14 +23,14 @@ internal sealed class NativePluginModuleConstructionSource
     private readonly NativePluginImageImport[] _imports;
     private NativePluginModuleConstructionSource(NativePluginImageDeclaration image, string stack,
         NativePluginModuleConstructionKind kind, uint entry, IReadOnlyList<NativePluginConstructorField> fields,
-        IReadOnlyList<NativePluginConstructorInitializer> initializers)
+        IReadOnlyList<NativePluginConstructorInitializer> initializers, string? family = null)
     {
         Path = image.Path; Sha256 = image.Sha256; StackSha256 = stack.ToUpperInvariant(); Kind = kind; EntryRva = entry;
         Family = kind switch
         {
             NativePluginModuleConstructionKind.NoEntry => "PE32/no-entry/no-TLS-callbacks",
             NativePluginModuleConstructionKind.Leaf => "PE32/leaf-TRUE-stdcall/no-TLS-callbacks",
-            _ => "PE32/dynamic-UCRT/bounded-memory-attach/no-pre-entry-I/O"
+            _ => family ?? throw new InvalidDataException("Original dynamic construction omitted its selected source graph family.")
         };
         Fields = Array.AsReadOnly(fields.ToArray()); Initializers = Array.AsReadOnly(initializers.ToArray()); _imports = image.Imports.ToArray();
     }
@@ -47,7 +47,7 @@ internal sealed class NativePluginModuleConstructionSource
         if (entry == 0) return new(image, stack, NativePluginModuleConstructionKind.NoEntry, 0, [], []);
         if (source.LeafTrue(entry)) return new(image, stack, NativePluginModuleConstructionKind.Leaf, entry, [], []);
         var reduced = NativePluginDynamicCrtConstructor.Read(source, entry);
-        return new(image, stack, NativePluginModuleConstructionKind.DynamicCrt, entry, reduced.Fields, reduced.Initializers);
+        return new(image, stack, NativePluginModuleConstructionKind.DynamicCrt, entry, reduced.Fields, reduced.Initializers, reduced.Family);
     }
     internal void Check(NativePluginImageDeclaration image, string? stack = null)
     {

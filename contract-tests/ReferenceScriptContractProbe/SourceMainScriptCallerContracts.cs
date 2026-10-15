@@ -20,6 +20,9 @@ internal static partial class SourceMainScriptCallerContracts
         RunPlayerMoverDeltaContracts();
         RunPlayerActorMovementContracts();
         RunPlayerReturnTailContracts();
+        RunLoadedPlayerAnimationContracts();
+        RunPlayerViewOwnerContracts();
+        RunPlayerAnimationPreparationContracts();
         RunReferenceFrameReceiptContracts();
         ConditionGlobalContracts.Run();
         RunMainMenuBoundaryContracts();

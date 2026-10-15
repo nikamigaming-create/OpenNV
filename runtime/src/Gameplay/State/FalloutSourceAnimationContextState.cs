@@ -8,29 +8,32 @@ internal enum FalloutSourceAnimationContextStep
 internal sealed record FalloutSourceAnimationContextCall(FalloutPlayerLateFrameInvocation Frame, Guid Context,
     Guid Factory, long Entered, long Changed, FalloutSourceAnimationContextStep Step,
     FalloutSourceAnimationContextStep? FailedAt, uint DeltaBits, Guid? RootFactory,
-    int PendingCount, int TimedCount, int GroupCount, bool ActorPredicate, bool Returned, string? Failure);
+    int PendingCount, int TimedCount, int GroupCount, bool ActorPredicate, bool Returned, string? Failure, FalloutLoadedAnimationUpdate? Loaded = null);
 internal sealed record FalloutSourceAnimationContextConstruction(string Source, Guid Identity, Guid Factory,
-    FalloutReferenceModelDataInvocation Invocation, int GroupBuckets, bool Returned);
+    FalloutReferenceModelDataInvocation Invocation, int GroupBuckets, bool Returned,
+    FalloutLoadedAnimationRole Role = FalloutLoadedAnimationRole.FirstPerson);
 internal sealed record FalloutSourceAnimationContextSnapshot(FalloutSourceAnimationContextConstruction Construction,
     Guid Process, Guid CommonProcess, long Sequence, Guid? RootFactory, int PendingCount, int TimedCount,
     int GroupCount, Guid? FirstPair, Guid? SecondPair, ushort RequestedGroup,
-    string? Writer, FalloutSourceAnimationContextCall? LastCall, string? Failure);
+    string? Writer, FalloutSourceAnimationContextCall? LastCall, string? Failure,
+    FalloutLoadedAnimationContextSnapshot? Loaded = null, Guid? RetiringBindingFactory = null,
+    string? RetirementFailure = null, bool Retired = false);
 
 // The real managed AnimData object, independently allocated at the original
 // source constructor call. A KF clip, idle marker or logical graph is never
 // substituted for this object's current root, lists or animation groups.
-internal sealed class FalloutSourceAnimationContextState
+internal sealed partial class FalloutSourceAnimationContextState
 {
     private readonly Action _requireLifetime;
     private readonly Dictionary<ushort, Guid> _groups = new(FalloutPlayerReturnTailSource.AnimationGroupBuckets);
     private readonly List<Guid> _pending = [], _timed = [];
     private readonly int _thread = Environment.CurrentManagedThreadId;
-    private FalloutReferenceModelDataNode? _root;
+    private FalloutReferenceModelDataNode? _root, _retiringBinding;
     private Guid? _firstPair = null, _secondPair = null;
     private ushort _requested = FalloutPlayerReturnTailSource.NoAnimationGroup;
     private long _sequence, _fault;
-    private bool _busy, _retired;
-    private string? _writer, _failure;
+    private bool _busy, _retired, _retirementStarted;
+    private string? _writer, _failure, _retirementFailure;
     internal FalloutPlayerReturnTailSource Source { get; }
     internal FalloutCombatActorIdentity Actor { get; }
     internal Guid Identity { get; } = Guid.NewGuid();
@@ -39,11 +42,13 @@ internal sealed class FalloutSourceAnimationContextState
     internal Guid CommonProcess { get; }
     internal FalloutSourceAnimationContextConstruction Construction { get; }
     internal FalloutSourceAnimationContextCall? LastCall { get; private set; }
-    internal string? SaveBlocker => _retired ? "source-AnimData-retired" : _busy ? "source-AnimData-update-entered" : _failure ?? _writer;
+    internal string? SaveBlocker => _retired ? "source-AnimData-retired" :
+        _retirementStarted ? "source-AnimData-retirement-remains-entered" : _busy ? "source-AnimData-update-entered" : _failure ?? _writer ??
+        (LastBind is { Returned: false } ? "source-AnimData-bind-not-returned" : _manager?.SaveBlocker);
 
     internal FalloutSourceAnimationContextState(FalloutPlayerReturnTailSource source,
         FalloutReferenceModelDataInvocation construction, Action<FalloutReferenceModelDataInvocation> requireConstruction,
-        Action requireLifetime)
+        Action requireLifetime, FalloutLoadedAnimationRole role = FalloutLoadedAnimationRole.FirstPerson)
     {
         source.Validate(); ArgumentNullException.ThrowIfNull(requireConstruction); ArgumentNullException.ThrowIfNull(requireLifetime);
         requireConstruction(construction); requireLifetime(); construction.Actor.Validate();
@@ -54,7 +59,7 @@ internal sealed class FalloutSourceAnimationContextState
         Source = source; Actor = construction.Actor; Process = construction.ReferenceProcess; CommonProcess = construction.CommonProcess;
         _requireLifetime = requireLifetime;
         Construction = new(source.Identity, Identity, Factory, construction,
-            FalloutPlayerReturnTailSource.AnimationGroupBuckets, true);
+            FalloutPlayerReturnTailSource.AnimationGroupBuckets, true, role);
         requireConstruction(construction); requireLifetime();
     }
 
@@ -89,7 +94,8 @@ internal sealed class FalloutSourceAnimationContextState
             if (_root is not null)
             {
                 _root.RequireCurrent(); Check(); Step(FalloutSourceAnimationContextStep.BoundResource);
-                throw new NotSupportedException("source-AnimData-bound-root-controller-sequence-and-KF-manager-update-unowned");
+                try { UpdateLoadedRoot(deltaBits, () => CheckFrame(), () => ReadFrameScale(frame), frame: frame); }
+                finally { LastCall = LastCall with { Loaded = LastLoadedUpdate?.Frame == frame ? LastLoadedUpdate : null, Changed = Next() }; }
             }
             Step(FalloutSourceAnimationContextStep.Returned);
             LastCall = LastCall with { Returned = true, Changed = Next() }; return LastCall;
@@ -110,7 +116,7 @@ internal sealed class FalloutSourceAnimationContextState
         void CheckFrame()
         {
             _requireLifetime(); requireActual(frame);
-            if (_retired || frame.PlayerProcess != Process || frame.Common.Process != CommonProcess || frame.Common.Actor != Actor ||
+            if (_retired || _retirementStarted || frame.PlayerProcess != Process || frame.Common.Process != CommonProcess || frame.Common.Actor != Actor ||
                 frame.Common.Epoch != Construction.Invocation.Epoch || frame.PlayerConstructor != Construction.Invocation.ReferenceConstructor ||
                 frame.ThreadId != _thread || Environment.CurrentManagedThreadId != _thread)
                 throw new InvalidOperationException("AnimData update changed its actual Actor, source constructor, epoch or thread.");
@@ -142,19 +148,49 @@ internal sealed class FalloutSourceAnimationContextState
     }
     internal FalloutSourceAnimationContextSnapshot Capture() => new(Construction, Process, CommonProcess,
         _sequence, _root?.Node.Factory, _pending.Count, _timed.Count, _groups.Count, _firstPair, _secondPair,
-        _requested, _writer, LastCall, _failure);
+        _requested, _writer, LastCall, _failure, CaptureLoaded(), _retiringBinding?.Node.Factory, _retirementFailure, _retired);
     private void RequireIdle()
     {
         _requireLifetime();
         if (_busy) { ++_fault; throw new InvalidOperationException("AnimData writer reentered its actual current update."); }
-        if (_retired || _thread != Environment.CurrentManagedThreadId)
+        if (_retired || _retirementStarted || _thread != Environment.CurrentManagedThreadId)
             throw new InvalidOperationException("AnimData lost its actual current source lifetime/thread.");
     }
     private long Next() => checked(++_sequence);
+    internal bool Retired => _retired;
+    internal Guid? RetainedModelFactory => _root?.Node.Factory ?? _retiringBinding?.Node.Factory;
     internal void Retire()
     {
-        RequireIdle();
-        if (_root is { } root) root.Release(() => { _root = null; Next(); });
-        _retired = true;
+        if (_retired) return;
+        if (_busy || _thread != Environment.CurrentManagedThreadId)
+            throw new InvalidOperationException("AnimData retirement left its actual idle source owner/thread.");
+        _retirementStarted = true;
+        try
+        {
+            // Manager teardown precedes release of the graph it still uses.
+            // Independent contexts are drained by the containing facade.
+            _manager?.Retire();
+            if (_retiringBinding is { } pending)
+            {
+                var state = pending.RetirementState;
+                if (state is not (FalloutReferenceModelBindingRetirementState.Retained or
+                    FalloutReferenceModelBindingRetirementState.BindingPending or FalloutReferenceModelBindingRetirementState.Retired))
+                    throw new InvalidOperationException("AnimData final binding retry lost its committed source release.");
+                // A committed shared release may leave another owner retaining
+                // the node. Only its genuine zero-reference state permits the
+                // independent final binding retry.
+                if (state == FalloutReferenceModelBindingRetirementState.BindingPending) pending.RetireBinding();
+                _retiringBinding = null; Next();
+            }
+            if (_root is { } root)
+            {
+                root.Release(() => { _root = null; _retiringBinding = root; Next(); });
+                // A normal return either leaves other real source leases or
+                // returns final binding retirement. Neither needs another call.
+                _retiringBinding = null;
+            }
+            _retired = true; Next();
+        }
+        catch (Exception error) { _retirementFailure ??= error.Message; throw; }
     }
 }

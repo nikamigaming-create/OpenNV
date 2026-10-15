@@ -24,7 +24,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             _playerOpacity?.Capture() ?? _historicalPlayerOpacity, _followingServicesCall, _weaponContinuation,
             _inhibition.Capture(), _followingTimerFlag.Capture(), _followingContinuation, mover,
             _lateActorTime?.Capture() ?? _historicalLateActorTime, CaptureLateFrame(),
-            _lateMoverDelta?.Capture() ?? _historicalMoverDelta, _actorMovement?.Capture() ?? _historicalActorMovement);
+            _lateMoverDelta?.Capture() ?? _historicalMoverDelta, _actorMovement?.Capture() ?? _historicalActorMovement, CaptureViewFields());
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -83,7 +83,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             saved.CameraPosition is null || saved.CameraAngles is null || saved.FirstPersonHistory is null || saved.ControlObservations is null ||
             saved.FirstPersonHistory.Select(owner => owner.Identity).Distinct().Count() != saved.FirstPersonHistory.Count ||
             saved.FirstPersonHistory.Select(owner => owner.Publication.Factory).Distinct().Count() != saved.FirstPersonHistory.Count ||
-            saved.SceneMode > 1 || saved.MainHold > 1 || saved.PlayerView != 0 || saved.MainHold != 0 && saved.SceneMode == 0 ||
+            saved.SceneMode > 1 || saved.MainHold > 1 || saved.MainHold != 0 && saved.SceneMode == 0 ||
             saved.ViewRequest != 0 || saved.ViewRequestArgument != 0 || saved.CountdownEnabled != 0 ||
             saved.CountdownBits != 0x40a00000 || saved.ReferenceScratch != 0 ||
             saved.ClockKind != 0 || saved.Numerator != FalloutStandalonePlayerSceneSource.One ||
@@ -92,6 +92,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             saved.Failure is not null && string.IsNullOrWhiteSpace(saved.Failure))
             throw new InvalidDataException("Standalone scene omitted or invented its current source constructor/writer/ownership fields.");
         saved.Source.Validate();
+        ValidateViewFields(saved);
         ValidateControlPointOfView(saved);
         if (saved.ActorMover is not { } mover || mover.Process != saved.CapturedProcess ||
             mover.Constructor != saved.Constructor || mover.Values.Player != saved.MoverFields)

@@ -4,6 +4,22 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--loaded-player-animation-contracts"])
+{
+    SourceMainScriptCallerContracts.RunLoadedPlayerAnimationContracts();
+    return;
+}
+if (args is ["--player-view-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerViewOwnerContracts();
+    return;
+}
+if (args is ["--player-animation-preparation-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerAnimationPreparationContracts();
+    return;
+}
+
 if (args is ["--player-return-tail-contracts"])
 {
     SourceMainScriptCallerContracts.RunPlayerReturnTailContracts();

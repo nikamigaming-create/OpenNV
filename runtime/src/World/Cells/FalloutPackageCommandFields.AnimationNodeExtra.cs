@@ -136,7 +136,8 @@ internal sealed partial class FalloutActorPackageCommandFields
         FalloutSourceAnimationContextState context, Action<FalloutReferenceModelDataInvocation> requireActualStore)
     {
         RequireAnimationLoad(invocation, requireActualStore); ArgumentNullException.ThrowIfNull(context);
-        if (context.Source != _animationTailSource || context.Actor != Actor || context.Process != invocation.ReferenceProcess ||
+        if (context.Construction.Role != FalloutLoadedAnimationRole.FirstPerson ||
+            context.Source != _animationTailSource || context.Actor != Actor || context.Process != invocation.ReferenceProcess ||
             context.CommonProcess != Process || context.Construction.Invocation != invocation || !context.Construction.Returned ||
             !_animationLoadWriters.Any(row => row.Invocation == invocation && row.Kind == FalloutReferenceAnimationLoadWriterKind.EnteredLoad && row.Returned) ||
             _animationLoadWriters.Any(row => row.Invocation == invocation && row.Kind == FalloutReferenceAnimationLoadWriterKind.FirstContextStore))

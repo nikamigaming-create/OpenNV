@@ -9,6 +9,8 @@ internal static partial class SourceMainScriptCallerContracts
         var owned = records.OwnedSource ?? throw new InvalidDataException("Player tail qualification requires original owned inputs.");
         records.RequireLiveLoadReceipt(records.LoadReceipt);
         var source = FalloutExecutableStringTable.ReadPlayerReturnTail(owned.FalloutExecutablePath, movement, scene);
+        AuditOwnedLoadedPlayerAnimation(owned.FalloutExecutablePath, source);
+        AuditOwnedPlayerPostAnimation(owned.FalloutExecutablePath, source);
         using var fixture = new PlayerReturnTailFixture(original: records, controls: movement.Mover.Controller.Fields.Controls);
         var call = fixture.Update(); FalloutPlayerReturnTailState.Validate(fixture.State.Capture());
         Require(call.Returned && call.Animations.Count == 2 && call.Queue is { Returned: true } &&

@@ -40,11 +40,10 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         uint flags = FalloutReferenceScriptExtraInitializerSource.ConstructorFlags; long sequence = 0; var lastPublication = -1;
         string? boundary = null; var priorReturned = false; var failed = false;
         var flagWrites = saved.ReferenceFlagWrites ?? [];
-        var flagWriteIndex = 0;
+        var flagWriteIndex = 0; var animationWrites = saved.AnimationFlagWrites ?? []; var animationIndex = 0;
         foreach (var call in saved.Calls)
         {
-            while (flagWriteIndex < flagWrites.Count && flagWrites[flagWriteIndex].Entered < call.Entered)
-                FlagWrite(flagWrites[flagWriteIndex++]);
+            AdvanceFlagsBefore(call.Entered);
             if (call is null || call.Source is null || call.Source.Identity != source.Identity || call.Invocation is not { } invocation ||
                 invocation.Initialization == Guid.Empty || !ids.Add(invocation.Initialization) || invocation.Actor != actor || invocation.Epoch != saved.Epoch ||
                 invocation.ThreadId < 1 || !publications.TryGetValue(invocation.Process, out var publication) ||
@@ -72,13 +71,47 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
             }
             flags = call.FlagsAfter; failed |= !call.Returned;
         }
-        while (flagWriteIndex < flagWrites.Count) FlagWrite(flagWrites[flagWriteIndex++]);
+        AdvanceFlagsBefore(long.MaxValue);
         if (flags != saved.ReferenceFlags || boundary != saved.WriterBoundary)
             throw new InvalidDataException("Script initializer current flags or writer refusal disagree with their ordered source history.");
         var publicationCalls = saved.Calls.Select(value => (Process: value.Invocation.Process, value.Entered, value.Changed))
             .Concat(flagWrites.Select(value => (Process: value.Invocation.CommonProcess, value.Entered, value.Changed)))
+            .Concat(animationWrites.Select(value => (Process: value.Invocation.CommonProcess, value.Entered, value.Changed)))
             .OrderBy(value => value.Entered).ToArray();
         FalloutReferencePublicationSequence.Validate(saved.Publications.Select(value => (value.Process, value.PublishedSequence)), publicationCalls, sequence);
+
+        void AdvanceFlagsBefore(long bound)
+        {
+            while (flagWriteIndex < flagWrites.Count || animationIndex < animationWrites.Count)
+            {
+                var normal = flagWriteIndex < flagWrites.Count ? flagWrites[flagWriteIndex].Entered : long.MaxValue;
+                var animation = animationIndex < animationWrites.Count ? animationWrites[animationIndex].Entered : long.MaxValue;
+                if (Math.Min(normal, animation) >= bound) break;
+                if (normal < animation) FlagWrite(flagWrites[flagWriteIndex++]);
+                else AnimationFlag(animationWrites[animationIndex++]);
+            }
+        }
+        void AnimationFlag(FalloutReferenceAnimationFlagWrite write)
+        {
+            var invocation = write.Invocation;
+            if (write.Source != source.Identity || write.LoadedSource.Length != 64 || write.Call == Guid.Empty || !ids.Add(write.Call) ||
+                invocation.Call == Guid.Empty || invocation.Actor != actor || invocation.Epoch != saved.Epoch || invocation.ThreadId < 1 ||
+                invocation.Ingress != FalloutReferenceModelDataIngress.ThreeDLoad ||
+                !publications.TryGetValue(invocation.CommonProcess, out var publication) ||
+                invocation.ReferenceProcess != publication.Value.ThreadProcess || invocation.ReferenceConstructor != publication.Value.Constructor ||
+                write.Factory != publication.Value.Factory || write.FieldsFactory != publication.Value.FieldsFactory ||
+                publication.Ordinal < lastPublication || write.Entered != ++sequence || write.Changed != ++sequence || write.Before != flags ||
+                write.Returned != (write.Failure is null) || write.Failure is { Length: 0 } ||
+                threads.TryGetValue(invocation.CommonProcess, out var thread) && thread != invocation.ThreadId ||
+                write.Enabled && (write.Construction is not { Returned: true, Role: FalloutLoadedAnimationRole.Common } construction ||
+                    construction.Invocation != invocation))
+                throw new InvalidDataException("Animation flag store changed its actual source word, loader or constructor.");
+            var after = write.Enabled ? flags | FalloutLoadedAnimationSource.AnimationReferenceFlag : flags & ~FalloutLoadedAnimationSource.AnimationReferenceFlag;
+            if (write.Returned ? write.After != after : write.After != flags && write.After != after)
+                throw new InvalidDataException("Animation flag store fabricated a bit or lost a failed prefix.");
+            flags = write.After; lastPublication = publication.Ordinal;
+            threads.TryAdd(invocation.CommonProcess, invocation.ThreadId); failed |= !write.Returned;
+        }
 
         void FlagWrite(FalloutReferenceInitializedFlagWrite write)
         {
@@ -195,7 +228,8 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
     {
         Publications = Array.AsReadOnly(snapshot.Publications.ToArray()),
         Calls = Array.AsReadOnly(snapshot.Calls.Select(CloneCall).ToArray()),
-        ReferenceFlagWrites = snapshot.ReferenceFlagWrites is { } writes ? Array.AsReadOnly(writes.ToArray()) : null
+        ReferenceFlagWrites = snapshot.ReferenceFlagWrites is { } writes ? Array.AsReadOnly(writes.ToArray()) : null,
+        AnimationFlagWrites = snapshot.AnimationFlagWrites is { } animations ? Array.AsReadOnly(animations.ToArray()) : null
     };
     private static bool EquivalentSnapshot(FalloutReferenceScriptExtraInitializerSnapshot first, FalloutReferenceScriptExtraInitializerSnapshot second) =>
         JsonSerializer.Serialize(first) == JsonSerializer.Serialize(second);

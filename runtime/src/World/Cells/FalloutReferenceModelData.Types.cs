@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -36,6 +37,9 @@ internal sealed record FalloutReferenceModelDataSnapshot(FalloutPlayerMoverDelta
 
 // A lease retains the same returned source graph and native factory. Merely
 // naming a native root is insufficient; every read/retain rechecks its owner.
+internal enum FalloutReferenceModelBindingRetirementState
+{ Retained, SourceReleaseEntered, SourceReleaseFailed, BindingPending, BindingRetirementEntered, Retired }
+
 internal sealed class FalloutReferenceModelDataNode
 {
     private readonly FalloutActorLogicalScene _logical;
@@ -44,9 +48,20 @@ internal sealed class FalloutReferenceModelDataNode
     private readonly Action _released;
     private readonly Action? _retireBinding;
     private int _references;
-    private bool _bindingRetired;
+    private bool _bindingRetired, _releaseEntered, _bindingRetirementStarted, _bindingRetirementEntered;
+    private ExceptionDispatchInfo? _sourceReleaseFailure;
+    internal FalloutReferenceModelBindingRetirementState RetirementState =>
+        _releaseEntered ? FalloutReferenceModelBindingRetirementState.SourceReleaseEntered :
+        _bindingRetirementEntered ? FalloutReferenceModelBindingRetirementState.BindingRetirementEntered :
+        _sourceReleaseFailure is not null ? FalloutReferenceModelBindingRetirementState.SourceReleaseFailed :
+        _bindingRetired ? FalloutReferenceModelBindingRetirementState.Retired :
+        _references == 0 ? FalloutReferenceModelBindingRetirementState.BindingPending : FalloutReferenceModelBindingRetirementState.Retained;
     internal FalloutSourceSceneNode Node { get; }
-    internal string? SaveBlocker => _logical.SaveBlocker;
+    internal FalloutActorLogicalScene LogicalScene { get { RequireCurrent(); return _logical; } }
+    internal string? SaveBlocker => _releaseEntered ? "source-reference-model-release-entered" :
+        _sourceReleaseFailure is not null ? "source-reference-model-release-failed" :
+        _bindingRetired ? "source-reference-model-binding-retired" :
+        _bindingRetirementStarted ? "source-reference-model-binding-retirement-incomplete" : _logical.SaveBlocker;
     internal FalloutActorLogicalSceneSnapshot CaptureScene() => _logical.Capture();
     internal FalloutReferenceModelDataNode(FalloutSourceSceneNode node, FalloutActorLogicalScene logical,
         Action requireActual, Action released, Action? retireBinding = null, Action? requireRetirement = null)
@@ -60,7 +75,8 @@ internal sealed class FalloutReferenceModelDataNode
     }
     internal void RequireCurrent()
     {
-        if (_bindingRetired) throw new InvalidOperationException("Reference model binding is retired.");
+        if (_bindingRetired || _bindingRetirementStarted || _releaseEntered || _sourceReleaseFailure is not null)
+            throw new InvalidOperationException("Reference model binding entered retirement or retained a failed source release.");
         _requireActual();
         if (_logical.SaveBlocker is { } failure) throw new NotSupportedException(failure);
         if (_logical.Factory != Node.Factory) throw new InvalidOperationException("Reference model changed its retained source graph.");
@@ -69,21 +85,36 @@ internal sealed class FalloutReferenceModelDataNode
     { RequireCurrent(); _references = checked(_references + 1); committed(); RequireCurrent(); }
     internal void Release(Action committed)
     {
-        _requireRetirement();
-        if (_bindingRetired || _logical.Factory != Node.Factory || _references < 1)
-            throw new InvalidOperationException("Reference model released a foreign or retired binding.");
-        // The real final-release callback precedes retirement of our retained
-        // count, so a failed callback retains the genuine lease for cleanup.
-        if (_references == 1) _released(); --_references; committed();
+        if (_releaseEntered || _bindingRetirementEntered)
+            throw new InvalidOperationException("Reference model release reentered its actual lifecycle callback.");
+        _releaseEntered = true;
+        try
+        {
+            _requireRetirement(); _sourceReleaseFailure?.Throw();
+            if (_bindingRetired || _logical.Factory != Node.Factory || _references < 1)
+                throw new InvalidOperationException("Reference model released a foreign or retired binding.");
+            // The source callback runs once, before its retained count commits.
+            // An exception has an unknown source prefix and cannot be replayed.
+            if (_references == 1)
+                try { _released(); }
+                catch (Exception error) { _sourceReleaseFailure = ExceptionDispatchInfo.Capture(error); throw; }
+            --_references;
+            if (_references == 0) _bindingRetirementStarted = true;
+            committed();
+        }
+        finally { _releaseEntered = false; }
         if (_references == 0) RetireBinding();
     }
     internal void RetireBinding()
     {
+        if (_releaseEntered || _bindingRetirementEntered)
+            throw new InvalidOperationException("Reference model binding retirement reentered its actual lifecycle callback.");
         if (_bindingRetired) return;
         if (_references != 0) throw new InvalidOperationException("Reference model binding retains source references.");
-        // Native binding ownership exists even when a pointer store commits
-        // before the source retain. Retiring it never fabricates a Release.
-        _retireBinding?.Invoke();
-        _bindingRetired = true;
+        // Binding ownership is independent of source reference count. A failed
+        // final callback retains this zero-reference binding for a real retry.
+        _bindingRetirementStarted = _bindingRetirementEntered = true;
+        try { _retireBinding?.Invoke(); _bindingRetired = true; }
+        finally { _bindingRetirementEntered = false; }
     }
 }

@@ -36,7 +36,7 @@ internal sealed partial class FalloutPlayerMoverDeltaState
             call.Ordinal != saved.Calls || call.Entered < 1 || call.Entered <= owner.Published || call.Changed <= call.Entered ||
             call.Changed != saved.Sequence || call.ProcessReads is null || call.ProcessReads.Count > 4 ||
             call.ProcessBytes is null || call.ProcessBytes.Count > 2 || call.Flags is null || call.Flags.Count > 3 ||
-            call.Controllers is null || call.Controllers.Count > 2 || call.Delta != FalloutActorMoverVector.Default ||
+            call.Controllers is null || call.Controllers.Count > 2 ||
             call.Returned != (call.Failure is null) || call.Returned != (call.Step == FalloutPlayerMoverDeltaStep.Returned) ||
             call.Failure != saved.Failure || (call.Returned ? call.FailedAt is not null : call.FailedAt is null) ||
             call.Failure is { } error && string.IsNullOrWhiteSpace(error))
@@ -52,10 +52,11 @@ internal sealed partial class FalloutPlayerMoverDeltaState
         foreach (var read in call.ProcessBytes)
         { RequireCommon(read.Common, call.Invocation); if (!Enum.IsDefined(read.Cell)) throw new InvalidDataException("Mover delta read another process byte."); }
         if (call.View is { } view) RequireView(view, call.Invocation, saved.Source);
-        if (call.FirstAnimation is { } first && (call.View?.View != 0 || first.Context is not null && call.Returned ||
+        if (call.FirstAnimation is { } first && (call.View?.View != 0 ||
             first.Actor != call.Invocation.Common.Actor || first.Process != call.Invocation.Common.Process || first.Epoch != call.Invocation.Common.Epoch ||
             first.Source != saved.Source.Controller.Fields.Identity || first.Constructor != call.Invocation.PlayerConstructor || first.Factory == Guid.Empty || first.Stack != saved.Stack))
             throw new InvalidDataException("Mover delta first animation belongs to another actual field or omitted its nonnull child.");
+        ValidateLoadedAnimationReads(call);
         foreach (var controller in call.Controllers)
         {
             RequireCommon(controller.Context.Process, call.Invocation);
@@ -89,7 +90,7 @@ internal sealed partial class FalloutPlayerMoverDeltaState
         if (!call.Returned) return;
         if (call.ProcessReads.Count < 1 || call.View is null || call.View.View == 0 && call.FirstAnimation is null ||
             call.Activities.Count == 0 || call.Activities[0].Value != 0 && call.Activities.Count != 2 ||
-            call.Override != false || call.SelectedAnimation is not null || call.ProcessReads[0].AnimationContext is not null ||
+            call.Override != false ||
             call.Life is not { Result: false } || !call.ProcessBytes.Any(read => read.Cell == FalloutMoverDeltaProcessCell.SpecialMotion && read.Value == 0) ||
             call.Controllers.Count < 1 || call.Flags.Count == 0)
             throw new InvalidDataException("Returned mover delta omitted an actually reached animation/override/controller/flag child.");
@@ -105,6 +106,67 @@ internal sealed partial class FalloutPlayerMoverDeltaState
                 call.Data is not null || call.Controllers.Count != 1 : (call.Data is null || call.Data.Data is not null && call.ActorMovement is not { Returned: true } ||
                     call.Data.Data is null && call.ActorMovement is not null) || call.Controllers.Count != 2))
             throw new InvalidDataException("Ordinary mover delta fabricated movement return from zero XYZ or null model in nonnull data.");
+    }
+    private static void ValidateLoadedAnimationReads(FalloutPlayerMoverDeltaCall call)
+    {
+        var common = call.ProcessReads.FirstOrDefault()?.AnimationContext; var first = call.FirstAnimation?.Context;
+        var expected = common; var groups = call.AnimationGroups ?? [];
+        if (call.View?.View == 0)
+        {
+            if (common is not null && first is not null)
+            {
+                if (!call.Returned && call.FailedAt <= FalloutPlayerMoverDeltaStep.AnimationEquality && groups.Count < 2)
+                {
+                    if (groups.Count > 1 || groups.Any(row => row.Frame != call.Invocation || row.Context != first || row.Factory == Guid.Empty || row.Sequence < 0) ||
+                        call.SelectedAnimation != common || call.AnimationMovement is not null || call.Delta != FalloutActorMoverVector.Default)
+                        throw new InvalidDataException("Failed mover delta fabricated its incomplete group comparison.");
+                    return;
+                }
+                if (groups is not [var firstRead, var commonRead] || firstRead.Context != first || commonRead.Context != common ||
+                    groups.Any(row => row.Frame != call.Invocation || row.Factory == Guid.Empty || row.Sequence < 0))
+                    throw new InvalidDataException("Mover delta omitted the current first/common group-word equality reads.");
+                if (firstRead.Word == commonRead.Word) expected = first;
+            }
+            else if (common is null) expected = first;
+        }
+        if ((common is null || first is null || call.View?.View != 0) && groups.Count != 0)
+            throw new InvalidDataException("Mover delta invented unentered group comparisons.");
+        if (call.SelectedAnimation != expected)
+            throw new InvalidDataException("Mover delta selected a different real animation pointer from its current group words.");
+        if (call.AnimationMovement is not { } read)
+        {
+            if (call.Delta != FalloutActorMoverVector.Default || call.Returned && expected is not null)
+                throw new InvalidDataException("Mover delta returned a nonnull animation without its vector child.");
+            return;
+        }
+        if (read.Frame != call.Invocation || read.Context != expected || read.Factory == Guid.Empty || read.Sequence < 0 ||
+            read.Delta != call.Delta || call.Flags.FirstOrDefault() != read.Flags ||
+            read.Returned && (read.ModelFactory is null || read.ModelFactory == Guid.Empty || read.Mode is null ||
+                read.MoverFlags != call.Mover.Flags || read.Rotation.Count != 9) ||
+            !read.Returned && (read.ModelFactory is not null || read.Mode is not null || read.Scale is not null ||
+                read.Rotation.Count != 0 || read.Delta != FalloutActorMoverVector.Default))
+            throw new InvalidDataException("Animation vector changed its actual model, mutable leaves, caller or returned result.");
+        if (!read.Returned) return;
+        var mode = read.Mode!;
+        if (mode.Actor != call.Invocation.Common.Actor || mode.Process != call.Invocation.PlayerProcess ||
+            mode.Constructor != call.Invocation.PlayerConstructor || (mode.Mode is 3 or 5 or 8 or 10) != (read.Scale is not null))
+            throw new InvalidDataException("Animation vector replaced the same source Actor19C getter or its conditional scale.");
+        var x = Value(read.Before.X); var y = Value(read.Before.Y); var z = Value(read.Before.Z);
+        if (read.Scale is { } scale)
+        {
+            if (scale.Actor != mode.Actor || scale.Process != mode.Process || scale.Constructor != mode.Constructor)
+                throw new InvalidDataException("Animation vector borrowed another current reference scale.");
+            x /= Value(scale.Bits); y /= Value(scale.Bits);
+        }
+        if ((read.Flags.Flags & FalloutPlayerMoverDeltaSource.DirectPositionFlag) == 0) z = 0;
+        else
+        {
+            var matrix = read.Rotation.Select(Value).ToArray();
+            float Row(int row) => ((matrix[row] * x) + 0f) + (matrix[row + 1] * y) + (matrix[row + 2] * z);
+            var nextX = Row(0); var nextY = Row(3); var nextZ = Row(6); x = nextX; y = nextY; z = nextZ;
+        }
+        if (read.Delta != new FalloutActorMoverVector(Bits(x), Bits(y), Bits(z)))
+            throw new InvalidDataException("Animation vector lost its actual source Float32 scale/rotation/zero-Z law.");
     }
     private static void ValidateInvocation(FalloutPlayerLateFrameInvocation invocation, FalloutPlayerMoverDeltaSource source, string stack)
     {

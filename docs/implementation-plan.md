@@ -17,6 +17,9 @@ they do not complete this deliverable.
    using current runtime owners. Loading transfer, controller context/post-actions,
    Current/Primary idle query, late inhibition prefix, Actor-time and XY/Z stores
    now return in ordinary FO3. The argument uses actual cached Main time.
+   Compose the real first-person and inherited model/animation loader before
+   admitting its nonnull pointers. Reuse those contexts, the shared Scene view
+   field and C# sequence manager for the following animation and action calls.
    Complete healthy source Pause/Save transitions while retaining the same owners.
 2. Return the complete Player/Main gameplay frame and exercise ordinary movement
    and quest input. Fix the next actual behavioral failure on this same path.

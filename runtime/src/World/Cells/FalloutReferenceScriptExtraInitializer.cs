@@ -69,12 +69,16 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
             _referenceFlags = saved.ReferenceFlags; _template = saved.Template; _writerBoundary = saved.WriterBoundary;
             _publications.AddRange(saved.Publications); _calls.AddRange(saved.Calls.Select(CloneCall));
             _referenceFlagWrites.AddRange(saved.ReferenceFlagWrites ?? []);
+            _animationFlagWrites.AddRange(saved.AnimationFlagWrites ?? []);
             _failure = _calls.FirstOrDefault(value => !value.Returned)?.Failure;
             _returnedInitialization = _calls.Any(value => value.Returned && value.InvalidatedWriter is null);
             foreach (var call in _calls) _invocations.Add(call.Invocation.Initialization);
             foreach (var write in _referenceFlagWrites) _invocations.Add(write.Invocation.Call);
-            _sequence = Math.Max(_calls.LastOrDefault()?.Changed ?? 0, _referenceFlagWrites.LastOrDefault()?.Changed ?? 0);
+            foreach (var write in _animationFlagWrites) _invocations.Add(write.Call);
+            _sequence = Math.Max(Math.Max(_calls.LastOrDefault()?.Changed ?? 0, _referenceFlagWrites.LastOrDefault()?.Changed ?? 0),
+                _animationFlagWrites.LastOrDefault()?.Changed ?? 0);
             _failure ??= _referenceFlagWrites.FirstOrDefault(value => !value.Returned)?.Failure;
+            _failure ??= _animationFlagWrites.FirstOrDefault(value => !value.Returned)?.Failure;
             LastCall = _calls.LastOrDefault();
             _publications.Add(new(Process, Factory, FieldsFactory, Constructor, Epoch, threadContext.Process, threadContext.Factory,
                 saved.Process, saved.Factory, _sequence));
@@ -191,7 +195,8 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         var snapshot = new FalloutReferenceScriptExtraInitializerSnapshot(Schema, Source, _fields.Stack, Actor, Process,
             Factory, FieldsFactory, Constructor, Epoch, _referenceFlags, _template, _writerBoundary,
             Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_calls.Select(CloneCall).ToArray()),
-            _referenceFlagWrites.Count == 0 ? null : Array.AsReadOnly(_referenceFlagWrites.ToArray()));
+            _referenceFlagWrites.Count == 0 ? null : Array.AsReadOnly(_referenceFlagWrites.ToArray()),
+            _animationFlagWrites.Count == 0 ? null : Array.AsReadOnly(_animationFlagWrites.ToArray()));
         Validate(snapshot, Source, _fields.Stack, Actor); return snapshot;
     }
 

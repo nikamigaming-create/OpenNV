@@ -19,7 +19,8 @@ internal sealed record FalloutProcessSceneFields(FalloutProcessWeaponEntry? Weap
     FalloutMoverDeltaProcessFields? MoverDelta = null,
     FalloutProcessAnimationQueueFields? AnimationPairs = null,
     string? AnimationContextWriter = null,
-    FalloutProcessAnimationContextInvalidation? AnimationContextLoad = null)
+    FalloutProcessAnimationContextInvalidation? AnimationContextLoad = null,
+    IReadOnlyList<FalloutProcessAnimationContextStore>? AnimationContextStores = null)
 {
     internal static FalloutProcessSceneFields Constructed => new(null, null);
 }
@@ -122,7 +123,7 @@ internal sealed partial class FalloutActorProcessCommonState
     {
         var expected = FalloutSourceMainFamily.IsFallout3(executable) &&
             entry.Level is FalloutDetectionProcessLevel.High or FalloutDetectionProcessLevel.MiddleHigh;
-        if (expected != (entry.SceneFields is not null) || entry.SceneFields is { WeaponEntry: not null } or { AnimationContext: not null } or { SceneUpdateMask: not 0 } or { ActionCondition: not 0 } or { Action9Condition: not 0 } or { IdlePrimaryPackage: not null } or { ActorValueCache: not null })
+        if (expected != (entry.SceneFields is not null) || entry.SceneFields is { WeaponEntry: not null } or { SceneUpdateMask: not 0 } or { ActionCondition: not 0 } or { Action9Condition: not 0 } or { IdlePrimaryPackage: not null } or { ActorValueCache: not null })
             throw new InvalidDataException("Process scene fields lost their constructor or admitted a missing inventory/animation writer.");
         ValidateEarlyControllerField(entry, executable, stack);
         ValidatePostActionFields(entry);
@@ -132,6 +133,7 @@ internal sealed partial class FalloutActorProcessCommonState
         ValidateWeaponDrawnFields(entry);
         ValidateMoverDeltaProcessFields(entry, executable);
         ValidatePlayerAnimationQueueFields(entry, executable);
+        ValidateLoadedAnimationPointer(entry);
         ValidateOpacityFields(entry, executable, stack);
         ValidateWeaponContinuationFields(entry);
     }

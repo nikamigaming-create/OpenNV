@@ -44,6 +44,16 @@ and content read lifetime are repaired with focused regression checks; complete
 product acceptance remains unavailable.
 This current result supersedes older component/refusal checkpoints below.
 
+The current animation repair compiles without warnings and passes focused C#
+pose, independent-pointer, shared-view and preparation-prefix contracts. Owned
+executable qualification passes for the selected loaded-animation and subsequent
+view/preparation calls. Failed-context cleanup now drains independent resources,
+retains failed source releases and retries final binding retirement separately.
+The enclosing Player loader, action/group activation, complete frame and full
+AnimData cold state are still unfinished. An unchanged FNV startup now passes
+the former FNVXR constructor declaration boundary and reaches an independent
+co-resident BCrypt import refusal; JIP still fails at its later image mutation.
+
 A private phone-friendly 36-second FO3 startup clip from main shows Boy selection
 and character creation with audio and a visible edit. Its birth background is
 black. It does not establish a completed quest or save/Continue.

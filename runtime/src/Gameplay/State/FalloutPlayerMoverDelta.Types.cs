@@ -42,7 +42,9 @@ internal sealed record FalloutPlayerMoverDeltaCall(FalloutPlayerLateFrameInvocat
     FalloutPlayerMoverDeltaMenuRead? Menu, FalloutReferenceModelDataRead? Data,
     FalloutActorMoverVector Delta, FalloutReferencePositionCall? Position,
     FalloutReferenceParentCellRead? Parent, bool? MovementReturned,
-    bool Returned, string? Failure, FalloutPlayerActorMovementCall? ActorMovement = null);
+    bool Returned, string? Failure, FalloutPlayerActorMovementCall? ActorMovement = null,
+    IReadOnlyList<FalloutLoadedAnimationGroupRead>? AnimationGroups = null,
+    FalloutLoadedAnimationMovementRead? AnimationMovement = null);
 internal sealed record FalloutPlayerMoverDeltaSnapshot(FalloutPlayerMoverDeltaSource Source, string Stack,
     Guid PlayerProcess, Guid Factory, Guid Constructor, long Sequence, long Calls,
     IReadOnlyList<FalloutPlayerMoverDeltaPublication> Publications,
@@ -59,4 +61,7 @@ internal sealed record FalloutPlayerMoverDeltaOwners(FalloutActorMoverState Move
     Func<FalloutPlayerLateFrameInvocation, Func<FalloutReferencePositionInvocation, FalloutReferencePositionCall>,
         FalloutReferencePositionCall> WithPosition,
     FalloutSourceReferencePositionState Position, IFalloutReferencePositionConsumers PositionConsumers,
-    FalloutPlayerActorMovementState? ActorMovement = null);
+    FalloutPlayerActorMovementState? ActorMovement = null,
+    Func<Guid, FalloutSourceAnimationContextState>? RequireAnimationContext = null,
+    Func<FalloutPlayerLateFrameInvocation, FalloutReferenceActorYawModeRead>? ReadAnimationActorMode = null,
+    Func<FalloutPlayerLateFrameInvocation, FalloutReferenceScaleRead>? ReadAnimationScale = null);
