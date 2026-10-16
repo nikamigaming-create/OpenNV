@@ -223,6 +223,10 @@ public partial class RuntimeCoordinator
         if (_nativePluginCampaign is null && _nativeDirectInput is null && _nativeQuestScripts is { } scripts &&
             GodotObject.IsInstanceValid(scripts) && scripts.GetParent() is null)
             Retire(() => { scripts.Free(); _nativeQuestScripts = null; });
+        // Subtitles prepare speech before physical Player publication. A
+        // failed model load can precede their transfer to the HUD's tree.
+        if (_nativeSubtitles is { } subtitles && GodotObject.IsInstanceValid(subtitles) && subtitles.GetParent() is null)
+            Retire(() => { subtitles.Free(); _nativeSubtitles = null; });
         Retire(RetireNativeExperienceHud);
         Retire(() => CancelNativeManualSave("Native session retired before the pending manual save could commit.", allQueued: true));
         Retire(DetachNativeCloseRequest);

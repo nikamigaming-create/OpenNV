@@ -9,19 +9,19 @@ checks do not establish a playable campaign or matched retail parity.
 
 The adversarial audit inventories all first-party code and configuration and
 traces unconditional refusals, ownership contradictions, persistence and
-performance risks. The latest FO3 start returns its opening package, High reset,
+performance risks. An earlier FO3 start returns its opening package, High reset,
 mover, follower lookup and source-null animation handoff, then returns the pending
 birth-CELL transfer and ordinary load. All 1,610 references are retained; ten
 source-selected XPRM plane/portal bases have genuine engine-static ingress.
-The latest first Player frame returns its real nonnull controller context and
-post-action children and its Current/Primary idle-package query. The latest
+That first Player frame returns its real nonnull controller context and
+post-action children and its Current/Primary idle-package query. The same
 ordinary run also returns the late Flags setter, independent inhibition timer
 and bytes, Actor-time body and XY/Z stores using actual cached Main time. It next
 also returns mover-delta and its nonnull-data Actor movement child. It next
-fails at the following Player tail. The fresh run publishes
+fails at the following Player tail. That run publishes
 that shared World failure without recorded publication losses. Earlier package
 diagnostics called a failed gameplay getter; dedicated retained-field observation
-repairs that loss. The latest ordinary headless session opens Pause through
+repairs that loss. The earlier ordinary headless session opens Pause through
 Escape, resumes through the actual menu, returns the source stack to quiet mode,
 then reopens and quits through the actual confirmation. Normal process exit is
 zero and source owners are disposed. This proves menu and faulted-session cleanup;
@@ -44,13 +44,20 @@ and content read lifetime are repaired with focused regression checks; complete
 product acceptance remains unavailable.
 This current result supersedes older component/refusal checkpoints below.
 
-The current animation repair compiles without warnings and passes focused C#
-pose, independent-pointer, shared-view and preparation-prefix contracts. Owned
-executable qualification passes for the selected loaded-animation and subsequent
-view/preparation calls. Failed-context cleanup now drains independent resources,
-retains failed source releases and retries final binding retirement separately.
-The enclosing Player loader, action/group activation, complete frame and full
-AnimData cold state are still unfinished. An unchanged FNV startup now passes
+The production FO3 Player loader now returns the first-model field and initial
+embedded-controller update, independent first/Common animation binding and the
+following weapon/magic/shared-shader prefix. Its next actual refusal is the
+following controller, Interface/Pip-Boy and toddler-animation work. The owned
+first-person model passes all 73 initial transform controllers and three fresh
+logical-model reconstructions without replay. The source pointer declaration
+binds before model loading independently of Extra-list membership. Diagnostics
+retain the reached prefix with zero publication loss and failed startup exits
+with code one. Failed-context cleanup drains independent resources, retains failed
+source releases and retries final binding retirement separately. Complete loader
+return, action/group activation, Player/Main frames and full AnimData cold state
+remain unfinished. The complete pinned runtime gate and selected Release owned
+source/controller audits pass for this batch.
+An unchanged FNV startup now passes
 the former FNVXR constructor declaration boundary and reaches an independent
 co-resident BCrypt import refusal; JIP still fails at its later image mutation.
 

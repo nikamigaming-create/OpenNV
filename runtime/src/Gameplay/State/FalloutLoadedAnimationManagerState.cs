@@ -15,7 +15,7 @@ internal sealed record FalloutLoadedAnimationRootUpdate(Guid Factory, long Enter
 // A real source controller manager owns independently cloned sequence clocks.
 // The existing sampler publishes C# poses into the SAME logical graph. Native
 // presentation independently projects that authoritative graph afterwards.
-internal sealed class FalloutLoadedAnimationManagerState
+internal sealed partial class FalloutLoadedAnimationManagerState
 {
     private sealed class Sequence(FalloutLoadedAnimationResource resource, FalloutLoadedAnimationSequenceBinding binding)
     {
@@ -56,6 +56,14 @@ internal sealed class FalloutLoadedAnimationManagerState
         if (resources.Source != source || resources.Model.Factory != scene.Factory ||
             resources.Model.Skeleton.Source.Sha256 != scene.SkeletonSha256)
             throw new InvalidDataException("Animation manager changed its actual source model, root palette or native adapter.");
+        ConstructModelObjectPalette();
+        scene.BindLoadedAnimationPoseOwner(this);
+    }
+    internal void RequireModelBinding(FalloutActorLogicalScene scene)
+    {
+        Require();
+        if (!ReferenceEquals(_scene, scene))
+            throw new InvalidOperationException("Animation pose publication selected another logical model.");
     }
     internal void RegisterResources()
     {

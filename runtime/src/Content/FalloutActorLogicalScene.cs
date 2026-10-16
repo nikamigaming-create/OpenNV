@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 // mesh visibility or renderer pose can supply its fields.
 internal sealed partial class FalloutActorLogicalScene
 {
-    internal const string Schema = "opennv-actor-logical-scene/v1";
+    internal const string Schema = "opennv-actor-logical-scene/v4";
     internal const uint FixedBound = 0x2000;
     internal const uint UpdateBound = 0x80000;
     internal const uint LoadedActiveFlags = 0x8000e;
@@ -23,6 +23,7 @@ internal sealed partial class FalloutActorLogicalScene
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private long _sequence;
     private bool _busy, _retired;
+    private long _reentry;
     private string? _failure;
     private Guid? _restoredLifetime;
     private FalloutNifSceneAlphaCall? _alpha;
@@ -85,6 +86,10 @@ internal sealed partial class FalloutActorLogicalScene
         objects = _objects.Count,
         properties = _properties.Values.Select(property => property.Capture()).ToArray(),
         alpha = _alpha,
+        floatExtraData = CaptureFloatExtraData(),
+        visibility = CaptureVisibility(),
+        morphs = CaptureMorphs(),
+        initialModelUpdate = _initialModelUpdate,
         bounds = BoundLane,
         attachments = AttachmentLane,
         failure = _failure,
@@ -107,6 +112,8 @@ internal sealed partial class FalloutActorLogicalScene
             var key = new FalloutNifSceneKey(asset, slot.Declaration.Block.Index);
             var current = new FalloutNifSceneObject(key, slot.Declaration, local, (flags & ~ClearedLoadFlag) | LoadedActiveFlags);
             _objects.Add(key, current);
+            AddFloatExtraData(current, model.Source);
+            AddVisualFields(current, model.Source);
             var references = slot.Declaration switch { FalloutNifNode node => node.Properties, FalloutNifGeometry geometry => geometry.Properties, _ => [] };
             foreach (var index in references.Where(index => index >= 0))
             {
@@ -191,15 +198,19 @@ internal sealed partial class FalloutActorLogicalScene
             {
                 node.World = FalloutNifSceneMath.Compose(node.Parent?.World ?? anchor, node.Local); Next();
             }
-            // Geometry skin palettes may refer to bones elsewhere in the tree;
-            // all current world transforms must publish before the bound pass.
-            foreach (var node in _order)
-                if (node.IsGeometry) UpdateGeometryBound(node);
-            for (var index = _order.Count - 1; index >= 0; index--)
-                if (_order[index].IsNode) UpdateNodeBound(_order[index]);
+            UpdateCurrentBounds();
         }
         catch (Exception error) { _failure ??= error.Message; throw; }
         finally { _busy = false; }
+    }
+    private void UpdateCurrentBounds()
+    {
+        // Geometry skin palettes may refer to bones elsewhere in the tree;
+        // all current world transforms must publish before the bound pass.
+        foreach (var node in _order)
+            if (node.IsGeometry) UpdateGeometryBound(node);
+        for (var index = _order.Count - 1; index >= 0; index--)
+            if (_order[index].IsNode) UpdateNodeBound(_order[index]);
     }
     private void UpdateGeometryBound(FalloutNifSceneObject node)
     {
@@ -268,7 +279,7 @@ internal sealed partial class FalloutActorLogicalScene
     {
         ObjectDisposedException.ThrowIf(_retired, this);
         if (_thread != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Logical source scene changed its actual owning thread.");
-        if (_busy) throw new InvalidOperationException("Logical source scene cannot reenter a current publication.");
+        if (_busy) { ++_reentry; throw new InvalidOperationException("Logical source scene cannot reenter a current publication."); }
         if (!allowFailure && _failure is { } failure) throw new NotSupportedException(failure);
     }
 }

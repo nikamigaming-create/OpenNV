@@ -57,6 +57,15 @@ internal sealed partial class RuntimeNativeNifLogicalSceneMaterials : Node
         catch (Exception error) { Failure = error.Message; }
     }
     internal string? Failure { get; private set; }
+    internal void RequireBinding(FalloutActorLogicalScene scene, Node parent)
+    {
+        ObjectDisposedException.ThrowIf(_retired, this);
+        if (_thread != System.Environment.CurrentManagedThreadId || !ReferenceEquals(_scene, scene) ||
+            !GodotObject.IsInstanceValid(this) || IsQueuedForDeletion() ||
+            !GodotObject.IsInstanceValid(parent) || parent.IsQueuedForDeletion() ||
+            !ReferenceEquals(GetParent(), parent) || !_living())
+            throw new InvalidOperationException("Logical material borrower lost its actual source/parent/native binding.");
+    }
     internal object State => new
     {
         factory = _scene.Factory,

@@ -9,7 +9,10 @@ internal static partial class SourceMainScriptCallerContracts
 {
     internal static void RunLoadedPlayerAnimationContracts()
     {
+        RunInitialPlayerModelContracts();
         RunLoadedPlayerAnimationRetirementContracts();
+        RunLoadedPlayerFloatExtraDataContracts();
+        RunLoadedPlayerVisualFieldContracts();
         using var fixture = new PlayerReturnTailFixture();
         var source = AuthoredLoadedAnimation(fixture.State.Source);
         source.Validate();
@@ -97,6 +100,9 @@ internal static partial class SourceMainScriptCallerContracts
     internal static void AuditOwnedLoadedPlayerAnimation(string executable, FalloutPlayerReturnTailSource tail)
     {
         var source = FalloutExecutableStringTable.ReadLoadedPlayerAnimation(executable, tail);
+        Require(ReferenceEquals(source, FalloutExecutableStringTable.ReadLoadedPlayerAnimation(executable, tail)),
+            "The unchanged selected image did not reuse its qualified loaded-animation declaration.");
+        AuditOwnedPlayerModelLoadContinuation(executable, source);
         Require(source.Groups.Count == 183 && source.NodeNames.Count == 8 && source.ResourceNodeNames.Count == 5,
             "Owned source lost the actual animation group/node tables.");
         Console.WriteLine($"OPENNV_OWNED_LOADED_ANIMATION_SOURCE_PASS groups={source.Groups.Count} nodes={source.NodeNames.Count} resourceNodes={source.ResourceNodeNames.Count} source={source.Identity} gameplay=UNEXECUTED");

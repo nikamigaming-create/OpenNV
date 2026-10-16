@@ -34,18 +34,26 @@ internal sealed partial class FalloutActorPackageCommandFields
     private long _animationTailSequence;
     private string? _lateAnimationWriter;
     private FalloutPlayerReturnTailSource? _animationTailSource;
+    internal void BindAnimationLoadSource(FalloutPlayerReturnTailSource source)
+    {
+        RequireOwner(); source.Validate();
+        if (source.Movement.Mover.Controller.Fields != Source ||
+            _animationTailSource is { } current && current.Identity != source.Identity)
+            throw new InvalidDataException("Animation load source changed the actual reference field declaration.");
+        _animationTailSource = source;
+    }
     internal void BindAnimationNodeExtraMembership(FalloutPlayerReturnTailSource source,
         FalloutReferenceScriptExtraInitializer initializer, Action requireActualPrefix,
         FalloutReferenceAnimationNodeMembership? saved = null)
     {
         RequireOwner(); source.Validate(); ArgumentNullException.ThrowIfNull(initializer); ArgumentNullException.ThrowIfNull(requireActualPrefix);
         requireActualPrefix(); saved ??= _historicalAnimationTailFields?.Membership;
-        _animationTailSource = source;
         if (_animationNodeMembership is not null || !ReferenceEquals(_scriptInitializer, initializer) ||
             initializer.FieldsFactory != Factory || source.Movement.Mover.Controller.Fields != Source ||
             initializer.LastCall is not { Returned: true, InvalidatedWriter: null } construction ||
             construction.Selected is null || construction.Selected.Script is not null || construction.Before is not null)
             throw new InvalidOperationException("Animation node membership lacks the same returned source reference constructor/prefix.");
+        BindAnimationLoadSource(source);
         if (saved is null)
         {
             // This is the independently qualified actual constructor/current

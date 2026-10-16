@@ -10,7 +10,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
 {
     private readonly RuntimeLiveContentSource _content;
     private readonly FalloutPluginStack _records;
-    private readonly bool _first;
+    private readonly bool _first, _sourceAnimationOwner;
     private readonly string _directory;
     private readonly Dictionary<string, RuntimeNativeNifAnimation> _clips = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Node3D> _weaponNodes = [];
@@ -99,11 +99,11 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     }
 
     internal RuntimeNativePlayerActor(FalloutPluginStack records, RuntimeLiveContentSource content, FalloutNpcAppearance appearance,
-        FalloutFormKey? weapon, bool firstPerson, float units, Color ambient)
+        FalloutFormKey? weapon, bool firstPerson, float units, Color ambient, bool sourceAnimationOwner = false)
     {
         Name = firstPerson ? "NativeFirstPersonBody" : "NativeThirdPersonBody";
-        _records = records; _content = content; _first = firstPerson;
-        var selected = FalloutPlayerSourceAppearance.Select(appearance, content, firstPerson);
+        _records = records; _content = content; _first = firstPerson; _sourceAnimationOwner = sourceAnimationOwner;
+        var selected = FalloutPlayerSourceAppearance.Select(appearance, content, firstPerson, records);
         _directory = selected.SkeletonPath[..selected.SkeletonPath.LastIndexOf('/')];
         var models = selected.Models;
         try
@@ -142,13 +142,16 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             }
             if (firstPerson) NativePlayerSelfVisibility.Apply(Actor);
             SetAmbient(ambient);
-            _idle = Clip(firstPerson ? "mtidle" : "locomotion/mtidle");
-            if (Weapon?.Grip is { } grip && grip != 255)
+            if (!sourceAnimationOwner)
             {
-                var suffix = grip is >= 230 and <= 235 ? grip - 229 : throw new NotSupportedException($"WEAP grip {grip} is unbound.");
-                _grip = Clip(Weapon.AnimationGroup + "handgrip" + suffix);
+                _idle = Clip(firstPerson ? "mtidle" : "locomotion/mtidle");
+                if (Weapon?.Grip is { } grip && grip != 255)
+                {
+                    var suffix = grip is >= 230 and <= 235 ? grip - 229 : throw new NotSupportedException($"WEAP grip {grip} is unbound.");
+                    _grip = Clip(Weapon.AnimationGroup + "handgrip" + suffix);
+                }
+                Advance(0, Vector3.Zero, true, false);
             }
-            Advance(0, Vector3.Zero, true, false);
         }
         catch { Free(); throw; }
     }
@@ -213,6 +216,12 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         AdvanceMuzzle(delta);
         try
         {
+            if (LogicalScene is { } scene && (scene.HasLoadedAnimationPoseOwner || _sourceAnimationOwner))
+            {
+                Skeleton.BorrowCurrentSourcePoses();
+                return;
+            }
+            if (_sourceAnimationOwner) throw new InvalidOperationException("Source Player projection has no actual logical model.");
             var group = _drawn && Weapon is { } weapon ? weapon.AimGroup(_first, aiming) : _first ? "mtidle" : "locomotion/mtidle";
             if (group != _group) { _active = Clip(group); _group = group; _seconds = 0; }
             _seconds += delta * (Weapon?.AnimationMultiplier ?? 1);

@@ -23,6 +23,10 @@ internal static partial class SourceMainScriptCallerContracts
         RunLoadedPlayerAnimationContracts();
         RunPlayerViewOwnerContracts();
         RunPlayerAnimationPreparationContracts();
+        RunPlayerModelLoadContinuationContracts();
+        RunPlayerModelLoadPrerequisiteContracts();
+        RunPlayerFirstModelRetirementContracts();
+        RunPlayerLoaderScopeOrderContracts();
         RunReferenceFrameReceiptContracts();
         ConditionGlobalContracts.Run();
         RunMainMenuBoundaryContracts();

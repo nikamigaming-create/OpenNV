@@ -36,7 +36,7 @@ internal partial class RuntimeNativeNpc
         if (_conversationTarget is not null)
             throw new NotSupportedException("Head tracking has an active conversation-facing continuation.");
         var saved = new FalloutActorHeadTrackingSnapshot(HeadTrackingBinding(), _headTargets.Capture(), _headPose?.Capture(),
-            _headOverrideName is null ? null : Skeleton.FloatExtraData.Get(_headPart!.TargetNode, _headOverrideName), _headError);
+            _headOverrideName is null ? null : Skeleton.ReadSourceFloatExtraData(_headPart!.TargetNode, _headOverrideName), _headError);
         saved.Validate(); return saved;
     }
 
@@ -69,7 +69,7 @@ internal partial class RuntimeNativeNpc
         if (saved.Binding != HeadTrackingBinding())
             throw new InvalidDataException("Saved head tracking differs from this actual actor rig or units.");
         _headTargets!.ValidateRestore(saved.Targets);
-        if (_headOverrideName is { } name) _ = Skeleton.FloatExtraData.Get(_headPart!.TargetNode, name);
+        if (_headOverrideName is { } name) _ = Skeleton.ReadSourceFloatExtraData(_headPart!.TargetNode, name);
     }
 
     private void RestorePendingHeadTracking()
@@ -80,7 +80,7 @@ internal partial class RuntimeNativeNpc
         // Look replay, target invalidation, animation advance or random draw.
         ValidateHeadTrackingRestore(saved);
         _headTargets!.Restore(saved.Targets);
-        if (_headOverrideName is { } name) Skeleton.FloatExtraData.Restore(_headPart!.TargetNode, name, saved.OverrideValue!.Value);
+        if (_headOverrideName is { } name) Skeleton.BorrowRestoredSourceFloatExtraData(_headPart!.TargetNode, name, saved.OverrideValue!.Value);
         if (saved.Pose is { } pose) _headPose!.Restore(pose);
         _headError = saved.Error; _headRestore = null;
     }

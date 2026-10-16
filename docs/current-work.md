@@ -16,76 +16,77 @@ state, events, timing, audio, UI and final pixels is required for a parity claim
 
 ## Verified executable state
 
-The latest ordinary FO3 New Game returns the opening package and birth-CELL
-transfer with all 1,610 references and ten genuine engine-static plane/portal
-bases. Its first Player frame returns controller context, post-action children,
-Current/Primary idle query, Flags, inhibition, Actor-time, XY/Z stores, late
-mover-delta and its nonnull-data Actor movement child. The next actual failure is
-the following Player tail. Its argument is the actual cached Main timer; the
-winning signed hardware thread count is two, independent of the exterior buffer.
+The fresh ordinary FO3 New Game reaches the birth CELL with all 1,610 references.
+The production Player loader now returns its independent first-model field,
+named-node globals, initial embedded controller update, camera-height read and
+identity rotation store. It constructs the genuine independent first/Common
+AnimData and resource owners, stores Reference's returned model, samples Common
+idle and binds first-person animation around the same temporary Scene view byte.
+Its following weapon, root flag, camera global, magic reset, scene mask and
+shared shader-property prefix also returns.
 
-The latest FO3 load took 101.5 seconds. Diagnostics retained the failed World
-prefix and returned movement children with zero publication losses. Observed
-Escape/Pause and Quit/Yes exited normally with code zero and disposed source
-owners. This is faulted-session cleanup, not a healthy Player/Main frame,
-ordinary movement, quest progress, gameplay save or cold Continue.
+The next actual refusal is the following controller, Interface/Pip-Boy and
+toddler-animation work. The enclosing Player loader, complete Player/Main frame,
+ordinary movement, quest progression, gameplay saves and cold Continue remain
+unaccepted. Diagnostics retain the returned children and failed prefix with zero
+publication losses. Failed startup exits with code one and disposes source owners.
+The previous ordinary faulted-session Pause/Resume/Quit check remains valid only
+for that reached state; it cannot qualify this unfinished loader or healthy saves.
 
-New Vegas and TTW retain their selected 10/18 plugins and three/six native
-modules. The latest unchanged FNV startup passes the former FNVXR empty-CRT
-constructor declaration boundary and next refuses an independent co-resident
-BCrypt import. ShowOff retains its distinct client/initializer failure. JIP's
-original Query/Load return before a later image mutation fails. Child exit
-retires resources; diagnostics report no publication loss. No selected module is
-removed to advance startup.
+Fresh verbose failed-load cleanup retires the prepared subtitles control and
+source owners without the earlier CanvasItem/ObjectDB leak or orphan-name report.
+Recording is off. Private inputs, saves, selectors and raw source evidence remain
+outside the public repository; the preserved New Vegas save is unchanged.
 
-The latest unchanged TTW run returns all four Book page/focus input roles, with
-four real native SDK/store/restore events each and no Book input failure. Four
-prior model events remain returned. Its next distinct image mutation still
-refuses. Complete module Load, Book audio and FNV/TTW gameplay remain unaccepted.
+New Vegas and TTW retain their selected 10/18 plugins and three/six native modules.
+FNV's unchanged XR startup reaches an independent co-resident BCrypt import
+refusal; ShowOff retains its distinct client/initializer failure. JIP's original
+Query/Load returns before its later image mutation refuses. TTW returns all four
+Book page/focus input roles through real native protection/store/restore calls,
+then refuses a distinct next image mutation. Complete mod Load, Book audio and
+FNV/TTW gameplay remain unaccepted. No selected module is removed to advance startup.
 
-Four requested fresh rendering screenshots show source-placed Sunny and
-Cheyenne indoors and distinct daytime/night exterior views. These are diagnostic
-views, not gameplay or matched-retail evidence. Only four requested PNGs are
-retained. Recording remains off during development and checks.
+## Implementation and checks
 
-## Current repair and checks
+The original first-person model's 73 embedded transform controllers return in
+the owned-file audit: 11 null interpolators and 62 sampled poses. C# owns their
+initial clock fields, upper-first empty-range clamp, source samples and absolute
+scale stores. Parent world transforms commit before child controllers; later
+failure retains the earlier prefix. Three fresh logical-model reconstructions
+preserve fields and poses without replaying the initial update. Unsupported
+controller classes and clock branches remain visible.
 
-The loaded-animation branch implements independent first-person/Common C#
-contexts, original KF sampling, sequence clocks, model resources, movement
-reads, same-Scene temporary view writes and preparation early returns. It does
-not yet compose the enclosing production Player loader or ordinary action/group
-activation. Full AnimData cold reconstruction and the complete tail remain open;
-constructor-null pointers cannot survive a reached animation-load writer.
+Animation-source binding now occurs at real facade construction independently
+of the later Extra-list membership owner. The production-order regression has
+no prebound Extra membership and returns the genuine first-context pointer store.
+The actual transform virtual, clock body and source constructors pass the owned
+executable audit. Hash-checked declaration reuse is bounded and retains no
+transformed launch files; no startup-performance claim is accepted.
 
-Adversarial cleanup fixes drain independent contexts after a failed binding
-teardown, retry only pending binding retirement, retain failed source release
-and reject lifecycle callback reentry. Authored failure checks pass. Focused
-pose/resource/pointer/view and preparation checks pass. Selected owned Release
-movement, loaded-animation, post-animation and empty-CRT source audits pass.
-The full pinned gate passes Release/Debug builds, formatting/analyzers, contract
-probes, both native configurations, launcher tests and native Godot
-physics/navigation/project checks. Builds report zero warnings. These are
-component/source checks, not accepted gameplay or parity.
+Authored model-load, initial-controller, scalar, startup-byte, source-pointer,
+view, ordering and retirement checks pass. The default owned assembly/catalog
+audit covers all 656 selected resources and actual Common idle. Original float,
+visibility and morph channels, native pose projection and three fresh native
+bindings have component proof. Complete AnimData cold composition, action/group
+selection, canonical graft/blend/bounds and final pixels remain open.
 
-## Publication and next owner
+The complete pinned publication gate passes Release/Debug builds with zero
+warnings, formatting/analyzers, contract probes, both native configurations,
+launcher tests and native Godot checks. Selected Release owned-executable and
+initial-model audits pass. Use official Godot 4.8-dev7 Mono, its matching managed
+SDK and .NET 10.0.401. Component checks do not establish gameplay or parity.
 
-Checked PRs 204 and 205 are merged. Clean local main was verified equal to
-origin/main at c843fa600ac73c12dd5569322ec647f2eb7ad481. The loaded-animation
-branch starts from that main; its checked PR publication is next. The original
-New Vegas save remains unchanged. Private owned inputs, saves, selectors,
-captures and reverse-engineering evidence stay outside public repository inputs.
+## Next owner
 
-Finish genuine outer Player 3D loading around the actual first/third model
-factories, independent resources and animation pointer stores, shared view
-writes and mandatory following children. Bind the same contexts to movement
-and the complete tail. A real owned Common idle currently exposes a missing
-HeadTrack float channel; its C# logical-scene owner is being implemented.
-The current presentation animation tick would overwrite loaded C# poses;
-prepare its projection of the shared poses before binding the real manager.
+Finish the actual model-loader continuation using the existing current controller
+and genuine model resources, then the source Interface/Pip-Boy and toddler
+children. Return the enclosing source scope only after all reached children return.
+Bind the same animation contexts to movement and the complete Player tail; compose
+complete cold state without replaying constructors, clock updates or native release.
 
-Then return complete Player/Main frames, exercise ordinary input, healthy Pause,
+Then return complete Player/Main frames and exercise ordinary input, healthy Pause,
 normal Save/Quit and three cold Continues across a CELL transition. Finish the
 three quest routes and record their actual gameplay. Complete mod execution,
 exterior/door callbacks, physical OpenXR acceptance and measured streaming,
-thread and frame performance remain required. Use the pinned official Godot
-4.8-dev7 Mono, matching managed SDK and .NET 10.0.401.
+thread and frame performance remain required. The completed source batch passes
+its local publication gates.

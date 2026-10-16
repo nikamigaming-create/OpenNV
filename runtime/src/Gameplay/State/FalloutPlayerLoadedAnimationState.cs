@@ -55,17 +55,23 @@ internal sealed class FalloutPlayerLoadedAnimationState
             source.Tail.Movement.Mover.Controller.Fields.Identity != fields.Source.Identity ||
             source.Tail.Scene.Main.Identity != thread.Source.Main.Identity)
             throw new InvalidDataException("Loaded animation composition changed the shared reference/fields/thread owners.");
+        fields.BindAnimationLoadSource(source.Tail);
     }
-    internal FalloutLoadedAnimationFirstSkeletonRead BeginPlayerLoad(FalloutReferenceModelDataInvocation invocation)
+    internal void EnterPlayerLoad(FalloutReferenceModelDataInvocation invocation)
     {
         ObjectDisposedException.ThrowIf(_retired || _retirementStarted, this);
         _requireLifetime(); _requireActual(invocation);
         if (_load is not null || _first is not null) throw new NotSupportedException("source-Player-live-animation-reload-retirement-unowned");
         _load = invocation;
+        try { _scope = _thread.EnterAnimationInitialization(Guid.NewGuid(), Factory, FalloutLoadedAnimationScopeKind.PlayerLoad, Check); }
+        catch (Exception error) { Fail(error); throw; }
+    }
+    internal FalloutLoadedAnimationFirstSkeletonRead ReadFirstSkeletonForPlayerLoad(FalloutReferenceModelDataInvocation invocation)
+    {
+        RequireLoad(invocation);
+        if (_firstSkeleton is not null) throw new InvalidOperationException("First-skeleton input repeated its actual loader phase.");
         try
         {
-            _scope = _thread.EnterAnimationInitialization(Guid.NewGuid(), Factory, FalloutLoadedAnimationScopeKind.PlayerLoad, Check);
-            _fields.ObserveEnteredFirstPersonAnimationLoad(invocation, RequireLoad);
             var returned = _records.LoadReceipt; _records.RequireLiveLoadReceipt(returned);
             var selected = FalloutGameSettingStrings.Read(_records, FalloutLoadedAnimationSource.FirstSkeletonSetting);
             _firstSkeleton = new(FalloutLoadedAnimationSource.FirstSkeletonSetting, selected, returned.Factory, returned.SourceHash);
@@ -73,6 +79,8 @@ internal sealed class FalloutPlayerLoadedAnimationState
         }
         catch (Exception error) { Fail(error); throw; }
     }
+    internal FalloutLoadedAnimationFirstSkeletonRead BeginPlayerLoad(FalloutReferenceModelDataInvocation invocation)
+    { EnterPlayerLoad(invocation); return ReadFirstSkeletonForPlayerLoad(invocation); }
     // Called after the actual source first root publication, before inherited
     // loading temporarily changes the source view byte to one.
     internal FalloutSourceAnimationContextState ConstructFirst(FalloutReferenceModelDataInvocation invocation,
@@ -87,6 +95,7 @@ internal sealed class FalloutPlayerLoadedAnimationState
         try
         {
             _firstResources = new(Source, invocation, FalloutLoadedAnimationRole.FirstPerson, root.LogicalScene, RequireLoad, _requireLifetime);
+            _fields.ObserveEnteredFirstPersonAnimationLoad(invocation, RequireLoad);
             _first = new(Source.Tail, invocation, RequireLoad, _requireLifetime, FalloutLoadedAnimationRole.FirstPerson);
             _contexts.Add(_first.Identity, _first);
             _firstPointer = _fields.StoreConstructedFirstPersonAnimation(invocation, _first, RequireLoad);

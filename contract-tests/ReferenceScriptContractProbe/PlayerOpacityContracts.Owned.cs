@@ -13,7 +13,7 @@ internal static partial class PlayerOpacityContracts
         var main = FalloutMainScriptCallerSource.Read(FalloutImmediateScriptSource.Read(runtime.Receipt));
         var controls = FalloutPlayerMovementControlSource.Reviewed(main);
         var source = FalloutExecutableStringTable.ReadPlayerOpacity(content.FalloutExecutablePath, controls);
-        var appearance = FalloutPlayerSourceAppearance.Select(FalloutNpcAppearanceResolver.Resolve(records, records.RuntimeFormKey(7)), content, true);
+        var appearance = FalloutPlayerSourceAppearance.Select(FalloutNpcAppearanceResolver.Resolve(records, records.RuntimeFormKey(7)), content, true, records);
         var prepared = FalloutNpcPreparedGeometry.Read(appearance, content);
         var model = prepared.SourceModel.Instantiate(); var scene = model.ConstructLogicalScene();
         try

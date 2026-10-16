@@ -128,6 +128,13 @@ internal static partial class SourceMainScriptCallerContracts
         {
             _reference = original is null ? ReferencePositionFixture.CreateReturnTailRecords(saved?.Reference) :
                 new ReferencePositionFixture(original: original, controls: controls);
+            var assignmentSource = FalloutActorPackageAssignmentSource.Reviewed(_reference.Fields.Source);
+            Common.BindActorPackageAssignment(assignmentSource, Actor.Reference, 1, actual =>
+            {
+                if (actual.Actor != Actor || actual.Epoch != 1 || actual.Process != _reference.Fields.Process ||
+                    actual.Level != FalloutDetectionProcessLevel.High)
+                    throw new InvalidOperationException("Authored animation load changed the actual initial High constructor.");
+            });
             var main = _reference.Source.Fields.Controls.Main;
             Scene = new(FalloutStandalonePlayerSceneSource.Read(main), Stack, Guid.NewGuid());
             Fields = new(_reference.Fields.Source, Stack, Actor, Common.ReadSceneQueries(Actor.Reference, 1).Process,

@@ -39,11 +39,11 @@ public partial class RuntimeCoordinator
             _nativeBootstrapCharacter ?? throw new InvalidOperationException("Startup appearance state is absent.")) with
         { PlayerYoung = scripts.Scripts.Session.PlayerYoung });
         var inventory = new FalloutInventoryCommands(records, _nativeReferences!, _nativeInventory, () => initialLevel, _nativeGlobals);
-        _nativeBootstrap = new(_nativePluginStack!, FalloutInstallationSettings.Read(content), _nativeQuestState!, scripts.Scripts,
+        _nativeBootstrap = new(_nativePluginStack!, world.StandalonePlayerModelSettings ?? FalloutInstallationSettings.Read(content), _nativeQuestState!, scripts.Scripts,
             _nativeReferences!, BootstrapNativeCommand, BootstrapNativeEffect, () => !_nativeBootstrapMovie,
             _nativeGlobals, _nativeGameTime, inventory, () => initialLevel);
         PrepareNativeSaveOrderSelection();
-        _nativeBootstrap.Start();
+        world.StartStandaloneCharacterGeneration(_nativeBootstrap, _nativeBootstrap.Start);
         scripts.Bootstrap = _nativeBootstrap;
         GD.Print($"OPENNV_NEW_GAME_QUEST_START source={_nativeStartingQuest!.FormKey} winner={_nativeStartingQuest.Plugin.Name}");
         var loading = _loadingScreen;

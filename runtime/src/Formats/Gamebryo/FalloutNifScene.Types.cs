@@ -25,10 +25,12 @@ internal sealed record FalloutNifSceneTransform(uint X, uint Y, uint Z, IReadOnl
 }
 internal sealed record FalloutNifScenePropertySnapshot(FalloutNifSceneKey Key, string Type, int? ShaderKind,
     uint? ShaderAlphaBits, long ShaderStores, uint? MaterialAlphaBits, long MaterialStores);
+internal sealed record FalloutNifSceneFloatExtraDataSnapshot(FalloutNifSceneKey Key, string Name,
+    uint InitialBits, uint ValueBits, long Stores, long Changed);
 internal sealed record FalloutNifSceneObjectSnapshot(FalloutNifSceneKey Key, string Type, string Name,
     FalloutNifSceneKey? Parent, IReadOnlyList<FalloutNifSceneKey?> Children, uint Flags,
     FalloutNifSceneTransform Local, FalloutNifSceneTransform World, FalloutNifSceneBound? Bound,
-    FalloutNifSceneKey? Shader, long PoseStores, long BoundStores);
+    FalloutNifSceneKey? Shader, long PoseStores, long BoundStores, IReadOnlyList<FalloutNifSceneKey> FloatExtraData);
 internal sealed record FalloutActorLogicalSceneAsset(int Slot, string Path, string Sha256, IReadOnlyList<int> Roots);
 internal enum FalloutNifSceneAlphaStep { Root, Child, ShaderStore, NodeRecursion, Returned, Failed }
 internal sealed record FalloutNifSceneAlphaCall(Guid Invocation, uint AlphaBits, long Entered, long Changed,
@@ -38,7 +40,9 @@ internal sealed record FalloutActorLogicalSceneSnapshot(string Schema, Guid Fact
     long Sequence, IReadOnlyList<FalloutActorLogicalSceneAsset> Assets, FalloutNifSceneKey Root,
     IReadOnlyList<FalloutNifSceneObjectSnapshot> Objects, IReadOnlyList<FalloutNifScenePropertySnapshot> Properties,
     FalloutNifSceneAlphaCall? AlphaCall, string? Failure, bool Retired,
-    Guid? RestoredLifetime, string BoundLane, string AttachmentLane);
+    Guid? RestoredLifetime, string BoundLane, string AttachmentLane, IReadOnlyList<FalloutNifSceneFloatExtraDataSnapshot> FloatExtraData,
+    IReadOnlyList<FalloutNifSceneVisibilitySnapshot> Visibility, IReadOnlyList<FalloutNifSceneMorphSnapshot> Morphs,
+    OpenNV.Runtime.Content.FalloutInitialPlayerModelUpdate? InitialModelUpdate = null);
 
 // A living property is shared by the exact source references to its block. Fade
 // alpha and material-animation alpha are independent cells, even on one geometry.
@@ -101,9 +105,11 @@ internal sealed class FalloutNifSceneObject
     internal FalloutNifTransform World { get; set; }
     internal FalloutNifSceneBound? Bound { get; set; }
     internal FalloutNifSceneProperty? Shader { get; set; }
+    internal List<FalloutNifSceneKey> FloatExtraData { get; } = [];
     internal long PoseStores { get; set; }
     internal long BoundStores { get; set; }
     internal FalloutNifSceneObjectSnapshot Capture() => new(Key, Source.Block.TypeName, Name, Parent?.Key,
         Array.AsReadOnly(Children.Select(child => (FalloutNifSceneKey?)child?.Key).ToArray()), Flags,
-        FalloutNifSceneTransform.From(Local), FalloutNifSceneTransform.From(World), Bound, Shader?.Key, PoseStores, BoundStores);
+        FalloutNifSceneTransform.From(Local), FalloutNifSceneTransform.From(World), Bound, Shader?.Key, PoseStores, BoundStores,
+        Array.AsReadOnly(FloatExtraData.ToArray()));
 }

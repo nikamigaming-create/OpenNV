@@ -19,7 +19,7 @@ internal sealed partial class FalloutActorProcessCommonState
     // not manufacture a scene query with a null animation field.
     internal FalloutProcessAnimationLoadOwner ReadAnimationLoadOwner(FalloutReferenceModelDataInvocation invocation)
     {
-        if (!_busy || _enteredAnimationStore != invocation) RequireNotBusy();
+        if (!_busy || _enteredAnimationStore != invocation && _enteredPlayerModelStore != invocation) RequireNotBusy();
         var current = Require(invocation.Actor.Reference);
         if (invocation.Call == Guid.Empty || invocation.CommonProcess != _process || invocation.Actor != current.Source ||
             invocation.Epoch != current.Epoch || invocation.Ingress != FalloutReferenceModelDataIngress.ThreeDLoad ||

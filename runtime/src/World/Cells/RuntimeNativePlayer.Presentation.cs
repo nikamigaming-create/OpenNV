@@ -222,8 +222,31 @@ internal partial class RuntimeNativePlayer
         RuntimeNativePlayerActor? first = null, third = null;
         try
         {
-            first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient);
-            third = ConstructReferenceModel(() => new(records, content, appearance, weapon, false, UnitsToMeters, ambient));
+            if (_referenceModelWorld is { } world)
+            {
+                var session = (_playerPolicy ?? throw new InvalidOperationException("Player model loading has no actual ScriptSession."))();
+                world.LoadStandalonePlayerModels(session, actual =>
+                {
+                    if (!ReferenceEquals(_playerPolicy(), actual))
+                        throw new InvalidOperationException("Player model loading changed its actual shared ScriptSession.");
+                }, _ =>
+                {
+                    first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient, sourceAnimationOwner: true);
+                    return ConstructFirstModelNode(first, world);
+                }, onConstructed =>
+                {
+                    FalloutPlayerReturnedModel? model = null;
+                    third = ConstructReferenceModel(() => new(records, content, appearance, weapon, false, UnitsToMeters, ambient, sourceAnimationOwner: true),
+                        returned => { model = returned; onConstructed(returned); });
+                    return model ?? throw new InvalidOperationException("Inherited Reference model load omitted its actual returned node.");
+                });
+            }
+            else
+            {
+                first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient);
+                third = ConstructReferenceModel(() => new(records, content, appearance, weapon, false, UnitsToMeters, ambient));
+            }
+            if (first is null || third is null) throw new InvalidOperationException("Player model loading omitted an actual independent factory.");
             if (first.Error is not null || third.Error is not null) throw new NotSupportedException(first.Error ?? third.Error);
             third.ConfigureBodyContacts(CollisionLayer);
             third.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());
@@ -306,7 +329,8 @@ internal partial class RuntimeNativePlayer
         finally
         {
             NativeNifSceneRetirement.Drain("Unpublished Player presentation",
-                [() => first?.Free(), () => { if (third is not null) CleanupUnpublishedReferenceModel(third); }]);
+                [() => { if (first is not null) CleanupUnpublishedFirstModel(first); },
+                    () => { if (third is not null) CleanupUnpublishedReferenceModel(third); }]);
         }
     }
 

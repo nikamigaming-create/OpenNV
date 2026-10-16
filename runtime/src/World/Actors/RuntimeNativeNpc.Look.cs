@@ -109,7 +109,7 @@ internal partial class RuntimeNativeNpc
             .Where(value => value.Time.Target == block).ToArray();
         if (controllers.Length > 1) throw new NotSupportedException("Head float-controller selection is ambiguous.");
         if (controllers.SingleOrDefault() is not { } controller) { BindHeadTrackingPersistence(referenceState); return; }
-        _ = Skeleton.FloatExtraData.Get(_headPart.TargetNode, controller.ExtraDataName);
+        _ = Skeleton.ReadSourceFloatExtraData(_headPart.TargetNode, controller.ExtraDataName);
         _headOverrideName = controller.ExtraDataName;
         BindHeadTrackingPersistence(referenceState);
     }
@@ -163,7 +163,7 @@ internal partial class RuntimeNativeNpc
                     _headTargets.SelectedTarget is { } target ? _headTargetPoint!(target) : null
                 : null;
             var animationOverride = _headOverrideName is null ? 0 :
-                Skeleton.FloatExtraData.Get(_headPart!.TargetNode, _headOverrideName);
+                Skeleton.ReadSourceFloatExtraData(_headPart!.TargetNode, _headOverrideName);
             _headPose?.Publish(point, animationOverride);
         }
         catch (Exception error) when (error is NotSupportedException or InvalidDataException or InvalidOperationException)

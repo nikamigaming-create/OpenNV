@@ -33,6 +33,7 @@ internal sealed class RuntimeNativeNifAnimation
                 throw new InvalidDataException("Sequence text-key link is not text-key data.")).Keys;
         var targets = new HashSet<int>();
         var floatTargets = new HashSet<(string Node, string Name)>();
+        var logicalFloatTargets = new HashSet<FalloutNifSceneKey>();
         var rootBound = false;
         foreach (var link in sequence.ControlledBlocks)
         {
@@ -75,9 +76,11 @@ internal sealed class RuntimeNativeNifAnimation
                 }
                 else if (link.ControllerType == "NiFloatExtraDataController")
                 {
-                    if (!floatTargets.Add((link.NodeName, link.Variable1)))
-                        throw new NotSupportedException("Multiple float links require a blend/priority owner.");
-                    _otherChannels.Add(skeleton.FloatExtraData.Bind(source, link));
+                    var unique = skeleton.LogicalScene is { } logical
+                        ? logicalFloatTargets.Add(logical.RequireSkeletonFloatExtraDataKey(link.NodeName, link.Variable1))
+                        : floatTargets.Add((link.NodeName, link.Variable1));
+                    if (!unique) throw new NotSupportedException("Multiple float links require a blend/priority owner.");
+                    _otherChannels.Add(skeleton.BindSourceFloatExtraData(source, link));
                 }
                 else if (skeleton.BindVisualChannel(source, link) is { } visual)
                     _otherChannels.Add(visual);

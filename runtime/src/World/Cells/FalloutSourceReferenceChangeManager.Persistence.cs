@@ -8,7 +8,7 @@ internal sealed partial class FalloutSourceReferenceChangeManager
     { Stores = Array.AsReadOnly(call.Stores.ToArray()) };
     internal FalloutReferenceChangeSnapshot Capture()
     {
-        if (_current is not null) { _fault++; throw new InvalidOperationException("Entered reference change map cannot be captured."); }
+        if (_current is not null || _modelLoadFlagsReading) { _fault++; throw new InvalidOperationException("Entered reference change map cannot be captured."); }
         var saved = new FalloutReferenceChangeSnapshot(Schema, Source, Stack, Process, Factory, Constructor,
             _sequence, _managerFlags, Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_entries.Values.ToArray()),
             Array.AsReadOnly(_buckets.Select(value => (IReadOnlyList<Guid>)Array.AsReadOnly(value.ToArray())).ToArray()),
@@ -20,7 +20,7 @@ internal sealed partial class FalloutSourceReferenceChangeManager
     }
     internal void Retire()
     {
-        if (_current is not null) { _fault++; throw new InvalidOperationException("Entered reference change map cannot retire."); }
+        if (_current is not null || _modelLoadFlagsReading) { _fault++; throw new InvalidOperationException("Entered reference change map cannot retire."); }
         _retired = true;
     }
     internal static void Validate(FalloutReferenceChangeSnapshot saved, FalloutReferencePositionSource source, string stack)

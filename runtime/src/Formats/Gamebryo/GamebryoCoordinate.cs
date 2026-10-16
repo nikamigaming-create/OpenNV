@@ -6,12 +6,8 @@ internal static class GamebryoCoordinate
 {
     internal const int SpatialDimensions = 3;
 
-    private static readonly float[,] GameToGodot =
-    {
-        { 1.0f, 0.0f, 0.0f },
-        { 0.0f, 0.0f, 1.0f },
-        { 0.0f, -1.0f, 0.0f },
-    };
+    private static readonly float[] GameToGodot =
+        [1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f];
 
     internal static Vector3 ConvertVector(Vector3 source) =>
         new(source.X, source.Z, -source.Y);
@@ -49,8 +45,7 @@ internal static class GamebryoCoordinate
         IReadOnlyList<float> gameRowMajor,
         string label)
     {
-        if (gameRowMajor.Count != SpatialDimensions * SpatialDimensions ||
-            gameRowMajor.Any(value => !float.IsFinite(value)))
+        if (!FiniteMatrix(gameRowMajor))
             throw new InvalidOperationException(
                 $"Gamebryo {label} must contain nine finite row-major values.");
         var forward = ConvertVector(new Vector3(
@@ -72,47 +67,57 @@ internal static class GamebryoCoordinate
         float scale,
         string label)
     {
-        if (gameRowMajor.Count != SpatialDimensions * SpatialDimensions ||
-            gameRowMajor.Any(value => !float.IsFinite(value)))
+        if (!FiniteMatrix(gameRowMajor))
             throw new InvalidOperationException(
                 $"Gamebryo {label} must contain nine finite row-major values.");
         if (!float.IsFinite(scale) || scale <= 0.0f)
             throw new InvalidOperationException($"Gamebryo {label} has invalid scale.");
 
-        var source = new float[SpatialDimensions, SpatialDimensions];
+        Span<float> source = stackalloc float[SpatialDimensions * SpatialDimensions];
         for (var row = 0; row < SpatialDimensions; row++)
             for (var column = 0; column < SpatialDimensions; column++)
-                source[row, column] = gameRowMajor[row * SpatialDimensions + column];
+                source[row * SpatialDimensions + column] = gameRowMajor[row * SpatialDimensions + column];
         // Runtime NiTransform world/local composition is parent * child: the
         // observed matrix is already a column-vector transform. The NIF file
         // exporter has a separate row-vector serialization boundary and
         // performs its transpose there.
-        var converted = Multiply(
-            GameToGodot,
-            Multiply(source, Transpose(GameToGodot)));
+        Span<float> transpose = stackalloc float[SpatialDimensions * SpatialDimensions];
+        Span<float> intermediate = stackalloc float[SpatialDimensions * SpatialDimensions];
+        Span<float> converted = stackalloc float[SpatialDimensions * SpatialDimensions];
+        Transpose(GameToGodot, transpose);
+        Multiply(source, transpose, intermediate);
+        Multiply(GameToGodot, intermediate, converted);
         return new Basis(
-            new Vector3(converted[0, 0], converted[1, 0], converted[2, 0]),
-            new Vector3(converted[0, 1], converted[1, 1], converted[2, 1]),
-            new Vector3(converted[0, 2], converted[1, 2], converted[2, 2]))
+            new Vector3(converted[0], converted[SpatialDimensions], converted[SpatialDimensions * 2]),
+            new Vector3(converted[1], converted[SpatialDimensions + 1], converted[SpatialDimensions * 2 + 1]),
+            new Vector3(converted[2], converted[SpatialDimensions + 2], converted[SpatialDimensions * 2 + 2]))
             .Scaled(Vector3.One * scale);
     }
 
-    private static float[,] Multiply(float[,] left, float[,] right)
+    private static bool FiniteMatrix(IReadOnlyList<float> matrix)
     {
-        var result = new float[SpatialDimensions, SpatialDimensions];
-        for (var row = 0; row < SpatialDimensions; row++)
-            for (var column = 0; column < SpatialDimensions; column++)
-                for (var axis = 0; axis < SpatialDimensions; axis++)
-                    result[row, column] += left[row, axis] * right[axis, column];
-        return result;
+        if (matrix.Count != SpatialDimensions * SpatialDimensions) return false;
+        for (var index = 0; index < matrix.Count; ++index)
+            if (!float.IsFinite(matrix[index])) return false;
+        return true;
     }
 
-    private static float[,] Transpose(float[,] source)
+    private static void Multiply(ReadOnlySpan<float> left, ReadOnlySpan<float> right, Span<float> result)
     {
-        var result = new float[SpatialDimensions, SpatialDimensions];
         for (var row = 0; row < SpatialDimensions; row++)
             for (var column = 0; column < SpatialDimensions; column++)
-                result[row, column] = source[column, row];
-        return result;
+            {
+                result[row * SpatialDimensions + column] = 0;
+                for (var axis = 0; axis < SpatialDimensions; axis++)
+                    result[row * SpatialDimensions + column] +=
+                        left[row * SpatialDimensions + axis] * right[axis * SpatialDimensions + column];
+            }
+    }
+
+    private static void Transpose(ReadOnlySpan<float> source, Span<float> result)
+    {
+        for (var row = 0; row < SpatialDimensions; row++)
+            for (var column = 0; column < SpatialDimensions; column++)
+                result[row * SpatialDimensions + column] = source[column * SpatialDimensions + row];
     }
 }

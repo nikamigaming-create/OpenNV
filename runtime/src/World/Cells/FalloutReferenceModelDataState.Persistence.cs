@@ -37,14 +37,16 @@ internal sealed partial class FalloutReferenceModelDataState
             saved.Calls is null || saved.Publications is not { Count: > 0 } ||
             (saved.Data is null) != (saved.Fields is null) || saved.Data == Guid.Empty ||
             saved.WriterBoundary is { } writer && string.IsNullOrWhiteSpace(writer) ||
-            saved.Failure is { } failure && string.IsNullOrWhiteSpace(failure))
+            saved.Failure is { } failure && string.IsNullOrWhiteSpace(failure) ||
+            saved.Retired && !saved.RetirementStarted ||
+            saved.RetirementFailure is { } retirement && (!saved.RetirementStarted || string.IsNullOrWhiteSpace(retirement)))
             throw new InvalidDataException("Reference data snapshot omitted its actual source/process/field/failed prefix.");
         if ((saved.Fields?.Model is null) != (saved.ModelScene is null) || saved.Fields?.OtherModel is not null)
             throw new InvalidDataException("Reference model omitted its complete logical graph or acquired an unowned second model.");
         if (saved.ModelScene is { } modelScene)
         {
             FalloutActorLogicalScene.Validate(modelScene);
-            if (modelScene.Factory != saved.Fields!.Model!.Factory)
+            if (modelScene.Factory != saved.Fields!.Model!.Factory || saved.RetirementStarted && modelScene.Retired)
                 throw new InvalidDataException("Reference model graph belongs to another retained source node factory.");
         }
         var publications = new Dictionary<Guid, FalloutReferenceModelDataPublication>();

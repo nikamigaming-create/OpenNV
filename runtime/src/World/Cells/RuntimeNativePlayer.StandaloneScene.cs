@@ -34,7 +34,7 @@ internal partial class RuntimeNativePlayer
         if (!content.TryRead(path, null, out var bytes, out _))
             throw new FileNotFoundException("First-person scene cannot bind its original source resource.", path);
         var state = world.CampaignStandalonePlayerScene;
-        body.BindLogicalScene(state.CurrentPlayerOpacity?.PreparedColdScene);
+        body.RequireLogicalScene(state.CurrentPlayerOpacity?.PreparedColdScene);
         _standaloneFirstPersonOwner = state.PublishFirstPerson(new(body.SourceSceneFactory, state.Process, state.Source.Identity,
             state.Stack, body.GetInstanceId(), path, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
             "actual-returned-source-first-person-player-assembly/" + GetInstanceId()), Living);
@@ -47,6 +47,8 @@ internal partial class RuntimeNativePlayer
     private void ReleaseStandaloneFirstPersonScene()
     {
         if (_standaloneFirstPersonOwner is not { } owner) return;
+        if (_loadedModelWorld is not null)
+            throw new InvalidOperationException("Player first-person binding still has entered loaded-model retirement.");
         var world = _standaloneSceneWorld ?? throw new InvalidOperationException("Player scene release lost its actual source world.");
         world.RequireStandalonePlayerSceneReplacement();
         ReleaseStandaloneFirstPersonOwnership(world.CampaignStandalonePlayerScene, owner,
@@ -66,7 +68,7 @@ internal partial class RuntimeNativePlayer
         try
         {
             NativeNifSceneRetirement.Drain("Actual Player standalone scene",
-                [ReleaseStandaloneFirstPersonScene,
+                [ReleaseStandaloneLoadedPlayerModels, ReleaseStandaloneFirstPersonScene,
                     () => { ReleaseStandaloneReferenceModel(); _thirdPerson?.RetireLogicalScene(); },
                     RetireStandaloneLivingPhysics]);
         }
@@ -74,7 +76,8 @@ internal partial class RuntimeNativePlayer
         {
             // A rejected source release still owns its field and world. Keep
             // those references available for a genuine later retirement retry.
-            if (_standaloneFirstPersonOwner is null && _livingPhysics is null && _referenceModelWorld is null)
+            if (_standaloneFirstPersonOwner is null && _livingPhysics is null && _referenceModelWorld is null &&
+                _loadedModelWorld is null && _firstModelLeases.Count == 0)
                 _standaloneSceneWorld = null;
         }
     }

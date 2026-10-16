@@ -27,7 +27,7 @@ internal sealed partial class FalloutSourceReferenceChangeManager
     internal Guid Factory { get; } = Guid.NewGuid();
     internal Guid Constructor { get; }
     internal FalloutReferenceChangeCall? StartupFlagClear { get; private set; }
-    internal string? SaveBlocker => _current is not null ? "source-reference-change-map-in-flight" :
+    internal string? SaveBlocker => _current is not null || _modelLoadFlagsReading ? "source-reference-change-map-in-flight" :
         _retired ? "source-reference-change-map-retired" : _writerBoundary ?? _failure;
 
     internal FalloutSourceReferenceChangeManager(FalloutReferencePositionSource source, string stack,
@@ -155,7 +155,7 @@ internal sealed partial class FalloutSourceReferenceChangeManager
         uint mask, bool force, Action<Scope> action)
     {
         ObjectDisposedException.ThrowIf(_retired, this);
-        if (_current is not null) { _fault++; throw new InvalidOperationException("Shared reference change manager reentered."); }
+        if (_current is not null || _modelLoadFlagsReading) { _fault++; throw new InvalidOperationException("Shared reference change manager reentered."); }
         PrepareFrameChange(invocation, kind, mask, force);
         var scope = new Scope(invocation, kind, mask, force, ++_sequence, _managerFlags, _fault); _current = scope;
         try { Guard(scope); action(scope); Guard(scope); scope.Step = FalloutReferenceChangeStep.Returned; return Complete(scope, true, null); }

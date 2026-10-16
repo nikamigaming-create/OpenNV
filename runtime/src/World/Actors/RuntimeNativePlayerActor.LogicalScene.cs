@@ -6,27 +6,33 @@ namespace OpenNV.Runtime.World.Actors;
 internal sealed partial class RuntimeNativePlayerActor
 {
     private RuntimeNativeNifLogicalSceneMaterials? _logicalMaterials;
+    private FalloutActorLogicalSceneSnapshot? _logicalBindingRestore;
     internal object? LogicalMaterialState => _logicalMaterials?.State;
     internal FalloutActorLogicalScene? LogicalScene => Actor.SourceModel.LogicalScene;
     internal FalloutActorLogicalScene BindLogicalScene(FalloutActorLogicalSceneSnapshot? saved = null)
     {
-        if (Error is not null || _idle is null)
-            throw new NotSupportedException("Logical Player model publication requires its actual returned source role and animation selection.");
+        if (Error is not null)
+            throw new NotSupportedException("Logical Player model publication requires its actual returned source factory.");
         var scene = Actor.SourceModel.ConstructLogicalScene(saved);
         RequireCompleteLogicalAttachmentGraph(scene);
         Skeleton.BindLogicalScene(scene);
-        if (saved is not null) Skeleton.BorrowRestoredSourcePoses();
-        else
-        {
-            scene.ResetBonePoses(_idle.Sequence.TargetName);
-            var count = CurrentSourceLayers();
-            RuntimeNativeNifAnimation.ApplyLogicalLayers(_animationLayers.AsSpan(0, count), Skeleton);
-        }
+        Skeleton.BorrowCurrentSourcePoses();
+        _logicalBindingRestore = saved;
         var targets = Skeleton.ReadGeometryMaterialTargets().Select(binding => new RuntimeNativeNifSceneMaterialTarget(0, binding))
             .Concat(Actor.Parts.SelectMany((part, index) => part.GeometryMaterials.Select(binding => new RuntimeNativeNifSceneMaterialTarget(index + 1, binding))));
         _logicalMaterials = new(scene, targets, () => ReferenceEquals(Actor.SourceModel.LogicalScene, scene) &&
             Godot.GodotObject.IsInstanceValid(this) && !IsQueuedForDeletion());
         AddChild(_logicalMaterials);
+        return scene;
+    }
+    internal FalloutActorLogicalScene RequireLogicalScene(FalloutActorLogicalSceneSnapshot? saved = null)
+    {
+        if (LogicalScene is not { } scene) return BindLogicalScene(saved);
+        if (!ReferenceEquals(Skeleton.LogicalScene, scene) || _logicalMaterials is null ||
+            !ReferenceEquals(_logicalBindingRestore, saved) || Error is not null)
+            throw new InvalidOperationException("Player publication lost its actual previously bound source graph.");
+        _logicalMaterials.RequireBinding(scene, this);
+        scene.RequireCurrentPoseProjection();
         return scene;
     }
     private int CurrentSourceLayers()

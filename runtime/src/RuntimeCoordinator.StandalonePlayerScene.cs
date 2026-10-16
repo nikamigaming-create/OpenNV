@@ -62,6 +62,7 @@ public partial class RuntimeCoordinator
                 !ReferenceEquals(_nativeReferences, world))
                 throw new InvalidOperationException("Player movement left its actual records or World lifetime.");
         });
+        world.PrepareStandalonePlayerModelLoading(_nativeInventory);
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)

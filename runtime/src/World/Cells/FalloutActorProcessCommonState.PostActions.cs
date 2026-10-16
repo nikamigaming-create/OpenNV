@@ -66,7 +66,7 @@ internal sealed partial class FalloutActorProcessCommonState
     private static void ValidatePostActionFields(FalloutProcessCommonEntry entry)
     {
         if (entry.SceneFields is not { } fields) return;
-        if (fields.PostActionContext is not null || (entry.Level == FalloutDetectionProcessLevel.High) != (fields.PostActionScalars is not null) ||
+        if ((entry.Level == FalloutDetectionProcessLevel.High) != (fields.PostActionScalars is not null) ||
             (entry.Level == FalloutDetectionProcessLevel.High) != (fields.DetectionActionScalars is not null) ||
             fields.PostActionScalars is { } post && (post.Updates < 0 || post.Updates == 0 && post != FalloutProcessPostActionScalars.Constructed ||
                 post.ValueBits != 0) ||

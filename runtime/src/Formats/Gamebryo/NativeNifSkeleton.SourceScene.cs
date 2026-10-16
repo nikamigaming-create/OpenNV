@@ -7,6 +7,7 @@ internal sealed partial class RuntimeNativeNifSkeleton
 {
     private FalloutActorLogicalScene? _logicalScene;
     private string[]? _sourceBoneNames;
+    private FalloutNifSceneObject[]? _logicalBones;
     private FalloutNifSourcePoseBlend? _sourcePoseBlend;
     internal FalloutActorLogicalScene? LogicalScene => _logicalScene;
     internal FalloutNifSourcePoseBlend SourcePoseBlend => _sourcePoseBlend ??= new(_boneIndices.Count);
@@ -30,8 +31,16 @@ internal sealed partial class RuntimeNativeNifSkeleton
         if (_logicalScene is not null || scene.SkeletonSha256 != Source.Sha256)
             throw new InvalidDataException("Skeleton logical scene changed its actual source instance or bound twice.");
         _sourceBoneNames = new string[_boneIndices.Count];
-        foreach (var (name, index) in _boneIndices) _sourceBoneNames[index] = name;
+        _logicalBones = new FalloutNifSceneObject[_boneIndices.Count];
+        var byName = scene.Objects.Where(node => node.Key.Asset == 0 && node.IsNode)
+            .ToDictionary(node => node.Name, StringComparer.Ordinal);
+        foreach (var (name, index) in _boneIndices)
+        {
+            _sourceBoneNames[index] = name;
+            _logicalBones[index] = byName[name];
+        }
         _logicalScene = scene;
+        BindLogicalVisualFields(scene);
     }
     internal void PublishSourceBone(int bone, FalloutNifAnimationSample sample)
     {
@@ -45,9 +54,14 @@ internal sealed partial class RuntimeNativeNifSkeleton
         if (sample.Scale is { } scale) Node.SetBonePoseScale(bone, Vector3.One * scale);
     }
     internal void BorrowRestoredSourcePoses()
+        => BorrowCurrentSourcePoses();
+
+    internal void BorrowCurrentSourcePoses()
     {
-        var scene = _logicalScene ?? throw new InvalidOperationException("Cold renderer lost its actual logical source scene.");
-        var byName = scene.Objects.Where(node => node.Key.Asset == 0 && node.IsNode).ToDictionary(node => node.Name, StringComparer.Ordinal);
-        foreach (var (name, index) in _boneIndices) Node.SetBonePose(index, Convert(byName[name].Local));
+        var scene = _logicalScene ?? throw new InvalidOperationException("Renderer lost its actual logical source scene.");
+        scene.RequireCurrentPoseProjection();
+        for (var index = 0; index < _logicalBones!.Length; ++index)
+            Node.SetBonePose(index, Convert(_logicalBones[index].Local));
+        BorrowCurrentSourceVisualFields();
     }
 }

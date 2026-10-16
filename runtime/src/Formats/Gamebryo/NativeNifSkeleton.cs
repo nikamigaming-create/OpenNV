@@ -84,6 +84,7 @@ internal sealed partial class RuntimeNativeNifSkeleton
     }
     internal object VisualChannelState => new
     {
+        source = _logicalScene?.VisualFieldState,
         visibility = _visibility.Select(row => new { node = row.Key, visible = row.Value }).ToArray(),
         morphs = _morphWeights.Select(row => new { node = row.Key.Node, target = row.Key.Index, weight = row.Value }).ToArray(),
         surfaces = _attachments.Count,
@@ -91,11 +92,13 @@ internal sealed partial class RuntimeNativeNifSkeleton
 
     internal bool HasSourceTarget(string name) => _boneIndices.ContainsKey(name) || _attachments.ContainsKey(name);
 
-    internal IEnumerable<(string Node, string Name, float Weight)> NamedMorphWeights => _morphWeights.Select(row =>
+    internal IEnumerable<(string Node, string Name, float Weight)> NamedMorphWeights => _logicalScene is { } scene
+        ? scene.ReadSkeletonMorphWeights() : _morphWeights.Select(row =>
         (row.Key.Node, _attachments[row.Key.Node].Morph!.Data.Morphs[row.Key.Index].Name, row.Value));
 
     internal void ResetMorphPublication()
     {
+        if (_logicalScene is not null) { BorrowCurrentSourceVisualFields(); return; }
         foreach (var (key, value) in _morphDefaults)
         {
             _morphWeights[key] = value;
@@ -105,6 +108,7 @@ internal sealed partial class RuntimeNativeNifSkeleton
 
     internal Action<float>? BindVisualChannel(FalloutNifFile source, FalloutNifControllerLink link)
     {
+        if (BindLogicalVisualChannel(source, link) is { } logical) return logical;
         if (MaterialChannels.Bind(source, link) is { } material) return material;
         if (link.PropertyType.Length != 0 || link.Variable1.Length != 0) return null;
         if (link.ControllerType == "NiVisController" && link.Variable2.Length == 0 && HasSourceTarget(link.NodeName))
@@ -115,14 +119,29 @@ internal sealed partial class RuntimeNativeNifSkeleton
                 .Select(value => (FalloutNifVisibilityController)Source.ReadObject(value.Index)).Where(value => value.Time.Target == block).ToArray();
             if (controllers.Length != 1) throw new InvalidDataException("Visibility channel has no unique declared source controller.");
             var sampler = new FalloutNifBoolAnimation(source, link.Interpolator);
-            return time => { _visibility[link.NodeName] = sampler.Sample(time); RefreshVisibility(); };
+            Action<float>? logicalApply = null;
+            return time =>
+            {
+                if (_logicalScene is not null)
+                {
+                    logicalApply ??= BindLogicalVisualChannel(source, link) ?? throw new InvalidDataException("Bound visibility lost its actual logical source field.");
+                    logicalApply(time); return;
+                }
+                _visibility[link.NodeName] = sampler.Sample(time); RefreshVisibility();
+            };
         }
         if (link.ControllerType == "NiGeomMorpherController" && _attachments.TryGetValue(link.NodeName, out var attachment) && attachment.Morph is { } morph)
         {
             var index = morph.Index(link.Variable2);
             var sampler = new FalloutNifFloatAnimation(source, link.Interpolator);
+            Action<float>? logicalApply = null;
             return time =>
             {
+                if (_logicalScene is not null)
+                {
+                    logicalApply ??= BindLogicalVisualChannel(source, link) ?? throw new InvalidDataException("Bound morph lost its actual logical source field.");
+                    logicalApply(time); return;
+                }
                 var value = morph.EffectiveWeight(index, sampler.Sample(time));
                 _morphWeights[(link.NodeName, index)] = value;
                 if (index > 0) attachment.Mesh.SetBlendShapeValue(index - 1, value);

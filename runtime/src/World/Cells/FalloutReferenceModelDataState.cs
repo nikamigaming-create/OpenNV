@@ -33,8 +33,8 @@ internal sealed partial class FalloutReferenceModelDataState
     private FalloutActorLogicalSceneSnapshot? _retainedModelScene;
     private bool _modelRetained, _otherRetained;
     private long _sequence, _fault;
-    private bool _busy, _retired;
-    private string? _failure, _writer;
+    private bool _busy, _retired, _retiring, _retirementStarted;
+    private string? _failure, _writer, _retirementFailure;
     private FalloutReferenceModelDataInvocation? _entered;
     private long _enteredFault;
     internal FalloutPlayerMoverDeltaSource Source { get; }
@@ -45,8 +45,14 @@ internal sealed partial class FalloutReferenceModelDataState
     internal Guid Constructor { get; }
     internal FalloutCombatActorIdentity Actor { get; }
     internal long Epoch { get; }
-    internal FalloutActorLogicalSceneSnapshot? PreparedColdModel => _model is null && _values?.Model is not null ? _retainedModelScene : null;
-    internal string? SaveBlocker => _busy ? "source-reference-data-in-flight" : _failure ?? _writer ?? _model?.SaveBlocker ??
+    internal FalloutActorLogicalSceneSnapshot? PreparedColdModel
+    {
+        get { RequireIdle(); return _model is null && _values?.Model is not null ? _retainedModelScene : null; }
+    }
+    internal string? SaveBlocker => _busy ? "source-reference-data-in-flight" :
+        _retiring ? "source-reference-data-retirement-entered" :
+        _retirementStarted ? (_retired ? "source-reference-data-retired" :
+            _retirementFailure ?? "source-reference-data-retirement-incomplete") : _failure ?? _writer ?? _model?.SaveBlocker ??
         (_values?.Model is not null && _model is null || _values?.OtherModel is not null && _other is null ?
             "source-cold-reference-model-fresh-native-binding-unavailable" : _retired ? "source-reference-data-retired" :
             _calls.Count == 0 ? "source-reference-data-actual-constructor-field-unbound" : null);
@@ -64,7 +70,7 @@ internal sealed partial class FalloutReferenceModelDataState
         if (saved is not null)
         {
             Validate(saved); if (saved.Source != source || saved.Stack != stack || saved.Actor != actor ||
-                saved.Process == process || saved.CommonProcess == commonProcess || saved.Constructor == constructor || saved.Retired || saved.Epoch != epoch)
+                saved.Process == process || saved.CommonProcess == commonProcess || saved.Constructor == constructor || saved.Retired || saved.RetirementStarted || saved.Epoch != epoch)
                 throw new InvalidDataException("Cold reference data changed source or reused its prior lifetime.");
             _sequence = saved.Sequence; _previousData = saved.Data;
             _dataObject = saved.Fields is null ? null : new(saved.Fields);
@@ -244,8 +250,14 @@ internal sealed partial class FalloutReferenceModelDataState
     }
     private void RequireIdle()
     {
+        RequireLifecycleIdle();
         ObjectDisposedException.ThrowIf(_retired, this);
-        if (_busy || _thread != Environment.CurrentManagedThreadId) { ++_fault; throw new InvalidOperationException("Reference data reentered or escaped its current source thread."); }
+        if (_retirementStarted) throw new InvalidOperationException("Reference data entered retirement and cannot resume gameplay.");
+    }
+    private void RequireLifecycleIdle()
+    {
+        if (_busy || _retiring || _thread != Environment.CurrentManagedThreadId)
+        { ++_fault; throw new InvalidOperationException("Reference data reentered or escaped its current source thread."); }
     }
     private long Next() => _sequence = checked(_sequence + 1);
     private sealed class DataObject(FalloutReferenceModelDataValues fields)
@@ -255,14 +267,15 @@ internal sealed partial class FalloutReferenceModelDataState
     }
     internal FalloutReferenceModelDataSnapshot Capture()
     {
-        RequireIdle(); var snapshot = new FalloutReferenceModelDataSnapshot(Source, Stack, Process, CommonProcess, Factory, Constructor,
+        RequireLifecycleIdle(); var snapshot = new FalloutReferenceModelDataSnapshot(Source, Stack, Process, CommonProcess, Factory, Constructor,
             Actor, Epoch, _sequence, _data, _values, _publications.ToArray(), _calls.ToArray(), _writer, _failure, _retired, _previousData,
-            _values?.Model is null ? null : _model?.CaptureScene() ?? _retainedModelScene, _coldBindings.ToArray());
+            _values?.Model is null ? null : _retirementStarted ? _retainedModelScene : _model?.CaptureScene() ?? _retainedModelScene,
+            _coldBindings.ToArray(), _retirementStarted, _retirementFailure);
         Validate(snapshot); return snapshot;
     }
     internal bool RetainsReturnedModel(FalloutSourceSceneNode node)
     {
-        RequireIdle();
+        RequireLifecycleIdle();
         return _model?.Node == node || _other?.Node == node;
     }
     internal void CleanupUnpublishedModel(FalloutSourceSceneNode node, Action preserve, Action retire)
@@ -273,13 +286,38 @@ internal sealed partial class FalloutReferenceModelDataState
     }
     internal void Retire()
     {
-        if (_retired) return; RequireIdle(); _requireLifetime();
-        if (_model is not null) _retainedModelScene = _model.CaptureScene();
-        if (_modelRetained) _model!.Release(() => _modelRetained = false);
-        _model?.RetireBinding();
-        _model = null;
-        if (_otherRetained) _other!.Release(() => _otherRetained = false);
-        _other?.RetireBinding();
-        _other = null; _retired = true;
+        RequireLifecycleIdle();
+        if (_retired) return;
+        var fault = _fault; _retiring = true;
+        try
+        {
+            Check();
+            if (!_retirementStarted)
+            {
+                // Preserve the actual current graph before the first source
+                // release or final binding callback can retire it. A cold
+                // baseline is not a capture of the freshly bound current model.
+                var scene = _model?.CaptureScene() ?? _retainedModelScene;
+                Check(); _retainedModelScene = scene; _retirementStarted = true;
+            }
+            if (_modelRetained) _model!.Release(() => _modelRetained = false);
+            Check(); _model?.RetireBinding(); Check();
+            _model = null;
+            if (_otherRetained) _other!.Release(() => _otherRetained = false);
+            Check(); _other?.RetireBinding(); Check();
+            _other = null; _retired = true;
+        }
+        catch (Exception error)
+        {
+            if (_retirementStarted) _retirementFailure ??= error.Message;
+            throw;
+        }
+        finally { _retiring = false; }
+
+        void Check()
+        {
+            _requireLifetime();
+            if (_fault != fault) throw new InvalidOperationException("Reference data swallowed retirement reentry.");
+        }
     }
 }

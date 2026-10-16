@@ -20,9 +20,10 @@ internal sealed record FalloutProcessSceneFields(FalloutProcessWeaponEntry? Weap
     FalloutProcessAnimationQueueFields? AnimationPairs = null,
     string? AnimationContextWriter = null,
     FalloutProcessAnimationContextInvalidation? AnimationContextLoad = null,
-    IReadOnlyList<FalloutProcessAnimationContextStore>? AnimationContextStores = null)
+    IReadOnlyList<FalloutProcessAnimationContextStore>? AnimationContextStores = null,
+    FalloutProcessModelLoadFields? ModelLoad = null)
 {
-    internal static FalloutProcessSceneFields Constructed => new(null, null);
+    internal static FalloutProcessSceneFields Constructed => new(null, null) { ModelLoad = FalloutProcessModelLoadFields.Constructed };
 }
 internal sealed record FalloutProcessSceneQuery(Guid Process, string Stack, string ExecutableSha256, FalloutCombatActorIdentity Actor,
     long Epoch, FalloutDetectionProcessLevel Level, Guid GameplayOwnership, long Changed,
@@ -134,6 +135,7 @@ internal sealed partial class FalloutActorProcessCommonState
         ValidateMoverDeltaProcessFields(entry, executable);
         ValidatePlayerAnimationQueueFields(entry, executable);
         ValidateLoadedAnimationPointer(entry);
+        ValidatePlayerModelLoadFields(entry);
         ValidateOpacityFields(entry, executable, stack);
         ValidateWeaponContinuationFields(entry);
     }

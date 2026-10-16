@@ -2,17 +2,19 @@ namespace OpenNV.Runtime.Content;
 
 internal static class FalloutPlayerSourceAppearance
 {
-    private const string FirstPersonDirectory = "meshes/characters/_1stperson";
     private const uint HandBipedSlots = 0x18;
 
     internal static FalloutNpcAppearance Select(FalloutNpcAppearance appearance,
-        RuntimeLiveContentSource content, bool firstPerson)
+        RuntimeLiveContentSource content, bool firstPerson, FalloutPluginStack records)
     {
         ArgumentNullException.ThrowIfNull(appearance); ArgumentNullException.ThrowIfNull(content);
         if (!firstPerson) return appearance;
         var models = appearance.Models.Where(part => part.Role is "body" or "hand-left" or "hand-right" or "armor" or "armor-addon")
             .Select(SelectHandVariant).ToArray();
-        return appearance with { Models = models, SkeletonPath = FirstPersonDirectory + "/skeleton.nif" };
+        var skeleton = FalloutBsaArchive.CanonicalPath(FalloutGameSettingStrings.Read(records,
+            FalloutLoadedAnimationSource.FirstSkeletonSetting)).Replace('\\', '/');
+        if (!skeleton.StartsWith("meshes/", StringComparison.OrdinalIgnoreCase)) skeleton = "meshes/" + skeleton;
+        return appearance with { Models = models, SkeletonPath = skeleton };
 
         FalloutNpcAppearancePart SelectHandVariant(FalloutNpcAppearancePart part)
         {

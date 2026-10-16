@@ -10,7 +10,7 @@ internal sealed partial class FalloutActorLogicalScene
         return new(Schema, Factory, _lifetime, _sequence, Array.AsReadOnly(_assets.ToArray()), Root.Key,
             Array.AsReadOnly(_order.Select(node => node.Capture()).ToArray()),
             Array.AsReadOnly(_properties.Values.Select(property => property.Capture()).ToArray()),
-            _alpha, _failure, _retired, _restoredLifetime, BoundLane, AttachmentLane);
+            _alpha, _failure, _retired, _restoredLifetime, BoundLane, AttachmentLane, CaptureFloatExtraData(), CaptureVisibility(), CaptureMorphs(), _initialModelUpdate);
     }
     private void Restore(FalloutActorLogicalSceneSnapshot saved)
     {
@@ -29,13 +29,16 @@ internal sealed partial class FalloutActorLogicalScene
             var node = _order[index]; var old = saved.Objects[index];
             if (node.Key != old.Key || node.Source.Block.TypeName != old.Type || node.Name != old.Name ||
                 node.Parent?.Key != old.Parent || !node.Children.Select(child => (FalloutNifSceneKey?)child?.Key).SequenceEqual(old.Children) ||
-                node.Shader?.Key != old.Shader)
+                node.Shader?.Key != old.Shader || !node.FloatExtraData.SequenceEqual(old.FloatExtraData))
                 throw new InvalidDataException("Cold logical scene changed source class, child slots, property reference or assembly publication.");
             node.Flags = old.Flags; node.Local = old.Local.Read(); node.World = old.World.Read();
             node.Bound = old.Bound is { } bound ? bound with { Identity = Guid.NewGuid() } : null;
             node.PoseStores = old.PoseStores; node.BoundStores = old.BoundStores;
         }
         foreach (var property in saved.Properties) _properties[property.Key].Restore(property);
+        RestoreFloatExtraData(saved);
+        RestoreVisualFields(saved);
+        RestoreInitialModelUpdate(saved);
         _sequence = saved.Sequence; _alpha = saved.AlphaCall; _failure = saved.Failure; _restoredLifetime = saved.Lifetime;
         // Fresh actual field/resource identities, retained state: do not update
         // transforms, bounds, shader alpha, clocks or source constructors here.
@@ -62,6 +65,9 @@ internal sealed partial class FalloutActorLogicalScene
             saved.Failure is not null && string.IsNullOrWhiteSpace(saved.Failure) ||
             saved.RestoredLifetime is { } oldLifetime && (oldLifetime == Guid.Empty || oldLifetime == saved.Lifetime))
             throw new InvalidDataException("Cold logical scene lost its source resources, fields or current lifetime.");
+        ValidateFloatExtraData(saved);
+        ValidateVisualFields(saved);
+        ValidateInitialModelUpdate(saved);
         var objects = saved.Objects.ToDictionary(node => node.Key);
         var properties = saved.Properties.ToDictionary(property => property.Key);
         if (objects.Count != saved.Objects.Count || properties.Count != saved.Properties.Count || !objects.ContainsKey(saved.Root) ||

@@ -4,6 +4,42 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--audit-owned-initial-player-model", var initialModelRoot])
+{
+    SourceMainScriptCallerContracts.AuditOwnedInitialPlayerModel(initialModelRoot);
+    return;
+}
+
+if (args is ["--audit-owned-loaded-visual-fields", var visualArchive, var visualSkeleton, var visualSequence])
+{
+    SourceMainScriptCallerContracts.AuditOwnedLoadedPlayerVisualFields(visualArchive, visualSkeleton, visualSequence);
+    return;
+}
+if (args is ["--player-model-load-prerequisite-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerModelLoadPrerequisiteContracts();
+    SourceMainScriptCallerContracts.RunPlayerFirstModelRetirementContracts();
+    SourceMainScriptCallerContracts.RunPlayerLoaderScopeOrderContracts();
+    return;
+}
+
+if (args is ["--audit-owned-loaded-animation-catalog", var animationCatalogRoot])
+{
+    SourceMainScriptCallerContracts.AuditOwnedLoadedPlayerCatalog(animationCatalogRoot);
+    return;
+}
+
+if (args is ["--player-model-load-contracts"])
+{
+    SourceMainScriptCallerContracts.RunPlayerModelLoadContinuationContracts();
+    return;
+}
+if (args is ["--audit-owned-loaded-float-extra", var floatArchive, var floatSkeleton, var floatSequence])
+{
+    SourceMainScriptCallerContracts.AuditOwnedLoadedPlayerFloatExtraData(floatArchive, floatSkeleton, floatSequence);
+    return;
+}
+
 if (args is ["--loaded-player-animation-contracts"])
 {
     SourceMainScriptCallerContracts.RunLoadedPlayerAnimationContracts();

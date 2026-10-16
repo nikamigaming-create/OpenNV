@@ -33,7 +33,8 @@ internal sealed record FalloutReferenceModelDataSnapshot(FalloutPlayerMoverDelta
     IReadOnlyList<FalloutReferenceModelDataPublication> Publications,
     IReadOnlyList<FalloutReferenceModelDataCall> Calls, string? WriterBoundary, string? Failure, bool Retired,
     Guid? PreviousData = null, FalloutActorLogicalSceneSnapshot? ModelScene = null,
-    IReadOnlyList<FalloutReferenceModelColdBinding>? ColdBindings = null);
+    IReadOnlyList<FalloutReferenceModelColdBinding>? ColdBindings = null,
+    bool RetirementStarted = false, string? RetirementFailure = null);
 
 // A lease retains the same returned source graph and native factory. Merely
 // naming a native root is insufficient; every read/retain rechecks its owner.

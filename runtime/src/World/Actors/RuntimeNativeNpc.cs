@@ -55,7 +55,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
         replayCooldowns = _idleReplays.Remaining.Select(value => new { idle = value.Key.ToString(), seconds = value.Value }).ToArray(),
         textKeyCrossings = _idleTextKeyEvents.ToArray(),
         animationSounds = _animationSounds?.State,
-        sourceFloatProperties = Skeleton.FloatExtraData.Values.Select(value => new
+        sourceFloatProperties = Skeleton.SourceFloatExtraDataValues.Select(value => new
         {
             node = value.Node,
             name = value.Name,

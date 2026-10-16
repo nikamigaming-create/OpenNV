@@ -25,6 +25,7 @@ internal sealed partial class FalloutReferenceWorld
         referenceScriptInitialization = _sourceReferenceScriptInitializer?.Capture(),
         referencePosition = SourceReferencePositionState,
         earlyController = SourceEarlyControllerState,
+        modelLoad = SourcePlayerModelLoadState,
         actorAssignment = _currentActorPackageAssignment,
         dataHandlerLoading = _sourceDataHandlerLoading?.Capture(),
         saveBlocker = SourcePackageCommandSaveBlocker

@@ -17,7 +17,7 @@ internal static class FalloutReferenceModelDataSaveContract
         if (common.ReferenceOwners?.Position is null || data.Stack != scene.Stack || data.Stack != common.Stack || data.Process != scene.CapturedProcess ||
             data.Constructor != scene.Constructor || data.CommonProcess != common.CapturedProcess ||
             data.Source.Controller.Fields.Controls.Main != scene.Source.Main ||
-            data.Actor != common.ReferenceOwners!.Position.Actor || data.Retired || data.Failure is not null || data.WriterBoundary is not null)
+            data.Actor != common.ReferenceOwners!.Position.Actor || data.Retired || data.RetirementStarted || data.Failure is not null || data.WriterBoundary is not null)
             throw new InvalidDataException("Reference model data changed its real Scene/Common/Actor/source or retained an unfinished writer.");
         var constructors = scene.PointOfView?.Lifetimes.Select(lifetime => (lifetime.Process, lifetime.Constructor)).ToHashSet() ?? [];
         constructors.Add((scene.CapturedProcess, scene.Constructor));

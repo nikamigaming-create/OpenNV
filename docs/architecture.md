@@ -49,6 +49,15 @@ ordinary action/group selection and complete cold-state composition. Resource
 retirement drains independent contexts, commits source reference release once
 and keeps a failed final binding available for a separate retry.
 
+The first model's initial update precedes AnimData construction. Its embedded
+transform controllers retain independent zero-input clock fields and sample
+their original interpolators into the same C# logical poses. Constructor-empty
+ranges keep the source upper-first clamp and null interpolators still retain
+their clock stores. Parent world transforms publish before child controllers;
+a failed child preserves that prefix. Cold logical reconstruction retains the
+clock and pose fields without reentering the historical loader. Other controller
+classes and the complete enclosing Player loader remain explicit boundaries.
+
 Book page and focus sound inputs retain independent typed source fields while
 sharing one native pointer table, image lifetime and menu/audio consumer. Index
 controls store their current bounded selection before resolving the live winning
