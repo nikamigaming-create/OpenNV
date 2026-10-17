@@ -60,11 +60,12 @@ local source bundle and the accounted dirty-source snapshot; remove redundant
 branches/worktrees only after their contents are safe. Do not accumulate captures,
 build caches or duplicate packages.
 
-Complete the existing checked PR, verify local main equals origin/main, and leave
-no outstanding task PR. Then start one fresh release branch for any remaining
-handoff work. Package only first-party code and redistributable dependencies.
-Give the user one clear Quest 3/Air Link entrypoint with the accepted save, controls
-and specific remaining issues. Do not advertise unavailable FO3 VR routes.
+PR #208 completed the runtime promotion with all five CI checks passing and local
+main equal to origin/main. A clean asset-free package and dedicated Quest 3/Air
+Link launcher now use an isolated accepted save. Physical testing is next; see
+current-work.md for the exact candidate and remaining gameplay issues. Start any
+subsequent implementation on one fresh feature branch from current origin/main.
+Do not advertise unavailable FO3 VR routes or campaign completion.
 
 ## Required checks before pushing
 

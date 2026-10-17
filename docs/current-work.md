@@ -1,15 +1,16 @@
 # Current work
 
-Updated 2026-10-17. Root alone integrates the vanilla FNV local playtest for Quest 3
-and Air Link; all subagents are stopped at the user's request. Priority remains
-FNV, standalone FO3, mods, then TTW. No campaign or physical-headset completion
-is claimed.
+Updated 2026-10-17. The vanilla FNV local playtest is ready for the user's Quest 3
+and Air Link test. All subagents and gameplay processes are stopped. Priority
+remains FNV, standalone FO3, mods, then TTW. No campaign or physical-headset
+completion is claimed.
 
 ## Verified baseline
 
-PR #207 restored the coherent runtime and consolidated the repository. Main was
-synchronized; obsolete task branches and worktrees were removed after preserving
-unique source. One checkout contains the current codex/fnv-playable-release work.
+PR #207 restored the coherent runtime and consolidated the repository. PR #208
+merged the playtest changes after all five CI checks passed. Its main commit is
+e601a04a7c1dd7cdcedf1d0f58754926f526baf3. Local main matched origin/main with one
+checkout and no remaining feature branch. Unique earlier source remains preserved.
 
 Fresh creation, Doc's exit, saloon doors, Sunny's tutorial, actual rifle hits on
 all three bottles and the next dialogue work in flat/simulator OpenXR. Earlier
@@ -42,11 +43,19 @@ controller/output checks pass. The final export saved inside the saloon, loaded
 the stage-25 exterior checkpoint in a fresh process and saved again at stage 30
 with no opening-driver or Sunny AI error. Both test processes quit normally.
 
-## Remaining work
+## Local handoff and remaining work
 
-Merge checked PR #208, verify clean local main equals origin/main, and pin one
-asset-free local Quest 3 launcher with the accepted stage-25 checkpoint. Root
-owns the handoff; no agents or background gameplay sessions remain active.
+The pinned asset-free package is OpenNV-fnv-playtest-20261017-f-windows-x64,
+built from clean commit 0c8b65900bb0fc8d19919fab22a204a78efc8525 (the exact tree
+merged by #208). All 207 file hashes and exported launcher identity passed.
+The ignored local release directory contains OpenNV Quest 3.cmd for Air Link,
+OpenNV Recovery Test.cmd for flat play, and headset-handoff.json with exact paths
+and hashes. Both launchers use one isolated stage-25 profile; user saves are
+untouched. Quest Link runtime/profile validation passed without launching a headset
+session. The user's physical test is next; root owns any subsequent repair alone.
+
+Automatic approval review blocked deleting the superseded package and earlier
+simulator/screenshot diagnostics. They remain inactive; do not bypass that rejection.
 
 Cheyenne still cannot reach the saloon portal: its native capsule is blocked at
 the required source-corridor endpoint before entering the final arrival region.
