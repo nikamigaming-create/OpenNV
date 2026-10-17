@@ -53,8 +53,13 @@ Native extension modules are disabled. FO3/mod/TTW expansion is deferred.
   tags and traits with ordinary input. A new manual save was written inside Doc's
   house. The original copied save retains an earlier Doc-exit script failure:
   the two-argument ForceWeather command stopped before resetting VCG02.
-  Its optional override flag is now implemented and source-audited. Old faults
-  are retained; fresh exit replay is next.
+  Its optional override flag is now implemented and source-audited. Fresh exit
+  passed that command, then exposed the next unimplemented command, PlayMusic
+  with a nonempty MUSC record. This still prevents the tutorial reset. Old faults
+  are retained; retry from the fresh indoor save after fixing the command.
+- Fresh exterior actors have correct source positions and capturable furniture
+  state. The older save's Easy Pete binding-failure snapshot contains world origin,
+  causing its later furniture/save blocker. No named-actor repair is applied.
 - Tutorial weapon queries now share live equipment/drawn state and the documented
   script animation-category mapping. Owned bottle-script hits advance the objective;
   actual tutorial shooting remains pending. Controller-ray 9mm equip, reload and
@@ -63,8 +68,8 @@ Native extension modules are disabled. FO3/mod/TTW expansion is deferred.
 
 ## Next work
 
-Export the weather/weapon-query fixes and continue the fresh character through
-Doc's exit and Sunny's tutorial. Repeat the full gate; the prior run exposed an
+Finish the checked recovery baseline on main, then fix script music and retry
+Doc's exit and Sunny's tutorial on one fresh release branch. Repeat the full gate; the prior run exposed an
 uninitialized vitals owner in the save-deferral fixture, now corrected with a real
 owner and defeated-player coverage. Measure settled performance, then exercise
 loot and cold saves with ordinary inputs. Continue
