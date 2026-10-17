@@ -18,7 +18,7 @@ public partial class NativeActorCombatAudit
         if (movedToHex is not null)
         {
             world.MoveTo(key, records.RuntimeFormKey(Convert.ToUInt32(movedToHex, 16)));
-            cell = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Placement(key).Cell));
+            cell = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Placement(key).Cell), .0142875f);
         }
         var placed = cell.References.Single(value => value.FormKey == key);
         world.LoadCell(cell);

@@ -64,7 +64,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v51";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v52";
+    internal const string BeforeAggroWarningsSchema = "opennv-native-fnv-campaign-save/v51";
     internal const string BeforeTransientExplosionsSchema = "opennv-native-fnv-campaign-save/v50";
     internal const string BeforeAbilityScriptsSchema = "opennv-native-fnv-campaign-save/v49";
     internal const string FinishedRadioSchema = "opennv-native-fnv-campaign-save/v48";
@@ -468,6 +469,9 @@ internal static class FalloutNativeCampaignSave
 
     internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.AggroWarning is not null) == true)
+            throw new InvalidDataException("Earlier campaign schemas cannot own aggro warning state.");
+        if (state.Schema == BeforeAggroWarningsSchema) return state with { Schema = ExpectedSchema };
         if (state.Schema != ExpectedSchema && (state.Music is not null || state.TransientExplosions is not null || state.FastTravel is not null))
             throw new InvalidDataException("Earlier campaign schemas cannot own music, transient explosion or travel policy state.");
         return state.Schema == BeforeTransientExplosionsSchema ? state with { Schema = ExpectedSchema, TransientExplosions = new(0, []), FastTravel = FalloutFastTravelSnapshot.Initial } : state;
@@ -482,6 +486,8 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        if (state.Schema != ExpectedSchema && state.References?.Any(reference => reference.AggroWarning is not null) == true)
+            throw new InvalidDataException("Aggro warning state requires the current campaign schema.");
         if (state.Schema != ExpectedSchema && (state.Music is not null || state.TransientExplosions is not null || state.FastTravel is not null))
             throw new InvalidDataException("Music, transient explosions and travel policy require the current campaign schema.");
         if (state.Schema == ExpectedSchema && state.TransientExplosions is null && originalAbilityAdmission is null)

@@ -5,6 +5,9 @@ using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
 
+internal sealed record NativeActorNavigationRoute(Vector3[] Points,
+    NativeNavigationProjectionRegion? Projection = null, Func<Vector3, bool>? Arrival = null);
+
 internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Player, Func<GameplayVitals> Vitals,
     Action<FalloutWeaponDamage, byte> DamagePlayer, Func<Vector3, Vector3, Vector3[]> Route, Func<Vector3, bool> Resident,
     Func<int> Level, FalloutGlobalState Globals, float StepHeight, float Gravity,
@@ -13,7 +16,8 @@ internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Playe
     Func<FalloutFormKey, ulong, bool, NativeRouteDoorStatus>? RouteDoor = null,
     Func<ulong, FalloutFormKey?>? CollisionReference = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? RequestPortal = null,
-    float? ActivationDistanceMeters = null);
+    float? ActivationDistanceMeters = null,
+    Func<Vector3, Vector3, float, NativeActorNavigationRoute>? RouteRegion = null);
 
 internal sealed partial class RuntimeNativeActorCombat
 {
@@ -33,8 +37,10 @@ internal sealed partial class RuntimeNativeActorCombat
     private object? _lastHitscanImpact;
     private object? _lastExplosion;
     private FalloutActorActivityState Activity => _actor is RuntimeNativeNpc npc ? npc.Activity : ((RuntimeNativeCreature)_actor).Activity;
-    internal bool OwnsPose => _state.KnockedDown || _context is not null && (_state.Engagement is not null || ReactingToHit);
+    internal bool OwnsPose => _state.KnockedDown || _context is not null && (_state.Engagement is not null || _state.AggroWarning is not null || ReactingToHit);
     internal bool Restrained => _state.Restrained;
+    internal int? ScriptCombatProcedure => _state.Engagement is null ? null : _state.Engagement.Action == "flee" ? 16 : 13;
+    internal int? ScriptCombatPackage => _state.Engagement is null ? null : _state.Engagement.Action == "flee" ? 10 : 5;
     private bool PackageAllowsUnprovokedCombat(FalloutFormKey? attackedTarget = null) =>
         _actor is not RuntimeNativeCreature creature || creature.PackageAllowsUnprovokedCombat(attackedTarget);
     private object EngagementObservation => new
@@ -55,6 +61,9 @@ internal sealed partial class RuntimeNativeActorCombat
         error = _engagementError,
         assistanceError = _assistanceError,
         acquisition = _lastAcquisition,
+        warning = _state.AggroWarning,
+        warningSounds = _warningSounds?.State,
+        warningPresentationBoundary = "source-idle-and-turn;GuardTrespass-dialogue-and-special-warning-idles-unbound",
         motion = MotionObservation,
         boundary = "source-aggression-confidence-0-flee-and-faction-assistance;confidence-threat-ratios-stealth-avoidance-cover-and-retail-tactics-unmatched"
     };
@@ -86,6 +95,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (Dead || _state.Unconscious) return;
         if (_world.IgnoresFriendlyHits(_state.Reference) &&
             (attacker == _records.RuntimeFormKey(0x14) && _state.PlayerTeammate || _world.ActorRelation(_state.Reference, attacker) >= 2)) return;
+        _state.AggroWarning = null;
         _state.Engagement ??= new(attacker);
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
         NotifyAssistance(attacker, attacked: true);
@@ -170,18 +180,28 @@ internal sealed partial class RuntimeNativeActorCombat
             if (_state.Engagement is null && !TryCompanionCombat())
             {
                 _detectionClock -= delta;
-                if (_detectionClock > 0) return;
-                _detectionClock = .2; // broad-phase scheduling; source rules own eligibility
-                _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
-                var aggression = _world.ActorValue(_state.Reference, "aggression");
-                if (aggression != Math.Truncate(aggression) || aggression is < 0 or > 3) throw new InvalidDataException("Actor aggression is invalid.");
-                _threat = _threat with { Aggression = (byte)aggression };
-                if (!PackageAllowsUnprovokedCombat() || _state.PlayerTeammate || _threat.Aggression == 0 || _threat.Confidence == 0 || !TryAcquireThreat(player)) return;
+                if (_detectionClock <= 0)
+                {
+                    _detectionClock = .2; // broad-phase scheduling; source rules own eligibility
+                    _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
+                    var aggression = _world.ActorValue(_state.Reference, "aggression");
+                    if (aggression != Math.Truncate(aggression) || aggression is < 0 or > 3) throw new InvalidDataException("Actor aggression is invalid.");
+                    _threat = _threat with { Aggression = (byte)aggression };
+                    if (!PackageAllowsUnprovokedCombat() || _state.PlayerTeammate || _threat.Confidence == 0 ||
+                        _threat.Aggression == 0) ClearRadiusWarning();
+                    else TryAcquireThreat(player);
+                }
+                if (_state.Engagement is null)
+                {
+                    AdvanceRadiusWarning(player, delta);
+                    if (_state.Engagement is null) return;
+                }
                 NotifyAssistance(_state.Engagement!.Target);
             }
             // The package's destination cannot be silently replaced by enemy
             // pursuit. Continue During Combat needs simultaneous route and
             // firing ownership; refuse that phase before either advances.
+            _state.AggroWarning = null;
             if (_actor is RuntimeNativeNpc npc) npc.RequireTravelCombatContinuation();
             if (!ResolveTarget(player)) return;
             StopPackageMotion(); _enemyObject?.Root.Show();

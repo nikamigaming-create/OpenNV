@@ -23,7 +23,7 @@ internal static class OwnedScriptRecoveryProbe
              error.EndsWith(": Script operand GetRandomPercent has no variable owner.", StringComparison.OrdinalIgnoreCase))).ToArray();
         if (selected.Length == 0) throw new InvalidDataException("Selected checkpoint contains no legacy clock/random read failures.");
         foreach (var cell in selected.Select(state => state.Placement?.Cell ?? state.Cell).Distinct())
-            world.LoadCell(world.ComposeResidency(FalloutCellSceneReader.Read(records, cell)));
+            world.LoadCell(world.ComposeResidency(FalloutCellSceneReader.Read(records, cell), .0142875f));
         var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
             effect => throw new NotSupportedException($"Headless recovery audit does not execute native effect {effect.Kind}."),
             Globals: globals, IsInInterior: actor => world.IsInInterior(actor, save.ActiveCell)));

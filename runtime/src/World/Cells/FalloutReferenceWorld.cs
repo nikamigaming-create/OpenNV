@@ -34,7 +34,8 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutHitReactionFaultsSnapshot? HitReactionFaults = null,
     FalloutActivationRelaySnapshot? ActivationRelay = null,
     FalloutActorCorpseEquipment? CorpseEquipment = null,
-    FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null)
+    FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null,
+    FalloutAggroRadiusWarning? AggroWarning = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -76,6 +77,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved talking activator actor identity is invalid.");
             snapshot.Placement?.Validate();
             snapshot.Engagement?.Validate();
+            snapshot.AggroWarning?.Validate();
+            if (snapshot.AggroWarning is { } warning && (snapshot.Engagement is not null || warning.Target == snapshot.Reference))
+                throw new InvalidDataException("Actor cannot warn and engage in combat simultaneously.");
             FalloutActorCorpseEquipment.ValidateSnapshot(snapshot);
             snapshot.HeadTracking?.Validate();
             if (snapshot.HeadTracking is { } head && head.Binding.Actor != snapshot.Reference)
@@ -252,6 +256,7 @@ internal sealed class FalloutReferenceInstance
     internal FalloutActorRagdollState? Ragdoll { get; set; }
     internal Func<FalloutActorRagdollState>? CaptureRagdoll { get; set; }
     internal FalloutActorEngagement? Engagement { get; set; }
+    internal FalloutAggroRadiusWarning? AggroWarning { get; set; }
     internal Action? StopCombat { get; set; }
     internal Func<FalloutActorEngagement?>? CaptureEngagement { get; set; }
     internal FalloutActorCorpseEquipment? CorpseEquipment { get; set; }
@@ -365,7 +370,7 @@ internal sealed class FalloutReferenceInstance
                 ? capturePending() : PendingPackageSelection?.Copy() : null,
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
-            DeferredPackageContinuation: DeferredPackageContinuation);
+            DeferredPackageContinuation: DeferredPackageContinuation, AggroWarning: AggroWarning);
     }
 }
 
@@ -769,6 +774,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.Ragdoll = snapshot.Ragdoll;
             instance.KnockedDown = snapshot.KnockedDown;
             instance.Engagement = snapshot.Engagement;
+            if (snapshot.AggroWarning is { } warning)
+            {
+                _ = validated.Actor(snapshot.Reference);
+                if (warning.Target != records.RuntimeFormKey(0x14)) _ = validated.Actor(warning.Target);
+                if (FalloutActorThreat.Read(records, instance.Base, instance.Templates) is not { RadiusBehavior: true, Radius: > 0 })
+                    throw new InvalidDataException("Saved aggro warning has no source radius behavior.");
+                instance.AggroWarning = warning;
+            }
             if (snapshot.CorpseEquipment is { } equipment)
             {
                 equipment.ValidateSource(records, instance.Inventory?.Contents ??

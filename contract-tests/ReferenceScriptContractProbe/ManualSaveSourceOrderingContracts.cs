@@ -60,9 +60,9 @@ internal static class ManualSaveSourceOrderingContracts
         Require(JsonSerializer.Serialize(completed with { Disposition = "pending", SlotPath = null }) == pending &&
             RuntimeManualSaveSourceBoundary.Observe(fixture.Owner).Kind == RuntimeManualSaveAdmissionKind.Ready,
             "Completed original source history was erased or remained an artificial player/menu blocker.");
-        Require(RuntimeManualSaveSourceBoundary.Observe(fixture.Owner, autoSaveRequested: true) is
+        Require(RuntimeManualSaveSourceBoundary.Observe(fixture.Owner, autoSaveWriting: true) is
             { Kind: RuntimeManualSaveAdmissionKind.Refused, Blocker: "concurrent-auto-save" } &&
-            ReferenceEquals(fixture.Owner.Receipt, completed), "Pending AutoSave was cleared or its ordering was guessed.");
+            ReferenceEquals(fixture.Owner.Receipt, completed), "Active AutoSave writing was admitted or changed source history.");
         manual.Request(session, source, 11, origin);
         manual.Prepare(11, 1010, RuntimeManualSaveSourceBoundary.Observe(fixture.Owner), []);
         Require(manual.DrainPrepared(session, source, 12, 1020, () => [],

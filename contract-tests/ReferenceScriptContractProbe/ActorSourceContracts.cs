@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
@@ -14,6 +15,18 @@ internal static class ActorSourceContracts
         try
         {
             RandomDialogueContracts(directory);
+            var warning = new FalloutAggroRadiusWarning(new("Actors.esm", 0x14), RemainingSeconds: 5);
+            var firstWarning = warning.Advance(2, 5, 2);
+            var coldWarning = JsonSerializer.Deserialize<FalloutAggroRadiusWarning>(JsonSerializer.Serialize(firstWarning.State))!;
+            var secondWarning = coldWarning.Advance(3, 5, 2);
+            var attackWarning = secondWarning.State.Advance(5, 5, 2);
+            Check(!firstWarning.Attack && !secondWarning.Attack && secondWarning.State.Warnings == 2 &&
+                attackWarning.Attack && attackWarning.State.Seconds == 10,
+                "Warning timer, count or cold continuation skipped the source warning interval.");
+            var radiusThreat = new FalloutActorThreat(new("Actors.esm", 0x800), 1, 2, 0, true, 1024);
+            Check(!radiusThreat.Initiates(0) && radiusThreat.Warns(0) && radiusThreat.Warns(1) &&
+                !radiusThreat.Warns(2) && !radiusThreat.Warns(3) && !(radiusThreat with { Confidence = 0 }).Warns(0),
+                "Radius behavior lost neutral intrusion, friendly exclusions or cowardly confidence.");
             File.WriteAllBytes(Path.Combine(directory, "Actors.esm"), Join(Header(),
                 Creature(0x800, 0, 0, "creatures/test/skeleton.nif", "body.nif", 1.5f,
                     Field("CNTO", Join(BitConverter.GetBytes(0x840u), BitConverter.GetBytes(3)))),
@@ -25,6 +38,8 @@ internal static class ActorSourceContracts
                 Creature(0x804, 256, 0x800, "creatures/test/skeleton.nif", "body.nif", 1),
                 Creature(0x805, 66, 0x820, "creatures/local/skeleton.nif", "local.nif", 1),
                 Creature(0x806, 66, 0x821, "creatures/local/skeleton.nif", "local.nif", 1),
+                Creature(0x80c, 64, 0, "creatures/local/skeleton.nif", "local.nif", 1),
+                Record("CREA", 0x80d, Field("ACBS", new byte[22].Concat(new byte[] { 64, 0 }).ToArray())),
                 ImmobileCreature(0x808),
                 Creature(0x80a, 0, 0, "creatures/test/skeleton.nif", "body.nif", 1,
                     Field("PKID", BitConverter.GetBytes(0x8f5u)), Field("PKID", BitConverter.GetBytes(0x8f6u))),
@@ -110,6 +125,9 @@ internal static class ActorSourceContracts
                 !FalloutExteriorClimate.ContainsRegion(records, Key(0x8f1), Key(0x8f2), 1, 1),
                 "Player region membership ignored the source polygon or world.");
             var appearance = FalloutCreatureAppearanceResolver.Resolve(records, Key(0x801), Key(0x900));
+            Check(FalloutActorTemplateOwner.Resolve(records, records.GetEffective(Key(0x80c)), 64).FormKey == Key(0x80c) &&
+                FalloutActorTemplateOwner.Resolve(records, records.GetEffective(Key(0x80d)), 64).FormKey == Key(0x80d),
+                "Unused template flags rejected an actor with a null or absent template link.");
             Check(appearance.ModelOwner == Key(0x800) && appearance.StatsOwner == Key(0x801) && appearance.BaseScale == .75f &&
                 appearance.Models.Single() == "meshes/creatures/test/body.nif", "Independent CREA template groups or part directory changed.");
             Reject(() => FalloutCreatureAppearanceResolver.Resolve(records, Key(0x802)));
@@ -239,8 +257,8 @@ internal static class ActorSourceContracts
             world.MoveTo(Key(0x901), Key(0x908), 2, 3, 4);
             world.SetRestrained(Key(0x901), true);
             world.SetPlayerTeammate(Key(0x901), true);
-            var sourceAfterMove = world.ComposeResidency(sourceScene);
-            var destinationAfterMove = world.ComposeResidency(destinationScene);
+            var sourceAfterMove = world.ComposeResidency(sourceScene, 1);
+            var destinationAfterMove = world.ComposeResidency(destinationScene, 1);
             world.ReplaceResidentCell(sourceAfterMove);
             world.LoadCell(destinationAfterMove);
             Check(world.Get(Key(0x901)).Cell == Key(0x880) && world.Placement(Key(0x901)).Cell == Key(0x881) &&
@@ -255,7 +273,7 @@ internal static class ActorSourceContracts
                     inventoryRestore.Inventory(Key(0x902), 1).Contents.Item(Key(0x840))?.Count == 3,
                     "Creature inventory changes leaked to a peer or were lost in the save.");
                 Check(inventoryRestore.Get(Key(0x901)) is { Restrained: true, PlayerTeammate: true } &&
-                    inventoryRestore.ComposeResidency(destinationScene).References.Single(reference => reference.FormKey == Key(0x901))
+                    inventoryRestore.ComposeResidency(destinationScene, 1).References.Single(reference => reference.FormKey == Key(0x901))
                         .Position.SequenceEqual(new float[] { 12, 23, 5 }), "Cold save lost moved actor placement or companion flags.");
             }
             Reject(() => world.MoveTo(Key(0x901), Key(0x908), float.NaN));

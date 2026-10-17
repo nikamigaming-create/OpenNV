@@ -22,12 +22,28 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
     private float _lastHour = -1;
     private Vector3 _ambient, _fog, _range;
     private bool _lightingBound;
+    private float _shadowDistance = 100;
     internal Compositor? Compositor { get; set; }
     internal FalloutImageSpace? ImageSpace { get; set; }
     internal int RegisteredSurfaces => _meshes.Count;
+    internal object ShadowState => new
+    {
+        distance = _sun.DirectionalShadowMaxDistance,
+        blendSplits = _sun.DirectionalShadowBlendSplits,
+        fadeStart = _sun.DirectionalShadowFadeStart,
+        mode = _sun.DirectionalShadowMode.ToString(),
+        enabled = _sun.ShadowEnabled,
+        rangeOwner = "resident-exterior-grid",
+        boundary = "source-geometry-casters;retail-shadow-filtering-and-LOD-shadows-unmatched"
+    };
 
-    internal void Configure(FalloutPluginStack records, FalloutSkyLightingState sky, Func<float> hour, float units, Node? sceneRoot = null)
-    { _records = records; _sky = sky; _hour = hour; _units = units; _sceneRoot = sceneRoot; }
+    internal void Configure(FalloutPluginStack records, FalloutSkyLightingState sky, Func<float> hour, float units,
+        Node? sceneRoot = null, float shadowDistance = 100)
+    {
+        if (!float.IsFinite(shadowDistance) || shadowDistance <= 0)
+            throw new InvalidDataException("Exterior shadow distance must cover a positive finite region.");
+        _records = records; _sky = sky; _hour = hour; _units = units; _sceneRoot = sceneRoot; _shadowDistance = shadowDistance;
+    }
 
     internal void Register(Node root)
     {
@@ -65,7 +81,9 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         {
             Name = "OwnedExteriorSun",
             ShadowEnabled = true,
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
+            DirectionalShadowMaxDistance = _shadowDistance,
+            DirectionalShadowBlendSplits = true
         };
         AddChild(_sun);
         Register(_scene);

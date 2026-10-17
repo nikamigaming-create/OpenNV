@@ -123,6 +123,9 @@ internal static class TransientExplosionContracts
         Check(admitted.Schema == FalloutNativeCampaignSave.ExpectedSchema && admitted.TransientExplosions is { LastId: 0, Retired.Count: 0 },
             "Schema50 did not explicitly initialize absent transient history.");
         Reject(() => FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(prior with { TransientExplosions = new(0, []) }));
+        var beforeWarnings = admitted with { Schema = FalloutNativeCampaignSave.BeforeAggroWarningsSchema };
+        Check(FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(beforeWarnings).Schema == FalloutNativeCampaignSave.ExpectedSchema,
+            "The previous campaign schema did not retain its state while admitting the warning owner.");
         Reject(() => FalloutNativeCampaignSave.AdmitPreviousOwnerSchema(prior with
         { Music = new(Key(0x800), new string('A', 64), null, null, 0, 0, false) }));
         Reject(() => FalloutNativeCampaignSave.Write(path, prior with { Schema = FalloutNativeCampaignSave.ExpectedSchema }));

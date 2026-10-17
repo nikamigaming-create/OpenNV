@@ -39,7 +39,7 @@ internal sealed partial class RuntimeNativeActorCombat
             throw new InvalidDataException("Actor automatic weapon has no valid source attack-shot rate.");
         owned.Contents.Equip(_records, item.FormKey);
         if (_enemyWeapon.Model is not null) _enemyObject = new(_enemyWeapon, _skeleton, _content);
-        else
+        else if (Ranged)
         {
             var nodes = Enumerable.Range(0, _skeleton.Node.GetBoneCount()).Select(index => _skeleton.Node.GetBoneName(index).ToString())
                 .Where(name => name.StartsWith("ProjectileNode", StringComparison.OrdinalIgnoreCase)).ToArray();

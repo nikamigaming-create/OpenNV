@@ -42,7 +42,7 @@ public partial class NativeReferenceEventsAudit
                 var admittedRandom = instance.SoundRandom.State;
                 var admittedAnimation = instance.Animation.Capture();
                 var scriptValuesBefore = JsonSerializer.Serialize(world.ScriptValues.Capture());
-                var cell = world.ComposeResidency(FalloutCellSceneReader.Read(records, instance.Placement?.Cell ?? instance.Cell));
+                var cell = world.ComposeResidency(FalloutCellSceneReader.Read(records, instance.Placement?.Cell ?? instance.Cell), .0142875f);
                 var reference = cell.References.Single(value => value.FormKey == record.FormKey);
                 world.LoadCell(cell with { References = [reference] });
                 RuntimeNativeCreature? actor = null, resumed = null;

@@ -14,24 +14,25 @@ internal static class FalloutNifHardwareSkin
 {
     // Fallout BSDismemberBodyPartType: intact bodies show ordinary parts and
     // torso sections. Section/torso caps belong to severed-body presentation.
+    // FNV extends the regional indices through 14 (owned cazador cap 214).
     // https://www.niftools.org/nifxml/BSDismemberBodyPartType.html
     internal static bool VisibleOnIntactBody(FalloutNifBodyPartition? partition) => partition?.BodyPart switch
     {
         null => true,
-        <= 13 => true,
+        <= 14 => true,
         // The owned mantis mesh also declares torso cap 200 (part zero),
         // alongside 201/203/205/207/210 on the same cap geometry.
-        >= 101 and <= 113 or >= 200 and <= 213 => false,
-        >= 1000 and <= 13000 when partition.Value.BodyPart % 1000 == 0 => true,
+        >= 101 and <= 114 or >= 200 and <= 214 => false,
+        >= 1000 and <= 14000 when partition.Value.BodyPart % 1000 == 0 => true,
         _ => throw new NotSupportedException($"Unknown Fallout body partition {partition.Value.BodyPart}."),
     };
 
     internal static bool VisibleAfterSevering(ushort part, IReadOnlyCollection<byte> severed) => part switch
     {
-        <= 13 => true,
-        >= 101 and <= 113 => severed.Contains((byte)(part - 100)),
-        >= 200 and <= 213 => severed.Contains((byte)(part - 200)),
-        >= 1000 and <= 13000 when part % 1000 == 0 => !severed.Contains((byte)(part / 1000)),
+        <= 14 => true,
+        >= 101 and <= 114 => severed.Contains((byte)(part - 100)),
+        >= 200 and <= 214 => severed.Contains((byte)(part - 200)),
+        >= 1000 and <= 14000 when part % 1000 == 0 => !severed.Contains((byte)(part / 1000)),
         _ => throw new NotSupportedException($"Unknown Fallout body partition {part}.")
     };
 

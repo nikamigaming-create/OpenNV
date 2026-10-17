@@ -235,6 +235,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
 
     private void BeginDeath()
     {
+        _state.AggroWarning = null;
         _deathPresentationAttempted = true;
         RetireDeathPursuit();
         _state.KnockedDown = false;

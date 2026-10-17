@@ -268,7 +268,18 @@ internal static class NativeNavigationContracts
         if (!region(new(2.5f, .52f, 0)) || region(new(2.5f, .4f, 0)) ||
             NativeCapsuleNavigation.ApproachAfterProjection(observedArrival, boundaryAccepted, new(3, 0, -3), 1, NativeRegion) is null)
             throw new InvalidOperationException("Ordinary endpoint tolerance tightened the source sphere before native reference approach.");
-        Console.WriteLine("OPENNV_SOURCE_ARRIVAL_CONTRACT_PASS requestedSelectedIndependent=true intermediatePrefixRetained=true portalThenRegion=true firstLongEdgeRetained=true originalRadius=true reachableFloor=true upperFloorRefused=true outsideNavmRefused=true halfSpacing=true");
+        using var slopeSource = JsonDocument.Parse("""
+            {"schema":"opennv-owned-cell-navigation/v1","navmeshes":[
+              {"formId":"slope","cellFormId":"cell","version":11,
+               "verticesGameUnits":[[-3,-3,-3],[3,-3,3],[-3,3,-3],[3,3,3]],
+               "triangles":[{"vertexIndices":[0,1,2],"adjacentTriangles":[-1,1,-1],"flags":0},
+                            {"vertexIndices":[1,3,2],"adjacentTriangles":[-1,-1,0],"flags":0}],"externalConnections":[]}]}
+            """);
+        var slope = CellNavigationGraph.Load(slopeSource.RootElement, new HashSet<string> { "cell" });
+        var slopeRegion = slope.ArrivalRegion(new(-2, -2, -2), new(1, 1, 1.2f), new(1, 1, 1), 2, .01f, .6f);
+        if (!slopeRegion(new(0, 0, .25f)) || slopeRegion(new(0, 0, 1.2f)) || slopeRegion(new(4, 0, 4)))
+            throw new InvalidOperationException("Sloped source arrival lost the native support margin or admitted another floor/outside triangle.");
+        Console.WriteLine("OPENNV_SOURCE_ARRIVAL_CONTRACT_PASS requestedSelectedIndependent=true intermediatePrefixRetained=true portalThenRegion=true firstLongEdgeRetained=true originalRadius=true reachableFloor=true upperFloorRefused=true outsideNavmRefused=true slopedSupportMargin=true halfSpacing=true");
     }
 
     private static void CheckProjectionBounds()

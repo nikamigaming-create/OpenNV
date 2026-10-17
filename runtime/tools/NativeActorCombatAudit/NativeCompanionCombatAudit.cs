@@ -15,7 +15,7 @@ public partial class NativeActorCombatAudit
         var key = records.RuntimeFormKey(Convert.ToUInt32(actorHex, 16));
         var targetKey = records.RuntimeFormKey(Convert.ToUInt32(targetHex, 16));
         world.MoveTo(key, records.RuntimeFormKey(Convert.ToUInt32(destinationHex, 16)));
-        var actorCell = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Placement(key).Cell));
+        var actorCell = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Placement(key).Cell), .0142875f);
         var targetCell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(records.GetEffective(targetKey))!.Value);
         world.LoadCell(actorCell); world.LoadCell(targetCell);
         world.InitializeActorTemplates(key, 1, globals); world.InitializeActorTemplates(targetKey, 1, globals);

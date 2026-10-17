@@ -9,6 +9,18 @@ internal sealed record NativeNavigationProjectionRegion(Vector3 Requested, Vecto
 
 internal static partial class NativeCapsuleNavigation
 {
+    internal static Vector3[] TerminalRegionCorridor(IReadOnlyList<Vector3> path, Func<Vector3, bool> arrival)
+    {
+        if (path.Count == 0 || !arrival(path[^1]))
+            throw new InvalidDataException("Source corridor has no terminal arrival region.");
+        var end = path.Count - 1;
+        // Portal midpoints wholly inside the final reachable region are seeds,
+        // not compulsory positions inside the target's collision body. Retain
+        // every preceding point outside that region, including folded routes.
+        while (end > 0 && arrival(path[end - 1])) end--;
+        return path.Take(end + 1).ToArray();
+    }
+
     internal static NativeNavigationIntent? ApproachAfterProjection(Vector3 start, Vector3 accepted,
         Vector3 reference, float radius, Func<Vector3, bool> sourceFloor)
     {

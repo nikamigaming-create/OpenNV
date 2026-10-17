@@ -63,6 +63,7 @@ internal sealed partial class FalloutReferenceWorld
         instance.Placement = placement.Copy();
         instance.PackageMotion = null;
         instance.Engagement = null;
+        instance.AggroWarning = null;
         instance.HitReaction = null;
         instance.PlacementRevision = ++PlacementRevision;
     }
@@ -70,8 +71,11 @@ internal sealed partial class FalloutReferenceWorld
     internal IReadOnlyList<FalloutReferenceInstance> MovedSince(long revision) =>
         _instances.Values.Where(instance => instance.PlacementRevision > revision).ToArray();
 
-    internal FalloutCellScene ComposeResidency(FalloutCellScene scene, IReadOnlyList<FalloutCellDefinition>? exteriorCells = null)
+    internal FalloutCellScene ComposeResidency(FalloutCellScene scene, float unitsToMetres,
+        IReadOnlyList<FalloutCellDefinition>? exteriorCells = null)
     {
+        if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0)
+            throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
         var coordinates = exteriorCells?.Select(cell => cell.Coordinates!.Value).ToHashSet();
         bool Resident(FalloutReferencePlacement placement)
         {
@@ -83,9 +87,14 @@ internal sealed partial class FalloutReferenceWorld
         }
         var references = scene.References.ToDictionary(reference => reference.FormKey);
         var bases = scene.BaseObjects.ToDictionary(pair => pair.Key, pair => pair.Value);
-        foreach (var instance in _instances.Values.Where(value => value.Placement is not null))
+        foreach (var instance in _instances.Values.Where(value => value.Placement is not null ||
+            value.PackageMotion is not null || value.Engagement is not null))
         {
-            var placement = instance.Placement!;
+            // MoveTo clears motion before presentation consumes the new placement. Do not query
+            // the old native node in that interval; moving actors otherwise own their current pose.
+            var placement = instance.PackageMotion is not null || instance.Engagement is not null
+                ? SpatialPlacement(instance.Reference, null, unitsToMetres, requireFacing: true)
+                : Placement(instance.Reference);
             if (!Resident(placement)) { references.Remove(instance.Reference); continue; }
             var source = PlacementSource(instance);
             var reference = source.References.Single(value => value.FormKey == instance.Reference);

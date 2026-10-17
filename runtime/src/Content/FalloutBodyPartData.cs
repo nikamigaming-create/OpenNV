@@ -19,19 +19,13 @@ internal sealed record FalloutBodyPartData(FalloutFormKey Form, IReadOnlyList<Fa
     {
         if (!float.IsFinite(maximumHealth) || maximumHealth <= 0)
             throw new InvalidDataException("Mobility condition requires positive finite health.");
-        var seen = 0;
         var count = 0;
-        foreach (var part in Parts)
+        foreach (var actorValue in Parts.Where(part => part.ActorValue is 29 or 30 && part.HealthPercent > 0)
+                     .Select(part => part.ActorValue).Distinct())
         {
             // BPND's actor-value binding defines function. A robot's weapon
             // may reuse a thigh bone without being a mobility limb.
-            if (part.ActorValue is not (29 or 30) || part.HealthPercent == 0) continue;
-            var bit = 1 << (part.ActorValue - 29);
-            if ((seen & bit) != 0) throw new NotSupportedException("Mobility actor value has multiple source health thresholds.");
-            seen |= bit;
-            var injury = damage.GetValueOrDefault(part.Type);
-            if (!float.IsFinite(injury) || injury < 0) throw new InvalidDataException("Mobility damage is invalid.");
-            if (injury >= maximumHealth * part.HealthPercent / 100) count++;
+            if (LimbCondition(actorValue, maximumHealth, damage) <= 0) count++;
         }
         return count;
     }
@@ -39,14 +33,23 @@ internal sealed record FalloutBodyPartData(FalloutFormKey Form, IReadOnlyList<Fa
     internal float LimbCondition(int actorValue, float maximumHealth, IReadOnlyDictionary<byte, float>? damage)
     {
         var matching = Parts.Where(part => part.ActorValue == actorValue && part.HealthPercent > 0).ToArray();
-        if (matching.Length != 1)
-            throw new NotSupportedException($"Body-part actor value {actorValue} has no unique source health threshold.");
-        var part = matching[0];
-        var threshold = maximumHealth * part.HealthPercent / 100;
-        var injury = damage?.GetValueOrDefault(part.Type) ?? 0;
-        if (!float.IsFinite(threshold) || threshold <= 0 || !float.IsFinite(injury) || injury < 0)
-            throw new InvalidDataException("Limb condition requires finite health and injury.");
-        return Math.Clamp((threshold - injury) / threshold, 0, 1) * 100;
+        if (matching.Length == 0)
+            throw new NotSupportedException($"Body-part actor value {actorValue} has no source health threshold.");
+        if (matching.Select(part => part.Type).Distinct().Count() != matching.Length)
+            throw new InvalidDataException("Body-part types are repeated.");
+        // Quadruped front/rear regions can feed the same limb actor value.
+        // Each region converts damage through its own source health threshold;
+        // their contributions deplete one shared condition, not extra legs.
+        var depleted = 0f;
+        foreach (var part in matching)
+        {
+            var threshold = maximumHealth * part.HealthPercent / 100;
+            var injury = damage?.GetValueOrDefault(part.Type) ?? 0;
+            if (!float.IsFinite(threshold) || threshold <= 0 || !float.IsFinite(injury) || injury < 0)
+                throw new InvalidDataException("Limb condition requires finite health and injury.");
+            depleted += injury / threshold;
+        }
+        return Math.Clamp(1 - depleted, 0, 1) * 100;
     }
 
     internal static FalloutBodyPartData Read(FalloutPluginRecord record)

@@ -10,7 +10,7 @@ internal sealed record RuntimeManualSavePreparationReceipt(ulong StartedPhase, u
 
 internal static class RuntimeManualSaveSourceBoundary
 {
-    internal static RuntimeManualSaveAdmission Observe(FalloutScriptManualSaveRequests requests, bool autoSaveRequested = false)
+    internal static RuntimeManualSaveAdmission Observe(FalloutScriptManualSaveRequests requests, bool autoSaveWriting = false)
     {
         if (requests.WritingRequestedSlot)
             return new(RuntimeManualSaveAdmissionKind.Refused, "source-manual-save-writing");
@@ -20,7 +20,7 @@ internal static class RuntimeManualSaveSourceBoundary
             return new(RuntimeManualSaveAdmissionKind.Refused,
                 $"source-manual-save: {error.Message} generation={requests.Receipt?.Generation} disposition={requests.Receipt?.Disposition ?? "entered-source-invocation"}");
         }
-        return autoSaveRequested ? new(RuntimeManualSaveAdmissionKind.Refused, "concurrent-auto-save") :
+        return autoSaveWriting ? new(RuntimeManualSaveAdmissionKind.Refused, "concurrent-auto-save") :
             new(RuntimeManualSaveAdmissionKind.Ready);
     }
 }

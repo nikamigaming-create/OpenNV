@@ -20,7 +20,15 @@ internal static class FalloutActorTemplateOwner
                 throw new InvalidDataException("Actor template has a cycle or changes actor type.");
             var acbs = Field(actor, "ACBS", 24);
             if ((BinaryPrimitives.ReadUInt16LittleEndian(acbs.Span[22..]) & group) == 0) return actor;
-            actor = stack.GetEffective(actor.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(Field(actor, "TPLT", 4).Span)));
+            // ACBS can retain template flags after its optional template link
+            // is removed. Without a link the actor owns its local fields.
+            var links = actor.ReadSubrecords().Where(field => field.Signature == "TPLT").ToArray();
+            if (links.Length == 0) return actor;
+            if (links.Length != 1 || links[0].Data.Length != 4)
+                throw new InvalidDataException($"Actor template {actor.FormKey} has invalid TPLT data.");
+            var template = actor.Plugin.AdjustOptionalFormId(BinaryPrimitives.ReadUInt32LittleEndian(links[0].Data.Span));
+            if (template is null) return actor;
+            actor = stack.GetEffective(template.Value);
             while (actor.Signature == (signature == "NPC_" ? "LVLN" : "LVLC"))
             {
                 if (!visited.Add(actor.FormKey)) throw new InvalidDataException("Leveled actor template contains a cycle.");

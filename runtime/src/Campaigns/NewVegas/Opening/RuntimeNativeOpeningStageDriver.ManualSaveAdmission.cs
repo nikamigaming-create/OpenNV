@@ -15,7 +15,8 @@ internal partial class RuntimeNativeOpeningStageDriver
                 manual ?? throw new InvalidOperationException("Ordered save admission has no original manual receipt."), Godot.Engine.GetProcessFrames());
         if (sourceBoundary.Kind == RuntimeManualSaveAdmissionKind.Refused) return sourceBoundary;
         if (_scripts.References!.PlayerMoves.Pending) return new(RuntimeManualSaveAdmissionKind.Refused, "player-move");
-        if (_saveRequested) return new(RuntimeManualSaveAdmissionKind.Refused, "concurrent-auto-save");
+        // A queued automatic snapshot is not an active writer. The complete
+        // manual snapshot can fulfill it after ordinary capture/audio admission.
         if (_scripts.References.PendingHitEventCount != 0) return new(RuntimeManualSaveAdmissionKind.Refused, "reference-hit-event");
         if (StageResultsSaveBlocker is { } stage) return new(RuntimeManualSaveAdmissionKind.Refused, stage);
         var blocker = SaveContinuationBlocker;

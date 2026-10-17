@@ -232,7 +232,7 @@ public partial class RuntimeCoordinator
 
     private void StageNativeExteriorGrid(PreparedExteriorGrid prepared)
     {
-        var grid = prepared.Grid with { Scene = _nativeReferences!.ComposeResidency(prepared.Grid.Scene, prepared.Grid.Cells) };
+        var grid = prepared.Grid with { Scene = _nativeReferences!.ComposeResidency(prepared.Grid.Scene, _configuration.World.GameUnitsToMeters, prepared.Grid.Cells) };
         var root = _nativeCurrentCellRoot!;
         _nativeGridPending = grid; _nativeGridUploads = new();
         var oldLand = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Select(land => land.Source.ActiveCell).ToHashSet();
@@ -436,7 +436,12 @@ public partial class RuntimeCoordinator
                 throw new InvalidDataException("Exterior environment has no worldspace."));
         sky.Compositor = AddNativeImageSpace(root, imageSpace);
         sky.ImageSpace = imageSpace;
-        sky.Configure(_nativePluginStack!, _nativeSkyLighting!, () => _nativeGameTime!.Hour, _configuration.World.GameUnitsToMeters, this);
+        var diameter = Math.Max(checked((int)FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current!).Unsigned("General", "uGridsToLoad")),
+            _configuration.World.MinimumExteriorGridDiameter);
+        // Cover the complete resident square, including its diagonal when the
+        // player crosses an anchor boundary. Engine defaults cut this at 100m.
+        var shadowDistance = (diameter / 2 + 1) * 4096 * _configuration.World.GameUnitsToMeters * MathF.Sqrt(2);
+        sky.Configure(_nativePluginStack!, _nativeSkyLighting!, () => _nativeGameTime!.Hour, _configuration.World.GameUnitsToMeters, this, shadowDistance);
         root.AddChild(sky);
         var wind = new RuntimeNativeWind { Name = "ExteriorWindOwner" };
         FalloutFormKey? windWeather = null;

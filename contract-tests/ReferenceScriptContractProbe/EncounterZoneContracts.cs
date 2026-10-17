@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using System.Security.Cryptography;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 internal static class EncounterZoneContracts
@@ -21,6 +23,7 @@ internal static class EncounterZoneContracts
                 Record("ECZN", 0x813, Field("DATA", new byte[7])), Zone(0x814, 1, 4),
                 Record("CREA", 0x820, Field("ACBS", acbs), Field("TPLT", BitConverter.GetBytes(0x830u))),
                 Record("CREA", 0x821, Field("ACBS", new byte[24])), Record("CREA", 0x822, Field("ACBS", new byte[24])),
+                Record("PACK", 0x831),
                 Record("LVLC", 0x830, Field("LVLD", [0]), Field("LVLF", [0]), Entry(1, 0x821), Entry(15, 0x822)),
                 Cell(0x840, 0x810, Reference(0x850), Reference(0x851, Field("XLCM", BitConverter.GetBytes(3)))),
                 Cell(0x841, 0x810, Reference(0x852)),
@@ -70,6 +73,29 @@ internal static class EncounterZoneContracts
                 "Cold continuation recalculated encounter levels.");
             Check(JsonSerializer.Serialize(cold.Get(Key(0x851)).Templates!.Capture()) == JsonSerializer.Serialize(world.Get(Key(0x851)).Templates!.Capture()),
                 "Cold continuation changed list difficulty or actor identity.");
+            var origin = FalloutCellSceneReader.Read(records, Key(0x862));
+            var destination = FalloutCellSceneReader.Read(records, Key(0x863));
+            var actor = world.Get(Key(0x855));
+            actor.PackageMotion = new(Key(0x831), Convert.ToHexString(SHA256.HashData(records.GetEffective(Key(0x831)).ReadData())),
+                "idle.kf", new string('0', 64), 1, false, [50, 2, -3], [0, 0, 0, 1]);
+            void CheckMotion(FalloutReferenceWorld owner)
+            {
+                Check(!owner.ComposeResidency(origin, .01f).References.Any(value => value.FormKey == actor.Reference) &&
+                    owner.ComposeResidency(destination, .01f).References.Single(value => value.FormKey == actor.Reference)
+                        .Position.SequenceEqual(new float[] { 5000, 300, 200 }),
+                    "Package motion lost residency, source unit conversion or current pose.");
+            }
+            CheckMotion(world);
+            using (var motionCold = new FalloutReferenceWorld(records))
+            {
+                motionCold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!);
+                CheckMotion(motionCold);
+            }
+            actor.QuerySpatialPlacement = () => new(Key(0x861), [5000, 300, 200], [0, 0, 0]);
+            world.SetPlacement(actor.Reference, new(Key(0x861), [10, 20, 30], [0, 0, 0]));
+            Check(world.ComposeResidency(origin, .01f).References.Single(value => value.FormKey == actor.Reference)
+                .Position.SequenceEqual(new float[] { 10, 20, 30 }),
+                "A stale live node overrode a pending authoritative MoveTo.");
             using var invalid = new FalloutReferenceWorld(records);
             var first = world.CaptureEncounterZones()[0];
             Reject(() => invalid.RestoreEncounterZones([first, first]));

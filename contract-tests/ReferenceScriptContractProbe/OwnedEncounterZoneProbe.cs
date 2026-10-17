@@ -25,7 +25,7 @@ internal static class OwnedEncounterZoneProbe
         var actors = new List<object>(); var cells = new List<object>();
         while (pending.TryDequeue(out var authored))
         {
-            var scene = world.ComposeResidency(authored, authored == grid.Scene ? grid.Cells : null);
+            var scene = world.ComposeResidency(authored, .0142875f, authored == grid.Scene ? grid.Cells : null);
             world.EnterEncounterCell(scene.Cell.FormKey, level);
             cells.Add(new { cell = scene.Cell.FormKey.ToString(), scene.Cell.EditorId, references = scene.References.Count });
             foreach (var reference in scene.References)

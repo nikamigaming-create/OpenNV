@@ -50,6 +50,19 @@ public partial class NativeLocomotionAudit
                 _ => true, 512, targetRadius: tail.ArrivalRadius, corridor: tail.Corridor);
             if (body.GlobalTransform != pose || route.Path[^1].DistanceTo(goal) > radius || !placement.CanStand(route.Path[^1]))
                 throw new InvalidOperationException("Long terminal query changed its radius, moved its body or selected an unsupported endpoint.");
+            var occupiedPortal = goal + Vector3.Back * .1f;
+            var regionalCorridor = NativeCapsuleNavigation.TerminalRegionCorridor([portal, occupiedPortal, goal],
+                point => point.DistanceTo(goal) <= radius);
+            var projected = NativeCapsuleNavigation.Intent(pose.Origin, regionalCorridor,
+                projection: new(goal, regionalCorridor[^1], radius));
+            var projectedRoute = NativeCapsuleNavigation.FindRefined(body, pose.Origin, projected.Target, .4f, .66f, .165f,
+                _ => true, 512, corridor: projected.Corridor, arrival: point => point.DistanceTo(goal) <= radius);
+            if (body.GlobalTransform != pose || !placement.CanStand(projectedRoute.Path[^1]) || projectedRoute.Path[^1].DistanceTo(goal) > radius)
+                throw new InvalidOperationException("Projected pursuit required a portal midpoint inside the occupied attack region.");
+            var outside = new Vector3(2, 0, -2);
+            var folded = NativeCapsuleNavigation.TerminalRegionCorridor([portal, occupiedPortal, outside, occupiedPortal, goal],
+                point => point.DistanceTo(goal) <= radius);
+            if (!folded.Contains(outside)) throw new InvalidOperationException("Projected pursuit trimmed an untraversed source prefix outside its region.");
             void Refuse(NativeNavigationIntent intent, Func<Vector3, bool> resident, string boundary)
             {
                 var refused = false;

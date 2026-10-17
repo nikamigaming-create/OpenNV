@@ -1,6 +1,8 @@
 using Godot;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime;
 
@@ -24,5 +26,21 @@ public partial class RuntimeCoordinator
             new(null, Error: "NPC route door has no resident activation owner."),
         collider => _nativeReferenceEvents?.CollisionReference(collider),
         (actor, door) => (_nativeReferenceEvents ?? throw new NotSupportedException("NPC portal has no resident event owner."))
-            .RequestNpcPortal(actor, door), _configuration.Player.ActivationDistanceMeters);
+            .RequestNpcPortal(actor, door), _configuration.Player.ActivationDistanceMeters,
+        FindNativeActorNavigationRoute);
+
+    private NativeActorNavigationRoute FindNativeActorNavigationRoute(Vector3 from, Vector3 to, float radius)
+    {
+        EnsureNativeBotNavigation();
+        var units = _configuration.World.GameUnitsToMeters;
+        Vector3 Source(Vector3 point) => new Vector3(point.X, -point.Z, point.Y) / units;
+        Vector3 World(Vector3 point) => new Vector3(point.X, point.Z, -point.Y) * units;
+        var path = _botNavigation!.FindPath(Source(from), Source(to), destinationRadiusGameUnits: radius / units);
+        var points = path.Select(World).ToArray();
+        if (radius <= 0) return new(points);
+        var region = _botNavigation.ArrivalRegion(Source(from), Source(to), path[^1], radius / units,
+            .01f / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
+        points = NativeCapsuleNavigation.TerminalRegionCorridor(points, point => region(Source(point)));
+        return new(points, new(to, points[^1], radius), point => region(Source(point)));
+    }
 }

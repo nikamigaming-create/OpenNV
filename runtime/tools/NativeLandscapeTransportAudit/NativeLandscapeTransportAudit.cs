@@ -58,8 +58,11 @@ public partial class NativeLandscapeTransportAudit : Node3D
                     throw new InvalidDataException("LAND has no visible geometry or owned material binding.");
             }
             var environment = new RuntimeNativeExteriorEnvironment();
-            environment.Configure(records, sky, () => 12f, units); AddChild(environment);
+            environment.Configure(records, sky, () => 12f, units, shadowDistance: 300); AddChild(environment);
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            var sun = environment.GetChildren().OfType<DirectionalLight3D>().Single();
+            if (!sun.ShadowEnabled || !sun.DirectionalShadowBlendSplits || sun.DirectionalShadowMaxDistance != 300)
+                throw new InvalidDataException("Exterior sunlight discarded the resident-world shadow range or cascade blending.");
             await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
             var materialRays = 0;
             foreach (var land in terrain)

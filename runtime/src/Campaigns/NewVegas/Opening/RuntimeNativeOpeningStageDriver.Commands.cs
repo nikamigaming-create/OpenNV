@@ -189,6 +189,13 @@ internal partial class RuntimeNativeOpeningStageDriver
         _playerAbilities.Synchronize();
         var vitals = Vitals;
         var transform = _player.GlobalTransform;
+        var sourceCell = FalloutCellSceneReader.ReadDefinition(_pluginStack, activeCell);
+        if (sourceCell.Worldspace is { } world)
+        {
+            _saveExteriorGrid ??= new(_pluginStack);
+            activeCell = _saveExteriorGrid.SpatialCell(world,
+                transform.Origin.X / _player.UnitsToMeters, -transform.Origin.Z / _player.UnitsToMeters);
+        }
         var rotation = transform.Basis.Orthonormalized().GetRotationQuaternion().Normalized();
         var complete = _tagSkillContract is null ? !_scripts.Session.InCharGen :
             _quests.IsCompleted(FalloutDialogueTopic.Find(_pluginStack, "QUST", FalloutNativeCampaignSave.OpeningQuestEditorId).FormKey);
@@ -213,6 +220,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             Music = _scriptMusic?.Capture()
         };
     }
+
+    private FalloutExteriorGrid? _saveExteriorGrid;
 
     private void OpenRecipeMenu(FalloutFormKey categoryForm)
     {

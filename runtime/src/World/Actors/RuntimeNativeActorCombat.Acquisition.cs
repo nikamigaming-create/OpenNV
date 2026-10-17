@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.World.Actors;
@@ -31,24 +32,38 @@ internal sealed partial class RuntimeNativeActorCombat
         // script changes. Nearest visible eligibility is a deterministic initial
         // selection policy; retail threat weighting remains a separate owner.
         var decisions = new List<object>();
+        var selected = false;
         foreach (var candidate in candidates.OrderBy(value => value.DistanceSquared)
                      .ThenBy(value => value.Reference.ToString(), StringComparer.Ordinal))
         {
             var relation = _world.ActorRelation(_state.Reference, candidate.Reference);
-            var eligible = _threat!.Initiates(relation);
+            var initiates = _threat!.Initiates(relation);
+            var warns = _threat.Warns(relation);
+            var eligible = initiates || warns;
             bool? visible = eligible ? CanSeePoint(candidate.Actor?.BodyTargetPoint() ?? player!.CombatTargetPoint, candidate.Actor) : null;
-            decisions.Add(new { reference = candidate.Reference, candidate.DistanceSquared, relation, eligible, visible });
+            decisions.Add(new { reference = candidate.Reference, candidate.DistanceSquared, relation, eligible, visible, warns });
             if (visible != true) continue;
+            selected = true;
             _relation = relation;
-            _state.Engagement = new(candidate.Reference);
+            if (initiates || candidate.DistanceSquared <= maximumDistanceSquared / 4)
+            {
+                _state.AggroWarning = null;
+                _state.Engagement = new(candidate.Reference);
+            }
+            else if (_state.AggroWarning?.Target != candidate.Reference)
+            {
+                _state.AggroWarning = new(candidate.Reference, RemainingSeconds: WarningInterval);
+            }
             break;
         }
+        if (!selected) ClearRadiusWarning();
         _lastAcquisition = new
         {
             radius = _detectRange,
             candidates = candidates.Count,
             decisions,
             selected = _state.Engagement?.Target,
+            warning = _state.AggroWarning,
             boundary = "source-faction-and-aggression-eligibility;nearest-visible-selection;retail-threat-priority-unmatched"
         };
         return _state.Engagement is not null;

@@ -236,6 +236,7 @@ public partial class RuntimeCoordinator
                     scale = new[] { actor.Scale.X, actor.Scale.Y, actor.Scale.Z },
                     animation = actor.Observation,
                 }).ToArray(),
+            exteriorShadows = _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeExteriorEnvironment>().SingleOrDefault()?.ShadowState,
             lights = cellChildren is null ? null : cellNodes.OfType<OmniLight3D>().Select(light => new
             {
                 reference = light.GetMeta("opennv_ligh_reference", "").AsString(),
@@ -607,12 +608,14 @@ public partial class RuntimeCoordinator
             if (activeScene.Cell.Worldspace is { } world)
             {
                 grid = ResolveExterior(world, position);
-                if (activeCell != grid.Scene.Cell.FormKey && activeCell != grid.PersistentCell)
-                    throw new InvalidDataException($"Saved CELL {activeCell} does not contain the saved exterior position.");
+                // Older saves retained the streaming grid's anchor while the
+                // player had already crossed into another resident cell. The
+                // saved cell still selects the world; position selects its
+                // authored spatial cell, exactly as ordinary streaming does.
                 activeScene = grid.Scene;
             }
         }
-        activeScene = _nativeReferences!.ComposeResidency(activeScene, grid?.Cells);
+        activeScene = _nativeReferences!.ComposeResidency(activeScene, _configuration.World.GameUnitsToMeters, grid?.Cells);
         if (grid is not null) grid = grid with { Scene = activeScene };
         _nativeSkyLighting?.EnterCell(activeScene.Cell, _nativeGlobals, position);
         SetLoadingStatus("Loading the world");
@@ -1134,7 +1137,7 @@ public partial class RuntimeCoordinator
         try
         {
             await ShowNativeLoadingScreens(targetScene.Cell.FormKey);
-            targetScene = _nativeReferences!.ComposeResidency(targetScene, grid?.Cells);
+            targetScene = _nativeReferences!.ComposeResidency(targetScene, _configuration.World.GameUnitsToMeters, grid?.Cells);
             if (grid is not null) grid = grid with { Scene = targetScene };
             sky.EnterCell(targetScene.Cell, _nativeGlobals, entry.Position);
             SetLoadingStatus("Loading the world");

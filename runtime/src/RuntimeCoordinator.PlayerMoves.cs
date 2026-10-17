@@ -65,7 +65,7 @@ public partial class RuntimeCoordinator
         (CollisionObject3D Body, CollisionObject3D.DisableModeEnum Mode)[] arrivalCollision = [];
         try
         {
-            scene = _nativeReferences!.ComposeResidency(grid?.Scene ?? scene, grid?.Cells);
+            scene = _nativeReferences!.ComposeResidency(grid?.Scene ?? scene, _configuration.World.GameUnitsToMeters, grid?.Cells);
             if (grid is not null) grid = grid with { Scene = scene };
             sky.EnterCell(scene.Cell, _nativeGlobals, placement.Position);
             SetLoadingStatus("Loading the world");
