@@ -35,7 +35,8 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
     internal long Epoch => _fields.Epoch;
     internal FalloutCombatActorIdentity Actor => _fields.Actor;
     internal FalloutReferenceScriptExtraInitializationCall? LastCall { get; private set; }
-    internal string? SaveBlocker => _busy ? EnteredBoundary : _writerBoundary ?? _failure;
+    internal string? SaveBlocker => _busy ? EnteredBoundary : _writerBoundary ?? _failure ??
+        (_animationNoteExtra is not null ? "source-Actor-animation-note-receiver-cold-binding-unowned" : null);
 
     internal FalloutReferenceScriptExtraInitializer(FalloutReferenceScriptExtraInitializerSource source,
         FalloutPluginStack records, FalloutActorPackageCommandFields fields, FalloutPlayerThreadContextState threadContext,
@@ -62,6 +63,8 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
         }
         else
         {
+            if (saved.AnimationNotes is not null)
+                throw new NotSupportedException("source-Actor-animation-note-receiver-cold-binding-unowned");
             Validate(saved, source, fields.Stack, fields.Actor);
             if (saved.Process == Process || saved.Factory == Factory || saved.Epoch != Epoch ||
                 fields.SavedScriptInitialization is not { } baseline || !EquivalentSnapshot(saved, baseline))
@@ -196,7 +199,7 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
             Factory, FieldsFactory, Constructor, Epoch, _referenceFlags, _template, _writerBoundary,
             Array.AsReadOnly(_publications.ToArray()), Array.AsReadOnly(_calls.Select(CloneCall).ToArray()),
             _referenceFlagWrites.Count == 0 ? null : Array.AsReadOnly(_referenceFlagWrites.ToArray()),
-            _animationFlagWrites.Count == 0 ? null : Array.AsReadOnly(_animationFlagWrites.ToArray()));
+            _animationFlagWrites.Count == 0 ? null : Array.AsReadOnly(_animationFlagWrites.ToArray()), CaptureAnimationNoteExtra());
         Validate(snapshot, Source, _fields.Stack, Actor); return snapshot;
     }
 

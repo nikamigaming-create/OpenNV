@@ -17,7 +17,8 @@ internal sealed record FalloutSourceAnimationContextSnapshot(FalloutSourceAnimat
     int GroupCount, Guid? FirstPair, Guid? SecondPair, ushort RequestedGroup,
     string? Writer, FalloutSourceAnimationContextCall? LastCall, string? Failure,
     FalloutLoadedAnimationContextSnapshot? Loaded = null, Guid? RetiringBindingFactory = null,
-    string? RetirementFailure = null, bool Retired = false);
+    string? RetirementFailure = null, bool Retired = false,
+    FalloutIdleAnimationAction? IdleFirst = null, FalloutIdleAnimationAction? IdleSecond = null);
 
 // The real managed AnimData object, independently allocated at the original
 // source constructor call. A KF clip, idle marker or logical graph is never
@@ -148,7 +149,8 @@ internal sealed partial class FalloutSourceAnimationContextState
     }
     internal FalloutSourceAnimationContextSnapshot Capture() => new(Construction, Process, CommonProcess,
         _sequence, _root?.Node.Factory, _pending.Count, _timed.Count, _groups.Count, _firstPair, _secondPair,
-        _requested, _writer, LastCall, _failure, CaptureLoaded(), _retiringBinding?.Node.Factory, _retirementFailure, _retired);
+        _requested, _writer, LastCall, _failure, CaptureLoaded(), _retiringBinding?.Node.Factory, _retirementFailure, _retired,
+        _idleFirst, _idleSecond);
     private void RequireIdle()
     {
         _requireLifetime();

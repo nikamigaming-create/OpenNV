@@ -4,6 +4,26 @@ namespace OpenNV.Runtime.World.Physics;
 
 internal static class FalloutLivingModelConstruction
 {
+    internal static FalloutCharacterControllerProxyTransform ProjectCurrentWorld(FalloutNifTransform world,
+        FalloutNifRigidBody body, FalloutPhysicalConstructorInputs inputs, FalloutLivingModelPlacement placement)
+    {
+        FalloutNifSceneMath.Validate(world);
+        var scale = BitConverter.UInt32BitsToSingle(placement.ReferenceScale);
+        if (!float.IsFinite(scale) || scale <= 0) throw new InvalidDataException("Current physical placement lost its reference scale.");
+        var local = Scale(inputs.ScaleReferencePosition(FalloutPhysicalVector3.FromValues(
+            world.Translation.X, world.Translation.Y, world.Translation.Z)), scale);
+        var root = placement.Root;
+        var result = new FalloutCharacterControllerProxyTransform(Multiply(root.Rotation, Rotation(world.RotationRowMajor)),
+            Add(root.Translation, Rotate(local, root.Rotation)));
+        if (body.Block.TypeName == "bhkRigidBodyT")
+        {
+            var offset = Scale(FalloutPhysicalVector3.FromValues(body.Translation.X, body.Translation.Y, body.Translation.Z),
+                Multiply(world.Scale, scale));
+            result = new(Multiply(result.Rotation, QuaternionRotation(body.Rotation)),
+                Add(result.Translation, Rotate(offset, result.Rotation)));
+        }
+        return result;
+    }
     // Fresh model construction consumes the authored local hierarchy and the
     // actual reference's current placement. Later animation/physical pose
     // publication has its own lifetime and cannot re-read these rest inputs.

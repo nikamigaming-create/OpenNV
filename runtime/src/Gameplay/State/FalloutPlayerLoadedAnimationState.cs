@@ -14,9 +14,9 @@ internal sealed record FalloutLoadedPlayerAnimationSnapshot(string Source, Guid 
     IReadOnlyList<FalloutReferenceAnimationFlagWrite> Flags, string? Failure, bool Retired,
     int RetainedModels, int RetiredContexts, string? RetirementFailure = null, bool RetirementStarted = false);
 
-// These are callable source children of Player 3D loading. No method returns
-// the enclosing Player loader: its following camera/weapon children remain
-// independent. Root composes these calls at their actual entered positions.
+// Root composes source children at their actual entered positions. Returning
+// its outer animation kind requires both real bound contexts, and Root calls
+// that return only after its following controller/UI/toddler children return.
 internal sealed class FalloutPlayerLoadedAnimationState
 {
     private readonly FalloutPluginStack _records;
@@ -160,6 +160,15 @@ internal sealed class FalloutPlayerLoadedAnimationState
     }
     internal FalloutSourceAnimationContextState RequireContext(Guid identity)
     { _requireLifetime(); return _contexts.GetValueOrDefault(identity) ?? throw new InvalidOperationException("No actual loaded context owns this pointer."); }
+    internal FalloutSourceAnimationKindScope ReturnPlayerLoad(FalloutReferenceModelDataInvocation invocation)
+    {
+        RequireLoad(invocation);
+        if (_scope is not { Kind: FalloutLoadedAnimationScopeKind.PlayerLoad, Scope.Returned: false, Scope.Failure: null } scope ||
+            !_commonInitialized || _first?.LastBind is not { Returned: true } || _third is not null && _third.LastBind is not { Returned: true })
+            throw new InvalidOperationException("Player load return lost its actual entered kind or independent bound contexts.");
+        try { return (_scope = _thread.ReturnAnimationInitialization(scope, () => RequireLoad(invocation))); }
+        catch (Exception error) { Fail(error); throw; }
+    }
     internal void ObserveEnteredLoadedAnimationWriter(string producer, Action requireActual)
     {
         requireActual(); _requireLifetime();

@@ -20,7 +20,8 @@ internal sealed record FalloutStandaloneSceneClockCall(Guid Main, long MainOrdin
     FalloutStandaloneSceneClockStep Step, string? Failure, FalloutSourceFrameDeltaRead? CachedTimer = null);
 internal enum FalloutStandaloneScenePreludeStep { ViewRequests, OwnedChildRelease, Countdown, ReferenceScratchStore, ReferenceQuery, ReferenceFrame, ReferenceRelease, ActorScalarReset, ThreadContext, InputManagerQuery, ActorProcessQuery, ActorSceneContinuation, QueuedSceneNodes, ProcessSceneUpdate, PostProcessContext, TimedActions, PlayerSceneContinuation, Failed }
 internal sealed record FalloutStandaloneActorProcessQuery(Guid Main, long MainOrdinal, Guid Process,
-    long Entered, long Changed, FalloutProcessSceneQuery? Result, int EntryCalls, bool AnimationReturned, string? Failure);
+    long Entered, long Changed, FalloutProcessSceneQuery? Result, int EntryCalls, bool AnimationReturned, string? Failure,
+    FalloutAnimationProcessQueryBinding? AnimationBinding = null);
 internal sealed record FalloutStandaloneInputManagerQuery(Guid Main, long MainOrdinal, Guid Process,
     string Stack, Guid Factory, ulong Window, ulong Sample, long Revision, long Entered, long Changed, bool Returned,
     FalloutInputProvider Provider = FalloutInputProvider.WindowsDirectInput);
@@ -68,7 +69,7 @@ internal sealed record FalloutStandalonePlayerSceneSnapshot(string Schema, Fallo
     FalloutPlayerLateFrameSnapshot? LateFrame = null,
     FalloutPlayerMoverDeltaSnapshot? MoverDelta = null,
     FalloutPlayerActorMovementSnapshot? ActorMovement = null,
-    FalloutPlayerViewSnapshot? ViewFields = null);
+    FalloutPlayerViewSnapshot? ViewFields = null, FalloutPlayerReturnTailSnapshot? ReturnTail = null);
 
 // These are individual source children. A supplied delegate is not a completion
 // receipt; the source call records its actual returned child and committed prefix.

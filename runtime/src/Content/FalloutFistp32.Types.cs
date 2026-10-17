@@ -1,6 +1,6 @@
 namespace OpenNV.Runtime.Content;
 
-internal enum FalloutFistpOperation : byte { Observe, Convert, SourceArgument }
+internal enum FalloutFistpOperation : byte { Observe, Convert, SourceArgument, ScaledHundred }
 internal enum FalloutFistpOutcome : byte { Unset, Observed, Converted, PendingException, UnmaskedException, ReservedPrecision, OccupiedStack }
 internal enum FalloutFistpRounding : byte { NearestEven, Down, Up, TowardZero }
 internal sealed record FalloutFistpObservation(uint Abi, uint Bytes, uint NativeProcess, uint NativeThread,

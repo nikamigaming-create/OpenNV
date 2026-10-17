@@ -21,7 +21,8 @@ internal sealed record FalloutProcessSceneFields(FalloutProcessWeaponEntry? Weap
     string? AnimationContextWriter = null,
     FalloutProcessAnimationContextInvalidation? AnimationContextLoad = null,
     IReadOnlyList<FalloutProcessAnimationContextStore>? AnimationContextStores = null,
-    FalloutProcessModelLoadFields? ModelLoad = null)
+    FalloutProcessModelLoadFields? ModelLoad = null,
+    FalloutProcessPostActionLightCall? PostActionLight = null)
 {
     internal static FalloutProcessSceneFields Constructed => new(null, null) { ModelLoad = FalloutProcessModelLoadFields.Constructed };
 }

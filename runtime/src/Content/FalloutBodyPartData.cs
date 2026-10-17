@@ -9,12 +9,20 @@ internal sealed record FalloutBodyPartGore(int DebrisCount, FalloutFormKey? Debr
 internal sealed record FalloutBodyPart(byte Type, string Name, string Node, string Target, byte Flags,
     float DamageMultiplier, byte HealthPercent, sbyte ActorValue, byte HitChance, byte ExplosionChance,
     float TrackingDegrees, FalloutBodyPartGore Sever, FalloutBodyPartGore Explode,
-    Vector3 GoreTranslation, Vector3 GoreRotation, string? ReplacementModel, float ReplacementScale, string GoreBone);
+    Vector3 GoreTranslation, Vector3 GoreRotation, string? ReplacementModel, float ReplacementScale, string GoreBone,
+    string IkStartNode = "");
 
 // One source table supplies anatomical hit selection, damage and original gore
 // resources. NAM1/NAM4 follow BPND and belong to that same part.
-internal sealed record FalloutBodyPartData(FalloutFormKey Form, IReadOnlyList<FalloutBodyPart> Parts)
+internal sealed record FalloutBodyPartData(FalloutFormKey Form, IReadOnlyList<FalloutBodyPart> Parts, string ModelPath = "")
 {
+    internal IReadOnlyList<FalloutBodyPart> EnumerateRagdollParts()
+    {
+        if (Parts is null || Parts.Any(part => part is null || part.Type >= 15) || Parts.Select(part => part.Type).Distinct().Count() != Parts.Count)
+            throw new InvalidDataException("Ragdoll body-part enumeration lost the actual fifteen-slot table.");
+        return Parts.Where(part => (part.Flags & 2) != 0).OrderByDescending(part => part.Type).ToArray();
+    }
+
     internal int CrippledMobilityCount(float maximumHealth, IReadOnlyDictionary<byte, float> damage)
     {
         if (!float.IsFinite(maximumHealth) || maximumHealth <= 0)
@@ -76,16 +84,19 @@ internal sealed record FalloutBodyPartData(FalloutFormKey Form, IReadOnlyList<Fa
             var part = new FalloutBodyPart(data.Span[5], Text("BPTN"), Text("BPNN"), Text("BPNT"), data.Span[4],
                 Number(0), data.Span[6], unchecked((sbyte)data.Span[7]), data.Span[8], data.Span[9], Number(20), sever, explode,
                 new(Number(44), Number(48), Number(52)), new(Number(56), Number(60), Number(64)),
-                FalloutNpcAppearanceResolver.PathField(record, "NAM1", "meshes", false, fields), Number(80), Text("NAM4"));
+                FalloutNpcAppearanceResolver.PathField(record, "NAM1", "meshes", false, fields), Number(80), Text("NAM4"), Text("BPNI"));
             if (part.Type > 14 || parts.Any(value => value.Type == part.Type) || (part.Flags & ~0x7f) != 0 ||
-                part.DamageMultiplier < 0 || part.HealthPercent > 100 || part.ExplosionChance > 100 ||
+                part.DamageMultiplier < 0 || part.ExplosionChance > 100 ||
                 part.TrackingDegrees is < 0 or > 180 || part.ReplacementScale < 0 ||
                 sever.DebrisCount < 0 || sever.DebrisScale < 0 || explode.DebrisScale < 0)
                 throw new InvalidDataException("Body-part fields are invalid or repeated.");
             parts.Add(part);
         }
         if (parts.Count == 0) throw new InvalidDataException("Body-part source has no parts.");
-        return new(record.FormKey, parts.OrderBy(part => part.Type).ToArray());
+        var models = record.ReadSubrecords().Where(field => field.Signature == "MODL").ToArray();
+        if (models.Length > 1) throw new InvalidDataException("Body-part source repeats its independent model component.");
+        return new(record.FormKey, parts.OrderBy(part => part.Type).ToArray(),
+            models.Length == 0 ? "" : FalloutDialogueTopic.Text(models[0].Data.Span));
     }
 
     internal static IEnumerable<IReadOnlyList<FalloutPluginSubrecord>> Groups(IEnumerable<FalloutPluginSubrecord> fields)

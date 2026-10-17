@@ -4,7 +4,7 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
 internal sealed record RuntimeNativeNifPointLightOwner(FalloutModeledLightSource Source,
-    Func<Transform3D, RuntimeNativePlacedLight> Create);
+    Func<Transform3D, RuntimeNativePlacedLight> Create, FalloutModeledLightPose? Pose = null);
 
 internal static partial class RuntimeNativeNifMeshBuilder
 {

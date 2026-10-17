@@ -19,7 +19,7 @@ internal sealed partial class FalloutReferenceWorld
     internal object? ActualProcessCommonState => _processCommon?.State;
     internal string? ActualProcessRuntimeSaveBlocker => SourcePackageCommandSaveBlocker ?? _processRuntime?.SaveBlocker ?? _processRuntime?.SourceCachedTimerRuntimeBoundary ??
         (_processRuntime is null ? "actual-Main-Player-Actor-process-runtime-owner-absent" : null);
-    internal string? ActualProcessCommonSaveBlocker => _processCommon?.SaveBlocker ??
+    internal string? ActualProcessCommonSaveBlocker => _processCommon?.SaveBlocker ?? _sceneLights.SaveBlocker ??
         (_processCommon is null ? "actual-actor-common-process-owner-absent" : null);
     private FalloutActorProcessRuntimeState ProcessRuntime => _processRuntime ??
         throw new NotSupportedException("Actual source Main/Player/Actor runtime process inputs are absent.");

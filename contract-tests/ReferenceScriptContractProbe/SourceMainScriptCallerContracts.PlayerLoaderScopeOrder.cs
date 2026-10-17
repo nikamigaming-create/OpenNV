@@ -40,17 +40,36 @@ internal static partial class SourceMainScriptCallerContracts
             () => Guard(invocation), () => throw new InvalidOperationException("Unbound context acquired no source root retain."),
             graph.Retire, () => { });
         facade.ConstructFirst(invocation, node);
+        Reject(() => facade.ReturnPlayerLoad(invocation));
+        Require(facade.Capture().Scope is { Scope.Returned: false, Scope.EnteredKind: 52 },
+            "An attempted early Player return restored its kind before the actual independent context binds.");
         Require(fixture.Fields.Capture().AnimationTail!.LoadWriters.Count == 2 &&
             fixture.Fields.Capture().AnimationTail!.Membership is null &&
             facade.Capture().FirstPointer is { Returned: true } && facade.Capture().Scope is { Scope.Returned: false },
             "Actual first constructor/store missed its entered writer or returned the enclosing loader.");
         FalloutActorPackageCommandFields.Validate(fixture.Fields.Capture(), fixture.Fields.Source, fixture.Fields.Stack, fixture.Actor);
+        var auxiliary = fixture.Initializer.ReadControllerConstructorExtra(0x7e, invocation, Guard);
+        Require(auxiliary is { Extra: null, Subtype: 0x7e } && auxiliary.Initializer == fixture.Initializer.Factory &&
+            auxiliary.Fields == fixture.Fields.Factory, "Controller lookup substituted another list's constructor absence.");
+        Reject(() => fixture.Initializer.ReadControllerConstructorExtra(0x0d, invocation, Guard));
+        Reject(() => fixture.Initializer.ReadControllerConstructorExtra(0x7e, invocation with { Epoch = 2 }, _ => { }));
         Reject(() => facade.EnterPlayerLoad(invocation));
         facade.Retire(); node.RetireBinding(); current = null;
+        fixture.InvalidateControllerExtraMembership();
+        current = invocation;
+        Reject(() => fixture.Initializer.ReadControllerConstructorExtra(0x7e, invocation, Guard));
+        Reject(() => fixture.Initializer.ReadControllerConstructorExtra(0x5f, invocation, Guard));
+        current = null;
         Console.WriteLine("OPENNV_PLAYER_LOADER_SCOPE_ORDER_PASS kindBeforeGates=true noEagerSkeleton=true firstWriterAtConstructor=true failedScopeUnrestored=true wholeLoader=UNRETURNED");
     }
     private sealed partial class ReferencePositionFixture
     {
+        internal void InvalidateControllerExtraMembership()
+        {
+            _script = new(Guid.NewGuid(), Actor, Fields.Process, 1, Fields.Constructor, Environment.CurrentManagedThreadId);
+            try { _ = Initializer.ObserveUnownedWriter(_script, FalloutReferenceScriptExtraWriter.ExtraCopyOrLoad, "authored-controller-Extra-copy"); }
+            finally { _script = null; }
+        }
         internal static ReferencePositionFixture CreatePlayerLoadScopeRecords() => new(appendedRows:
             Row("GMST", 0x883, Part("EDID", "sFirstPersonSkeleton\0"u8.ToArray()),
                 Part("DATA", "meshes/authored/opacity-skeleton.nif\0"u8.ToArray())));

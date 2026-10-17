@@ -71,6 +71,20 @@ int wmain(int argc, wchar_t** argv) {
         require(value.outcome == 2 && value.argument == 1 && value.value == 0 && (value.status_at_conversion & 2) != 0 &&
             (value.status_after & 0x3f) == ((value.status_at_conversion & 0x3f) | 0x22),
             "Source argument transport flags/bits were hidden by the FISTP result."); row("source-argument-status");
+        const int scaled_half[] = { 12, 12, 13, 12 };
+        for (std::uint32_t mode = 0; mode < 4; ++mode) {
+            const auto control = 0x037fu | (mode << 10);
+            opennv_fistp_fixture_environment(control, 0, (mxcsr & ~0x6000u) | ((mode ^ 1u) << 13));
+            value = observed(3, 0x3e000000);
+            require(value.outcome == 2 && value.argument == 0x41480000 && value.value == scaled_half[mode] &&
+                value.control_before == control && value.control_after == control && value.tag_before == value.tag_after,
+                "Scaled x87 conversion changed its actual rounding, argument or register ownership."); row("scaled-half");
+            opennv_fistp_fixture_environment(control, 0, (mxcsr & ~0x6000u) | ((mode ^ 1u) << 13));
+            value = observed(3, 0x3dcccccd);
+            require(value.outcome == 2 && value.argument == (mode == 2 ? 0x41200001u : 0x41200000u) &&
+                value.value == (mode == 2 ? 11 : 10) && (value.status_at_conversion & 0x20) != 0,
+                "Scaled Float32 store was collapsed into a single integer rounding or used MXCSR."); row("scaled-store-rounding");
+        }
         const auto refused = [&](std::uint8_t outcome) {
             const auto result = observed(1, 0x3fc00000);
             require(result.outcome == outcome && result.value == INT32_MIN && result.control_before == result.control_after &&
@@ -89,8 +103,8 @@ int wmain(int argc, wchar_t** argv) {
         row("occupied-registers-preserved");
         OpenNVHostFistp32 invalid; std::memset(&invalid, 0x5a, sizeof(invalid)); const auto original = invalid;
         require(call(1, 0, &invalid, 47) == -1 && std::memcmp(&invalid, &original, sizeof(invalid)) == 0, "Wrong ABI extent entered or mutated output."); row("wrong-extent-refused");
-        require(call(3, 0, &invalid, 48) == -1 && std::memcmp(&invalid, &original, sizeof(invalid)) == 0, "Unknown ABI operation entered or mutated output."); row("wrong-operation-refused");
-        require(rows == 19, "Native audit did not execute all 19 independent cases.");
+        require(call(4, 0, &invalid, 48) == -1 && std::memcmp(&invalid, &original, sizeof(invalid)) == 0, "Unknown ABI operation entered or mutated output."); row("wrong-operation-refused");
+        require(rows == 27, "Native audit did not execute all 27 independent cases.");
         executed = rows; exit = 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; }
     if (owns_environment) {
@@ -105,7 +119,7 @@ int wmain(int argc, wchar_t** argv) {
             }
     }
     if (!FreeLibrary(module)) { std::cerr << "Actual first-party DLL lease did not retire.\n"; return 1; }
-    if (exit == 0 && executed == 19)
-        std::cout << "OPENNV_FISTP_ISA_NATIVE_PASS cases=19 zeroExecutedRefused=true realCallingThread=true mxcsrIndependent=true sourceArgumentPrefix=true originalEnvironmentRestored=true dllRetired=true productGameplay=UNEXECUTED\n";
+    if (exit == 0 && executed == 27)
+        std::cout << "OPENNV_FISTP_ISA_NATIVE_PASS cases=27 zeroExecutedRefused=true realCallingThread=true mxcsrIndependent=true sourceArgumentPrefix=true scaledFloatStore=true originalEnvironmentRestored=true dllRetired=true productGameplay=UNEXECUTED\n";
     return exit;
 }

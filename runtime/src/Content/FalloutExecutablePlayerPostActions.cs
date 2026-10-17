@@ -43,6 +43,7 @@ internal static partial class FalloutExecutableStringTable
             Word(code, update + 0x35d) != scaledTimer ||
             !Match(code, update + 0x361, [0x51, 0x8b, 0xcf, 0xd9, 0x1c, 0x24, 0xff, 0x96, 8, 5, 0, 0]))
             throw new NotSupportedException("Post-action process lost its ordered/unordered timer arm, null-context stores or Main timer association.");
+        RequirePlayerPostActionSpatial(code, image, update, high, middleConstructor);
         RequirePlayerDetectionAction(code, image, caller, high, middle, scaledTimer);
         uint Class(string name)
         {

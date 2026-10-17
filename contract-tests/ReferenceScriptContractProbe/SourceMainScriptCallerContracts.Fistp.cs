@@ -48,7 +48,29 @@ internal static partial class SourceMainScriptCallerContracts
             continued.Fistp.Last.Context.MainOrdinal == 2 && continued.Fistp.Last.Context.Process == continued.CapturedProcess &&
             continued.Fistp.ColdHandoff?.PreviousProcess == saved.CapturedProcess,
             "Cold native continuation rewound counters, replayed history or left the new actual Main/native lease.");
+        using var modelFixture = new PlayerReturnTailFixture();
+        using var scalar = new FalloutSourceFistpState(FalloutMainFrameDeclaration.ForExecutable(source.Main.EngineSha256),
+            modelFixture.Stack, Guid.NewGuid());
+        using (scalar.Bind(fresh))
+            modelFixture.EnterLoad((load, guard) =>
+            {
+                var converted = scalar.ConvertModelKey(load, 0x3dcccccd, guard);
+                Require(converted is { Returned: true, Native.Operation: FalloutFistpOperation.ScaledHundred } &&
+                    converted.Integer == FalloutFistp32Semantics.RequireConverted(converted.Native).Integer,
+                    "Actual model-key call lost its native multiply, Float32 store or integer conversion.");
+            });
+        var scalarSaved = System.Text.Json.JsonSerializer.Deserialize<FalloutSourceFistpSnapshot>(
+            System.Text.Json.JsonSerializer.Serialize(scalar.Capture()))!;
+        FalloutSourceFistpState.Validate(scalarSaved);
+        Reject(() => FalloutSourceFistpState.Validate(scalarSaved with
+        { LastModelKey = scalarSaved.LastModelKey! with { Integer = scalarSaved.LastModelKey.Integer ^ 1 } }));
+        var beforeScalarCold = fresh.ObservationOrdinal;
+        using var scalarCold = new FalloutSourceFistpState(FalloutMainFrameDeclaration.ForExecutable(source.Main.EngineSha256),
+            modelFixture.Stack, Guid.NewGuid(), scalarSaved);
+        Require(scalarCold.Capture() is { ModelKeys: 1, ModelKeyConversions: 1, Conversions: 0, Bound: false } && fresh.ObservationOrdinal == beforeScalarCold,
+            "Cold model key replayed a native instruction or borrowed a live historical thread.");
         Console.WriteLine("OPENNV_CALLING_THREAD_FISTP_NATIVE_PASS sourceSites=2 actualConversions=8 currentNativeThread=true wrongThreadNoInstruction=true coldFreshLease=true authoredMainInputs=true godotGameplay=UNEXECUTED newOsProcess=UNEXECUTED");
+        Console.WriteLine("OPENNV_MODEL_KEY_FISTP_NATIVE_PASS actualMultiplyStoreConvert=true independentGridCounters=true changedIntegerRejected=true coldNoInstruction=true");
     }
     private sealed class FistpPlayerConsumer(FalloutMainPlayerCellSource source) : IFalloutMainPlayerCellConsumers
     {

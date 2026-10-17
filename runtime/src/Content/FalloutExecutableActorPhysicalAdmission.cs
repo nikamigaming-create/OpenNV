@@ -4,6 +4,8 @@ internal static partial class FalloutExecutableStringTable
 {
     private static void RequireActorPhysicalAdmissionConstructor(byte[] code, Image image, int player, int initialize)
     {
+        if (!Match(code, initialize + 0x20c, [0xc7, 0x86, 0xa4, 0, 0, 0, 0, 0, 0, 0]))
+            throw new NotSupportedException("Actor ragdoll lost its independent constructor-null field writer.");
         if (!Match(code, initialize + 0x9d, [0xc7, 0x86, 0xfc, 0, 0, 0, 0, 0, 0, 0,
                 0xc7, 0x86, 0, 1, 0, 0, 0, 0, 0, 0]) ||
             !Match(code, initialize + 0x60, [0x89, 0x46, 0x60]))

@@ -17,12 +17,13 @@ internal static class RuntimeNativePlacedLightBuilder
         Func<FalloutFormKey, float[]>? regionEmittance = null)
     {
         var resolved = FalloutPlacedLightResolver.Resolve(reference, baseObject, records, regionEmittance);
-        return BuildResolved(resolved, baseObject, transform, gameUnitsToMeters, energyScale, minimumEnergy, shadows, records, regionEmittance);
+        return BuildResolved(resolved, reference, baseObject, transform, gameUnitsToMeters, energyScale, minimumEnergy, shadows, records, regionEmittance);
     }
 
-    internal static RuntimeNativePlacedLight BuildResolved(FalloutPlacedLight source, FalloutBaseObjectDefinition baseObject,
+    internal static RuntimeNativePlacedLight BuildResolved(FalloutPlacedLight source, FalloutPlacedReference reference, FalloutBaseObjectDefinition baseObject,
         Transform3D transform, float gameUnitsToMeters, float energyScale, float minimumEnergy, bool shadows,
-        FalloutPluginStack? records = null, Func<FalloutFormKey, float[]>? regionEmittance = null)
+        FalloutPluginStack? records = null, Func<FalloutFormKey, float[]>? regionEmittance = null,
+        FalloutModeledLightPose? modelPose = null)
     {
         if (source.Base != baseObject.FormKey || baseObject.Light is null)
             throw new InvalidDataException("Native resolved light differs from its actual source base.");
@@ -53,6 +54,7 @@ internal static class RuntimeNativePlacedLightBuilder
         try
         {
             light.Name = $"LIGH_{source.Reference}";
+            light.ConfigureSourceFields(new(reference, source, modelPose));
             light.Transform = transform;
             light.LightColor = RetailLighting.GodotLightColor(color);
             light.LightEnergy = MathF.Max(minimumEnergy, source.Intensity * energyScale);

@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -30,7 +31,7 @@ internal sealed partial class FalloutReferenceWorld
     internal FalloutProcessPostActionUpdate UpdateStandalonePlayerPostActions(Func<float> readScaledTimer)
     {
         _ = ReadStandaloneSceneProcessQueries();
-        return ProcessCommon.UpdatePostActions(_enginePlayer, ActorProcesses.Read(_enginePlayer).Epoch, readScaledTimer);
+        return ProcessCommon.UpdatePostActions(_enginePlayer, ActorProcesses.Read(_enginePlayer).Epoch, readScaledTimer, ReadStandalonePostActionLight);
     }
     internal FalloutProcessDetectionActionUpdate UpdateStandalonePlayerDetectionAction(Func<float> readScaledTimer)
     {
@@ -69,5 +70,14 @@ internal sealed partial class FalloutReferenceWorld
         if (inventory.Equipped.Any(id => records.GetEffective(records.RuntimeFormKey(id)).Signature == "WEAP"))
             throw new NotSupportedException("source-Player-scene-process-equipped-entry-replacement-writer-unowned");
         return query;
+    }
+    internal FalloutAnimationProcessQueryBinding ReadStandaloneSceneAnimationBinding(FalloutProcessSceneQuery query)
+    {
+        RequireStandaloneControlPublication(); var actor = ActorProcesses.Read(_enginePlayer);
+        if (query.Actor != actor.Source || query.Epoch != actor.Epoch || query.Level != actor.Level || query.Stack != _processRuntimeStack ||
+            query.AnimationContext is not { } context)
+            throw new InvalidOperationException("Player scene animation binding crossed its actual independent process query.");
+        return (_loadedPlayerAnimation ?? throw new NotSupportedException("source-Player-current-Common-AnimData-factory-unbound"))
+            .RequireContext(context).ReadCommonProcessQuery(query);
     }
 }

@@ -1,9 +1,25 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.World.Physics;
 
 namespace OpenNV.Runtime.World.Cells;
 
+internal sealed record FalloutPlayerPhysicalPlacement(FalloutPhysicalVector3 Position, FalloutPhysicalVector3 Rotation, uint Scale);
+
 internal sealed partial class FalloutReferenceWorld
 {
+    internal FalloutPlayerPhysicalPlacement ReadStandalonePlayerPhysicalPlacement()
+    {
+        RequireStandaloneControlPublication();
+        return WithActualReferencePosition(FalloutReferencePositionIngress.CopyOrLoad, invocation =>
+        {
+            var owner = _sourcePlayerReferencePosition ?? throw new NotSupportedException("source-physical-current-reference-position-owner-unbound");
+            var position = owner.ReadCurrentPosition(invocation).Position;
+            var scale = owner.ReadReferenceScale(invocation).Bits;
+            var rotation = CampaignStandalonePlayerScene.RequirePlayerReferenceOrientation().ReadPhysicalReferenceRotation(invocation.ReferenceConstructor);
+            RequireActualReferencePosition(invocation);
+            return new FalloutPlayerPhysicalPlacement(new(position.X, position.Y, position.Z), rotation, scale);
+        });
+    }
     internal FalloutActorProcessFact<int> ReadStandalonePlayerPhysicalMode() => ProcessRuntime.Life(_enginePlayer);
 
     internal FalloutActorPhysicalRegistrationTrace ReadStandalonePlayerPhysicalAdmission(

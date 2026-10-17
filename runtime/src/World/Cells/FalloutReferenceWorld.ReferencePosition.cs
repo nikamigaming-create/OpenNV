@@ -62,7 +62,7 @@ internal sealed partial class FalloutReferenceWorld
             throw new InvalidOperationException("Source reference owner reentered its actual caller.");
         var owner = _sourcePlayerReferencePosition ?? throw new NotSupportedException("source-reference-position-owner-unbound");
         var actor = ActorProcesses.Read(owner.Actor.Reference);
-        var common = ProcessCommon.ReadSceneQueries(owner.Actor.Reference, actor.Epoch);
+        var common = ReadReferencePositionCommon(owner.Actor.Reference, actor.Epoch);
         var invocation = new FalloutReferencePositionInvocation(Guid.NewGuid(), actor.Source, owner.Process,
             owner.Constructor, common.Process, actor.Epoch, Environment.CurrentManagedThreadId, ingress,
             ingress == FalloutReferencePositionIngress.PackageCommand ? _enteredPackageCommand?.SourceCommand : null, frame);
@@ -88,7 +88,7 @@ internal sealed partial class FalloutReferenceWorld
             owner.Process != invocation.ReferenceProcess || owner.Constructor != invocation.ReferenceConstructor)
             throw new InvalidOperationException("Reference fields left their actual source caller, constructor or thread.");
         var actor = ActorProcesses.Read(invocation.Actor.Reference);
-        var common = ProcessCommon.ReadSceneQueries(invocation.Actor.Reference, invocation.Epoch);
+        var common = ReadReferencePositionCommon(invocation.Actor.Reference, invocation.Epoch);
         if (actor.Retired || actor.Source != invocation.Actor || actor.Epoch != invocation.Epoch ||
             common.Process != invocation.CommonProcess || common.Actor != invocation.Actor || common.Stack != owner.Stack ||
             CampaignStandalonePlayerScene.Constructor != invocation.ReferenceConstructor)
@@ -174,6 +174,7 @@ internal sealed partial class FalloutReferenceWorld
         _sourceReferenceFormFiles?.Retire(); _sourceReferenceFormFiles = null;
         _sourceInitialPlacementCells?.Retire(); _sourceInitialPlacementCells = null;
         _sourcePlayerModelData?.Retire(); _sourcePlayerModelData = null;
+        _sourceActorRagdollControllerField = null;
     }
 
     private FalloutStandaloneReferenceOwnersSnapshot? CaptureStandaloneReferenceOwners()
@@ -189,6 +190,7 @@ internal sealed partial class FalloutReferenceWorld
             _sourceReferenceBaseAssignment, _sourceReferenceActorResponse, _sourceReferenceFormFiles.Capture(),
             _sourceInitialPlacementCells.Capture(),
             _sourceLinkedPlayerParentHistory?.Capture(_sourceLinkedPlayerParentRevision, _sourceLinkedPlayerParent),
-            _sourceDataHandlerLoading?.Capture(), _sourcePlayerModelData?.Capture(), _sourcePlayerMoverSpeed?.Capture());
+            _sourceDataHandlerLoading?.Capture(), _sourcePlayerModelData?.Capture(), _sourcePlayerMoverSpeed?.Capture(),
+            _sourceActorRagdollControllerField?.Capture());
     }
 }

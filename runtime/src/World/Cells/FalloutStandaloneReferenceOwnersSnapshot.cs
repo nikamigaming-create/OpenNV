@@ -18,4 +18,5 @@ internal sealed record FalloutStandaloneReferenceOwnersSnapshot(
     FalloutReferenceParentCellSnapshot? Parent = null,
     FalloutDataHandlerLoadingSnapshot? DataHandlerLoading = null,
     FalloutReferenceModelDataSnapshot? ModelData = null,
-    FalloutPlayerMoverSpeedCacheSnapshot? MoverSpeed = null);
+    FalloutPlayerMoverSpeedCacheSnapshot? MoverSpeed = null,
+    FalloutActorRagdollControllerFieldSnapshot? RagdollControllerField = null);

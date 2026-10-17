@@ -25,22 +25,21 @@ public partial class NativePlayerIdleModelAudit : Node
             var appearance = FalloutNpcAppearanceResolver.Resolve(records, records.RuntimeFormKey(7), equippedArmor: []);
             body = new(records, content, appearance, null, true, .0142875f, Colors.White);
             AddChild(body);
-            var animation = body.ReadIdleAnimationContext();
+            try { _ = body.ReadIdleAnimationContext(null!); throw new InvalidDataException("Native presentation fabricated an unloaded AnimData context."); }
+            catch (ArgumentNullException) { }
             var radius = body.ReadSourcePoseBoundRadius();
-            if (animation.Ownership == Guid.Empty || animation.First is not null || animation.Second is not null ||
-                radius is not { } bits || !float.IsFinite(BitConverter.UInt32BitsToSingle(bits)) || BitConverter.UInt32BitsToSingle(bits) <= 0)
-                throw new InvalidDataException("Actual first-person factory lost its independent context or posed source spheres.");
+            if (radius is not { } bits || !float.IsFinite(BitConverter.UInt32BitsToSingle(bits)) || BitConverter.UInt32BitsToSingle(bits) <= 0)
+                throw new InvalidDataException("Actual first-person model lost its posed source spheres.");
             body.Advance(.1, new Vector3(1, 0, 0), true, false);
-            ExpectBoundary(body.ReadIdleAnimationContext, "source-Player-animation-pending-action-transition-writer-unbound");
             _ = body.ReadSourcePoseBoundRadius();
             fresh = new(records, content, appearance, null, true, .0142875f, Colors.White);
             AddChild(fresh);
-            if (fresh.SourceSceneFactory == body.SourceSceneFactory || fresh.ReadIdleAnimationContext().Ownership == animation.Ownership)
-                throw new InvalidDataException("Fresh Player assembly replayed a previous model or animation factory.");
+            if (fresh.SourceSceneFactory == body.SourceSceneFactory)
+                throw new InvalidDataException("Fresh Player assembly replayed a previous model factory.");
             RemoveChild(fresh);
-            ExpectBoundary(fresh.ReadIdleAnimationContext, "Player animation context lost its actual first-person animation factory.");
+            ExpectBoundary(() => { _ = fresh.ReadSourcePoseBoundRadius(); }, "Player bound lost its actual assembled skeleton and current pose.");
             GD.Print($"OPENNV_NATIVE_PLAYER_IDLE_MODEL_PASS sourceFactory=true currentPoseBound=true radiusBits={bits:x8} " +
-                "independentAnimationFactory=true pendingWriterRefused=true retiredModelRefused=true freshFactories=true " +
+                "missingAnimDataRefused=true animationPredicates=REQUIRE_ACTUAL_LOADED_CONTEXT retiredModelRefused=true freshFactories=true " +
                 "headless=true gameLaunched=false framesRecorded=false gameplay=UNEXECUTED coldContinue=UNEXECUTED");
             code = 0;
         }
@@ -57,9 +56,9 @@ public partial class NativePlayerIdleModelAudit : Node
             GetTree().Quit(code);
         }
     }
-    private static void ExpectBoundary(Func<FalloutIdleAnimationContext> read, string expected)
+    private static void ExpectBoundary(Action read, string expected)
     {
-        try { _ = read(); }
+        try { read(); }
         catch (NotSupportedException error) when (error.Message == expected) { return; }
         throw new InvalidDataException("Player model did not retain its exact missing or retired animation owner.");
     }

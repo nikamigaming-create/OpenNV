@@ -36,7 +36,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
     internal string? SaveBlocker => _retired ? "source-Player-scene-retired" : _failure ?? _boundary ??
         ViewSaveBlocker ?? _inhibition.SaveBlocker ?? _followingTimerFlag.SaveBlocker ?? _actorMover.SaveBlocker ??
         _lateActorTime?.SaveBlocker ?? (_historicalLateActorTime is not null && _lateActorTime is null ? "source-Player-cold-Actor-time-publication-unbound" : null) ??
-        _lateMoverDelta?.SaveBlocker ?? _actorMovement?.SaveBlocker ??
+        _lateMoverDelta?.SaveBlocker ?? _actorMovement?.SaveBlocker ?? _lateReturnTail?.SaveBlocker ?? _lateAnimationPreparation?.SaveBlocker ??
+        (_historicalReturnTail is not null && _lateReturnTail is null ? "source-Player-cold-return-updater-publication-unbound" : null) ??
         (_historicalMoverDelta is not null && _lateMoverDelta is null ? "source-Player-cold-mover-publication-unbound" : null) ??
         _lateInhibitionTimerWriterBoundary ?? (_historicalLateFrame is not null && _lateFrameSource is null ? "source-Player-cold-late-frame-publication-unbound" : null) ??
         _controlHud?.SaveBlocker ?? (_historicalControlHud is not null && _controlHud is null ? "source-Player-cold-HUD-publication-unbound" : null) ??
@@ -107,6 +108,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         followingContinuation = _followingContinuation,
         lateActorTime = _lateActorTime?.Capture() ?? _historicalLateActorTime,
         moverDelta = _lateMoverDelta?.Capture() ?? _historicalMoverDelta,
+        returnTail = _lateReturnTail?.Capture() ?? _historicalReturnTail,
         actorMovement = _actorMovement?.Capture() ?? _historicalActorMovement,
         lateFrame = CaptureLateFrame(),
         actorMovementFlag = _actorMovementFlag,
@@ -296,6 +298,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _followingTimerFlag.Retire();
         _actorMover.Retire();
         _lateMoverDelta?.Retire();
+        _lateReturnTail?.Retire();
+        _lateAnimationPreparation?.Retire();
         _actorMovement?.Retire();
         _movementPhysics = null;
         _inputManager = null;

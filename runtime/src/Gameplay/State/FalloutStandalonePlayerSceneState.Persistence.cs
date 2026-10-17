@@ -24,7 +24,8 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             _playerOpacity?.Capture() ?? _historicalPlayerOpacity, _followingServicesCall, _weaponContinuation,
             _inhibition.Capture(), _followingTimerFlag.Capture(), _followingContinuation, mover,
             _lateActorTime?.Capture() ?? _historicalLateActorTime, CaptureLateFrame(),
-            _lateMoverDelta?.Capture() ?? _historicalMoverDelta, _actorMovement?.Capture() ?? _historicalActorMovement, CaptureViewFields());
+            _lateMoverDelta?.Capture() ?? _historicalMoverDelta, _actorMovement?.Capture() ?? _historicalActorMovement, CaptureViewFields(),
+            _lateReturnTail?.Capture() ?? _historicalReturnTail);
         Validate(saved); return saved;
     }
     private void Restore(FalloutStandalonePlayerSceneSnapshot saved)
@@ -67,6 +68,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         _historicalLateActorTime = saved.LateActorTime;
         _historicalLateFrame = saved.LateFrame;
         _historicalMoverDelta = saved.MoverDelta;
+        _historicalReturnTail = saved.ReturnTail;
         _historicalActorMovement = saved.ActorMovement;
         RestoreControlPointOfView(saved.PointOfView!);
         _controlObservations.AddRange(saved.ControlObservations!);
@@ -92,6 +94,16 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             saved.Failure is not null && string.IsNullOrWhiteSpace(saved.Failure))
             throw new InvalidDataException("Standalone scene omitted or invented its current source constructor/writer/ownership fields.");
         saved.Source.Validate();
+        if (saved.ReturnTail is { } returnTail)
+        {
+            FalloutPlayerReturnTailState.Validate(returnTail);
+            if (returnTail.Stack != saved.Stack || returnTail.Source.Scene != saved.Source ||
+                saved.LateFrame?.LastCall?.ReturnTail is { } tailCall &&
+                !SameBoundedLateChild(tailCall, returnTail.LastCall))
+                throw new InvalidDataException("Player scene lost its actual animation updater source or retained current call.");
+        }
+        else if (saved.LateFrame?.LastCall?.ReturnTail is not null)
+            throw new InvalidDataException("Player scene omitted its reached animation updater owner.");
         ValidateViewFields(saved);
         ValidateControlPointOfView(saved);
         if (saved.ActorMover is not { } mover || mover.Process != saved.CapturedProcess ||
@@ -148,9 +160,26 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             throw new InvalidDataException("Cold scene reconstruction omitted its genuine new process/factory epoch.");
         if (saved.Clock is { } clock)
         {
+            var currentBracket = clock.Bracket;
+            var bracketChanged = clock.Entered;
+            if (saved.ReturnTail?.LastCall is { } updater && updater.Invocation.Caller.Main == clock.Main &&
+                updater.Invocation.Caller.Ordinal == clock.MainOrdinal)
+            {
+                foreach (var store in updater.Stores.Where(store => store.Field == FalloutPlayerReturnTailField.AnimationBracket))
+                {
+                    var shared = store.SharedBracket ?? throw new InvalidDataException("Updater bracket lost its actual shared Scene store.");
+                    if (shared.Source != saved.Source.Identity || !ChildBelongsToParentProcessLineage(saved, shared.SceneProcess) ||
+                        shared.SceneConstructor != saved.PointOfView!.Lifetimes.Single(value => value.Process == shared.SceneProcess).Constructor ||
+                        shared.Before != currentBracket || shared.Changed <= bracketChanged || shared.Changed > saved.Sequence ||
+                        shared.After != unchecked((byte)(currentBracket + (shared.Enter ? 1 : -1))))
+                        throw new InvalidDataException("Scene clock lost the updater's independent nested bracket prefix.");
+                    currentBracket = shared.After;
+                    bracketChanged = shared.Changed;
+                }
+            }
             if (clock.Main == Guid.Empty || clock.MainOrdinal < 1 || clock.Entered < 1 || clock.Changed < clock.Entered ||
                 clock.Changed > saved.Sequence || !Enum.IsDefined(clock.Step) || clock.BeforeBracket != 0 ||
-                clock.Bracket != unchecked((byte)(clock.BeforeBracket + 1)) || saved.SceneBracket != clock.Bracket ||
+                clock.Bracket != unchecked((byte)(clock.BeforeBracket + 1)) || saved.SceneBracket != currentBracket ||
                 clock.ArgumentBits is { } argument && argument != clock.CachedScaledBits ||
                 (clock.CachedTimer is null) != (clock.CachedScaledBits is null) ||
                 clock.CachedTimer is { } timer && (timer.Source != saved.Source.Main.EngineSha256 ||

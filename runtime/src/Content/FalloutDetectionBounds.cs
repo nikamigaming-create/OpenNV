@@ -12,8 +12,8 @@ internal sealed record FalloutDetectionBounds(string SourceSha256, int RootBlock
     {
         ArgumentNullException.ThrowIfNull(source);
         var root = source.ReadNode(actualSourceRoot);
-        var named = root.ExtraData.Where(index => index >= 0).Select(source.ReadObject)
-            .Where(value => Name(value) == "BBX").ToArray();
+        var named = root.ExtraData.Where(index => index >= 0 && source.ReadExtraDataName(index) == "BBX")
+            .Select(source.ReadObject).ToArray();
         if (named.Length > 1 || named is [not FalloutNifBound])
             throw new InvalidDataException("Detection bounds have no unique typed source BBX object.");
         if (named.Length == 0) return new(source.Sha256, actualSourceRoot, -1, [0, 0, 0], [0, 0, 0]);
@@ -54,15 +54,4 @@ internal sealed record FalloutDetectionBounds(string SourceSha256, int RootBlock
         var result = (float)value;
         return float.IsFinite(result) ? result : throw new InvalidDataException("Detection BBX exceeds finite Float32 bounds.");
     }
-    private static string Name(FalloutNifObject value) => value switch
-    {
-        FalloutNifBound bound => bound.Name,
-        FalloutNifIntegerExtraData extra => extra.Name,
-        FalloutNifFloatExtraData extra => extra.Name,
-        FalloutNifStringExtraData extra => extra.Name,
-        FalloutNifTextKeyExtraData extra => extra.Name,
-        FalloutNifFurnitureMarker extra => extra.Name,
-        FalloutNifDecalPlacementExtraData extra => extra.Name,
-        _ => throw new NotSupportedException("Detection BBX lookup contains an unowned extra-data name/type.")
-    };
 }

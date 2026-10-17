@@ -11,6 +11,44 @@ internal static partial class SourceMainScriptCallerContracts
         {
             fixture.InFrame((frame, guard) =>
             {
+                var scene = fixture.Host.Scene;
+                var baseline = scene.Capture();
+                var initial = scene.ReadTailView(fixture.Source, frame, guard);
+                var bracketConsumer = Guid.NewGuid();
+                scene.StoreReturnTailAnimationBracket(frame, bracketConsumer, FalloutPlayerAnimationBracketChild.Updater, true, guard);
+                scene.StoreReturnTailAnimationBracket(frame, bracketConsumer, FalloutPlayerAnimationBracketChild.Updater, false, guard);
+                var current = scene.ReadTailView(fixture.Source, frame, guard);
+                var toggle = scene.StoreFirstTailViewToggle(fixture.Source, frame, fixture.Preparation.Factory, initial, current, guard);
+                var preparation = fixture.Preparation.Prepare(frame);
+                Require(initial.Value == 0 && toggle.After == 1 && preparation.View is { Value: 1 } && preparation.Returned,
+                    "Post-updater preparation borrowed the view from before its mandatory first toggle.");
+                Require(current.Sequence > initial.Sequence, "Authored independent view reads lost their intervening Scene observations.");
+                var viewFields = scene.CaptureViewFields();
+                var viewSnapshot = baseline with { PlayerView = viewFields.Value, Sequence = viewFields.Sequence, ViewFields = viewFields };
+                FalloutStandalonePlayerSceneState.ValidateViewFields(viewSnapshot);
+                var forgedToggle = toggle with { Read = current with { Value = 1 }, After = 0 };
+                Reject(() => FalloutStandalonePlayerSceneState.ValidateViewFields(viewSnapshot with
+                { PlayerView = 0, ViewFields = viewFields with { Value = 0, LastWrite = forgedToggle,
+                    Tail = viewFields.Tail! with { First = forgedToggle } } }));
+                const string failure = "authored-unimplemented-status-child";
+                var prefix = new FalloutPlayerPostAnimationPrefixCall(fixture.Source.Identity, frame, fixture.Preparation.Factory,
+                    FalloutPlayerPostAnimationPrefixStep.Failed, FalloutPlayerPostAnimationPrefixStep.Status,
+                    initial, current, toggle, preparation, failure);
+                var parent = new FalloutPlayerLateFrameCall("authored-component-parent", fixture.Host.Stack, frame, 1, 2,
+                    FalloutPlayerLateFrameStep.Failed, FalloutPlayerLateFrameStep.AnimationPreparation, Failure: failure, PostAnimation: prefix);
+                void Check(FalloutPlayerPostAnimationPrefixCall actual) =>
+                    FalloutStandalonePlayerSceneState.ValidatePostAnimationPrefix(actual, parent, fixture.Source.Tail, fixture.Host.Stack);
+                Check(JsonSerializer.Deserialize<FalloutPlayerPostAnimationPrefixCall>(JsonSerializer.Serialize(prefix))!);
+                Reject(() => Check(prefix with { Preparation = null }));
+                Reject(() => Check(prefix with { FirstToggle = toggle with { After = 0 } }));
+                Reject(() => Check(prefix with { CurrentView = current with { Process = Guid.NewGuid() } }));
+                Reject(() => Check(prefix with { Preparation = preparation with { Frame = frame with { Prelude = Guid.NewGuid() } } }));
+            });
+        }
+        using (var fixture = new AnimationPreparationFixture())
+        {
+            fixture.InFrame((frame, guard) =>
+            {
                 var call = fixture.Preparation.Prepare(frame);
                 Require(call.Returned && call.Life is { Result: false } && call.Activity is { Value: 0 } && call.View is { Value: 0 } &&
                     call.Selected is null && call.Controller is null && fixture.ResolverCalls == 0,

@@ -333,7 +333,7 @@ internal static partial class NativeNifCollisionBuilder
                 (physicalToSourceUnits * unitsToMetres));
     }
 
-    private static Basis BasisLookingAlongY(Vector3 y)
+    internal static Basis BasisLookingAlongY(Vector3 y)
     {
         var helper = MathF.Abs(y.Dot(Vector3.Up)) < ParallelAxisThreshold
             ? Vector3.Up

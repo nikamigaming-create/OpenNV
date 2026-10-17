@@ -73,6 +73,36 @@ internal static class FalloutFistp32Semantics
                 throw new InvalidDataException("Direct FISTP silently added another Float32 transport.");
             return;
         }
+        if (observation.Operation == FalloutFistpOperation.ScaledHundred)
+        {
+            // A binary32 significand multiplied by the exact integer 100 fits
+            // in binary64 without rounding. Check the source Float32 store
+            // using the actual x87 rounding mode, independently of MXCSR.
+            var input = BitConverter.UInt32BitsToSingle(observation.InputBits);
+            if (!float.IsFinite(input)) throw new NotSupportedException("Model scale key has a nonfinite original scalar.");
+            var exact = (double)input * 100d;
+            var scaledArgument = BitConverter.UInt32BitsToSingle(observation.ArgumentBits);
+            var mode = Rounding(observation.ControlBefore);
+            if (mode == FalloutFistpRounding.TowardZero) mode = exact >= 0 ? FalloutFistpRounding.Down : FalloutFistpRounding.Up;
+            var limit = Math.ScaleB(1d, 128) - Math.ScaleB(1d, 103);
+            var lower = scaledArgument == -float.MaxValue ? -limit : ((double)MathF.BitDecrement(scaledArgument) + scaledArgument) / 2;
+            var upper = scaledArgument == float.MaxValue ? limit : ((double)MathF.BitIncrement(scaledArgument) + scaledArgument) / 2;
+            var correct = !float.IsNaN(scaledArgument) && (mode switch
+            {
+                FalloutFistpRounding.Down => scaledArgument <= exact && MathF.BitIncrement(scaledArgument) > exact,
+                FalloutFistpRounding.Up => scaledArgument >= exact && MathF.BitDecrement(scaledArgument) < exact,
+                FalloutFistpRounding.NearestEven => float.IsPositiveInfinity(scaledArgument) ? exact >= limit :
+                    float.IsNegativeInfinity(scaledArgument) ? exact <= -limit : exact >= lower && exact <= upper &&
+                    (exact != lower && exact != upper || (observation.ArgumentBits & 1) == 0),
+                _ => false
+            });
+            if (!correct ||
+                (observation.StatusAtConversion & observation.StatusBefore & 0x3f) != (observation.StatusBefore & 0x3f) ||
+                (observation.StatusAtConversion & 0x3840) != (observation.StatusBefore & 0x3840) ||
+                (observation.StatusAtConversion & 0x80) != 0 || (observation.StatusAtConversion & 4) != (observation.StatusBefore & 4))
+                throw new InvalidDataException("Actual scaled Float32 transport changed its source bits, sticky flags or x87 stack.");
+            return;
+        }
         var exponent = (observation.InputBits >> 23) & 255;
         var fraction = observation.InputBits & 0x7fffff;
         var signaling = exponent == 255 && fraction != 0 && (fraction & 0x400000) == 0;

@@ -112,6 +112,7 @@ internal static partial class FalloutExecutableStringTable
             Need(Slot(high, 0x4f4) + 0xa, [0x8b, 0x8f, 0x20, 2, 0, 0], "actual post-action shared shader field");
             Need(Slot(high, 0x4f4) + 0x27, [0x89, 0xb7, 0x20, 2, 0, 0], "same shared shader publication");
             Need(Slot(high, 0x4f4) + 0x31, [0xf0, 0xff, 0x46, 4], "actual shared property retain");
+            RequirePlayerModelControllerPrefix(code, image, player, load);
             var result = new FalloutPlayerModelLoadContinuationSource(animation, FalloutPlayerModelLoadContinuationSource.ContractDigest,
                 cameraName, skin, prefix)
             { FirstNodeNames = firstNames }; result.Validate();

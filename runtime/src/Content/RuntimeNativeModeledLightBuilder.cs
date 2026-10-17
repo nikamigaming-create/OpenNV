@@ -8,17 +8,18 @@ internal static class RuntimeNativeModeledLightBuilder
     internal static RuntimeNativeNifScene Build(FalloutPlacedReference reference, FalloutBaseObjectDefinition basis,
         FalloutNifFile model, Transform3D placement, float units, float energyScale, float minimumEnergy,
         bool shadows, FalloutPluginStack? records = null, Func<FalloutFormKey, float[]>? regionEmittance = null,
-        RuntimeLiveContentSource? content = null)
+        RuntimeLiveContentSource? content = null, Action<RuntimeNativePlacedLight>? configureLight = null)
     {
         var binding = FalloutModeledLightSource.Read(model, basis.ModelPath ??
             throw new InvalidDataException("Modeled light has no source MODL."));
         var source = FalloutPlacedLightResolver.ResolveModeled(reference, basis, binding, records, regionEmittance);
+        var pose = new FalloutModeledLightPose(binding);
         var emittance = reference.Emittance is { } form ? new FalloutExternalEmittance(records ??
             throw new InvalidDataException("Modeled light has no XEMI records."), form, regionEmittance) : null;
         RuntimeNativePlacedLight Create(Transform3D transform)
         {
-            var point = RuntimeNativePlacedLightBuilder.BuildResolved(source, basis, transform, units,
-                energyScale, minimumEnergy, shadows, records, regionEmittance);
+            var point = RuntimeNativePlacedLightBuilder.BuildResolved(source, reference, basis, transform, units,
+                energyScale, minimumEnergy, shadows, records, regionEmittance, pose);
             try
             {
                 point.ConfigureSourceDiffuse(FalloutPlacedLightResolver.NormalizeModeledRecordColor(source.ColorRgb),
@@ -26,6 +27,7 @@ internal static class RuntimeNativeModeledLightBuilder
                 point.SetMeta("opennv_ligh_model_sha256", model.Sha256);
                 point.SetMeta("opennv_ligh_source_radius_owner", "LIGH+XRDS-unscaled");
                 point.SetMeta("opennv_ligh_rendering_boundary", "calibrated-light-remap;custom-attenuation-pixels-unverified");
+                configureLight?.Invoke(point);
                 return point;
             }
             catch (Exception primary)
@@ -36,7 +38,7 @@ internal static class RuntimeNativeModeledLightBuilder
             }
         }
         var scene = RuntimeNativeNifMeshBuilder.Build(model, units, contentSource: content,
-            pointLightOwner: new(binding, Create));
+            pointLightOwner: new(binding, Create, pose));
         try
         {
             // A source node root is replaced by REFR. A non-node export is

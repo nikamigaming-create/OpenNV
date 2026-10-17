@@ -138,7 +138,16 @@ internal sealed partial class FalloutStandalonePlayerSceneState
                 _lateFrameCall = _lateFrameCall with { MoverDelta = delta?.Invocation == invocation ? delta : null }; Publish();
             }
             Step(FalloutPlayerLateFrameStep.Tail);
-            throw new NotSupportedException(FalloutPlayerFollowingContinuation.LateTailBoundary);
+            var updateTail = _updateReturnTail ?? throw new NotSupportedException(FalloutPlayerFollowingContinuation.LateTailBoundary);
+            try { updateTail(invocation); }
+            finally
+            {
+                var tail = _lateReturnTail?.LastCall;
+                _lateFrameCall = _lateFrameCall with { ReturnTail = tail?.Invocation == invocation ? tail : null }; Publish();
+            }
+            Step(FalloutPlayerLateFrameStep.AnimationPreparation);
+            UpdatePostAnimationPrefix(invocation, prefix =>
+            { _lateFrameCall = _lateFrameCall with { PostAnimation = prefix }; Publish(); });
         }
         catch (Exception error)
         {
@@ -196,6 +205,13 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             return;
         }
         ValidateLateFrameCall(call, late.Source, saved.Stack);
+        if (call.PostAnimation is { } post)
+        {
+            var tailOwner = saved.ReturnTail ?? throw new InvalidDataException("Post-animation prefix lost its actual updater source owner.");
+            ValidatePostAnimationPrefix(post, call, tailOwner.Source, saved.Stack);
+            if (post.FirstToggle is { } firstToggle && saved.ViewFields?.Tail?.First != firstToggle)
+                throw new InvalidDataException("Post-animation toggle differs from the actual shared Scene field store.");
+        }
         if (call.ViewRequest != late.ViewRequest ||
             call.SharedTimerBits is { } timerBits && timerBits != late.InhibitionTimerBits)
             throw new InvalidDataException("Late Player reads differ from their actual request or inhibition timer owner.");
@@ -226,6 +242,9 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             string.IsNullOrWhiteSpace(call.Failure) || call.InhibitionReads?.Count > 2)
             throw new InvalidDataException("Late Player prefix omitted its actual source call or failed boundary.");
         var at = call.FailedAt.Value;
+        if (call.ReturnTail is { } tail && (at < FalloutPlayerLateFrameStep.Tail || tail.Invocation != call.Invocation) ||
+            at == FalloutPlayerLateFrameStep.AnimationPreparation && call.ReturnTail is not { Returned: true, Failure: null })
+            throw new InvalidDataException("Late Player prefix lost its reached animation updater or returned child.");
         if (call.ViewRequest == 0 && (call.CurrentView is not null || call.DisabledControls is not null) ||
             call.ViewRequest is > 0 && at > FalloutPlayerLateFrameStep.CurrentView && call.CurrentView is null ||
             call.ViewRequest is > 0 && call.CurrentView == 0 && at > FalloutPlayerLateFrameStep.DisabledControls &&

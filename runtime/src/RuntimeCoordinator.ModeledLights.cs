@@ -30,7 +30,8 @@ public partial class RuntimeCoordinator
                 _configuration.World.GameUnitsToMeters, _configuration.Renderer.PointLightEnergyScale,
                 _configuration.Renderer.MinimumPointLightEnergy, _configuration.Renderer.AuthoredPointLightShadows,
                 records, region => (_nativeSkyLighting ?? throw new InvalidOperationException("Light sky state is absent."))
-                    .RegionEmittance(region, (_nativeGameTime ?? throw new InvalidOperationException("Light has no simulation clock.")).Hour), content);
+                    .RegionEmittance(region, (_nativeGameTime ?? throw new InvalidOperationException("Light has no simulation clock.")).Hour), content,
+                light => light.BindSourceScene((_nativeReferences ?? throw new InvalidOperationException("Light has no source World.")).AttachScenePointLight));
             try
             {
                 var state = _nativeReferences!.Get(reference.FormKey);

@@ -1,7 +1,7 @@
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutPlayerThreadContextSource(FalloutMainScriptCallerSource Main, string Contract,
-    uint InitialKind, byte InitialInitialized, uint PlayerKind, uint InitialModel = 0, uint InitialReference = 0)
+    uint InitialKind, byte InitialInitialized, uint PlayerKind, uint InitialModel = 0, uint InitialReference = 0, uint InitialCollisionMode = 0)
 {
     private const string Rules = "source-FO3-Player-thread-context/v4;" +
         "current-source-calling-thread-loaded-kind-fifty-nine-and-initialized-zero;" +
@@ -17,6 +17,7 @@ internal sealed record FalloutPlayerThreadContextSource(FalloutMainScriptCallerS
         "loaded-current-thread-model-and-reference-cache-pointers-null-independent-from-kind-and-common-body;" +
         "Player-model-current-thread-cache-reference-comparison-before-loaded-reference-model-fallback;" +
         "model-cache-writers-remain-independent-and-cold-retains-history-without-replay;" +
+        "independent-current-thread-collision-update-mode-starts-at-original-loader-zero-and-is-read-in-the-actual-model-load;" +
         "other-TLS-fields-and-native-module-image-are-independent-unowned-projections;" +
         "cold-state-retains-history-without-native-thread-or-scope-promotion";
     internal string Identity => FalloutAdvancementRuntimeReceipt.Hash(Main.Identity + "\0" + Contract);

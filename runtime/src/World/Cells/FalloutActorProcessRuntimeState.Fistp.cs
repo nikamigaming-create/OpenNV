@@ -12,6 +12,8 @@ internal sealed partial class FalloutActorProcessRuntimeState
         return _sourceFistp.Bind(host);
     }
     private FalloutSourceFistpSnapshot CaptureSourceFistp() => _sourceFistp.Capture();
+    internal FalloutModelKeyFistpCall ConvertPlayerModelScaleKey(FalloutReferenceModelDataInvocation load, uint input,
+        Action<FalloutReferenceModelDataInvocation> requireActual) => _sourceFistp.ConvertModelKey(load, input, requireActual);
     private void RestoreSourceFistp(FalloutSourceFistpSnapshot saved)
     {
         _sourceFistp.Dispose(); _sourceFistp = new(_mainFrameDeclaration, _stack, _process, saved);

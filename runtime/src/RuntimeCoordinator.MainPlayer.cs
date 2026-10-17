@@ -17,7 +17,8 @@ public partial class RuntimeCoordinator
         if (!world.CampaignMainPlayerCellConstructed) return; // The source-absent family has no promoted FNV Main segment.
         BindActualNativeQueuedCallerThread();
         if (_nativeMainPlayerLease is not null) throw new InvalidOperationException("Main Player native children already own a living lease.");
-        BindNativeCallingThreadFistp(world);
+        if (!ReferenceEquals(_callingThreadFistpWorld, world) || _callingThreadFistpLease is null)
+            throw new InvalidOperationException("Main Player lost its earlier actual session numeric provider binding.");
         BindStandalonePlayerScene(world);
         var consumers = new NativeMainPlayerConsumers(this, world, world.CampaignMainPlayerCellSource);
         _nativeMainPlayerLease = world.BindCampaignMainPlayerCell(consumers, "actual-native-Player-CELL/" + GetInstanceId());

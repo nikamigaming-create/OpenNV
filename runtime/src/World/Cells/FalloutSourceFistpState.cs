@@ -4,7 +4,7 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed partial class FalloutSourceFistpState : IDisposable
 {
-    private const string Schema = "opennv-source-calling-thread-FISTP/v1";
+    private const string Schema = "opennv-source-calling-thread-FISTP/v2";
     private readonly FalloutMainFrameDeclaration _source;
     private readonly string _stack;
     private readonly Guid _process;
@@ -14,7 +14,11 @@ internal sealed partial class FalloutSourceFistpState : IDisposable
     private FalloutActorProcessRuntimeHandoff? _cold;
     private long _sequence, _pairs, _conversions, _reentry;
     private bool _entered, _retired;
-    internal string? SaveBlocker => _entered ? "actual-source-calling-thread-FISTP-entered" : _last is { Failure: { } error } ? "actual-source-FISTP:" + error : null;
+    private long _modelKeys, _modelKeyConversions;
+    private FalloutModelKeyFistpCall? _lastModelKey;
+    internal string? SaveBlocker => _entered ? "actual-source-calling-thread-FISTP-entered" :
+        _lastModelKey is { Failure: { } modelError } ? "actual-source-model-key-FISTP:" + modelError :
+        _last is { Failure: { } error } ? "actual-source-FISTP:" + error : null;
     internal object State => new
     {
         source = _source.Contract,
@@ -24,8 +28,12 @@ internal sealed partial class FalloutSourceFistpState : IDisposable
         binding = _lastBinding,
         sequence = _sequence,
         pairs = _pairs,
-        nativeConversions = _conversions,
+        nativeConversions = _conversions + _modelKeyConversions,
+        gridConversions = _conversions,
+        modelKeyConversions = _modelKeyConversions,
         last = _last,
+        modelKeys = _modelKeys,
+        lastModelKey = _lastModelKey,
         cold = _cold,
         retired = _retired,
         saveBlocker = SaveBlocker
@@ -60,7 +68,8 @@ internal sealed partial class FalloutSourceFistpState : IDisposable
     {
         RequireIdle(); RequireContext(context); ArgumentNullException.ThrowIfNull(requireActualCaller);
         requireActualCaller();
-        if (_last is { Failure: { } retained }) throw new InvalidOperationException("Source FISTP refuses replay after its retained native/source failure: " + retained);
+        if (_last is { Failure: not null } || _lastModelKey is { Failure: not null })
+            throw new InvalidOperationException("Source FISTP refuses replay after its retained native/source failure.");
         var entered = Next(); _pairs = checked(_pairs + 1); var fault = _reentry;
         _last = new(context, _host?.Binding, entered, entered, [], false, null); _entered = true;
         try

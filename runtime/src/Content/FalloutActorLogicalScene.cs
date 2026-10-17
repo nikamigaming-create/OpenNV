@@ -6,7 +6,7 @@ namespace OpenNV.Runtime.Content;
 // mesh visibility or renderer pose can supply its fields.
 internal sealed partial class FalloutActorLogicalScene
 {
-    internal const string Schema = "opennv-actor-logical-scene/v4";
+    internal const string Schema = "opennv-actor-logical-scene/v7";
     internal const uint FixedBound = 0x2000;
     internal const uint UpdateBound = 0x80000;
     internal const uint LoadedActiveFlags = 0x8000e;
@@ -60,6 +60,7 @@ internal sealed partial class FalloutActorLogicalScene
         if (saved is null) UpdateWorldAndBounds(); else Restore(saved);
     }
     internal Guid Factory => _model.Factory;
+    internal FalloutActorSourceModel SourceModel => _model;
     internal Guid Lifetime => _lifetime;
     internal FalloutNifSceneObject Root { get; }
     internal IReadOnlyList<FalloutNifSceneObject> Objects => _order;
@@ -73,7 +74,7 @@ internal sealed partial class FalloutActorLogicalScene
         return Asset(asset).Sha256;
     }
     internal string? SaveBlocker => _retired ? "source-Actor-logical-scene-retired" : _failure ??
-        (_busy ? "source-Actor-logical-scene-operation-entered" : null);
+        (_busy ? "source-Actor-logical-scene-operation-entered" : RagdollTemplatePoseBoundary);
     internal object State => new
     {
         factory = Factory,
@@ -90,6 +91,9 @@ internal sealed partial class FalloutActorLogicalScene
         visibility = CaptureVisibility(),
         morphs = CaptureMorphs(),
         initialModelUpdate = _initialModelUpdate,
+        controllerModelPreparation = _controllerModelPreparation,
+        ragdollTemplatePose = _ragdollTemplatePose,
+        ragdollWorldUpdates = _ragdollWorldUpdates,
         bounds = BoundLane,
         attachments = AttachmentLane,
         failure = _failure,
@@ -281,5 +285,6 @@ internal sealed partial class FalloutActorLogicalScene
         if (_thread != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Logical source scene changed its actual owning thread.");
         if (_busy) { ++_reentry; throw new InvalidOperationException("Logical source scene cannot reenter a current publication."); }
         if (!allowFailure && _failure is { } failure) throw new NotSupportedException(failure);
+        if (!allowFailure && RagdollTemplatePoseBoundary is { } temporary) throw new NotSupportedException(temporary);
     }
 }

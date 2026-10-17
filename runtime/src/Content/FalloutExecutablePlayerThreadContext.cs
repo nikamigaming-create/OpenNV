@@ -27,7 +27,7 @@ internal static partial class FalloutExecutableStringTable
             throw new NotSupportedException("Player TLS initialization has an unowned callback, initialized-byte writer or nonempty initializer range.");
         var loaded = image.PlayerWorkingContextLoaderCells(Word(code, start + 8));
         if (loaded.Kind != source.InitialKind || loaded.Initialized != source.InitialInitialized ||
-            loaded.Model != source.InitialModel || loaded.Reference != source.InitialReference)
+            loaded.Model != source.InitialModel || loaded.Reference != source.InitialReference || loaded.CollisionMode != source.InitialCollisionMode)
             throw new NotSupportedException("Player source TLS initial current-thread cells changed.");
         var exit = hudCaller + 0x3dc7;
         if (!Match(code, exit, [0x8b, 0x0d]) || Word(code, exit + 2) != Word(code, start + 8) ||
@@ -42,7 +42,7 @@ internal static partial class FalloutExecutableStringTable
     }
     private sealed partial class Image
     {
-        internal (uint Kind, byte Initialized, uint Model, uint Reference) PlayerWorkingContextLoaderCells(uint selectedIndex)
+        internal (uint Kind, byte Initialized, uint Model, uint Reference, uint CollisionMode) PlayerWorkingContextLoaderCells(uint selectedIndex)
         {
             var directory = headers.PEHeader!.ThreadLocalStorageTableDirectory;
             if (directory.Size != 24 || directory.RelativeVirtualAddress == 0)
@@ -52,7 +52,7 @@ internal static partial class FalloutExecutableStringTable
             if (last < first || Word(tls, 8) != selectedIndex || (ulong)last - first + Word(tls, 16) < 0x2a5)
                 throw new InvalidDataException("Player source context is outside the declared loader TLS image/index.");
             var values = ReadLoaderData(checked(first + 0x248), 0x5d);
-            return (Word(values, 0x38), values[0x5c], Word(values, 0), Word(values, 4));
+            return (Word(values, 0x38), values[0x5c], Word(values, 0), Word(values, 4), Word(values, 0x40));
         }
     }
 }

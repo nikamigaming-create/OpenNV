@@ -51,6 +51,9 @@ internal static class ActorDamageContracts
                 Record("CELL", 0x80, Field("EDID", Text("SourceCell")), Field("DATA", [1])), group));
             using var records = FalloutPluginStack.Load(directory, ["Test.esm"]);
             FalloutFormKey Key(uint id) => new("Test.esm", id);
+            var npcBodyPartTables = FalloutNpcBodyPartTables.FromLoadedRecords(records);
+            Check(npcBodyPartTables.Read(Key(0x10), Key(0x10)).FormKey == Key(0x1d),
+                "Missing Player BPTD invented an override instead of retaining the actual default-table branch.");
             foreach (var dataset in new uint[] { 0x73, 0x74, 0x75 })
                 Check(FalloutImpact.Resolve(records, Key(dataset), 6)?.Decal is
                     { MinimumWidth: 12, MaximumWidth: 20, MinimumHeight: 8, MaximumHeight: 30, Depth: 50,
@@ -100,10 +103,20 @@ internal static class ActorDamageContracts
                 "Competing armor did not choose the stronger retained item with independent headwear and stable ties.");
             Reject(() => FalloutActorArmorSelection.Select([new(Key(0x70), 4, float.NaN, 0)]));
             var parts = FalloutBodyPartData.Read(records.GetEffective(Key(2)));
-            Check(parts.Parts[1] is { Type: 1, DamageMultiplier: 2, ReplacementModel: "meshes/Gore/source-head.nif", GoreBone: "Neck" },
+            Check(parts.Parts[1] is { Type: 1, DamageMultiplier: 2, ReplacementModel: "meshes/Gore/source-head.nif", GoreBone: "Neck", IkStartNode: "Neck-IK", HealthPercent: 255 },
                 "Post-BPND model/attachment fields escaped their source body part.");
             Reject(() => FalloutBodyPartData.Read(records.GetEffective(Key(5))));
+            var unorderedParts = parts with { Parts = [parts.Parts[0] with { Type = 7, Flags = 6 },
+                parts.Parts[1] with { Type = 14, Flags = 2 }, parts.Parts[0] with { Type = 3, Flags = 4 }] };
+            Check(unorderedParts.EnumerateRagdollParts().Select(part => part.Type).SequenceEqual(new byte[] { 14, 7 }),
+                "Ragdoll body-part enumeration used file order or IK-only membership instead of the source admitted list-head order.");
+            Reject(() => (unorderedParts with { Parts = [unorderedParts.Parts[0], unorderedParts.Parts[0]] }).EnumerateRagdollParts());
+            Reject(() => (unorderedParts with { Parts = [unorderedParts.Parts[0] with { Type = 15 }] }).EnumerateRagdollParts());
             var limbTable = parts with { Parts = [parts.Parts[1] with { Type = 7, ActorValue = 29, HealthPercent = 25 }] };
+            var largeLimb = limbTable with { Parts = [limbTable.Parts[0] with { HealthPercent = 150 }] };
+            Check(largeLimb.LimbCondition(29, 200, new Dictionary<byte, float> { [7] = 150 }) == 50 &&
+                largeLimb.CrippledMobilityCount(200, new Dictionary<byte, float> { [7] = 200 }) == 0,
+                "Above-one-hundred source limb percentages were capped or reinterpreted as whole-body health.");
             Check(limbTable.LimbCondition(29, 200, null) == 100 &&
                 limbTable.LimbCondition(29, 200, new Dictionary<byte, float> { [7] = 12.5f }) == 75 &&
                 limbTable.LimbCondition(29, 200, new Dictionary<byte, float> { [7] = 60 }) == 0,
@@ -206,9 +219,9 @@ internal static class ActorDamageContracts
 
     private static byte[] Part(byte type, float multiplier, string node)
     {
-        var data = new byte[84]; Float(data, 0, multiplier); data[4] = 1; data[5] = type; data[6] = 25;
+        var data = new byte[84]; Float(data, 0, multiplier); data[4] = 1; data[5] = type; data[6] = type == 1 ? (byte)255 : (byte)25;
         Float(data, 24, 1); Float(data, 40, 1); Float(data, 80, 1);
-        return Join(Field("BPNN", Text(node)), Field("BPNT", Text(node)), Field("BPND", data),
+        return Join(Field("BPNN", Text(node)), Field("BPNT", Text(node)), Field("BPNI", Text(node + "-IK")), Field("BPND", data),
             Field("NAM1", Text(type == 1 ? "Gore/source-head.nif" : "")), Field("NAM4", Text(node)));
     }
     private static byte[] Reference(uint id) => Record("ACRE", id, Field("NAME", BitConverter.GetBytes(1u)), Field("DATA", new byte[24]));

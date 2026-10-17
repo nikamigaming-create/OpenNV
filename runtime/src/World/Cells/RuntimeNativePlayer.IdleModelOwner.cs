@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -22,8 +23,8 @@ internal partial class RuntimeNativePlayer
                 first.Publication.Process != Process || first.Publication.Stack != Stack || first.Publication.Source != Source)
                 throw new NotSupportedException("Player idle model lost its current native field, source factory or calling thread.");
         }
-        public FalloutIdleAnimationContext ReadFirstPersonAnimation()
-        { RequireCurrent(); return player._firstPerson!.ReadIdleAnimationContext(); }
+        public FalloutIdleAnimationContext ReadFirstPersonAnimation(FalloutSourceAnimationContextState context)
+        { RequireCurrent(); return player._firstPerson!.ReadIdleAnimationContext(context); }
         public uint? ReadBoundRadius(FalloutSourceSceneNode model)
         {
             RequireCurrent(); var body = player._firstPerson!;

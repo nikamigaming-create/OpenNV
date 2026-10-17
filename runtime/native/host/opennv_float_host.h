@@ -32,6 +32,7 @@ static_assert(offsetof(OpenNVHostFistp32, argument) == 40);
 
 // operation: 0 observes only; 1 performs FLD m32real + FISTP m32int;
 // 2 first performs the admitted Float32 argument load/store transport.
+// 3 multiplies the input by 100 in x87, stores Float32, then converts that value.
 // outcome: 1 observed, 2 converted, 3 pending exception, 4 unmasked
 // exception policy, 5 reserved precision, 6 occupied next x87 stack slot.
 extern "C" int opennv_host_fistp32(std::uint32_t operation, std::uint32_t input,

@@ -66,7 +66,19 @@ internal sealed partial class FalloutReferenceWorld
             {
                 RequireActualPlayerMoverFrame(frame);
                 return WithActualReferencePosition(FalloutReferencePositionIngress.ActorPosition, body);
-            }, position, consumers, _sourcePlayerActorMovement);
+            }, position, consumers, _sourcePlayerActorMovement,
+            RequireAnimationContext: identity => (_loadedPlayerAnimation ??
+                throw new NotSupportedException("source-mover-current-loaded-animation-factory-unbound")).RequireContext(identity),
+            ReadAnimationActorMode: frame =>
+            {
+                RequireActualPlayerMoverFrame(frame);
+                return WithActualReferencePosition(FalloutReferencePositionIngress.ActorPosition, position.ReadActorYawMode);
+            },
+            ReadAnimationScale: frame =>
+            {
+                RequireActualPlayerMoverFrame(frame);
+                return WithActualReferencePosition(FalloutReferencePositionIngress.ActorPosition, position.ReadReferenceScale);
+            });
         _sourcePlayerMoverDelta = new(source, records, scene.Stack, scene.Process, scene.Constructor,
             common, moverOwners, RequireActualPlayerMoverFrame, Living, saved.MoverDelta);
         scene.BindLateMoverDelta(_sourcePlayerMoverDelta, _sourcePlayerActorMovement, UpdateStandalonePlayerMoverDelta);

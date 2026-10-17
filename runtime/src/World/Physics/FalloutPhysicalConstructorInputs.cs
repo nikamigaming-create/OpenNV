@@ -35,6 +35,17 @@ internal sealed record FalloutStandardControllerConvexInputs(IReadOnlyList<Fallo
 // Shape, motion, state factory, phantom/proxy and admission remain real consumers.
 internal sealed class FalloutPhysicalConstructorInputs
 {
+    // The selected image initializes thirty independent blend groups to unit
+    // gain and its two remaining table rows to zero. These C# fields are shared
+    // by both living models; a later writer needs this same owner.
+    private readonly uint[] _collisionBlendFactors = Enumerable.Range(0, 64).Select(InitialCollisionBlendFactor).ToArray();
+    internal static uint InitialCollisionBlendFactor(int component) => component is >= 0 and < 64 ?
+        component < 60 ? 0x3f800000u : 0 : throw new ArgumentOutOfRangeException(nameof(component));
+    internal (float Pose, float Velocity) ReadCollisionBlendFactors(int group)
+    {
+        if (group is < 0 or >= 32) throw new ArgumentOutOfRangeException(nameof(group));
+        return (Value(_collisionBlendFactors[group * 2]), Value(_collisionBlendFactors[group * 2 + 1]));
+    }
     internal const string ReviewedEngineSha256 = "c3f97c2255fa041a851c17cf372d69aaadd8694e2dc4230ba556001bbfbd2f3e";
     internal const uint SourceToPhysicalBits = 0x3e124e47;
     internal const uint PhysicalToSourceBits = 0x40dff823;

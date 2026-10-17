@@ -8,12 +8,12 @@ internal sealed partial class RuntimeNativeLivingPhysicsBackend
     private sealed class NativeConstraint : IFalloutLivingConstraintBackend
     {
         private readonly RuntimeNativeLivingPhysicsBackend _owner;
-        private readonly FalloutNifPhysicalConstraint _source;
+        private readonly FalloutLivingJointParameters _parameters;
         private bool _retired;
-        internal NativeConstraint(RuntimeNativeLivingPhysicsBackend owner, FalloutNifPhysicalConstraint source,
+        internal NativeConstraint(RuntimeNativeLivingPhysicsBackend owner, FalloutLivingJointParameters parameters,
             NativeBody first, NativeBody second)
         {
-            _owner = owner; _source = source; First = first; Second = second;
+            _owner = owner; _parameters = parameters; First = first; Second = second;
             Handle = PhysicsServer3D.JointCreate();
             if (!Handle.IsValid) throw new InvalidDataException("Living joint factory lost its actual constraint resource.");
         }
@@ -31,19 +31,9 @@ internal sealed partial class RuntimeNativeLivingPhysicsBackend
 
         internal void Admit()
         {
-            var source = _source.Declaration;
-            var first = source switch
-            {
-                FalloutNifRagdollConstraint ragdoll => Frame(ragdoll.TwistA, ragdoll.PlaneA, ragdoll.PivotA),
-                FalloutNifHingeConstraint hinge => Frame(hinge.AxisA, hinge.PerpendicularA1, hinge.PivotA),
-                _ => throw new NotSupportedException("Living structural joint frame is unowned."),
-            };
-            var second = source switch
-            {
-                FalloutNifRagdollConstraint ragdoll => Frame(ragdoll.TwistB, ragdoll.PlaneB, ragdoll.PivotB),
-                FalloutNifHingeConstraint hinge => Frame(hinge.AxisB, hinge.PerpendicularB1, hinge.PivotB),
-                _ => throw new NotSupportedException("Living structural joint frame is unowned."),
-            };
+            _parameters.Validate();
+            var first = Frame(_parameters.First);
+            var second = Frame(_parameters.Second);
             PhysicsServer3D.JointMakeGeneric6Dof(Handle, First.Handle, first, Second.Handle, second);
             PhysicsServer3D.JointDisableCollisionsBetweenBodies(Handle, true);
             for (var axis = 0; axis < 3; axis++)
@@ -52,34 +42,24 @@ internal sealed partial class RuntimeNativeLivingPhysicsBackend
                 PhysicsServer3D.Generic6DofJointSetFlag(Handle, dimension, PhysicsServer3D.G6DofJointAxisFlag.EnableLinearLimit, true);
                 PhysicsServer3D.Generic6DofJointSetParam(Handle, dimension, PhysicsServer3D.G6DofJointAxisParam.LinearLowerLimit, 0);
                 PhysicsServer3D.Generic6DofJointSetParam(Handle, dimension, PhysicsServer3D.G6DofJointAxisParam.LinearUpperLimit, 0);
-                var lower = 0f; var upper = 0f; var bounded = true;
-                if (source is FalloutNifRagdollConstraint angular)
-                {
-                    lower = axis == 0 ? angular.TwistMinimum : axis == 1 ? angular.PlaneMinimum : -angular.Cone;
-                    upper = axis == 0 ? angular.TwistMaximum : axis == 1 ? angular.PlaneMaximum : angular.Cone;
-                }
-                else if (source is FalloutNifHingeConstraint hinge && axis == 0)
-                {
-                    lower = hinge.Minimum ?? 0; upper = hinge.Maximum ?? 0;
-                    bounded = hinge.Minimum.HasValue && hinge.Maximum.HasValue;
-                }
-                PhysicsServer3D.Generic6DofJointSetFlag(Handle, dimension, PhysicsServer3D.G6DofJointAxisFlag.EnableAngularLimit, bounded);
-                PhysicsServer3D.Generic6DofJointSetParam(Handle, dimension, PhysicsServer3D.G6DofJointAxisParam.AngularLowerLimit, lower);
-                PhysicsServer3D.Generic6DofJointSetParam(Handle, dimension, PhysicsServer3D.G6DofJointAxisParam.AngularUpperLimit, upper);
+                var limit = _parameters.Angular[axis];
+                PhysicsServer3D.Generic6DofJointSetFlag(Handle, dimension, PhysicsServer3D.G6DofJointAxisFlag.EnableAngularLimit, limit.Enabled);
+                PhysicsServer3D.Generic6DofJointSetParam(Handle, dimension, PhysicsServer3D.G6DofJointAxisParam.AngularLowerLimit, BitConverter.UInt32BitsToSingle(limit.Lower));
+                PhysicsServer3D.Generic6DofJointSetParam(Handle, dimension, PhysicsServer3D.G6DofJointAxisParam.AngularUpperLimit, BitConverter.UInt32BitsToSingle(limit.Upper));
             }
             Attached = true;
         }
 
-        private Transform3D Frame(FalloutNifVector3 axis, FalloutNifVector3 plane, FalloutNifVector3 pivot)
+        private Transform3D Frame(FalloutLivingJointFrame frame)
         {
-            var x = GamebryoCoordinate.ConvertVector(new(axis.X, axis.Y, axis.Z));
-            var y = GamebryoCoordinate.ConvertVector(new(plane.X, plane.Y, plane.Z));
+            var x = GamebryoCoordinate.ConvertVector(new(frame.Axis.XValue, frame.Axis.YValue, frame.Axis.ZValue));
+            var y = GamebryoCoordinate.ConvertVector(new(frame.Plane.XValue, frame.Plane.YValue, frame.Plane.ZValue));
             const float orthogonalTolerance = .001f;
             if (MathF.Abs(x.LengthSquared() - 1) > orthogonalTolerance || MathF.Abs(y.LengthSquared() - 1) > orthogonalTolerance ||
                 MathF.Abs(x.Dot(y)) > orthogonalTolerance)
                 throw new InvalidDataException("Living source joint frame is not orthonormal.");
             x = x.Normalized(); y = y.Normalized();
-            return new(new(x, y, x.Cross(y).Normalized()), _owner.ToNative(FalloutPhysicalVector3.FromValues(pivot.X, pivot.Y, pivot.Z)));
+            return new(new(x, y, x.Cross(y).Normalized()), _owner.ToNative(frame.Pivot));
         }
 
         public void Dispose()

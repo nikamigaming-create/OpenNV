@@ -239,7 +239,7 @@ internal partial class RuntimeNativePlayer
                     third = ConstructReferenceModel(() => new(records, content, appearance, weapon, false, UnitsToMeters, ambient, sourceAnimationOwner: true),
                         returned => { model = returned; onConstructed(returned); });
                     return model ?? throw new InvalidOperationException("Inherited Reference model load omitted its actual returned node.");
-                });
+                }, PrepareStandaloneLoadingModelPhysics);
             }
             else
             {

@@ -6,8 +6,23 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal enum FalloutPlayerModelLoadThreadKind { WeaponSetter, WornEntry }
 internal sealed record FalloutPlayerModelLoadKindScope(FalloutSourceThreadKindScope Scope, Guid Parent,
     FalloutReferenceModelDataInvocation Load, FalloutPlayerModelLoadThreadKind Kind);
+internal sealed record FalloutPlayerCollisionModeRead(string Source, Guid Process, Guid Factory, int Thread,
+    FalloutReferenceModelDataInvocation Load, uint Mode);
 internal sealed partial class FalloutPlayerThreadContextState
 {
+    internal FalloutPlayerCollisionModeRead ReadModelLoadCollisionMode(FalloutReferenceModelDataInvocation load,
+        Action<FalloutReferenceModelDataInvocation> requireActual)
+    {
+        requireActual(load); RequireCurrentKindOwner();
+        var fields = CurrentKindFields();
+        if (_retired || load.ThreadId != Environment.CurrentManagedThreadId || fields.Entered is not { } parent ||
+            !_animationKinds.TryGetValue(parent, out var outer) || outer.Kind != FalloutLoadedAnimationScopeKind.PlayerLoad ||
+            outer.Scope.Returned || outer.Scope.Failure is not null || fields.Kind != FalloutLoadedAnimationSource.PlayerLoadThreadKind)
+            throw new InvalidOperationException("Collision mode read left its actual entered model-load thread.");
+        fields.Initialized = 1;
+        var result = new FalloutPlayerCollisionModeRead(_source.Identity, _process, _factory, load.ThreadId, load, fields.CollisionMode);
+        requireActual(load); return result;
+    }
     private readonly Dictionary<Guid, FalloutPlayerModelLoadKindScope> _modelLoadKinds = [];
     internal FalloutPlayerModelLoadKindScope EnterPlayerLoadWeaponSetter(FalloutReferenceModelDataInvocation load,
         Guid invocation, Guid ownerFactory, Action<FalloutReferenceModelDataInvocation> requireActual)

@@ -1,25 +1,46 @@
 using Godot;
 using OpenNV.Runtime.Presentation.Rendering;
+using OpenNV.Runtime.World.Cells;
 
 namespace OpenNV.Runtime.Content;
 
 internal sealed partial class RuntimeNativePlacedLight : OmniLight3D
 {
-    private Func<float[]>? _regionColor;
     private float[]? _lastColor;
-    internal void ConfigureRegionColor(Func<float[]> color) => _regionColor = color;
+    private FalloutSourcePointLight? _sourceFields;
+    private Func<FalloutSourcePointLight, IDisposable>? _attachScene;
+    private IDisposable? _sceneMembership;
+    private bool _dynamicColor;
+    internal FalloutSourcePointLight SourceFields => _sourceFields ??
+        throw new InvalidOperationException("Placed light has no actual C# source fields.");
+    internal void ConfigureSourceFields(FalloutSourcePointLight fields)
+    {
+        if (_sourceFields is not null) throw new InvalidOperationException("Placed light source fields are already constructed.");
+        _sourceFields = fields;
+    }
+    internal void BindSourceScene(Func<FalloutSourcePointLight, IDisposable> attach)
+    {
+        if (_attachScene is not null || IsInsideTree()) throw new InvalidOperationException("Light scene binding must precede real attachment.");
+        _attachScene = attach;
+    }
+    internal void ConfigureRegionColor(Func<float[]> color)
+    { SourceFields.ConfigureColor(color); _dynamicColor = true; }
+    public override void _EnterTree()
+    {
+        if (_sceneMembership is not null) throw new InvalidOperationException("Placed light already owns a live scene membership.");
+        _sceneMembership = _attachScene?.Invoke(SourceFields);
+    }
+    public override void _ExitTree()
+    {
+        _sceneMembership?.Dispose(); _sceneMembership = null;
+    }
 
     public override void _Process(double delta)
     {
-        if (_regionColor is null && _diffuse is null) return;
+        if (!_dynamicColor) return;
         try
         {
-            if (_diffuse is not null) { PublishSourceDiffuse(); return; }
-            var color = _regionColor!();
-            if (_lastColor is not null && _lastColor.SequenceEqual(color)) return;
-            LightColor = RetailLighting.GodotLightColor(new(color[0], color[1], color[2]));
-            SetMeta("opennv_ligh_shader_rgb", color);
-            _lastColor = color;
+            PublishSourceDiffuse();
         }
         catch (Exception error)
         {

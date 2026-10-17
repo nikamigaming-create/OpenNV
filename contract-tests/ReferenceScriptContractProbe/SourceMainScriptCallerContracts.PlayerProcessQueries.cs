@@ -12,6 +12,7 @@ internal static partial class SourceMainScriptCallerContracts
         RunPlayerSceneReferenceQueue();
         RunPlayerTimedActions();
         RunPlayerPostActionArithmetic();
+        RunScenePointLightContracts();
         RunInterfaceActorDistances();
         RunPlayerActorDistanceTimer();
         RunPlayerIdleAnimation();
@@ -199,6 +200,7 @@ internal static partial class SourceMainScriptCallerContracts
         { Current = cleared.Current.Select(item => item.Source.Reference == player ? item with
             { SceneFields = item.SceneFields! with { SceneUpdateMask = 1 } } : item).ToArray() }));
         RunFailedPlayerProcessQuery(main, stack, query);
+        RunLoadedPlayerProcessQueryAdmission(main, stack, query);
         common.RetainUnownedMutation(player, "actual-equipped-entry-writer-unowned");
         Reject(() => common.ReadSceneQueries(player, 1));
         using var reentryCommon = new FalloutActorProcessCommonState(source, stack, Identity, Gameplay, _ => null);

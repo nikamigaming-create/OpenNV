@@ -44,10 +44,12 @@ internal sealed partial class RuntimeNativeLivingPhysicsBackend : IFalloutLiving
         RequireCurrent();
         if (collision.Body != inputs.Source.Block.Index)
             throw new InvalidDataException("Living body constructor lost its actual collision property.");
+        if (current.PrimitiveShape is { } primitive && (primitive.Block != inputs.Source.Shape || primitive.Scale != current.ShapeScaleBits))
+            throw new InvalidDataException("Living body primitive parameters belong to another source shape or scale.");
         return new NativeBody(this, source, inputs, current);
     }
 
-    public IFalloutLivingConstraintBackend CreateConstraint(FalloutNifPhysicalConstraint source,
+    public IFalloutLivingConstraintBackend CreateConstraint(FalloutNifPhysicalConstraint source, FalloutLivingJointParameters parameters,
         IFalloutLivingBodyBackend first, IFalloutLivingBodyBackend second)
     {
         RequireCurrent();
@@ -57,7 +59,10 @@ internal sealed partial class RuntimeNativeLivingPhysicsBackend : IFalloutLiving
             throw new NotSupportedException("Living joint has no actual physical descriptor owner.");
         if (source.Declaration is FalloutNifRagdollConstraint { Motor.Enabled: true })
             throw new NotSupportedException("Living joint enabled motor has no physical drive owner.");
-        return new NativeConstraint(this, source, a, b);
+        parameters.Validate();
+        if (parameters.Block != source.Header.Block.Index || parameters.Type != source.Header.WrappedType)
+            throw new InvalidDataException("Native joint received another source constraint's current parameters.");
+        return new NativeConstraint(this, parameters, a, b);
     }
 
     public void AddBody(IFalloutLivingBodyBackend body)
@@ -128,7 +133,9 @@ internal sealed partial class RuntimeNativeLivingPhysicsBackend : IFalloutLiving
                 throw new NotSupportedException("Living zero-mass nonfixed body has no source-equivalent native mass owner.");
             var shapeScale = BitConverter.UInt32BitsToSingle(current.ShapeScaleBits);
             if (!float.IsFinite(shapeScale) || shapeScale <= 0) throw new InvalidDataException("Living physical shape scale is invalid.");
-            _shapes = NativeNifCollisionBuilder.BuildLivingBodyShapes(source, declaration, owner._units * shapeScale, owner._physicalToSource);
+            PrimitiveShape = current.PrimitiveShape;
+            _shapes = PrimitiveShape is { } primitive ? owner.BuildPrimitiveShape(primitive) :
+                NativeNifCollisionBuilder.BuildLivingBodyShapes(source, declaration, owner._units * shapeScale, owner._physicalToSource);
             Handle = PhysicsServer3D.BodyCreate();
             try
             {
@@ -168,6 +175,7 @@ internal sealed partial class RuntimeNativeLivingPhysicsBackend : IFalloutLiving
         public bool IsWorldAttached { get { RequireCurrent(); return PhysicsServer3D.BodyGetSpace(Handle).IsValid; } }
         public ulong PhysicalObjectId { get { RequireCurrent(); return Handle.Id; } }
         public int PhysicalShapeCount { get { RequireCurrent(); return PhysicsServer3D.BodyGetShapeCount(Handle); } }
+        public FalloutLivingPrimitiveShapeParameters? PrimitiveShape { get; }
         public void RequireCurrent() { Owner.RequireCurrent(); ObjectDisposedException.ThrowIf(_retired, this); }
 
         public FalloutLivingBodyDynamics ReadDynamics()
@@ -209,6 +217,8 @@ internal sealed partial class RuntimeNativeLivingPhysicsBackend : IFalloutLiving
             RequireCurrent();
             PhysicsServer3D.BodySetMode(Handle, ModeForMotion(motion));
         }
+        public void PublishTransform(FalloutCharacterControllerProxyTransform transform)
+        { RequireCurrent(); PhysicsServer3D.BodySetState(Handle, PhysicsServer3D.BodyState.Transform, Owner.ToNative(transform)); }
         private static PhysicsServer3D.BodyMode ModeForMotion(byte motion) => motion switch
         {
             7 => PhysicsServer3D.BodyMode.Static,

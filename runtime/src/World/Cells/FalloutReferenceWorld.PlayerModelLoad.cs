@@ -1,6 +1,7 @@
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Physics;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -30,12 +31,15 @@ internal sealed partial class FalloutReferenceWorld
         animation = _loadedPlayerAnimation?.Capture(),
         globals = _playerModelGlobals?.Capture(),
         continuation = _playerModelContinuation?.LastCall,
+        controller = _playerModelControllerCall,
+        tail = _playerModelLoadTail,
+        returned = _playerModelLoadReturned,
         failure = _playerModelLoadFailure
     };
     internal FalloutInstallationSettings? StandalonePlayerModelSettings => _playerModelSettings;
     private string? StandalonePlayerModelLoadSaveBlocker => !HasStandalonePlayerScene ? null :
         _playerModelLoadFailure ?? _playerModelStartup?.SaveBlocker ?? _playerFirstModel?.SaveBlocker ??
-        _loadedPlayerAnimation?.SaveBlocker ?? "source-Player-enclosing-model-loader-unreturned";
+        _loadedPlayerAnimation?.SaveBlocker ?? (_playerModelLoadReturned ? null : "source-Player-enclosing-model-loader-unreturned");
 
     internal void PrepareStandalonePlayerModelLoading(FalloutPlayerInventory inventory)
     {
@@ -91,7 +95,8 @@ internal sealed partial class FalloutReferenceWorld
     // return only after Reference stored its returned third-person model.
     internal void LoadStandalonePlayerModels(FalloutScriptSession session, Action<FalloutScriptSession> requireSession,
         Func<FalloutLoadedAnimationFirstSkeletonRead, FalloutPlayerReturnedModel> firstFactory,
-        Func<Action<FalloutPlayerReturnedModel>, FalloutPlayerReturnedModel> inheritedFactory)
+        Func<Action<FalloutPlayerReturnedModel>, FalloutPlayerReturnedModel> inheritedFactory,
+        Func<FalloutReferenceModelDataInvocation, FalloutPlayerReturnedModel, FalloutLivingActorModel> modelPhysics)
     {
         RequireStandaloneControlPublication();
         if (_enteredPlayerModelLoad is not null || _playerModelLoadFailure is not null)
@@ -140,8 +145,8 @@ internal sealed partial class FalloutReferenceWorld
                     RequireActualPlayerModelLoad(invocation);
                     return RequireRace(ActorRace(invocation.Actor.Reference));
                 }, _ => throw new NotSupportedException("source-Player-model-missing-Camera3rd-diagnostic-unowned"));
-            // This is a reached boundary, not a successful enclosing return.
-            throw new NotSupportedException("source-Player-model-load-following-controller-PipBoy-toddler-children-unowned");
+            ContinueStandalonePlayerModelController(load, third, modelPhysics);
+            CompleteStandalonePlayerModelLoad(load, session, requireSession);
 
             FalloutLoadedAnimationResources Resources(FalloutPlayerReturnedModel model, FalloutLoadedAnimationRole role) =>
                 new(_sourceLoadedPlayerAnimation!, records, records.OwnedSource!, model.Source, model.RequireLifetime,
@@ -157,6 +162,12 @@ internal sealed partial class FalloutReferenceWorld
         RequireActualPlayerModelLoad(load);
         return new(_sourceReferenceCurrentBase ?? throw new NotSupportedException("source-current-reference-Base-unbound"),
             _sourceReferenceBaseAssignment ?? throw new NotSupportedException("source-current-reference-Base-assignment-unbound"));
+    }
+    internal void RequireStandalonePlayerModelLoadPhysics(FalloutReferenceModelDataInvocation load, FalloutPlayerReturnedModel model)
+    {
+        RequireActualPlayerModelLoad(load); model.RequireLifetime(); model.Node.RequireCurrent();
+        if (!RetainsReturnedReferenceModel(model.Node.Node) || !ReferenceEquals(model.Source.LogicalScene, model.Node.LogicalScene))
+            throw new InvalidOperationException("Model loading physics changed the actual retained Reference model.");
     }
     private uint ReadPlayerAnimationLoadScale(FalloutReferenceModelDataInvocation load)
     {

@@ -13,8 +13,7 @@ internal static class FalloutProcessTeleportFadeReceipt
             !FalloutSourceMainFamily.IsFallout3(executable) ||
             before.Epoch < 1 || before.Level != FalloutDetectionProcessLevel.High ||
             before.GameplayOwnership == Guid.Empty || before.Changed < 1 || receipt.Changed < before.Changed ||
-            before.WeaponEntry is not null || before.AnimationContext is not null ||
-            before.IdlePrimaryPackage is not null || before.ActorValueCache is not null ||
+            before.AnimationContext == Guid.Empty || before.IdlePrimaryPackage == Guid.Empty || before.ActorValueCache == Guid.Empty ||
             enginePlayer is { } player && before.Actor.EnginePlayer != player ||
             receipt.BeforeFields is null || receipt.AfterFields is null || receipt.Trace is null)
             throw new InvalidDataException("Teleport receipt changed its source, current High owner or retained fields.");

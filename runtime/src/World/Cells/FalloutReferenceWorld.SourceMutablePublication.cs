@@ -80,6 +80,7 @@ internal sealed partial class FalloutReferenceWorld
         _sourceMutableRetirementOnly = retirementOnly;
         try
         {
+            _sceneLights.PublishThread(actualNativeRoot);
             _sourceCellLinks?.PublishNativeOwner(actualNativeRoot);
             _sourceCellIngestion?.PublishNativeOwner(actualNativeRoot);
         }

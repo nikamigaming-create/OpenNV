@@ -42,7 +42,11 @@ internal sealed record FalloutActorLogicalSceneSnapshot(string Schema, Guid Fact
     FalloutNifSceneAlphaCall? AlphaCall, string? Failure, bool Retired,
     Guid? RestoredLifetime, string BoundLane, string AttachmentLane, IReadOnlyList<FalloutNifSceneFloatExtraDataSnapshot> FloatExtraData,
     IReadOnlyList<FalloutNifSceneVisibilitySnapshot> Visibility, IReadOnlyList<FalloutNifSceneMorphSnapshot> Morphs,
-    OpenNV.Runtime.Content.FalloutInitialPlayerModelUpdate? InitialModelUpdate = null);
+    OpenNV.Runtime.Content.FalloutInitialPlayerModelUpdate? InitialModelUpdate = null,
+    OpenNV.Runtime.Content.FalloutControllerModelPreparation? ControllerModelPreparation = null,
+    OpenNV.Runtime.Content.FalloutRagdollTemplatePoseCall? RagdollTemplatePose = null,
+    IReadOnlyList<OpenNV.Runtime.Content.FalloutRagdollWorldUpdate>? RagdollWorldUpdates = null,
+    OpenNV.Runtime.Gameplay.State.FalloutRootAnimationControllerHead? RootAnimationController = null);
 
 // A living property is shared by the exact source references to its block. Fade
 // alpha and material-animation alpha are independent cells, even on one geometry.

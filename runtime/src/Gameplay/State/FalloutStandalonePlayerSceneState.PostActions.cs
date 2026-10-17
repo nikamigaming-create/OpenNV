@@ -85,9 +85,12 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             (high ? result.Changed <= expected.Changed : result.Changed != expected.Changed) ||
             (result.BeforeScalars is { } before ? before.SubtractsTimer
                 ? result.ScaledTimerBits is not { } timer || result.Stores != 1 || result.AfterScalars != before.Subtract(BitConverter.UInt32BitsToSingle(timer))
-                : result.ScaledTimerBits is not null || result.Stores != 2 || result.AfterScalars != before.Publish(0)
+                : result.ScaledTimerBits is not null || result.Stores != 2 || result.AfterScalars != before.Publish(
+                    result.Light?.ValueBits is { } value ? BitConverter.UInt32BitsToSingle(value) : 0)
                 : result.ScaledTimerBits is not null || result.Stores != 0))
             throw new InvalidDataException("Post-action update lost its actual process, separate timer arm or ordered source stores.");
+        if (result.Light is { } light && (light.Query != expected || !light.Returned || light.Failure is not null || light.ValueBits is null))
+            throw new InvalidDataException("Post-action scalar borrowed an unfinished or foreign source light call.");
     }
     private static void RequireDetectionActionUpdate(FalloutProcessDetectionActionUpdate result, FalloutProcessSceneQuery expected)
     {

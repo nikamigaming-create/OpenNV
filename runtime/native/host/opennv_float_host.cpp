@@ -13,7 +13,7 @@ extern "C" void opennv_host_fistp32_asm(OpenNVHostFistp32* result);
 
 extern "C" int opennv_host_fistp32(std::uint32_t operation,
     std::uint32_t input, OpenNVHostFistp32* result, std::uint32_t bytes) {
-    if (!result || bytes != sizeof(OpenNVHostFistp32) || operation > 2 || (!operation && input)) return -1;
+    if (!result || bytes != sizeof(OpenNVHostFistp32) || operation > 3 || (!operation && input)) return -1;
     std::memset(result, 0, sizeof(*result));
     result->abi = 1;
     result->bytes = static_cast<std::uint32_t>(sizeof(*result));

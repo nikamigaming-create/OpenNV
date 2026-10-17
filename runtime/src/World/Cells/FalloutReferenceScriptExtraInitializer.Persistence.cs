@@ -16,6 +16,14 @@ internal sealed partial class FalloutReferenceScriptExtraInitializer
             saved.Publications is not { Count: > 0 } || saved.Calls is null || saved.WriterBoundary is { Length: 0 })
             throw new InvalidDataException("Script initializer cold state changed its exact source, Player or schema.");
         saved.Source.Validate();
+        if (saved.AnimationNotes is { } notes)
+        {
+            notes.Receiver.Validate();
+            if (notes.Identity == Guid.Empty || notes.List != saved.Factory || notes.Subtype != 0x6d ||
+                notes.Writer.Actor != actor || notes.Writer.CommonProcess != saved.Process || notes.Writer.ReferenceConstructor != saved.Constructor ||
+                notes.Receiver.Actor != actor || notes.Receiver.Process != notes.Writer.ReferenceProcess || notes.Receiver.Constructor != saved.Constructor)
+                throw new InvalidDataException("Animation-note Extra lost its actual reference/list lifetime or receiver.");
+        }
         var processes = new HashSet<Guid>(); var factories = new HashSet<Guid>(); var fieldFactories = new HashSet<Guid>();
         var constructors = new HashSet<Guid>(); var threadProcesses = new HashSet<Guid>(); var threadFactories = new HashSet<Guid>();
         var publications = new Dictionary<Guid, (int Ordinal, FalloutReferenceScriptExtraInitializerPublication Value)>();

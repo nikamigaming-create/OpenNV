@@ -1,4 +1,5 @@
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -8,6 +9,6 @@ internal interface IFalloutPlayerIdleModelOwner
     string Stack { get; }
     string Source { get; }
     void RequireCurrent();
-    FalloutIdleAnimationContext ReadFirstPersonAnimation();
+    FalloutIdleAnimationContext ReadFirstPersonAnimation(FalloutSourceAnimationContextState context);
     uint? ReadBoundRadius(FalloutSourceSceneNode model);
 }

@@ -25,6 +25,9 @@ public partial class NativeNifInstanceAudit
             RuntimeNativeModeledLightBuilder.RestoreObjectClocks(first.Root, null);
             var point = ModeledPoint(first.Root); var other = ModeledPoint(second.Root);
             var expected = placement * (new Vector3(35, 8, 2) * units);
+            var sourcePoint = point.SourceFields.ModelPose!.ReadPoint().Translation;
+            if (!GamebryoCoordinate.ConvertVector(new(sourcePoint.X, sourcePoint.Y, sourcePoint.Z)).IsEqualApprox(new(35, 8, 2)))
+                throw new InvalidOperationException("Modeled point's C# parent transforms differ from its actual native descendant.");
             if (!point.GlobalPosition.IsEqualApprox(expected) || point.GlobalPosition.IsEqualApprox(placement.Origin) ||
                 point.OmniRange != 2.5f || other.OmniRange != 5.625f || point.LightEnergy != 1.5f || other.LightEnergy != 2 ||
                 point.GetMeta("opennv_nif_point_source_dimmer").AsDouble() != 9 ||
@@ -50,11 +53,13 @@ public partial class NativeNifInstanceAudit
             var player = ModeledPlayer(warm.Root); var point = ModeledPoint(warm.Root);
             player.RequestSourceSequence("Forward", 1); player.SeekSourceTime(.5);
             var expected = new Vector3(.5f, .25f, .125f);
+            if (!point.SourceFields.ReadDiffuse().SequenceEqual(new[] { expected.X, expected.Y, expected.Z }))
+                throw new InvalidOperationException("Diffuse animation changed presentation without publishing the same C# light fields.");
             if (!point.GetMeta("opennv_ligh_current_diffuse").AsFloat32Array().SequenceEqual(new[] { expected.X, expected.Y, expected.Z }))
                 throw new InvalidOperationException("Managed diffuse multiplied record/NIF color instead of publishing the absolute curve.");
             var emissionSource = FalloutPlacedLightResolver.ResolveModeled(reference, basis,
                 FalloutModeledLightSource.Read(model, basis.ModelPath!));
-            var modulated = RuntimeNativePlacedLightBuilder.BuildResolved(emissionSource, basis, Transform3D.Identity,
+            var modulated = RuntimeNativePlacedLightBuilder.BuildResolved(emissionSource, reference, basis, Transform3D.Identity,
                 units, 1, 0, false);
             try
             {

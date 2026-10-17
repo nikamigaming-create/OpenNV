@@ -8,11 +8,12 @@ internal sealed record FalloutSourceThreadKindScope(string Source, Guid Process,
 
 internal sealed partial class FalloutPlayerThreadContextState
 {
-    private sealed class KindFields(uint kind, byte initialized)
+    private sealed class KindFields(uint kind, byte initialized, uint collisionMode)
     {
         internal uint Kind = kind;
         internal byte Initialized = initialized;
         internal Guid? Entered;
+        internal uint CollisionMode = collisionMode;
     }
     private readonly Dictionary<int, KindFields> _kindFields = [];
     private readonly List<FalloutSourceThreadKindScope> _kindScopes = [];
@@ -22,7 +23,7 @@ internal sealed partial class FalloutPlayerThreadContextState
     {
         var thread = Environment.CurrentManagedThreadId;
         if (!_kindFields.TryGetValue(thread, out var fields))
-            _kindFields.Add(thread, fields = new(_source.InitialKind, _source.InitialInitialized));
+            _kindFields.Add(thread, fields = new(_source.InitialKind, _source.InitialInitialized, _source.InitialCollisionMode));
         return fields;
     }
 

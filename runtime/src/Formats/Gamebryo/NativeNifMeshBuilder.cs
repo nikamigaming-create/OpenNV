@@ -832,8 +832,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
             {
                 var sample = sampler.Sample(time);
                 var rotation = sample.Rotation is { } value ? QuaternionRowMajor(value) : sourceTransform.RotationRowMajor;
-                node.Transform = ConvertTransform(new FalloutNifTransform(
-                    sample.Translation ?? sourceTransform.Translation, rotation, sample.Scale ?? sourceTransform.Scale));
+                var transform = new FalloutNifTransform(
+                    sample.Translation ?? sourceTransform.Translation, rotation, sample.Scale ?? sourceTransform.Scale);
+                PointLightOwner?.Pose?.StoreLocal(owner.Block.Index, transform);
+                node.Transform = ConvertTransform(transform);
             });
             _directControllerSequences.Add(new RuntimeNifControllerSequence(
                 $"DirectTransform{controller.Block.Index}",
@@ -888,7 +890,9 @@ internal static partial class RuntimeNativeNifMeshBuilder
                 if (data.Scales.Length != 0)
                     scale = data.Scales[0].Value;
             }
-            node.Transform = ConvertTransform(new FalloutNifTransform(translation, rotation, scale));
+            var transform = new FalloutNifTransform(translation, rotation, scale);
+            PointLightOwner?.Pose?.StoreLocal(owner.Block.Index, transform);
+            node.Transform = ConvertTransform(transform);
             node.SetMeta("opennv_nif_static_transform_controller", controller.Block.Index);
             return true;
         }
@@ -1125,8 +1129,10 @@ internal static partial class RuntimeNativeNifMeshBuilder
             {
                 var sample = sampler.Sample(time);
                 var rotation = sample.Rotation is { } value ? QuaternionRowMajor(value) : sourceTransform.RotationRowMajor;
-                target.Transform = ConvertTransform(new FalloutNifTransform(
-                    sample.Translation ?? sourceTransform.Translation, rotation, sample.Scale ?? sourceTransform.Scale));
+                var transform = new FalloutNifTransform(
+                    sample.Translation ?? sourceTransform.Translation, rotation, sample.Scale ?? sourceTransform.Scale);
+                PointLightOwner?.Pose?.StoreLocal(targetBlock, transform);
+                target.Transform = ConvertTransform(transform);
             });
         }
 

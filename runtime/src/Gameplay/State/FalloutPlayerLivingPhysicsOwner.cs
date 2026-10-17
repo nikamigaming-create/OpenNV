@@ -15,7 +15,7 @@ internal sealed record FalloutPlayerLivingPhysicsSnapshot(string Schema, string 
     FalloutLivingWorldSnapshot? World = null, FalloutPenetrationClockSnapshot? Clock = null,
     IReadOnlyList<FalloutPlayerPhysicsCaptureRefusal>? CaptureRefusals = null)
 {
-    internal const string CurrentSchema = "opennv-Player-living-physics/v1";
+    internal const string CurrentSchema = "opennv-Player-living-physics/v2";
     internal bool CompleteCapture => CaptureRefusals is null || CaptureRefusals.Count == 0;
 
     internal void Validate()
@@ -42,9 +42,57 @@ internal sealed record FalloutPlayerLivingPhysicsSnapshot(string Schema, string 
                 throw new InvalidDataException("Player physics clock changed its source or retained frequency conversion.");
         }
         foreach (var model in Models)
+        {
             if (string.IsNullOrWhiteSpace(model.Key) || !FalloutAdvancementRuntimeReceipt.Digest(model.SourceSha256) ||
                 model.Bodies is null || model.Bodies.Select(body => body.Key).Distinct(StringComparer.Ordinal).Count() != model.Bodies.Count)
                 throw new InvalidDataException("Player physics omitted its living model source or distinct current bodies.");
+            if (model.RagdollBinding is { } binding)
+            {
+                binding.Validate();
+                if (binding.Skeleton.Source != model.SourceSha256 || binding.Bodies.Any(body =>
+                    !model.Bodies.Any(current => current.Key == body.CurrentBody)))
+                    throw new InvalidDataException("Player physics changed its actual ragdoll/model body association.");
+            }
+            foreach (var body in model.Bodies.Where(body => body.ShapeInfo is not null))
+                body.ShapeInfo!.Validate(body, model.RagdollBinding ??
+                    throw new InvalidDataException("Ragdoll current shape-info omitted its actual body/resource binding."));
+            if (model.PhysicalSkeleton is { } skeleton)
+            {
+                skeleton.Descriptor.Validate();
+                if (model.RagdollBinding is not { Returned: true } actual || skeleton.Load != actual.Load || skeleton.Instance == Guid.Empty ||
+                    skeleton.Descriptor.Source != model.SourceSha256 || skeleton.NativeBodies.Count != skeleton.Descriptor.Bones.Count ||
+                    skeleton.NativeJoints.Count != skeleton.Descriptor.Constraints.Count ||
+                    skeleton.Descriptor.Bones.Select((bone, index) => (bone, index)).Any(row => !actual.Bodies.Any(body =>
+                        body.Body == row.bone.Body && body.Name == row.bone.Name && body.NativeBody == skeleton.NativeBodies[row.index])) ||
+                    skeleton.Descriptor.Constraints.Select((joint, index) => (joint, index)).Any(row => !actual.Joints.Any(joint =>
+                        joint.Constraint == row.joint && joint.NativeJoint == skeleton.NativeJoints[row.index])))
+                    throw new InvalidDataException("Physical skeleton borrowed another actual ragdoll body/joint instance or descriptor source.");
+            }
+            if (model.Drive is { } drive)
+                drive.Validate(model.PhysicalSkeleton ?? throw new InvalidDataException("Ragdoll drive omitted its actual physical instance."));
+            model.Controller?.Validate(model);
+            model.BodyPartPreparation?.Validate(model);
+            model.FootIk?.Validate(model);
+            model.DeathInitialization?.Validate(model);
+            if (model.Arms is { } arms)
+            {
+                arms.Validate();
+                if (model.PhysicalSkeleton is not { } armPhysical || arms.Load != armPhysical.Load)
+                    throw new InvalidDataException("Ragdoll arm fields borrowed another actual physical initialization.");
+                if (arms.ExistingAnimation is { } prior && model.AnimationSkeleton?.Descriptor is { } selected && prior != selected.Identity)
+                    throw new InvalidDataException("Ragdoll arm fields borrowed another shared animation descriptor.");
+            }
+            if (model.AnimationSkeleton is { } animation)
+                animation.Validate(model.PhysicalSkeleton ?? throw new InvalidDataException("Ragdoll animation omitted its actual physical instance."));
+            if (model.Mapping is { } mapping)
+            {
+                if (model.PhysicalSkeleton is not { } physical || model.AnimationSkeleton is not { Returned: true, Descriptor: { } descriptor } ||
+                    mapping.Load != physical.Load || mapping.Returned == (mapping.Failure is not null) ||
+                    mapping.Returned != (mapping.Mappings is not null) || mapping.Cached && !mapping.Returned)
+                    throw new InvalidDataException("Ragdoll mapper lost its actual source instance or failed constructor prefix.");
+                mapping.Mappings?.Validate(physical.Descriptor, descriptor);
+            }
+        }
         if (Frame is { } call && (call.Main == Guid.Empty || call.MainOrdinal < 1 || call.Entered < 1 ||
             call.Changed <= call.Entered || call.Changed > Revision || string.IsNullOrWhiteSpace(call.Step) ||
             call.Returned == (call.Failure is not null) || call.Failure is not null && call.Failure != Failure))

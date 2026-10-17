@@ -12,6 +12,8 @@ internal static partial class FalloutExecutableStringTable
         var wrapper = checked(query + 0x3a + System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(code.AsSpan(query + 0x36)));
         if (!Match(code, wrapper, [0x8b, 0x49, 0x60, 0x85, 0xc9, 0x74, 8, 0x8b, 1, 0xff, 0xa0, 0xb4, 1, 0, 0, 0x33, 0xc0, 0xc3]))
             throw new NotSupportedException("Player Actor animation-context wrapper lost its independent nullable process branch.");
+        if (!Match(code, query + 0x49, [0x89, 0x85, 0x5c, 0xff, 0xff, 0xff]))
+            throw new NotSupportedException("Player animation-context getter lost its independent returned-pointer local store.");
         int? postWrapper = null;
         foreach (var (at, tail) in new[] { (caller + 0x27e, new byte[] { 0x89, 0x45, 0xd0, 0x85, 0xc0, 0x74, 0x65 }),
             (caller + 0x2f1, new byte[] { 0x85, 0xc0, 0x74, 0x56 }) })

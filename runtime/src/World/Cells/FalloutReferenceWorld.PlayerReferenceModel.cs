@@ -12,6 +12,7 @@ internal sealed partial class FalloutReferenceWorld
     private FalloutReferenceModelDataInvocation? _enteredReferenceModel;
     private bool _constructingReferenceModelField;
     private Guid? _enteredReferenceModelLoad;
+    private FalloutActorRagdollControllerField? _sourceActorRagdollControllerField;
 
     private void ConstructStandaloneReferenceModelData(FalloutEarlyControllerSource early)
     {
@@ -25,11 +26,14 @@ internal sealed partial class FalloutReferenceWorld
         var common = ProcessCommon.ReadSceneQueries(_enginePlayer, actor.Epoch);
         _sourcePlayerMoverSource = source;
         var saved = _processCommonRestore?.ReferenceOwners?.ModelData;
+        if (_processCommonRestore?.ReferenceOwners?.RagdollControllerField is not null)
+            throw new NotSupportedException("source-cold-Actor-ragdoll-controller-field-binding-unowned");
         if (_processCommonRestore is not null && saved is null)
             throw new InvalidDataException("Cold reference data omitted its actual constructor and load history.");
         _sourcePlayerModelData = new(source, records, scene.Stack, scene.Process, common.Process,
             scene.Constructor, actor.Source, actor.Epoch, RequireActualReferenceModel, RequireReferenceModelLifetime, saved);
         if (saved is not null) return;
+        _sourceActorRagdollControllerField = new(scene.Process, scene.Constructor, actor.Source);
         _constructingReferenceModelField = true;
         try
         {

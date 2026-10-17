@@ -13,6 +13,11 @@ internal sealed class FalloutSourceSharedShaderProperty
     internal FalloutSourceSharedShaderIdentity Source { get; }
     internal FalloutNifSceneProperty Property => _property;
     internal int CommonLeases => _leases;
+    // Source LightingProperty construction clears its independent light list.
+    // Scene light wrappers belong to the separate scene collection. This
+    // current list receives only the property's actual association writer.
+    private readonly LinkedList<FalloutSourcePointLight> _lights = new();
+    internal Guid? ReadFirstLight() => _lights.First?.Value.Identity;
     private FalloutSourceSharedShaderProperty(FalloutActorLogicalScene model, FalloutNifSceneProperty property)
     {
         if (property.ShaderKind is not (>= 7 and <= 11) || !model.Properties.Any(value => ReferenceEquals(value, property)))

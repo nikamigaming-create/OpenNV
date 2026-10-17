@@ -4,6 +4,17 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--actor-damage-contracts"])
+{
+    ActorDamageContracts.Run();
+    return;
+}
+
+if (args is ["--audit-owned-controller-model", var controllerModelRoot])
+{
+    SourceMainScriptCallerContracts.AuditOwnedControllerModel(controllerModelRoot);
+    return;
+}
 if (args is ["--audit-owned-initial-player-model", var initialModelRoot])
 {
     SourceMainScriptCallerContracts.AuditOwnedInitialPlayerModel(initialModelRoot);

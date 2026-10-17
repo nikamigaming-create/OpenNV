@@ -8,7 +8,8 @@ internal sealed record FalloutLoadedAnimationSequenceSnapshot(Guid Identity, Fal
 internal sealed record FalloutLoadedAnimationManagerSnapshot(string Source, Guid Factory, Guid ModelFactory, Guid LogicalLifetime,
     long Sequence, int SequenceCapacity, int NameBuckets, int PaletteBuckets,
     IReadOnlyList<FalloutLoadedAnimationSequenceSnapshot> Sequences, IReadOnlyDictionary<ushort, Guid> SingleGroups,
-    IReadOnlyDictionary<ushort, IReadOnlyList<Guid>> MultipleGroups, string? Failure, bool Retired, bool Registered, FalloutLoadedAnimationRootUpdate? LastUpdate);
+    IReadOnlyDictionary<ushort, IReadOnlyList<Guid>> MultipleGroups, string? Failure, bool Retired, bool Registered, FalloutLoadedAnimationRootUpdate? LastUpdate,
+    FalloutAnimationNoteSourceSnapshot? AnimationNotes = null);
 internal sealed record FalloutLoadedAnimationRootUpdate(Guid Factory, long Entered, long Changed,
     uint AbsoluteBits, int ActiveSequences, IReadOnlyList<Guid> Updated, bool Returned, string? Failure);
 
@@ -56,7 +57,9 @@ internal sealed partial class FalloutLoadedAnimationManagerState
         if (resources.Source != source || resources.Model.Factory != scene.Factory ||
             resources.Model.Skeleton.Source.Sha256 != scene.SkeletonSha256)
             throw new InvalidDataException("Animation manager changed its actual source model, root palette or native adapter.");
+        scene.AttachLoadedAnimationRootController(this);
         ConstructModelObjectPalette();
+        _animationNotes = new();
         scene.BindLoadedAnimationPoseOwner(this);
     }
     internal void RequireModelBinding(FalloutActorLogicalScene scene)
@@ -165,7 +168,7 @@ internal sealed partial class FalloutLoadedAnimationManagerState
             FalloutLoadedAnimationSource.ManagerSequenceCapacity, FalloutLoadedAnimationSource.ManagerNameBuckets,
             FalloutLoadedAnimationSource.PaletteNameBuckets, _sequences.Values.Select(row => row.Capture()).ToArray(),
             new Dictionary<ushort, Guid>(_single), _multiple.ToDictionary(row => row.Key, row => (IReadOnlyList<Guid>)row.Value.ToArray()),
-            _failure, _retired, _registered, LastUpdate);
+            _failure, _retired, _registered, LastUpdate, _animationNotes?.Capture());
     }
     internal void Retire()
     {
@@ -174,6 +177,8 @@ internal sealed partial class FalloutLoadedAnimationManagerState
             throw new InvalidOperationException("Animation manager retirement left its idle source owner/thread.");
         foreach (var identity in _active) _sequences[identity].Clock.DeactivateImmediately();
         _active.Clear();
+        _animationNotes?.Retire();
+        _scene.DetachLoadedAnimationRootController(this);
         _retired = true; Next();
     }
     private void Require(bool allowFailure = false)

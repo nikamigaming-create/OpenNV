@@ -10,11 +10,15 @@ internal sealed partial class FalloutActorLogicalScene
         return new(Schema, Factory, _lifetime, _sequence, Array.AsReadOnly(_assets.ToArray()), Root.Key,
             Array.AsReadOnly(_order.Select(node => node.Capture()).ToArray()),
             Array.AsReadOnly(_properties.Values.Select(property => property.Capture()).ToArray()),
-            _alpha, _failure, _retired, _restoredLifetime, BoundLane, AttachmentLane, CaptureFloatExtraData(), CaptureVisibility(), CaptureMorphs(), _initialModelUpdate);
+            _alpha, _failure, _retired, _restoredLifetime, BoundLane, AttachmentLane, CaptureFloatExtraData(), CaptureVisibility(), CaptureMorphs(), _initialModelUpdate,
+            _controllerModelPreparation, _ragdollTemplatePose, _ragdollWorldUpdates.ToArray(),
+            _rootAnimationController?.CaptureRootControllerHead(ReferenceEquals(_rootAnimationController, _loadedAnimationManager)));
     }
     private void Restore(FalloutActorLogicalSceneSnapshot saved)
     {
         Validate(saved);
+        if (saved.RootAnimationController is not null)
+            throw new NotSupportedException("source-logical-root-animation-controller-cold-binding-unowned");
         if (saved.Factory == Factory || saved.Lifetime == _lifetime || saved.Retired || saved.Root != Root.Key ||
             saved.Assets.Count != _assets.Count || saved.Objects.Count != _objects.Count || saved.Properties.Count != _properties.Count)
             throw new InvalidDataException("Cold logical scene lost a fresh model lifetime or its complete source denominator.");
@@ -39,6 +43,9 @@ internal sealed partial class FalloutActorLogicalScene
         RestoreFloatExtraData(saved);
         RestoreVisualFields(saved);
         RestoreInitialModelUpdate(saved);
+        RestoreControllerModelPreparation(saved);
+        RestoreRagdollTemplatePoseFields(saved);
+        RestoreRagdollWorldUpdates(saved);
         _sequence = saved.Sequence; _alpha = saved.AlphaCall; _failure = saved.Failure; _restoredLifetime = saved.Lifetime;
         // Fresh actual field/resource identities, retained state: do not update
         // transforms, bounds, shader alpha, clocks or source constructors here.
@@ -68,6 +75,12 @@ internal sealed partial class FalloutActorLogicalScene
         ValidateFloatExtraData(saved);
         ValidateVisualFields(saved);
         ValidateInitialModelUpdate(saved);
+        ValidateControllerModelPreparation(saved);
+        ValidateRagdollTemplatePose(saved);
+        ValidateRagdollWorldUpdates(saved);
+        if (saved.RootAnimationController is { } head && (head.Manager == Guid.Empty || head.Model != saved.Factory || head.Lifetime != saved.Lifetime ||
+            head.Type != "NiControllerManager" || head.NoteSource == Guid.Empty || head.PoseOwnerBound && head.NoteSource is null))
+            throw new InvalidDataException("Logical root controller lost its actual target, class or constructor prefix.");
         var objects = saved.Objects.ToDictionary(node => node.Key);
         var properties = saved.Properties.ToDictionary(property => property.Key);
         if (objects.Count != saved.Objects.Count || properties.Count != saved.Properties.Count || !objects.ContainsKey(saved.Root) ||
@@ -106,7 +119,8 @@ internal sealed partial class FalloutActorLogicalScene
     internal static void RequireComplete(FalloutActorLogicalSceneSnapshot saved)
     {
         Validate(saved);
-        if (saved.Retired || saved.Failure is not null || saved.AlphaCall is { Step: not FalloutNifSceneAlphaStep.Returned })
+        if (saved.Retired || saved.Failure is not null || saved.AlphaCall is { Step: not FalloutNifSceneAlphaStep.Returned } ||
+            saved.RagdollTemplatePose is { Restored: false })
             throw new InvalidDataException("A complete save cannot publish an unfinished logical Actor scene.");
     }
 }

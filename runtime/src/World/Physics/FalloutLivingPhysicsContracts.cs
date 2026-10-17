@@ -8,6 +8,7 @@ internal sealed record FalloutLivingBodyConstruction(string Name, bool IsWeaponO
     FalloutCharacterControllerProxyTransform Transform, bool Active)
 {
     public uint ShapeScaleBits { get; init; } = BitConverter.SingleToUInt32Bits(1);
+    public FalloutLivingPrimitiveShapeParameters? PrimitiveShape { get; init; }
 }
 
 internal sealed record FalloutLivingBodyDynamics(FalloutCharacterControllerProxyTransform Transform,
@@ -24,11 +25,13 @@ internal interface IFalloutLivingBodyBackend : IDisposable
     bool IsWorldAttached { get; }
     ulong PhysicalObjectId { get; }
     int PhysicalShapeCount { get; }
+    FalloutLivingPrimitiveShapeParameters? PrimitiveShape { get; }
     void RequireCurrent();
     FalloutLivingBodyDynamics ReadDynamics();
     FalloutPenetrationBounds ReadBounds();
     void ValidateRestore(byte motion, FalloutLivingBodyDynamics state);
     void RestoreDynamics(FalloutLivingBodyDynamics state);
+    void PublishTransform(FalloutCharacterControllerProxyTransform transform);
     void PublishMotion(byte motion);
     void PublishCollisionFilter(uint filter);
     void Activate();
@@ -53,7 +56,7 @@ internal interface IFalloutLivingPhysicsBackend
     IFalloutLivingBodyBackend CreateBody(FalloutNifFile source,
         FalloutNifCollisionObject collision, FalloutRigidBodyConstructionInputs inputs,
         FalloutLivingBodyConstruction current);
-    IFalloutLivingConstraintBackend CreateConstraint(FalloutNifPhysicalConstraint source,
+    IFalloutLivingConstraintBackend CreateConstraint(FalloutNifPhysicalConstraint source, FalloutLivingJointParameters parameters,
         IFalloutLivingBodyBackend first, IFalloutLivingBodyBackend second);
     void AddBody(IFalloutLivingBodyBackend body);
     void RemoveBody(IFalloutLivingBodyBackend body);
@@ -62,6 +65,14 @@ internal interface IFalloutLivingPhysicsBackend
 }
 
 internal sealed record FalloutLivingBodySnapshot(string Key, byte Motion, uint CollisionFilter,
-    FalloutLivingBodyDynamics Dynamics, uint ShapeScaleBits);
+    FalloutLivingBodyDynamics Dynamics, uint ShapeScaleBits, FalloutLivingCollisionSnapshot? Collision = null,
+    FalloutLivingShapeInfo? ShapeInfo = null);
+internal sealed record FalloutLivingModelPlacement(FalloutCharacterControllerProxyTransform Root, uint ReferenceScale);
 internal sealed record FalloutLivingModelSnapshot(string Key, string SourceSha256,
-    IReadOnlyList<FalloutLivingBodySnapshot> Bodies);
+    IReadOnlyList<FalloutLivingBodySnapshot> Bodies, FalloutLivingRagdollBindingSnapshot? RagdollBinding = null,
+    FalloutLivingModelPlacement? Placement = null, FalloutLivingRagdollTemplateSnapshot? RagdollTemplate = null,
+    FalloutLivingRagdollSkeletonSnapshot? PhysicalSkeleton = null, FalloutLivingRagdollDriveSnapshot? Drive = null,
+    FalloutLivingRagdollAnimationSnapshot? AnimationSkeleton = null, FalloutLivingRagdollMappingSnapshot? Mapping = null,
+    FalloutRagdollArmInitialization? Arms = null, FalloutLivingRagdollControllerSnapshot? Controller = null,
+    FalloutRagdollBodyPartPreparation? BodyPartPreparation = null, FalloutRagdollFootIkSnapshot? FootIk = null,
+    FalloutRagdollDeathInitialization? DeathInitialization = null);

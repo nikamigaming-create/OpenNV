@@ -11,14 +11,28 @@ internal partial class RuntimeNativePlayer
 {
     private PlayerLivingPhysicsOwner? _livingPhysics;
 
+    private FalloutLivingActorModel PrepareStandaloneLoadingModelPhysics(FalloutReferenceModelDataInvocation load,
+        FalloutPlayerReturnedModel model)
+    {
+        var world = _referenceModelWorld ?? throw new InvalidOperationException("Model physics lost its actual loading World.");
+        world.RequireStandalonePlayerModelLoadPhysics(load, model);
+        var first = _firstModelLeases.Single(body => _firstModelNodes.ContainsKey(body));
+        var third = _referenceModelLeases.Single(body => body.SourceSceneFactory == model.Node.Node.Factory);
+        _livingPhysics ??= new(this, world);
+        _livingPhysics.PrepareModels(first, third);
+        world.RequireStandalonePlayerModelLoadPhysics(load, model);
+        return _livingPhysics.ReadPreparedReferenceModel(model.Source);
+    }
+
     private void PublishStandaloneLivingPhysics()
     {
         if (_standaloneSceneWorld is not { } world) return;
         if (_livingPhysics is null)
         {
             _livingPhysics = new(this, world);
-            world.CampaignStandalonePlayerScene.BindMovementPhysics(_livingPhysics);
         }
+        if (!_livingPhysics.BoundToMovement)
+        { world.CampaignStandalonePlayerScene.BindMovementPhysics(_livingPhysics); _livingPhysics.BoundToMovement = true; }
         _livingPhysics.PublishModels();
     }
 
@@ -44,18 +58,21 @@ internal partial class RuntimeNativePlayer
         private readonly FalloutActorPenetrationUtility _utility;
         private readonly FalloutNativePenetrationClock _clock;
         private readonly List<FalloutLivingActorModel> _models = [];
-        private readonly FalloutActorPhysicalAdmissionFields _fields = FalloutActorPhysicalAdmissionFields.Constructed;
+        private readonly FalloutActorPhysicalAdmissionFields _fields;
         private FalloutActorPhysicalRegistrationTrace? _admission;
         private FalloutPlayerPhysicsFrameCall? _frame;
         private Guid? _viewFactory, _referenceFactory;
+        private RuntimeNativePlayerActor? _viewActor, _referenceActor;
         private long _revision;
         private string? _failure;
         private bool _retired, _reportedReturn;
+        private bool _modelPublicationEntered, _modelsPublished;
         private bool _retiring, _utilityRetired, _worldRetired, _clockRetired;
 
         internal PlayerLivingPhysicsOwner(RuntimeNativePlayer player, FalloutReferenceWorld world)
         {
             _player = player; _world = world;
+            _fields = world.ReadStandalonePlayerPhysicalAdmissionFields();
             _nativeWorld = player.GetWorld3D();
             var scene = world.CampaignStandalonePlayerScene;
             Process = scene.Process; Source = scene.Source.Identity; Stack = scene.Stack;
@@ -83,12 +100,14 @@ internal partial class RuntimeNativePlayer
         public string Source { get; }
         public string Stack { get; }
         public Guid Factory { get; } = Guid.NewGuid();
+        internal bool BoundToMovement { get; set; }
 
         public void RequireCurrent()
         {
             RequireThread(); ObjectDisposedException.ThrowIf(_retired, this);
             if (_retiring) throw new InvalidOperationException("Player living physics retains an entered or failed retirement.");
-            if (!ReferenceEquals(_player._standaloneSceneWorld, _world) || !ReferenceEquals(_player._livingPhysics, this) ||
+            if (!ReferenceEquals(_player._standaloneSceneWorld, _world) && !ReferenceEquals(_player._referenceModelWorld, _world) ||
+                !ReferenceEquals(_player._livingPhysics, this) ||
                 _world.CampaignStandalonePlayerScene.Process != Process || _world.CampaignStandalonePlayerScene.Stack != Stack ||
                 !GodotObject.IsInstanceValid(_player) || !_player.IsInsideTree() || _player.IsQueuedForDeletion() ||
                 _player.GetWorld3D().Space != ReadActualSpace())
@@ -99,15 +118,16 @@ internal partial class RuntimeNativePlayer
         internal void PublishModels()
         {
             RequireCurrent();
-            if (_models.Count != 0) throw new InvalidOperationException("Player living model replacement did not retire its previous objects.");
+            if (_modelsPublished) { RequireModels(); return; }
+            if (_modelPublicationEntered)
+                throw new NotSupportedException(_failure ?? "source-living-model-publication-remains-entered");
+            _modelPublicationEntered = true;
             try
             {
                 var view = _player._firstPerson ?? throw new NotSupportedException("Player living view model factory is absent.");
                 var reference = _player._thirdPerson ?? throw new NotSupportedException("Player living reference model factory is absent.");
                 RequireActor(view); RequireActor(reference); _fields.Validate();
-                var root = ReadActualPhysicalRoot();
-                Construct(view, "view", root); Construct(reference, "reference", root);
-                _viewFactory = view.SourceSceneFactory; _referenceFactory = reference.SourceSceneFactory;
+                PrepareModels(view, reference);
                 _admission = _world.ReadStandalonePlayerPhysicalAdmission(ReadReferenceModel, RequireModels,
                     trace => { _admission = trace; Next(); });
                 // The setter uses the direct reference model; registration uses
@@ -122,7 +142,7 @@ internal partial class RuntimeNativePlayer
                             if (admitted.Add(linked)) _physicalWorld.AddConstraint(linked);
                 }
                 if (_admission.Register == true) _utility.Register();
-                Next();
+                _modelsPublished = true; Next();
             }
             catch (Exception error)
             {
@@ -131,16 +151,50 @@ internal partial class RuntimeNativePlayer
             }
         }
 
-        private void Construct(RuntimeNativePlayerActor actor, string role, FalloutCharacterControllerProxyTransform root)
+        internal void PrepareModels(RuntimeNativePlayerActor view, RuntimeNativePlayerActor reference)
+        {
+            RequireCurrent();
+            if (_failure is not null) throw new NotSupportedException(_failure);
+            if (_viewActor is not null || _referenceActor is not null)
+            {
+                if (!ReferenceEquals(_viewActor, view) || !ReferenceEquals(_referenceActor, reference))
+                    throw new InvalidOperationException("Player loading physics replaced an actual retained model factory.");
+                RequireModels(); return;
+            }
+            RequireActor(view, false); RequireActor(reference, false); _fields.Validate();
+            _viewActor = view; _referenceActor = reference;
+            _viewFactory = view.SourceSceneFactory; _referenceFactory = reference.SourceSceneFactory;
+            try
+            {
+                var placement = _world.ReadStandalonePlayerPhysicalPlacement();
+                var root = ReadActualPhysicalRoot(placement);
+                var scale = BitConverter.UInt32BitsToSingle(placement.Scale);
+                Construct(view, "view", root, scale); Construct(reference, "reference", root, scale);
+                RequireModels(); Next();
+            }
+            catch (Exception error) { _failure ??= error.Message; Next(); throw; }
+        }
+
+        internal FalloutLivingActorModel ReadPreparedReferenceModel(FalloutActorSourceModel source)
+        {
+            RequireModels();
+            if (!ReferenceEquals(_models[1].Source, source))
+                throw new InvalidOperationException("Model motion selected another actual physical assembly.");
+            return _models[1];
+        }
+
+        private void Construct(RuntimeNativePlayerActor actor, string role, FalloutCharacterControllerProxyTransform root, float scale)
         {
             var source = actor.Actor.SourceModel;
             if (actor.Weapon is not null)
                 throw new NotSupportedException("source-living-WeaponObject-model-attachment-factory-unowned");
             var key = "Player/" + role + "/" + source.Skeleton.Source.Sha256;
             var poses = FalloutLivingModelConstruction.ReadSourceRestPoses(source.Skeleton, _inputs, root,
-                _player._sourceScale * source.Appearance.Height, true, _ => false);
+                scale * source.Appearance.Height, true, _ => false);
             var model = FalloutLivingActorModel.Construct(key, source, _inputs, _backend,
-                scene => poses[scene.Declaration.Block.Index]);
+                scene => actor.LogicalScene is { HasControllerBodyNames: true } logical && scene.Collision is { Body: >= 0 } collision
+                    ? poses[scene.Declaration.Block.Index] with { Name = logical.ReadControllerBodyName(0, collision.Body) }
+                    : poses[scene.Declaration.Block.Index], new(root, BitConverter.SingleToUInt32Bits(scale)));
             _models.Add(model);
         }
 
@@ -219,26 +273,27 @@ internal partial class RuntimeNativePlayer
         private void RequireModels()
         {
             RequireCurrent();
-            if (_models.Count != 2 || _player._firstPerson is not { } view || _player._thirdPerson is not { } reference ||
+            if (_models.Count != 2 || _viewActor is not { } view || _referenceActor is not { } reference ||
                 view.SourceSceneFactory != _viewFactory || reference.SourceSceneFactory != _referenceFactory ||
                 !ReferenceEquals(_models[0].Source, view.Actor.SourceModel) || !ReferenceEquals(_models[1].Source, reference.Actor.SourceModel))
                 throw new InvalidOperationException("Player physical field cannot borrow a historical or unpublished model.");
-            RequireActor(view); RequireActor(reference);
+            RequireActor(view, false); RequireActor(reference, false);
             foreach (var model in _models) model.RequireCurrent();
         }
-        private static void RequireActor(RuntimeNativePlayerActor actor)
+        private static void RequireActor(RuntimeNativePlayerActor actor, bool attached = true)
         {
-            if (!GodotObject.IsInstanceValid(actor) || !actor.IsInsideTree() || actor.IsQueuedForDeletion() || actor.Error is not null)
+            if (!GodotObject.IsInstanceValid(actor) || attached && !actor.IsInsideTree() || actor.IsQueuedForDeletion() || actor.Error is not null)
                 throw new InvalidOperationException("Player physical model has no actual completed source assembly.");
         }
 
-        private FalloutCharacterControllerProxyTransform ReadActualPhysicalRoot()
+        private FalloutCharacterControllerProxyTransform ReadActualPhysicalRoot(FalloutPlayerPhysicalPlacement placement)
         {
-            var position = _player.GlobalPosition / _player.UnitsToMeters;
             var axes = new Basis(Vector3.Right, Vector3.Forward, Vector3.Up);
-            var rotation = axes.Transposed() * _player.GlobalBasis.Orthonormalized() * axes;
+            var source = placement.Rotation;
+            var rotation = axes.Transposed() * GamebryoCoordinate.ConvertReferenceEuler(
+                new(source.XValue, source.YValue, source.ZValue), 1) * axes;
             return new(new(Vector(rotation.X), Vector(rotation.Y), Vector(rotation.Z)),
-                _inputs.ScaleReferencePosition(FalloutPhysicalVector3.FromValues(position.X, -position.Z, position.Y)));
+                _inputs.ScaleReferencePosition(placement.Position));
             static FalloutPhysicalVector3 Vector(Vector3 value) => FalloutPhysicalVector3.FromValues(value.X, value.Y, value.Z);
         }
         private Rid ReadActualSpace()
@@ -263,7 +318,8 @@ internal partial class RuntimeNativePlayer
             if (_utility.SystemCount != 0)
                 throw new NotSupportedException("source-nonempty-living-model-replacement-system-retirement-caller-unowned");
             foreach (var model in _models) model.Dispose(); _models.Clear();
-            _viewFactory = null; _referenceFactory = null; Next();
+            _modelPublicationEntered = _modelsPublished = false; _admission = null;
+            _viewFactory = null; _referenceFactory = null; _viewActor = _referenceActor = null; Next();
         }
         private void RequireThread()
         {
@@ -289,7 +345,7 @@ internal partial class RuntimeNativePlayer
             }
             finally
             {
-                if (_models.Count == 0) _viewFactory = _referenceFactory = null;
+                if (_models.Count == 0) { _viewFactory = _referenceFactory = null; _viewActor = _referenceActor = null; }
             }
             IEnumerable<Action> Resources()
             {

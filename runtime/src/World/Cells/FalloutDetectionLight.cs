@@ -121,10 +121,11 @@ internal sealed class FalloutDetectionLight
             var x = Store((double)sourcePosition[0] - input.Position[0]);
             var y = Store((double)sourcePosition[1] - input.Position[1]);
             var z = Store((double)sourcePosition[2] - input.Position[2]);
-            var square = Store(x * (double)x + y * (double)y + z * (double)z);
+            var square = Store((double)Store(y * (double)y) + Store(x * (double)x));
+            square = Store((double)square + Store(z * (double)z));
             var distance = Store(Math.Sqrt(square));
             var ratio = Math.Clamp(Store(distance / (double)input.Radius), 0, 1);
-            attenuation = Store(1d - ratio * (double)ratio);
+            attenuation = Store(1d - Store(ratio * (double)ratio));
         }
         return Store(Math.Max(red, Math.Max(green, blue)) * (double)attenuation);
     }

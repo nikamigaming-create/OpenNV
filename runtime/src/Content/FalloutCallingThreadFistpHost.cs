@@ -71,7 +71,7 @@ internal sealed class FalloutCallingThreadFistpHost : IDisposable
     internal FalloutFistpObservation Convert(uint bits) => Convert(bits, FalloutFistpOperation.SourceArgument);
     internal FalloutFistpObservation Convert(uint bits, FalloutFistpOperation operation)
     {
-        if (operation is not (FalloutFistpOperation.Convert or FalloutFistpOperation.SourceArgument))
+        if (operation is not (FalloutFistpOperation.Convert or FalloutFistpOperation.SourceArgument or FalloutFistpOperation.ScaledHundred))
             throw new InvalidDataException("Actual FISTP requires a selected original conversion transport.");
         RequireThread(); var binding = Binding;
         // Verify the actual OS thread before executing an instruction. The

@@ -202,6 +202,16 @@ internal sealed partial class FalloutNifFile
         return Interlocked.CompareExchange(ref _decodedObjects[blockIndex], decoded, null) ?? decoded;
     }
 
+    internal string ReadExtraDataName(int blockIndex)
+    {
+        RequireReference(blockIndex, Blocks.Count, "extra-data name", allowNull: false);
+        // NiAVObject's extra-data links point to NiExtraData. Its base name
+        // precedes the independent derived payload; name lookup does not
+        // instantiate or claim support for that unrelated payload.
+        var cursor = BlockCursor(Blocks[blockIndex]);
+        return ReadStringReference(ref cursor, "extra-data base name");
+    }
+
     private FalloutNifObject DecodeObject(int blockIndex)
     {
         var block = Blocks[blockIndex];

@@ -63,6 +63,8 @@ public partial class RuntimeCoordinator
                 throw new InvalidOperationException("Player movement left its actual records or World lifetime.");
         });
         world.PrepareStandalonePlayerModelLoading(_nativeInventory);
+        world.PrepareStandalonePlayerReturnTail();
+        world.PrepareStandalonePlayerAnimationPreparation();
     }
 
     private void RetireStandalonePlayerOwners(FalloutReferenceWorld world)
@@ -89,7 +91,7 @@ public partial class RuntimeCoordinator
             (_nativeDirectInput ?? throw new InvalidOperationException("Main scene binding has no actual product input manager.")).PlayerManager());
         world.CampaignStandalonePlayerScene.BindMovementControlConfiguration(
             (_nativePluginStack ?? throw new InvalidOperationException("Player controls lost the winning record/INI selection.")).IniSettings);
-        world.CampaignStandalonePlayerScene.BindActorProcessQueries(world.ReadStandaloneSceneProcessQueries);
+        world.CampaignStandalonePlayerScene.BindActorProcessQueries(world.ReadStandaloneSceneProcessQueries, world.ReadStandaloneSceneAnimationBinding);
         world.CampaignStandalonePlayerScene.BindProcessSceneUpdate(world.UpdateStandalonePlayerProcessScene);
         world.CampaignStandalonePlayerScene.BindPostProcessContext(world.ReadStandalonePlayerSceneContext);
         world.CampaignStandalonePlayerScene.BindPostProcessController(world.BorrowStandalonePlayerContextController);

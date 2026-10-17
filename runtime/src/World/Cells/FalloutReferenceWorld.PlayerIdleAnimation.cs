@@ -55,9 +55,8 @@ internal sealed partial class FalloutReferenceWorld
         public FalloutIdleSelectedObject? ReadAlternateObject() =>
             throw new NotSupportedException("source-Actor-idle-alternate-selected-object-factory-unbound");
         public FalloutIdleAnimationContext? ReadAnimation() => scene.ReadSelectedIdleAnimation(
-            world.RequireStandaloneIdleModelOwner().ReadFirstPersonAnimation,
-            () => before.AnimationContext is null ? null :
-                throw new NotSupportedException("source-Player-idle-process-animation-context-current-factory-unbound"));
+            () => world.ReadStandaloneFirstIdleAnimation(before),
+            () => world.ReadStandaloneCommonIdleAnimation(before));
         public uint? ReadBoundRadius(FalloutSourceSceneNode model) => world.RequireStandaloneIdleModelOwner().ReadBoundRadius(model);
         public float ReadDistanceToPlayer() => world.ReadActorDistanceToPlayer(world._enginePlayer, bypassCell: true);
         public float ReadDistanceSetting() => world.ReadIdleSetting("fAIIdleAnimationDistance");
@@ -83,5 +82,24 @@ internal sealed partial class FalloutReferenceWorld
         public float ReadMainScaledTimer() => readScaledTimer();
         public void StartIdle() =>
             throw new NotSupportedException("source-High-idle-selected-animation-start-child-unbound");
+    }
+
+    private FalloutIdleAnimationContext? ReadStandaloneFirstIdleAnimation(FalloutProcessSceneQuery before)
+    {
+        var first = _sourcePackageFields[_enginePlayer].ReadIdleFirstAnimation(before);
+        if (first is null) return ReadStandaloneCommonIdleAnimation(before);
+        var context = (_loadedPlayerAnimation ?? throw new NotSupportedException("source-Player-idle-loaded-animation-factory-unbound"))
+            .RequireContext(first.Value);
+        if (context.Actor != before.Actor || context.CommonProcess != before.Process || context.Construction.Invocation.Epoch != before.Epoch)
+            throw new InvalidOperationException("First idle animation borrowed another actual Actor/process epoch.");
+        return RequireStandaloneIdleModelOwner().ReadFirstPersonAnimation(context);
+    }
+    private FalloutIdleAnimationContext? ReadStandaloneCommonIdleAnimation(FalloutProcessSceneQuery before)
+    {
+        if (before.AnimationContext is not { } pointer) return null;
+        var context = (_loadedPlayerAnimation ?? throw new NotSupportedException("source-Player-idle-loaded-animation-factory-unbound")).RequireContext(pointer);
+        if (context.Actor != before.Actor || context.CommonProcess != before.Process || context.Construction.Invocation.Epoch != before.Epoch)
+            throw new InvalidOperationException("Common idle animation borrowed another actual Actor/process epoch.");
+        return context.ReadIdleContext(FalloutLoadedAnimationRole.Common);
     }
 }

@@ -40,6 +40,27 @@ internal static partial class SourceMainScriptCallerContracts
         }
         using (var fixture = new PlayerReturnTailFixture())
         {
+            fixture.Scene.BindLateReturnTail(fixture.State, _ => throw new InvalidOperationException("Component fixture has no complete Player frame."));
+            fixture.Update();
+            var saved = fixture.Scene.Capture();
+            Require(saved.SceneBracket == 1 && saved.ReturnTail?.LastCall is { Returned: true },
+                "Scene capture lost its actual returned nested bracket stores.");
+            Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with { SceneBracket = 2 }));
+        }
+        using (var fixture = new PlayerReturnTailFixture())
+        {
+            fixture.Scene.BindLateReturnTail(fixture.State, _ => throw new InvalidOperationException("Component fixture has no complete Player frame."));
+            fixture.Common.ObserveUnownedAnimationPairWriter(fixture.Actor.Reference, 1, "authored-entered-pair-writer", () => { });
+            Reject(() => fixture.Update());
+            var saved = JsonSerializer.Deserialize<FalloutStandalonePlayerSceneSnapshot>(JsonSerializer.Serialize(fixture.Scene.Capture()))!;
+            FalloutStandalonePlayerSceneState.Validate(saved);
+            Require(saved.SceneBracket == 2 && saved.ReturnTail?.LastCall is { Returned: false },
+                "Scene snapshot rejected or restored the actual failed nested animation bracket.");
+            Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with { SceneBracket = 1 }));
+            Reject(() => FalloutStandalonePlayerSceneState.Validate(saved with { ReturnTail = null }));
+        }
+        using (var fixture = new PlayerReturnTailFixture())
+        {
             fixture.State.ObserveUnownedSharedWriter(FalloutPlayerReturnTailField.DeathTimer, "authored-real-writer", () => { });
             var call = fixture.Update();
             Require(call.Stores[0].Before is null && call.Stores[0].After == FalloutPlayerReturnTailSource.InitialDeathTimerBits &&

@@ -1,6 +1,8 @@
 option casemap:none
 PUBLIC opennv_host_fistp32_asm
 
+.const
+opennv_float_hundred DWORD 042c80000h
 .code
 opennv_host_fistp32_asm PROC FRAME
     sub rsp, 228h
@@ -45,11 +47,15 @@ convert:
     shl eax, cl
     test byte ptr [r10+32], al
     jnz occupied
-    cmp byte ptr [r10+35], 2
-    jne integer_value
+    cmp byte ptr [r10+35], 1
+    je integer_value
     ; The selected source caller first stores its argument as Float32. Retain
     ; its actual buffered bits and flags independently from the helper result.
     fld dword ptr [r10+16]
+    cmp byte ptr [r10+35], 3
+    jne argument_store
+    fmul dword ptr [opennv_float_hundred]
+argument_store:
     fstp dword ptr [r10+40]
     fxsave [rsp+20h]
     mov ax, word ptr [rsp+22h]

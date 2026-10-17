@@ -50,7 +50,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             ValidateRead(span.Initial, isLoad);
             ValidateStore(span.First, isLoad ? FalloutPlayerViewWriter.LoadTemporary : FalloutPlayerViewWriter.FirstTailToggle);
             if (!SameScope(span.Initial, span.First.Read) || span.First.Read.Sequence < span.Initial.Sequence ||
-                isLoad && span.First.Read != span.Initial || !isLoad && span.Initial.Value == 0 && span.First.Read != span.Initial ||
+                isLoad && span.First.Read != span.Initial || !isLoad && span.Initial.Value == 0 && span.First.Read.Value != span.Initial.Value ||
                 span.First.After != (isLoad ? 1 : Toggle(span.First.Read.Value)))
                 throw new InvalidDataException("Player view changed the real initial read or first source store law.");
             if (span.Second is not { } second) return;

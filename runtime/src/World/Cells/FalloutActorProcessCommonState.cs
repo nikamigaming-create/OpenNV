@@ -52,6 +52,7 @@ internal sealed partial class FalloutActorProcessCommonState : IDisposable
             "source-Actor-following-weapon-observed-writer-unbound:" + following.Source.Reference : null;
     internal object State => new
     {
+        postActionLight = LastPostActionLight,
         source = _source.Contract,
         process = _process,
         _sequence,

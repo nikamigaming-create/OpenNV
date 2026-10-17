@@ -2,7 +2,7 @@ using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.World.Physics;
 
-internal sealed class FalloutLivingPhysicalBody : IFalloutPenetrationBody
+internal sealed partial class FalloutLivingPhysicalBody : IFalloutPenetrationBody
 {
     private readonly FalloutLivingActorModel _model;
     private readonly List<IFalloutPenetrationConstraint> _masters = [], _slaves = [];
@@ -21,6 +21,7 @@ internal sealed class FalloutLivingPhysicalBody : IFalloutPenetrationBody
         _model = model; Source = source; Collision = collision; Construction = inputs;
         Backend = backend; Key = key; _name = current.Name; _weapon = current.IsWeaponObject;
         _shapeScaleBits = current.ShapeScaleBits;
+        ConstructionShape = current.PrimitiveShape;
         CollisionProperty = collisionProperty; Wrapper = new(model, this);
         _motion = inputs.InitialMotion;
         _filter = source.Filter.Layer | (uint)source.Filter.Flags << 8 | (uint)source.Filter.Group << 16;
@@ -42,6 +43,7 @@ internal sealed class FalloutLivingPhysicalBody : IFalloutPenetrationBody
     internal FalloutLivingCollisionObject CollisionProperty { get; }
     internal FalloutLivingRigidBodyWrapper Wrapper { get; }
     internal FalloutRigidBodyConstructionInputs Construction { get; }
+    internal FalloutLivingPrimitiveShapeParameters? ConstructionShape { get; }
     internal IFalloutLivingBodyBackend Backend { get; }
     internal FalloutLivingPhysicalWorld? CurrentWorld { get; set; }
     internal FalloutLivingPhysicalWorld? PendingWorld { get; set; }
@@ -97,6 +99,8 @@ internal sealed class FalloutLivingPhysicalBody : IFalloutPenetrationBody
             throw new NotSupportedException("Living current-island motion conversion is unowned.");
         Backend.PublishMotion(motion); _motion = motion;
     }
+    internal void PublishModelMotion(byte motion)
+    { PublishMotion(motion); CollisionProperty.PublishModelMotion(motion); }
 
     public void Activate() { RequireCurrent(); Backend.Activate(); }
     public void PublishCollisionFilter(uint filter)
@@ -104,9 +108,11 @@ internal sealed class FalloutLivingPhysicalBody : IFalloutPenetrationBody
     public void ApplyPointImpulse(FalloutPhysicalVector3 impulse, FalloutPhysicalVector3 point)
     { RequireCurrent(); Backend.ApplyPointImpulse(impulse, point); }
 
-    internal FalloutLivingBodySnapshot Capture() => new(Key, Motion, CollisionFilter, Read(), _shapeScaleBits);
+    internal FalloutLivingBodySnapshot Capture() => new(Key, Motion, CollisionFilter, Read(), _shapeScaleBits, CollisionProperty.Capture(), _shapeInfo);
     internal void ValidateRestore(FalloutLivingBodySnapshot saved)
     {
+        if (saved.ShapeInfo is not null)
+            throw new NotSupportedException("source-cold-current-shape-info-cache-resource-binding-unowned");
         RequireCurrent();
         if (saved.Key != Key || saved.ShapeScaleBits != _shapeScaleBits || saved.Motion is < 1 or > 8 || saved.Dynamics is null ||
             !Finite(saved.Dynamics.Transform.Translation) || !Finite(saved.Dynamics.Transform.Rotation.Column0) ||
@@ -119,6 +125,8 @@ internal sealed class FalloutLivingPhysicalBody : IFalloutPenetrationBody
         // The backend derives inverse mass from its saved motion and mass.
         // Validate that redundant field before any row is published.
         Backend.ValidateRestore(saved.Motion, saved.Dynamics);
+        if (saved.Collision is not { } collision) throw new InvalidDataException("Cold physical body omitted its actual collision object fields.");
+        CollisionProperty.Validate(collision, saved.CollisionFilter);
         static bool Finite(FalloutPhysicalVector3 value) =>
             float.IsFinite(value.XValue) && float.IsFinite(value.YValue) && float.IsFinite(value.ZValue);
     }
@@ -126,18 +134,21 @@ internal sealed class FalloutLivingPhysicalBody : IFalloutPenetrationBody
     {
         PublishMotion(saved.Motion); PublishCollisionFilter(saved.CollisionFilter);
         Backend.RestoreDynamics(saved.Dynamics);
+        if (saved.Collision is not { } collision) throw new InvalidDataException("Cold physical body omitted its actual collision object fields.");
+        CollisionProperty.Restore(collision);
     }
 }
 
 internal sealed class FalloutLivingPhysicalConstraint : IFalloutPenetrationConstraint
 {
     private readonly FalloutLivingActorModel _model;
-    internal FalloutLivingPhysicalConstraint(FalloutLivingActorModel model, FalloutNifPhysicalConstraint source,
+    internal FalloutLivingPhysicalConstraint(FalloutLivingActorModel model, FalloutNifPhysicalConstraint source, FalloutLivingJointParameters parameters,
         FalloutLivingPhysicalBody first, FalloutLivingPhysicalBody second, IFalloutLivingConstraintBackend backend, string key)
     {
         _model = model; Source = source; FirstBody = first; SecondBody = second; Backend = backend; Key = key;
         var type = source.Header.Block.TypeName == "bhkMalleableConstraint" ? 13 : checked((int)source.Header.WrappedType);
-        Wrapper = new(model, this, type);
+        Parameters = parameters;
+        Wrapper = new(model, this, type, parameters);
     }
     public string Key { get; }
     public int? DataType
@@ -153,6 +164,7 @@ internal sealed class FalloutLivingPhysicalConstraint : IFalloutPenetrationConst
     public IFalloutPenetrationBody First { get { RequireCurrent(); return FirstBody; } }
     public IFalloutPenetrationBody Second { get { RequireCurrent(); return SecondBody; } }
     internal FalloutNifPhysicalConstraint Source { get; }
+    internal FalloutLivingJointParameters Parameters { get; }
     internal FalloutLivingPhysicalBody FirstBody { get; }
     internal FalloutLivingPhysicalBody SecondBody { get; }
     internal IFalloutLivingConstraintBackend Backend { get; }

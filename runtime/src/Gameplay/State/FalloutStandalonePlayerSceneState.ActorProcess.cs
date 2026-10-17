@@ -5,13 +5,15 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed partial class FalloutStandalonePlayerSceneState
 {
     private Func<FalloutProcessSceneQuery>? _readProcessQueries;
+    private Func<FalloutProcessSceneQuery, FalloutAnimationProcessQueryBinding>? _readAnimationBinding;
     private FalloutStandaloneActorProcessQuery? _actorProcessQuery;
 
-    internal void BindActorProcessQueries(Func<FalloutProcessSceneQuery> read)
+    internal void BindActorProcessQueries(Func<FalloutProcessSceneQuery> read,
+        Func<FalloutProcessSceneQuery, FalloutAnimationProcessQueryBinding>? readAnimationBinding = null)
     {
         RequireIdle(); ArgumentNullException.ThrowIfNull(read);
         if (_readProcessQueries is not null) throw new InvalidOperationException("Player scene process query is already bound.");
-        _readProcessQueries = read;
+        _readProcessQueries = read; _readAnimationBinding = readAnimationBinding;
     }
 
     private void ReadActorProcessQueries(Guid main, long ordinal)
@@ -24,11 +26,17 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         {
             var entry = read(); RequireQuery(entry);
             _actorProcessQuery = _actorProcessQuery with { Result = entry, EntryCalls = 1, Changed = Next() };
+            AdmitContents(entry);
             Check();
             // The null entry arm calls the entry getter once. Nonnull entry
             // writers/consumers must be owned before its repeated read is legal.
             var animation = read(); RequireQuery(animation);
             if (animation != entry) throw new InvalidOperationException("Player process changed before its independent animation-context query.");
+            var binding = animation.AnimationContext is null ? null : (_readAnimationBinding ??
+                throw new NotSupportedException("source-Player-current-Common-AnimData-query-owner-unbound"))(animation);
+            binding?.Validate(animation);
+            if (binding != _actorProcessQuery.AnimationBinding)
+                throw new InvalidOperationException("Player animation getter replaced its actual current Common context or bound model.");
             _actorProcessQuery = _actorProcessQuery with { AnimationReturned = true, Changed = Next() };
             Check();
         }
@@ -41,6 +49,15 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             RequireThread();
             if (_reentry != fault) throw new InvalidOperationException("Player process getter swallowed a scene owner reentry refusal.");
         }
+        void AdmitContents(FalloutProcessSceneQuery query)
+        {
+            if (query.WeaponEntry is not null || query.IdlePrimaryPackage is not null)
+                throw new NotSupportedException("source-Player-scene-process-nonnull-entry-or-package-consumers-unowned");
+            if (query.AnimationContext is null) return;
+            var binding = (_readAnimationBinding ?? throw new NotSupportedException("source-Player-current-Common-AnimData-query-owner-unbound"))(query);
+            binding.Validate(query);
+            _actorProcessQuery = _actorProcessQuery! with { AnimationBinding = binding, Changed = Next() };
+        }
     }
 
     private void RequireQuery(FalloutProcessSceneQuery query)
@@ -49,8 +66,6 @@ internal sealed partial class FalloutStandalonePlayerSceneState
             query.Actor is null || !query.Actor.EnginePlayer || query.Process == Guid.Empty || query.GameplayOwnership == Guid.Empty ||
             query.Epoch < 1 || query.Changed < 1 || query.Level != FalloutDetectionProcessLevel.High)
             throw new InvalidDataException("Player process query lost its actual source class, actor, epoch or gameplay lease.");
-        if (query.WeaponEntry is not null || query.AnimationContext is not null || query.IdlePrimaryPackage is not null)
-            throw new NotSupportedException("source-Player-scene-process-nonnull-entry-or-animation-consumers-unowned");
     }
 
     private static void ValidateActorProcessQuery(FalloutStandalonePlayerSceneSnapshot saved)
@@ -76,9 +91,12 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         if (query is null) return;
         if (query.Stack != saved.Stack || query.ExecutableSha256 != saved.Source.Main.EngineSha256 ||
             query.Actor is null || !query.Actor.EnginePlayer || query.Process == Guid.Empty || query.GameplayOwnership == Guid.Empty ||
-            query.Epoch < 1 || query.Changed < 1 || query.Level != FalloutDetectionProcessLevel.High ||
-            query.WeaponEntry is not null || query.AnimationContext is not null || query.IdlePrimaryPackage is not null)
+            query.Epoch < 1 || query.Changed < 1 || query.Level != FalloutDetectionProcessLevel.High)
             throw new InvalidDataException("Player process receipt changed its actual independent nullable getters or retained source owner.");
+        call.AnimationBinding?.Validate(query);
+        if (call.AnimationReturned && (query.WeaponEntry is not null || query.IdlePrimaryPackage is not null ||
+            (query.AnimationContext is not null) != (call.AnimationBinding is not null)))
+            throw new InvalidDataException("Player process query returned without its actual Common context binding.");
         query.Actor.Validate();
     }
 }

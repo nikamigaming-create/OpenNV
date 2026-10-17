@@ -9,7 +9,7 @@ internal sealed partial class FalloutSourceFistpState
         RequireIdle();
         if (_host is not null) _host.RequireCurrent(_lastBinding!);
         return new(Schema, _source.Contract, _source.ExecutableSha256, _stack, _process, _sequence,
-            _pairs, _conversions, _lastBinding, _host is not null, _last, _cold);
+            _pairs, _conversions, _lastBinding, _host is not null, _last, _cold, _modelKeys, _lastModelKey, _modelKeyConversions);
     }
     private void Restore(FalloutSourceFistpSnapshot saved)
     {
@@ -18,6 +18,7 @@ internal sealed partial class FalloutSourceFistpState
             throw new InvalidDataException("Cold FISTP lost its exact selected source or actual new process epoch.");
         _sequence = saved.Sequence; _pairs = saved.Pairs; _conversions = saved.Conversions;
         _last = saved.Last; _lastBinding = saved.LastBinding;
+        _modelKeys = saved.ModelKeys; _lastModelKey = saved.LastModelKey; _modelKeyConversions = saved.ModelKeyConversions;
         _cold = new(saved.CapturedProcess, _process, Next());
         // Saved CW/SW, thread IDs and instruction receipts are history only.
         // No native thread is constructed, no control word is written, and no
@@ -33,6 +34,7 @@ internal sealed partial class FalloutSourceFistpState
         var source = FalloutMainFrameDeclaration.ForExecutable(saved.ExecutableSha256);
         if (source.Contract != saved.Contract) throw new InvalidDataException("Saved FISTP changed its selected original Main declaration.");
         if (saved.LastBinding is { } binding) FalloutFistp32Abi.RequireBinding(binding);
+        ValidateModelKeyFistp(saved);
         if (saved.Last is { } pair)
         {
             ValidateContext(pair.Context);

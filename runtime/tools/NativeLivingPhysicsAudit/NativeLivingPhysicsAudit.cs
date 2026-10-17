@@ -50,6 +50,12 @@ public partial class NativeLivingPhysicsAudit : Node
         using var world = new FalloutLivingPhysicalWorld(backend, uint.MaxValue - 1);
         var bodies = model.Bodies.ToDictionary(body => body.Source.Block.Index);
         var constraints = model.Constraints.ToDictionary(value => value.Source.Header.Block.Index);
+        Require(bodies.Values.Where(body => body.ConstructionShape is not null).All(body =>
+            ReferenceEquals(body.ConstructionShape, body.Backend.PrimitiveShape)),
+            "Native body construction detached its actual primitive parameter owner.");
+        Require(constraints.Values.All(joint => ReferenceEquals(joint.Parameters,
+            joint.Wrapper.CurrentData is { Type: 13 } outer ? outer.Wrapped?.Joint : joint.Wrapper.CurrentData?.Joint)),
+            "Current constraint wrapper lost the same native joint parameter owner or malleable child.");
         Require(bodies.Count == 3 && constraints.Count == 4 && bodies.Values.All(body => body.Backend.HasPhysicalObject && !body.Backend.IsWorldAttached &&
             body.CurrentWorld is null && body.Island is null && body.IncomingConstraints.Count == 0 && body.OutgoingConstraints.Count == 0),
             "Source declarations substituted for real detached bodies or current memberships.");

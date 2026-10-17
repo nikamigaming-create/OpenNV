@@ -30,6 +30,9 @@ internal static partial class PlayerWorldOrientationContracts
         var yaw = ordinary.Reference.ReadCurrentReferenceYaw(ordinary.Main, 1);
         var commandConstructor = Guid.NewGuid();
         var rawRotation = ordinary.Reference.ReadPackageCommandRawRotationZ(commandConstructor);
+        var physicalRotation = ordinary.Reference.ReadPhysicalReferenceRotation(commandConstructor);
+        Require(physicalRotation.X == Bits(-0.25f) && physicalRotation.Y == Bits(0.25f) && physicalRotation.Z == Bits(0.5f),
+            "Physical construction borrowed rendered orientation or the separate Player yaw offset.");
         Require(rawRotation.ZBits == Bits(0.5f) && rawRotation.ZBits != FalloutPlayerControlOrientation.Yaw(yaw, ordinary.Fields.ReadYawOffset()) &&
             rawRotation.Process == ordinary.Reference.Process && rawRotation.Factory == ordinary.Reference.Factory &&
             rawRotation.Constructor == commandConstructor && rawRotation.Reference == ordinary.Reference.Binding.Reference,
@@ -93,6 +96,8 @@ internal static partial class PlayerWorldOrientationContracts
         Reject(() => FalloutPlayerReferenceOrientationOwner.Validate(reference with { Publications = null }));
         Require(restoredReference.ReadCurrentWorldFov(actualMain, 1).Bits == Bits(42) &&
             restoredReference.ReadCurrentReferencePitch(actualMain, 1).Bits == Bits(-0.25f), "Cold current getters omitted restored field bits.");
+        Require(restoredReference.ReadPhysicalReferenceRotation(Guid.NewGuid()) == warm.Reference.ReadPhysicalReferenceRotation(Guid.NewGuid()),
+            "Cold physical construction changed independent raw reference rotation fields.");
         Require(restoredReference.Capture().ProjectionWorld == world &&
             restoredReference.Capture().ProjectionRootFactory == restoredRoot.Factory &&
             restoredReference.Capture().ProjectionWorld != reference.ProjectionWorld,

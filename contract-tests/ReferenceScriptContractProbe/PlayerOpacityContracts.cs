@@ -101,6 +101,19 @@ internal static partial class PlayerOpacityContracts
         Require(!opacity.SkipTeleportUpdate(() => throw new InvalidOperationException("Zero gates queried state.")), "Default source gates skipped fade.");
         var invocation = Guid.NewGuid();
         var call = common.UpdateTeleportFade(source, actor, 1, invocation, (_, read, store) => opacity.BindTeleportConsumers(main, 1, invocation, read, store));
+        // Teleport retains this query header but consumes its own fade fields.
+        // Independent process pointers cannot become null-only prerequisites.
+        var observedPointers = call with { Before = call.Before with
+        {
+            AnimationContext = Guid.NewGuid(), IdlePrimaryPackage = Guid.NewGuid(), ActorValueCache = Guid.NewGuid(),
+            WeaponEntry = new(Guid.NewGuid(), actor, 1)
+        } };
+        FalloutProcessTeleportFadeReceipt.Validate(observedPointers, stack, source.Controls.Main.EngineSha256, true);
+        var pointerHistory = JsonSerializer.Deserialize<FalloutProcessTeleportFadeUpdate>(JsonSerializer.Serialize(observedPointers))!;
+        FalloutProcessTeleportFadeReceipt.Validate(pointerHistory, stack, source.Controls.Main.EngineSha256, true);
+        Require(pointerHistory.Before == observedPointers.Before, "Teleport history erased independent current process pointers.");
+        Reject(() => FalloutProcessTeleportFadeReceipt.Validate(pointerHistory with
+        { Before = pointerHistory.Before with { AnimationContext = Guid.Empty } }, stack, source.Controls.Main.EngineSha256, true));
         Require(call.AfterFields.FadeBits == Bits(.25f) && common.ReadOpacity(actor, 1).Opacity is { EffectiveBits: 0x3e800000, Stores: 1 } &&
             opacity.Capture().Call is { EffectiveStored: true, Step: FalloutPlayerOpacityStep.Returned, Scene.Stores.Count: 3 },
             "Real current High fields or source model were replaced with entry metadata/opaque one.");

@@ -37,7 +37,7 @@ internal sealed partial class FalloutStandalonePlayerSceneState
         { ModelCacheReads = _idleAnimationCall.ModelCacheReads!.Append(cache).ToArray(), Changed = Next() };
         return cache.Matched ? cache.Model : readFallback();
     }
-    internal FalloutIdleAnimationContext? ReadSelectedIdleAnimation(Func<FalloutIdleAnimationContext> readFirstPerson,
+    internal FalloutIdleAnimationContext? ReadSelectedIdleAnimation(Func<FalloutIdleAnimationContext?> readFirstPerson,
         Func<FalloutIdleAnimationContext?> readFallback)
     {
         RequireThread(); ObjectDisposedException.ThrowIf(_retired, this);

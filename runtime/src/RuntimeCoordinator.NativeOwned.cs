@@ -280,6 +280,7 @@ public partial class RuntimeCoordinator
                     scale = new[] { actor.Scale.X, actor.Scale.Y, actor.Scale.Z },
                     animation = actor.Observation,
                 }).ToArray(),
+            sourceSceneLights = _nativeReferences?.SourceSceneLightState,
             lights = cellChildren is null ? null : NativePlacedLightNodes().Select(light => new
             {
                 reference = light.GetMeta("opennv_ligh_reference", "").AsString(),
@@ -1378,6 +1379,8 @@ public partial class RuntimeCoordinator
             region => (_nativeSkyLighting ?? throw new InvalidOperationException("Sky lighting state is absent."))
                 .RegionEmittance(region, (_nativeGameTime ?? throw new InvalidOperationException("Sky has no simulation clock.")).Hour));
         light.SetMeta("opennv_reference_form_key", reference.FormKey.ToString());
+        ((RuntimeNativePlacedLight)light).BindSourceScene((_nativeReferences ??
+            throw new InvalidOperationException("Placed light has no source World.")).AttachScenePointLight);
         root.AddChild(light);
     }
 
@@ -1493,6 +1496,7 @@ public partial class RuntimeCoordinator
             throw new NotSupportedException("Rest has no actual native world clock."), () => CreateNativeSaveSite(), restore?.State);
         BindNativeReferenceEvents(_nativeCurrentCellRoot ??
             throw new InvalidOperationException("Player construction has no attached source CELL."), initialCell);
+        BindNativeCallingThreadFistp(_nativeReferences!);
         _nativePlayer.PublishRequiredPlayerPhysicalBody();
         if (restore is not null && _nativeReferences!.SourceLinkedPlayerConstructed)
             _nativeReferences.RebindSourcePlayerLinkedCell(initialCell.Cell.FormKey);
@@ -1529,6 +1533,7 @@ public partial class RuntimeCoordinator
 
     private void AddNativeCellEnvironment(Node3D root, FalloutCellScene cell)
     {
+        (_nativeReferences ?? throw new InvalidOperationException("Cell lighting has no source World.")).StoreSceneCellLighting(cell.Cell);
         var lighting = cell.Cell.Lighting ??
             throw new InvalidDataException(
                 $"Native CELL {cell.Cell.FormKey} has no resolved XCLL/LGTM lighting.");

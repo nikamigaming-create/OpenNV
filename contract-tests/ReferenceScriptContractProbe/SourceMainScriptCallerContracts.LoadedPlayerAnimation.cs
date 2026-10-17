@@ -51,6 +51,11 @@ internal static partial class SourceMainScriptCallerContracts
             resources.ObserveEnteredWriter("authored-real-slot-writer", () => guard(invocation));
             Reject(() => resources.ClearForAnimationLoad(invocation, guard));
             var commonContext = new FalloutSourceAnimationContextState(source.Tail, invocation, guard, () => { }, FalloutLoadedAnimationRole.Common);
+            var unboundQuery = new FalloutProcessSceneQuery(invocation.CommonProcess, fixture.Stack,
+                source.Tail.Scene.Main.EngineSha256, invocation.Actor, invocation.Epoch, FalloutDetectionProcessLevel.High,
+                Guid.NewGuid(), 1, null, commonContext.Identity);
+            Reject(() => commonContext.ReadCommonProcessQuery(unboundQuery));
+            Reject(() => commonContext.ReadIdleContext(FalloutLoadedAnimationRole.Common));
             fixture.Initializer.SetLoadedAnimationFlag(source, invocation, false, null, guard);
             var flag = fixture.Initializer.SetLoadedAnimationFlag(source, invocation, true, commonContext, guard);
             var capturedFlags = fixture.Initializer.Capture();
@@ -81,6 +86,8 @@ internal static partial class SourceMainScriptCallerContracts
             Require(inner.Scope.RestoredKind == 52 && outer.Scope.RestoredKind == outer.Scope.BeforeKind,
                 "Nested animation scopes did not restore their actual prior kinds.");
             first.Retire(); commonContext.Retire();
+            Reject(() => commonContext.ReadIdleContext(FalloutLoadedAnimationRole.Common));
+            Reject(() => commonContext.ReadCommonProcessQuery(unboundQuery));
             var healthy = true; var releases = 0; var retiredBindings = 0;
             var node = new FalloutReferenceModelDataNode(new(invocation.ReferenceProcess, logical.Factory, 123), logical,
                 () => { if (!healthy) throw new InvalidOperationException("authored-failed-model-child"); },
