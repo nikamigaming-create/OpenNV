@@ -24,27 +24,8 @@ internal sealed record FalloutPlayerControlCommand(
     private const int SneakingIndex = 6;
 
     internal FalloutPlayerControlState Apply(FalloutPlayerControlState state)
-        => Apply(state, ExpandArguments(Enable ? [true, true, true, true, true, true, true] :
-            [true, true, true, true, false, false, false]));
-
-    internal FalloutPlayerControlState ApplyStandalone(FalloutPlayerControlState state)
-        => Apply(state, SelectedStandaloneArguments());
-
-    internal bool[] SelectedStandaloneArguments()
-        // The reviewed FO3 handler defaults movement, Pip-Boy and fighting.
-        // Its fourth argument (POV) has an independent zero default.
-        => ExpandArguments(Enable ? [true, true, true, true, true, true, true] :
-            [true, true, true, false, false, false, false]);
-
-    private bool[] ExpandArguments(bool[] defaults)
     {
         if (Arguments.Count > 7) throw new InvalidDataException("Player control mask has more than seven flags.");
-        for (var index = 0; index < Arguments.Count; ++index) defaults[index] = Arguments[index];
-        return defaults;
-    }
-
-    private FalloutPlayerControlState Apply(FalloutPlayerControlState state, bool[] arguments)
-    {
         var values = new[]
         {
             state.Movement,
@@ -55,6 +36,9 @@ internal sealed record FalloutPlayerControlCommand(
             state.RolloverText,
             state.Sneaking,
         };
+        var arguments = Enable ? new[] { true, true, true, true, true, true, true } :
+            new[] { true, true, true, true, false, false, false };
+        for (var index = 0; index < Arguments.Count; ++index) arguments[index] = Arguments[index];
         for (var index = 0; index < arguments.Length; ++index)
         {
             if (arguments[index])
@@ -74,8 +58,7 @@ internal sealed record FalloutOpeningControlStage(
     IReadOnlyList<FalloutPlayerControlCommand> Commands);
 
 internal sealed record FalloutOpeningControlGraph(
-    IReadOnlyDictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>> Quests,
-    bool ResultDriven = false)
+    IReadOnlyDictionary<string, IReadOnlyDictionary<short, FalloutOpeningControlStage>> Quests)
 {
     internal FalloutOpeningControlStage Stage(string questEditorId, short stage)
     {
@@ -93,16 +76,7 @@ internal static class FalloutOpeningPlayerControlResolver
 
     internal static FalloutOpeningControlGraph Resolve(
         FalloutPluginStack stack,
-        IReadOnlyList<string> questEditorIds) => Resolve(stack, questEditorIds, diagnostic: true);
-
-    // The product catalog resolves identity and stage declarations only. Its
-    // shared result executor owns controls, conditionals, timers and mutations.
-    internal static FalloutOpeningControlGraph ResolveForExecution(
-        FalloutPluginStack stack,
-        IReadOnlyList<string> questEditorIds) => Resolve(stack, questEditorIds, diagnostic: false);
-
-    private static FalloutOpeningControlGraph Resolve(FalloutPluginStack stack,
-        IReadOnlyList<string> questEditorIds, bool diagnostic)
+        IReadOnlyList<string> questEditorIds)
     {
         ArgumentNullException.ThrowIfNull(stack);
         ArgumentNullException.ThrowIfNull(questEditorIds);
@@ -121,15 +95,15 @@ internal static class FalloutOpeningPlayerControlResolver
                 throw new InvalidDataException(
                     $"Native opening requires exactly one winning {editorId} QUST; found {matches.Length}.");
             var quest = matches[0];
-            var stages = ReadStages(quest, editorId, diagnostic);
+            var stages = ReadStages(quest, editorId);
             quests.Add(editorId, stages);
         }
-        return new FalloutOpeningControlGraph(quests, ResultDriven: !diagnostic);
+        return new FalloutOpeningControlGraph(quests);
     }
 
     private static IReadOnlyDictionary<short, FalloutOpeningControlStage> ReadStages(
         FalloutPluginRecord quest,
-        string editorId, bool diagnostic)
+        string editorId)
     {
         var subrecords = quest.ReadSubrecords().ToArray();
         var result = new Dictionary<short, FalloutOpeningControlStage>();
@@ -143,10 +117,10 @@ internal static class FalloutOpeningPlayerControlResolver
             var end = index + 1;
             while (end < subrecords.Length && subrecords[end].Signature is not ("INDX" or "QOBJ"))
                 end++;
-            var sources = diagnostic ? subrecords[(index + 1)..end]
+            var sources = subrecords[(index + 1)..end]
                 .Where(value => value.Signature == "SCTX")
                 .Select(value => ReadSource(quest, value.Data.Span))
-                .ToArray() : [];
+                .ToArray();
             var source = string.Join(System.Environment.NewLine, sources);
             var commands = sources.SelectMany(value => ReadCommands(quest, value)).ToArray();
             if (!result.TryAdd(

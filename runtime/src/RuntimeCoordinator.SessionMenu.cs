@@ -10,7 +10,6 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator
 {
-    private enum NativeSessionQuitOrigin { SourceMenu, SessionMenu, WindowClose }
     private static Dictionary<string, string>? _nextSessionOptions;
     private static bool _nextSessionContinue;
     private static bool _nextSessionPauseAfterCheckpointLoad;
@@ -52,7 +51,7 @@ public partial class RuntimeCoordinator
     {
         if (_nativeDeathPresented || _nativeDoorLoading || _nativePlayer is null ||
             _nativeOpeningStageDriver?.Vitals.HitPoints != 0) return;
-        CancelNativeManualSave("Player defeated before the pending manual save could commit.", allQueued: true);
+        CancelNativeManualSave("Player defeated before the pending manual save could commit.");
         _nativeDeathPresented = true;
         if (_nativeXr?.PointAtPipBoy is not null) FocusNativeXrPipBoy(false);
         _nativePlayer.SetModalInput(true);
@@ -63,24 +62,21 @@ public partial class RuntimeCoordinator
     private RuntimeSaveSlotCatalog NativeSaveSlots() => new(Path.GetFullPath(RequireOption(_options, "save-path")), root =>
     {
         if (!root.TryGetProperty("Schema", out var schema) || schema.ValueKind != JsonValueKind.String ||
-            schema.GetString() != FalloutNativeCampaignSave.ExpectedSchema ||
+            !schema.GetString()!.StartsWith("opennv-native-fnv-campaign-save/", StringComparison.Ordinal) ||
             !root.TryGetProperty("SaveCompatibilityId", out var identity) ||
             identity.GetString() != RuntimeLiveContentSource.Current!.SaveCompatibilityId)
             throw new InvalidDataException("This save belongs to a different game or source stack.");
     });
 
     private FalloutNativeCampaignRestore ReadNativeSave(string path) => FalloutNativeCampaignSave.Read(path,
-        RuntimeLiveContentSource.Current!.SaveCompatibilityId, _nativePluginStack!);
+        RuntimeLiveContentSource.Current!.SaveCompatibilityId, _nativePluginStack!, _nativeVigorContract!,
+        _nativeTagSkillContract!, _nativeOpeningGrant!, _nativeTraitFarewellContract!);
 
     internal RuntimeSaveSlotMetadata CreateNativeCheckpoint(Guid id)
     {
         if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePlayer is null ||
             _nativeActiveCell is null || _nativeOpeningStageDriver is null)
             throw new InvalidOperationException("A checkpoint requires a settled native campaign session.");
-        if (_nativeOpeningStageDriver.ManualSourceSaveRequests.Order.Writing is not { } writing ||
-            writing.Request != id || writing.Destination != RuntimeSaveRequestDestination.NewSlot)
-            throw new InvalidOperationException("Checkpoint publication lacks its actual ordered new-slot writer lease.");
-        RequireNativePluginSaveBoundary();
         var slot = NativeSaveSlots().Create(id, () => _nativeOpeningStageDriver.PersistWorldState(_nativeActiveCell.Cell.FormKey));
         GD.Print($"OPENNV_NATIVE_CHECKPOINT_CREATED id={slot.Id} save={slot.Path} owner=shared-campaign-state");
         return slot;
@@ -88,7 +84,9 @@ public partial class RuntimeCoordinator
 
     internal RuntimeSaveSlotMetadata LoadNativeCheckpoint(Guid id, bool pauseAfterLoad)
     {
-        if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePluginStack is null)
+        if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePluginStack is null ||
+            _nativeVigorContract is null || _nativeTagSkillContract is null ||
+            _nativeOpeningGrant is null || _nativeTraitFarewellContract is null)
             throw new InvalidOperationException("Checkpoint loading requires an indexed native source stack.");
         var slot = NativeSaveSlots().ReadSlot(id.ToString("N"));
         SelectNativeSave(slot, pauseAfterLoad);
@@ -117,9 +115,8 @@ public partial class RuntimeCoordinator
         _nativeSessionLayer = new CanvasLayer { Name = "NativeSessionLayer", Layer = 150, ProcessMode = ProcessModeEnum.Always };
         _nativeSessionMenu = new(NativeSaveSlots(), _nativePlayer is not null, showSaves, _nativeOpeningStageDriver?.Vitals.HitPoints == 0,
             CloseNativeSessionMenu, SaveNativeMenuSlot, CancelNativeManualSaveFromInput, LoadNativeSelectedSlot,
-            () => RestartNativeSession(false), () => QuitNativeSession(NativeSessionQuitOrigin.SessionMenu), DescribeNativeSave);
+            () => RestartNativeSession(false), () => QuitNativeSession(), DescribeNativeSave);
         AddChild(_nativeSessionLayer); _nativeSessionLayer.AddChild(_nativeSessionMenu);
-        _nativeOpeningStageDriver?.OpenSourceSessionMenu(_nativeSessionMenu, _nativeUi!);
         _nativePlayer?.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
         GetTree().Paused = true;
         _nativeSessionMenu.ShowManualSaveReceipt(_nativeManualSaves.Receipt);
@@ -130,14 +127,7 @@ public partial class RuntimeCoordinator
     {
         if (_nativeSessionTransitioning) return;
         if (_nativeDeathPresented && !_retiringNativeSession) return;
-        CancelNativeManualSave("Session menu closed before the pending manual save committed.", allQueued: true);
-        if (_nativeSessionMenu is { } closing &&
-            _nativeOpeningStageDriver?.BeginCloseSourceSessionMenu(closing, CompleteNativeSessionMenuClose) == true) return;
-        CompleteNativeSessionMenuClose();
-    }
-
-    private void CompleteNativeSessionMenuClose()
-    {
+        CancelNativeManualSave("Session menu closed before the pending manual save committed.");
         _nativeSessionLayer?.QueueFree(); _nativeSessionLayer = null; _nativeSessionMenu = null;
         _nativePlayer?.SetModalInput(false); GetTree().Paused = _sessionWasPaused; Input.MouseMode = _sessionMouseMode;
         _sessionPreviousMenu?.Show(); _sessionPreviousMenu = null;
@@ -165,13 +155,11 @@ public partial class RuntimeCoordinator
 
     private string RejectNativePendingLoad(Exception failure)
     {
-        failure = RetainNativeCampaignLoadFailure(failure);
-        try { _pendingSaveActivation?.Dispose(); _pendingSaveActivation = null; }
+        try { _pendingSaveActivation?.Dispose(); }
         catch (Exception rollback) { failure = new AggregateException("Load failed and Continue recovery also failed.", failure, rollback); }
-        failure = RetainNativeCampaignLoadFailure(failure);
+        _pendingSaveActivation = null;
         _pendingCheckpointRestore = null;
         _continueAfterRestart = false;
-        RetainNativeLoadFailureDiagnostic(failure);
         GD.PushError($"OPENNV_NATIVE_LOAD_REJECTED {failure}");
         return failure.Message;
     }
@@ -190,28 +178,23 @@ public partial class RuntimeCoordinator
     private async void RestartNativeSession(bool continueSave, bool pauseAfterLoad = false, RuntimeSaveSlotMetadata? checkpoint = null)
     {
         if (_nativeSessionTransitioning) return;
-        CancelNativeManualSave("Native session transition started before the pending manual save could commit.", allQueued: true);
+        CancelNativeManualSave("Native session transition started before the pending manual save could commit.");
         _nativeSessionTransitioning = true;
         try
         {
             BeginLoadingScreen(continueSave ? "Preparing saved game" : "Returning to the main menu");
-            await WaitForHostFrame();
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             await DrainNativeSourceReaders();
             _nextSessionOptions = new(_options, StringComparer.OrdinalIgnoreCase);
             _nextSessionOptions.Remove("launcher"); _nextSessionOptions.Remove("new-game");
-            _nextSessionOptions.Remove("continue-game");
             _nextSessionContinue = continueSave;
             _nextSessionPauseAfterCheckpointLoad = continueSave && pauseAfterLoad;
             _nextSessionCheckpoint = continueSave ? checkpoint : null;
             _nextSessionActivation = continueSave ? _pendingSaveActivation : null;
-            await WaitForHostFrame();
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             _retiringNativeSession = true;
             _nativeQuestScripts?.Scripts.Events.EnterMainMenu();
             _nativeScriptStorage?.Controls?.Flush();
-            _runtimeLiveHarness?.Retire();
-            RetireNativeExperienceHud();
-            RetireCurrentImagePhase();
-            await RetireNativeCellAndHdrConsumers();
             GetTree().Paused = false;
             var error = GetTree().ReloadCurrentScene();
             if (error != Error.Ok) throw new InvalidOperationException($"Session reload failed: {error}.");
@@ -225,34 +208,42 @@ public partial class RuntimeCoordinator
             var failure = RejectNativePendingLoad(error);
             _retiringNativeSession = false;
             _nativeSessionTransitioning = false;
-            GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {_nativeCampaignLoadFailure ?? error}");
+            GD.PushError($"OPENNV_NATIVE_SESSION_RELOAD_FAILURE {error}");
             DismissLoadingScreen();
             GetTree().Paused = true;
             _nativeSessionMenu?.ShowFailure(failure);
         }
     }
 
-    private Task DrainNativeSourceReaders() => DrainActualCampaignReadersAndMainDelivery();
+    private async Task DrainNativeSourceReaders()
+    {
+        GetTree().Paused = true;
+        var pending = _nativeGridNpcPreparations.Select(item => item.ReadTask).ToList();
+        if (_nativeMenuRead is { } menuRead) pending.Add(menuRead);
+        if (_nativePlayerMoveRead is { } moveRead) pending.Add(moveRead);
+        if (_nativeDoorRead is { } doorRead) pending.Add(doorRead);
+        if (_nativeGridRead is { } gridRead) pending.Add(gridRead);
+        foreach (var lod in FindChildren("*", "", true, false).OfType<RuntimeNativeExteriorLod>())
+            pending.Add(lod.StopSourceReads());
+        CancelNativeGridRead();
+        try { await Task.WhenAll(pending); }
+        catch (Exception readError) { GD.Print($"OPENNV_SESSION_OLD_READ_FINISHED {readError.Message}"); }
+    }
 
-    private void OnNativeCloseRequested() => QuitNativeSession(NativeSessionQuitOrigin.WindowClose);
+    private void OnNativeCloseRequested() => QuitNativeSession();
 
-    private async void QuitNativeSession(NativeSessionQuitOrigin origin)
+    private async void QuitNativeSession()
     {
         if (_nativeSessionTransitioning) return;
-        CancelNativeManualSave("Native session transition started before the pending manual save could commit.", allQueued: true);
+        CancelNativeManualSave("Native session transition started before the pending manual save could commit.");
         _nativeSessionTransitioning = true;
-        GD.Print($"OPENNV_NATIVE_SESSION_QUIT_REQUESTED origin={origin}");
         try
         {
             await DrainNativeSourceReaders();
-            await WaitForHostFrame();
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             if (_pendingSaveActivation is not null) RejectNativePendingLoad(new OperationCanceledException("Selected load was cancelled by quitting."));
             _nativeScriptStorage?.Controls?.Flush();
             _retiringNativeSession = true;
-            _runtimeLiveHarness?.Retire();
-            RetireNativeExperienceHud();
-            RetireCurrentImagePhase();
-            await RetireNativeCellAndHdrConsumers();
             StopNativeOpenXr();
             GD.Print($"OPENNV_NATIVE_SESSION_QUIT prototypes={_nativeNifPrototypes.Count} sourceReaders=drained");
             GetTree().Quit();
@@ -265,5 +256,4 @@ public partial class RuntimeCoordinator
             _nativeSessionMenu?.ShowFailure(error.Message);
         }
     }
-
 }

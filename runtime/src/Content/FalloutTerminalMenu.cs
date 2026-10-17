@@ -1,4 +1,3 @@
-using OpenNV.Runtime.Gameplay.State;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -9,7 +8,7 @@ internal sealed record FalloutTerminalSelection(FalloutFormKey Reference, Fallou
     FalloutTerminalEntry Entry, long Generation);
 internal enum FalloutTerminalSelectionState { Executing, Succeeded, Failed }
 internal sealed record FalloutTerminalSelectionReceipt(FalloutTerminalSelection Selection,
-    FalloutTerminalSelectionState State, string? Error = null, FalloutScriptResultReceipt? ResultReceipt = null);
+    FalloutTerminalSelectionState State, string? Error = null);
 
 // The source menu owns selection, not the native row or its visible position.
 // Its host admits the real placed reference and applies all authoritative
@@ -17,7 +16,6 @@ internal sealed record FalloutTerminalSelectionReceipt(FalloutTerminalSelection 
 internal sealed partial class FalloutTerminalMenu
 {
     private readonly FalloutPluginStack _records;
-    private readonly FalloutGlobalState? _globals;
     private readonly Action<FalloutFormKey> _requireAdmission;
     private readonly Func<FalloutFormKey, FalloutCondition, float> _evaluateCondition;
     private readonly Action<FalloutTerminalSelection> _executeSelection;
@@ -42,21 +40,12 @@ internal sealed partial class FalloutTerminalMenu
         (LastReceipt is { State: FalloutTerminalSelectionState.Failed } receipt ? receipt.Error : null);
     internal FalloutTerminalSelectionReceipt? LastReceipt { get; private set; }
 
-    internal void BindResult(FalloutTerminalSelection selection, FalloutScriptResultReceipt result)
-    {
-        if (!_executing || LastReceipt is not { State: FalloutTerminalSelectionState.Executing } current ||
-            !ReferenceEquals(current.Selection, selection) || current.ResultReceipt is not null)
-            throw new InvalidOperationException("Terminal result has no current uncompleted selection owner.");
-        result.Require(selection.Entry.Program.Scope, Reference);
-        LastReceipt = current with { ResultReceipt = result };
-    }
-
     internal FalloutTerminalMenu(FalloutPluginStack records, FalloutFormKey reference,
         Action<FalloutFormKey> requireAdmission,
         Func<FalloutFormKey, FalloutCondition, float> evaluateCondition,
-        Action<FalloutTerminalSelection> executeSelection, FalloutGlobalState? globals = null)
+        Action<FalloutTerminalSelection> executeSelection)
     {
-        _records = records; _globals = globals;
+        _records = records;
         _requireAdmission = requireAdmission ?? throw new ArgumentNullException(nameof(requireAdmission));
         _evaluateCondition = evaluateCondition ?? throw new ArgumentNullException(nameof(evaluateCondition));
         _executeSelection = executeSelection ?? throw new ArgumentNullException(nameof(executeSelection));
@@ -122,8 +111,6 @@ internal sealed partial class FalloutTerminalMenu
         {
             var submenu = selected.Entry.Submenu is { } form ? FalloutTerminal.Read(_records, form) : null;
             _executeSelection(selected);
-            var result = LastReceipt?.ResultReceipt ??
-                throw new InvalidOperationException("Terminal selection completed without its shared result execution owner.");
             DisplayText = selected.Entry.ResultText;
             DisplayNote = selected.Entry.Note;
             if (submenu is not null)
@@ -135,7 +122,7 @@ internal sealed partial class FalloutTerminalMenu
                 _visible = ReadVisibleEntries();
             }
             else _result = selected.Entry;
-            LastReceipt = new(selected, FalloutTerminalSelectionState.Succeeded, ResultReceipt: result);
+            LastReceipt = new(selected, FalloutTerminalSelectionState.Succeeded);
         }
         catch (Exception error)
         {
@@ -194,7 +181,7 @@ internal sealed partial class FalloutTerminalMenu
     }
 
     private bool Eligible(FalloutTerminalEntry entry) => FalloutCondition.AllPass(entry.Conditions,
-        condition => _evaluateCondition(Reference, condition), evaluateRunOn: true, globals: _globals);
+        condition => _evaluateCondition(Reference, condition), evaluateRunOn: true);
 
     private void RequireReady(bool allowResult = false)
     {

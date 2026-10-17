@@ -10,9 +10,9 @@ internal sealed record FalloutIngestibleUse(FalloutFormKey? Sound, Func<FalloutI
 
 // The same item transaction and gameplay clock serve flat and wrist UI input.
 // Timers store magnitudes selected at consumption, never recomputed on reload.
-internal sealed partial class FalloutPlayerIngestibles(FalloutPluginStack records, FalloutPlayerInventory inventory,
+internal sealed class FalloutPlayerIngestibles(FalloutPluginStack records, FalloutPlayerInventory inventory,
     FalloutPlayerVitals vitals, FalloutBodyPartData bodyParts, Func<int, float> actorValue,
-    Func<FalloutFormKey, bool> hasPerk, Func<bool> hardcore, FalloutGlobalState? globals = null)
+    Func<FalloutFormKey, bool> hasPerk, Func<bool> hardcore)
 {
     private readonly Dictionary<FalloutFormKey, FalloutIngestible> _definitions = [];
     private readonly List<FalloutIngestibleActiveEffect> _active = [];
@@ -32,14 +32,12 @@ internal sealed partial class FalloutPlayerIngestibles(FalloutPluginStack record
             throw new NotSupportedException($"Ingestible {form} requires its flags, script or addiction owner.");
         if (source.Effects.All(effect => (effect.Flags & 5) == 5))
             throw new NotSupportedException("Poison application requires its equipped-weapon owner.");
-        var selected = source.Effects.Where(effect => FalloutCondition.AllPass(effect.Conditions, Condition, globals: globals)).ToArray();
-        var scriptUse = PrepareScriptedEffects(source, selected);
+        var selected = source.Effects.Where(effect => FalloutCondition.AllPass(effect.Conditions, Condition)).ToArray();
         var before = vitals.State;
         var after = before;
         var timers = new List<FalloutIngestibleActiveEffect>();
         foreach (var effect in selected)
         {
-            if (effect.Archetype == 1) continue;
             ValidateEffect(effect);
             var magnitude = Magnitude(source, effect);
             if (effect.EffectiveDuration == 0) after = Apply(after, effect, magnitude);
@@ -53,9 +51,9 @@ internal sealed partial class FalloutPlayerIngestibles(FalloutPluginStack record
             if (used || inventory.Revision != revision || !ReferenceEquals(vitals.State, before))
                 throw new InvalidOperationException("Prepared Aid use is stale or already committed.");
             used = true;
-            void PublishPools() { vitals.Publish(after); _active.AddRange(timers); }
-            if (scriptUse is null) { inventory.Remove(form, 1, true); PublishPools(); }
-            else scriptUse.Commit(PublishPools);
+            inventory.Remove(form, 1, true);
+            vitals.Publish(after);
+            _active.AddRange(timers);
             return new(form, true, before.ExactHitPoints, after.ExactHitPoints);
         });
     }

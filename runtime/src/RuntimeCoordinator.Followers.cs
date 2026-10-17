@@ -13,13 +13,12 @@ public partial class RuntimeCoordinator
 
     private IReadOnlyList<DoorFollower> BeginFollowerDoorTransfer(Node3D current, FalloutFormKey cell, FalloutTeleportDestination entry)
     {
-        var followers = current.FindChildren("*", "", true, false).OfType<IRuntimeNativeFollower>()
+        var followers = current.FindChildren("*", "", true, false).OfType<RuntimeNativeCreature>()
             .Where(actor => actor.FollowingPlayer).Select(actor =>
             {
-                var key = actor.FollowerReference;
+                var key = actor.Appearance.Reference!.Value;
                 var state = _nativeReferences!.Get(key);
-                var motion = state.CapturePackageMotion is { } captureMotion ? captureMotion() : state.PackageMotion;
-                return new DoorFollower(key, _nativeReferences.Placement(key), motion, state.Engagement);
+                return new DoorFollower(key, _nativeReferences.Placement(key), state.PackageMotion, state.Engagement);
             }).ToArray();
         try
         {
@@ -52,11 +51,10 @@ public partial class RuntimeCoordinator
         var reserved = new List<(Vector3 Point, float Radius)> { (origin, _nativePlayer!.CombatRadius) };
         foreach (var follower in followers)
         {
-            var actor = root.FindChildren("*", "", true, false).OfType<IRuntimeNativeFollower>()
-                .Single(value => value.FollowerReference == follower.Reference);
-            var body = actor.FollowerBody;
-            var radius = actor.FollowerCombat.PreparePortalArrival();
-            using var clearance = new NativeCapsulePlacementQuery(body);
+            var actor = root.FindChildren("*", "", true, false).OfType<RuntimeNativeCreature>()
+                .Single(value => value.Appearance.Reference == follower.Reference);
+            var radius = actor.Combat!.PreparePortalArrival();
+            using var clearance = new NativeCapsulePlacementQuery(actor);
             var candidates = Enumerable.Range(1, 4).SelectMany(ring => Enumerable.Range(0, 12).Select(index =>
                 graph.FindNearestPoint(Source(origin + new Vector3(MathF.Cos(index * MathF.Tau / 12), 0,
                     MathF.Sin(index * MathF.Tau / 12)) * (radius * 2 + .5f) * ring))))
@@ -67,7 +65,7 @@ public partial class RuntimeCoordinator
             {
                 var point = World(candidate);
                 if (point.DistanceSquaredTo(origin) > 36 || reserved.Any(item =>
-                    new Vector2(point.X - item.Point.X, point.Z - item.Point.Z).Length() < radius + item.Radius + body.SafeMargin * 4) ||
+                    new Vector2(point.X - item.Point.X, point.Z - item.Point.Z).Length() < radius + item.Radius + actor.SafeMargin * 4) ||
                     !clearance.CanStand(point)) continue;
                 try
                 {
@@ -79,11 +77,11 @@ public partial class RuntimeCoordinator
                 break;
             }
             if (selected is not { } arrival) throw new NotSupportedException($"Follower {follower.Reference} has no source-NAVM arrival with native capsule clearance.");
-            body.GlobalPosition = arrival + Vector3.Up * body.SafeMargin * 4;
-            var source = Source(body.GlobalPosition);
+            actor.GlobalPosition = arrival + Vector3.Up * actor.SafeMargin * 4;
+            var source = Source(actor.GlobalPosition);
             _nativeReferences!.SetPlacement(follower.Reference, new(scene.Cell.FormKey, [source.X, source.Y, source.Z], (float[])entry.RotationRadians.Clone()));
             reserved.Add((arrival, radius));
-            GD.Print($"OPENNV_FOLLOWER_DOOR_ARRIVAL reference={follower.Reference} cell={scene.Cell.FormKey} clearance=native-capsule path=source-NAVM position={body.GlobalPosition}");
+            GD.Print($"OPENNV_FOLLOWER_DOOR_ARRIVAL reference={follower.Reference} cell={scene.Cell.FormKey} clearance=native-capsule path=source-NAVM position={actor.GlobalPosition}");
         }
     }
 }

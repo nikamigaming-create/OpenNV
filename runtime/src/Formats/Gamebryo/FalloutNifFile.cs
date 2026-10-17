@@ -202,16 +202,6 @@ internal sealed partial class FalloutNifFile
         return Interlocked.CompareExchange(ref _decodedObjects[blockIndex], decoded, null) ?? decoded;
     }
 
-    internal string ReadExtraDataName(int blockIndex)
-    {
-        RequireReference(blockIndex, Blocks.Count, "extra-data name", allowNull: false);
-        // NiAVObject's extra-data links point to NiExtraData. Its base name
-        // precedes the independent derived payload; name lookup does not
-        // instantiate or claim support for that unrelated payload.
-        var cursor = BlockCursor(Blocks[blockIndex]);
-        return ReadStringReference(ref cursor, "extra-data base name");
-    }
-
     private FalloutNifObject DecodeObject(int blockIndex)
     {
         var block = Blocks[blockIndex];
@@ -269,9 +259,6 @@ internal sealed partial class FalloutNifFile
             "NiBlendPoint3Interpolator" => ReadBlendPoint3Interpolator(block, ref cursor),
             "NiTextureTransformController" => ReadTextureTransformController(block, ref cursor),
             "NiMaterialColorController" => ReadMaterialColorController(block, ref cursor),
-            "NiLightColorController" => new FalloutNifLightColorController(block,
-                ReadTimeController(ref cursor, "light color controller"), ReadReference(ref cursor, "light color interpolator"),
-                cursor.ReadUInt16("light color target")),
             "NiAlphaController" => new FalloutNifAlphaController(block, ReadTimeController(ref cursor, "alpha controller"), ReadReference(ref cursor, "alpha interpolator")),
             "BSMaterialEmittanceMultController" => new FalloutNifEmittanceController(block,
                 ReadTimeController(ref cursor, "emittance controller"), ReadReference(ref cursor, "emittance interpolator")),
@@ -2138,9 +2125,6 @@ internal sealed record FalloutNifTextureTransformController(
     bool ShaderMap,
     uint TextureSlot,
     uint Operation) : FalloutNifObject(Block);
-
-internal sealed record FalloutNifLightColorController(FalloutNifBlock Block, FalloutNifTimeController Time,
-    int Interpolator, ushort TargetColor) : FalloutNifObject(Block);
 
 internal sealed record FalloutNifMaterialColorController(
     FalloutNifBlock Block,

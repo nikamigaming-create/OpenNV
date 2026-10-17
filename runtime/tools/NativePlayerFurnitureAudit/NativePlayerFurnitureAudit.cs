@@ -71,22 +71,24 @@ public partial class NativePlayerFurnitureAudit : Node3D
             var creation = FalloutNativeRaceSexResolver.Resolve(records);
             var appearance = FalloutNpcAppearanceResolver.Resolve(records, creation.Player, equippedArmor: [],
                 appearanceState: FalloutNativeCharacterCreation.ActorState(records, creation.Player, creation.Initial));
-            var model = cell.BaseObjects[reference.Base].ModelPath!;
-            if (!content.TryRead(model, null, out var sourceFurnitureBytes, out _)) throw new FileNotFoundException("Furniture model is absent.", model);
-            prototype = new(sourceFurnitureBytes, units);
-            furnitureNode = prototype.InstantiatePlaced(placement); AddChild(furnitureNode);
             player = new RuntimeNativePlayer();
             AddChild(player);
             player.Configure(configuration, placement);
             player.SetPhysicsProcess(false); player.SetProcessUnhandledInput(false);
-            var quests = new FalloutQuestState(records);
-            using var physicalSource = FalloutAdvancementRuntimeSource.Open(records);
-            NativeSourcePlayerPhysicalSetup.Configure(player, records, quests, world, appearance,
-                physicalSource.Receipt, key => key == reference.FormKey && world.IsEnabled(key) && furnitureNode?.IsInsideTree() == true
-                    ? furnitureNode.GlobalTransform : throw new NotSupportedException("Furniture diagnostic has no attached enabled source instance."));
-            player.ActivateFurniture(records, quests, reference, furnitureNode.GlobalTransform, cell.Cell.FormKey, world);
+            player.CreateFurnitureBody = () =>
+            {
+                var body = RuntimeNativeNpc.Create(appearance with { Reference = records.RuntimeFormKey(0x14) }, content, units,
+                    (_, _, _, _) => new StandardMaterial3D());
+                try { body.ConfigureContactShapes(configuration.Player.CollisionLayer); return body; }
+                catch { body.Free(); throw; }
+            };
+            player.ActivateFurniture(records, new(records), reference, placement, cell.Cell.FormKey, world);
             if (args.Length >= 4)
             {
+                var model = cell.BaseObjects[reference.Base].ModelPath!;
+                if (!content.TryRead(model, null, out var bytes, out _)) throw new FileNotFoundException("Furniture model is absent.", model);
+                prototype = new(bytes, units);
+                furnitureNode = prototype.InstantiatePlaced(placement); AddChild(furnitureNode);
                 var approach = player.FurnitureApproach;
                 // A controlled lab start one stride behind the authored approach;
                 // the real body must still move past the source collision shape.
@@ -125,11 +127,11 @@ public partial class NativePlayerFurnitureAudit : Node3D
                 phases.Add(phase);
                 if (phase == "occupied" && ++occupiedFrames >= 180 && !occupied)
                 {
-                    if (player.CurrentFurniture != reference.FormKey || player.GetPlayerKnockedState() != 0)
+                    if (player.CurrentFurniture != reference.FormKey || player.GetChildren().OfType<RuntimeNativeNpc>().Count() != 1)
                         throw new InvalidOperationException("Furniture lost its actual player state/body.");
                     occupied = true;
                     occupiedIndex = state.GetProperty("marker").GetInt32();
-                    CheckActualFurnitureActivation(player);
+                    if (!player.RequestFurnitureExit()) throw new InvalidOperationException("Occupied furniture did not accept exit.");
                 }
                 if (phase == "none" && occupied) break;
             }
@@ -137,7 +139,7 @@ public partial class NativePlayerFurnitureAudit : Node3D
                 throw new InvalidOperationException("Furniture phase or reference lifetime is incomplete.");
             if (occupiedIndex is not { } releasedIndex || !world.ReserveFurnitureSeat(reference.FormKey, releasedIndex, records.RuntimeFormKey(0x14)))
                 throw new InvalidOperationException("Completed player furniture did not release its source reservation.");
-            GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_AUDIT_PASS reference={reference.FormKey} entry=true body=true loop=true exit=true sittingQuery=true sourceCollision={args.Length >= 4} modalLease=true sourceControls=true xrExitRequest=true recording=off ordinary-input-and-pixels=unverified");
+            GD.Print($"OPENNV_NATIVE_PLAYER_FURNITURE_AUDIT_PASS reference={reference.FormKey} entry=true body=true loop=true exit=true sittingQuery=true sourceCollision={args.Length >= 4} recording=off ordinary-input-and-pixels=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }

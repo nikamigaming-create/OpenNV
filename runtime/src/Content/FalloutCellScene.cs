@@ -65,19 +65,7 @@ internal sealed record FalloutTeleportDestination(
     FalloutFormKey Door,
     float[] Position,
     float[] RotationRadians,
-    uint Flags)
-{
-    // The final XTEL uint is the source No Alarm boolean, not a transition
-    // bitmask. Retain the raw value for persistence and diagnostics.
-    internal bool NoAlarm => ReadNoAlarm(Flags);
-
-    internal static bool ReadNoAlarm(uint value) => value switch
-    {
-        0 => false,
-        1 => true,
-        _ => throw new NotSupportedException($"XTEL No Alarm value 0x{value:x8} is unowned."),
-    };
-}
+    uint Flags);
 
 internal sealed record FalloutCellScene(
     FalloutCellDefinition Cell,

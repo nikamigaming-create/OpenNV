@@ -5,7 +5,10 @@ param(
     [string]$Configuration = "Release",
     [switch]$ValidateOnly,
     [switch]$Vr,
-    [ValidateSet('installed', 'none')][string]$NativePlugins = 'installed'
+    [ValidateSet('none')][string]$NativePlugins = 'none',
+    [ValidateSet('vanilla', 'installed')][string]$ContentSelection = 'vanilla',
+    [ValidateSet('newvegas', 'fallout3', 'fallout1', 'fallout2')][string]$Game = 'newvegas',
+    [string]$ProfileRoot = ''
 )
 
 $ErrorActionPreference = "Stop"
@@ -89,6 +92,14 @@ foreach ($requiredFile in @(
 & (Join-Path $PSScriptRoot 'Build-NativeAudio.ps1') -Godot $versionCheckPath
 & (Join-Path $PSScriptRoot 'Build-NativePluginDomain.ps1') -Configuration Release
 
+if ([string]::IsNullOrWhiteSpace($ProfileRoot)) {
+    $ProfileRoot = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Godot/app_userdata/OpenNV/vanilla'
+}
+$ProfileRoot = [IO.Path]::GetFullPath($ProfileRoot)
+$launchArguments = @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }), '--', '--launcher',
+    '--launcher-game', $Game, '--presentation', $(if ($Vr) { 'openxr' } else { 'first-person' }),
+    '--native-plugins', $NativePlugins, '--content-selection', $ContentSelection, '--profile-root', $ProfileRoot)
+
 if ($Configuration -eq "Release") {
     # The editor's --path runner always loads Debug OpenNV and GodotSharp.
     # ExportRelease compiles both against the optimized runtime and produces
@@ -135,9 +146,9 @@ if ($ValidateOnly) {
 if ($Configuration -eq "Release") {
     # The exported Godot runtime is now the product launcher and game. The
     # selected world is entered in this same process.
-    & $exportExecutable --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher --presentation $(if ($Vr) { 'openxr' } else { 'first-person' }) --native-plugins $NativePlugins
+    & $exportExecutable @launchArguments
 } else {
-    & $godotPath --path $runtimeRoot --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher --presentation $(if ($Vr) { 'openxr' } else { 'first-person' }) --native-plugins $NativePlugins
+    & $godotPath --path $runtimeRoot @launchArguments
 }
 if ($LASTEXITCODE -ne 0) {
     throw "OpenNV Godot launcher exited with code $LASTEXITCODE."

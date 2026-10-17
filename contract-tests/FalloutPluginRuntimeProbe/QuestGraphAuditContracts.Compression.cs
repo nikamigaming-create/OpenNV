@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
@@ -6,9 +7,10 @@ internal static partial class QuestGraphAuditContracts
 {
     private static void CompressedEmptyControl(string directory)
     {
-        // Explicit RFC 1950 framing with a final fixed-Huffman EOB keeps the
-        // malformed-envelope controls independent of the SDK's empty codec.
-        byte[] framed = [0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01];
+        using var encoded = new MemoryStream();
+        using (var compressor = new ZLibStream(encoded, CompressionLevel.Optimal, leaveOpen: true))
+            compressor.Write(Array.Empty<byte>());
+        var framed = encoded.ToArray();
         var nonFinal = framed.ToArray();
         nonFinal[2] &= 0xfe;
         var invalidWindow = framed.ToArray();

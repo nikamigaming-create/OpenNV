@@ -8,14 +8,14 @@ using System.Text;
 namespace OpenNV.Runtime.Compatibility.NativePlugins;
 
 // C# owns each process generation, request, callback, fault and retirement.
-// Authored diagnostic calls and source-bound NVSE initialization share this
-// owner. Game objects, engine hooks and plugin co-save I/O require separate owners.
+// This first slice admits authored modules only. It provides no NVSE interface,
+// engine object projection, binary hook continuation or plugin persistence.
 internal sealed partial class NativePluginExecutionDomain : IDisposable
 {
     private static long _generationSequence = RandomNumberGenerator.GetInt32(1, int.MaxValue);
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private readonly object _faultGate = new();
-    private readonly NativePluginDomainChild _process;
+    private readonly Process _process;
     private readonly TimeSpan _timeout;
     private readonly int _maximumDepth, _maximumCallbacks;
     private readonly Task _diagnosticDrain;
@@ -35,12 +35,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     internal int ProcessId { get; }
     internal uint NativeThread { get; private set; }
     internal bool NaturallyRetired => _retired;
-    internal bool ResourcesRetired => _disposed && ChildExited && _process.ResourcesRetired && _privateIo is null && ImportProviderSourcesRetired && MutexNamespaceOwnersRetired && WindowProcessOwnersRetired && EngineGlobalSourcesRetired;
     internal bool ChildExited { get => Volatile.Read(ref _childExited); private set => Volatile.Write(ref _childExited, value); }
-    internal int? ChildExitCode { get; private set; }
-    internal NativePluginTokenObjectReceipt? ObjectSecurity => _process.ObjectSecurity;
-    internal NativePluginDesktopReceipt? Desktop => _process.Desktop;
-    private bool _childExitDiagnosticPublished;
     internal NativePluginDomainFault? Fault { get { lock (_faultGate) return CurrentFault(); } }
     internal Func<NativePluginCallback, uint>? Callback
     {
@@ -53,7 +48,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         }
     }
 
-    internal NativePluginExecutionDomain(string companion, TimeSpan? timeout = null, int maximumDepth = 8, int maximumCallbacks = 32, NativePluginPrivateIo? privateIo = null)
+    internal NativePluginExecutionDomain(string companion, TimeSpan? timeout = null, int maximumDepth = 8, int maximumCallbacks = 32)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("The native execution domain requires Windows.");
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumDepth, 1); ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumDepth, NativeMaximumDepth);
@@ -76,7 +71,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             WorkingDirectory = Path.GetDirectoryName(executable)!,
         };
         start.ArgumentList.Add("--generation"); start.ArgumentList.Add(Generation.ToString(CultureInfo.InvariantCulture));
-        _process = NativePluginDomainChild.Start(start, privateIo, Generation);
+        _process = Process.Start(start) ?? throw new InvalidOperationException("Native x86 companion did not start.");
         ProcessId = _process.Id; _diagnosticDrain = DrainDiagnostics();
         try
         {
@@ -86,13 +81,11 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             if (NativeThread == 0 || reader.ReadUInt32() != 32 || reader.ReadUInt32() != MaximumPayload || reader.ReadUInt32() != NativeMaximumDepth)
                 throw new InvalidDataException("Native companion pointer width or protocol capability drifted.");
             Finish(reader);
-            ReadSourceAddressSpace(privateIo);
-            if (privateIo is not null) PreparePrivateIo(privateIo);
         }
         catch (Exception error)
         {
             MarkFault(error, null); StopOwnedChild(); DrainAfterExit();
-            if (ChildExited) { ClearPrivateIo(); _process.Dispose(); _disposed = true; }
+            if (ChildExited) { _process.Dispose(); _disposed = true; }
             throw FaultException(error);
         }
     }
@@ -100,7 +93,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     internal NativePluginModule LoadAuthoredModule(string path, string expectedSha256)
     {
         VerifyOwner();
-        if (_callDepth != 0 || NativeModuleCount != 0) throw new InvalidOperationException("Authored module admission requires an empty call/module owner.");
+        if (_callDepth != 0 || _module is not null) throw new InvalidOperationException("Authored module admission requires an empty call/module owner.");
         var fullPath = Path.GetFullPath(path);
         var source = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var admissionStarted = false;
@@ -190,20 +183,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     public void Dispose()
     {
         VerifyThread();
-        if (_disposed && ChildExited && _process.ResourcesRetired)
-        {
-            var failures = new List<Exception>();
-            try { if (!CngSystemOwnersRetired) ReleaseCngSystemServiceAfterChildExit(); } catch (Exception error) { failures.Add(error); }
-            try { if (!SharedPlacementOwnersRetired) ClearSharedPlacementsAfterChildExit(); } catch (Exception error) { failures.Add(error); }
-            try { if (!ImportProviderSourcesRetired) ClearNativeImportProvidersAfterChildExit(); } catch (Exception error) { failures.Add(error); }
-            try { if (!MutexNamespaceOwnersRetired) ClearMutexNamespacesAfterChildExit(); } catch (Exception error) { failures.Add(error); }
-            try { if (!WindowProcessOwnersRetired) ClearWindowProcessAfterChildExit(); } catch (Exception error) { failures.Add(error); }
-            try { if (_privateIo is not null) ClearPrivateIo(); } catch (Exception error) { failures.Add(error); }
-            try { if (_nvseModuleSources.Count != 0 || _nvseFailedModuleSources.Count != 0 || _nvseHostSource is not null) ClearNvseCapabilities(); }
-            catch (Exception error) { failures.Add(error); }
-            if (failures.Count != 0) throw FaultException(new AggregateException("Independent native source/section retries failed.", failures));
-            return;
-        }
+        if (_disposed && ChildExited) return;
         if (_callDepth != 0) throw new InvalidOperationException("A native call/callback prevents retirement of its process generation.");
         Exception? failure = null;
         try
@@ -211,19 +191,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
             if (Fault is null)
             {
                 if (_module is not null) Unload(_module);
-                foreach (var function in _nvseFunctionBorrows.Values.ToArray())
-                    if (function.Live) ReleaseNvseFunction(function);
-                foreach (var plugin in NvseAutomaticRetirementOrder())
-                    if (plugin.Phase != NativeNvsePhase.Retired) UnloadNvse(plugin);
-                RequireSteamRetired();
-                RetireNativeImportProviders();
-                RetireProductWindowCalls();
-                RequirePrivateIoRetired();
-                ReleaseGuestResources();
-                using var reader = Exchange(NativePluginDomainOperation.Retire, []);
-                var guest = ReadGuestStatistics(reader); Finish(reader);
-                CheckGuestStatistics(guest, retiredDelta: -checked((int)_guestRetired), reservedDelta: -(long)_guestReserved);
-                PublishGuestStatistics(guest);
+                using var reader = Exchange(NativePluginDomainOperation.Retire, []); Finish(reader);
                 _process.StandardInput.Close();
                 if (!_process.WaitForExit(checked((int)_timeout.TotalMilliseconds))) throw new TimeoutException("Native retirement acknowledgement did not produce process exit.");
                 DrainAfterExit();
@@ -236,32 +204,10 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         finally
         {
             if (!_retired) StopOwnedChild();
-            DrainAfterExit();
-            if (ChildExited)
-            {
-                var cleanup = new List<Exception>();
-                try { _moduleSource?.Dispose(); } catch (Exception error) { cleanup.Add(error); }
-                _moduleSource = null; _module = null; _functions.Clear();
-                try { ClearGuestCapabilities(); } catch (Exception error) { cleanup.Add(error); }
-                try { ClearNvseCapabilities(); } catch (Exception error) { cleanup.Add(error); }
-                try { ClearSteamAfterChildExit(); } catch (Exception error) { cleanup.Add(error); }
-                try { ClearPrivateIo(); } catch (Exception error) { cleanup.Add(error); }
-                try { _process.Dispose(); } catch (Exception error) { cleanup.Add(error); }
-                _disposed = true;
-                if (cleanup.Count != 0)
-                {
-                    if (failure is not null) cleanup.Insert(0, failure);
-                    failure = new AggregateException("Native source/capability retirement failed after verified child closure.", cleanup);
-                    MarkFault(failure, null);
-                }
-            }
-            else
-            {
-                // Keep actual source leases, callable capabilities, process
-                // handle and first failure for another exact-child cleanup.
-                MarkFault(new TimeoutException("The owned native child has not exited after bounded retirement."), null);
-                failure ??= new TimeoutException("Owned child remains alive.");
-            }
+            DrainAfterExit(); _moduleSource?.Dispose(); _moduleSource = null; _module = null; _functions.Clear();
+            if (ChildExited) _process.Dispose();
+            else { MarkFault(new TimeoutException("The owned native child has not exited after bounded retirement."), null); failure ??= new TimeoutException("Owned child remains alive."); }
+            _disposed = true;
         }
         if (failure is not null) throw FaultException(failure);
     }
@@ -275,7 +221,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         lock (_faultGate) { _operation = operation.ToString(); _currentCall = request; }
         if (root)
         {
-            _callbackCount = 0; _nvseCallbackCount = 0; _ioCallbackCount = 0; _transaction = new CancellationTokenSource();
+            _callbackCount = 0; _transaction = new CancellationTokenSource();
             _watchdog = _transaction.Token.Register(() =>
             { MarkFault(new TimeoutException("Native transaction exceeded its complete call/callback deadline."), null); StopOwnedChild(); });
             _transaction.CancelAfter(_timeout);
@@ -291,35 +237,12 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                 {
                     if (frame.Id != request || frame.Parent != _callbackOwner || frame.Operation != (uint)operation)
                         throw new InvalidDataException("Native fault does not belong to its waiting call frame.");
-                    using var fault = Reader(frame.Payload); var code = fault.ReadUInt32(); var reason = ReadText(fault);
-                    if (operation == NativePluginDomainOperation.SteamProvider) RetainSteamFault(fault);
-                    var observedException = ReadNativeException(fault, frame, code, reason);
-                    Finish(fault);
+                    using var fault = Reader(frame.Payload); var code = fault.ReadUInt32(); var reason = ReadText(fault); Finish(fault);
                     if (code == 0 || reason.Length == 0)
                         throw new InvalidDataException("Native fault lacks a failure code or reason.");
-                    MarkFault(new InvalidDataException(reason), code);
-                    RetainNativeException(observedException, frame);
-                    throw FaultException();
+                    MarkFault(new InvalidDataException(reason), code); throw FaultException();
                 }
-                if (frame.Kind is NativePluginDomainMessage.Callback or NativePluginDomainMessage.StateQuery or NativePluginDomainMessage.NvseCallback or NativePluginDomainMessage.IoCallback)
-                {
-                    var steamSourceCallback = operation == NativePluginDomainOperation.SteamProvider &&
-                        frame.Kind == NativePluginDomainMessage.NvseCallback && (frame.Operation == SteamCallbackEvent || frame.Operation == SteamSourceHashEvent);
-                    var globalsSourceCallback = operation == NativePluginDomainOperation.SourceGlobals &&
-                        frame.Kind == NativePluginDomainMessage.NvseCallback &&
-                        (IsNvseInputExchangeCallback(frame) ||
-                            (NativeNvseHostCall)frame.Operation is (NativeNvseHostCall.EngineGlobalPublish or NativeNvseHostCall.EngineTlsPublish or
-                                NativeNvseHostCall.EngineGlobalRetire or NativeNvseHostCall.EngineTlsRetire));
-                    var fieldMethodSourceCallback = operation == NativePluginDomainOperation.SourceFieldMethods &&
-                        frame.Kind == NativePluginDomainMessage.NvseCallback &&
-                        (IsNvseInputExchangeCallback(frame) ||
-                            (NativeNvseHostCall)frame.Operation is (NativeNvseHostCall.SourceFieldMethodDeclare or NativeNvseHostCall.SourceFieldMethodPublish or
-                                NativeNvseHostCall.SourceFieldMethodExecute or NativeNvseHostCall.SourceFieldMethodRetire));
-                    if (!steamSourceCallback && !globalsSourceCallback && !fieldMethodSourceCallback && !IsOriginalLoaderCallback(operation, frame) && operation is not (NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
-                        NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.UnloadNvse or NativePluginDomainOperation.CrtRuntime or NativePluginDomainOperation.WindowProcess or NativePluginDomainOperation.SourceCallSites or NativePluginDomainOperation.NvseModuleSet))
-                        throw new InvalidDataException($"A native callback arrived outside its executable call owner: operation={operation}, kind={frame.Kind}, event={frame.Operation}, depth={_callDepth}.");
-                    DispatchCallback(frame, request); continue;
-                }
+                if (frame.Kind == NativePluginDomainMessage.Callback) { DispatchCallback(frame, request); continue; }
                 if (frame.Kind != NativePluginDomainMessage.Reply || frame.Id != request || frame.Parent != _callbackOwner || frame.Operation != (uint)operation)
                     throw new InvalidDataException("Native reply does not belong to its waiting call frame.");
                 var reader = Reader(frame.Payload);
@@ -328,34 +251,12 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
                     var status = reader.ReadUInt32(); var liveModules = reader.ReadUInt32(); var reason = ReadText(reader);
                     var expectedModules = operation switch
                     {
-                        NativePluginDomainOperation.LoadAuthored or NativePluginDomainOperation.LoadNvse => status == 0 ? 1U : 0U,
+                        NativePluginDomainOperation.LoadAuthored => status == 0 ? 1U : 0U,
                         NativePluginDomainOperation.Unload => status == 0 ? 0U : 1U,
-                        NativePluginDomainOperation.UnloadNvse => status == 0 ? checked(NativeModuleCount - 1) : NativeModuleCount,
-                        NativePluginDomainOperation.NvseModuleSet => status == 0 && BitConverter.ToUInt32(payload) == 0 ? checked(NativeModuleCount + 1) : NativeModuleCount,
-                        NativePluginDomainOperation.Resolve or NativePluginDomainOperation.Call or NativePluginDomainOperation.NvseQuery or
-                        NativePluginDomainOperation.NvseLoad or NativePluginDomainOperation.NvseMessage or NativePluginDomainOperation.NvseSerialization or
-                        NativePluginDomainOperation.NvseExpressionAbi or NativePluginDomainOperation.NvseCommand or NativePluginDomainOperation.NvseExpressionStatistics or
-                        NativePluginDomainOperation.NvseValuesAttach or NativePluginDomainOperation.NvseValuesStatistics or NativePluginDomainOperation.NvseValueHeap or
-                        NativePluginDomainOperation.NvseLocalCreate or NativePluginDomainOperation.NvseLocalFill or NativePluginDomainOperation.NvseLocalSeal or
-                        NativePluginDomainOperation.NvseLocalRetire or NativePluginDomainOperation.NvseLocalStatistics or
-                        NativePluginDomainOperation.NvseObjectBind or NativePluginDomainOperation.NvseObjectRetire or NativePluginDomainOperation.NvseScriptInterface or
-                        NativePluginDomainOperation.NvseObjectRefresh or NativePluginDomainOperation.NvseLocalAttachScript or
-                        NativePluginDomainOperation.NvseFileMethods or NativePluginDomainOperation.NvseBinaryMethods or
-                        NativePluginDomainOperation.NvseBinaryBind or NativePluginDomainOperation.NvseBinaryRetire or
-                        NativePluginDomainOperation.CrtRuntime => NativeModuleCount,
-                        NativePluginDomainOperation.GuestCapabilities or NativePluginDomainOperation.GuestAllocate or
-                        NativePluginDomainOperation.GuestRead or NativePluginDomainOperation.GuestWrite or
-                        NativePluginDomainOperation.GuestRelease or NativePluginDomainOperation.GuestBindState or
-                        NativePluginDomainOperation.GuestStatistics or NativePluginDomainOperation.GuestSeal => NativeModuleCount,
-                        NativePluginDomainOperation.WindowProcess => NativeModuleCount,
-                        NativePluginDomainOperation.SourceCallSites or NativePluginDomainOperation.SourceGlobals or NativePluginDomainOperation.SourceFieldMethods => NativeModuleCount,
-                        NativePluginDomainOperation.SteamProvider => NativeModuleCount,
-                        NativePluginDomainOperation.ImportProviders => NativeModuleCount,
+                        NativePluginDomainOperation.Resolve or NativePluginDomainOperation.Call => 1U,
                         _ => 0U,
                     };
                     if (liveModules != expectedModules) throw new InvalidDataException("Native module lifetime drifted across its request.");
-                    if (operation == NativePluginDomainOperation.NvseModuleSet && BitConverter.ToUInt32(payload) == 0)
-                        ReadModuleConstructionReply(reader, status);
                     if (status != 0) { Finish(reader); throw new NativePluginDomainRefusal(status, liveModules, reason); }
                     if (reason.Length != 0) throw new InvalidDataException("Native success reply carries an unowned diagnostic.");
                     return reader;
@@ -377,65 +278,21 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     {
         if (frame.Parent != waitingCall || (frame.Id & CallbackBit) == 0 || frame.Id <= _lastCallback || _callDepth == 0)
             throw new InvalidDataException("Native callback does not belong to its current call/sequence.");
-        if (frame.Kind == NativePluginDomainMessage.IoCallback)
-        {
-            if (++_ioCallbackCount > 1048576) throw new InvalidDataException("Native private I/O callback budget exceeded.");
-        }
-        else if (frame.Kind == NativePluginDomainMessage.NvseCallback && (frame.Operation == SteamCallbackEvent || frame.Operation == SteamSourceHashEvent))
-        {
-            // SDK member callbacks and our actual original-file hashing each own a separate bounded budget.
-        }
-        else if (frame.Kind == NativePluginDomainMessage.NvseCallback)
-        {
-            if (++_nvseCallbackCount > _nvseCallbackBudget) throw new InvalidDataException("NVSE interface callback budget exceeded.");
-        }
-        else if (++_callbackCount > _maximumCallbacks) throw new InvalidDataException("Native callback budget exceeded.");
+        if (++_callbackCount > _maximumCallbacks) throw new InvalidDataException("Native callback budget exceeded.");
         _lastCallback = frame.Id;
+        using var reader = Reader(frame.Payload);
+        var thread = reader.ReadUInt32(); var first = reader.ReadUInt32(); var second = reader.ReadUInt32(); Finish(reader);
+        if (thread != NativeThread) throw new InvalidDataException("Native callback came from an unowned thread.");
+        var handler = _callback ?? throw new InvalidOperationException("A native callback has no C# runtime owner.");
         var previous = _callbackOwner; _callbackOwner = frame.Id;
-        var previousModule = _nvsePlugin;
         try
         {
-            _ = SelectNvseCallbackModule(frame);
-            uint value = 0; byte[]? typedReply = null;
-            if (frame.Kind == NativePluginDomainMessage.IoCallback) typedReply = DispatchPrivateIo(frame, waitingCall);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == SteamSourceHashEvent)
-                typedReply = DispatchSteamSourceHash(frame, waitingCall);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == SteamCallbackEvent)
-                value = DispatchSteamSourceCallback(frame, waitingCall);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == 0x500)
-                typedReply = DispatchNvseData(frame, waitingCall);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation == CommandTableEvent)
-                typedReply = DispatchNvseCommandTable(frame, waitingCall);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= LocalBegin && frame.Operation <= LocalEnd)
-                typedReply = DispatchNvseLocals(frame);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= BinaryBegin && frame.Operation <= BinaryEnd)
-                typedReply = DispatchNvseBinary(frame);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= SourceFileBegin && frame.Operation <= SourceFilePublished)
-                typedReply = DispatchNvseSourceFile(frame);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation is 0x401 or 0x403)
-                typedReply = DispatchNvseSourceObject(frame);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= ValueGetString)
-                typedReply = DispatchNvseValueHost(frame, waitingCall);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback && frame.Operation >= ExpressionInitialize)
-                typedReply = DispatchNvseExpressionHost(frame, waitingCall);
-            else if (frame.Kind == NativePluginDomainMessage.NvseCallback) value = DispatchNvseHost(frame, waitingCall);
-            else if (frame.Kind == NativePluginDomainMessage.StateQuery) value = DispatchGuestStateQuery(frame, waitingCall);
-            else
-            {
-                using var reader = Reader(frame.Payload);
-                var thread = reader.ReadUInt32(); var first = reader.ReadUInt32(); var second = reader.ReadUInt32(); Finish(reader);
-                if (thread != NativeThread) throw new InvalidDataException("Native callback came from an unowned thread.");
-                var handler = _callback ?? throw new InvalidOperationException("A native callback has no C# runtime owner.");
-                value = handler(new(Generation, frame.Id, waitingCall, frame.Operation, first, second, thread));
-            }
+            var value = handler(new(Generation, frame.Id, waitingCall, frame.Operation, first, second, thread));
             VerifyOwner(); _transaction!.Token.ThrowIfCancellationRequested();
-            var replyKind = frame.Kind == NativePluginDomainMessage.IoCallback ? NativePluginDomainMessage.IoReply :
-                frame.Kind == NativePluginDomainMessage.NvseCallback ? NativePluginDomainMessage.NvseReply :
-                frame.Kind == NativePluginDomainMessage.StateQuery ? NativePluginDomainMessage.StateReply : NativePluginDomainMessage.CallbackReply;
-            WriteFrame(new(replyKind, frame.Operation, Generation, frame.Id, waitingCall,
-                typedReply ?? Payload(writer => writer.Write(value))));
+            WriteFrame(new(NativePluginDomainMessage.CallbackReply, frame.Operation, Generation, frame.Id, waitingCall,
+                Payload(writer => writer.Write(value))));
         }
-        finally { _callbackOwner = previous; _nvsePlugin = previousModule; }
+        finally { _callbackOwner = previous; }
     }
 
     private void VerifyModule(NativePluginModule module)
@@ -457,12 +314,6 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
     }
     private NativePluginDomainFaultException Fatal(Exception error)
     {
-        // Cancellation callbacks run in reverse registration order. Pending
-        // pipe I/O can therefore wake this caller before the earlier watchdog
-        // records its timeout. Both paths must retain the same deadline fault.
-        if (error is OperationCanceledException && _transaction?.IsCancellationRequested == true)
-            error = new TimeoutException("Native transaction exceeded its complete call/callback deadline.", error);
-        error = RetainIncompleteSourceFilePrefixes(error);
         MarkFault(error, null); StopOwnedChild(); return FaultException(error);
     }
     private NativePluginDomainFaultException FaultException(Exception? inner = null) => new(Fault ??
@@ -485,10 +336,7 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         try
         {
             if (!_process.HasExited) _process.Kill(entireProcessTree: false);
-            if (_process.WaitForExit(1000))
-            {
-                ObserveChildExit();
-            }
+            if (_process.WaitForExit(1000)) ChildExited = true;
         }
         catch (InvalidOperationException) { }
         catch (Win32Exception error) { AppendDiagnostic($" Child retirement: {error.Message}"); }
@@ -518,24 +366,13 @@ internal sealed partial class NativePluginExecutionDomain : IDisposable
         {
             if (_process.WaitForExit(1000))
             {
-                ObserveChildExit();
+                ChildExited = true;
                 if (!_diagnosticDrain.Wait(TimeSpan.FromSeconds(1)))
                     lock (_faultGate) { AppendDiagnostic(" Diagnostic drain did not complete."); _diagnosticsTruncated = true; }
             }
         }
         catch (InvalidOperationException) { }
         catch (AggregateException error) { AppendDiagnostic($" Diagnostic drain failure: {error.Message}"); }
-    }
-    private void ObserveChildExit()
-    {
-        ChildExited = true;
-        lock (_faultGate)
-        {
-            ChildExitCode ??= _process.ExitCode;
-            if (_fault is null || _childExitDiagnosticPublished) return;
-            AppendDiagnostic($" Child exit=0x{unchecked((uint)ChildExitCode.Value):x8}.");
-            _childExitDiagnosticPublished = true;
-        }
     }
     private void AppendDiagnostic(string text)
     {

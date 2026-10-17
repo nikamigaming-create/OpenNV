@@ -71,13 +71,7 @@ internal sealed partial class FalloutReferenceWorld
     internal bool IsUnconscious(FalloutFormKey reference) => Actor(reference).Unconscious;
     internal void SetUnconscious(FalloutFormKey reference, bool unconscious) => Actor(reference).Unconscious = unconscious;
     internal void SetRestrained(FalloutFormKey reference, bool restrained) => Actor(reference).Restrained = restrained;
-    internal void SetPlayerTeammate(FalloutFormKey reference, bool teammate)
-    {
-        var actor = Actor(reference);
-        if (actor.PlayerTeammate == teammate) return;
-        actor.PlayerTeammate = teammate;
-        _combatGroups?.ObserveOpaqueTeammateChange(reference);
-    }
+    internal void SetPlayerTeammate(FalloutFormKey reference, bool teammate) => Actor(reference).PlayerTeammate = teammate;
 
     internal void ChangeActorValue(FalloutFormKey reference, string name, string operation, float value)
     {

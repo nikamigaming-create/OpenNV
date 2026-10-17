@@ -79,7 +79,6 @@ internal static class OwnedFarewellProbe
         for (var index = 0; index < 80 && conversation.Phase != "closed"; ++index)
         {
             if (conversation.Phase == "speaking") conversation.CompleteResponse();
-            else if (conversation.Phase == "continuing") conversation.ContinueResultOnly();
             else conversation.Choose(conversation.Choices[0].Topic);
         }
         if (conversation.Phase != "closed" || conversation.Error is not null || !pipBoy.Available || pipBoy.Revision != 1 ||

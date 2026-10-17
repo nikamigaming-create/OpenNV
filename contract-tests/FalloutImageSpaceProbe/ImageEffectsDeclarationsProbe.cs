@@ -1,11 +1,10 @@
 using System.Buffers.Binary;
 using OpenNV.Runtime.Content;
 
-internal static partial class ImageEffectsDeclarationsProbe
+internal static class ImageEffectsDeclarationsProbe
 {
     internal static void Run()
     {
-        SinglePhase();
         var phaseCode = new byte[38];
         Store(phaseCode, 0, [0x83, 0xec, 0x08, 0xd9, 0x05]);
         Store(phaseCode, 9, [0x8b, 0x41, 0x1c, 0xdc, 0x35]);

@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Gameplay.State;
 // RewardXP awards the engine-created player's XP even when an object, quest
 // or global function invokes it. Vitals remain the sole saved XP value.
 internal sealed class FalloutPlayerExperience(FalloutPluginStack records, FalloutPlayerVitals vitals,
-    Func<IReadOnlyList<FalloutPerkEntry>> perkEntries, FalloutGlobalState? globals = null)
+    Func<IReadOnlyList<FalloutPerkEntry>> perkEntries)
 {
     private Func<FalloutCondition, float>? _perkConditions;
     internal event Action<int, int>? ExperienceChanged;
@@ -28,7 +28,7 @@ internal sealed class FalloutPlayerExperience(FalloutPluginStack records, Fallou
         if (before.Level >= cap) return 0;
 
         var adjusted = FalloutPlayerPerkNumericEffects.Apply(9, amount, perkEntries(), condition =>
-            (_perkConditions ?? throw new NotSupportedException("XP perk conditions have no live actor owner."))(condition), globals);
+            (_perkConditions ?? throw new NotSupportedException("XP perk conditions have no live actor owner."))(condition));
         var rounded = (double)MathF.Ceiling(adjusted);
         if (rounded < int.MinValue || rounded > int.MaxValue)
             throw new NotSupportedException("RewardXP exceeds admitted signed XP storage.");

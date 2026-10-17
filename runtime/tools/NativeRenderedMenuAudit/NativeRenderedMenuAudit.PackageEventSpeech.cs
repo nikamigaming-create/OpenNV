@@ -29,7 +29,10 @@ public partial class NativeRenderedMenuAudit
             records = FalloutPluginStack.Load(content.PluginSources);
             var controls = FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"]);
             var opening = FalloutCellSceneReader.Read(records, new("FalloutNV.esm", 0x103df9));
-            var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records).State;
+            var saved = FalloutNativeCampaignSave.Read(checkpoint, content.SaveCompatibilityId, records,
+                FalloutNativeVigorResolver.Resolve(records, opening), FalloutNativeTagSkillResolver.Resolve(records, controls),
+                FalloutOpeningInventoryGrantResolver.Resolve(records, controls, "VCG01"),
+                FalloutNativeTraitFarewellResolver.Resolve(records, controls, opening)).State;
             FalloutFormKey Key(string value)
             {
                 var parts = value.Split(':');
@@ -43,8 +46,9 @@ public partial class NativeRenderedMenuAudit
                 throw new InvalidDataException("Selected original package event has no source topic.");
             var expected = FalloutDialogueTopic.Decode(records.GetEffective(expectedInfo));
             RequireFinished(FalloutDialogueTopic.Read(records, topic).Infos.Any(info => info.Record.FormKey == expectedInfo) &&
-                expected.Responses.Count != 0 && NativeAuthoredResultAudit.IsEmpty(records, expected, true) && NativeAuthoredResultAudit.IsEmpty(records, expected, false),
-                "Selected package voice must have actual responses and independently empty original result scopes.");
+                expected.Responses.Count != 0 && !FalloutDialogueTopic.CodeLines(expected.BeginScript).Any() &&
+                !FalloutDialogueTopic.CodeLines(expected.EndScript).Any(),
+                "Selected package voice must have actual responses and an independently empty source result body.");
             var configuration = RuntimeConfiguration.Load();
             var world = new FalloutReferenceWorld(records); worlds.Add(world);
             world.RestoreEncounterZones(saved.EncounterZones); world.Restore(saved.References!);
@@ -66,14 +70,7 @@ public partial class NativeRenderedMenuAudit
             var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false,
                 _ => throw new NotSupportedException("Package voice fixture reached an unowned original source effect."), Globals: globals));
             speech = PackageSpeechOwner(records, configuration, world, quests, said);
-            speech.ExecuteOwnedResults = (info, caller, begin) =>
-            {
-                var result = scripts.ExecuteResultOwned(info, caller, begin);
-                RequireFinished(result.CommittedSteps == 0, "Result-free package executed an authored instruction.");
-                ++results;
-                return result;
-            };
-            var expectedResults = NativeAuthoredResultAudit.Invocations(expected);
+            speech.ExecuteResults = (info, caller, begin) => { scripts.ExecuteResult(info, caller, begin); ++results; };
             speech.InfoCompleted += info =>
             {
                 RequireFinished(info == expectedInfo, "Package voice completed an unexpected original INFO.");
@@ -100,7 +97,7 @@ public partial class NativeRenderedMenuAudit
             var randomAfterSelection = JsonSerializer.Serialize(world.ScriptValues.Capture());
             await WaitFinishedSpeech(speech, allowFailure: false);
             RequireFinished(speech.Error is null && !speech.Active && !speech.IsTalking(actor) && !player.Playing &&
-                audioEnds == selected.Responses.Count && notifications == 1 && sourceCompletions == 0 && results == expectedResults &&
+                audioEnds == selected.Responses.Count && notifications == 1 && sourceCompletions == 0 && results == 0 &&
                 FinishedSpeechVoiceField(voice, "PackageCompleted").GetValue(voice) is null &&
                 FinishedSpeechVoiceField(voice, "PackageEvent").GetValue(voice) is null,
                 speech.Error ?? "Actual package voice did not retire its source event after audio and callback completion.");
@@ -117,7 +114,7 @@ public partial class NativeRenderedMenuAudit
             var valuesAfter = FinishedSpeechCopy(world.ScriptValues.Capture()); var saidAfter = said.ToArray();
             speech._Process(0); speech._Process(0);
             RequireFinished(JsonSerializer.Serialize(finished) == JsonSerializer.Serialize(speech.CaptureFinishedState()) &&
-                notifications == 1 && results == expectedResults && sourceCompletions == 0,
+                notifications == 1 && results == 0 && sourceCompletions == 0,
                 "Repeated native processing replayed the ended package callback/results.");
             world.UnloadCell(cell.Cell.FormKey); scripts.UnloadCell(cell.Cell.FormKey);
             speech.Free(); speech = null; body.Free(); body = null;
@@ -125,7 +122,7 @@ public partial class NativeRenderedMenuAudit
             cold.ScriptValues.Restore(valuesAfter); cold.Restore(references);
             var coldQuests = new FalloutQuestState(records); coldQuests.Restore(quests.Capture());
             coldSpeech = PackageSpeechOwner(records, configuration, cold, coldQuests, saidAfter.ToHashSet());
-            coldSpeech.ExecuteOwnedResults = (_, _, _) => throw new InvalidDataException("Cold package history replayed source results.");
+            coldSpeech.ExecuteResults = (_, _, _) => throw new InvalidDataException("Cold package history replayed source results.");
             coldSpeech.InfoCompleted += _ => throw new InvalidDataException("Cold package history replayed INFO notification.");
             coldSpeech.SayToCompleted += _ => throw new InvalidDataException("Cold package history invented SayToDone.");
             AddChild(coldSpeech); coldSpeech.SetProcess(false); coldSpeech.RestoreFinishedState(finished);

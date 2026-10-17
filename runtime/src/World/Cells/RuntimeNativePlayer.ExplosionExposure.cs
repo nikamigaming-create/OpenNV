@@ -34,7 +34,6 @@ internal partial class RuntimeNativePlayer
 
     internal void ReceiveExplosionExposure(FalloutExplosion source, Vector3 point)
     {
-        _playerPerceptionWorld?.RequireNoFunctionalFailure();
         if (source.ImageSpace is { } modifier && source.ImageSpaceRadius > 0 &&
             Camera.GlobalPosition.DistanceTo(point) <= source.ImageSpaceRadius * UnitsToMeters)
         {
@@ -67,7 +66,6 @@ internal partial class RuntimeNativePlayer
 
     private void AdvanceExplosionExposure(double delta)
     {
-        if (GameplayMutationBlocked) return;
         for (var index = _explosionExposure.Count - 1; index >= 0; index--)
         {
             var exposure = _explosionExposure[index];

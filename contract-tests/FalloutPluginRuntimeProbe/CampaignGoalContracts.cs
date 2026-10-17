@@ -62,7 +62,6 @@ internal static partial class CampaignGoalContracts
                 "Source-goal or portal reads changed plugin data.");
         });
         QuestRejections();
-        PortalNoAlarm();
         PortalRejections();
         PortalIssueScope();
         Console.WriteLine("OPENNV_CAMPAIGN_GOALS_PASS winningMasters=true sourceOrdinals=true targetConditions=true " +
@@ -114,25 +113,6 @@ internal static partial class CampaignGoalContracts
         });
     }
 
-    private static void PortalNoAlarm()
-    {
-        WithPlugins([(BasePlugin, PortalFixture(Reference(0x210, 0x100,
-            extra: Field("XTEL", Teleport(0x220, 1)))))], records =>
-        {
-            var before = Hash(records.GetEffective(Key(0x210)));
-            var source = FalloutCellSceneReader.Read(records, Key(0x300)).References.Single();
-            var destination = FalloutDoorDestinationResolver.Resolve(records, source);
-            var graph = new FalloutCampaignPortalGraph(records);
-            Require(graph.Issues.Count == 0 && source.Teleport is { NoAlarm: true, Flags: 1 } &&
-                destination.Destination.FormKey == Key(0x220) &&
-                source.Teleport.Position.SequenceEqual(new[] { -2.5f, -1.25f, 0f }) &&
-                source.Teleport.RotationRadians.SequenceEqual(new[] { 1.25f, 2.5f, 3.75f }),
-                "Source No Alarm boolean was lost or changed the directed target and landing pose.");
-            RequireRoute(graph.Find(Key(0x300), Key(0x301), _ => true), 0x210);
-            Require(before == Hash(records.GetEffective(Key(0x210))), "No Alarm routing rewrote source bytes.");
-        });
-    }
-
     private static void PortalRejections()
     {
         void Invalid<T>(byte[] source, byte[]? destination = null, byte[]? cells = null) where T : Exception =>
@@ -150,7 +130,7 @@ internal static partial class CampaignGoalContracts
         Invalid<InvalidDataException>(Reference(0x210, 0x100, extra: Field("XTEL", Teleport(0))));
         Invalid<InvalidDataException>(Reference(0x210, 0x100, teleport: 0x777));
         Invalid<InvalidDataException>(Reference(0x210, 0x100, teleport: 0x220, extra: Field("XTEL", valid)));
-        Invalid<NotSupportedException>(Reference(0x210, 0x100, extra: Field("XTEL", Teleport(0x220, 2))));
+        Invalid<NotSupportedException>(Reference(0x210, 0x100, extra: Field("XTEL", Teleport(0x220, 1))));
         var nonFinite = Teleport(0x220);
         BinaryPrimitives.WriteSingleLittleEndian(nonFinite.AsSpan(16), float.PositiveInfinity);
         Invalid<InvalidDataException>(Reference(0x210, 0x100, extra: Field("XTEL", nonFinite)));
@@ -190,7 +170,7 @@ internal static partial class CampaignGoalContracts
         FalloutFormKey DetachedKey(uint id) => new(detached, id);
         var disconnected = Join(Header(BasePlugin),
             Cell(0x0100_0400), Group(0x0100_0400, Reference(0x0100_0410, 0x100,
-                extra: Field("XTEL", Teleport(0x0100_0420, 2)))),
+                extra: Field("XTEL", Teleport(0x0100_0420, 1)))),
             Cell(0x0100_0401), Group(0x0100_0401, Reference(0x0100_0420, 0x100)),
             Cell(0x0100_0402), Group(0x0100_0402, Reference(0x0100_0430, 0x100,
                 extra: Field("XTEL", new byte[28]))));
@@ -209,7 +189,7 @@ internal static partial class CampaignGoalContracts
                     graph.Issues[0].Destination == DetachedKey(0x420) &&
                     graph.Issues[0].Winner == detached &&
                     graph.Issues[0].ErrorType == nameof(NotSupportedException) &&
-                    graph.Issues[0].Error.Contains("0x00000002", StringComparison.Ordinal) &&
+                    graph.Issues[0].Error.Contains("0x00000001", StringComparison.Ordinal) &&
                     graph.Issues[1].Reference == DetachedKey(0x430) &&
                     graph.Issues[1].ErrorType == nameof(InvalidDataException),
                     "Disconnected unsupported/malformed portals lost winner, master remap or error identity.");
@@ -226,7 +206,7 @@ internal static partial class CampaignGoalContracts
         WithPlugins([(BasePlugin, Join(Header(), Record("DOOR", 0x100),
             Cell(0x300), Group(0x300, Reference(0x210, 0x100, teleport: 0x220)),
             Cell(0x301), Group(0x301, Reference(0x220, 0x100),
-                Reference(0x221, 0x100, extra: Field("XTEL", Teleport(0x230, 2)))),
+                Reference(0x221, 0x100, extra: Field("XTEL", Teleport(0x230, 1)))),
             Cell(0x302), Group(0x302, Reference(0x230, 0x100))))], records =>
         {
             var graph = new FalloutCampaignPortalGraph(records);
@@ -239,7 +219,7 @@ internal static partial class CampaignGoalContracts
             Expect<NotSupportedException>(() => graph.Find(Key(0x301), Key(0x302), _ => false));
         });
         WithPlugins([(BasePlugin, PortalFixture(Join(Reference(0x210, 0x100, teleport: 0x220),
-            Reference(0x211, 0x100, extra: Field("XTEL", Teleport(0x220, 2))))))], records =>
+            Reference(0x211, 0x100, extra: Field("XTEL", Teleport(0x220, 1))))))], records =>
         {
             var graph = new FalloutCampaignPortalGraph(records);
             Expect<NotSupportedException>(() => graph.Find(Key(0x300), Key(0x301), _ => true));

@@ -46,8 +46,6 @@ if (!computeFunction.Contains("vec4 source_filter(vec2 coordinate)", StringCompa
     throw new Exception("Compute program did not preserve its body and external register bindings.");
 Reject(() => interpolated.ComputeFunction("source_filter", new Dictionary<int, string> { [0] = "params.weight" }, new Dictionary<int, string>()));
 Console.WriteLine("OPENNV_SHADER_CONTRACT_PASS modifiers=true truncationFails=true unknownOpcodeFails=true relativeAddressingFails=true");
-RenderedMenuOutputContracts.Run();
-if (args is ["--menu-pixel-output-contracts"]) return;
 if (args is [var root])
 {
     var packages = Directory.GetFiles(Path.Combine(root, "Shaders"), "*.sdp");

@@ -37,11 +37,6 @@ internal partial class RuntimeNativeSkyLayers : Node3D
     {
         var content = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Sky has no owned source.");
         if (!content.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException(path);
-        if (path.Equals(FalloutSkyCloudResource.Path, StringComparison.OrdinalIgnoreCase))
-        {
-            if (_sourceCloudResource is not null) throw new InvalidOperationException("Sky attempted to publish a second Clouds field factory.");
-            _sourceCloudResource = FalloutSkyCloudResource.Read(bytes, path);
-        }
         var scene = RuntimeNativeNifMeshBuilder.Build(bytes, units);
         scene.Root.SetMeta("opennv_source_model", path);
         scene.Root.SetMeta("opennv_source_resource", identity);
@@ -60,16 +55,23 @@ internal partial class RuntimeNativeSkyLayers : Node3D
                     case 5: _stars.Add(material); break;
                     case 3:
                         if (mesh.Mesh.GetSurfaceCount() != 1) throw new NotSupportedException("Cloud layer has multiple material surfaces.");
-                        var cloudResource = _sourceCloudResource ?? throw new InvalidDataException("Cloud geometry has no source field factory.");
-                        if (!mesh.HasMeta("opennv_nif_geometry_block") || !material.HasMeta("opennv_sky_property_block"))
-                            throw new InvalidDataException("Cloud geometry/property omitted their actual NIF block identities.");
-                        var geometryBlock = mesh.GetMeta("opennv_nif_geometry_block").AsInt32();
-                        var propertyBlock = material.GetMeta("opennv_sky_property_block").AsInt32();
-                        var cloudSlot = cloudResource.Slots.SingleOrDefault(slot => slot.Geometry == geometryBlock && slot.Property == propertyBlock) ??
-                            throw new InvalidDataException("Cloud native geometry/property has no exact authored child-list slot.");
-                        if (_clouds.Any(row => row.Layer == cloudSlot.Slot))
-                            throw new InvalidDataException("A source cloud slot was published by two actual native meshes.");
-                        _clouds.Add((mesh, material, cloudSlot.Slot));
+                        _clouds.Add((mesh, material, 0));
+                        for (var layer = 1; layer < 4; layer++)
+                        {
+                            var layerMaterial = (ShaderMaterial)material.Duplicate();
+                            layerMaterial.RenderPriority = -126 + layer;
+                            var layerMesh = new MeshInstance3D
+                            {
+                                Name = $"WeatherCloudLayer{layer}",
+                                Mesh = mesh.Mesh,
+                                Transform = mesh.Transform,
+                                MaterialOverride = layerMaterial,
+                                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                                ExtraCullMargin = mesh.ExtraCullMargin
+                            };
+                            mesh.GetParent().AddChild(layerMesh);
+                            _clouds.Add((layerMesh, layerMaterial, layer));
+                        }
                         break;
                 }
             }
@@ -80,9 +82,6 @@ internal partial class RuntimeNativeSkyLayers : Node3D
     public override void _Process(double delta)
     {
         if (GetViewport().GetCamera3D() is { } camera) GlobalPosition = camera.GlobalPosition;
-        // Camera placement adapts this viewport independently of a source
-        // Moon frame. Its failure still stops the following source consumers.
-        ProcessSourceMoonCalendar();
         for (var layer = 0; layer < _cloudOffsets.Length; layer++)
             _cloudOffsets[layer] = (_cloudOffsets[layer] + delta * _cloudRates[layer]) % 1.0;
         foreach (var (_, material, layer) in _clouds)
@@ -113,9 +112,7 @@ internal partial class RuntimeNativeSkyLayers : Node3D
         var night = (weights.First == 3 ? weights.FirstWeight : 0) + (weights.Second == 3 ? weights.SecondWeight : 0);
         foreach (var material in _stars) material.SetShaderParameter("stars_encoded", new Vector4(stars.X, stars.Y, stars.Z, night));
         var colors = _weatherFields.Single(field => field.Signature == "PNAM").Data;
-        if (colors.Length != 4 * weather.TimeSamples * 4 || weights.First < 0 || weights.First >= weather.TimeSamples ||
-            weights.Second < 0 || weights.Second >= weather.TimeSamples)
-            throw new InvalidDataException("Weather cloud colors changed their actual source time-sample extent.");
+        if (colors.Length != 96) throw new InvalidDataException("Weather clouds require four six-sample color arrays.");
         string[] slots = ["DNAM", "CNAM", "ANAM", "BNAM"];
         foreach (var (mesh, material, layer) in _clouds)
         {
@@ -125,11 +122,10 @@ internal partial class RuntimeNativeSkyLayers : Node3D
             if (!mesh.Visible) continue;
             if (!path.StartsWith("textures\\", StringComparison.OrdinalIgnoreCase)) path = "textures\\" + path;
             if (!_textures.TryGetValue(path, out var texture)) _textures.Add(path, texture = NativeOwnedMediaLoader.LoadTexture(path));
-            var at = layer * weather.TimeSamples * 4;
+            var at = layer * 24;
             float Channel(int channel) => (colors.Span[at + weights.First * 4 + channel] * weights.FirstWeight +
                 colors.Span[at + weights.Second * 4 + channel] * weights.SecondWeight) / 255f;
             material.SetShaderParameter("cloud_map", texture);
-            RecordSourceCloudPrimary(layer, path);
             material.SetShaderParameter("cloud_color_encoded", new Vector3(Channel(0), Channel(1), Channel(2)));
             material.SetShaderParameter("sky_upper_encoded", upper);
             material.SetShaderParameter("sky_lower_encoded", lower);

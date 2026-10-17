@@ -57,9 +57,6 @@ internal static class NativeRaceMenuModelContracts
         Bytes(448, 0x83, 0xbd); Word(450, -200); Bytes(454, 7, 0x0f, 0x84); Word(457, 550 - 461);
         Relative(461, 0xe9, 640); Direct(500, 6000); Direct(550, 6000); Direct(640, 5000);
         Require(Read() == "meshes/" + model.ToLowerInvariant(), "Spilled source mode must choose the direct model consumer.");
-        var selected = FalloutExecutableStringTable.ReadRaceMenuModelSelection(code, settings, address => strings.GetValueOrDefault(address), 0);
-        Require(selected.Operand is { Instruction: 642, Pointer: 5000, ReceiverField: 144, StringSetter: 900 } && selected.Modes.SequenceEqual(new[] { 0, 1 }),
-            "Mutable input selection retains the same command arm, complete PUSH and separate receiver string child.");
         Word(450, -204); Reject(() => Read()); Word(450, -200);
         Word(462, 1000); Reject(() => Read()); Word(462, 640 - 466);
         settings[1000] = "sForeign"; Reject(() => Read()); settings[1000] = "sRSMCustomize";

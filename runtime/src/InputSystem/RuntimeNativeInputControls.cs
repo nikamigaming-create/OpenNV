@@ -24,38 +24,22 @@ internal sealed partial class RuntimeNativeInputControls(FalloutInputControls co
         // physical keys leave the previous owner/map intact and fail visibly.
         var changed = Enumerable.Range(0, FalloutInputControls.Count)
             .Where(index => _bound is null || bindings[index] != _bound[index]).ToArray();
-        var events = new Dictionary<int, (int Code, InputEvent Input)[]>(changed.Length);
-        var created = new List<InputEvent>(checked(changed.Length * 2));
-        Exception? failure = null;
-        try
-        {
-            foreach (var index in changed)
+        var events = changed.ToDictionary(index => index, index =>
+            new[] { controls.Get((uint)index), controls.Get((uint)index, 1) }
+                .Where(code => code != -1).Select(code => (Code: code, Input: NativeScriptKeys.Create(code))).ToArray());
+        foreach (var index in changed)
+            foreach (var action in Actions(index))
             {
-                var row = new List<(int Code, InputEvent Input)>(2);
-                foreach (var code in new[] { controls.Get((uint)index), controls.Get((uint)index, 1) })
+                if (InputMap.HasAction(action)) { Input.ActionRelease(action); InputMap.EraseAction(action); }
+                InputMap.AddAction(action);
+                foreach (var input in events[index])
                 {
-                    if (code == -1) continue;
-                    var input = NativeScriptKeys.Create(code);
-                    created.Add(input); row.Add((code, input));
+                    InputMap.ActionAddEvent(action, input.Input);
+                    if (physicalKeyPressed(input.Code)) Input.ActionPress(action);
                 }
-                events.Add(index, row.ToArray());
             }
-            foreach (var index in changed)
-                foreach (var action in Actions(index))
-                {
-                    if (InputMap.HasAction(action)) { Input.ActionRelease(action); InputMap.EraseAction(action); }
-                    InputMap.AddAction(action);
-                    foreach (var input in events[index])
-                    {
-                        InputMap.ActionAddEvent(action, input.Input);
-                        if (physicalKeyPressed(input.Code)) Input.ActionPress(action);
-                    }
-                }
-            _bound = bindings;
-            Remapped?.Invoke(changed);
-        }
-        catch (Exception error) { failure = error; throw; }
-        finally { NativeScriptKeys.DisposeCreatedEvents(created, failure); }
+        _bound = bindings;
+        Remapped?.Invoke(changed);
     }
 
     private IEnumerable<string> Actions(int control)

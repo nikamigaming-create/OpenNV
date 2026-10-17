@@ -123,16 +123,8 @@ internal partial class RuntimeNativePlayer
     }
     public override void _ExitTree()
     {
-        try { RetirePlayerPerceptionAndStandaloneScene(); }
-        finally
-        {
-            try { RetirePlayerPhysicalActivity(); }
-            finally
-            {
-                try { ReleaseFurnitureReservation(); }
-                finally { ReleaseXrContacts(); }
-            }
-        }
+        ReleaseFurnitureReservation();
+        ReleaseXrContacts();
     }
     internal void AttachXr(NativeXrRig rig)
     {
@@ -147,10 +139,8 @@ internal partial class RuntimeNativePlayer
     }
     internal void XrActivate()
     {
-        if (_playerPerceptionWorld?.FunctionalFailure is not null || _modalInput) return;
-        if (!_activationEnabled) { RejectActivation(); return; }
-        if (DispatchSourceFurnitureActivation()) return;
-        if (AimedObject() is not { } collider) { RejectActivation(); return; }
+        if (_modalInput || _furniturePhase != 0) return;
+        if (!_activationEnabled || AimedObject() is not { } collider) { RejectActivation(); return; }
         var target = ResolveXrTarget?.Invoke(collider);
         // Comfort pickup reach is an OpenNV option. Doors, conversations and
         // furniture still require the ordinary source activation distance.

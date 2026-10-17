@@ -39,7 +39,8 @@ internal sealed partial class NativeGodotLauncher
                     if (!FalloutModInstallation.IsMod(campaign.Id))
                     {
                         _selectedGameId = campaign.Id;
-                        _selectedPresentation = campaign.DefaultPresentation;
+                        if (!campaign.Presentations.ContainsKey(_selectedPresentation))
+                            _selectedPresentation = campaign.DefaultPresentation;
                     }
                     _toast.Text = string.Empty;
                     Refresh();

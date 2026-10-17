@@ -36,12 +36,11 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         string edition,
         string engineBuild,
         string contentVersion,
-        FalloutContentLayers layers, IReadOnlyList<FalloutInstallationSetting>? settings, bool nativePluginsEnabled)
+        FalloutContentLayers layers, IReadOnlyList<FalloutInstallationSetting>? settings)
     {
         ContentRoot = contentRoot;
         _layers = layers;
         Settings = settings?.ToArray() ?? [];
-        NativePluginsEnabled = nativePluginsEnabled;
         PluginSources = Array.AsReadOnly(pluginSources.Select(source => source with { OwnedSource = this }).ToArray());
         _archivePaths = archivePaths;
         Game = game;
@@ -76,7 +75,6 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     internal string Game { get; }
     internal string StackId { get; }
     internal string SaveCompatibilityId { get; }
-    internal bool NativePluginsEnabled { get; }
     internal string Edition { get; }
     internal string EngineBuild { get; }
     internal string ContentVersion { get; }
@@ -105,7 +103,6 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     // decompressed asset for the lifetime of a campaign.
     internal IEnumerable<(string Identity, ReadOnlyMemory<byte> Bytes)> CachedResources()
     {
-        using var readLifetime = EnterResourceRead();
         foreach (var (identity, logical) in _archiveResources)
         {
             var file = identity[..identity.IndexOf("::", StringComparison.Ordinal)];
@@ -126,7 +123,6 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     internal (string File, long Offset, int StoredBytes, bool Compressed) ResourceExtent(string identity)
     {
-        using var readLifetime = EnterResourceRead();
         var split = identity.IndexOf("::", StringComparison.Ordinal);
         if (split < 0) return (identity, 0, checked((int)new FileInfo(identity).Length), false);
         var file = identity[..split];
@@ -135,12 +131,12 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     }
     internal static void Configure(string selectedRoot, string expectedCampaign,
         IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
-        IReadOnlyList<FalloutInstallationSetting>? settings = null, bool nativePluginsEnabled = true)
+        IReadOnlyList<FalloutInstallationSetting>? settings = null, bool includeImplicitPlugins = true)
     {
         Current?.Dispose();
         Current = null;
         Current = Open(selectedRoot, expectedCampaign, additionalContentRoots, activePlugins, settings: settings,
-            nativePluginsEnabled: nativePluginsEnabled);
+            includeImplicitPlugins: includeImplicitPlugins);
     }
 
     // Donor libraries have their own lifetime. Opening another owned game must
@@ -148,7 +144,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     internal static RuntimeLiveContentSource Open(string selectedRoot, string expectedCampaign,
         IReadOnlyList<string>? additionalContentRoots = null, IReadOnlyList<string>? activePlugins = null,
         string? archiveIniPath = null, IReadOnlyList<FalloutInstallationSetting>? settings = null,
-        bool nativePluginsEnabled = true)
+        bool includeImplicitPlugins = true)
     {
         var installation = NativeGameInstallation.Detect(selectedRoot);
         if (installation.Game is not (NativeGame.FalloutNewVegas or NativeGame.Fallout3))
@@ -168,7 +164,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
                     ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))));
         var pluginFiles = activePlugins is null
             ? ResolvePluginOrder(layers, installation.Game)
-            : ResolveSelectedPluginOrder(layers, installation.Game, activePlugins);
+            : ResolveSelectedPluginOrder(layers, installation.Game, activePlugins, includeImplicitPlugins);
         var plugins = pluginFiles.Select(path =>
         {
             var info = new FileInfo(path);
@@ -191,8 +187,6 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
         var edition = campaign;
         var build = installation.Game == NativeGame.Fallout3 ? "1.7.0.4" : "1.4.0.525";
         var identity = ComputeLiveIdentity(plugins, archives, layers.Roots.Count > 1 ? layers.Roots : []);
-        if (!nativePluginsEnabled)
-            identity = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity + "\0native-plugin-selection:none"))).ToLowerInvariant();
         return new RuntimeLiveContentSource(
             installation.ContentRoot,
             plugins,
@@ -203,7 +197,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
             edition,
             build,
             build,
-            layers, settings, nativePluginsEnabled);
+            layers, settings);
     }
 
     internal static void Clear()
@@ -218,7 +212,6 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
     internal bool TryRead(string logicalPath, string? preferredArchive, out byte[] data, out string source,
         out FalloutBsaMemberEncoding? archiveEncoding)
     {
-        using var readLifetime = EnterResourceRead();
         archiveEncoding = null;
         if (TryResolveLoose(logicalPath, out var loosePath))
         {
@@ -258,7 +251,6 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     internal bool TryResolve(string logicalPath, string? preferredArchive, out string source)
     {
-        using var readLifetime = EnterResourceRead();
         if (TryResolveLoose(logicalPath, out source))
             return true;
         var canonical = FalloutBsaArchive.CanonicalPath(logicalPath);
@@ -273,7 +265,6 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     internal IReadOnlyList<string> ResourcePathsUnder(string logicalDirectory)
     {
-        using var readLifetime = EnterResourceRead();
         var prefix = FalloutBsaArchive.CanonicalPath(logicalDirectory).TrimEnd('\\') + "\\";
         ArchiveWarmup.GetAwaiter().GetResult();
         var paths = _archiveWinners.Keys.Where(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
@@ -332,54 +323,22 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
 
     public void Dispose()
     {
-        RequireNotInsideResourceRead();
-        lock (_resourceRetirement)
-        {
-            if (_resourcesDisposed)
-            {
-                if (_resourceRetirementFailure is { } failure)
-                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
-                return;
-            }
-            DisposeResources();
-        }
-    }
-
-    private void DisposeResources()
-    {
-        List<Exception>? failures = null;
-        void Retire(Action operation)
-        {
-            try { operation(); }
-            catch (Exception failure) { (failures ??= []).Add(failure); }
-        }
-        Retire(RetireNativePluginDeclarationRead);
-        Retire(RetireMenuSoundSelection);
-        // First stop/drain asynchronous producer owners above, then wait for
-        // actual entered reads. New readers cannot pass the retirement store.
-        StopAndDrainResourceReads();
-        // Warmup is an independent constructor task and must return before
-        // its archive handles are released. It does not enter public reads.
-        Retire(() => ArchiveWarmup.GetAwaiter().GetResult());
-        Retire(_payloads.Clear);
+        // Warmup owns archive handles too; do not let it reopen them after disposal.
+        try { ArchiveWarmup.GetAwaiter().GetResult(); }
+        catch (Exception) { /* A failed warmup still has to release every opened archive. */ }
+        _payloads.Clear();
         foreach (var archive in _openArchives.Values)
-            if (archive.IsValueCreated) Retire(archive.Value.Dispose);
-        _resourcesDisposed = true;
-        _resourceRetirementFailure = failures switch
         {
-            { Count: 1 } => failures[0],
-            { Count: > 1 } => new AggregateException("Selected source retirement retained independent owner failures.", failures),
-            _ => null
-        };
-        if (_resourceRetirementFailure is { } error)
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+            if (archive.IsValueCreated)
+                archive.Value.Dispose();
+        }
     }
 
     internal static IReadOnlyList<string> ResolvePluginOrder(string dataRoot, NativeGame game, string? activePluginsPath = null)
         => ResolvePluginOrder(new FalloutContentLayers([dataRoot]), game, activePluginsPath);
 
     internal static IReadOnlyList<string> ResolveSelectedPluginOrder(FalloutContentLayers layers, NativeGame game,
-        IReadOnlyList<string> selectedPlugins)
+        IReadOnlyList<string> selectedPlugins, bool includeImplicitPlugins = true)
     {
         var available = layers.TopLevelFiles();
         var requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -405,7 +364,7 @@ internal sealed partial class RuntimeLiveContentSource : IDisposable
             result.Add(path);
         }
         Visit(game == NativeGame.Fallout3 ? "Fallout3.esm" : "FalloutNV.esm");
-        if (game == NativeGame.FalloutNewVegas)
+        if (includeImplicitPlugins && game == NativeGame.FalloutNewVegas)
         {
             var implicitPlugins = available.Keys.Where(name => Path.GetExtension(name).Equals(".nam", StringComparison.OrdinalIgnoreCase))
                 .SelectMany(marker => new[] { Path.ChangeExtension(marker, ".esm"), Path.ChangeExtension(marker, ".esp") })

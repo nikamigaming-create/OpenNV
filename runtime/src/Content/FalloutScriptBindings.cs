@@ -6,12 +6,6 @@ namespace OpenNV.Runtime.Content;
 // A matching EDID elsewhere in the load order does not grant script access.
 internal sealed class FalloutScriptBindings
 {
-    internal const uint PlayerReferenceId = 0x14;
-    // This reference is constructed by engine bootstrap; it need not have an
-    // ESM placement record. Runtime identity still belongs to the selected graph.
-    internal static bool IsPlayerReference(FalloutPluginStack records, FalloutFormKey reference) =>
-        records.RuntimeFormId(reference) == PlayerReferenceId;
-
     private readonly FalloutPluginStack _records;
     private readonly FalloutPluginRecord _owner;
     private readonly Func<FalloutPluginRecord, FalloutPluginRecord?>? _attachedScript;
@@ -21,32 +15,6 @@ internal sealed class FalloutScriptBindings
     internal bool HasPlayerReference { get; }
     internal FalloutFormKey Source { get; }
     private readonly FalloutFormKey? _playerReference;
-    private readonly bool _compiled;
-    private readonly Dictionary<FalloutFormKey, string> _compiledNames = [];
-
-    private FalloutScriptBindings(FalloutPluginStack records, FalloutPluginRecord owner,
-        FalloutPluginRecord source, Func<FalloutPluginRecord, FalloutPluginRecord?> attachedScript)
-    {
-        _records = records; _owner = owner; Source = source.FormKey; _attachedScript = attachedScript;
-        _compiled = true;
-        // This spelling is an internal binding of the reserved engine player,
-        // reachable only from a decoded table entry or an authoritative typed
-        // query result. No source name or synthetic placed record is required.
-        _playerReference = records.RuntimeFormKey(PlayerReferenceId); HasPlayerReference = true;
-    }
-
-    internal static FalloutScriptBindings ForCompiled(FalloutPluginStack records, FalloutPluginRecord owner,
-        FalloutPluginRecord source, Func<FalloutPluginRecord, FalloutPluginRecord?> attachedScript) =>
-        new(records, owner, source, attachedScript);
-
-    internal string BindCompiledForm(FalloutFormKey form)
-    {
-        if (!_compiled) throw new InvalidOperationException("Binary operands require their compiled binding owner.");
-        if (_records.RuntimeFormId(form) == 0x14) return "player";
-        if (_compiledNames.TryGetValue(form, out var previous)) return previous;
-        var name = "opennvCompiledOperand" + _compiledNames.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        _forms.Add(name, _records.GetEffective(form)); _compiledNames.Add(form, name); return name;
-    }
 
     internal FalloutScriptBindings(FalloutPluginStack records, FalloutPluginRecord quest,
         FalloutPluginRecord source, IEnumerable<FalloutPluginSubrecord> fields,
@@ -60,7 +28,7 @@ internal sealed class FalloutScriptBindings
         {
             if (field.Data.Length != 4) throw new InvalidDataException("Script reference extent is invalid.");
             var form = source.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
-            if (IsPlayerReference(records, form)) { HasPlayerReference = true; _playerReference = form; continue; }
+            if (records.RuntimeFormId(form) == 0x14) { HasPlayerReference = true; _playerReference = form; continue; }
             var record = records.GetEffective(form);
             var ids = record.ReadSubrecords().Where(value => value.Signature == "EDID").ToArray();
             if (ids.Length == 0) continue;
@@ -104,8 +72,7 @@ internal sealed class FalloutScriptBindings
         var script = _attachedScript is null ? FalloutScriptLocals.AttachedScript(_records, owner) : _attachedScript(owner);
         if (script is null) return false;
         if (!_variables.TryGetValue(script.FormKey, out var variables))
-            _variables.Add(script.FormKey, variables = FalloutScriptLocals.ReadDeclarations(script, _compiled ?
-                FalloutScriptDeclarationAuthority.CompiledVanilla : FalloutScriptDeclarationAuthority.SourceDiagnostic));
+            _variables.Add(script.FormKey, variables = FalloutScriptLocals.ReadDeclarations(script));
         return variables.ContainsKey(parts[^1]);
     }
 
@@ -121,8 +88,7 @@ internal sealed class FalloutScriptBindings
             throw new NotSupportedException($"Script variable owner {owner.FormKey} has no attached script.");
         if (!_variables.TryGetValue(script.FormKey, out var variables))
         {
-            variables = FalloutScriptLocals.ReadDeclarations(script, _compiled ?
-                FalloutScriptDeclarationAuthority.CompiledVanilla : FalloutScriptDeclarationAuthority.SourceDiagnostic);
+            variables = FalloutScriptLocals.ReadDeclarations(script);
             _variables.Add(script.FormKey, variables);
         }
         if (!variables.TryGetValue(split[^1], out var value))

@@ -1,49 +1,44 @@
 # Current work
 
-## User direction — 2026-10-17
+Updated 2026-10-17. One integration owner is recovering a playable Godot/OpenXR
+FNV candidate for Quest 3 over Air Link. Delivery order remains **vanilla FNV,
+vanilla FO3, mods, then TTW**. Existing gameplay is a regression requirement.
 
-Recover the previously playable Godot/OpenXR game for a local Quest 3 / Air Link
-test. Delivery order is **vanilla New Vegas, vanilla Fallout 3, mods, then TTW**.
-VR is part of each game's acceptance from the start.
+## Current implementation
 
-Consolidate outstanding source onto checked main, establish a working baseline,
-then begin one fresh release branch. The next FNV acceptance route includes
-Goodsprings, travel to Primm, ED-E repair/recruitment, companion combat and loot,
-dialogue, inventory/Pip-Boy, and persistent continuation. Crafting remains an
-explicit test target. Existing playthroughs are regression requirements.
+The October 9 gameplay implementation at 03c3d23a is restored as one coherent
+runtime/native/tools/test boundary. Godot 4.8-dev7 and .NET 10 remain pinned.
+Recent source work is retained in normal Git history at 17a56554. The incomplete
+mandatory Main/Player integration is removed, not bypassed with success stubs.
 
-## Source findings
+Independent retained fixes cover signed font advances, compiler compatibility,
+isolated launcher profiles, explicit official-content selection, OpenXR launch
+selection, wrist pointer cancellation and input release, and player visibility.
+Native extension modules are disabled. FO3/mod/TTW expansion is deferred.
 
-Ordinary startup attaches and starts the mandatory source Main caller in
-RuntimeCoordinator.NativeOwned.cs. Its New Vegas consumers still throw for
-MainHold, TimedContexts and renderer/registered-clock callbacks in
-FalloutCampaignMainScriptConsumers.cs. RuntimeCoordinator.MainPlayer.cs also
-contains unimplemented FNV interface/scene and CELL-loading consumers.
+## Executed checks
 
-A Main failure is retained in the shared world. RuntimeNativePlayer.cs and
-RuntimeNativePlayer.OpenXR.cs then stop gameplay movement/actions. Existing
-VR presentation and gameplay implementations remain in the source. Disabling
-native mods alone cannot repair these required frame consumers.
+- Fresh pre-recovery New Game failed constructing the player in Doc Mitchell's
+  house: source-Player-post-null-distinct-manager-word-constructor-and-writers-unowned.
+- Historical executable loaded a copied save, moved and opened its actual Pip-Boy.
+- Restored Debug source builds with no warnings. Restored Release builds too;
+  the full required gate is running and compiler-version formatting is being fixed.
+- Restored Debug simulator loaded Goodsprings through the actual game save menu.
+  Both eyes show the world, hands, wrist device and equipped laser pistol.
+  Controller locomotion moved the player. Ordinary Quit completed.
+- That Debug session was slow. Release frame times and the final input fixes
+  still need live validation. No physical-headset acceptance is claimed.
+- Original user save hash remained unchanged. Tests use separate copied saves.
 
-This is a code-proven incomplete production path and the leading regression
-hypothesis. The first failure in a fresh vanilla run and the exact breaking
-revision have not yet been reproduced in this recovery session.
+## Next work
 
-## Repository inventory at planning time
+Finish the full runtime gate and owned-data checks. Export a fresh Release,
+measure and repair actual performance/input failures, then exercise dialogue,
+weapons, Pip-Boy pages, doors, loot and cold saves with ordinary inputs. Continue
+the Goodsprings/Primm/ED-E regression route without forced quests or entities.
 
-- main and origin/main: 147a3f9d.
-- Current branch: codex/fo3-model-load, committed HEAD 17eddb43.
-- Existing PR: #207; current checkout has 169 changed/untracked paths.
-- 72 local branches; 24 registered worktrees; 18 worktrees have changes.
-- An October 9 exported FNV package is present locally with source identity
-  03c3d23a. Historical revisions are comparison inputs, not today's acceptance.
-
-## Next execution
-
-Follow [implementation-plan.md](implementation-plan.md). Preserve source changes
-and saves, reconcile branch contents, reproduce vanilla FNV against the historical
-reference, repair the first demonstrated integration regression, and verify the
-ordinary route in the simulator. Keep one integration owner and candidate.
-
-No new runtime, simulator, save or headset pass is claimed by this planning
-reset. Frame recording is off. Prior narrative progress reports are not gates.
+Complete checked PR #207, synchronize main, and retire accounted branches and
+worktrees. Source reconciliation has preserved dirty source and identified
+superseded experiments; cleanup is pending. Then use one fresh release branch
+for the local handoff. Root owns builds, live input and Git integration; agents
+review gameplay, launcher and source reconciliation. Frame recording is off.

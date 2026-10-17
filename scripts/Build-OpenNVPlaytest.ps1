@@ -74,7 +74,8 @@ $taskSmokeLog = Join-Path $OutputRoot ($LaunchName + '-startup.log')
 # Windows GUI exports do not inherit the PowerShell console's output handles.
 # Use the runtime's own file logger and wait for the actual exported process.
 $taskStartup = Start-Process -FilePath (Join-Path $taskPackage 'OpenNV.exe') -ArgumentList (
-    '--headless --xr-mode off --quit-after 3 --log-file "' + $taskSmokeLog + '" -- --launcher') -WindowStyle Hidden -PassThru
+    '--headless --xr-mode off --quit-after 3 --log-file "' + $taskSmokeLog + '" -- --launcher --launcher-game newvegas --presentation first-person --native-plugins none --content-selection vanilla --profile-root "' +
+    (Join-Path $taskRepository 'tmp/playtest-launcher-smoke') + '"') -WindowStyle Hidden -PassThru
 if (!$taskStartup.WaitForExit(45000)) {
     $taskStartup.Kill()
     throw "Pinned launcher startup did not finish: $taskSmokeLog"
@@ -100,7 +101,7 @@ if ($taskReady.phase -ne 'launcher-construction' -or !$taskReady.refreshed -or !
 # The pointer can advance. Each package and checksum retains its original path.
 $taskRelative = [IO.Path]::GetRelativePath($OutputRoot, $taskPackage)
 $taskCommand = @('@echo off', 'cd /d "%~dp0"',
-    ('start "OpenNV" "%~dp0' + $taskRelative + '\OpenNV.exe" --xr-mode off -- --launcher %*'))
+    ('start "OpenNV" "%~dp0' + $taskRelative + '\OpenNV.exe" --xr-mode off -- --launcher --launcher-game newvegas --presentation first-person --native-plugins none --content-selection vanilla --profile-root "%APPDATA%\Godot\app_userdata\OpenNV\vanilla" %*'))
 $taskCommandPath = Join-Path $OutputRoot ($LaunchName + '.cmd')
 $taskPending = $taskCommandPath + '.pending'
 $taskCommand | Set-Content -LiteralPath $taskPending -Encoding ascii

@@ -40,21 +40,13 @@ internal static class OwnedConversationProbe
         var conversation = new FalloutConversation(records, quests, context.Evaluate, (info, begin) => scripts.ExecuteResult(info, speaker.FormKey, begin), said);
         conversation.Start(speakerBase, FalloutDialogueTopic.Find(records, "DIAL", "GREETING").FormKey);
         if (quests.Variable(quest.FormKey, slots["bBeganTest"]) != 1) throw new InvalidOperationException("Authored conversation begin script did not run.");
-        var selections = 0; var silentSteps = 0;
+        var selections = 0;
         var fade = FalloutReferenceFadeSettings.Read(FalloutInstallationSettings.Read(content));
         while (conversation.Phase != "closed" && selections < 64)
         {
             world.AdvanceEnableChanges(1d / 60, fade, _ => false);
             while (conversation.Phase == "speaking") conversation.CompleteResponse();
             if (conversation.Phase == "closed") break;
-            if (conversation.Phase == "continuing")
-            {
-                // This bound belongs only to the finite diagnostic probe.
-                // Production uses the recurrent C# owner without a chain cap.
-                if (++silentSteps > 64) throw new InvalidOperationException("Owned questionnaire probe did not settle its silent continuation.");
-                conversation.ContinueResultOnly();
-                continue;
-            }
             if (conversation.Phase != "choices" || conversation.Choices.Count == 0) throw new InvalidOperationException("Authored questionnaire choices are absent.");
             conversation.Choose(conversation.Choices[0].Topic);
             selections++;

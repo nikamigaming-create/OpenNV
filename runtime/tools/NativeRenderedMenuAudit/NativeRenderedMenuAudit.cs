@@ -10,34 +10,9 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
-            if (args is ["--menu-pixel-output"])
-            {
-                await MenuPixelOutput(null, []);
-                GetTree().Quit();
-                return;
-            }
-            if (args is ["--menu-pixel-output", var pixelRoot, .. var pixelOptions])
-            {
-                await MenuPixelOutput(pixelRoot, pixelOptions);
-                GetTree().Quit();
-                return;
-            }
-            if (args is ["--bitmap-font-metrics", var fontRoot, .. var fontOptions])
-            {
-                BitmapFontMetrics(fontRoot, fontOptions);
-                GetTree().Quit();
-                return;
-            }
             if (args is ["--ui-system-colors", var colorRoot, .. var colorOptions])
             {
                 await UiSystemColors(colorRoot, colorOptions); GetTree().Quit(); return;
-            }
-            if (args.Length >= 8 && args[1] == "--speech-result-authority-negative")
-            {
-                await FinishedSpeechResultAuthorityNegative(args[0], args[2], args[3], args[4], args[5], args[6],
-                    short.Parse(args[7], System.Globalization.CultureInfo.InvariantCulture), args[8..]);
-                GetTree().Quit();
-                return;
             }
             if (args.Length >= 9 && args[1] == "--package-event-speech-cold")
             {

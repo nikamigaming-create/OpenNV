@@ -34,16 +34,6 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     private int _transparentLayerUnresolvedContacts;
     private bool _active;
     private string _status = "prepared";
-    private FalloutReferenceWorld? _gameplayWorld;
-
-    internal void BindGameplayWorld(FalloutReferenceWorld world)
-    {
-        ArgumentNullException.ThrowIfNull(world);
-        if (_active || _gameplayWorld is not null)
-            throw new InvalidOperationException("Projectile gameplay owner cannot change after publication.");
-        world.RequireNoFunctionalFailure();
-        _gameplayWorld = world;
-    }
 
     internal Action<RuntimeNativeProjectileContact>? OnContact { get; set; }
     internal Action<RuntimeNativeProjectileFlight>? OnFinished { get; set; }
@@ -114,7 +104,6 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
 
     internal void Start()
     {
-        _gameplayWorld?.RequireNoFunctionalFailure();
         if (!IsInsideTree() || _active || IsFinished) throw new InvalidOperationException("Projectile flight is not ready to start.");
         if (_source.ExplosionSource is not null && OnDetonate is null)
             throw new InvalidOperationException("Explosive projectile has no runtime detonation owner.");
@@ -129,12 +118,6 @@ internal sealed partial class RuntimeNativeProjectileFlight : Node3D
     public override void _PhysicsProcess(double delta)
     {
         if (!_active) return;
-        if (_gameplayWorld?.FunctionalFailure is { } failure)
-        {
-            Error ??= "Authoritative projectile stopped at " + failure.Owner + ": " + failure.Error;
-            ProcessMode = ProcessModeEnum.Disabled;
-            return;
-        }
         if (!double.IsFinite(delta) || delta <= 0)
         {
             Finish("invalid-frame");

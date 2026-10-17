@@ -102,7 +102,7 @@ internal sealed partial class NativeOwnedWorldMap : Control
         }
         if (input is InputEventMouseMotion motion)
         {
-            if (_drag is { } previous) { _dragDistance += motion.Position.DistanceTo(previous); _offset += motion.Position - previous; _drag = motion.Position; QueueRedraw(); }
+            if (_drag is not null) { _dragDistance += motion.Relative.Length(); _offset += motion.Relative; _drag = motion.Position; QueueRedraw(); }
             var selected = _markers.Where(marker => (_offset + marker.Point * Extent).DistanceTo(motion.Position) < 22)
                 .OrderBy(marker => (_offset + marker.Point * Extent).DistanceSquaredTo(motion.Position)).FirstOrDefault();
             Hovered?.Invoke(selected.Marker?.Name ?? ""); AcceptEvent();

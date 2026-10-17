@@ -9,7 +9,6 @@ internal sealed record RuntimeLaunchRequest(
     RuntimeLaunchRoute Route,
     string? LoadingTitle)
 {
-    internal bool OpensLauncher { get; private init; }
     private static readonly string[] LegacyLaunchOptions =
     [
         "source-root", "source-stack", "source-stack-sha256", "stack-id",
@@ -31,10 +30,7 @@ internal sealed record RuntimeLaunchRequest(
         var route = options.ContainsKey("data-root")
             ? RuntimeLaunchRoute.LiveRetailFiles
             : RuntimeLaunchRoute.None;
-        return new RuntimeLaunchRequest(route, SelectLoadingTitle(options))
-        {
-            OpensLauncher = options.Count == 0 || options.ContainsKey("launcher"),
-        };
+        return new RuntimeLaunchRequest(route, SelectLoadingTitle(options));
     }
 
     internal bool Is(RuntimeLaunchRoute route) => Route == route;

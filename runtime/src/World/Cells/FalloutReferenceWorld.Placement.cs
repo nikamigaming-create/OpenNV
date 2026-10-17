@@ -60,9 +60,7 @@ internal sealed partial class FalloutReferenceWorld
         placement.Validate();
         if (instance.Deleted || instance.DeletePending || records.GetEffective(placement.Cell).Signature != "CELL")
             throw new InvalidDataException("Reference placement target is unavailable.");
-        var previous = Placement(reference);
-        CommitSourceLinkedPlacement(instance, previous, placement,
-            () => instance.Placement = placement.Copy());
+        instance.Placement = placement.Copy();
         instance.PackageMotion = null;
         instance.Engagement = null;
         instance.HitReaction = null;
@@ -119,7 +117,7 @@ internal sealed partial class FalloutReferenceWorld
             {
                 _residentReferences.Remove(key);
                 var instance = _instances[key];
-                if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; RetireDeletedActorScriptPackage(instance); }
+                if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; }
             }
         }
         foreach (var key in newKeys.Except(oldKeys)) _residentReferences[key] = _residentReferences.GetValueOrDefault(key) + 1;

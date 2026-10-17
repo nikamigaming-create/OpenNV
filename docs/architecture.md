@@ -1,77 +1,44 @@
 # OpenNV architecture
 
-This document describes the product boundary and the source paths inspected on
-October 17, 2026. It does not certify that every owner completes at runtime.
+OpenNV is a first-party C# and Godot/OpenXR game implementation. C# owns binary
+readers, winning records, gameplay, persistence and diagnostics. Godot owns
+presentation, controller/input adaptation and OpenXR. Flat and VR share the
+same gameplay and saves. Owned retail files are read-only; no retail assets or
+derivatives are packaged. There is no OpenMW dependency.
 
-## Product boundary
+## Product path
 
-OpenNV reads user-owned Fallout records and resources in place. C# owns formats,
-record resolution, scripts, gameplay state, telemetry and persistence. Godot owns
-presentation, input adaptation and OpenXR. Flat and VR must use the same
-authoritative game/save state. Retail files and saves remain read-only inputs;
-retail assets and derivatives are not distributed.
+RuntimeCoordinator and its launcher select an installation, profile and mode.
+RuntimeLiveContentSource reads installed resources directly. Official-content
+selection excludes custom activation lists and native extensions. Mod profiles
+remain a later explicit capability. Loose resources physically installed in the
+selected directory still follow resource precedence; official ESM selection does
+not assert that an installation is pristine.
 
-The implementation is independent of OpenMW and other engine source. Private
-retail observation yields neutral behavioral contracts, not copied implementation.
-Unknown required behavior remains an explicit failure until implemented.
+RuntimeCoordinator.NativeOwned constructs source-authored cells and references.
+RuntimeNativeQuestScripts advances the authoritative script runtime.
+RuntimeNativeOpeningStageDriver connects quest, conversation, package, combat,
+inventory and world owners. RuntimeNativePlayer owns locomotion and actions.
+Existing door and exterior-streaming owners load connected spaces. Persistent
+campaign snapshots retain gameplay state for both flat and OpenXR continuation.
 
-## Source entry and content selection
+NativeXrRig adapts tracked head/controller poses and ordinary action input to the
+same player. RuntimeNativePlayerActor owns body, hands and weapon presentation.
+NativeOwnedPipBoy renders the shared menu on the equipped wrist device.
+NativeXrCanvas renders ordinary menus on a stereo surface. Input ownership must
+release when a menu closes, tracking disappears or a session retires.
 
-RuntimeCoordinator.Launcher.cs selects the game, profile, mod stack and presentation,
-then configures RuntimeLiveContentSource. Native extension selection accepts
-installed or none; the current default is installed.
-RuntimeLiveContentSource.NativePlugins.cs excludes native plugin discovery when
-that selection is disabled. Base ESM/ESP selection and native DLL selection are
-distinct and must both be explicit for a vanilla test.
+## Implementation discipline
 
-RuntimeCoordinator.NativeOwned.cs constructs the world and campaign adapters.
-RuntimeCoordinator.NativePlugins.cs binds original native-module compatibility,
-input and inventory-reference services. Native module compatibility is an optional
-content capability; its failures must not become an undeclared vanilla dependency.
+Keep one owner per state transition and avoid parallel gameplay paths. Decode
+and reuse resources in process; transformed retail assets are not launch inputs.
+Do not introduce named-location exceptions, proxy actors or forced quest success.
+Implement missing behavior at its real owner and keep unsupported behavior visible.
+Use bounded, relevant checks and ordinary gameplay to assess the result. Record
+counts and plausible images do not establish campaign completion or parity.
 
-## Gameplay delivery and the current integration problem
-
-Campaigns/NewVegas/Opening/RuntimeNativeOpeningStageDriver.SourceMainScriptCaller.cs
-requires the selected Main runtime at attachment and starts native frame delivery.
-World/Cells/RuntimeNativeSourceMainScriptCaller.cs adapts the Godot process callback
-to the shared C# Main owner; its Async partial retains entered calls and failures.
-
-World/Cells/FalloutCampaignMainScriptConsumers.cs supplies the production callbacks.
-The FNV paths for MainHold, TimedContexts and renderer/registered clocks currently
-throw. RuntimeCoordinator.MainPlayer.cs also retains incomplete interface, scene
-and CELL-loading callbacks. These are production gaps, not merely diagnostic
-warnings.
-
-World/Cells/FalloutReferenceWorld.FunctionalFailure.cs retains a shared gameplay
-failure. RuntimeNativePlayer.cs and RuntimeNativePlayer.OpenXR.cs stop mutations
-after that failure. This preserves a consistent stopped state but makes existing
-presentation/input unusable when a mandatory upstream consumer is unfinished.
-Recovery must repair the integration and real behavior; bypassing the fault would
-leave inconsistent simulation and saves.
-
-## Existing presentation and interaction owners
-
-- RuntimeNativePlayer and RuntimeNativePlayerActor adapt movement, equipment,
-  player models and their shared gameplay state.
-- Presentation/OpenXR/NativeXrRig and related contact, pointer and support-grip
-  owners provide tracked head/controller and first-person interaction.
-- Presentation/Ui/NativeOwnedPipBoy presents the owned device/menu and routes
-  interaction to the gameplay owners.
-- Content/FalloutWeaponShot and Gameplay/State weapon owners resolve source
-  ammunition, actions and damage; flat and XR input enter the same action path.
-- Campaign, conversation, reference, companion and inventory owners remain the
-  existing gameplay implementation. Their presence is not current end-to-end proof.
-
-## Persistence and acceptance
-
-Complete saves must retain authoritative state, source identity and required live
-continuations across normal Quit and a new process. Presentation reconstruction
-must bind fresh resources without manufacturing historical gameplay. A save-file
-write alone is insufficient; ordinary cold Continue after travel/combat is required.
-
-Use one candidate and one publication owner. Consolidate checked source onto main,
-verify ordinary FNV gameplay in the simulator, then start the release branch.
-The delivery order, concrete route, cleanup policy and checks are defined in
-[implementation-plan.md](implementation-plan.md). Add architectural detail here
-only when it describes an implemented, source-located owner or a clearly labelled
-remaining gap.
+The incomplete mandatory source-Main/Player model was removed during the October
+17 recovery. Its prior work remains in Git history. New mechanics must integrate
+with the playable implementation rather than recreate a compulsory unfinished
+scheduler. Implementation details may be replaced freely when source behavior
+and practical validation justify the change.

@@ -17,26 +17,11 @@ internal static class PlayerScriptPackageContracts
                 Package(0x101, 0x201, 5), Package(0x102, 0x201, 5, BitConverter.GetBytes(1u)),
                 Package(0x103, 0x201, 5, [1, 0]), Package(0x104, 0x201, 5, BitConverter.GetBytes(uint.MaxValue)),
                 Package(0x105, 0x201, 5, BitConverter.GetBytes(2u)),
-                Record("PACK", 0x106, Field("EDID", Text("EmptyIdleCollection")), Field("PKDT", new byte[12]), Field("IDLC", [0])),
-                Record("PACK", 0x107, Field("EDID", Text("AbsentIdleCollection")), Field("PKDT", new byte[8])),
-                Record("PACK", 0x108, Field("EDID", Text("TimerOnlyIdleCollection")), Field("PKDT", new byte[12]), Field("IDLT", BitConverter.GetBytes(1f))),
                 Record("REFR", 0x200), Record("REFR", 0x201), Record("IDLE", 0x300)));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Packages.esm"), Package(0x100, 0x201, 3)));
             using var records = FalloutPluginStack.Load(directory, ["Packages.esm", "Patch.esp"]);
             var package = FalloutScriptPackage.Read(records.GetEffective(Key(0x100)));
             var exact = FalloutScriptPackage.Read(records.GetEffective(Key(0x101))) with { LocationRadius = 0 };
-            var empty = FalloutScriptPackage.Read(records.GetEffective(Key(0x106)));
-            var absent = FalloutScriptPackage.Read(records.GetEffective(Key(0x107)));
-            var timerOnly = FalloutScriptPackage.Read(records.GetEffective(Key(0x108)));
-            Require(package.HasIdleCollection && empty.HasIdleCollection && empty.Idles.Count == 0 &&
-                !absent.HasIdleCollection && timerOnly.HasIdleCollection && timerOnly.Idles.Count == 0,
-                "Idle collection pointer presence was guessed from the nonempty animation count.");
-            var packageSource = new FalloutIdlePackageSource(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Key(0x14),
-                new string('a', 64), empty.Form, Convert.ToHexString(SHA256.HashData(records.GetEffective(empty.Form).ReadData())), 4);
-            Require(FalloutIdlePackageSelection.From(empty, packageSource) is { HasExtra: true, Kind: 0, Source.Revision: 4 },
-                "Winning idle package descriptor lost its raw kind, empty collection or assignment scope.");
-            Reject(() => FalloutIdlePackageSelection.From(empty, packageSource with { Package = absent.Form }));
-            Reject(() => FalloutIdlePackageSelection.From(empty, packageSource with { Factory = Guid.Empty }));
             Require(package is { Procedure: 6, LocationType: 0, LocationRadius: 3 } && package.LocationReference == Key(0x201),
                 "Winning master-adjusted player package location was lost.");
             Require(FalloutScriptPackage.Read(records.GetEffective(Key(0x102))).Idles.SequenceEqual(package.Idles),
@@ -62,13 +47,11 @@ internal static class PlayerScriptPackageContracts
             Reject(() => exact.ContainsReferenceLocation(Key(0x400), projected, Key(0x400), projected, 0));
             var saved = new FalloutPlayerScriptPackageSnapshot(package.Form,
                 Convert.ToHexString(SHA256.HashData(records.GetEffective(package.Form).ReadData())), Key(0x300),
-                new string('A', 64), 1, true, false, .375, 0, EventKind: "POBA",
-                Playback: new(.375, 0, 0, 0, false, false),
-                IdleSha256: Convert.ToHexString(SHA256.HashData(records.GetEffective(Key(0x300)).ReadData())), EventResults: []);
+                new string('A', 64), 1, true, false, .375, 0);
             var session = new FalloutScriptSession(); session.PublishPlayerPackage(saved);
             var cold = new FalloutScriptSession();
             cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(session.Capture()))!);
-            Require(Same(cold.PlayerPackage, saved), "Cold player package lost assignment, phase, cursor, hash or elapsed time.");
+            Require(cold.PlayerPackage == saved, "Cold player package lost assignment, phase, cursor, hash or elapsed time.");
             var repeated = saved with
             {
                 Elapsed = 23.5,
@@ -78,7 +61,7 @@ internal static class PlayerScriptPackageContracts
             };
             cold.PublishPlayerPackage(repeated);
             cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(cold.Capture()))!);
-            Require(Same(cold.PlayerPackage, repeated) && cold.PlayerPackage!.PendingPackage is null,
+            Require(cold.PlayerPackage == repeated && cold.PlayerPackage.PendingPackage is null,
                 "Cold settled change pose lost its IDLE identity, repetitions, phase or sound random state.");
             foreach (var invalidRepeat in new[]
             {
@@ -89,18 +72,18 @@ internal static class PlayerScriptPackageContracts
             })
             {
                 Reject(() => cold.PublishPlayerPackage(invalidRepeat));
-                Require(Same(cold.PlayerPackage, repeated), "Rejected repeat state partially changed the live player package.");
+                Require(cold.PlayerPackage == repeated, "Rejected repeat state partially changed the live player package.");
             }
             var changing = saved with { EventKind = "POCA", PendingPackage = Key(0x101), PendingPackageSha256 = new string('B', 64) };
             cold.PublishPlayerPackage(changing);
             cold.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(cold.Capture()))!);
-            Require(Same(cold.PlayerPackage, changing) && cold.PlayerPackage!.Phase == "POCA", "Cold change phase lost its pending source assignment.");
+            Require(cold.PlayerPackage == changing && cold.PlayerPackage.Phase == "POCA", "Cold change phase lost its pending source assignment.");
             foreach (var invalidChange in new[] { changing with { PendingPackage = null }, changing with { PendingPackageSha256 = null },
                 changing with { PendingPackageSha256 = "bad" }, changing with { EventKind = "POBA" }, changing with { PackageEvent = false },
                 changing with { EventKind = "POEA" }, changing with { Idle = null, AnimationSha256 = null, PackageEvent = false } })
             {
                 Reject(() => cold.PublishPlayerPackage(invalidChange));
-                Require(Same(cold.PlayerPackage, changing), "Rejected change phase partially replaced saved assignment.");
+                Require(cold.PlayerPackage == changing, "Rejected change phase partially replaced saved assignment.");
             }
             cold.PublishPlayerPackage(saved);
             foreach (var invalid in new[] { saved with { Cursor = -1 }, saved with { Elapsed = double.NaN },
@@ -108,9 +91,9 @@ internal static class PlayerScriptPackageContracts
                 saved with { Wait = -1 }, saved with { Complete = true } })
             {
                 Reject(() => cold.PublishPlayerPackage(invalid));
-                Require(Same(cold.PlayerPackage, saved), "Rejected package state partially published.");
+                Require(cold.PlayerPackage == saved, "Rejected package state partially published.");
                 Reject(() => cold.Restore(cold.Capture() with { PlayerPackage = invalid }));
-                Require(Same(cold.PlayerPackage, saved), "Rejected cold package state replaced live assignment.");
+                Require(cold.PlayerPackage == saved, "Rejected cold package state replaced live assignment.");
             }
             var legacy = JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>("{\"Hardcore\":false,\"AutoDisplayObjectives\":true,\"Achievements\":[]}")!;
             Require(legacy.PlayerPackage is null, "Legacy session acquired a script package.");
@@ -155,8 +138,6 @@ internal static class PlayerScriptPackageContracts
     }
     private static byte[] Text(string value) => Encoding.ASCII.GetBytes(value + '\0');
     private static byte[] Join(params byte[][] values) => values.SelectMany(value => value).ToArray();
-    private static bool Same(FalloutPlayerScriptPackageSnapshot? actual, FalloutPlayerScriptPackageSnapshot expected) =>
-        JsonSerializer.Serialize(actual) == JsonSerializer.Serialize(expected);
     private static void Require(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
     private static void Reject(Action action)
     {

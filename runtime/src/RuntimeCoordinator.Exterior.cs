@@ -58,18 +58,13 @@ public partial class RuntimeCoordinator
         maximumUploadMilliseconds = _nativeGridMaximumUploadMilliseconds,
         maximumUploadSource = _nativeGridMaximumUploadSource,
         preparingNpcs = _nativeGridNpcPreparations.Count,
-        retainedNpcPublications = _nativeGridNpcPublications.Count,
-        queuedActorCallers = NativeQueuedActorCallerState,
         lastCommitMilliseconds = _nativeGridCommitMilliseconds,
         lastCommitPhasesMilliseconds = _nativeGridCommitPhases,
-        error = _nativeGridError,
-        sourceCellGraph = NativeSharedGridState
+        error = _nativeGridError
     };
 
     private void AdvanceNativeExteriorStreaming(double delta)
     {
-        ReapExteriorQueuedNpcRetirements();
-        if (AdvanceNativeSharedGridCancellation() || InvalidateChangedNativeSharedPlacementInput()) return;
         if (_nativeStreamRoot is not null && _nativeStreamRoot != _nativeCurrentCellRoot)
         {
             foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
@@ -126,8 +121,7 @@ public partial class RuntimeCoordinator
             _nativeGridTarget = target;
             _nativeGridError = null;
             var resident = _nativeWalkableGrid.ToHashSet();
-            var residentModels = _nativeNifPrototypes.Keys.Concat(_nativeModeledLightSources.Values.Select(value => value.LogicalPath))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var residentModels = _nativeNifPrototypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var content = RuntimeLiveContentSource.Current!;
             _nativeGridReadCancellation = new();
             var cancellation = _nativeGridReadCancellation.Token;
@@ -140,7 +134,7 @@ public partial class RuntimeCoordinator
                         cell =>
                         {
                             cancellation.ThrowIfCancellationRequested();
-                            return FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell);
+                            return FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, resolved.PersistentCell);
                         });
                     foreach (var path in landscapes.Values.SelectMany(land => land.Textures.Values)
                         .SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
@@ -176,9 +170,7 @@ public partial class RuntimeCoordinator
         }
         catch (Exception error)
         {
-            RetainNativeSharedGridFailure(error);
-            _nativeGridError = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
-            _nativeGridFailed = _nativeGridTarget ?? coordinates;
+            _nativeGridError = error.Message; _nativeGridFailed = _nativeGridTarget ?? coordinates;
             CancelNativeGridRead(); _nativeGridUploads = null; _nativeGridPending = null;
             _nativeGridTarget = null;
             foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
@@ -189,60 +181,24 @@ public partial class RuntimeCoordinator
 
     private void CancelNativeGridRead()
     {
-        var failures = new List<Exception>();
-        try { RequestExteriorQueuedNpcRetirement(); } catch (Exception error) { failures.Add(error); }
-        try { ReapExteriorQueuedNpcRetirements(); } catch (Exception error) { failures.Add(error); }
-        try { RequestNativeSharedGridCancellation(); } catch (Exception error) { failures.Add(error); }
-        try { _ = AdvanceNativeSharedGridCancellation(); } catch (Exception error) { failures.Add(error); }
-        try
-        {
-            _nativeGridReadCancellation?.Cancel();
-            _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
-        }
-        catch (Exception error) { failures.Add(error); }
+        foreach (var preparation in _nativeGridNpcPreparations) preparation.Dispose();
+        _nativeGridNpcPreparations.Clear();
+        _nativeGridReadCancellation?.Cancel();
+        _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
         if (_nativeGridRead is { } abandoned)
             _ = abandoned.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         _nativeGridRead = null;
-        if (failures.Count != 0) throw new AggregateException("Exterior read/native caller cancellation retains independent failures.", failures);
     }
 
     public override void _ExitTree()
     {
         if (_retiringNativeSession) GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=enter");
-        var failures = new List<Exception>();
-        void Retire(Action action) { try { action(); } catch (Exception error) { failures.Add(error); } }
-        Retire(RetireNativeMainDelivery);
-        try { RequireNativeMainDeliveryClosed(); }
-        catch (Exception failure)
-        {
-            failures.Add(failure);
-            throw new AggregateException("Native Main remains bound; its scene/platform/source providers stay retained.", failures);
-        }
-        Retire(RetireNativePluginCampaign);
-        if (_nativePluginCampaign is null && _nativeDirectInput is null && _nativeQuestScripts is { } scripts &&
-            GodotObject.IsInstanceValid(scripts) && scripts.GetParent() is null)
-            Retire(() => { scripts.Free(); _nativeQuestScripts = null; });
-        // Subtitles prepare speech before physical Player publication. A
-        // failed model load can precede their transfer to the HUD's tree.
-        if (_nativeSubtitles is { } subtitles && GodotObject.IsInstanceValid(subtitles) && subtitles.GetParent() is null)
-            Retire(() => { subtitles.Free(); _nativeSubtitles = null; });
-        Retire(RetireNativeExperienceHud);
-        Retire(() => CancelNativeManualSave("Native session retired before the pending manual save could commit.", allQueued: true));
-        Retire(DetachNativeCloseRequest);
-        Retire(CancelNativeLauncherEntry);
-        Retire(CancelNativeGridRead);
-        Retire(() => _nativeBootstrap?.RetirePreparation());
-        Retire(RequireNativeSourceCellRetirementBeforeWorldRelease);
-        Retire(RetireCurrentImagePhase);
-        Retire(RetireNativeModeledLightSources);
-        Retire(RequireNativeSkyHdrRetired);
-        Retire(() => _nativeSkyLighting?.RetireSourceTransfer());
-        if (!_retiringNativeSession)
-        {
-            if (failures.Count != 0) throw new AggregateException("Native session retirement retained failures.", failures);
-            return;
-        }
+        CancelNativeManualSave("Native session retired before the pending manual save could commit.");
+        DetachNativeCloseRequest();
+        CancelNativeLauncherEntry();
+        CancelNativeGridRead();
+        if (!_retiringNativeSession) return;
         // Session retirement has drained source workers. Detached prototypes are outside
         // the scene tree and must be released with the retired record owners.
         var retired = 0;
@@ -250,43 +206,39 @@ public partial class RuntimeCoordinator
         {
             if (_options.ContainsKey("live-harness") && retired % 16 == 0)
                 GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototype index={retired} source={path}");
-            Retire(prototype.Scene.Root.Free); retired++;
+            prototype.Scene.Root.Free(); retired++;
         }
         GD.Print($"OPENNV_NATIVE_SESSION_RETIRE phase=prototypes-freed count={retired}");
         _nativeNifPrototypes.Clear();
-        Retire(() => FreeNativeSourceCellRoot(_nativePrewarmedInitialCellRoot)); _nativePrewarmedInitialCellRoot = null;
-        if (_nativePluginCampaign is null && _nativeDirectInput is null && _nativeInventoryReferences is null && _nativeQueuedActorCallers.Count == 0 &&
-            _nativeGridNpcPreparations.Count == 0 && _nativeGridNpcPublications.Count == 0)
-        {
-            Retire(RetireNativeCampaignSources);
-        }
-        else failures.Add(new InvalidOperationException("Native child or queued caller retirement is incomplete; its source/world owners remain retained."));
-        if (failures.Count != 0) throw new AggregateException("Native session retirement retained failures.", failures);
+        _nativePrewarmedInitialCellRoot?.Free(); _nativePrewarmedInitialCellRoot = null;
+        _nativeReferences?.Dispose(); _nativePluginStack?.Dispose();
+        GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
     }
 
     private void StageNativeExteriorGrid(PreparedExteriorGrid prepared)
     {
         var grid = prepared.Grid with { Scene = _nativeReferences!.ComposeResidency(prepared.Grid.Scene, prepared.Grid.Cells) };
         var root = _nativeCurrentCellRoot!;
-        var pendingReferences = PrepareNativeSharedGrid(root, grid);
         _nativeGridPending = grid; _nativeGridUploads = new();
         var oldLand = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Select(land => land.Source.ActiveCell).ToHashSet();
         foreach (var cell in grid.Cells.Where(cell => !oldLand.Contains(cell.FormKey)))
             _nativeGridUploads.Enqueue((cell.FormKey.ToString(), () =>
             {
-                var land = ConstructNativeSourceTerrain(root, cell.FormKey, prepared.Landscapes[cell.FormKey]);
-                GamebryoReferenceEnableRuntime.Apply(land, false); _nativeGridStaged.Add(land);
+                var land = RuntimeNativeLandscapeTransportBuilder.Build(prepared.Landscapes[cell.FormKey],
+                    _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures);
+                root.AddChild(land); GamebryoReferenceEnableRuntime.Apply(land, false); _nativeGridStaged.Add(land);
                 return true;
             }
             ));
-        foreach (var reference in grid.Scene.References.Where(reference => pendingReferences.Contains(reference.FormKey)))
+        var previous = _nativeActiveCell!.References.Select(reference => reference.FormKey).ToHashSet();
+        foreach (var reference in grid.Scene.References.Where(reference => !previous.Contains(reference.FormKey) &&
+            _nativeReferencePresentation?.HasPrepared(reference.FormKey) != true))
         {
             ExteriorNpcPreparation? npc = null;
             _nativeGridUploads.Enqueue((reference.FormKey.ToString(), () =>
             {
                 var before = root.GetChildCount();
                 RuntimeNativeNpc? preparedNpc = null;
-                var cancelled = false;
                 try
                 {
                     var model = grid.Scene.BaseObjects[reference.Base].ModelPath;
@@ -294,8 +246,8 @@ public partial class RuntimeCoordinator
                     {
                         if (npc is null)
                         {
-                            // Bound real decoder/assembly inputs. Transferred
-                            // bodies retain separate source publication owners.
+                            // Bound both jobs and completed bodies awaiting GPU
+                            // publication; worker slots alone do not bound memory.
                             if (_nativeGridNpcPreparations.Count >= FalloutContentWorkers.Concurrency) return false;
                             npc = PrepareExteriorNpc(reference);
                         }
@@ -304,16 +256,12 @@ public partial class RuntimeCoordinator
                             var armor = _nativeReferences.EquippedArmor(reference.FormKey,
                                 _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
                             if (!armor.SequenceEqual(npc.Appearance.EquippedArmor))
-                            {
-                                if (ReleaseExteriorNpc(npc, cancel: true)) npc = null;
-                                return false;
-                            }
+                            { ReleaseExteriorNpc(npc); npc = null; return false; }
                             if (!npc.Advance(this, grid.Scene, out preparedNpc)) return false;
                         }
                     }
                     PlaceNativeReference(root, grid.Scene, reference, observe: false,
                         preparedModel: model is null ? null : prepared.Models.GetValueOrDefault(model), preparedNpc: preparedNpc);
-                    CompleteNativeSourceCellReference(root, grid.Scene, reference, before);
                     if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
                     var nodes = root.GetChildren().Skip(before).OfType<Node3D>().ToArray();
                     if (nodes.Length > 1) throw new InvalidDataException("A source reference must have one presentation root.");
@@ -325,9 +273,6 @@ public partial class RuntimeCoordinator
                 }
                 catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
                 {
-                    cancelled = true;
-                    FailNativeSourceCellReference(root, reference, error, before);
-                    if (npc is not null) RetainNativeQueuedCallerFailure(npc.Caller, error);
                     if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
                     while (root.GetChildCount() > before) root.GetChild(before).Free();
                     _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
@@ -335,7 +280,7 @@ public partial class RuntimeCoordinator
                         _nativeActorDivergences[reference.FormKey.ToString()] = error.Message;
                     GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey}: {error.Message}");
                 }
-                if (ReleaseExteriorNpc(npc, cancel: cancelled)) npc = null;
+                ReleaseExteriorNpc(npc); npc = null;
                 return true;
             }
             ));
@@ -356,28 +301,24 @@ public partial class RuntimeCoordinator
             phaseStarted = now;
         }
         var root = _nativeCurrentCellRoot!; var grid = _nativeGridPending!;
-        // A renderer grid is not an original CELL graph publication. Require
-        // the actual source attachment to have admitted the selected delta.
-        BeginNativeSharedGridPublication(root, grid);
         var previous = _nativeActiveCell!.Cell.FormKey;
         var retained = grid.Cells.Select(cell => cell.FormKey).ToHashSet();
         ++_nativeGridGeneration;
         var sky = new FalloutSkyLightingState(_nativePluginStack!, _nativeSkyLighting!.DaytimeExtension);
-        sky.RestoreLightingProjection(_nativeSkyLighting.CaptureLightingProjection());
+        sky.Restore(_nativeSkyLighting.Capture());
         var position = _nativePlayer!.GlobalPosition / _configuration.World.GameUnitsToMeters;
         sky.EnterCell(grid.Scene.Cell, _nativeGlobals, [position.X, -position.Z, position.Y]);
-        if (previous == grid.Scene.Cell.FormKey) _nativeReferences!.ReplaceResidentCell(grid.Scene);
-        else
-        {
-            _nativeReferences!.LoadCell(grid.Scene);
-            _nativeReferences.UnloadCell(previous);
-        }
+        _nativeReferences!.LoadCell(grid.Scene);
+        _nativeReferences.UnloadCell(previous);
         _nativeActiveCell = grid.Scene;
-        _nativeSkyLighting.CommitLightingProjection(sky.CaptureLightingProjection());
+        _nativeSkyLighting.Restore(sky.Capture());
         Mark("world-and-weather");
+        var center = grid.Scene.Cell.Coordinates!.Value;
         DiscoverNativeCellReferences(grid.Scene);
         Mark("source-discovery");
-        _nativeReferencePresentation!.SetResidency(grid.Scene.References, reference => MaterializeNativeReference(root, grid.Scene, reference));
+        _nativeReferencePresentation!.SetResidency(grid.Scene.References, reference => MaterializeNativeReference(root, grid.Scene, reference),
+            reference => Math.Abs((int)MathF.Floor(reference.Position[0] / 4096) - center.X) <= grid.Radius + 1 &&
+                Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Y) <= grid.Radius + 1);
         Mark("reference-residency");
         foreach (var (key, model) in _nativeGridModels) _nativeReferencePresentation.Register(key, model);
         Mark("reference-publication");
@@ -387,8 +328,15 @@ public partial class RuntimeCoordinator
             GamebryoReferenceEnableRuntime.Apply(land, active);
             if (active) _nativeLandLastUse[land.Source.ActiveCell] = _nativeGridGeneration;
         }
-        // Outgoing LAND nodes were actually destroyed through their source
-        // consumer leases before residency changed; retained cells keep theirs.
+        // Keep a bounded inactive terrain fringe for boundary reversals. It has
+        // no collision or gameplay residency until the normal commit enables it.
+        var terrain = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().ToArray();
+        foreach (var land in terrain.Where(land => !retained.Contains(land.Source.ActiveCell))
+            .OrderBy(land => _nativeLandLastUse.GetValueOrDefault(land.Source.ActiveCell))
+            .Take(Math.Max(0, terrain.Length - Math.Max(96, retained.Count * 2))))
+        {
+            _nativeLandLastUse.Remove(land.Source.ActiveCell); land.QueueFree();
+        }
         Mark("terrain-residency");
         _nativeReferenceEvents!.SetResidency(grid.Scene, root);
         Mark("reference-events");
@@ -401,9 +349,7 @@ public partial class RuntimeCoordinator
         Mark("lod-detail-mask");
         foreach (var actor in _nativeGridModels.Values.OfType<RuntimeNativeNpc>())
             actor.BeginPackageDialogue = (package, completed) => _nativeOpeningStageDriver!.RequestPackageDialogue(actor.Appearance.Reference!.Value, package, completed);
-        ApplyNativeSharedReferencePlacements(grid.Scene);
         foreach (var actor in _nativeReferencePresentation.Actors) actor.UpdateResidentScene(grid.Scene);
-        CompleteNativeSharedGridPublication(root);
         _nativeWalkableGrid.Clear(); foreach (var cell in grid.Cells) _nativeWalkableGrid.Add(cell.Coordinates!.Value);
         _nativeGridUploads = null; _nativeGridPending = null; _nativeGridStaged.Clear(); _nativeGridModels.Clear();
         _nativeGridFailed = null; _nativeGridTarget = null;
@@ -418,7 +364,6 @@ public partial class RuntimeCoordinator
         {
             _nativeNifPrototypes[path].Scene.Root.Free(); _nativeNifPrototypes.Remove(path);
         }
-        PruneNativeModeledLightSources(warmModels);
         Mark("prototype-eviction");
         var textures = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Where(land => !land.IsQueuedForDeletion())
             .SelectMany(land => land.Source.Textures.Values).SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath })
@@ -458,7 +403,9 @@ public partial class RuntimeCoordinator
     private void AddExteriorLandscape(Node3D root, FalloutExteriorGridScene grid)
     {
         foreach (var cell in grid.Cells)
-            _ = ConstructNativeSourceTerrain(root, cell.FormKey, FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell));
+            root.AddChild(RuntimeNativeLandscapeTransportBuilder.Build(
+                FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, grid.PersistentCell),
+                _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures));
         root.SetMeta("opennv_exterior_grid_cells", grid.Cells.Count);
         root.SetMeta("opennv_exterior_grid_radius", grid.Radius);
         var lod = new RuntimeNativeExteriorLod();
@@ -475,8 +422,6 @@ public partial class RuntimeCoordinator
         sky.Compositor = AddNativeImageSpace(root, imageSpace);
         sky.ImageSpace = imageSpace;
         sky.Configure(_nativePluginStack!, _nativeSkyLighting!, () => _nativeGameTime!.Hour, _configuration.World.GameUnitsToMeters, this);
-        sky.BindSourceMoonInputs(_nativeReferences ?? throw new InvalidOperationException("Sky has no actual reference world."),
-            _nativeGameTime ?? throw new InvalidOperationException("Sky has no actual calendar owner."));
         root.AddChild(sky);
         var wind = new RuntimeNativeWind { Name = "ExteriorWindOwner" };
         FalloutFormKey? windWeather = null;

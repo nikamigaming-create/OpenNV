@@ -3,31 +3,27 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime;
 
 /// <summary>
-/// Admit launch selections before reading the selected installation or saves.
+/// Fail-closed validation for the only admitted runtime content path: the
+/// selected installation's live retail files.
+/// Launch validation for the direct owned-installation runtime.
 /// </summary>
 internal static class RuntimeLaunchValidator
 {
+    internal static void NormalizePresentation(IDictionary<string, string> options)
+    {
+        options.TryGetValue("presentation", out var presentation);
+        if (options.ContainsKey("vr") && presentation is not null and not "openxr")
+            throw new ArgumentException("--vr conflicts with the selected presentation. Select openxr for VR.");
+        if (options.ContainsKey("vr") || presentation == "openxr")
+        {
+            options["vr"] = "true";
+            options["presentation"] = "openxr";
+        }
+    }
+
     internal static void ValidatePreflight(IReadOnlyDictionary<string, string> options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var commandInput = RuntimeInputPresentationSelection.UsesCommandInput(options);
-        if (options.ContainsKey("continue-game") && !commandInput)
-            throw new ArgumentException("--continue-game requires explicit --command-input or --headless-play.");
-        if (commandInput)
-        {
-            var required = new[] { "data-root", "campaign", "save-path", "live-harness" };
-            var missing = required.FirstOrDefault(option => !options.TryGetValue(option, out var value) || string.IsNullOrWhiteSpace(value));
-            if (missing is not null) throw new ArgumentException("Command gameplay requires --" + missing + ".");
-            if (options.GetValueOrDefault("campaign") is not ("fallout-3" or "fallout-new-vegas") ||
-                options.ContainsKey("launcher"))
-                throw new ArgumentException("Command gameplay requires a selected Fallout 3/New Vegas source and windowless input.");
-            if (options.ContainsKey("headless-play") && options.ContainsKey("vr"))
-                throw new ArgumentException("Headless gameplay cannot replace the actual rendered OpenXR owner.");
-            if (options.ContainsKey("new-game") && options.ContainsKey("continue-game"))
-                throw new ArgumentException("Select one command New Game or Continue action.");
-            if (!Path.IsPathFullyQualified(options["live-harness"]))
-                throw new ArgumentException("Command gameplay requires an absolute private command directory.");
-        }
         if (options.ContainsKey("xr-simulator-proof") &&
             (!options.ContainsKey("vr") || !options.ContainsKey("report")))
             throw new ArgumentException("--xr-simulator-proof requires --vr and --report.");

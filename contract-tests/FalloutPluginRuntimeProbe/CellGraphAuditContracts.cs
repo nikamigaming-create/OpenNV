@@ -12,10 +12,6 @@ internal static partial class CellGraphAuditContracts
     {
         SourceCampaigns();
         SourceOptions();
-        ActorAnimationDependencies();
-        IncomingAnimationDependencies();
-        NifControllerLinks();
-        NifPhysicsDeclarations();
         NifTextureSourceIdentity();
         NifGeometryDataLinks();
         NifAnimationSoundDeclarations();

@@ -45,7 +45,6 @@ public partial class RuntimeCoordinator
 
     private string? RequestNativeFastTravel(FalloutFormKey reference)
     {
-        _nativeReferences!.RequireNoFunctionalFailure();
         var records = _nativePluginStack!;
         var player = _nativePlayer!;
         var driver = _nativeOpeningStageDriver!;
@@ -109,7 +108,7 @@ public partial class RuntimeCoordinator
             await ShowNativeLoadingScreens(placement.Cell);
             if (placement.Cell == active.Cell.FormKey) player.Teleport(transform);
             else await StreamNativePlayerMove(placement, transform);
-            RequestNativeInteractionSave(target);
+            SaveNativeInteraction();
             GD.Print($"OPENNV_FAST_TRAVEL destination={target} cell={_nativeActiveCell!.Cell.FormKey}");
         }
         catch (Exception error)

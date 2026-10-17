@@ -10,8 +10,7 @@ $output = Join-Path $generated $Configuration
 $fixtures = Join-Path $output 'fixtures'
 $missingImport = Join-Path $output 'missing-import'
 $protocolFixtures = Join-Path $output 'protocol-fixtures'
-$importProviders = Join-Path $output 'providers/cng'
-foreach ($directory in @($output, $fixtures, $missingImport, $protocolFixtures, $importProviders)) { [IO.Directory]::CreateDirectory($directory) | Out-Null }
+foreach ($directory in @($output, $fixtures, $missingImport, $protocolFixtures)) { [IO.Directory]::CreateDirectory($directory) | Out-Null }
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
 $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (!$installation) { throw 'The plugin execution-domain proposal requires installed MSVC x86 build tools.' }
@@ -42,22 +41,7 @@ function Invoke-Compile([string[]]$CompilerArguments) {
 Push-Location $output
 try {
     Invoke-Compile @((Join-Path $repository 'runtime/native/plugins/opennv_plugin_domain.cpp'),
-        "/Fo$output/opennv_plugin_domain.obj", '/link', '/MACHINE:X86', '/BASE:0x68000000', '/DYNAMICBASE:NO',
-        "/OUT:$output/opennv_plugin_domain.exe")
-    Invoke-Compile @('/DOPENNV_SYSTEM_CNG_SERVICE', (Join-Path $repository 'runtime/native/plugins/opennv_plugin_domain.cpp'),
-        "/Fo$output/opennv_cng_service.obj", '/link', '/MACHINE:X86', "/OUT:$output/opennv_cng_service.exe")
-    # Entry/import-free authored compiler/static TLS carrier; Windows owns its actual index/storage.
-    $tlsArguments = @($common | Where-Object { $_ -notin @('/MT', '/EHsc') }) + @('/GS-', '/Zl', '/LD',
-        (Join-Path $repository 'runtime/native/plugins/opennv_plugin_engine_tls.cpp'),
-        "/Fo$output/engine-tls.obj", '/link', '/MACHINE:X86', '/NOENTRY', '/NODEFAULTLIB',
-        "/DEF:$repository/runtime/native/plugins/opennv_plugin_engine_tls.def",
-        "/OUT:$output/opennv_engine_tls.dll", "/IMPLIB:$output/engine-tls.lib", 'libcmt.lib')
-    & $compiler @tlsArguments
-    if ($LASTEXITCODE -ne 0) { throw 'First-party compiler/static TLS carrier compilation failed.' }
-    Invoke-Compile @('/LD', (Join-Path $repository 'runtime/native/plugins/opennv_plugin_cng_import_provider.cpp'),
-        "/Fo$output/cng-import-provider.obj", '/link', '/MACHINE:X86',
-        "/DEF:$repository/runtime/native/plugins/opennv_plugin_cng_import_provider.def",
-        "/OUT:$importProviders/bcrypt.dll", "/IMPLIB:$output/cng-import-provider.lib")
+        "/Fo$output/opennv_plugin_domain.obj", '/link', '/MACHINE:X86', "/OUT:$output/opennv_plugin_domain.exe")
     Invoke-Compile @('/LD', (Join-Path $fixtureSource 'NativeFixtureDependency.cpp'),
         "/Fo$output/dependency.obj", '/link', '/MACHINE:X86', "/DEF:$fixtureSource/NativeFixtureDependency.def",
         "/OUT:$fixtures/opennv_domain_fixture_dependency.dll", "/IMPLIB:$output/opennv_domain_fixture_dependency.lib")
@@ -73,101 +57,9 @@ try {
         Invoke-Compile @((Join-Path $fixtureSource 'NativeFaultEnvelopeFixture.cpp'), "/DOPENNV_FAULT_ENVELOPE_MODE=$mode",
             "/Fo$output/fault-envelope-$mode.obj", '/link', '/MACHINE:X86', "/OUT:$protocolFixtures/opennv_fault_envelope_$mode.exe")
     }
-    # This public NVSE caller uses the genuine dynamically imported Windows CRT.
-    # Its entry has no initial I/O and does not depend on a copied game image.
-    $crtArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/GS-', '/LD',
-        (Join-Path $fixtureSource 'NativeCrtFixture.cpp'), "/Fo$output/crt-fixture.obj", '/link',
-        '/MACHINE:X86', '/ENTRY:DllMain@12', 'ucrt.lib', 'kernel32.lib', "/DEF:$fixtureSource/NativeCrtFixture.def",
-        "/OUT:$fixtures/opennv_crt_fixture.dll", "/IMPLIB:$output/crt-fixture.lib")
-    & $compiler @crtArguments
-    if ($LASTEXITCODE -ne 0) { throw 'Authored public-ABI CRT fixture compilation failed.' }
-    $crtPureArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/GS-', '/Oi-', '/fp:strict', '/LD',
-        (Join-Path $fixtureSource 'NativeCrtPureFixture.cpp'), "/Fo$output/crt-pure-fixture.obj", '/link',
-        '/MACHINE:X86', '/ENTRY:DllMain@12', 'ucrt.lib', 'kernel32.lib', "/DEF:$fixtureSource/NativeCrtFixture.def",
-        "/OUT:$fixtures/opennv_crt_pure_fixture.dll", "/IMPLIB:$output/crt-pure-fixture.lib")
-    & $compiler @crtPureArguments
-    if ($LASTEXITCODE -ne 0) { throw 'Authored genuine pure CRT fixture compilation failed.' }
-    $cppArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/LD',
-        (Join-Path $fixtureSource 'NativeCppStreamsFixture.cpp'),
-        "/Fo$output/cpp-streams-fixture.obj", '/link', '/MACHINE:X86', '/OPT:REF',
-        "/DEF:$fixtureSource/NativeCrtFixture.def",
-        "/OUT:$fixtures/opennv_cpp_streams_fixture.dll",
-        "/IMPLIB:$output/cpp-streams-fixture.lib")
-    & $compiler @cppArguments
-    if ($LASTEXITCODE -ne 0) { throw 'Actual authored C++ stream fixture compilation failed.' }
-    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeCngSharedFixture.cpp'), "/Fo$output/cng-shared-fixture.obj", '/link',
-        '/MACHINE:X86', '/ENTRY:DllMain@12', "/DEF:$fixtureSource/NativeCrtFixture.def", "/OUT:$fixtures/opennv_cng_shared_fixture.dll",
-        "/IMPLIB:$output/cng-shared-fixture.lib", 'bcrypt.lib', 'kernel32.lib')
-    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeMutexFixture.cpp'),
-        "/Fo$output/mutex-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
-        "/DEF:$fixtureSource/NativeCrtFixture.def",
-        "/OUT:$fixtures/opennv_mutex_fixture.dll", "/IMPLIB:$output/mutex-fixture.lib", 'kernel32.lib')
-    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeNvseLoggingFixture.cpp'),
-        "/Fo$output/logging-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
-        "/DEF:$fixtureSource/NativeCrtFixture.def",
-        "/OUT:$fixtures/opennv_logging_fixture.dll", "/IMPLIB:$output/logging-fixture.lib", 'kernel32.lib')
-    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeSourceSuppressionFixture.cpp'),
-        "/Fo$output/source-suppression-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
-        "/DEF:$fixtureSource/NativeCrtFixture.def", "/OUT:$fixtures/opennv_source_suppression_fixture.dll",
-        "/IMPLIB:$output/source-suppression-fixture.lib", 'kernel32.lib')
-    Invoke-Compile @('/GS-', '/LD', (Join-Path $fixtureSource 'NativeMoveFileFixture.cpp'),
-        "/Fo$output/move-file-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12',
-        "/DEF:$fixtureSource/NativeCrtFixture.def", "/OUT:$fixtures/opennv_move_file_fixture.dll",
-        "/IMPLIB:$output/move-file-fixture.lib", 'kernel32.lib')
-    foreach ($sizeVariant in @(@{Suffix='primary';Defines=@()}, @{Suffix='peer';Defines=@('/DOPENNV_FILE_SIZE_PEER')})) {
-        Invoke-Compile (@('/GS-', '/LD') + $sizeVariant.Defines + @(
-            (Join-Path $fixtureSource 'NativeFileSizeFixture.cpp'), "/Fo$output/file-size-$($sizeVariant.Suffix)-fixture.obj",
-            '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF', "/DEF:$fixtureSource/NativeFileSizeFixture.def",
-            "/OUT:$fixtures/opennv_file_size_$($sizeVariant.Suffix).dll",
-            "/IMPLIB:$output/file-size-$($sizeVariant.Suffix)-fixture.lib", 'kernel32.lib'))
-    }
-    Invoke-Compile @('/GS-', '/O2', '/LD', (Join-Path $fixtureSource 'NativeModuleReadFixture.cpp'),
-        "/Fo$output/module-read-fixture.obj", '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF',
-        "/DEF:$fixtureSource/NativeModuleReadFixture.def", "/OUT:$fixtures/opennv_module_read_fixture.dll",
-        "/IMPLIB:$output/module-read-fixture.lib", 'kernel32.lib')
-    $diagnosticArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/GS-', '/LD',
-        (Join-Path $fixtureSource 'NativeDiagnosticPrimaryFixture.cpp'), "/Fo$output/diagnostic-primary-fixture.obj",
-        '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF', 'ucrt.lib', 'vcruntime.lib', 'msvcprt.lib', "/DEF:$fixtureSource/NativeCrtFixture.def",
-        "/OUT:$fixtures/opennv_diagnostic_primary_fixture.dll", "/IMPLIB:$output/diagnostic-primary-fixture.lib")
-    & $compiler @diagnosticArguments
-    if ($LASTEXITCODE -ne 0) { throw 'Authored shared diagnostic provider fixture compilation failed.' }
-    foreach ($moduleVariant in @(@{Suffix='primary';Defines=@();Libraries=@('msvcprt.lib')},
-            @{Suffix='secondary';Defines=@('/DOPENNV_CORESIDENT_SECONDARY');Libraries=@()})) {
-        Invoke-Compile (@('/GS-', '/LD') + $moduleVariant.Defines + @(
-            (Join-Path $fixtureSource 'NativeCoResidentModuleFixture.cpp'), "/Fo$output/co-resident-$($moduleVariant.Suffix)-fixture.obj",
-            '/link', '/MACHINE:X86', '/ENTRY:DllMain@12', '/OPT:REF', "/DEF:$fixtureSource/NativeCoResidentModuleFixture.def",
-            "/OUT:$fixtures/opennv_co_resident_$($moduleVariant.Suffix).dll",
-            "/IMPLIB:$output/co-resident-$($moduleVariant.Suffix)-fixture.lib", 'kernel32.lib') + $moduleVariant.Libraries)
-    }
-    foreach ($platformVariant in @(@{Suffix='capabilities';Defines=@()}, @{Suffix='break';Defines=@('/DOPENNV_PLATFORM_BREAK_UNHANDLED')})) {
-        $platformArguments = @($common | Where-Object { $_ -ne '/MT' }) + @('/MD', '/LD') + $platformVariant.Defines + @(
-            (Join-Path $fixtureSource 'NativePlatformCapabilitiesFixture.cpp'), "/Fo$output/platform-$($platformVariant.Suffix)-fixture.obj",
-            '/link', '/MACHINE:X86', '/OPT:REF', "/DEF:$fixtureSource/NativeCrtFixture.def",
-            "/OUT:$fixtures/opennv_platform_$($platformVariant.Suffix)_fixture.dll", "/IMPLIB:$output/platform-$($platformVariant.Suffix)-fixture.lib", 'ucrt.lib', 'kernel32.lib')
-        & $compiler @platformArguments
-        if ($LASTEXITCODE -ne 0) { throw 'Authored platform synchronization/runtime caller compilation failed.' }
-    }
-    $files = @('opennv_plugin_domain.exe', 'opennv_cng_service.exe', 'fixtures/opennv_domain_fixture.dll',
+    $files = @('opennv_plugin_domain.exe', 'fixtures/opennv_domain_fixture.dll',
         'fixtures/opennv_domain_fixture_dependency.dll', 'fixtures/opennv_domain_fixture_reject.dll', 'missing-import/opennv_domain_fixture.dll')
     $files += @(0..6 | ForEach-Object { "protocol-fixtures/opennv_fault_envelope_$_.exe" })
-    $files += 'fixtures/opennv_crt_fixture.dll'
-    $files += 'fixtures/opennv_crt_pure_fixture.dll'
-    $files += 'fixtures/opennv_cpp_streams_fixture.dll'
-    $files += 'fixtures/opennv_cng_shared_fixture.dll'
-    $files += 'fixtures/opennv_mutex_fixture.dll'
-    $files += 'fixtures/opennv_logging_fixture.dll'
-    $files += 'fixtures/opennv_source_suppression_fixture.dll'
-    $files += 'fixtures/opennv_move_file_fixture.dll'
-    $files += 'fixtures/opennv_file_size_primary.dll'
-    $files += 'fixtures/opennv_file_size_peer.dll'
-    $files += 'fixtures/opennv_module_read_fixture.dll'
-    $files += 'fixtures/opennv_diagnostic_primary_fixture.dll'
-    $files += 'fixtures/opennv_co_resident_primary.dll'
-    $files += 'fixtures/opennv_co_resident_secondary.dll'
-    $files += 'fixtures/opennv_platform_capabilities_fixture.dll'
-    $files += 'fixtures/opennv_platform_break_fixture.dll'
-    $files += 'providers/cng/bcrypt.dll'
-    $files += 'opennv_engine_tls.dll'
     $manifest = [ordered]@{ authoredOnly = $true; configuration = $Configuration; machine = 'I386'; executionVerified = $false; files = @() }
     foreach ($file in $files) {
         $built = Join-Path $output $file

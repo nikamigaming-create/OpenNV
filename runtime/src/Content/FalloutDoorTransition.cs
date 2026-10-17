@@ -14,6 +14,7 @@ internal static class FalloutDoorTransitionResolver
 {
     private const byte InteriorCellFlag = 0x01;
     private const uint PersistentReferenceFlag = 0x0000_0400;
+    private const uint SupportedTeleportFlags = 0;
 
     internal static IReadOnlyList<FalloutDoorTransition> ResolveInteriorExits(
         FalloutPluginStack stack,
@@ -99,12 +100,12 @@ internal static class FalloutDoorTransitionResolver
                 $"Native XTEL {label} {reference.FormKey} has no teleport destination.");
         if ((reference.Flags & PersistentReferenceFlag) == 0 ||
             FalloutCellSceneReader.IsInitiallyDisabled(reference) ||
-            reference.EnableParent is not null)
+            reference.EnableParent is not null ||
+            reference.Teleport.Flags != SupportedTeleportFlags)
             throw new NotSupportedException(
                 $"Native XTEL {label} {reference.FormKey} is not an active persistent portal: " +
                 $"flags=0x{reference.Flags:x8} enableParent={reference.EnableParent} " +
                 $"scale={reference.Scale:R} xtelFlags=0x{reference.Teleport.Flags:x8}.");
-        _ = reference.Teleport.NoAlarm;
     }
 
     private static string ReadOptionalEditorId(FalloutPluginRecord record)

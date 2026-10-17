@@ -15,7 +15,6 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     private string? _error;
     private readonly FalloutPlayerInventory _inventory;
     private NativeOwnedHudMessages? _hud;
-    private Rendering.RuntimeHeadlessScreenBlood? _headlessScreenBlood;
     private bool _worldActive;
     private readonly InputSystem.RuntimeNativeScriptEvents _events;
     private readonly RuntimeNativeUiClock _uiClock;
@@ -27,9 +26,6 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         _ => throw new NotSupportedException("Script sound reference presentation has no world owner.");
     internal float SoundUnitsToMetres { get; set; }
     internal FalloutNewGameBootstrap? Bootstrap { get; set; }
-    internal Func<IEnumerable<uint>?>? StartupMenus { get; set; }
-    internal bool StartupMessagePending => _current?.Request is { } request && Scripts.MessageResults.IsPending(request) ||
-        Scripts.HasQueuedMessage;
     internal string? StartupError => _error;
     internal object State => Observe(detailed: true);
     internal object Observe(bool detailed) => new
@@ -38,7 +34,6 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         worldActive = _worldActive,
         message = _current,
         hud = _hud?.State,
-        screenBloodHeadless = _headlessScreenBlood?.State,
         error = _error,
         startupMenuExecution = _worldActive ? "world-host" : Bootstrap is null ? "unbound-bootstrap-host" : "source-bootstrap-host",
         bootstrap = Bootstrap?.State
@@ -53,14 +48,14 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         _events.Active = true;
     }
 
-    internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutPlayerInventory inventory, FalloutQuestScripts scripts)
+    internal RuntimeNativeQuestScripts(FalloutPluginStack records, FalloutQuestState quests, IReadOnlySet<FalloutFormKey> claimed,
+        FalloutPlayerInventory inventory, FalloutGlobalState? globals = null, FalloutReferenceWorld? references = null,
+        FalloutScriptEvents? events = null, FalloutScriptStorage? storage = null)
     {
-        if (!ReferenceEquals(scripts.Records, records) || !ReferenceEquals(scripts.PlayerInventory, inventory))
-            throw new InvalidOperationException("Quest presentation requires its genuine prepared record and inventory owners.");
         Name = "NativeQuestScripts";
         _records = records;
         _inventory = inventory;
-        Scripts = scripts;
+        Scripts = new(records, quests, claimed, inventory, globals, references: references, events: events, storage: storage);
         _events = new(Scripts.Events, () => Scripts.Host?.InvokeFunction);
         _uiClock = new(() => Scripts.Ui);
         ProcessMode = ProcessModeEnum.Always;
@@ -81,12 +76,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
                     source.Game == RuntimeLiveContentSource.FalloutNewVegasGame ? "FalloutNV.exe" : "Fallout3.exe")));
             AddChild(new NativeOwnedScriptSoundPlayer(Scripts.Sounds, source, Scripts.Menus,
                 reference => SoundReference(reference), SoundUnitsToMetres));
-            if (DisplayServer.GetName() == "headless")
-            {
-                _headlessScreenBlood = new(Scripts.ScreenBlood, source, Scripts.Menus);
-                AddChild(_headlessScreenBlood);
-            }
-            else AddChild(new Rendering.NativeOwnedScreenBlood(Scripts.ScreenBlood, source, Scripts.Menus));
+            AddChild(new Rendering.NativeOwnedScreenBlood(Scripts.ScreenBlood, source, Scripts.Menus));
         }
         try
         {
@@ -111,18 +101,11 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
     public override void _Process(double delta)
     {
         if (_error is not null) return;
-        if (Scripts.References?.FunctionalFailure is not null) return;
         if (!_worldActive)
         {
             if (Bootstrap is not null)
             {
-                try
-                {
-                    var menus = StartupMenus?.Invoke()?.ToList();
-                    if (_layer is not null) { menus ??= []; menus.AddRange([1001, 2]); }
-                    Bootstrap.Advance(delta, menus);
-                    if (!Bootstrap.PresentationBlocked && !Bootstrap.PlacementPreparing) RefreshMessages();
-                }
+                try { Bootstrap.Advance(delta, [4, 1007, 2]); }
                 catch (Exception error)
                 {
                     _error = error.Message;
@@ -132,7 +115,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
             }
             // The current title path has no player/source-command host yet.
             // Keep its clocks without pretending those menu blocks executed.
-            Scripts.Advance(delta, gameMode: false, menus: StartupMenus?.Invoke(), execute: false);
+            Scripts.Advance(delta, gameMode: false, menus: [4], execute: false);
             return;
         }
         if (_layer is not null || GetTree().Paused)
@@ -152,12 +135,6 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         if (Scripts.TryTakeMessage(out var message)) Show(message!);
     }
 
-    private void RefreshMessages()
-    {
-        if (_current?.Request is { } request && !Scripts.MessageResults.IsPending(request)) CloseMessage();
-        if (_layer is null && Scripts.TryTakeMessage(out var message)) Show(message!);
-    }
-
     private void Show(FalloutSourceMessage message)
     {
         _current = message;
@@ -168,7 +145,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
         try
         {
             message = message.ResolveButtons(_records, condition => (EvaluateMessageCondition ??
-                throw new NotSupportedException("Message condition has no gameplay owner."))(condition), Scripts.Globals);
+                throw new NotSupportedException("Message condition has no gameplay owner."))(condition));
             _current = message;
             _layer.AddChild(new NativeOwnedMessageMenu(message, _records, choice =>
             {

@@ -33,7 +33,6 @@ internal sealed class RuntimeNativeNifAnimation
                 throw new InvalidDataException("Sequence text-key link is not text-key data.")).Keys;
         var targets = new HashSet<int>();
         var floatTargets = new HashSet<(string Node, string Name)>();
-        var logicalFloatTargets = new HashSet<FalloutNifSceneKey>();
         var rootBound = false;
         foreach (var link in sequence.ControlledBlocks)
         {
@@ -76,11 +75,9 @@ internal sealed class RuntimeNativeNifAnimation
                 }
                 else if (link.ControllerType == "NiFloatExtraDataController")
                 {
-                    var unique = skeleton.LogicalScene is { } logical
-                        ? logicalFloatTargets.Add(logical.RequireSkeletonFloatExtraDataKey(link.NodeName, link.Variable1))
-                        : floatTargets.Add((link.NodeName, link.Variable1));
-                    if (!unique) throw new NotSupportedException("Multiple float links require a blend/priority owner.");
-                    _otherChannels.Add(skeleton.BindSourceFloatExtraData(source, link));
+                    if (!floatTargets.Add((link.NodeName, link.Variable1)))
+                        throw new NotSupportedException("Multiple float links require a blend/priority owner.");
+                    _otherChannels.Add(skeleton.FloatExtraData.Bind(source, link));
                 }
                 else if (skeleton.BindVisualChannel(source, link) is { } visual)
                     _otherChannels.Add(visual);
@@ -150,8 +147,6 @@ internal sealed class RuntimeNativeNifAnimation
         foreach (var (bone, _, sampler) in _transforms)
         {
             var sample = sampler.Sample(sourceTime);
-            if (_skeleton.LogicalScene is not null)
-            { _skeleton.PublishSourceBone(bone, sample); continue; }
             if (sample.Translation is { } translation)
                 _skeleton.Node.SetBonePosePosition(bone,
                     GamebryoCoordinate.ConvertVector(new(translation.X, translation.Y, translation.Z)) * _skeleton.UnitsToMetres);
@@ -169,7 +164,6 @@ internal sealed class RuntimeNativeNifAnimation
                 _skeleton.Node.SetBonePoseScale(bone, Vector3.One * scale);
             }
         }
-        _skeleton.LogicalScene?.UpdateWorldAndBounds();
     }
 
     internal static void ApplyLayers(params (RuntimeNativeNifAnimation Animation, float Time)[] layers)
@@ -179,10 +173,6 @@ internal sealed class RuntimeNativeNifAnimation
     {
         if (layers.Length == 0) return;
         var skeleton = layers[0].Animation._skeleton;
-        if (skeleton.LogicalScene is not null)
-        {
-            ApplyLogicalLayers(layers, skeleton); return;
-        }
         var blend = skeleton.AnimationBlend;
         blend.Clear();
         foreach (var (animation, time) in layers)
@@ -209,26 +199,6 @@ internal sealed class RuntimeNativeNifAnimation
                 current.Add(sampler.Sample(time), weight);
             }
         blend.Publish(skeleton);
-        foreach (var (animation, time) in layers)
-            foreach (var apply in animation._otherChannels) apply(time);
-    }
-
-    internal static void ApplyLogicalLayers(ReadOnlySpan<(RuntimeNativeNifAnimation Animation, float Time)> layers,
-        RuntimeNativeNifSkeleton skeleton)
-    {
-        var blend = skeleton.SourcePoseBlend; blend.Clear();
-        foreach (var (animation, time) in layers)
-        {
-            if (animation._skeleton != skeleton || animation.UnboundChannels.Count != 0 || !float.IsFinite(time) ||
-                time < animation.Sequence.StartTime || time > animation.Sequence.StopTime)
-                throw new NotSupportedException("Logical source pose layers lost their current skeleton, complete channels or resolved clock.");
-            foreach (var (bone, priority, _) in animation._transforms) blend.Select(bone, priority);
-        }
-        foreach (var (animation, time) in layers)
-            foreach (var (bone, priority, sampler) in animation._transforms)
-                blend.Add(bone, priority, animation.Sequence.Weight, sampler.Sample(time));
-        blend.Publish(skeleton.PublishSourceBone);
-        skeleton.LogicalScene!.UpdateWorldAndBounds();
         foreach (var (animation, time) in layers)
             foreach (var apply in animation._otherChannels) apply(time);
     }

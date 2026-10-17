@@ -149,7 +149,7 @@ internal static class FalloutMenuXml
     internal static XElement Expand(RuntimeLiveContentSource live, XElement source) =>
         Expand(source, path => Read(live, path));
 
-    internal static XElement Expand(XElement source, Func<string, XElement> read)
+    private static XElement Expand(XElement source, Func<string, XElement> read)
     {
         var active = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         XElement Build(XElement tile)

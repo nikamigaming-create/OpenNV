@@ -38,7 +38,8 @@ public partial class NativeReferenceEventsAudit
         using var json = JsonDocument.Parse(original);
         var sourceSchema = json.RootElement.GetProperty("Schema").GetString() ??
             throw new InvalidDataException("Creature checkpoint has no saved schema.");
-        var state = FalloutNativeCampaignSave.Read(path, content.SaveCompatibilityId, records).State;
+        var state = FalloutNativeCampaignSave.Read(path, content.SaveCompatibilityId, records,
+            null, null, null, null).State;
         if (state.References is null || state.Scripts is null)
             throw new InvalidDataException("Creature checkpoint has no complete saved reference/script value graph.");
         var checkpoint = new CreatureEmitterCheckpoint(path, hash, sourceSchema, state);

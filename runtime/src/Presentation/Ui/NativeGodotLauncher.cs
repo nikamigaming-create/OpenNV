@@ -109,10 +109,10 @@ internal sealed partial class NativeGodotLauncher : Control
         _profiles = profiles ?? GodotLauncherProfileStore.Load();
         _campaigns = LoadManifest(out _launcherManifestSha256);
         var game = campaignId ?? _profiles.SelectedGame;
-        if (game is not null && _campaigns.Any(row => row.Id.Equals(game, StringComparison.OrdinalIgnoreCase)))
-            _selectedId = _selectedGameId = game;
+        if (game is not null && FallbackCampaigns.ContainsKey(game))
+            _selectedId = _selectedGameId = game.ToLowerInvariant();
         else if (campaignId is not null)
-            throw new ArgumentException("The selected game is absent from the launcher manifest.", nameof(campaignId));
+            throw new ArgumentException("Select a base game from the launcher manifest.", nameof(campaignId));
         if (presentation is not null)
         {
             if (!_campaigns.Single(row => row.Id.Equals(_selectedGameId, StringComparison.OrdinalIgnoreCase))
@@ -263,7 +263,8 @@ internal sealed partial class NativeGodotLauncher : Control
                 _profiles.Save(detected, installation.InstallRoot);
                 _profiles.SelectGame(detected);
                 _selectedId = _selectedGameId = detected;
-                _selectedPresentation = LaunchCampaign().DefaultPresentation;
+                if (!LaunchCampaign().Presentations.ContainsKey(_selectedPresentation))
+                    _selectedPresentation = LaunchCampaign().DefaultPresentation;
             }
             _toast.Text = "Folder saved. Your original files stay in place.";
             _toast.AddThemeColorOverride("font_color", new Color(0.47f, 0.84f, 0.62f));

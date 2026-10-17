@@ -44,9 +44,9 @@ internal static class StageConditionScopeContracts
             Reject(() => stages.Enter(quest, 1));
             Require(executed.SequenceEqual(new[] { "always", "prefix" }), "Failed subject replayed the consumed entry prefix.");
             Reject(() => stages.Enter(quest, 2));
-            Require(executed.Count == 2, "Run-on admission bypassed the missing live comparison-global owner.");
+            Require(executed.Count == 2, "Run-on admission bypassed an unsupported comparison-global flag.");
             Console.WriteLine("OPENNV_STAGE_CONDITION_SCOPE_PASS explicitPlayerInventory=true hostRequired=true " +
-                "unsupportedSubjectRefused=true comparisonGlobalOwnerRequired=true consumedPrefixRetained=true");
+                "unsupportedSubjectRefused=true flagsStillRefused=true consumedPrefixRetained=true");
         }
         finally { directory.Delete(true); }
     }

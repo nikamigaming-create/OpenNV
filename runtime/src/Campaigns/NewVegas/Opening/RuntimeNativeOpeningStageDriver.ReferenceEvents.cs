@@ -41,8 +41,7 @@ internal partial class RuntimeNativeOpeningStageDriver
     }
     internal IReadOnlyList<FalloutNativeSkillIdentity> Tags => _tagSkills.Selection;
     internal FalloutPlayerTagSkills PlayerTagSkills => _tagSkills;
-    internal IReadOnlyList<FalloutNativeTraitIdentity> Traits => _traits.Where(trait =>
-        _scripts.References!.PerkRank(_pluginStack.RuntimeFormKey(0x14), _pluginStack.RuntimeFormKey(trait.RuntimeFormId)) > 0).ToArray();
+    internal IReadOnlyList<FalloutNativeTraitIdentity> Traits => _traits;
     internal FalloutRadioStations Radio => _scripts.Radio ?? throw new InvalidOperationException("Radio station owner is absent.");
 
     private void RefreshRadioStations(bool force = false)
@@ -119,29 +118,20 @@ internal partial class RuntimeNativeOpeningStageDriver
                 ReadActorValue: ReadActorValue, ChangeActorValue: ChangeActorValue, Inventory: InventoryCommands, Challenges: _scripts.Challenges,
                 HeadingAngle: ReferenceHeadingAngle, ResetPlayerHealth: _vitals.ResetHealth,
                 CurrentPackage: CurrentActorPackage, Sitting: ActorSitting, TagSkills: _tagSkills, IsInCell: IsInCell, IsHardcore: () => _scripts.Session.Hardcore,
-                RewardXp: RewardPlayerExperience, GameTime: _gameTime,
-                Placement: ReferenceScriptPlacement, IsPcSleeping: _player.IsPcSleeping,
-                Sleeping: ActorSleeping, KnockedState: ActorKnockedState,
-                SleepWait: PlayerRest, OpenSleepWaitMenu: OpenCurrentPlayerRest, Statistics: PlayerStatistics,
-                GlobalTime: _scripts.References!.ScriptGlobalTime));
-        results.BindCampaignChallengeRewards();
+                RewardXp: value => _experience.Reward(value), GameTime: _gameTime));
         _resultScripts = results;
         _stageResults = new(_pluginStack, _quests, results.StageSteps,
-            EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true, globals: _globals);
-        _scripts.References!.ExecutePerkQuestStage = ExecutePlayerPerkQuestStage;
+            EvaluateMessageCondition, () => !_moviePlaying, evaluateRunOn: true);
         RestoreStageResults();
         _scriptHost = _scriptHost with
         {
             ExecuteProgram = results.ExecuteProgram,
-            ExecuteCompiledProgram = results.ExecuteProgram,
-            CanContinueCompiled = gameMode => !_moviePlaying && _stageResults?.HasPendingResults != true && (!gameMode || !GetTree().Paused),
             InvokeFunction = results.InvokeFunction,
             TagSkills = _tagSkills,
-            IsInCell = IsInCell,
-            GlobalTime = _scripts.References!.ScriptGlobalTime
+            IsInCell = IsInCell
         };
         _scripts.Host = _scriptHost;
-        _speech!.ExecuteOwnedResults = results.ExecuteResultOwned;
+        _speech!.ExecuteResults = results.ExecuteResult;
         _conversation = new();
         _conversation.Configure(_pluginStack, _quests, _player, _speech!, condition =>
         {
@@ -159,7 +149,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             if (condition.RunOn == 1 && condition.Function == 70 && condition.Argument1 <= 1)
                 return (condition.Argument1 == 1) == _character.Female ? 1 : 0;
             throw new NotSupportedException($"Conversation condition {condition.Owner.FormKey}/{condition.Function}/{condition.RunOn} is unbound.");
-        }, results.ExecuteResult, _scripts.References!.RequireNoFunctionalFailure, _scripts.SaidInfos, (speaker, condition) => condition.RunOn switch
+        }, results.ExecuteResult, _scripts.SaidInfos, (speaker, condition) => condition.RunOn switch
         {
             0 => _scripts.References!.Placement(speaker).Cell,
             1 => _activeCell,
@@ -180,7 +170,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
             _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting,
-            _scripts.References!.GetDeadCount, ownedResults: results.ExecuteResultOwned, globals: _globals);
+            _scripts.References!.GetDeadCount);
         AddChild(_conversation);
     }
 
@@ -251,10 +241,10 @@ internal partial class RuntimeNativeOpeningStageDriver
         else (_conversation ?? throw new InvalidOperationException("Conversation owner is absent.")).Request(speaker, package.Target, package.Topic, completed);
     }
     internal double ActorValue(FalloutFormKey actor, string name) => _pluginStack.RuntimeFormId(actor) == 0x14 ?
-        ReadPlayerActorValue(name, FalloutActorValueRead.Current) : _scripts.References!.ActorValue(actor, name);
+        _scriptHost.PlayerActorValue(name) : _scripts.References!.ActorValue(actor, name);
     private static bool IsSpecial(string name) => FalloutNativeVigorResolver.AttributeNames.Any(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
-    private double ReadPlayerActorValue(string name, FalloutActorValueRead kind) => IsSpecial(name) || _playerActorValues.IsStatusValue(name)
-        ? _playerActorValues.Read(IsSpecial(name) ? FalloutPlayerActorValues.SpecialValue(name) : _playerActorValues.StatusValue(name), kind)
+    private double ReadPlayerActorValue(string name, FalloutActorValueRead kind) => IsSpecial(name)
+        ? _playerActorValues.Read(FalloutPlayerActorValues.SpecialValue(name), kind)
         : _playerSkills.IsSkill(name) ? _playerSkills.ReadSkill(name, kind)
         : kind == FalloutActorValueRead.Current ? _scriptHost.PlayerActorValue(name) :
             throw new NotSupportedException($"Player base/permanent value {name} has no pool/formula owner.");
@@ -270,8 +260,16 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal float PlayerSkillValue(string name) => _playerSkills.Value(name);
     internal float PlayerCombatValue(int value) => _playerSkills.Value(value);
     internal IReadOnlyList<FalloutPerkEntry> PlayerPerkEntries => _playerSkills.PerkEntries;
-    private int SourcePlayerLevel => _vitals?.State.Level ??
-        throw new InvalidOperationException("Player level has no initialized persistent vitals owner.");
+    private int SourcePlayerLevel
+    {
+        get
+        {
+            var data = _pluginStack.GetEffective(_raceSexContract.Player).ReadSubrecords().Single(subrecord => subrecord.Signature == "ACBS").Data;
+            if (data.Length != 24) throw new InvalidDataException("Player ACBS extent is invalid.");
+            var level = System.Buffers.Binary.BinaryPrimitives.ReadInt16LittleEndian(data.Span[8..]);
+            return level >= 1 ? level : throw new InvalidDataException("Initial player level is not positive.");
+        }
+    }
 
     internal void ApplyReferenceEffect(FalloutReferenceScriptEffect effect)
     {
@@ -294,10 +292,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _scripts.Session.LocationSpecificLoadScreensOnly = effect.Enable;
                 break;
             case FalloutReferenceEffectKind.CharacterGeneration:
-                _scripts.Session.SetInCharGen(effect.Enable);
-                break;
-            case FalloutReferenceEffectKind.SceneComplexity:
-                _scripts.Session.SetSceneIsComplex(effect.Enable);
+                _scripts.Session.SetInCharGen(effect.Enable, _vitals.RequireLevelUpOwner);
                 break;
             case FalloutReferenceEffectKind.PlayerToddler:
                 _scripts.Session.SetPlayerToddler(effect.Enable);
@@ -310,7 +305,7 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _scripts.Session.SetPlayerYoung(effect.Enable);
                 break;
             case FalloutReferenceEffectKind.Achievement:
-                _scripts.References!.AddSourceAchievement(effect.Value);
+                _scripts.Session.AddAchievement(effect.Value);
                 break;
             case FalloutReferenceEffectKind.AddItem or FalloutReferenceEffectKind.EquipItem or FalloutReferenceEffectKind.RemoveItem:
                 InventoryCommands.Execute(new(effect.Kind switch
@@ -347,10 +342,12 @@ internal partial class RuntimeNativeOpeningStageDriver
             case FalloutReferenceEffectKind.ScriptPackage:
                 if (_pluginStack.RuntimeFormId(effect.Target!.Value) != 0x14)
                 {
-                    if (_scripts.References!.ApplyActorScriptPackage(effect.Target.Value, effect.Argument))
-                        EvaluateActorPackages(effect.Target.Value, false);
+                    if (effect.Argument is not null) throw new NotSupportedException("NPC script package simulation is unbound.");
+                    // NPC AddScriptPackage is rejected, so no script override can
+                    // be resident. Reevaluate without deleting any base package.
+                    EvaluateActorPackages(effect.Target.Value, false);
                 }
-                else _playerPackage!.Apply(effect.Argument, effect);
+                else _playerPackage!.Apply(effect.Argument);
                 break;
             case FalloutReferenceEffectKind.ImageSpace:
                 if (effect.Enable) _imageSpaceState.Apply(FalloutImageSpaceModifierReader.Read(_pluginStack.GetEffective(effect.Target!.Value)));
@@ -373,10 +370,10 @@ internal partial class RuntimeNativeOpeningStageDriver
                 _scriptHost.PrepareSetStage(effect.Target ?? throw new InvalidDataException("SetStage target is absent."), effect.Stage)();
                 break;
             case FalloutReferenceEffectKind.PlayerControls:
-                ApplySourcePlayerControls(effect);
-                break;
-            case FalloutReferenceEffectKind.Message when effect.Message is { } messageCall:
-                _scripts.ShowCompiledMessage(effect.Target ?? throw new InvalidDataException("Compiled message target is absent."), messageCall);
+                var controls = new FalloutPlayerControlCommand(effect.Enable, effect.Controls ?? throw new InvalidDataException("Player controls are absent."));
+                if (_machine is not null) _machine.ApplyControls(controls);
+                else _sourceControls = controls.Apply(_sourceControls);
+                _player.ApplySourceControls(PlayerControls);
                 break;
             case FalloutReferenceEffectKind.Message:
                 var messageOwner = _pluginStack.GetEffective(effect.Source);

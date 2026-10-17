@@ -29,20 +29,18 @@ internal sealed partial class FalloutReferenceWorld
         _ = records.GetEffective(source);
         if (destination != records.RuntimeFormKey(0x14) && Get(destination) is ({ Deleted: true } or { DeletePending: true }))
             throw new InvalidOperationException("Player MoveTo destination is deleted.");
-        QueueSourcePlayerRawMoveTo(source, destination, x, y, z);
+        PlayerMoves.Enqueue(new(source, destination, x, y, z));
     }
 
     internal FalloutReferencePlacement ResolvePlayerMove(FalloutPlayerMove move,
         FalloutReferencePlacement player, float unitsToMetres)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        player.Validate();
-        if (!float.IsFinite(unitsToMetres) || unitsToMetres <= 0)
-            throw new ArgumentOutOfRangeException(nameof(unitsToMetres));
-        var request = PlayerMoves.SourcePending.Next;
-        if (request is not { Kind: FalloutPlayerPendingKind.MoveTo } || !ReferenceEquals(request.Move, move))
-            throw new InvalidOperationException("Player destination belongs to a superseded or absent source allocation.");
-        return ReadSourcePlayerRawPlacement(RequireCurrentPendingConversion(request), request);
+        if (move.Destination != records.RuntimeFormKey(0x14) && Get(move.Destination) is ({ Deleted: true } or { DeletePending: true }))
+            throw new InvalidOperationException("Player MoveTo destination is deleted.");
+        var result = FalloutPlayerMoves.Resolve(move, SpatialPlacement(move.Destination, player, unitsToMetres));
+        if (records.GetEffective(result.Cell).Signature != "CELL") throw new InvalidDataException("Player MoveTo destination has no CELL.");
+        return result;
     }
 
     internal bool IsInInterior(FalloutFormKey reference, FalloutFormKey? playerCell = null)

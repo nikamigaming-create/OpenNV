@@ -1,12 +1,6 @@
 using OpenNV.Runtime;
 using OpenNV.Runtime.Content;
 
-if (!RuntimeLaunchRequest.Create(new Dictionary<string, string>()).OpensLauncher ||
-    !RuntimeLaunchRequest.Create(new Dictionary<string, string> { ["launcher"] = "true" }).OpensLauncher ||
-    RuntimeLaunchRequest.Create(new Dictionary<string, string> { ["xr-rig-proof"] = "true" }).OpensLauncher ||
-    RuntimeLaunchRequest.Create(new Dictionary<string, string> { ["campaign"] = "fallout-3" }).OpensLauncher)
-    throw new InvalidOperationException("Ordinary executable startup must open the picker; incomplete explicit requests must retain their validation.");
-
 var campaigns = new Dictionary<NativeGame, string>
 {
     [NativeGame.Fallout1] = "fallout-1",
@@ -23,9 +17,7 @@ foreach (var (game, campaign) in campaigns)
         ["save-path"] = $"isolated/{campaign}/player.json",
     };
     var installation = new NativeGameInstallation(game, options["data-root"], options["data-root"]);
-    var request = RuntimeLaunchRequest.Create(options);
-    if (request.OpensLauncher) throw new InvalidOperationException("An explicit owned installation was replaced by the launcher.");
-    RuntimeLaunchValidator.ValidateContent(options, request);
+    RuntimeLaunchValidator.ValidateContent(options, RuntimeLaunchRequest.Create(options));
     RuntimeLaunchValidator.ValidateInstallation(options, installation);
     foreach (var other in campaigns.Values.Where(value => value != campaign))
     {
@@ -48,8 +40,21 @@ foreach (var (game, campaign) in campaigns)
     options["fo1-start-presentation"] = "first-person";
     MustReject<ArgumentException>(() => RuntimeLaunchValidator.ValidateInstallation(options, installation));
 }
-InputPresentationContracts.Run();
-Console.WriteLine("OPENNV_RUNTIME_LAUNCH_CONTRACT_PASS campaigns=4 wrongCampaign=rejected unsupportedViews=rejected headlessSelection=true commandSelection=true rendererIndependent=true");
+var xrPresentation = new Dictionary<string, string> { ["presentation"] = "openxr" };
+RuntimeLaunchValidator.NormalizePresentation(xrPresentation);
+if (xrPresentation.GetValueOrDefault("vr") != "true")
+    throw new InvalidOperationException("Explicit OpenXR presentation did not enable the application XR path.");
+var legacyVr = new Dictionary<string, string> { ["vr"] = "true" };
+RuntimeLaunchValidator.NormalizePresentation(legacyVr);
+if (legacyVr.GetValueOrDefault("presentation") != "openxr")
+    throw new InvalidOperationException("Legacy VR selection did not select the launcher's VR presentation.");
+var flatPresentation = new Dictionary<string, string> { ["presentation"] = "first-person" };
+RuntimeLaunchValidator.NormalizePresentation(flatPresentation);
+if (flatPresentation.ContainsKey("vr")) throw new InvalidOperationException("Desktop presentation enabled VR.");
+foreach (var presentation in new[] { "first-person", "hex-tactical" })
+    MustReject<ArgumentException>(() => RuntimeLaunchValidator.NormalizePresentation(
+        new Dictionary<string, string> { ["presentation"] = presentation, ["vr"] = "true" }));
+Console.WriteLine("OPENNV_RUNTIME_LAUNCH_CONTRACT_PASS campaigns=4 wrongCampaign=rejected unsupportedViews=rejected xrPresentation=normalized conflictingViews=rejected");
 
 static void MustReject<TException>(Action action) where TException : Exception
 {

@@ -28,9 +28,24 @@ internal sealed partial class NativeXrRig : Node3D
     internal int SnapTurns { get; private set; }
     internal float MaximumSnapPivotError { get; private set; }
     internal Func<bool>? Modal { get; set; }
-    internal Func<Transform3D, bool, bool, Vector3?>? PointAtPipBoy { get; set; }
+    private Func<Transform3D, bool, bool, Vector3?>? _pointAtPipBoy;
+    internal Func<Transform3D, bool, bool, Vector3?>? PointAtPipBoy
+    {
+        get => _pointAtPipBoy;
+        set
+        {
+            if (Equals(_pointAtPipBoy, value)) return;
+            _pointAtPipBoy = value;
+            // A trigger or stick held over the UI cannot become a world action
+            // when that surface closes or changes during an equipment rebuild.
+            _rightInputReady = false; _pointerPressed = false; _snapReady = false;
+            WorldPointer = false;
+            if (_player is { } player && IsInstanceValid(player)) player.XrFire(false);
+        }
+    }
     internal Action<Transform3D>? PoseWristDevice { get; set; }
     internal Action<bool>? SetPipBoyHeld { get; set; }
+    internal Func<bool>? CanFocusPipBoy { get; set; }
     internal Action? MenuRequested { get; set; }
     internal void CancelModal() => _canvas.Cancel();
     internal bool WorldPointer { get; private set; }
@@ -50,7 +65,7 @@ internal sealed partial class NativeXrRig : Node3D
         snapTurns = SnapTurns,
         maximumSnapPivotErrorMeters = MaximumSnapPivotError,
         canvas = _canvas.State,
-        pipBoyInput = PipBoyInputState,
+        pipBoyInput = new { requestedFocus = _pipBoyRequestedFocus, awaitingRelease = _pipBoyAwaitRelease, failure = _pipBoyInputFailure },
         hands = "owned-gloves-and-hand-skins; analog-grip-trigger-and-thumb-touch",
         physicalAcceptance = "pending"
     };
@@ -82,13 +97,14 @@ internal sealed partial class NativeXrRig : Node3D
     }
     public override void _EnterTree()
     {
-        EnterPipBoyInput();
+        _pipBoyAwaitRelease = true;
+        _pipBoyRequestedFocus = false;
         GetTree().NodeAdded += RouteCanvas;
     }
     public override void _ExitTree()
     {
-        try { RetirePipBoyInput(); }
-        finally { GetTree().NodeAdded -= RouteCanvas; }
+        try { if (PointAtPipBoy is not null) SetPipBoyHeld?.Invoke(false); }
+        finally { PointAtPipBoy = null; GetTree().NodeAdded -= RouteCanvas; }
     }
     private void RouteCanvas(Node node)
     {
@@ -139,14 +155,13 @@ internal sealed partial class NativeXrRig : Node3D
             { CloseCombatWheel?.Invoke(false); _heldWheel = null; _rightInputReady = false; _snapReady = false; }
             else MenuRequested?.Invoke();
         }
-        if (_player?.GameplayMutationBlocked != true) AdvanceCombatWheels(tracked, left, right, delta);
-        var modal = (Modal?.Invoke() ?? _player is null) || _player?.GameplayMutationBlocked == true;
+        AdvanceCombatWheels(tracked, left, right, delta);
+        var modal = Modal?.Invoke() ?? _player is null;
         var stick = left ? LeftGrip.GetVector2(NativeXrActions.Move) : Vector2.Zero;
         Movement = tracked && _calibrated && !modal && stick.Length() >= _configuration.Xr.MovementDeadzone ? stick.LimitLength() : Vector2.Zero;
         Sprint = left && LeftGrip.IsButtonPressed(NativeXrActions.Sprint);
         JumpRequested |= Edge("jump", left && LeftGrip.IsButtonPressed(NativeXrActions.Jump)) && !modal;
-        var pipboy = LeftGrip.GetFloat(NativeXrActions.PipBoy) >= _configuration.Xr.ActionThreshold;
-        SamplePipBoyInput(left, pipboy);
+        SamplePipBoyInput(left, LeftGrip.GetFloat(NativeXrActions.PipBoy) >= _configuration.Xr.ActionThreshold);
         WorldPointer = right && !modal && PointAtPipBoy is null && RightGrip.GetFloat(NativeXrActions.Activate) >= _configuration.Xr.ActionThreshold;
         var fire = right && _rightInputReady && RightGrip.GetFloat(NativeXrActions.Fire) >= _configuration.Xr.ActionThreshold;
         _pointerPressed = fire;
@@ -183,7 +198,9 @@ internal sealed partial class NativeXrRig : Node3D
     internal void PublishWristInput()
     {
         PoseWristDevice?.Invoke(Camera.GlobalTransform);
-        SampleCurrentWristAccess();
+        // Script controls can change after the earlier XR input callback.
+        SamplePipBoyInput(LeftGrip.GetHasTrackingData(),
+            LeftGrip.GetFloat(NativeXrActions.PipBoy) >= _configuration.Xr.ActionThreshold);
         var aim = RightAim.GlobalTransform;
         var tracked = RightGrip.GetHasTrackingData() && RightAim.GetHasTrackingData();
         if (PointAtPipBoy is { } pointAtPipBoy)

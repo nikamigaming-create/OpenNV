@@ -19,7 +19,6 @@ internal sealed partial class RuntimeNativeCreature
     {
         var actor = Appearance.Reference!.Value;
         var world = _aiWorld!;
-        var startedRevision = BeginScriptPackageEvent(package, kind);
         if (kind == "POBA") world.MarkPackageStart(actor, _aiRecords!.GetEffective(package.Form), _aiClock);
         world.PackageEvents.Mark(actor, package.Form, kind switch
         {
@@ -48,10 +47,9 @@ internal sealed partial class RuntimeNativeCreature
                     form, Hash(record.ReadData()), idle.AnimationPath, source.Hash, clock.Capture());
                 BindEventIdle(saved, source.Animation, clock);
             }
-            CompleteScriptPackageEvent(package, kind, startedRevision);
             GD.Print($"OPENNV_CREATURE_PACKAGE_EVENT reference={actor} package={package.Form} event={kind} owner=shared-reference-results");
         }
-        catch (Exception error)
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or FileNotFoundException)
         {
             _aiState!.ScriptError ??= $"Package {kind} {package.Form}: {error.Message}";
             throw;
@@ -121,7 +119,7 @@ internal sealed partial class RuntimeNativeCreature
                     }
             });
         }
-        catch (Exception error)
+        catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException)
         {
             _aiState.ScriptError ??= $"Package idle {saved.Idle}: {error.Message}";
             throw;

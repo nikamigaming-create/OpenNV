@@ -5,8 +5,8 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 internal static partial class NativeNifCollisionBuilder
 {
     private static void BuildConvexList(FalloutNifFile source, FalloutNifConvexListShape list, float unitsToMetres,
-        float mass, Transform3D transform, CollisionObject3D owner, List<CollisionShape3D> output,
-        ref int triangles, HashSet<int> active, float physicalToSourceUnits = HavokToGameUnits)
+        float mass, Transform3D transform, PhysicsBody3D owner, List<CollisionShape3D> output,
+        ref int triangles, HashSet<int> active)
     {
         if (list.Children.Length == 0)
             throw new InvalidDataException($"NIF convex list shape {list.Block.Index} is empty.");
@@ -18,8 +18,7 @@ internal static partial class NativeNifCollisionBuilder
             // A convex collection is the authored union of its independent
             // leaves. Joining their vertices into one hull would fill its gaps.
             // The body continues to own mass, filtering and every partial node.
-            BuildShape(source, child, unitsToMetres, mass, transform, owner, output, ref triangles, active,
-                convexOnly: true, physicalToSourceUnits: physicalToSourceUnits);
+            BuildShape(source, child, unitsToMetres, mass, transform, owner, output, ref triangles, active, convexOnly: true);
             for (var index = first; index < output.Count; ++index)
             {
                 var node = output[index];

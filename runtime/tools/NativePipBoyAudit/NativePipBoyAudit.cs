@@ -12,12 +12,6 @@ public partial class NativePipBoyAudit : Node
     {
         try
         {
-            if (OS.GetCmdlineUserArgs().SequenceEqual(new[] { "--input-lifetime" }))
-            {
-                await ExerciseNativePointerCancellation();
-                GetTree().Quit();
-                return;
-            }
             var cropped = NativeUiImage.Sample(new(0, 0, 123.25f, 133.4f), new(0, 0, 128, 128), 145, Vector2.Zero)!.Value;
             if (!cropped.Source.Size.IsEqualApprox(new(85, 92))) throw new InvalidOperationException("Zoomed status art was stretched instead of cropped.");
             var shifted = NativeUiImage.Sample(new(10, 20, 60, 40), new(100, 200, 128, 128), 200, new(20, 10))!.Value;

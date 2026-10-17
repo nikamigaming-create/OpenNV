@@ -1,45 +1,50 @@
-# Windows development playtest
+# Windows FNV recovery playtest
 
-This is an experimental OpenNV Release build. The complete New Vegas campaign,
-Fallout 3, TTW, required mods and physical-headset acceptance remain unfinished.
-The native launcher reports the selected route's current status. Its artwork
-is original decorative art, not a gameplay screenshot.
+This experimental build targets vanilla Fallout: New Vegas for a local VR test.
+The complete campaign, every weapon, physical headset behavior and performance
+still need acceptance. Fallout 3 follows FNV; mods and TTW follow both base games.
+The launcher reports available routes from this package's runtime manifest.
+Availability does not establish a completed gameplay test.
 
 Bring your own legally owned installation. No retail files, transformed game
 assets, retail executables or saves are included. Read `NOTICE.md` and
-`THIRD_PARTY.md`. Godot and the .NET runtime are included; playing this package
-requires no development SDK.
+`THIRD_PARTY.md`. Godot and the .NET runtime are included; playing the package
+requires no development SDK. Keep the executable, PCK, native libraries and
+runtime directory together.
 
 ## Start a test
 
-Keep the executable, PCK, native libraries and runtime directory together.
-Run **OpenNV Flat.cmd**, select **New Vegas**, and choose your installation
-folder. Select **Desktop** in the launcher. **Play** opens the original game menu;
-**New Game** enters its original confirmation and bootstrap. **Continue** is
-available only when the selected profile has an OpenNV save, and the game
-validates that save against the selected source stack before loading it.
+Run **OpenNV Flat.cmd** and choose your Fallout: New Vegas installation folder.
+It selects New Vegas and Desktop. **Play** opens the original game menu;
+**New Game** enters its original confirmation and bootstrap. **Continue** needs
+an OpenNV save in this profile and checks compatibility with the selected files.
+No completed checkpoint is supplied or implied by this package.
 
-For VR, start your headset's OpenXR runtime and run **OpenNV VR.cmd**. It selects
-**VR** in the desktop launcher. Click **Play** there to initialize OpenXR, then
-use the original game menu in VR for **New Game** or **Continue**. Flat and
-OpenXR use the same authoritative gameplay and profile save.
-The launcher does not change the system's OpenXR runtime. Close the game before
-switching modes. Physical-headset behavior still requires a user playtest.
+For Quest 3, connect to the PC through Air Link and start **OpenNV VR.cmd** with
+the Oculus OpenXR runtime active. It selects VR in the desktop launcher. Click
+**Play** there to initialize the game's XR presentation, then use the original
+game menu in VR for **New Game** or **Continue**. Close the game before switching
+modes. Flat and OpenXR share authoritative gameplay and the profile save.
+The launcher does not change the system's OpenXR runtime. Simulator checks do
+not establish physical Air Link tracking, latency or headset acceptance.
 
-Installation folders, mod selections and OpenNV saves remain outside the pinned
-package. OpenNV saves live under
-`%APPDATA%/Godot/app_userdata/OpenNV/profiles/`. Retail saves are not loaded or
-modified. A save from a different source stack can be refused visibly.
-For an independent fresh profile store, pass an absolute directory with
-`OpenNV.exe -- --launcher --profile-root <directory>`.
+Both package launchers select official base-game/DLC plugins and disable native
+extensions. Loose files already present in the owned installation still win
+resource lookup; this selection does not verify or repair a modified installation.
 
-The current base-game desktop shortcuts **OpenNV Candidate New Vegas VR** and
-**OpenNV Candidate Fallout 3 VR** select that game and VR and disable native
-extension modules. The corresponding **Flat** shortcuts use the same profile
-saves. They launch exported Release with no debug or test harness options.
-The requested outside-Doc/outside-Vault checkpoints are still pending acceptance.
-Create these for a configured profile store with
+The package launchers use an isolated profile root:
+`%APPDATA%/Godot/app_userdata/OpenNV/vanilla/`. Installation registrations live in
+`launcher/profiles-v1.json`; FNV saves live in `profiles/newvegas/` beneath that
+root. Existing global profiles are not imported. Retail saves are not loaded or
+modified. Copy a compatible preserved OpenNV save into this isolated profile if
+needed; retain the original. A different source stack can be refused visibly.
+For another independent profile, use the executable directly, for example:
+`OpenNV.exe --xr-mode on -- --launcher --launcher-game newvegas --presentation openxr --native-plugins none --content-selection vanilla --profile-root <absolute-directory>`.
+
+For a configured isolated profile, developers can run
 `scripts/Set-OpenNVPlayShortcuts.ps1 -ReleaseDirectory <package> -ProfileRoot <profiles>`.
+It defaults to New Vegas and creates only modes offered by the package manifest.
+The current Fallout 3 route offers Desktop; it has no enabled VR route.
 
 ## Controls
 
@@ -51,29 +56,23 @@ Escape/the center to cancel. Scroll or Page Up/Down changes pages.
 
 In OpenXR, use the thumbsticks for movement/turning and the controller
 pointer/trigger for menus. The left Menu button or right-stick click opens
-the pause menu. A short left-primary press saves; holding it opens the weapon
+the pause menu. A short left X press saves; holding it opens the weapon
 wheel. Hold the left trigger for consumables, select with the right stick and
-release to confirm. The wrist device shares inventory and gameplay state.
+release to confirm. Hold the left grip to focus the Pip-Boy, then point and
+click with the right trigger; release the grip to return to gameplay. The right
+trigger fires, A activates, and B reloads. The wrist device shares inventory
+and gameplay state.
 
-## Pinned builds
+## Build identity and feedback
 
-`release-manifest.json` identifies the exact source commit and every packaged
-file's SHA-256. `build-toolchain.json`, when built through the playtest helper,
-also records the source tree, exporter and SDK. The launcher displays the build
-identity. Keep one current package and ZIP plus the active development candidate.
+`release-manifest.json` identifies the source commit, source modification state
+and packaged file hashes. `build-toolchain.json`, when built through the
+playtest helper, also records the source tree, exporter and SDK. The launcher
+displays build identity. `scripts/Build-OpenNVPlaytest.ps1` requires clean committed
+source and checks the exported launcher; it does not certify gameplay.
 
-For local development, `scripts/Build-OpenNVPlaytest.ps1` creates a checked-source
-Release package and a stable named `.cmd` shortcut. Updating that shortcut points
-it to the accepted newer package. Retire obsolete packages after promotion. The sibling
-`.json` records the selected version, commit and archive checksum. The helper
-requires a clean committed source tree and a successful exported-launcher start.
-Advance the stable test pin only after ordinary exported gameplay is accepted.
-
-## Report a failure
-
-Record the build commit, mode, selected game/mod stack, location, action and
-visible result. Unsupported scripts, native-plugin behavior, actor routines,
-materials, vegetation/LOD, streaming and save/lifecycle owners remain active
-implementation work. A successful launcher start or component check does not
-establish campaign completion or parity. All complete-game requirements remain
-open. Flat and physical-headset playtests are required before a golden release.
+Report the build commit, mode, location, action and visible result. The recovery
+route includes New Game, dialogue, travel to Primm, ED-E, combat/loot, Pip-Boy,
+crafting, and Save/Quit/cold Continue. Current acceptance is recorded separately
+in the recovery handoff. A successful launcher or simulator frame does not
+establish campaign completion, all-weapon support or parity.

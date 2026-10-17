@@ -10,7 +10,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
 {
     private readonly RuntimeLiveContentSource _content;
     private readonly FalloutPluginStack _records;
-    private readonly bool _first, _sourceAnimationOwner;
+    private readonly bool _first;
     private readonly string _directory;
     private readonly Dictionary<string, RuntimeNativeNifAnimation> _clips = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Node3D> _weaponNodes = [];
@@ -56,7 +56,6 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         seconds = _seconds,
         bones = Skeleton.Node.GetBoneCount(),
         error = Error,
-        logicalMaterials = LogicalMaterialState,
         trackedBody = _trackedBodyView ? XrHandState : null,
         visibility = BodyVisibilityState,
         movement = _movementPath,
@@ -82,11 +81,9 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     internal void PosePipBoy(double seconds, float raised = 1, double? buttonSeconds = null)
     {
         if (!_first) throw new InvalidOperationException("Pip-Boy hand pose needs the first-person source skeleton.");
-        if (raised < 1) Skeleton.RefuseUnownedLogicalPose("source-logical-scene-PipBoy-native-basis-interpolation-writer-unowned");
         var clip = PipBoyClip;
         var time = clip.Sequence.StartTime + (float)Math.Clamp(buttonSeconds ?? PipBoyDuration, 0, PipBoyDuration);
         _pipBoyIdle ??= ClipPath(FalloutActorIdleSource.Resolve(_records, Actor.Appearance.Female ? "PipboyWaverFemale" : "PipboyWaver").AnimationPath);
-        LogicalScene?.ResetBonePoses(_idle!.Sequence.TargetName);
         Skeleton.Node.ResetBonePoses();
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);
         _idle!.ApplySourceTime(_idle.Sequence.StartTime);
@@ -99,16 +96,16 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     }
 
     internal RuntimeNativePlayerActor(FalloutPluginStack records, RuntimeLiveContentSource content, FalloutNpcAppearance appearance,
-        FalloutFormKey? weapon, bool firstPerson, float units, Color ambient, bool sourceAnimationOwner = false)
+        FalloutFormKey? weapon, bool firstPerson, float units, Color ambient)
     {
         Name = firstPerson ? "NativeFirstPersonBody" : "NativeThirdPersonBody";
-        _records = records; _content = content; _first = firstPerson; _sourceAnimationOwner = sourceAnimationOwner;
-        var selected = FalloutPlayerSourceAppearance.Select(appearance, content, firstPerson, records);
-        _directory = selected.SkeletonPath[..selected.SkeletonPath.LastIndexOf('/')];
-        var models = selected.Models;
+        _records = records; _content = content; _first = firstPerson;
+        _directory = firstPerson ? "meshes/characters/_1stperson" : appearance.SkeletonPath[..appearance.SkeletonPath.LastIndexOf('/')];
+        var models = firstPerson ? appearance.Models.Where(part => part.Role is "body" or "hand-left" or "hand-right" or "armor" or "armor-addon")
+            .Select(FirstPersonPart).ToArray() : appearance.Models;
         try
         {
-            Actor = RuntimeNativeNpc.Create(selected, content, units,
+            Actor = RuntimeNativeNpc.Create(appearance with { Models = models, SkeletonPath = firstPerson ? _directory + "/skeleton.nif" : appearance.SkeletonPath }, content, units,
                 (npc, part, nif, geometry) => NativeNpcMaterial.Resolve(npc, part, nif, geometry, records, ambient));
             AddChild(Actor); Actor.SetProcess(false);
             var pipBoy = appearance.EquippedArmor.Any(key => (records.GetEffective(key).ReadSubrecords()
@@ -116,7 +113,6 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             for (var index = 0; index < Actor.Parts.Count; index++)
             {
                 var part = models[index]; var source = FalloutNifFile.Read(Read(part.ModelPath!));
-                _sourceBoundParts.Add(source);
                 foreach (var mesh in Actor.Parts[index].Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>())
                 {
                     if (!mesh.HasMeta("opennv_nif_geometry_block")) continue;
@@ -142,21 +138,26 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
             }
             if (firstPerson) NativePlayerSelfVisibility.Apply(Actor);
             SetAmbient(ambient);
-            if (!sourceAnimationOwner)
+            _idle = Clip(firstPerson ? "mtidle" : "locomotion/mtidle");
+            if (Weapon?.Grip is { } grip && grip != 255)
             {
-                _idle = Clip(firstPerson ? "mtidle" : "locomotion/mtidle");
-                if (Weapon?.Grip is { } grip && grip != 255)
-                {
-                    var suffix = grip is >= 230 and <= 235 ? grip - 229 : throw new NotSupportedException($"WEAP grip {grip} is unbound.");
-                    _grip = Clip(Weapon.AnimationGroup + "handgrip" + suffix);
-                }
-                Advance(0, Vector3.Zero, true, false);
+                var suffix = grip is >= 230 and <= 235 ? grip - 229 : throw new NotSupportedException($"WEAP grip {grip} is unbound.");
+                _grip = Clip(Weapon.AnimationGroup + "handgrip" + suffix);
             }
+            Advance(0, Vector3.Zero, true, false);
         }
         catch { Free(); throw; }
     }
 
     private byte[] Read(string path) => _content.TryRead(path, null, out var bytes, out _) ? bytes : throw new FileNotFoundException($"Player source resource is missing: {path}", path);
+    private FalloutNpcAppearancePart FirstPersonPart(FalloutNpcAppearancePart part)
+    {
+        if ((part.BipedSlots & 0x18) == 0 || part.ModelPath is not { } path || !path.EndsWith(".nif", StringComparison.OrdinalIgnoreCase)) return part;
+        // Owned hand variants carry inverse binds for the first-person finger
+        // hierarchy. Keeping the third-person inverse binds distorts the grip.
+        var candidate = path[..^4] + "1st.nif";
+        return _content.TryRead(candidate, null, out _, out _) ? part with { ModelPath = candidate } : part;
+    }
     internal bool ClipExists(string name)
     {
         if (!_availableClips.TryGetValue(name, out var exists))
@@ -216,20 +217,18 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         AdvanceMuzzle(delta);
         try
         {
-            if (LogicalScene is { } scene && (scene.HasLoadedAnimationPoseOwner || _sourceAnimationOwner))
-            {
-                Skeleton.BorrowCurrentSourcePoses();
-                return;
-            }
-            if (_sourceAnimationOwner) throw new InvalidOperationException("Source Player projection has no actual logical model.");
             var group = _drawn && Weapon is { } weapon ? weapon.AimGroup(_first, aiming) : _first ? "mtidle" : "locomotion/mtidle";
             if (group != _group) { _active = Clip(group); _group = group; _seconds = 0; }
             _seconds += delta * (Weapon?.AnimationMultiplier ?? 1);
             SelectMovement(delta, movement, grounded);
             Skeleton.Node.ResetBonePoses();
             Skeleton.Node.SetBonePose(Skeleton.BoneIndex(_idle!.Sequence.TargetName), Transform3D.Identity);
-            LogicalScene?.ResetBonePoses(_idle.Sequence.TargetName);
-            var count = CurrentSourceLayers();
+            var count = 0;
+            if (_idle is not null) _animationLayers[count++] = (_idle, SourceTime(_idle, _seconds));
+            if (_movement is not null) _animationLayers[count++] = (_movement, SourceTime(_movement, _movementSeconds));
+            if (_active is not null && _active != _idle) _animationLayers[count++] = (_active, SourceTime(_active, _seconds));
+            if (_drawn && _grip is not null) _animationLayers[count++] = (_grip, SourceTime(_grip, _seconds));
+            if (_actionClip is not null) _animationLayers[count++] = (_actionClip, SourceTime(_actionClip, _actionSeconds));
             RuntimeNativeNifAnimation.ApplyLayers(_animationLayers.AsSpan(0, count));
             PublishWeaponActionParent();
         }

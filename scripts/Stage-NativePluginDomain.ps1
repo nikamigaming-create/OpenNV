@@ -7,8 +7,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $sourceRoot = [IO.Path]::GetFullPath($SourceDirectory)
 $destinationRoot = [IO.Path]::GetFullPath($DestinationDirectory)
-$files = @('opennv_plugin_domain.exe', 'opennv_cng_service.exe', 'opennv_engine_tls.dll',
-    'build-manifest.json', 'providers/cng/bcrypt.dll')
+$files = @('opennv_plugin_domain.exe', 'build-manifest.json')
 foreach ($relative in $files) {
     if (!(Test-Path -LiteralPath (Join-Path $sourceRoot $relative) -PathType Leaf)) {
         throw "Missing first-party native runtime companion: $relative"

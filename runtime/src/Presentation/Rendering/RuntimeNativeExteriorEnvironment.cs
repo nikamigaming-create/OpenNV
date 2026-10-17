@@ -25,17 +25,6 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
     internal Compositor? Compositor { get; set; }
     internal FalloutImageSpace? ImageSpace { get; set; }
     internal int RegisteredSurfaces => _meshes.Count;
-    internal object DiagnosticState => new
-    {
-        hour = _lastHour,
-        weather = _sky.ActiveWeather.Form.ToString(),
-        lightingBound = _lightingBound,
-        registeredSurfaces = _meshes.Count,
-        ambient = new[] { _ambient.X, _ambient.Y, _ambient.Z },
-        fog = new[] { _fog.X, _fog.Y, _fog.Z },
-        sunEnergy = _sun?.LightEnergy,
-        skyPosition = _layers is null ? null : new[] { _layers.GlobalPosition.X, _layers.GlobalPosition.Y, _layers.GlobalPosition.Z },
-    };
 
     internal void Configure(FalloutPluginStack records, FalloutSkyLightingState sky, Func<float> hour, float units, Node? sceneRoot = null)
     { _records = records; _sky = sky; _hour = hour; _units = units; _sceneRoot = sceneRoot; }
@@ -61,9 +50,6 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         _layers = new RuntimeNativeSkyLayers { Name = "OwnedSkyLayers" };
         _layers.Build(_records, _sky, _units);
         AddChild(_layers);
-        if (_sky.SourceTransfer is { } sourceSky)
-            _layers.BindSourceReset(sourceSky, _scene, FalloutInstallationSettings.Read(
-                _records.OwnedSource ?? throw new InvalidOperationException("Sky factory has no selected source settings.")).NumericIni);
         _environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color,
@@ -85,10 +71,6 @@ internal partial class RuntimeNativeExteriorEnvironment : Node
         Register(_scene);
         SetMeta("opennv_exterior_presentation_unverified", "clouds,celestial-projection,weather-transition,region-edge-blend,LOD,matched-pixels");
         Sample();
-        // WTHR lighting and its scene resources have independent owners.
-        // A failed Moon factory remains a retained source failure, while the
-        // environment's process callback still has its initialized fields.
-        BindSourceMoonChildren();
     }
 
     public override void _ExitTree()

@@ -24,16 +24,6 @@ internal static class LinkedDoorAccessContracts
                 world.ResidentCellCount == 0, "Source-unlocked pair created a lock or a destination instance/residency.");
             Require(world.GetLocked(second) == 0 && world.GetLockLevel(second) == 0 && world.Lock(second) is null,
                 "Reciprocal ESP-local link did not adjust its declared master identities.");
-            using (var noAlarm = new FalloutReferenceWorld(records))
-            {
-                Require(noAlarm.GetLocked(Key(0x94)) == 0 && noAlarm.GetLockLevel(Key(0x94)) == 0 &&
-                    noAlarm.Lock(Key(0x94)) is null && noAlarm.InstanceCount == 1,
-                    "Source No Alarm became a teleport rejection, fabricated a lock or instantiated the opposite door.");
-                using var coldNoAlarm = new FalloutReferenceWorld(records);
-                coldNoAlarm.Restore(RoundTrip(noAlarm.Capture()));
-                Require(coldNoAlarm.GetLocked(Key(0x94)) == 0 && coldNoAlarm.InstanceCount == 1,
-                    "Cold No Alarm access fabricated a lock or destination instance.");
-            }
             var effects = 0;
             var scripts = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false, _ => ++effects));
             void Run(string source) => scripts.ExecuteProgram(records.GetEffective(first), records.GetEffective(Key(0x50)),
@@ -143,8 +133,7 @@ internal static class LinkedDoorAccessContracts
             Record("KEYM", 0x20), Script(), Record("CELL", 0x80, Field("DATA", [1])),
             Record("CELL", 0x81, Field("DATA", [1])), Record("CELL", 0x82, Field("DATA", [1])),
             Group(0x80, Reference(0x90, "LinkedA", 1),
-                Door(0x92, 0x93, Field("XLOC", SourceLock(100, 0x20))), Door(0x93, 0x92),
-                Reference(0x94, "NoAlarmDoor", 1, Field("XTEL", Teleport(0x95, 1))), Door(0x95, 0x94)),
+                Door(0x92, 0x93, Field("XLOC", SourceLock(100, 0x20))), Door(0x93, 0x92)),
             Group(0x82,
                 Reference(0x100, "ShortTeleport", 1, Field("XTEL", new byte[31])),
                 Reference(0x101, "EmptyTeleport", 1, Field("XTEL", [])),
@@ -155,7 +144,7 @@ internal static class LinkedDoorAccessContracts
                 Door(0x108, 0x132), Door(0x132, 0x90), Door(0x109, 0x109),
                 Reference(0x10a, "DuplicateTeleport", 1, Field("XTEL", Teleport(0x90)), Field("XTEL", Teleport(0x90))),
                 Reference(0x10b, "NonfiniteTeleport", 1, Field("XTEL", nan)),
-                Reference(0x10c, "UnknownTeleportNoAlarm", 1, Field("XTEL", Teleport(0x90, 2))),
+                Reference(0x10c, "UnknownTeleportFlags", 1, Field("XTEL", Teleport(0x90, 1))),
                 Door(0x10d, 0x133), Door(0x133, 0x10d, Field("XLOC", new byte[11])),
                 Door(0x10e, 0x134), Door(0x134, 0x10e, Field("XLOC", SourceLock(100, 2))),
                 Door(0x10f, 0x135), Door(0x135, 0x10f, Field("XLOC", []))));

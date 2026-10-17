@@ -31,7 +31,7 @@ internal partial class RuntimeNativeNpc
         if (!CanCaptureFurnitureContinuation())
             throw new NotSupportedException("Furniture still has an unowned approach, idle or source selection continuation.");
         var lifecycle = _packageEvents!;
-        var state = new FalloutActorFurnitureContinuation(FalloutActorPackageAssignment.Capture(_aiStack!, lifecycle, _boundScriptPackageRevision)!,
+        var state = new FalloutActorFurnitureContinuation(FalloutActorPackageAssignment.Capture(_aiStack!, lifecycle)!,
             lifecycle.Revision, lifecycle.LastEvent, lifecycle.LastPackage,
             lifecycle.LastPackage is { } previous ? FalloutActorFurnitureContinuation.RecordHash(_aiStack!.GetEffective(previous)) : null,
             SittingState, Math.Clamp(_furnitureSearchRemaining, 0, .5), WriteFurniturePose(Transform),
@@ -83,7 +83,7 @@ internal partial class RuntimeNativeNpc
         _findFurniture = source.Procedure == 0 ? FalloutFindFurniturePackage.Read(package) : null;
         _packageIdles = new(source, _idleReplays, idle => _idleConditions!.AllPass(idle, EvaluateAiCondition));
         RestorePackageIdleState(saved.IdleState);
-        _furnitureIdles = new(_aiStack, Appearance.SkeletonPath, _aiGlobals);
+        _furnitureIdles = new(_aiStack, Appearance.SkeletonPath);
         _furnitureSearchRemaining = saved.SearchRemaining;
         _sitting = saved.Phase == 3 ? 1 : saved.Phase;
         _furnitureEntry = _sitting == 2 ? clip : null;

@@ -1,6 +1,5 @@
 using Godot;
 using OpenNV.Runtime.Content;
-using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 
@@ -71,7 +70,7 @@ internal partial class RuntimeNativePlayer
         if (WeaponInput(input)) return true;
         if ((_inputControls is not null ? input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(13), allowEcho: false)
             : input is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F }) && GetMeta("opennv_source_pointofview_enabled", true).AsBool())
-        { _thirdPersonMode = !_thirdPersonMode; ObserveStandaloneViewTransition(); PublishThirdPersonCamera(); return true; }
+        { _thirdPersonMode = !_thirdPersonMode; PublishThirdPersonCamera(); return true; }
         if (_inputControls is not null && (input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(6), allowEcho: false) ||
             input.IsActionReleased(InputSystem.RuntimeNativeInputControls.Action(6))))
         { _aiming = input.IsActionPressed(InputSystem.RuntimeNativeInputControls.Action(6), allowEcho: false); return true; }
@@ -84,7 +83,7 @@ internal partial class RuntimeNativePlayer
                 { _thirdPersonDistance = _thirdPersonMode ? Math.Min(5, _thirdPersonDistance + .25f) : .5f; _thirdPersonMode = true; }
                 else if (_thirdPersonMode)
                 { _thirdPersonDistance -= .25f; if (_thirdPersonDistance < .5f) _thirdPersonMode = false; }
-                ObserveStandaloneViewTransition(); PublishThirdPersonCamera(); return true;
+                PublishThirdPersonCamera(); return true;
             }
         }
         return false;
@@ -116,14 +115,13 @@ internal partial class RuntimeNativePlayer
 
     public override void _Process(double delta)
     {
-        if (_playerPhysical?.Failure is not null) return;
         if (!GetTree().Paused) AdvancePendingProjectileImpacts((float)delta);
         if (_presentationRecords is null) return;
         var active = !_modalInput && _sourceCamera is null && _furniturePhase == 0 && _movementEnabled;
         if (_firstPersonPixels is not null) _firstPersonPixels.Visible = _presentationError is null && active && !_thirdPersonMode && (_firstPerson?.Weapon is null || _weaponHandling!.Drawn || _weaponAction is not null);
         if (_thirdPerson is not null)
         {
-            _thirdPerson.Visible = _presentationError is null && (_playerPhysical?.HasPhysicalMotion == true || _xr is not null || _sourceCamera is null && _furniturePhase == 0);
+            _thirdPerson.Visible = _presentationError is null && (_xr is not null || _sourceCamera is null && _furniturePhase == 0);
             _thirdPerson.SetViewPolicy(_xr is not null || _thirdPersonMode, true);
         }
         if (_xr is not null && _firstPerson is not null) _firstPerson.Visible = _presentationError is null;
@@ -139,12 +137,12 @@ internal partial class RuntimeNativePlayer
             try { RebuildPresentation(equipment); }
             catch (Exception error)
             {
-                _presentationError = error.ToString();
+                _presentationError = error.Message;
                 if (_firstPerson is not null) _firstPerson.Visible = false;
                 if (_thirdPerson is not null) _thirdPerson.Visible = false;
                 if (_firstPersonPixels is not null) _firstPersonPixels.Visible = false;
                 PresentationChanged?.Invoke();
-                GD.PushError("OPENNV_PLAYER_PRESENTATION_UNBOUND " + error);
+                GD.PushError("OPENNV_PLAYER_PRESENTATION_UNBOUND " + error.Message);
             }
             if (changing && _presentationError is null && _weaponHandling!.Drawn) RequestWeaponAction("equip");
         }
@@ -153,17 +151,6 @@ internal partial class RuntimeNativePlayer
             var policy = _playerPolicy();
             ApplySourceScale(policy.PlayerScale);
             _firstPerson?.SetToddler(policy.PlayerToddler);
-        }
-        if (_playerPhysical?.HasPhysicalMotion == true)
-        {
-            // The genuine KF/rig owns the current world body. The normal
-            // locomotion and tracked-arm publishers cannot overwrite that pose.
-            try { PhysicalPlayer.Execute("publish-player-physical-frame", PublishPlayerPhysicalView); }
-            catch (Exception error) when (FalloutPlayerPhysicalActivity.Ordinary(error))
-            { GD.PushError("OPENNV_PLAYER_PHYSICAL_FRAME_FAILED " + error.Message); return; }
-            if (_firstPersonPixels is not null) _firstPersonPixels.Visible = false;
-            if (_firstPerson is not null && _xr is not null) _firstPerson.Visible = false;
-            return;
         }
         if (!active && _xr is null && !(_firstPerson is { Toddler: true } && !_modalInput && _sourceCamera is null && _furniturePhase == 0))
         {
@@ -212,8 +199,6 @@ internal partial class RuntimeNativePlayer
 
     private void RebuildPresentation(uint[] equipped)
     {
-        RequireStandaloneFirstPersonSceneReplacement();
-        RequirePhysicalPresentationReplacement();
         var records = _presentationRecords!; var content = RuntimeLiveContentSource.Current!;
         var appearance = _appearance!();
         var weapon = equipped.Select(records.RuntimeFormKey).Where(key => records.GetEffective(key).Signature == "WEAP")
@@ -222,31 +207,8 @@ internal partial class RuntimeNativePlayer
         RuntimeNativePlayerActor? first = null, third = null;
         try
         {
-            if (_referenceModelWorld is { } world)
-            {
-                var session = (_playerPolicy ?? throw new InvalidOperationException("Player model loading has no actual ScriptSession."))();
-                world.LoadStandalonePlayerModels(session, actual =>
-                {
-                    if (!ReferenceEquals(_playerPolicy(), actual))
-                        throw new InvalidOperationException("Player model loading changed its actual shared ScriptSession.");
-                }, _ =>
-                {
-                    first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient, sourceAnimationOwner: true);
-                    return ConstructFirstModelNode(first, world);
-                }, onConstructed =>
-                {
-                    FalloutPlayerReturnedModel? model = null;
-                    third = ConstructReferenceModel(() => new(records, content, appearance, weapon, false, UnitsToMeters, ambient, sourceAnimationOwner: true),
-                        returned => { model = returned; onConstructed(returned); });
-                    return model ?? throw new InvalidOperationException("Inherited Reference model load omitted its actual returned node.");
-                }, PrepareStandaloneLoadingModelPhysics);
-            }
-            else
-            {
-                first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient);
-                third = ConstructReferenceModel(() => new(records, content, appearance, weapon, false, UnitsToMeters, ambient));
-            }
-            if (first is null || third is null) throw new InvalidOperationException("Player model loading omitted an actual independent factory.");
+            first = new(records, content, appearance, weapon, true, UnitsToMeters, ambient);
+            third = new(records, content, appearance, weapon, false, UnitsToMeters, ambient);
             if (first.Error is not null || third.Error is not null) throw new NotSupportedException(first.Error ?? third.Error);
             third.ConfigureBodyContacts(CollisionLayer);
             third.SetMeta("opennv_reference_form_key", records.RuntimeFormKey(0x14).ToString());
@@ -288,7 +250,6 @@ internal partial class RuntimeNativePlayer
                 };
                 layer.AddChild(_firstPersonPixels); _firstPersonPixels.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
             }
-            ReleaseStandaloneFirstPersonScene();
             if (_firstPerson is not null) _firstPerson.Visible = false;
             if (_thirdPerson is not null)
             {
@@ -321,17 +282,10 @@ internal partial class RuntimeNativePlayer
                 _thirdPerson.ShowTrackedBody(_firstPerson);
                 BindXrContacts();
             }
-            PublishPhysicalPlayerBody();
-            PublishStandaloneFirstPersonScene();
             PresentationChanged?.Invoke();
             Activity.SetWeaponDrawn(weapon is not null && _weaponHandling.Drawn);
         }
-        finally
-        {
-            NativeNifSceneRetirement.Drain("Unpublished Player presentation",
-                [() => { if (first is not null) CleanupUnpublishedFirstModel(first); },
-                    () => { if (third is not null) CleanupUnpublishedReferenceModel(third); }]);
-        }
+        finally { first?.Free(); third?.Free(); }
     }
 
     private Godot.Collections.Array<Rid> SelfQueryBodies

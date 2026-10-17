@@ -28,18 +28,11 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     }
     private float _jumpHeightMeters;
     private FalloutInputControls? _inputControls;
-    private FalloutDirectInputState? _gameplayInput;
 
-    internal void ConfigureInputControls(FalloutInputControls controls, Func<int, bool> physicalKeyPressed, FalloutDirectInputState? directInput = null)
+    internal void ConfigureInputControls(FalloutInputControls controls, Func<int, bool> physicalKeyPressed)
     {
         if (_inputControls is not null) throw new InvalidOperationException("Player input controls already have an owner.");
-        if (directInput is not null)
-        {
-            if (!ReferenceEquals(directInput.Controls, controls)) throw new InvalidDataException("Player controls differ from the actual device source.");
-            directInput.RequireCurrent();
-        }
         _inputControls = controls;
-        _gameplayInput = directInput;
         var adapter = new RuntimeNativeInputControls(controls, _configuration.Player.DesktopInput, physicalKeyPressed);
         adapter.Remapped += changed =>
         {
@@ -49,7 +42,6 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
                 _holdHandled = false; _aiming = false; CancelWeaponAction();
             }
         };
-        if (directInput is not null) adapter.BindDirectInput(directInput);
         AddChild(adapter);
     }
     internal bool Sprinting { get; private set; }
@@ -187,7 +179,6 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     internal void ApplySourceControls(FalloutPlayerControlState state)
     {
-        _sourceControlsPublished = false;
         SourceControls = state;
         _movementEnabled = state.Movement;
         _lookingEnabled = state.Looking;
@@ -201,7 +192,6 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         SetMeta("opennv_source_pointofview_enabled", state.PointOfView);
         if (!state.Fighting) { _reloadPressed = false; _weaponTriggerHeld = false; _pendingShotCount = 0; CancelWeaponAction(); }
         SetMeta("opennv_source_looking_enabled", state.Looking);
-        _sourceControlsPublished = true;
     }
 
     internal void Configure(RuntimeConfiguration configuration, Transform3D authoredFloorTransform)
@@ -221,16 +211,15 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         CollisionMask = configuration.Player.CollisionMask;
         FloorSnapLength = configuration.Player.CapsuleRadiusMeters;
         FloorMaxAngle = Mathf.DegToRad(configuration.Player.MaximumWalkableSlopeDegrees);
-        using var capsule = new CapsuleShape3D
-        {
-            Radius = configuration.Player.CapsuleRadiusMeters,
-            Height = configuration.Player.CapsuleHeightMeters,
-        };
         AddChild(new CollisionShape3D
         {
             Name = "NativePlayerCapsule",
             Position = Vector3.Up * configuration.Player.SpawnCenterHeightMeters,
-            Shape = capsule,
+            Shape = new CapsuleShape3D
+            {
+                Radius = configuration.Player.CapsuleRadiusMeters,
+                Height = configuration.Player.CapsuleHeightMeters,
+            },
         });
         _camera = new Camera3D
         {
@@ -299,19 +288,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     {
         ObserveSaveInput(inputEvent, "unhandled");
         if (_xr is not null) return;
-        if (_gameplayInput is { Provider: FalloutInputProvider.HeadlessCommands } commands &&
-            NativeScriptKeys.Read(inputEvent).Any(value => value.Down && !(commands.HasSourceControlQueries
-                ? commands.ReadCommandEventPermission((uint)value.Key, value.Down).Allowed
-                : commands.Pressed((uint)value.Key))))
-        {
-            GetViewport().SetInputAsHandled(); return;
-        }
         var input = _configuration.Player.DesktopInput;
-        if (_playerPerceptionWorld?.FunctionalFailure is not null &&
-            !inputEvent.IsActionPressed(input.Cancel.Action) && !inputEvent.IsActionPressed(input.CaptureMouse.Action))
-        {
-            GetViewport().SetInputAsHandled(); return;
-        }
         if (_inputControls is null && !_modalInput && _movementEnabled && _furniturePhase == 0 && _sourceCamera is null &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.Q or Key.H } wheel)
         {
@@ -319,7 +296,6 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled(); return;
         }
         if (PresentationInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
-        if (SourceRestInput(inputEvent)) { GetViewport().SetInputAsHandled(); return; }
         if (!_modalInput && _furniturePhase == 0 && GetMeta("opennv_source_pipboy_enabled", false).AsBool() &&
             inputEvent is InputEventKey { Pressed: true, Echo: false, PhysicalKeycode: Key.F1 or Key.F2 or Key.F3 } pageKey)
         {
@@ -340,7 +316,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         }
         if (inputEvent.IsActionPressed(input.Cancel.Action))
         {
-            if (!_modalInput || _playerPerceptionWorld?.FunctionalFailure is not null) OpenPauseMenu?.Invoke();
+            if (!_modalInput) OpenPauseMenu?.Invoke();
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -356,8 +332,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             {
                 RejectActivation(); GetViewport().SetInputAsHandled(); return;
             }
-            if (DispatchSourceFurnitureActivation())
+            if (_furniturePhase != 0)
             {
+                RequestFurnitureExit();
                 GetViewport().SetInputAsHandled();
                 return;
             }
@@ -367,7 +344,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             GetViewport().SetInputAsHandled();
             return;
         }
-        if (_playerPerceptionWorld?.FunctionalFailure is not null || _modalInput || !_lookingEnabled || Input.MouseMode != Input.MouseModeEnum.Captured ||
+        if (_modalInput || !_lookingEnabled || Input.MouseMode != Input.MouseModeEnum.Captured ||
             inputEvent is not InputEventMouseMotion motion)
             return;
         if (_furniturePhase is 1 or 2 or 4) return;
@@ -387,16 +364,12 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     internal event Action<OpenNV.Runtime.Gameplay.State.FalloutPipBoyPage>? OpenPipBoyPage;
     internal event Action<bool>? OpenCombatWheel;
     internal event Action? OpenPauseMenu;
-    internal bool GameplayMutationBlocked => _playerPerceptionWorld?.FunctionalFailure is not null;
 
     public override void _PhysicsProcess(double delta)
     {
         PublishXrPointer();
         if (_xr is not null && GetTree().Paused) return;
-        if (_playerPerceptionWorld?.FunctionalFailure is not null || _playerPhysical?.Failure is not null)
-        { Velocity = Vector3.Zero; return; }
         AdvanceExplosionExposure(delta);
-        if (AdvancePlayerKnockdown(delta)) return;
         if (_furniturePhase != 0) { AdvanceFurniture(delta); return; }
         var input = _configuration.Player.DesktopInput;
         var alive = IsDefeated?.Invoke() != true;

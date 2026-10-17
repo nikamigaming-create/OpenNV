@@ -21,8 +21,6 @@ internal static partial class QuestGraphAuditContracts
             new("dynamic-one-symbol-empty", DynamicEmptyFrame(), [], 1),
             new("dynamic-repeat16-full-literal-alphabet", DynamicAlphabetFrame(), alphabet, 1),
             new("dynamic-repeat16-crosses-alphabets", CrossAlphabetRepeatFrame(), [255], 1),
-            new("dynamic-all-code-lengths-through15", MaximumCodeLengthFrame(),
-                [.. Enumerable.Range(0, 14).Select(value => (byte)value), 65], 1),
             new("stored-fixed-dynamic-multiple-blocks", MultipleFrame(), "ABABBA"u8.ToArray(), 3),
             new("cross-block-history", HistoryFrame(), "abcabc"u8.ToArray(), 2),
             new("overlapping-match", OverlapFrame(), "AAAA"u8.ToArray(), 1),
@@ -32,11 +30,9 @@ internal static partial class QuestGraphAuditContracts
         var maximumExpected = maximumHistory.Concat(Enumerable.Repeat((byte)0x5a, 258)).ToArray();
         var maximumFrame = MaximumDistanceFrame(maximumHistory);
         positives.Add(new("maximum-window-and-match", maximumFrame, maximumExpected, 2));
-        // Public nonempty framework outputs supplement the independent bit
-        // writers. The lazy .NET 10 encoder produces no stream for an empty
-        // write; the explicit fixed/stored/dynamic empty controls above retain
-        // complete block-family and malformed-envelope coverage.
-        foreach (var data in new[] { alphabet, maximumExpected })
+        // Public framework outputs supplement the independent bit writers;
+        // they do not choose which block families the authored cases cover.
+        foreach (var data in new[] { Array.Empty<byte>(), alphabet, maximumExpected })
         {
             using var output = new MemoryStream();
             using (var compressor = new ZLibStream(output, CompressionLevel.Optimal, leaveOpen: true)) compressor.Write(data);
@@ -258,25 +254,6 @@ internal static partial class QuestGraphAuditContracts
         for (var symbol = 0; symbol < 256; ++symbol) writer.Code(0, 1);
         writer.Code(missingEnd ? 0 : 1, 1); writer.Code(0, 1);
         writer.Code(unusedPrefix ? 1 : 0, 1); return writer.ToArray();
-    }
-
-    private static byte[] MaximumCodeLengthFrame()
-    {
-        var writer = new CompressionBits();
-        writer.Bits(1, 1); writer.Bits(2, 2);
-        writer.Bits(0, 5); writer.Bits(0, 5); writer.Bits(15, 4);
-        // Complete code-length alphabet: sixteen four-bit codes, no repeats.
-        foreach (var symbol in new[] { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 })
-            writer.Bits(symbol < 16 ? 4 : 0, 3);
-        // Complete literal tree: one code at each length1..14 and two at15.
-        // Its final literal and EOB require the longest allowed code.
-        for (var symbol = 0; symbol <= 256; ++symbol)
-            writer.Code(symbol < 14 ? symbol + 1 : symbol is 65 or 256 ? 15 : 0, 4);
-        writer.Code(1, 4); // One legal, unused distance code.
-        for (var length = 1; length <= 14; ++length)
-            writer.Code((1 << length) - 2, length);
-        writer.Code(0x7ffe, 15); writer.Code(0x7fff, 15);
-        return writer.ToArray();
     }
 
     private static byte[] DynamicAlphabetFrame()

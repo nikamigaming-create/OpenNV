@@ -1,4 +1,3 @@
-using OpenNV.Runtime.Gameplay.State;
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -119,7 +118,7 @@ internal sealed partial class FalloutDialogueTopic
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context = null,
         Func<FalloutFormKey, bool>? questEligible = null, Func<FalloutFormKey, int>? questPriority = null,
         bool conversation = false, Func<uint, uint>? random = null, bool npcConversation = false,
-        bool immediateResults = false, bool radio = false, FalloutGlobalState? globals = null, bool allowResultOnly = false)
+        bool immediateResults = false, bool radio = false)
     {
         // A line excluded by its source speaker/SayOnce gate cannot own a
         // quest-priority query in this request. Retain uncertain OR/random and
@@ -130,10 +129,10 @@ internal sealed partial class FalloutDialogueTopic
         List<FalloutDialogueInfo>? pool = null;
         foreach (var info in candidates)
         {
-            if (!EligibleAfterSpeaker(info, speakerBase, questStage, context, questEligible, globals)) continue;
+            if (!EligibleAfterSpeaker(info, speakerBase, questStage, context, questEligible)) continue;
             if ((info.Flags & 2) == 0 && pool is not null) return Choose();
             RequireFlags(info, conversation, randomSelection: true, npcConversation: npcConversation,
-                immediateResults: immediateResults, radio: radio, allowResultOnly: allowResultOnly);
+                immediateResults: immediateResults, radio: radio);
             if ((info.Flags & 2) == 0) return info;
             (pool ??= []).Add(info);
             if ((info.Flags & 32) != 0) return Choose();
@@ -210,16 +209,13 @@ internal sealed partial class FalloutDialogueTopic
         var begin = new List<string>();
         var end = new List<string>();
         var afterNext = false;
-        var beginScope = FalloutScriptScope.Dialogue(record, true);
-        var endScope = FalloutScriptScope.Dialogue(record, false);
         for (var index = 0; index < fields.Length; ++index)
         {
             var field = fields[index];
             if (field.Signature == "NEXT") { afterNext = true; continue; }
             if (field.Signature == "SCTX")
             {
-                if (!(afterNext ? endScope : beginScope).Compiled)
-                    (afterNext ? end : begin).Add(ScriptText(field.Data.Span));
+                (afterNext ? end : begin).Add(ScriptText(field.Data.Span));
                 continue;
             }
             if (field.Signature == "CTDA") { conditions.Add(field.Data.ToArray()); continue; }
@@ -269,8 +265,7 @@ internal sealed partial class FalloutDialogueTopic
     }
 
     internal static bool ConditionsPass(FalloutDialogueInfo info, FalloutFormKey speaker,
-        Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context,
-        FalloutGlobalState? globals = null) =>
+        Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context) =>
         FalloutCondition.AllPass(info.Conditions.Select(bytes => FalloutCondition.Read(info.Record, bytes)).ToArray(), condition =>
         {
             if (condition.RunOn == 0)
@@ -280,12 +275,12 @@ internal sealed partial class FalloutDialogueTopic
             }
             return context?.Invoke(condition) ?? throw new NotSupportedException(
                 $"INFO {info.Record.FormKey} condition {condition.Function} RunOn {condition.RunOn} is unbound.");
-        }, evaluateRunOn: true, globals: globals);
+        }, evaluateRunOn: true);
 
     internal static void RequireFlags(FalloutDialogueInfo info, bool conversation, bool randomSelection = false,
-        bool npcConversation = false, bool immediateResults = false, bool radio = false, bool allowResultOnly = false)
+        bool npcConversation = false, bool immediateResults = false, bool radio = false)
     {
-        if (info.Responses.Count == 0 && !(allowResultOnly && !npcConversation && !radio))
+        if (info.Responses.Count == 0)
             throw new NotSupportedException($"INFO {info.Record.FormKey} zero-response result/flow behavior is unbound.");
         var supported = randomSelection ? 39 : 5;
         if (immediateResults) supported |= 8;
@@ -296,9 +291,9 @@ internal sealed partial class FalloutDialogueTopic
 
     internal static bool Eligible(FalloutDialogueInfo info, FalloutFormKey speaker, IReadOnlySet<FalloutFormKey> said,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context,
-        Func<FalloutFormKey, bool>? questEligible = null, bool radio = false, FalloutGlobalState? globals = null) =>
+        Func<FalloutFormKey, bool>? questEligible = null, bool radio = false) =>
         EligibleSpeaker(info, speaker, said, context, radio) &&
-        EligibleAfterSpeaker(info, speaker, questStage, context, questEligible, globals);
+        EligibleAfterSpeaker(info, speaker, questStage, context, questEligible);
 
     private static bool EligibleSpeaker(FalloutDialogueInfo info, FalloutFormKey speaker, IReadOnlySet<FalloutFormKey> said,
         Func<FalloutCondition, float>? context, bool radio) =>
@@ -307,8 +302,8 @@ internal sealed partial class FalloutDialogueTopic
 
     private static bool EligibleAfterSpeaker(FalloutDialogueInfo info, FalloutFormKey speaker,
         Func<FalloutFormKey, float> questStage, Func<FalloutCondition, float>? context,
-        Func<FalloutFormKey, bool>? questEligible, FalloutGlobalState? globals) =>
-        (questEligible is null || questEligible(info.Quest)) && ConditionsPass(info, speaker, questStage, context, globals);
+        Func<FalloutFormKey, bool>? questEligible) =>
+        (questEligible is null || questEligible(info.Quest)) && ConditionsPass(info, speaker, questStage, context);
 
     private static bool AdmitsSpeaker(FalloutDialogueInfo info, FalloutFormKey speaker, Func<FalloutCondition, float>? context)
     {

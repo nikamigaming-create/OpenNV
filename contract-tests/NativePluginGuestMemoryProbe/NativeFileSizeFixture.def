@@ -1,7 +1,0 @@
-EXPORTS
-    NVSEPlugin_Query=NVSEPlugin_Query
-    NVSEPlugin_Load=NVSEPlugin_Load
-    FileSizeHandle=_FileSizeHandle@4
-    FileSizePosition=_FileSizePosition@4
-    FileSizeLastError=_FileSizeLastError@0
-    FileSizeProbe=_FileSizeProbe@8
