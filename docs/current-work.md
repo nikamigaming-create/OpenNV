@@ -25,8 +25,9 @@ Git. Priority remains FNV, standalone FO3, mods, then TTW.
   player snapshot now fulfills that pending automatic snapshot after successful
   writing. Actual near-Sunny F5 moved from queued-auto=true to a completed v52
   slot and queued-auto=false after genuine finite audio completion. The slot
-  resolves spatial CELL 0e1ab6 and retains tutorial stage 35. Cold export proof
-  is next.
+  resolves spatial CELL 0e1ab6 and retains tutorial stage 35. The packaged export
+  cold-loads it with Sunny at the saved well position, renders the quest page
+  and commits another complete F5 slot.
 - Cazador skin partition 214 was rejected. Source body regions now cover index 14
   and corresponding caps/sections. Template flags without an actual TPLT link now
   retain local actor fields. Owned construction, independent instances and cold
@@ -64,15 +65,20 @@ Selected owned creature, coyote warning, armed/melee NPC and landscape checks pa
 their functional checks. The two NPC fixtures retain audio playback shutdown
 warnings; those are not a leak-free-runtime claim. The complete runtime gate is
 passed after the residency/save repair, including Release/Debug, format/analyzers,
-contracts, launcher and native Godot probes. Diff checks pass. Next are cold
-loading and independent Release export acceptance. Post-fast-travel saving and
-population remain unverified.
+contracts, launcher and native Godot probes. Diff checks pass. Independent
+Release cold/save/UI acceptance passes. Post-fast-travel saving and population
+remain unverified.
 
 Original owned files, recording and user saves remain untouched. Investigation
-copies/logs stay private in ignored local storage. No repaired package is pinned.
-Package f is the historical failed candidate. Publish only after selected checks
-and the full gate pass, through a checked PR, then synchronize main and pin the
-independently tested export.
+copies/logs stay private in ignored local storage. Package g,
+`OpenNV-fnv-repair-20261017-g-windows-x64`, pins clean source
+`92148ee84f3643f1b11b93f90fcd1942bdcb896f`; all 207 file hashes and exported
+launcher identity validate, with no owned data. ZIP SHA256:
+`2df69df4aaefa394817cdbefd942d8e0d9bf495975d21fb0ac697526d0d82afe`.
+Existing New Vegas flat/VR test shortcuts point to g with the original profile;
+its save hash is unchanged. PR #210 carries the repair and its checked integration.
+Package f remains the historical failed candidate. Begin the next implementation
+block from current origin/main on a fresh feature branch.
 
 Cheyenne's saloon portal approach remains unaccepted. Missing SpeedTree decoding,
 unsupported packages/scripts, unloaded background simulation, campaign/ED-E,
@@ -80,5 +86,7 @@ physical Quest 3, FO3 VR, mods and TTW remain open. Earlier bounded tutorial or
 simulator checks do not establish these capabilities. Loading is not instant.
 
 Frame recording is off; only selected diagnostic stills are inspected.
-Automatic approval review previously blocked deletion of superseded packages and
-older diagnostics. Leave those inactive artifacts alone.
+Automatic approval review blocked deletion of superseded packages, older
+diagnostics, and this investigation's temporary test sessions/frames. It returned
+only "blocked by policy" for the current cleanup. Those local artifacts remain;
+recording is off. Do not bypass the rejection.
