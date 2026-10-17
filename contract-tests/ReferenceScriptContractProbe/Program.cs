@@ -4,6 +4,17 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--weather-command-contracts"])
+{
+    WeatherCommandContracts.Run();
+    return;
+}
+if (args is ["--audit-weather-command", var weatherData])
+{
+    WeatherCommandContracts.RunOwned(weatherData);
+    return;
+}
+
 if (args is ["--player-ability-supplement-contracts"])
 {
     PlayerAbilitySupplementContracts.Run();
@@ -348,6 +359,11 @@ if (args.Length >= 3 && args[0] == "--audit-ttw-furniture")
 if (args is ["--inventory-query-contracts"])
 {
     InventoryQueryContracts.Run();
+    return;
+}
+if (args is ["--audit-fnv-bottle-weapons", var bottleData])
+{
+    OwnedBottleWeaponProbe.Run(bottleData);
     return;
 }
 if (args.Length >= 6 && args[0] == "--audit-dialogue-inventory")
@@ -891,6 +907,7 @@ FollowPackageContracts.Run();
 DialoguePackageContracts.Run();
 DialogueSpatialContracts.Run();
 HeadingQueryContracts.Run();
+WeatherCommandContracts.Run();
 CellQueryContracts.Run();
 NpcDialogueLinkContracts.Run();
 RadioContracts.Run();

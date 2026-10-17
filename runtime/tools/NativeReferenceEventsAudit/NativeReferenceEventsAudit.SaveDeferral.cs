@@ -38,8 +38,16 @@ public partial class NativeReferenceEventsAudit
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
         BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6); referenceBytes.CopyTo(group, 24);
         var playerStats = new byte[24]; playerStats[8] = 1;
+        byte[] Setting(uint id, string name, byte[] value) => Record("GMST", id,
+            Field("EDID", Encoding.ASCII.GetBytes(name + "\0")), Field("DATA", value));
         File.WriteAllBytes(path, Record("TES4", 0, Field("HEDR", header)).Concat(Record("ACTI", 0x700))
             .Concat(Record("NPC_", 7, Field("ACBS", playerStats), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5])))
+            .Concat(Setting(0x710, "fAVDHealthEnduranceMult", BitConverter.GetBytes(20f)))
+            .Concat(Setting(0x711, "fAVDHealthLevelMult", BitConverter.GetBytes(0f)))
+            .Concat(Setting(0x712, "fAVDActionPointsBase", BitConverter.GetBytes(65f)))
+            .Concat(Setting(0x713, "fAVDActionPointsMult", BitConverter.GetBytes(3f)))
+            .Concat(Setting(0x714, "iXPBase", BitConverter.GetBytes(200)))
+            .Concat(Setting(0x715, "iXPBumpBase", BitConverter.GetBytes(150)))
             .Concat(Record("CELL", 0x800, Field("DATA", [1]))).Concat(group).ToArray());
         using var records = FalloutPluginStack.Load(Path.GetDirectoryName(path)!, ["Contact.esm"]);
         using var world = new FalloutReferenceWorld(records);
@@ -55,6 +63,8 @@ public partial class NativeReferenceEventsAudit
         try
         {
             Bind("_player", player); Bind("_scripts", scripts);
+            var vitals = new FalloutPlayerVitals(records, Key(7), new(5, 5, 5, 5, 5, 5, 5));
+            Bind("_vitals", vitals);
             var abilities = new FalloutPlayerAbilityScripts(records, () => [],
                 _ => throw new InvalidOperationException("Unexpected ability condition in save-deferral fixture."));
             abilities.BindExecutor((_, _, _, _) => throw new InvalidOperationException("Unexpected active effect in save-deferral fixture."));
@@ -88,7 +98,19 @@ public partial class NativeReferenceEventsAudit
             Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
                 State().GetProperty("deferredBy").ValueKind == JsonValueKind.Null && world.Capture().Count > 0,
                 "Settled procedure did not release the same pending autosave for normal capture.");
-            GD.Print("OPENNV_NATIVE_SAVE_DEFERRAL_PASS sourceRequest=true transientBlockedFrames=true explicitCaptureRefused=true sameRequestEligible=true");
+            vitals.Damage(vitals.State.MaximumHitPoints);
+            driver._Process(0);
+            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean(),
+                "Player death consumed or permanently failed a pending autosave.");
+            try
+            {
+                owner.GetMethod("CaptureCurrentState", flags)!.Invoke(driver, [Key(0x800)]);
+                throw new InvalidOperationException("Explicit capture admitted a defeated player.");
+            }
+            catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException &&
+                error.InnerException.Message.Contains("after player death", StringComparison.Ordinal))
+            { }
+            GD.Print("OPENNV_NATIVE_SAVE_DEFERRAL_PASS sourceRequest=true transientBlockedFrames=true explicitCaptureRefused=true sameRequestEligible=true defeatedPlayerProtected=true");
         }
         finally { driver.Free(); }
     }

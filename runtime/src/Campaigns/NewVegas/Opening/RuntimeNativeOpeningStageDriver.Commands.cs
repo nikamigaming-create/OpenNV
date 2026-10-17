@@ -154,8 +154,10 @@ internal partial class RuntimeNativeOpeningStageDriver
                     throw new NotSupportedException("Nonempty script music requires its streaming playback owner.");
                 _music = music.FormKey;
                 break;
-            case "forceweather" when parts.Length == 1 && arguments.Count == 1:
-                (_skyLighting ?? throw new InvalidOperationException("Sky state owner is absent.")).ForceWeather(bindings.Form(arguments[0]).FormKey);
+            case "forceweather" or "fw" when parts.Length == 1:
+                var overrideWeather = FalloutSkyLightingState.ReadForceWeatherOverride(arguments);
+                (_skyLighting ?? throw new InvalidOperationException("Sky state owner is absent."))
+                    .ForceWeather(bindings.Form(arguments[0]).FormKey, overrideWeather);
                 break;
             case "releaseweatheroverride" when parts.Length == 1 && arguments.Count == 0:
                 (_skyLighting ?? throw new InvalidOperationException("Sky state owner is absent.")).ReleaseWeatherOverride();

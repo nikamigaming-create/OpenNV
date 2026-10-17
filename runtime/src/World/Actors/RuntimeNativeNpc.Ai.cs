@@ -553,7 +553,7 @@ internal partial class RuntimeNativeNpc
         91 => Activity.Alerted ? 1 : 0,
         101 => WeaponDrawn ? 1 : 0,
         107 => Combat?.KnockedDown == true ? 2 : 0,
-        108 => Combat?.WeaponAnimationType ?? 0,
+        108 => Combat?.ScriptWeaponAnimationType ?? 0,
         110 => CurrentAiPackage,
         143 => CurrentAiProcedure,
         160 => _seat?.MarkerId ?? 0,

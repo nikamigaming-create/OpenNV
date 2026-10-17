@@ -39,20 +39,35 @@ Native extension modules are disabled. FO3/mod/TTW expansion is deferred.
   and physical-headset acceptance remain pending. The full runtime gate passed.
 - Actual Sunny activation exposed an unbound GetDead condition. It now uses the
   shared actor death owner with source scopes and reference adjustment. Synthetic,
-  vanilla-owned and cold-state checks pass; actual conversation replay is next.
+  vanilla-owned and cold-state checks pass. Actual Sunny conversation now opens
+  and completes without that error.
 - Door autosave ran before destination actor initialization completed. Both
   interaction and door autosaves now use the existing readiness queue, retaining
-  capture guards and rechecking player health before writing. Cold replay is next.
+  capture guards and rechecking player health before writing. The saloon autosave
+  was written and loaded in a fresh process with its cell and player state intact.
 - Rendered FO3 New Game reaches its birth quest, but an anonymous sound emitter
   broke telemetry publication. Readiness now reports that per-voice error without
   throwing away controls; persistence still refuses an unowned continuation.
+  A fresh rendered replay reaches character selection/stage22 and quits normally.
+- Fresh FNV character creation passed name, appearance, SPECIAL, couch dialogue,
+  tags and traits with ordinary input. A new manual save was written inside Doc's
+  house. The original copied save retains an earlier Doc-exit script failure:
+  the two-argument ForceWeather command stopped before resetting VCG02.
+  Its optional override flag is now implemented and source-audited. Old faults
+  are retained; fresh exit replay is next.
+- Tutorial weapon queries now share live equipment/drawn state and the documented
+  script animation-category mapping. Owned bottle-script hits advance the objective;
+  actual tutorial shooting remains pending. Controller-ray 9mm equip, reload and
+  firing worked in the exported simulator, alongside the earlier laser-pistol check.
 - Original user save hash remained unchanged. Tests use separate copied saves.
 
 ## Next work
 
-Export the dialogue/autosave fixes and replay the conversation plus cold save.
-Run the full gate for these changes, measure settled performance, then exercise
-weapons, Pip-Boy pages, doors, loot and cold saves with ordinary inputs. Continue
+Export the weather/weapon-query fixes and continue the fresh character through
+Doc's exit and Sunny's tutorial. Repeat the full gate; the prior run exposed an
+uninitialized vitals owner in the save-deferral fixture, now corrected with a real
+owner and defeated-player coverage. Measure settled performance, then exercise
+loot and cold saves with ordinary inputs. Continue
 the Goodsprings/Primm/ED-E regression route without forced quests or entities.
 
 Complete checked PR #207, synchronize main, and retire accounted branches and

@@ -11,6 +11,8 @@ internal sealed partial class RuntimeNativeActorCombat
     private FalloutPluginRecord? _packageWeaponPolicySource;
     private bool _packageWeaponsVisible = true;
     internal uint WeaponAnimationType => _enemyWeapon?.WeaponAnimationType ?? _packageWeaponType;
+    internal uint ScriptWeaponAnimationType => _enemyWeapon is not null || _packageWeapon is not null
+        ? FalloutWeaponPresentation.ScriptAnimationType(WeaponAnimationType) : 0;
     internal NativeActorWeaponAttachment? AnimationWeapon => OwnsPose ? _enemyObject : _packageWeaponsVisible ? _packageWeapon : null;
 
     internal void PrepareInventoryChange()

@@ -505,6 +505,16 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                     (host.Inventory ?? throw new NotSupportedException("Item count has no shared inventory owner."))
                     .ItemCount(Target(), arguments[0].Value.FormKey(records)))
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation is "isweaponout" or "getweaponanimtype")
+                return new([], _ =>
+                {
+                    var inventory = host.Inventory ?? throw new NotSupportedException("Weapon query has no shared inventory owner.");
+                    return operation == "isweaponout" ? inventory.IsWeaponOut(Target()) ? 1 : 0 : inventory.WeaponAnimationType(Target());
+                }) { ReadOnly = true };
+            if (parts.Length <= 2 && operation == "getequipped")
+                return new([FalloutScriptArgumentKind.Value], arguments =>
+                    (host.Inventory ?? throw new NotSupportedException("Equipment query has no shared inventory owner."))
+                    .IsEquipped(Target(), arguments[0].Value.FormKey(records)) ? 1 : 0) { ReadOnly = true };
             if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
                 return FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Number], arguments =>
                 {

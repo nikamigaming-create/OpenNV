@@ -21,6 +21,8 @@ internal partial class RuntimeNativePlayer
     private bool _weaponTriggerHeld, _automaticFireStopped;
     private readonly SortedSet<string> _weaponUnboundEvents = new(StringComparer.Ordinal);
     internal FalloutWeaponHandlingSnapshot? CaptureWeaponHandling() => _weaponHandling?.Capture();
+    internal bool WeaponDrawn => (_weaponHandling ??
+        throw new NotSupportedException("Player weapon draw query has no handling owner.")).Drawn;
     internal NativeHudAmmo? AmmunitionHud
     {
         get

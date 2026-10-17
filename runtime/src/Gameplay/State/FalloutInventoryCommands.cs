@@ -11,7 +11,7 @@ internal sealed record FalloutInventoryCommand(FalloutInventoryCommandKind Kind,
 // Shared state owner for result/object/quest commands and both player views.
 internal sealed class FalloutInventoryCommands(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutPlayerInventory player, Func<int> level, FalloutGlobalState? globals = null,
-    Action<FalloutFormKey>? prepareActorChange = null)
+    Action<FalloutFormKey>? prepareActorChange = null, Func<FalloutFormKey, bool>? weaponDrawn = null)
 {
     private bool IsPlayer(FalloutFormKey target) => target == records.RuntimeFormKey(0x14);
     private FalloutPlayerInventory Inventory(FalloutFormKey target) => IsPlayer(target) ? player : world.Inventory(target, level(), globals).Contents;
@@ -21,6 +21,23 @@ internal sealed class FalloutInventoryCommands(FalloutPluginStack records, Fallo
 
     internal FalloutFormKey? EquippedObject(FalloutFormKey target, uint slot) => IsPlayer(target)
         ? player.EquippedObject(records, slot) : world.EquippedObject(target, slot, level(), globals);
+
+    internal bool IsWeaponOut(FalloutFormKey target) =>
+        (weaponDrawn ?? throw new NotSupportedException("Weapon draw query has no active actor owner."))(target);
+
+    internal uint WeaponAnimationType(FalloutFormKey target) => EquippedObject(target, 5) is { } weapon
+        ? FalloutWeaponPresentation.ReadScriptAnimationType(records.GetEffective(weapon)) : 0;
+
+    internal bool IsEquipped(FalloutFormKey target, FalloutFormKey item)
+    {
+        var source = records.GetEffective(item);
+        if (!IsPlayer(target))
+        {
+            if (source.Signature == "WEAP") return EquippedObject(target, 5) == item;
+            if (source.Signature == "ARMO") _ = world.EquippedArmor(target, level(), globals);
+        }
+        return Inventory(target).IsEquipped(records, item);
+    }
 
     internal void Execute(FalloutInventoryCommand command)
     {

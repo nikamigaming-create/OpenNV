@@ -737,6 +737,21 @@ internal sealed partial class FalloutQuestScripts
                     return owner.ItemCount(target, arguments[0].Value.FormKey(_records));
                 })
                 { ReadOnly = true };
+            if (parts.Length <= 2 && operation is "isweaponout" or "getweaponanimtype" or "getequipped")
+                return new(operation == "getequipped" ? [FalloutScriptArgumentKind.Value] : [], arguments =>
+                {
+                    var target = caller?.FormKey(_records) ?? (parts.Length == 2
+                        ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey);
+                    var owner = host?.Inventory ?? new FalloutInventoryCommands(_records, References ??
+                        throw new NotSupportedException("Equipment query has no reference world."), _inventory,
+                        () => throw new NotSupportedException("NPC inventory has no player-level owner."), _globals);
+                    return operation switch
+                    {
+                        "isweaponout" => owner.IsWeaponOut(target) ? 1 : 0,
+                        "getweaponanimtype" => owner.WeaponAnimationType(target),
+                        _ => owner.IsEquipped(target, arguments[0].Value.FormKey(_records)) ? 1 : 0,
+                    };
+                }) { ReadOnly = true };
             if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
                 return FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Number], arguments =>
                 {

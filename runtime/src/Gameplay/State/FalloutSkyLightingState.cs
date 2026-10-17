@@ -25,12 +25,24 @@ internal sealed class FalloutSkyLightingState
     internal FalloutClimateLighting Climate => _climate;
     internal float DaytimeExtension => _daytimeExtension;
     internal FalloutFormKey? ForcedWeather { get; private set; }
-    internal void ForceWeather(FalloutFormKey weather)
+    internal void ForceWeather(FalloutFormKey weather, bool overrideWeather = false)
     {
         _ = Weather(weather);
-        ForcedWeather = weather;
+        ExteriorWeather = weather;
+        ForcedWeather = overrideWeather ? weather : null;
     }
     internal void ReleaseWeatherOverride() => ForcedWeather = null;
+
+    internal static bool ReadForceWeatherOverride(IReadOnlyList<string> arguments)
+    {
+        if (arguments.Count is < 1 or > 2)
+            throw new InvalidDataException("ForceWeather requires a weather form and an optional override flag.");
+        if (arguments.Count == 1) return false;
+        if (!double.TryParse(arguments[1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var value) || value is not (0 or 1))
+            throw new InvalidDataException("ForceWeather override flag must be zero or one.");
+        return value == 1;
+    }
 
     internal FalloutSkyLightingState(FalloutPluginStack records, float daytimeExtension)
     {
