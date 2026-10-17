@@ -20,6 +20,7 @@ internal sealed record FalloutAnimationSoundBoneEmitterSnapshot(FalloutFormKey R
 }
 internal sealed record FalloutAnimationSoundPlaybackSnapshot(FalloutPcmPlaybackSnapshot Samples, string EmitterPath,
     bool FollowEmitter, FalloutAnimationSoundBoneEmitterSnapshot? SourceBone = null);
+internal sealed record FalloutAnimationSoundPlaybackDiagnostic(bool Ready, string? Error);
 internal sealed record FalloutAnimationSoundFault(string TextKey, string Error);
 
 internal sealed record FalloutAnimationSoundEvent(long Generation, FalloutFormKey Sound, string SoundSha256,
@@ -133,8 +134,16 @@ internal sealed class FalloutAnimationSoundEvents(FalloutFormKey reference, Func
     private bool CanCapturePlayback(long generation)
     {
         if (!_playbackCaptures.TryGetValue(generation, out var capture)) return false;
-        try { capture().Samples.Validate(); return true; }
-        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException) { return false; }
+        return ObservePlayback(capture).Ready;
+    }
+
+    // Readiness is diagnostic evidence, not a saved continuation. Keep an
+    // unavailable emitter visible without aborting unrelated live telemetry.
+    internal static FalloutAnimationSoundPlaybackDiagnostic ObservePlayback(Func<FalloutAnimationSoundPlaybackSnapshot> capture)
+    {
+        try { capture().Samples.Validate(); return new(true, null); }
+        catch (Exception error) when (error is InvalidDataException or InvalidOperationException or NotSupportedException)
+        { return new(false, error.Message); }
     }
 
     internal long Begin(FalloutPluginStack records, FalloutAnimationSoundSelection selected, string textKey, bool stereoOutput,

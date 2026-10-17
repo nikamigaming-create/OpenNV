@@ -179,6 +179,8 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
     {
+        if (Vitals.HitPoints <= 0)
+            throw new InvalidOperationException("Cannot replace a playable save after player death.");
         _scripts.ScriptManualSaves.RequireCapture();
         _scripts.References!.PlayerMoves.RequireSettled();
         if (SaveContinuationBlocker is { } blocker)

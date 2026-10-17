@@ -1157,8 +1157,10 @@ public partial class RuntimeCoordinator
         }
         finally { CloseNativeLoadingScreens(); }
         foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
-        if (_nativeReferences!.PlayerMoves.Pending) _nativeOpeningStageDriver!.RequestWorldSave();
-        else _nativeOpeningStageDriver!.PersistWorldState(targetScene.Cell.FormKey);
+        // The destination's actors have only just entered the tree. Use the
+        // shared autosave owner so their first updates can publish capturable
+        // state before saving the committed destination and player transform.
+        _nativeOpeningStageDriver!.RequestWorldSave();
         GD.Print(
             $"OPENNV_NATIVE_DOOR_STREAM source={active.Cell.FormKey} destination={targetScene.Cell.FormKey} " +
             $"door={reference.FormKey} " +

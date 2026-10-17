@@ -297,6 +297,17 @@ if (args is ["--dialogue-spatial-contracts"])
     DialogueSpatialContracts.Run();
     return;
 }
+if (args is ["--dialogue-death-contracts"])
+{
+    DialogueSpatialContracts.Run();
+    ActorDamageContracts.Run();
+    return;
+}
+if (args is ["--audit-dialogue-death", var deathData])
+{
+    OwnedDialogueDeathProbe.Run(deathData);
+    return;
+}
 if (args.Length >= 3 && args[0] == "--audit-ttw-dialogue-form-list")
 {
     OwnedDialogueFormListProbe.Run(args[1], args[2], args[3..]);

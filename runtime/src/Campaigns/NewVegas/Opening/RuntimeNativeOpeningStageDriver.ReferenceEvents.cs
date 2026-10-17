@@ -170,8 +170,16 @@ internal partial class RuntimeNativeOpeningStageDriver
             actor => _scripts.References!.ActorFactions(actor), () => _character.Female,
             actor => _scripts.References!.ActorRace(actor), _scripts.ScriptValues.RandomBounded, CurrentActorPackage,
             _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount, ReferenceDistance, ReferenceInZone, ActorSitting,
-            _scripts.References!.GetDeadCount);
+            _scripts.References!.GetDeadCount, DialogueActorDead);
         AddChild(_conversation);
+    }
+
+    private bool DialogueActorDead(FalloutFormKey actor)
+    {
+        if (actor == _pluginStack.RuntimeFormKey(0x14)) return Vitals.HitPoints == 0;
+        var world = _scripts.References!;
+        world.InitializeSourceCorpse(actor);
+        return world.IsDead(actor);
     }
 
     private float DialogueActorValue(FalloutFormKey actor, int value)

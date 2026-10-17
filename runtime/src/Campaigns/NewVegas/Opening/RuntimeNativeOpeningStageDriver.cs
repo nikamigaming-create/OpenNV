@@ -304,7 +304,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             RefreshRadioStations();
             _ingestibles.Advance(delta);
             _stageResults?.Continue();
-            if (_saveRequested && SaveContinuationBlocker is null && SourceAnimationSoundSaveBlocker is null &&
+            if (_saveRequested && Vitals.HitPoints > 0 && SaveContinuationBlocker is null && SourceAnimationSoundSaveBlocker is null &&
                 !_scripts.References!.PlayerMoves.Pending)
                 SaveCurrentState();
             _playerPackage?.Advance(delta);
@@ -364,7 +364,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
             actor => _scripts.References!.ActorRace(actor), DialogueActorValue, _scripts.ScriptValues.RandomBounded, _scripts.References,
             CurrentActorPackage, _scripts.ActorQueries.GetVampire, InventoryCommands.ItemCount,
             reference => ReferencePresentation().TryResolve(reference), ReferenceDistance, ReferenceInZone, ActorSitting,
-            _scripts.References!.GetDeadCount);
+            _scripts.References!.GetDeadCount, DialogueActorDead);
         AddChild(_speech);
         ConfigureConversation();
         ConfigureDetectionAndFinishedSpeech();

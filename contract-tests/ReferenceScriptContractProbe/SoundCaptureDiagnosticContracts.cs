@@ -69,8 +69,49 @@ internal static class SoundCaptureDiagnosticContracts
         opaque.Fail(null, "Missing source owner.");
         Require(!opaque.CaptureDiagnostic.Ready && opaque.CaptureDiagnostic.Unsettled.Count == 0 &&
             opaque.CaptureDiagnostic.OpaqueError == "Missing source owner.", "Opaque source failure lost its independent cause.");
+        PlaybackDiagnostics(records, caller);
         Console.WriteLine("OPENNV_SOUND_CAPTURE_DIAGNOSTIC_PASS owner=true generation=true sourceHash=true activeRefused=true " +
-            "cancelledRefused=true opaque=true unloaded=true readOnly=true finished=true noSaveSchema=true parity=unverified");
+            "cancelledRefused=true opaque=true unloaded=true readOnly=true finished=true pcmRefusalObservable=true noSaveSchema=true parity=unverified");
+    }
+
+    private static void PlaybackDiagnostics(FalloutPluginStack records, FalloutFormKey reference)
+    {
+        const string refusal = "Anonymous source sound emitter has no typed continuation identity.";
+        var source = FalloutSoundRecordReader.Read(records, new("Pose.esm", 0x6a));
+        var random = new FalloutSoundRandomState(7);
+        var selected = FalloutAnimationSound.Select(source, [source.LogicalPath], random, true);
+        var history = new FalloutAnimationSoundEvents(reference);
+        var generation = history.Begin(records, selected, "Sound:FixtureLoop", false, [source.LogicalPath]);
+        history.BindMedia(generation, new string('a', 64));
+        var playback = new FalloutAnimationSoundPlaybackSnapshot(new(120, 32000, 1, 48000,
+            FalloutSoundLoop.Read(source), 33.25, 2, true, false), ".", true);
+        var emitterBound = false;
+        FalloutAnimationSoundPlaybackSnapshot Capture() => emitterBound ? playback : throw new NotSupportedException(refusal);
+        history.BindPlayback(generation, Capture);
+        var before = JsonSerializer.Serialize(history.Events);
+        var randomBefore = random.State;
+        for (var repetition = 0; repetition < 3; repetition++)
+        {
+            var diagnostic = FalloutAnimationSoundEvents.ObservePlayback(Capture);
+            Require(!diagnostic.Ready && diagnostic.Error == refusal && !history.CanCapture,
+                "A missing PCM emitter either escaped diagnostics or became capture-ready.");
+            using var json = JsonDocument.Parse(JsonSerializer.Serialize(new { controls = new[] { "Quit" }, voice = diagnostic }));
+            Require(json.RootElement.GetProperty("controls")[0].GetString() == "Quit" &&
+                json.RootElement.GetProperty("voice").GetProperty("Error").GetString() == refusal,
+                "The voice refusal suppressed unrelated controls or lost its original reason.");
+        }
+        Require(JsonSerializer.Serialize(history.Events) == before && random.State == randomBefore,
+            "PCM diagnostics changed the source history or random stream.");
+        try { history.Capture(); throw new InvalidDataException("Diagnostic refusal waived persistent capture."); }
+        catch (NotSupportedException) { }
+        var invalid = FalloutAnimationSoundEvents.ObservePlayback(() => playback with
+        { Samples = playback.Samples with { Position = double.NaN } });
+        Require(!invalid.Ready && invalid.Error?.Contains("invalid sample clock", StringComparison.Ordinal) == true,
+            "Invalid PCM samples were admitted by a diagnostic readiness probe.");
+        emitterBound = true;
+        Require(FalloutAnimationSoundEvents.ObservePlayback(Capture) is { Ready: true, Error: null } &&
+            history.CanCapture && history.Capture().Events.Single().Playback == playback,
+            "A subsequently bound PCM continuation remained refused or changed its sample clock.");
     }
 
     private static void Reject(FalloutReferenceWorld world, FalloutFormKey reference, long generation,

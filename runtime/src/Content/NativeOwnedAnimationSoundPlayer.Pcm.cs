@@ -10,6 +10,9 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
     {
         if (_pcmRestoreFailure is { } failure) throw new InvalidDataException("Saved audio could not be restored.", failure);
     }
+    private FalloutAnimationSoundPlaybackDiagnostic ObservePcmVoice(Node node, Voice voice) =>
+        FalloutAnimationSoundEvents.ObservePlayback(() => CapturePcmVoice(node, voice));
+
     private FalloutAnimationSoundPlaybackSnapshot CapturePcmVoice(Node node, Voice voice)
     {
         if (!_voices.TryGetValue(node, out var current) || !ReferenceEquals(current, voice) ||

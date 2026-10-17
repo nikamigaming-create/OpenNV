@@ -32,15 +32,26 @@ Native extension modules are disabled. FO3/mod/TTW expansion is deferred.
 - Sampling identified repeated particle-collider matrix work and source-record
   decompression. Per-pass collider poses and bounded in-process record reuse are
   implemented; focused moving-collider, callback, cache and compression checks pass.
-- The local simulator ignored action binding paths. Its general binding resolver
-  and expiring controller leases are repaired in a separate local simulator build.
-  Final controls/performance still need replay. Physical-headset acceptance is pending.
+- The local simulator's action binding resolver and expiring controller leases
+  are repaired. Fresh Release input exercised wrist opening, ray selection of
+  ITEMS, input release, reload, firing, snap turns and walking through the actual
+  Prospector Saloon door. Initial outdoor median is about 14 ms; settled measurement
+  and physical-headset acceptance remain pending. The full runtime gate passed.
+- Actual Sunny activation exposed an unbound GetDead condition. It now uses the
+  shared actor death owner with source scopes and reference adjustment. Synthetic,
+  vanilla-owned and cold-state checks pass; actual conversation replay is next.
+- Door autosave ran before destination actor initialization completed. Both
+  interaction and door autosaves now use the existing readiness queue, retaining
+  capture guards and rechecking player health before writing. Cold replay is next.
+- Rendered FO3 New Game reaches its birth quest, but an anonymous sound emitter
+  broke telemetry publication. Readiness now reports that per-voice error without
+  throwing away controls; persistence still refuses an unowned continuation.
 - Original user save hash remained unchanged. Tests use separate copied saves.
 
 ## Next work
 
-Repeat the full gate for the performance changes. Export a fresh Release,
-measure and repair actual performance/input failures, then exercise dialogue,
+Export the dialogue/autosave fixes and replay the conversation plus cold save.
+Run the full gate for these changes, measure settled performance, then exercise
 weapons, Pip-Boy pages, doors, loot and cold saves with ordinary inputs. Continue
 the Goodsprings/Primm/ED-E regression route without forced quests or entities.
 

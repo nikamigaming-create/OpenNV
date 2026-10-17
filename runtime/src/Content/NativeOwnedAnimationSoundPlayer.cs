@@ -43,6 +43,14 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         unbound = _unbound.ToArray(),
         last = LastEvent,
         sourceEvents = _events?.Events,
+        pcmContinuations = _voices.Where(pair => pair.Value.Pcm is not null).Select(pair => new
+        {
+            generation = pair.Value.Generation,
+            nativeVoice = GodotObject.IsInstanceValid(pair.Key) ? (ulong?)pair.Key.GetInstanceId() : null,
+            emitter = GodotObject.IsInstanceValid(pair.Value.Emitter) && pair.Value.Emitter.IsInsideTree()
+                ? pair.Value.Emitter.GetPath().ToString() : null,
+            continuation = ObservePcmVoice(pair.Key, pair.Value),
+        }).ToArray(),
         finiteLifetime = _voices.Values.Where(voice => voice.Attachment is not null).Select(voice => new
         {
             generation = voice.Generation,
