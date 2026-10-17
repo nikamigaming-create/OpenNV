@@ -42,6 +42,11 @@ if (args is ["--test-quest-graph"])
     QuestGraphAuditContracts.Run();
     return;
 }
+if (args is ["--test-record-cache"])
+{
+    QuestGraphAuditContracts.RecordCache();
+    return;
+}
 if (args.Length > 0 && args[0] == "--test-owned-bsa-encodings")
 {
     QuestGraphAuditContracts.RunOwnedBsaEncodingAdmission(args[1..]);
@@ -160,6 +165,7 @@ CellLightingContracts.Run();
 PlacedLightEnableContracts.Run();
 CellGraphAuditContracts.Run();
 QuestGraphAuditContracts.Run();
+QuestGraphAuditContracts.RecordCache();
 WindForceProbe.Run();
 ContentWorkerProbe.Run();
 

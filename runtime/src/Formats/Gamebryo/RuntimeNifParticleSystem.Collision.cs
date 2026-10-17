@@ -5,6 +5,8 @@ namespace OpenNV.Runtime.Formats.Gamebryo;
 internal sealed partial class RuntimeNifParticleSystem
 {
     private readonly Dictionary<int, FalloutNifParticleCollider[]> _colliders = [];
+    private ColliderPose[] _colliderPoses = [];
+    private readonly record struct ColliderPose(Transform3D Transform, Transform3D Inverse, Basis Normal);
     internal long CollisionCount { get; private set; }
 
     private void ConfigureColliders(FalloutNifFile file, FalloutNifParticleColliderManager manager)
@@ -33,10 +35,13 @@ internal sealed partial class RuntimeNifParticleSystem
         }
         if (colliders.Count == 0) throw new InvalidDataException("Particle collider manager has no source collider.");
         _colliders.Add(manager.Block.Index, colliders.ToArray());
+        if (_colliderPoses.Length < colliders.Count) _colliderPoses = new ColliderPose[colliders.Count];
     }
 
     private void Collide(FalloutNifParticleColliderManager manager)
     {
+        var colliders = _colliders[manager.Block.Index];
+        var refreshPoses = true;
         _collisionWork.Clear();
         for (var index = ActiveCount - 1; index >= 0; index--) _collisionWork.Enqueue(_particles[index].Identity);
         while (_collisionWork.TryDequeue(out var identity))
@@ -45,15 +50,27 @@ internal sealed partial class RuntimeNifParticleSystem
             var collisions = 0;
             while (_particles[index].MotionSeconds > 0)
             {
+                // Node poses stay fixed during a synchronous modifier pass.
+                // Resolve native transforms and their inverses once per pass,
+                // then reuse them for every particle and spawned descendant.
+                if (refreshPoses)
+                {
+                    for (var colliderIndex = 0; colliderIndex < colliders.Length; colliderIndex++)
+                    {
+                        var transform = TransformOf(colliders[colliderIndex].Object);
+                        _colliderPoses[colliderIndex] = new(transform, transform.AffineInverse(), transform.Basis.Inverse().Transposed());
+                    }
+                    refreshPoses = false;
+                }
                 FalloutNifParticleCollider? selected = null;
                 FalloutNifParticleCollisionHit? closest = null;
-                var selectedTransform = Transform3D.Identity;
-                foreach (var candidateCollider in _colliders[manager.Block.Index])
+                var selectedPose = default(ColliderPose);
+                for (var colliderIndex = 0; colliderIndex < colliders.Length; colliderIndex++)
                 {
-                    var transform = TransformOf(candidateCollider.Object);
-                    var inverse = transform.AffineInverse();
-                    var position = inverse * _particles[index].Position;
-                    var velocity = inverse.Basis * _particles[index].Velocity;
+                    var candidateCollider = colliders[colliderIndex];
+                    var pose = _colliderPoses[colliderIndex];
+                    var position = pose.Inverse * _particles[index].Position;
+                    var velocity = pose.Inverse.Basis * _particles[index].Velocity;
                     FalloutNifParticleCollisionHit? hit;
                     if (candidateCollider is FalloutNifParticlePlanarCollider plane)
                     {
@@ -66,19 +83,22 @@ internal sealed partial class RuntimeNifParticleSystem
                             _particles[index].MotionSeconds, sphere.Radius * _units);
                     else throw new NotSupportedException("Particle collider shape has no trajectory owner.");
                     if (hit is null || closest is { } previous && hit.Value.Fraction >= previous.Fraction) continue;
-                    selected = candidateCollider; closest = hit; selectedTransform = transform;
+                    selected = candidateCollider; closest = hit; selectedPose = pose;
                 }
                 if (closest is not { } contact) break;
                 if (++collisions > 16) throw new NotSupportedException("Particle collision response exceeded its bounded contact continuation.");
                 var collider = selected ?? throw new InvalidDataException("Particle contact has no declared collider.");
                 CollisionCount = checked(CollisionCount + 1);
-                var normal = (selectedTransform.Basis.Inverse().Transposed() * new Vector3(contact.Normal.X, contact.Normal.Y, contact.Normal.Z)).Normalized();
+                var normal = (selectedPose.Normal * new Vector3(contact.Normal.X, contact.Normal.Y, contact.Normal.Z)).Normalized();
                 ref var particle = ref _particles[index];
-                particle.Position = selectedTransform * new Vector3(contact.Point.X, contact.Point.Y, contact.Point.Z);
+                particle.Position = selectedPose.Transform * new Vector3(contact.Point.X, contact.Point.Y, contact.Point.Z);
                 var incoming = particle.Velocity.Dot(normal);
                 particle.Velocity -= normal * ((1 + collider.Bounce) * incoming);
                 particle.MotionSeconds *= 1 - contact.Fraction;
                 var atContact = particle;
+                // A lifecycle observer may synchronously move a source node.
+                // Refresh after its callbacks before testing the next contact.
+                refreshPoses = LifecycleEvent is not null;
                 RecordLifecycle("collision", atContact, collider.Block.Index, "source-contact");
                 if (collider.DieOnCollide)
                 {

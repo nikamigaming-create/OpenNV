@@ -74,7 +74,7 @@ internal sealed class RuntimeSimulatorBotInput
         if (_combatRelease)
         {
             LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
-            { hand = 1, trigger = 0, buttonB = 0, primary = 0, buttonA = 0, grip = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 200 }));
+            { hand = 1, trigger = 0, secondary = 0, primary = 0, buttonA = 0, grip = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 200 }));
             _combatRelease = false; _pendingHands &= ~2;
             return;
         }
@@ -86,7 +86,7 @@ internal sealed class RuntimeSimulatorBotInput
             {
                 hand = 1,
                 trigger = _firePending ? 1 : 0,
-                buttonB = _reloadPending ? 1 : 0,
+                secondary = _reloadPending ? 1 : 0,
                 primary = 0,
                 buttonA = 0,
                 grip = 0,
@@ -102,7 +102,7 @@ internal sealed class RuntimeSimulatorBotInput
         {
             if (Stopwatch.GetTimestamp() < _combatUntil) return;
             LiveHarnessAtomicFile.Write(controllerPath, JsonSerializer.Serialize(new
-            { hand = 1, trigger = 0, buttonB = 0, primary = 0, buttonA = 0, grip = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 200 }));
+            { hand = 1, trigger = 0, secondary = 0, primary = 0, buttonA = 0, grip = 0, thumbstickX = 0, thumbstickY = 0, leaseMilliseconds = 200 }));
             _combatUntil = 0;
             return;
         }
@@ -156,7 +156,7 @@ internal sealed class RuntimeSimulatorBotInput
             {
                 hand = _hand,
                 trigger = 0,
-                buttonB = 0,
+                secondary = 0,
                 primary = 0,
                 buttonA = 0,
                 grip = 0,
@@ -200,7 +200,7 @@ internal sealed class RuntimeSimulatorBotInput
             grip = 0,
             trigger = 0,
             buttonA = 0,
-            buttonB = 0,
+            secondary = 0,
             menu = 0,
             leaseMilliseconds = _combat is null ? 500 : 200,
         }));

@@ -21,18 +21,25 @@ Native extension modules are disabled. FO3/mod/TTW expansion is deferred.
 - Fresh pre-recovery New Game failed constructing the player in Doc Mitchell's
   house: source-Player-post-null-distinct-manager-word-constructor-and-writers-unowned.
 - Historical executable loaded a copied save, moved and opened its actual Pip-Boy.
-- Restored Debug source builds with no warnings. Restored Release builds too;
-  the full required gate is running and compiler-version formatting is being fixed.
+- Restored Debug and Release compile without warnings. The complete required
+  runtime gate passed, including native Godot loading and navigation checks.
 - Restored Debug simulator loaded Goodsprings through the actual game save menu.
   Both eyes show the world, hands, wrist device and equipped laser pistol.
   Controller locomotion moved the player. Ordinary Quit completed.
-- That Debug session was slow. Release frame times and the final input fixes
-  still need live validation. No physical-headset acceptance is claimed.
+- A fresh exported Release loaded the same copied save and accepted controller
+  movement. Automatic diagnostic frame readback inflated its frame time; with
+  readback disabled, settled outdoor median draw interval was about 33 ms.
+- Sampling identified repeated particle-collider matrix work and source-record
+  decompression. Per-pass collider poses and bounded in-process record reuse are
+  implemented; focused moving-collider, callback, cache and compression checks pass.
+- The local simulator ignored action binding paths. Its general binding resolver
+  and expiring controller leases are repaired in a separate local simulator build.
+  Final controls/performance still need replay. Physical-headset acceptance is pending.
 - Original user save hash remained unchanged. Tests use separate copied saves.
 
 ## Next work
 
-Finish the full runtime gate and owned-data checks. Export a fresh Release,
+Repeat the full gate for the performance changes. Export a fresh Release,
 measure and repair actual performance/input failures, then exercise dialogue,
 weapons, Pip-Boy pages, doors, loot and cold saves with ordinary inputs. Continue
 the Goodsprings/Primm/ED-E regression route without forced quests or entities.

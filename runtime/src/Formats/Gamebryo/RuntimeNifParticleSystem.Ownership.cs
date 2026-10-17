@@ -31,7 +31,7 @@ internal sealed partial class RuntimeNifParticleSystem
             _turbulence?.Dispose(); _turbulence = null;
             _active.Clear(); _rates.Clear(); _speeds.Clear(); _lifespans.Clear(); _remainders.Clear();
             _meshes.Clear(); _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _particleIndices.Clear();
-            _particles = []; _drawBuffer = []; _modifiers = [];
+            _particles = []; _drawBuffer = []; _modifiers = []; _colliderPoses = [];
             _source = null!; _data = null!; _nodes = null!;
             _sourceFile = null;
             throw;
@@ -70,7 +70,7 @@ internal sealed partial class RuntimeNifParticleSystem
         catch
         {
             if (visual is not null) { visual.Multimesh = null; visual.Free(); }
-            if (draw is not null) { draw.Mesh = null; draw.Dispose(); }
+            draw?.Dispose();
             quad.Material = null; quad.Dispose();
             throw;
         }
@@ -90,7 +90,7 @@ internal sealed partial class RuntimeNifParticleSystem
             _visual.Multimesh = null;
             if (freeVisual) _visual.Free();
         }
-        if (_draw is not null) { _draw.Mesh = null; _draw.Dispose(); }
+        _draw?.Dispose();
         if (_particleQuad is not null) { _particleQuad.Material = null; _particleQuad.Dispose(); }
         _draw = null!; _visual = null!; _particleQuad = null;
     }
@@ -122,7 +122,7 @@ internal sealed partial class RuntimeNifParticleSystem
             _collisionWork.Clear(); _particleIndices.Clear();
             _active.Clear(); _rates.Clear(); _speeds.Clear(); _lifespans.Clear(); _remainders.Clear();
             _meshes.Clear(); _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear();
-            _particles = []; _drawBuffer = []; _modifiers = [];
+            _particles = []; _drawBuffer = []; _modifiers = []; _colliderPoses = [];
             _nodes = null!; LifecycleEvent = null; _configured = false;
             _sourceFile = null;
         }

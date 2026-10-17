@@ -101,6 +101,9 @@ internal sealed class FalloutPluginRecord
     }
 
     private byte[] ReadDataCore()
+        => _plugin.ReadRecordData(this);
+
+    internal byte[] ReadUncachedData()
     {
         var stored = _plugin.ReadAt(_dataOffset, _storedSize, $"{Signature} record data");
         if (!IsCompressed)
@@ -291,6 +294,12 @@ internal sealed class FalloutPlugin : IDisposable
 
     private readonly long _length;
     private readonly SafeFileHandle _handle;
+    internal const int RecordCacheBudgetBytes = 16 * 1024 * 1024;
+    internal const int RecordCacheCapacity = 4096;
+    private readonly object _recordDataGate = new();
+    private readonly Dictionary<FalloutPluginRecord, LinkedListNode<(FalloutPluginRecord Record, byte[] Data)>> _recordData = [];
+    private readonly LinkedList<(FalloutPluginRecord Record, byte[] Data)> _recordDataLru = [];
+    private long _recordDataBytes, _recordDataDecodes;
     private ReadOnlyCollection<string> _masters;
     private ReadOnlyCollection<string> _namespaces;
     private ReadOnlyCollection<FalloutPluginRecord> _records;
@@ -475,7 +484,58 @@ internal sealed class FalloutPlugin : IDisposable
         return result;
     }
 
-    public void Dispose() => _handle.Dispose();
+    internal (int Entries, long Bytes, long Decodes) RecordCacheState
+    {
+        get { lock (_recordDataGate) return (_recordData.Count, _recordDataBytes, _recordDataDecodes); }
+    }
+
+    internal byte[] ReadRecordData(FalloutPluginRecord record)
+    {
+        byte[] data;
+        lock (_recordDataGate)
+        {
+            // Cache lifetime is the open source handle, including cache hits.
+            // Serialize misses with retirement and other reads of this plugin.
+            EnsureUnchanged();
+            if (_recordData.TryGetValue(record, out var cached))
+            {
+                _recordDataLru.Remove(cached);
+                _recordDataLru.AddLast(cached);
+                data = cached.Value.Data;
+            }
+            else
+            {
+                data = record.ReadUncachedData();
+                _recordDataDecodes++;
+                if (data.Length <= RecordCacheBudgetBytes)
+                {
+                    while ((_recordDataBytes + data.Length > RecordCacheBudgetBytes ||
+                            _recordData.Count >= RecordCacheCapacity) && _recordDataLru.First is { } oldest)
+                    {
+                        _recordData.Remove(oldest.Value.Record);
+                        _recordDataBytes -= oldest.Value.Data.Length;
+                        _recordDataLru.RemoveFirst();
+                    }
+                    _recordData.Add(record, _recordDataLru.AddLast((record, data)));
+                    _recordDataBytes += data.Length;
+                }
+            }
+        }
+        // ReadData, observation callbacks and subrecords previously owned a
+        // fresh buffer. Never expose the canonical cached bytes to mutation.
+        return data.ToArray();
+    }
+
+    public void Dispose()
+    {
+        lock (_recordDataGate)
+        {
+            _recordData.Clear();
+            _recordDataLru.Clear();
+            _recordDataBytes = 0;
+            _handle.Dispose();
+        }
+    }
 
     private void EnsureUnchanged()
     {

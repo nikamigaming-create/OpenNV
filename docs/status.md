@@ -5,9 +5,9 @@ Updated 2026-10-17. Priority: **vanilla FNV -> vanilla FO3 -> mods -> TTW**.
 | Area | Current state |
 | --- | --- |
 | FNV startup regression | Fresh failure reproduced in incomplete mandatory Player construction. Coherent playable implementation restored; fresh final-candidate New Game still required. |
-| Builds | Restored Debug and Release compile. Full runtime gate is in progress. |
+| Builds | Restored Debug and Release compile. Full gate passed before the latest focused performance changes; repeat pending. |
 | OpenXR | Restored Debug simulator loads Goodsprings with visible world, hands, wrist and laser pistol. Controller locomotion works. Final input changes and Release behavior still need replay. |
-| Performance | Debug outdoor session is slow; no crisp-VR claim. Release measurement and repair are next. |
+| Performance | Release outdoor median was about 33 ms with diagnostic frame readback disabled. Profiled particle-pose and record-decompression fixes passed focused checks; fresh Release measurement pending. |
 | Gameplay | Historical copied save continues. Dialogue, combat, loot, crafting, Primm and ED-E remain current-candidate regression work. |
 | Saves | Original user save is preserved. Restored runtime accepts a copied historical save; final cold-save roundtrip still required. |
 | Profiles | Explicit official-content selection and isolated profile store. Native extensions disabled. Installed loose assets retain normal precedence. |
