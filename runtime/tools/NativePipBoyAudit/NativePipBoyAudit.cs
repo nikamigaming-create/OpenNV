@@ -87,7 +87,7 @@ public partial class NativePipBoyAudit : Node
                 menu.Select(page, index);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 if (menu.Error is { } error) { failures.Add($"{page}/{index}: {error}"); continue; }
-                using var children = menu.GetChildren();
+                var children = menu.GetChildren();
                 var buttons = children.OfType<BaseButton>().Where(button => button.Visible).ToArray();
                 if (buttons.Any(button => button.Size.X <= 0 || button.Size.Y <= 0)) failures.Add($"{page}/{index}: empty button target");
                 GD.Print($"OPENNV_PIPBOY_PAGE_BOUND {page}/{index} buttons={buttons.Length}");

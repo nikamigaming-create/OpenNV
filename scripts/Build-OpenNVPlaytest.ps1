@@ -30,6 +30,11 @@ if ($LASTEXITCODE -ne 0 -or @(& git -C $taskRepository ls-files --others --exclu
 }
 
 & (Join-Path $PSScriptRoot 'Start-OpenNV.ps1') -Godot $Godot -Configuration Release -ValidateOnly
+$taskExport = [Environment]::GetEnvironmentVariable('OPENNV_RUNTIME_ROOT', 'Process')
+if ([string]::IsNullOrWhiteSpace($taskExport) -or !(Test-Path -LiteralPath (Join-Path $taskExport 'OpenNV.exe') -PathType Leaf)) {
+    throw 'The developer launcher did not publish a validated Release export.'
+}
+$taskExport = [IO.Path]::GetFullPath($taskExport)
 & (Join-Path $PSScriptRoot 'Build-NativePluginDomain.ps1') -Configuration Release
 $taskGodotPath = [IO.Path]::GetFullPath($Godot)
 $taskGodotVersion = (& $taskGodotPath --version | Out-String).Trim()
@@ -54,7 +59,6 @@ $taskToolchain = [ordered]@{
     dotnetSdkVersion = $taskSdkVersion
     configuration = 'ExportRelease'
 }
-$taskExport = Join-Path $taskRepository 'tmp/development-runtime/windows'
 $taskToolchain | ConvertTo-Json -Depth 4 |
     Set-Content -LiteralPath (Join-Path $taskExport 'build-toolchain.json') -Encoding utf8
 & (Join-Path $PSScriptRoot 'Package-OpenNV.ps1') -Version $Version -ExportDirectory $taskExport -OutputRoot $OutputRoot
