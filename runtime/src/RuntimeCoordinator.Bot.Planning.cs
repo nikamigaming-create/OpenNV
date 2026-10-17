@@ -30,15 +30,22 @@ public partial class RuntimeCoordinator
         internal NativeNavigationProbe? Probe;
         internal NativeNavigationIntent? Intent;
         internal Func<Vector3, bool>? Arrival;
+        internal Func<Vector3, bool>? ProjectionFloor;
         internal Vector3 LocalTarget;
         internal float ArrivalRadius, Spacing, RefinedSpacing;
         internal int Resume;
         internal string? CoarseError;
         internal NativeNavigationWorkSnapshot? Work;
         internal double SourceMilliseconds, MaximumSliceMilliseconds;
+        internal BotNavigationProjection? PriorProjection;
     }
 
+    private sealed record NativeBotProjectionArrival(RuntimeNativePlayer Player, FalloutCellScene Scene,
+        RuntimeNativeReferenceEvents Events, NumericVector Target, Vector3 Endpoint,
+        BotNavigationProjection Projection, string SourceSha256, Func<Vector3, bool> Contains);
+
     private NativeBotRouteRequest? _botRouteRequest;
+    private NativeBotProjectionArrival? _botProjectionArrival;
     private object? _botLastRoutePlanning;
     private object? NativeBotPlanningState => _botRouteRequest is { } current ?
         NativeBotPlanningObservation(current, current.Search is null ? current.Work?.State ?? "source-pending" : "pending") : _botLastRoutePlanning;
@@ -49,6 +56,7 @@ public partial class RuntimeCoordinator
         ownerBuild = typeof(NativeCapsuleNavigation).Module.ModuleVersionId,
         source = request.Identity,
         sourceSha256 = _botNavigation?.SourceSha256,
+        sourceDoorAssociationErrors = _botNavigation?.DoorAssociationErrors,
         requestedStart = new[] { request.Start.X, request.Start.Y, request.Start.Z },
         requestedEnd = new[] { request.End.X, request.End.Y, request.End.Z },
         referenceTarget = new[] { request.Target.X, request.Target.Y, request.Target.Z },
@@ -135,7 +143,7 @@ public partial class RuntimeCoordinator
                 if (door.RequiresInteraction)
                 {
                     if (probe.Approach.Length == 0) throw new InvalidOperationException($"Source route door has no supported approach. {error.Message}", error);
-                    return BotRoute(current, probe.Approach) with { RequiredDoor = reference.ToString() };
+                    return BotRoute(current, probe.Approach, retainProjection: false) with { RequiredDoor = reference.ToString() };
                 }
             }
             // A failed point/lattice/approach query does not attest the full
@@ -157,12 +165,29 @@ public partial class RuntimeCoordinator
         var units = _configuration.World.GameUnitsToMeters;
         Vector3 Source(NumericVector point) => new Vector3(point.X, -point.Z, point.Y) / units;
         Vector3 World(Vector3 point) => new Vector3(point.X, point.Z, -point.Y) * units;
-        request.SourcePath = _botNavigation!.FindPath(Source(request.Start), Source(request.End),
-            destinationRadiusGameUnits: request.Projection / units);
-        request.WorldPath = request.SourcePath.Select(World).ToArray();
         var origin = Native(request.Start);
-        var intent = request.Intent = NativeCapsuleNavigation.Intent(origin, request.WorldPath, Native(request.Target), request.Distance,
-            projection: request.Projection > 0 ? new(Native(request.End), request.WorldPath[^1], request.Projection) : null);
+        NativeNavigationIntent? intent = null;
+        if (_botProjectionArrival is { } prior && prior.Player == request.Player && prior.Scene == request.Scene &&
+            prior.Events == request.Events && prior.Target == request.Target &&
+            prior.SourceSha256 == _botNavigation!.SourceSha256)
+        {
+            intent = NativeCapsuleNavigation.ApproachAfterProjection(origin, prior.Endpoint, Native(request.Target), request.Distance, prior.Contains);
+            if (intent is not null)
+            {
+                request.WorldPath = [Native(prior.Projection.Selected)];
+                request.PriorProjection = prior.Projection;
+            }
+        }
+        if (intent is null)
+        {
+            _botProjectionArrival = null;
+            request.SourcePath = _botNavigation!.FindPath(Source(request.Start), Source(request.End),
+                destinationRadiusGameUnits: request.Projection / units);
+            request.WorldPath = request.SourcePath.Select(World).ToArray();
+            intent = NativeCapsuleNavigation.Intent(origin, request.WorldPath, Native(request.Target), request.Distance,
+                projection: request.Projection > 0 ? new(Native(request.End), request.WorldPath[^1], request.Projection) : null);
+        }
+        request.Intent = intent;
         request.LocalTarget = intent.Target; request.Resume = intent.Resume; request.ArrivalRadius = intent.ArrivalRadius;
         IReadOnlyList<Vector3> corridor = intent.ReferenceApproach ? [intent.Target] : intent.Corridor;
         request.Probe = new(NativeCapsuleNavigation.FirstCorridorContact(request.Player, origin, corridor), request.Events.CollisionReference);
@@ -172,8 +197,10 @@ public partial class RuntimeCoordinator
         if (intent.Projection is not null)
         {
             var region = _botNavigation!.ArrivalRegion(Source(request.Start), Source(request.End), request.SourcePath[^1],
-                request.Projection / units, request.Player.SafeMargin * 8 / units, NativeCapsuleNavigation.SourceHeightTolerance / units);
+                request.Projection / units, request.Player.SafeMargin * 8 / units, NativeCapsuleNavigation.SourceHeightTolerance / units,
+                out var sourceFloor);
             request.Arrival = point => region(new Vector3(point.X, -point.Z, point.Y) / units);
+            request.ProjectionFloor = point => sourceFloor(new Vector3(point.X, -point.Z, point.Y) / units);
         }
         request.CoarseError = null;
         request.Search = NativeCapsuleNavigation.Search(request.Player, origin, request.LocalTarget,
@@ -184,10 +211,11 @@ public partial class RuntimeCoordinator
     private static Vector3 Native(NumericVector point) => new(point.X, point.Y, point.Z);
     private static string Scope(NativeBotRouteRequest request) => request.Intent!.ReferenceApproach ? "reference-approach" :
         request.Intent.Projection is not null ? "source-projection-region" : "source-corridor";
-    private BotNavigationRoute BotRoute(NativeBotRouteRequest request, IReadOnlyList<Vector3> path)
+    private BotNavigationRoute BotRoute(NativeBotRouteRequest request, IReadOnlyList<Vector3> path, bool retainProjection = true)
     {
         var projected = request.WorldPath[^1];
-        BotNavigationProjection? projection = null;
+        BotNavigationProjection? projection = request.PriorProjection;
+        Action<NumericVector>? observeArrival = null;
         if (request.Intent!.Projection is { } source && request.Arrival!(path[^1]))
         {
             var units = _configuration.World.GameUnitsToMeters;
@@ -196,11 +224,17 @@ public partial class RuntimeCoordinator
             projection = new(new(source.Requested.X, source.Requested.Y, source.Requested.Z),
                 new(source.Selected.X, source.Selected.Y, source.Selected.Z), source.Radius,
                 new(projected.X, projected.Y, projected.Z));
+            if (retainProjection)
+            {
+                var completed = new NativeBotProjectionArrival(request.Player, request.Scene, request.Events,
+                    request.Target, path[^1], projection, _botNavigation.SourceSha256, request.ProjectionFloor!);
+                observeArrival = _ => _botProjectionArrival = completed;
+            }
         }
         return new(path.Select(point => new NumericVector(point.X, point.Y, point.Z)).ToArray(), request.End,
             new(projected.X, projected.Y, projected.Z),
             request.Resume == request.WorldPath.Length, request.Identity, request.Projection,
             Refinement: new(Scope(request), new(request.LocalTarget.X, request.LocalTarget.Y, request.LocalTarget.Z),
-                request.ArrivalRadius, _botNavigation!.SourceSha256, projection));
+                request.ArrivalRadius, _botNavigation!.SourceSha256, projection), ObserveArrival: observeArrival);
     }
 }

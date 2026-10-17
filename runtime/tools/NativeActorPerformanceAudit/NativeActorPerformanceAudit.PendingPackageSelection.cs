@@ -78,6 +78,7 @@ public partial class NativeActorPerformanceAudit
             if (JsonSerializer.Serialize(after with { Ragdoll = ragdoll }) != JsonSerializer.Serialize(original))
                 throw new InvalidDataException("Dead queued selection rebound, redrew or replayed source effects.");
         }
+        PreserveReplacementCaptureOwner(resumed, cold.Get(caller));
         GD.Print($"OPENNV_NATIVE_PENDING_CORPSE_SELECTION_PASS actor={caller} selected={pending.Package} bodies={ragdoll.Bodies.Count} " +
             $"runtimeMvid={typeof(RuntimeConfiguration).Assembly.ManifestModule.ModuleVersionId} " +
             "selectedResultAndSourceFault=true rngActivityClock=true childFirstRetirement=true completeNativeBodies=true " +

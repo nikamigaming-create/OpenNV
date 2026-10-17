@@ -439,8 +439,9 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
             (uint)value : throw new InvalidDataException("Script objective index is invalid.");
         double Objective(IReadOnlyList<FalloutScriptArgument> arguments, bool completed)
         {
-            var value = quests.Objective(Quest(arguments[0].Identifier!), Index(arguments[1].Number));
-            return (completed ? value.Completed : value.Displayed) ? 1 : 0;
+            var quest = Quest(arguments[0].Identifier!);
+            var index = Index(arguments[1].Number);
+            return (completed ? quests.ObjectiveCompleted(quest, index) : quests.ObjectiveDisplayed(quest, index)) ? 1 : 0;
         }
         FalloutScriptFunction? ReferenceFunction(string name)
         {
@@ -494,6 +495,8 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 { ReadOnly = true };
             if (parts.Length == 1 && valueStore.Arrays.Function(name) is { } arrayFunction) return arrayFunction;
             FalloutFormKey Target() => suppliedTarget ?? (parts.Length == 1 ? source : Reference(parts[0]));
+            if (parts.Length <= 2 && operation == "placeatme")
+                return world.TransientExplosions.Function(Target);
             if (parts.Length <= 2 && operation == "playsound3d")
                 return new([FalloutScriptArgumentKind.Value], arguments =>
                 {
@@ -798,6 +801,11 @@ internal sealed partial class FalloutReferenceScripts(FalloutPluginStack records
                 if (frame is null) throw new NotSupportedException("SetFunctionValue needs an active function call.");
                 frame.ResultValue = FalloutNvseNumericExpression.EvaluateValue(arguments, values,
                     Function, UserFunction);
+                return;
+            }
+            if (parts.Length <= 2 && operation == "placeatme")
+            {
+                _ = FalloutNvseNumericExpression.EvaluateValue([command, .. arguments], values, Function, UserFunction);
                 return;
             }
             if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")

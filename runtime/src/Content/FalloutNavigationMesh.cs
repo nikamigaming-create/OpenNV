@@ -5,7 +5,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutNavigationTriangle(ushort[] Vertices, short[] Edges, ushort Flags, ushort CoverFlags);
 internal sealed record FalloutNavigationEdge(uint Type, FalloutFormKey Mesh, ushort Triangle);
-internal sealed record FalloutNavigationDoor(FalloutFormKey Door, ushort Triangle);
+internal sealed record FalloutNavigationDoor(FalloutFormKey Door, ushort Triangle, ushort Unused = 0);
 internal sealed record FalloutNavigationMesh(FalloutFormKey Form, FalloutFormKey Cell, uint Version,
     Vector3[] Vertices, FalloutNavigationTriangle[] Triangles, FalloutNavigationEdge[] Edges,
     ushort[] CoverTriangles, FalloutNavigationDoor[] Doors)
@@ -98,8 +98,11 @@ internal sealed record FalloutNavigationMesh(FalloutFormKey Form, FalloutFormKey
         {
             var bytes = doorBytes.Span[(index * 8)..];
             var triangle = BinaryPrimitives.ReadUInt16LittleEndian(bytes[4..]);
-            if (triangle >= triangles.Length) throw new InvalidDataException("NAVM door index exceeds its triangle array.");
-            doors[index] = new(record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(bytes)), triangle);
+            // NVDP is an auxiliary door association. Retain a stale association
+            // without discarding this mesh's independently valid geometry;
+            // resolving that association must still refuse the invalid index.
+            doors[index] = new(record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(bytes)), triangle,
+                BinaryPrimitives.ReadUInt16LittleEndian(bytes[6..]));
         }
         if (vertices.Length == 0 || triangles.Length == 0) throw new InvalidDataException("Active NAVM has no pathable geometry.");
         return new(record.FormKey, record.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(header.Span)),

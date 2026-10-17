@@ -45,8 +45,9 @@ public partial class NativeLocomotionAudit
             var selected = new Vector3(sourceSelected.X, sourceSelected.Z, -sourceSelected.Y);
             if (selected == requested) throw new InvalidOperationException("Synthetic source projection did not preserve an independent requested point.");
             var sourceRegion = graph.ArrivalRegion(Source(pose.Origin), Source(requested), sourceSelected, 1.6f,
-                body.SafeMargin * 8, NativeCapsuleNavigation.SourceHeightTolerance);
+                body.SafeMargin * 8, NativeCapsuleNavigation.SourceHeightTolerance, out var sourceFloor);
             bool Arrival(Vector3 point) => sourceRegion(Source(point));
+            bool SameSourceFloor(Vector3 point) => sourceFloor(Source(point));
             var exactRefused = false;
             try { _ = NativeCapsuleNavigation.FindRefined(body, pose.Origin, selected, .4f, .32f, .16f, _ => true); }
             catch (InvalidOperationException) { exactRefused = true; }
@@ -102,11 +103,36 @@ public partial class NativeLocomotionAudit
             catch (InvalidOperationException) { unloadedRefused = true; }
             if (!occupiedRefused || !upperRefused || !unloadedRefused || body.GlobalTransform != pose)
                 throw new InvalidOperationException("Source region bypassed an occupied destination, authored floor or native residency.");
-            await WalkCorridorBody(body, route.Path, .04f);
-            if (!body.IsOnFloor() || !Arrival(body.GlobalPosition) ||
+            await WalkCorridorBody(body, route.Path, .18f);
+            if (!body.IsOnFloor() || !SameSourceFloor(body.GlobalPosition) ||
+                new Vector2(body.GlobalPosition.X - route.Path[^1].X, body.GlobalPosition.Z - route.Path[^1].Z).Length() > .2f ||
                 originalGeometry.Any(value => value.node.GlobalTransform != value.GlobalTransform))
                 throw new InvalidOperationException("Ordinary controller did not execute the supported source region with its real wall intact.");
+            pose = body.GlobalTransform;
+            var reference = new Vector3(0, 0, 3);
+            var approach = NativeCapsuleNavigation.ApproachAfterProjection(pose.Origin, route.Path[^1], reference, 1, SameSourceFloor) ??
+                throw new InvalidOperationException("Observed accepted source region did not hand off to its reference approach.");
+            var approachRoute = NativeCapsuleNavigation.FindRefined(body, pose.Origin, approach.Target, .4f, .32f, .16f,
+                _ => true, targetRadius: approach.ArrivalRadius, corridor: approach.Corridor);
+            if (body.GlobalTransform != pose || approachRoute.Path[^1].DistanceTo(reference) > 1 ||
+                !placement.CanStand(approachRoute.Path[^1]))
+                throw new InvalidOperationException("Projected approach moved its query body or relaxed the actual reference range.");
+            var occupiedApproach = NativeCapsuleNavigation.ApproachAfterProjection(pose.Origin, route.Path[^1], selected, .1f, SameSourceFloor)!;
+            var occupiedApproachRefused = false;
+            try
+            {
+                _ = NativeCapsuleNavigation.FindRefined(body, pose.Origin, occupiedApproach.Target, .4f, .32f, .16f,
+                    _ => true, targetRadius: occupiedApproach.ArrivalRadius, corridor: occupiedApproach.Corridor);
+            }
+            catch (InvalidOperationException) { occupiedApproachRefused = true; }
+            if (!occupiedApproachRefused || body.GlobalTransform != pose)
+                throw new InvalidOperationException("Projected approach bypassed the occupied native reference region.");
+            await WalkCorridorBody(body, approachRoute.Path, .04f);
+            if (!body.IsOnFloor() || body.GlobalPosition.DistanceTo(reference) > 1 ||
+                originalGeometry.Any(value => value.node.GlobalTransform != value.GlobalTransform))
+                throw new InvalidOperationException("Projected approach did not execute through ordinary supported controller motion.");
             GD.Print($"OPENNV_NATIVE_SOURCE_ARRIVAL_REGION_PASS requested={requested} selected={selected} radius=1.6 accepted={route.Path[^1]} sourceSha256={graph.SourceSha256} portalThenRegion=true exactPointRefused=true occupiedRegionRefused=true otherFloorRefused=true unloadedRefused=true controllerArrival=true wallUnchanged=true queryBodyUnmoved=true maxNodesPerSearch=1200 fixture=synthetic gameplay=separate parity=unverified");
+            GD.Print("OPENNV_NATIVE_PROJECTED_REFERENCE_APPROACH_PASS observedSourceArrival=true nativeRange=true occupiedRefused=true controllerArrival=true geometryUnchanged=true queryBodyUnmoved=true");
         }
         finally { scene.Free(); }
     }

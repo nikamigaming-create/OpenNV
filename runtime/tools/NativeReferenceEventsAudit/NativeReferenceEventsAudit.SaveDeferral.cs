@@ -98,6 +98,15 @@ public partial class NativeReferenceEventsAudit
             Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
                 State().GetProperty("deferredBy").ValueKind == JsonValueKind.Null && world.Capture().Count > 0,
                 "Settled procedure did not release the same pending autosave for normal capture.");
+            const string captureFailure = "Reference Contact.esm:000901: Saved door motion has no retained source animation clock.";
+            owner.GetMethod("RetainDriverFailure", flags)!.Invoke(driver, [new InvalidDataException(captureFailure)]);
+            Require(driver.ObserveManualSaveAdmission() is
+            { Kind: RuntimeManualSaveAdmissionKind.Refused, Blocker: "native-driver-failure: " + captureFailure } &&
+                State().GetProperty("requested").GetBoolean(),
+                "A pending autosave hid the original driver failure from manual admission.");
+            // Restore the fixture's healthy driver for the independent death
+            // refusal below; production never clears a failed capture owner.
+            owner.GetProperty(nameof(RuntimeNativeOpeningStageDriver.ExecutionError), flags | BindingFlags.Public)!.SetValue(driver, null);
             vitals.Damage(vitals.State.MaximumHitPoints);
             driver._Process(0);
             Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean(),

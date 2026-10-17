@@ -140,7 +140,7 @@ internal sealed class FalloutUnloadedActorPackages(FalloutPluginStack records, F
         if (condition.Function == 159)
             return FalloutAiPackages.Sitting(records, condition, caller, sitting ?? (reference => world.GetSitting(reference)));
         if (world.EvaluateActorReferenceCondition(caller, condition) is { } referenceQuery) return referenceQuery;
-        if (condition.Function is 56 or 58 or 59 or 79 or 546) return quests.Evaluate(condition);
+        if (condition.Function is 56 or 58 or 59 or 79 or 420 or 421 or 546) return quests.Evaluate(condition);
         if (condition.Function == 18) return (clock ?? throw new NotSupportedException("Unloaded AI has no simulation clock.")).Hour;
         if (condition.Function == 74) return (globals ?? throw new NotSupportedException("Unloaded AI has no global state.")).Get(condition.FormArgument1);
         if (condition.Function == 84) return world.GetDeadCount(condition.FormArgument1);

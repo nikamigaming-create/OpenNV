@@ -104,9 +104,9 @@ internal static class OwnedOpeningProgramProbe
                     sky.ForceWeather(bindings.Form(arguments[0]).FormKey, overrideWeather); break;
                 case "releaseweatheroverride": sky.ReleaseWeatherOverride(); break;
                 case "playmusic":
-                    var music = bindings.Form(arguments.Single());
-                    if (music.Signature != "MUSC" || music.ReadSubrecords().Any(field => field.Signature != "EDID"))
-                        throw new NotSupportedException("Opening music requires streaming.");
+                    var music = FalloutMusicType.Read(bindings.Form(arguments.Single()));
+                    if (music.Path is { } musicPath && !content.TryResolve(musicPath, null, out _))
+                        throw new FileNotFoundException("Opening music file is absent.");
                     break;
                 case "moveto":
                     if (records.RuntimeFormId(target) != 0x14 || !cell.References.Any(reference => reference.FormKey == bindings.Reference(arguments.Single())))

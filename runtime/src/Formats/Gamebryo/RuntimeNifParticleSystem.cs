@@ -10,6 +10,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private FalloutNifParticleSystem _source = null!;
     private FalloutNifParticleData _data = null!;
     private FalloutNifParticleModifier[] _modifiers = [];
+    private FalloutNifParticleModifier[] _drawModifiers = [], _activeDrawModifiers = [];
     private readonly Dictionary<string, bool> _active = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _rates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, float> _speeds = new(StringComparer.Ordinal);
@@ -221,6 +222,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             !_modifiers.Any(value => value.Block.TypeName == "NiPSysPositionModifier") ||
             !_modifiers.OfType<FalloutNifParticleBounds>().Any())
             throw new NotSupportedException("Particle system lacks lifetime, position or bounds ownership.");
+        _drawModifiers = _modifiers.Where(modifier => modifier is
+            FalloutNifParticleGrowFade or FalloutNifParticleColor or FalloutNifParticleColorKeys).ToArray();
+        _activeDrawModifiers = new FalloutNifParticleModifier[_drawModifiers.Length];
         _particles = new Particle[_data.Maximum];
         _drawBuffer = new float[checked(_data.Maximum * NativeParticleDrawBuffer.Stride)];
         if (material is not ShaderMaterial shader || shader.ResourceName != NativeNifEffectMaterial.ResourceIdentity)
@@ -529,14 +533,19 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         }
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = -minimum;
+        // Controller activity is stable during this synchronous publication.
+        // Resolve only draw modifiers once, retaining their source order.
+        var drawModifierCount = 0;
+        foreach (var modifier in _drawModifiers)
+            if (_active[modifier.Name]) _activeDrawModifiers[drawModifierCount++] = modifier;
         for (var i = 0; i < ActiveCount; i++)
         {
             ref var particle = ref _particles[i];
             var radius = particle.Radius;
             var color = particle.InitialColor;
-            foreach (var modifier in _modifiers)
+            for (var modifierIndex = 0; modifierIndex < drawModifierCount; modifierIndex++)
             {
-                if (!_active[modifier.Name]) continue;
+                var modifier = _activeDrawModifiers[modifierIndex];
                 if (modifier is FalloutNifParticleGrowFade grow)
                 {
                     radius *= GrowFadeScale(grow, particle.Age, particle.Life, particle.Generation);

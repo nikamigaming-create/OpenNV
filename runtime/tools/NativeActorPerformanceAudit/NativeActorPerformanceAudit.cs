@@ -69,11 +69,28 @@ public partial class NativeActorPerformanceAudit : Node
                 SavedActorCheckpoint(savedGame, savedMod, savedRoot, savedPath, savedActors.Split(','), savedDependencies);
                 GetTree().Quit(); return;
             }
+            if (args is ["--vanilla-npc-checkpoint", var vanillaCheckpointGame, var vanillaCheckpointActor,
+                var vanillaCheckpointQuest, var vanillaCheckpointStage, var vanillaCheckpointOwner, var vanillaCheckpointHour])
+            {
+                NpcCheckpoint(vanillaCheckpointGame, null, null, vanillaCheckpointActor, vanillaCheckpointQuest,
+                    short.Parse(vanillaCheckpointStage, System.Globalization.CultureInfo.InvariantCulture), vanillaCheckpointOwner, [],
+                    float.Parse(vanillaCheckpointHour, System.Globalization.CultureInfo.InvariantCulture));
+                GetTree().Quit(); return;
+            }
             if (args is ["--npc-checkpoint", var checkpointGame, var checkpointMod, var checkpointRoot,
                 var checkpointActor, var checkpointQuest, var checkpointStage, var checkpointOwner, .. var checkpointDependencies])
             {
                 NpcCheckpoint(checkpointGame, checkpointMod, checkpointRoot, checkpointActor, checkpointQuest,
                     short.Parse(checkpointStage, System.Globalization.CultureInfo.InvariantCulture), checkpointOwner, checkpointDependencies);
+                GetTree().Quit(); return;
+            }
+            if (args is ["--vanilla-package-binding-cold", var vanillaBindingGame, var vanillaBindingActor,
+                var vanillaBindingQuest, var vanillaBindingStages, var vanillaBindingPackages, var vanillaBindingHour])
+            {
+                PackageEvaluation(vanillaBindingGame, null, null, vanillaBindingActor, vanillaBindingQuest,
+                    vanillaBindingStages.Split(',').Select(value => short.Parse(value, System.Globalization.CultureInfo.InvariantCulture)).ToArray(),
+                    [], stoppedFailure: true, expectedPackageId: vanillaBindingPackages,
+                    scheduleHour: float.Parse(vanillaBindingHour, System.Globalization.CultureInfo.InvariantCulture));
                 GetTree().Quit(); return;
             }
             if (args is ["--package-binding-cold", var bindingGame, var bindingMod, var bindingRoot,

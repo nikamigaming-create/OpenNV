@@ -10,6 +10,10 @@ public partial class NativeRenderedMenuAudit : Control
         try
         {
             var args = OS.GetCmdlineUserArgs();
+            if (args is ["--script-music", var musicRoot])
+            {
+                await ScriptMusic(musicRoot); GetTree().Quit(); return;
+            }
             if (args is ["--ui-system-colors", var colorRoot, .. var colorOptions])
             {
                 await UiSystemColors(colorRoot, colorOptions); GetTree().Quit(); return;

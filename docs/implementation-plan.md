@@ -19,9 +19,11 @@ and .NET toolchain, retaining only independent fixes. Preserve recent work in Gi
 history. Do not mix incomplete Main partials into the restored owners or replace
 missing behavior with successful constants.
 
-This restoration is applied. Debug simulator has loaded Goodsprings with both
-hands and the laser pistol and accepted stick movement. Final Release validation,
-performance, ordinary gameplay regression and repository promotion remain.
+This restoration is applied. Exported Release simulator play has exercised
+Goodsprings, tutorial dialogue and bottle hits, the well fight and corpse loot,
+wrist-ray fast travel, and ordinary save/cold continuation. These were bounded
+runs, not a completed campaign. Final creature portal navigation, post-travel
+population/persistence, performance and the ED-E route remain open.
 
 ## Active loop
 
@@ -37,9 +39,13 @@ performance, ordinary gameplay regression and repository promotion remain.
    repair/recruit ED-E through real requirements, with combat, loot and an
    available crafting transaction. Historical checkpoints accelerate isolation;
    they do not replace fresh progression.
+   Nipton, Novac, the Strip and other towns remain on the same unrestricted
+   runtime loading path. Check missing actor construction at its shared owner.
+   Exercise fast travel through both flat and VR interfaces, including elapsed
+   time, followers, destination state and persistence.
 6. Fix the next actual blocker and repeat the affected play action. Keep one
-   candidate and one integration owner. Agents may inspect distinct subsystems;
-   root coordinates builds, live input and Git.
+   candidate and one integration owner. At the user's request root works alone
+   and owns builds, live input and Git; do not restart other agents.
 
 Inspect both final eyes for VR acceptance. Check held-trigger/stick release on UI
 close, tracking changes, stable hands and weapon grips, readable wrist pixels and

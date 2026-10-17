@@ -3,6 +3,38 @@ using OpenNV.Runtime.World.Cells;
 
 internal static class OwnedCompanionPackageProbe
 {
+    internal static void RunAccompany(string root)
+    {
+        RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(root), includeImplicitPlugins: false);
+        using var content = RuntimeLiveContentSource.Current!;
+        using var records = FalloutPluginStack.Load(content.PluginSources);
+        var record = records.GetEffective(records.RuntimeFormKey(0x152afa));
+        var bytes = record.ReadData();
+        var accompany = FalloutFollowPackage.ReadAccompany(record);
+        using var world = new FalloutReferenceWorld(records);
+        var actor = world.Get(records.RuntimeFormKey(0x10588e));
+        var leader = world.Get(accompany.Target);
+        var selected = FalloutAiPackages.Select(records, actor.Base, condition => condition.Function switch
+        {
+            79 => 0,
+            84 => world.GetDeadCount(condition.FormArgument1),
+            _ => throw new NotSupportedException($"Unowned Accompany fixture condition {condition.Function}.")
+        });
+        if (selected?.FormKey != accompany.Form || accompany.Target != records.RuntimeFormKey(0x104e85) ||
+            records.GetEffective(leader.Base).Signature != "NPC_" || accompany.Distance != 128 ||
+            accompany.Flags != 0x04501000 || !accompany.DefensiveCombat || accompany.Running ||
+            accompany.AllowsUnprovokedCombat(null) || !accompany.AllowsUnprovokedCombat(leader.Reference) ||
+            accompany.AllowsUnprovokedCombat(records.RuntimeFormKey(0x14)) || !record.ReadData().SequenceEqual(bytes))
+            throw new InvalidDataException("Owned Accompany source or defensive target policy differs.");
+        var door = records.RuntimeFormKey(0x10618e);
+        var arrival = world.TravelPortalArrival(door, out var destination);
+        if (!world.CanNpcOpenDoor(door, actor.Reference) || destination != records.RuntimeFormKey(0x10636f) ||
+            world.TravelPortal(actor.Reference, arrival.Cell) != door || world.Placement(actor.Reference).Cell != actor.Cell)
+            throw new InvalidDataException("Owned Accompany door capability or source portal route differs.");
+        Console.WriteLine("OPENNV_OWNED_ACCOMPANY_PACKAGE_PASS sourceTarget=true sourceDistance=true sourceSelection=true defensiveTarget=true sourceDoorCapability=true directedPortal=true sourceReadonly=true nativeMovement=separate");
+    }
+
     internal static void Run(string root)
     {
         RuntimeLiveContentSource.Configure(root, RuntimeLiveContentSource.FalloutNewVegasGame);

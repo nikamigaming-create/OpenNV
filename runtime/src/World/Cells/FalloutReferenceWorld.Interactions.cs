@@ -32,7 +32,16 @@ internal sealed partial class FalloutReferenceWorld
         if (records.GetEffective(instance.Base).Signature != "DOOR")
             throw new InvalidDataException("NPC door access requires a placed door.");
         var activator = Get(actor);
-        if (records.GetEffective(activator.Base).Signature != "NPC_" || !CanActivate(actor) || IsDead(actor)) return false;
+        var source = records.GetEffective(activator.Base);
+        if (source.Signature is not ("NPC_" or "CREA") || !CanActivate(actor) || IsDead(actor)) return false;
+        if (source.Signature == "CREA")
+        {
+            // CREA's model template owns its movement/door capabilities.
+            var model = FalloutActorTemplateOwner.Resolve(records, source, 64, activator.Templates);
+            var flags = model.ReadSubrecords().Single(field => field.Signature == "ACBS").Data;
+            if (flags.Length != 24) throw new InvalidDataException("Creature door flags have an invalid extent.");
+            if ((BinaryPrimitives.ReadUInt32LittleEndian(flags.Span) & 0x00400000) != 0) return false;
+        }
         if (GetLocked(reference) == 0) return true;
         var owner = Ownership(reference);
         // A declared NPC/base or exact actor owner can use its own door.

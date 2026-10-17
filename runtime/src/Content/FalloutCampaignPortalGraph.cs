@@ -84,11 +84,20 @@ internal sealed class FalloutCampaignPortalGraph
     }
 
     internal IReadOnlyList<FalloutFormKey> Find(
-        FalloutFormKey fromCell, FalloutFormKey targetCell, Func<FalloutFormKey, bool> canUse)
+        FalloutFormKey fromCell, FalloutFormKey targetCell, Func<FalloutFormKey, bool> canUse,
+        Func<FalloutFormKey, FalloutFormKey>? region = null)
     {
         ArgumentNullException.ThrowIfNull(canUse);
         var from = RequireCell(fromCell);
         var target = RequireCell(targetCell);
+        FalloutFormKey Scope(FalloutFormKey cell) => region?.Invoke(cell) ?? cell;
+        var links = region is null ? _links : _links.Values.SelectMany(value => value)
+            .GroupBy(link => Scope(link.Source.Cell)).ToDictionary(group => group.Key,
+                group => (IReadOnlyList<Link>)group.ToArray());
+        var issues = region is null ? _issuesByCell : _issuesByCell.Values.SelectMany(value => value)
+            .GroupBy(failure => Scope(failure.Issue.Cell!.Value)).ToDictionary(group => group.Key,
+                group => (IReadOnlyList<Failure>)group.ToArray());
+        fromCell = Scope(fromCell); targetCell = Scope(targetCell);
         if (FalloutFormKeyComparer.Instance.Equals(fromCell, targetCell)) return [];
         var visited = new HashSet<FalloutFormKey>(FalloutFormKeyComparer.Instance) { fromCell };
         var previous = new Dictionary<FalloutFormKey, Link>(FalloutFormKeyComparer.Instance);
@@ -97,7 +106,7 @@ internal sealed class FalloutCampaignPortalGraph
         pending.Enqueue(fromCell);
         while (pending.TryDequeue(out var cell))
         {
-            if (_issuesByCell.TryGetValue(cell, out var failures))
+            if (issues.TryGetValue(cell, out var failures))
             {
                 var detail = $"Directed source XTEL route from {Context(from)} to {Context(target)} " +
                     $"reaches an unadmitted source CELL {cell}: " +
@@ -106,13 +115,14 @@ internal sealed class FalloutCampaignPortalGraph
                     throw new NotSupportedException(detail, failures[0].Cause);
                 throw new InvalidDataException(detail, failures[0].Cause);
             }
-            if (!_links.TryGetValue(cell, out var outgoing)) continue;
+            if (!links.TryGetValue(cell, out var outgoing)) continue;
             foreach (var link in outgoing)
             {
-                if (visited.Contains(link.Destination.Cell)) continue;
+                var destinationCell = Scope(link.Destination.Cell);
+                if (visited.Contains(destinationCell)) continue;
                 if (!Admitted(link.Source, link) || !Admitted(link.Destination, link)) continue;
-                previous.Add(link.Destination.Cell, link);
-                if (FalloutFormKeyComparer.Instance.Equals(link.Destination.Cell, targetCell))
+                previous.Add(destinationCell, link);
+                if (FalloutFormKeyComparer.Instance.Equals(destinationCell, targetCell))
                 {
                     var route = new List<FalloutFormKey>();
                     var current = targetCell;
@@ -120,13 +130,13 @@ internal sealed class FalloutCampaignPortalGraph
                     {
                         var step = previous[current];
                         route.Add(step.Source.Source.FormKey);
-                        current = step.Source.Cell;
+                        current = Scope(step.Source.Cell);
                     }
                     route.Reverse();
                     return route.AsReadOnly();
                 }
-                visited.Add(link.Destination.Cell);
-                pending.Enqueue(link.Destination.Cell);
+                visited.Add(destinationCell);
+                pending.Enqueue(destinationCell);
             }
         }
         throw new NotSupportedException(

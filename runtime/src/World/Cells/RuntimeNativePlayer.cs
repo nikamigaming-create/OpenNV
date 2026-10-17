@@ -44,7 +44,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         };
         AddChild(adapter);
     }
-    internal bool Sprinting { get; private set; }
+    internal bool Running { get; private set; }
     internal int JumpCount { get; private set; }
     internal int StepCount { get; private set; }
     internal string? StepBlocked { get; private set; }
@@ -81,7 +81,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
             throw new InvalidDataException("Source jump height must be finite and positive.");
         ConfigureLimbLocomotion(records, vitals);
         SetMeta("opennv_jump_height_meters", _jumpHeightMeters);
-        SetMeta("opennv_sprint_policy", "OpenNV optional hold-to-sprint");
+        SetMeta("opennv_run_policy", "Source autorun; retained Sprint action selects walking");
     }
 
     internal Camera3D Camera => _camera;
@@ -385,9 +385,9 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
         forward.Y = 0.0f;
         right.Y = 0.0f;
         var direction = right.Normalized() * movement.X + forward.Normalized() * movement.Y;
-        Sprinting = alive && _movementEnabled && !_modalInput && movement.Y > 0 && (_xr?.Sprint ?? Input.IsActionPressed(input.Sprint.Action));
-        var speed = _configuration.Player.MoveSpeedMetersPerSecond * (Sprinting ? _configuration.Player.SprintSpeedMultiplier : 1) *
-            CrippledLegMovementSpeedMultiplier();
+        Running = movement.LengthSquared() > 0 && !(_xr?.Sprint ?? Input.IsActionPressed(input.Sprint.Action));
+        var speed = movement.LengthSquared() > 0 ? MovementSpeed(Running) : 0;
+        Activity.SetMovement(Running, Activity.Sneaking);
         var velocity = direction * speed;
         velocity.Y = IsOnFloor()
             ? MathF.Min(Velocity.Y, 0.0f)
@@ -455,7 +455,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     private bool TryActivateLiveObject()
     {
-        var collider = AimedObject();
+        var collider = ActivationObject();
         return collider is not null && ActivateReference?.Invoke(collider) == true;
     }
 
@@ -475,16 +475,50 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
     };
     internal Node? AimedObject()
     {
+        var collider = TraceActivation(out _aimHit);
+        return collider;
+    }
+
+    internal Vector3 ActivationOrigin => ((Node3D?)_xr?.RightAim ?? _camera).GlobalPosition;
+
+    internal Node? ActivationObject()
+    {
+        var collider = AimedObject();
+        if (collider is null || _xr is null) return collider;
+        // The long visual pointer may reach ordinary references, but only
+        // source-admitted remote pickups inherit its extended activation reach.
+        return ResolveXrTarget?.Invoke(collider)?.RemotePickup == true ||
+            ActivationOrigin.DistanceTo(_aimHit) <= _configuration.Player.ActivationDistanceMeters ? collider : null;
+    }
+
+    internal object ObserveActivation(Func<Node, object?> reference)
+    {
+        var collider = TraceActivation(out var point);
+        var origin = ActivationOrigin;
+        return new
+        {
+            enabled = _activationEnabled,
+            collider = collider?.GetPath().ToString(),
+            reference = collider is null ? null : reference(collider),
+            origin = new[] { origin.X, origin.Y, origin.Z },
+            hitPosition = new[] { point.X, point.Y, point.Z },
+            distance = origin.DistanceTo(point),
+            activationDistance = _configuration.Player.ActivationDistanceMeters,
+        };
+    }
+
+    private Node? TraceActivation(out Vector3 hitPosition)
+    {
         var aim = (Node3D?)_xr?.RightAim ?? _camera;
         var from = aim.GlobalPosition;
         var to = from - aim.GlobalBasis.Z * (_xr?.WorldPointer == true ? 12f : _configuration.Player.ActivationDistanceMeters);
-        _aimHit = to;
-        var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionMask | CollisionLayer);
+        hitPosition = to;
+        using var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionMask | CollisionLayer);
         query.CollideWithAreas = true;
         query.Exclude = SelfQueryBodies;
         query.HitBackFaces = false;
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-        if (hit.TryGetValue("position", out var point)) _aimHit = point.AsVector3();
+        using var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.TryGetValue("position", out var point)) hitPosition = point.AsVector3();
         if (!hit.TryGetValue("collider", out var colliderValue) ||
             colliderValue.AsGodotObject() is not Node collider)
             return null;

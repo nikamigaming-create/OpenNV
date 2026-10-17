@@ -13,7 +13,7 @@ internal sealed record BotDoorObservation(bool Open, bool Moving, bool Pending, 
 
 internal sealed record BotNavigationRoute(IReadOnlyList<Vector3> Waypoints, Vector3 RequestedEndpoint,
     Vector3 ProjectedEndpoint, bool ReachesProjectedEndpoint, string? SourceIdentity = null, float ProjectionRadiusMeters = 0,
-    string? RequiredDoor = null, BotNavigationRefinement? Refinement = null);
+    string? RequiredDoor = null, BotNavigationRefinement? Refinement = null, Action<Vector3>? ObserveArrival = null);
 
 internal sealed record BotNavigationRefinement(string Scope, Vector3 Target, float ArrivalRadiusMeters,
     string SourceSha256, BotNavigationProjection? Projection = null);
@@ -273,12 +273,15 @@ internal sealed partial class ReactiveReferenceBot
             }
             if (move)
             {
-                if (_path is not null && Vector3.Distance(state.Target, _plannedTarget) > .4f)
+                // Follow consumes one verified segment before refreshing its
+                // moving target. Cancelling each pending query on target drift
+                // can otherwise prevent any route from reaching the executor.
+                if (_mode != "follow" && _path is not null && Vector3.Distance(state.Target, _plannedTarget) > .4f)
                 { CancelRoute(); _path = null; _projectionRadius = 2; _endpointReplans = 0; }
                 if (_path is null)
                 {
                     if (_request is { } pending && (Vector3.Distance(pending.Start, state.Position) > .2f ||
-                        Vector3.Distance(pending.Target, state.Target) > .4f)) CancelRoute();
+                        _mode != "follow" && Vector3.Distance(pending.Target, state.Target) > .4f)) CancelRoute();
                     _request ??= new(state.Position, state.Target - (offset.Length() > .001f ? Vector3.Normalize(offset) * _approachDistance : Vector3.Zero), state.Target);
                     var request = _request;
                     var destination = request.Endpoint;
@@ -339,6 +342,7 @@ internal sealed partial class ReactiveReferenceBot
                         Replan("replanning-moving-target");
                         return;
                     }
+                    _navigation.ObserveArrival?.Invoke(state.Position);
                     // A projected NAVM endpoint is not target-range arrival.
                     // Try the real interaction ray from this supported floor,
                     // then tighten source projection if it cannot reach.

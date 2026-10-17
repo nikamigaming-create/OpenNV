@@ -11,7 +11,8 @@ internal sealed record FalloutPlayerActorValuesSnapshot(string Schema, uint Refe
 // into their evidenced pools on demand; they are never saved a second time.
 internal sealed class FalloutPlayerActorValues
 {
-    internal const string SnapshotSchema = "opennv-player-special-values/v1";
+    internal const string SnapshotSchema = "opennv-player-actor-values/v2";
+    internal const string SpecialOnlySchema = "opennv-player-special-values/v1";
     internal const uint PlayerReference = 0x14;
     private readonly FalloutPlayerActorValueSource _source;
     private Dictionary<int, FalloutActorValue> _values;
@@ -29,6 +30,8 @@ internal sealed class FalloutPlayerActorValues
         _source = FalloutPlayerActorValueSource.Read(records);
         var initial = legacy?.Values ?? _source.Special;
         _values = Enumerable.Range(5, 7).ToDictionary(value => value, value => new FalloutActorValue(initial[value - 5]));
+        _values.Add(21, new(_source.SpeedMultiplier));
+        _values.Add(72, new(0));
         if (restore is not null) Restore(restore);
     }
 
@@ -52,12 +55,26 @@ internal sealed class FalloutPlayerActorValues
         return slot >= 0 ? slot + 5 : throw new NotSupportedException($"Player actor value {name} has no SPECIAL pool owner.");
     }
 
+    internal static bool HasPool(string name) => name.Equals("SpeedMult", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("IgnoreCrippledLimbs", StringComparison.OrdinalIgnoreCase) ||
+        FalloutNativeVigorResolver.AttributeNames.Any(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
+    internal static int PoolValue(string name) => name.ToLowerInvariant() switch
+    {
+        "speedmult" => 21,
+        "ignorecrippledlimbs" => 72,
+        _ => SpecialValue(name),
+    };
+    internal static bool HasPool(int value) => value is >= 5 and <= 11 or 21 or 72;
+
     private FalloutActorValue Value(int actorValue) => _values.TryGetValue(actorValue, out var value) ? value :
         throw new NotSupportedException($"Player actor value {actorValue} has no base/formula pool owner.");
 
     internal float ReadBase(int actorValue) => Value(actorValue).Base;
-    internal float ReadPermanent(int actorValue) => Evaluate(actorValue, () => Math.Clamp(ReadBase(actorValue) +
-        Pool(actorValue, FalloutActorValuePool.Permanent), 1, 10));
+    internal float ReadPermanent(int actorValue) => Evaluate(actorValue, () =>
+    {
+        var value = ReadBase(actorValue) + Pool(actorValue, FalloutActorValuePool.Permanent);
+        return actorValue is >= 5 and <= 11 ? Math.Clamp(value, 1, 10) : value;
+    });
     internal float ReadCurrent(int actorValue) => Evaluate(actorValue, () =>
         // The native float getter sums temporary, permanent and damage pools
         // with a wider intermediate before returning its Float32 result.
@@ -107,7 +124,7 @@ internal sealed class FalloutPlayerActorValues
     internal void Change(string name, string operation, double argument)
     {
         var value = SignedInteger(argument);
-        var actorValue = SpecialValue(name);
+        var actorValue = PoolValue(name);
         switch (operation.ToLowerInvariant())
         {
             case "setav" or "setactorvalue": WriteBaseInteger(actorValue, value); break;
@@ -177,6 +194,11 @@ internal sealed class FalloutPlayerActorValues
             snapshot.StatsOwner != _source.StatsOwner || snapshot.StatsWinner != _source.StatsWinner || snapshot.StatsSha256 != _source.StatsSha256)
             throw new InvalidDataException("Saved player values differ from their winning source identity.");
         var replacement = snapshot.Values.ToDictionary(pair => pair.Key, pair => pair.Value);
+        if (snapshot.Schema == SpecialOnlySchema)
+        {
+            replacement.Add(21, new(_source.SpeedMultiplier));
+            replacement.Add(72, new(0));
+        }
         _values = replacement;
         Changed?.Invoke();
     }
@@ -184,12 +206,12 @@ internal sealed class FalloutPlayerActorValues
     internal static void Validate(FalloutPlayerActorValuesSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.Schema != SnapshotSchema || snapshot.Reference != PlayerReference || snapshot.Player.ObjectId == 0 ||
+        if (snapshot.Schema is not (SnapshotSchema or SpecialOnlySchema) || snapshot.Reference != PlayerReference || snapshot.Player.ObjectId == 0 ||
             snapshot.StatsOwner.ObjectId == 0 || string.IsNullOrWhiteSpace(snapshot.PlayerWinner) || string.IsNullOrWhiteSpace(snapshot.StatsWinner) ||
-            !Hash(snapshot.PlayerSha256) || !Hash(snapshot.StatsSha256) || snapshot.Values is null || snapshot.Values.Count != 7 ||
-            snapshot.Values.Any(pair => pair.Key is < 5 or > 11 || pair.Value is null || !pair.Value.IsFinite ||
+            !Hash(snapshot.PlayerSha256) || !Hash(snapshot.StatsSha256) || snapshot.Values is null || snapshot.Values.Count != (snapshot.Schema == SpecialOnlySchema ? 7 : 9) ||
+            snapshot.Values.Any(pair => (snapshot.Schema == SpecialOnlySchema ? pair.Key is < 5 or > 11 : !HasPool(pair.Key)) || pair.Value is null || !pair.Value.IsFinite ||
                 pair.Value.Base != MathF.Truncate(pair.Value.Base) || pair.Value.Base < int.MinValue || (double)pair.Value.Base > 2147483648d))
-            throw new InvalidDataException("Saved player SPECIAL pools are invalid.");
+            throw new InvalidDataException("Saved player actor-value pools are invalid.");
         static bool Hash(string value) => value is { Length: 64 } && value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
     }
 }

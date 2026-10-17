@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
+using OpenNV.Runtime.World.Actors;
 
 internal static class FollowPackageContracts
 {
@@ -14,7 +15,11 @@ internal static class FollowPackageContracts
         {
             var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
             File.WriteAllBytes(Path.Combine(directory, "Follow.esm"), Join(Record("TES4", 0, Field("HEDR", header)),
-                Package(1, 330), Package(2, 500), Package(3, 330, location: true), Package(4, 0), Package(5, 330, targetType: 1)));
+                Package(1, 330), Package(2, 500), Package(3, 330, location: true), Package(4, 0), Package(5, 330, targetType: 1),
+                Package(6, 128, procedure: 7, flags: 0x04501000), Package(7, 128, procedure: 7, flags: 0x04501001),
+                Package(8, 128, location: true, procedure: 7), Package(9, 0, procedure: 7),
+                Package(10, 128, targetType: 1, procedure: 7), Package(11, 128, procedure: 7, specificFlags: 1),
+                Package(12, 128, procedure: 7, flags: 0x3000)));
             using var records = FalloutPluginStack.Load(directory, ["Follow.esm"]);
             FalloutPluginRecord Source(uint id) => records.GetEffective(new("Follow.esm", id));
             var shortFollow = FalloutFollowPackage.Read(Source(1));
@@ -24,6 +29,22 @@ internal static class FollowPackageContracts
             Reject(() => FalloutFollowPackage.Read(Source(3)));
             Reject(() => FalloutFollowPackage.Read(Source(4)));
             Reject(() => FalloutFollowPackage.Read(Source(5)));
+            var accompany = FalloutFollowPackage.ReadAccompany(Source(6));
+            if (!accompany.Accompany || !accompany.DefensiveCombat || accompany.Running ||
+                accompany.Target != shortFollow.Target || accompany.Distance != 128 || accompany.Flags != 0x04501000 ||
+                accompany.AllowsUnprovokedCombat(null) || accompany.AllowsUnprovokedCombat(Source(1).FormKey) ||
+                !accompany.AllowsUnprovokedCombat(accompany.Target) || !shortFollow.AllowsUnprovokedCombat(null) ||
+                !FalloutFollowPackage.ReadAccompany(Source(12)).Running)
+                throw new InvalidOperationException("Accompany lost its target, distance or defensive target protection policy.");
+            Reject(() => FalloutFollowPackage.ReadAccompany(Source(1)));
+            Reject(() => FalloutFollowPackage.Read(Source(6)));
+            foreach (var id in new uint[] { 7, 8, 9, 10, 11 }) Reject(() => FalloutFollowPackage.ReadAccompany(Source(id)));
+            var leader = Godot.Vector3.Zero; var goal = new Godot.Vector3(100, 0, 0);
+            var lateral = RuntimeNativeCreature.AccompanyApproach(new(100, 0, 50), leader, goal, 2);
+            var behind = RuntimeNativeCreature.AccompanyApproach(new(-10, 0, 0), leader, goal, 2);
+            if (lateral.Destination != leader || lateral.Distance != 2 ||
+                behind.Destination != goal || behind.Distance != 98)
+                throw new InvalidOperationException("Accompany destination knowledge lost the actual leader distance.");
             var motion = new FalloutActorPackageMotion(shortFollow.Form, new string('a', 64), "meshes/actor/mtforward.kf",
                 new string('b', 64), 3.25, false, [2, 3, 4], [0, 0, 0, 1]);
             var restored = JsonSerializer.Deserialize<FalloutActorPackageMotion>(JsonSerializer.Serialize(motion))!;
@@ -34,14 +55,23 @@ internal static class FollowPackageContracts
             Reject(() => (motion with { Rotation = [0, 0, 0, 0] }).Validate());
             Reject(() => (motion with { StartPending = true }).Validate());
             Reject(() => (motion with { PackageSha256 = "changed" }).Validate());
-            Console.WriteLine("OPENNV_FOLLOW_PACKAGE_CONTRACT_PASS optionalStart=true sourceTarget=true distances=true coldClock=true malformedRejected=true");
+            var accompanyMotion = motion with { Package = accompany.Form };
+            var coldAccompany = JsonSerializer.Deserialize<FalloutActorPackageMotion>(JsonSerializer.Serialize(accompanyMotion))!;
+            coldAccompany.Validate();
+            if (coldAccompany.Package != accompany.Form || coldAccompany.Seconds != accompanyMotion.Seconds ||
+                !coldAccompany.Position.SequenceEqual(accompanyMotion.Position))
+                throw new InvalidOperationException("Accompany cold motion lost its source identity, clock or pose.");
+            Console.WriteLine("OPENNV_FOLLOW_PACKAGE_CONTRACT_PASS optionalStart=true sourceTarget=true distances=true coldClock=true accompany=true defensiveTarget=true malformedRejected=true");
         }
         finally { Directory.Delete(directory, true); }
     }
 
-    private static byte[] Package(uint id, int distance, bool location = false, int targetType = 0)
+    private static byte[] Package(uint id, int distance, bool location = false, int targetType = 0,
+        byte procedure = 1, uint flags = 0, ushort specificFlags = 0)
     {
-        var data = new byte[12]; data[4] = 1; data[11] = 0xa5;
+        var data = new byte[12]; data[4] = procedure; data[11] = 0xa5;
+        BinaryPrimitives.WriteUInt32LittleEndian(data, flags);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(8), specificFlags);
         var target = new byte[16]; BinaryPrimitives.WriteInt32LittleEndian(target, targetType);
         BinaryPrimitives.WriteUInt32LittleEndian(target.AsSpan(4), 0x14);
         BinaryPrimitives.WriteInt32LittleEndian(target.AsSpan(8), distance); target[15] = 0xcc;

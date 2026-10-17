@@ -109,7 +109,8 @@ internal partial class RuntimeNativeNpc
     private bool RetainFurnitureContinuation()
     {
         if (_aiReferenceState is not { } state) return false;
-        var retained = CanCaptureFurnitureContinuation();
+        var retained = _furnitureCapture is not null && ReferenceEquals(state.CaptureFurniture, _furnitureCapture) &&
+            ReferenceEquals(state.CanCaptureFurniture, _furnitureCaptureReady) && CanCaptureFurnitureContinuation();
         if (retained)
         {
             var continuation = CaptureFurnitureContinuation() ??
@@ -117,8 +118,6 @@ internal partial class RuntimeNativeNpc
             state.PackageAssignment = continuation.Assignment;
             state.FurnitureContinuation = continuation;
         }
-        if (ReferenceEquals(state.CanCaptureFurniture, _furnitureCaptureReady)) state.CanCaptureFurniture = null;
-        if (ReferenceEquals(state.CaptureFurniture, _furnitureCapture)) state.CaptureFurniture = null;
         return retained;
     }
 

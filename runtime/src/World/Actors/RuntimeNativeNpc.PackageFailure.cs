@@ -14,7 +14,7 @@ internal partial class RuntimeNativeNpc
     private bool _baseLocomotionMoving;
 
     private bool CanCaptureBindingFailure() => CanCaptureBindingFailure(allowFiniteSoundWait: false);
-    private bool CanCaptureBindingFailure(bool allowFiniteSoundWait) => _aiReferenceState is { } state &&
+    private bool CanCaptureBindingFailure(bool allowFiniteSoundWait) => IsInsideTree() && _aiReferenceState is { } state &&
         state.ProcedureCaptureBlocker == _selectionCaptureBlocker && _selectionCaptureBlocker is not null &&
         _aiError is not null && _failedPackage is { } failed && failed == _selectedSourcePackage &&
         _requestedSelection is null && _pendingPackage is null && _aiPackage is null &&
@@ -33,6 +33,7 @@ internal partial class RuntimeNativeNpc
         {
             if (condition) blockers.Add(new("npc-binding", predicate, detail));
         }
+        Refuse(!IsInsideTree(), "native-transform-unattached");
         Refuse(_aiReferenceState is null, "reference-instance-missing");
         Refuse(_selectionCaptureBlocker is null, "binding-blocker-missing");
         Refuse(_aiReferenceState?.ProcedureCaptureBlocker != _selectionCaptureBlocker, "procedure-blocker-binding");
@@ -159,13 +160,5 @@ internal partial class RuntimeNativeNpc
             FalloutActorRetirementCandidate.Prepare(_aiStack!, state, GetInstanceId(), null,
                 CaptureBindingFailure(allowFiniteSoundWait: true))?.Bind();
         }
-        if (ReferenceEquals(state.CanCapturePackageBindingFailure, _bindingFailureReady))
-            state.CanCapturePackageBindingFailure = null;
-        if (ReferenceEquals(state.PendingPackageBindingFiniteVoices, _bindingFailureWait))
-            state.PendingPackageBindingFiniteVoices = null;
-        if (ReferenceEquals(state.CapturePackageBindingFailure, _bindingFailureCapture))
-            state.CapturePackageBindingFailure = null;
-        if (ReferenceEquals(state.ObservePackageBindingCapture, _bindingFailureDiagnostic))
-            state.ObservePackageBindingCapture = null;
     }
 }

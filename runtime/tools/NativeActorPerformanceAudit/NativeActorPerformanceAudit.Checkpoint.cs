@@ -9,15 +9,21 @@ using OpenNV.Runtime.World.Cells;
 
 public partial class NativeActorPerformanceAudit
 {
-    private void NpcCheckpoint(string game, string mod, string root, string actorId, string questId,
-        short stage, string expected, string[] dependencies)
+    private void NpcCheckpoint(string game, string? mod, string? root, string actorId, string questId,
+        short stage, string expected, string[] dependencies, float? scheduleHour = null)
     {
         var fixture = new Node3D(); AddChild(fixture);
         try
         {
-            var installation = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(game);
-            RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
-                installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
+            if (mod is null)
+                RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
+                    activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(game), includeImplicitPlugins: false);
+            else
+            {
+                var installation = new FalloutModStackSelection([new(mod, root!, dependencies)]).Resolve(game);
+                RuntimeLiveContentSource.Configure(game, RuntimeLiveContentSource.FalloutNewVegasGame,
+                    installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
+            }
             var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             using var world = new FalloutReferenceWorld(records);
@@ -29,6 +35,7 @@ public partial class NativeActorPerformanceAudit
             var globals = FalloutGlobalState.Read(records);
             var clock = new FalloutGameTime(globals, FalloutGameTimeBindings.Read(records),
                 FalloutCalendar.Read(Path.Combine(game, "FalloutNV.exe")));
+            if (scheduleHour is { } hour) clock.SetHour(hour);
             if (expected == "selection") world.UnloadedPackages = new(records, world, quests, clock, globals,
                 (_, _) => throw new InvalidDataException("Failed selection unload ran package results."), () => 1);
             var cell = FalloutCellSceneReader.Read(records, world.Get(caller).Cell); world.LoadCell(cell);
@@ -100,6 +107,37 @@ public partial class NativeActorPerformanceAudit
             };
             if (!HasOwner(actorState) || world.PendingProcedureCaptureCount != 0)
                 throw new InvalidDataException("Source fixture did not reach the required owned checkpoint continuation.");
+            if (expected == "furniture")
+            {
+                using var handoffWorld = new FalloutReferenceWorld(records);
+                handoffWorld.Restore(saved); handoffWorld.LoadCell(cell);
+                RuntimeNativeNpc AssembleHandoff()
+                {
+                    var result = Assemble(handoffWorld);
+                    result.ConfigureHeadTracking(records, content, target => target == caller ? result.HeadTargetPoint : null);
+                    return result;
+                }
+                var initial = AssembleHandoff();
+                var handoff = new RuntimeNativeReferencePresentation(handoffWorld, [placed], _ => AssembleHandoff());
+                fixture.AddChild(handoff);
+                using var handoffLifetime = new PackageFixtureLifetime(handoff);
+                handoff.Register(caller, initial);
+                var beforeHandoff = JsonSerializer.Serialize(handoffWorld.Get(caller).Capture());
+                handoff.RetireOverlappingActors([placed], out var previous);
+                if (GodotObject.IsInstanceValid(initial) || previous.Count != 1 || handoff.HasPrepared(caller) ||
+                    handoffWorld.Get(caller).CaptureHeadTracking is not null || handoffWorld.Get(caller).HeadTracking is null)
+                    throw new InvalidDataException("Actor overlap handoff left an old native head owner alive.");
+                handoff.RestoreRetiredActors(previous);
+                if (handoffWorld.Get(caller).CaptureHeadTracking is null ||
+                    JsonSerializer.Serialize(handoffWorld.Get(caller).Capture()) != beforeHandoff)
+                    throw new InvalidDataException("Actor overlap rollback changed its retained source continuation.");
+                handoff.SetResidency([], _ => throw new InvalidDataException("Warm retirement must not rematerialize."), _ => true);
+                handoff.RetireOverlappingActors([placed], out var warmPrevious);
+                if (warmPrevious.Count != 0 || handoff.HasPrepared(caller) ||
+                    handoffWorld.Get(caller).CaptureHeadTracking is not null)
+                    throw new InvalidDataException("Warm overlap retained its native binding or requested resident rollback.");
+                GD.Print("OPENNV_NATIVE_ACTOR_OVERLAP_PASS activeAndWarm=true headOwnerRetired=true rollbackExactContinuation=true");
+            }
             using var cold = new FalloutReferenceWorld(records);
             cold.Restore(JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(saved))!);
             cold.LoadCell(cell);
@@ -220,11 +258,75 @@ public partial class NativeActorPerformanceAudit
                     "residualComponents=true nativeSkeletonAndCoverageDrift=true childFirstRetirement=true " +
                     "sourceDriftAtomic=true sourceEffectsNotReplayed=true recording=false");
             }
+            if (cold.Get(caller).Capture().FurnitureContinuation is { Furniture: { } furniture, Seat: { } seat })
+                RestoreFurnitureReservation(resumed, cold, caller, records.RuntimeFormKey(0x14), furniture, seat.Index);
+            PreserveReplacementCaptureOwner(resumed, cold.Get(caller));
             GD.Print($"OPENNV_NATIVE_NPC_CHECKPOINT_PASS actor={caller} owner={expected} phase={warm.SittingState} " +
                 "nativeCold=true exactPose=true clock=true randomAndBlink=true sourceEffectsNotReplayed=true " +
-                "fixture=isolated-owned-records campaignAndParity=unverified recording=false");
+                "replacementCaptureOwnerPreserved=true fixture=isolated-owned-records campaignAndParity=unverified recording=false");
         }
         finally { if (GodotObject.IsInstanceValid(fixture)) fixture.Free(); }
+    }
+
+    private static void RestoreFurnitureReservation(RuntimeNativeNpc actor, FalloutReferenceWorld world,
+        FalloutFormKey caller, FalloutFormKey otherActor, FalloutFormKey furniture, int seat)
+    {
+        var before = JsonSerializer.Serialize(world.Get(caller).Capture());
+        var pose = actor.GlobalTransform;
+        world.ReleaseFurnitureSeat(furniture, seat, caller);
+        actor.RestoreSourceBindings();
+        if (!world.OwnsFurnitureSeat(furniture, seat, caller))
+            throw new InvalidDataException("Failed replacement retirement lost the live actor's source furniture seat.");
+        world.ReleaseFurnitureSeat(furniture, seat, caller);
+        if (!world.ReserveFurnitureSeat(furniture, seat, otherActor))
+            throw new InvalidDataException("Furniture handoff fixture could not reserve its actual source seat.");
+        try
+        {
+            var refused = false;
+            try { actor.RestoreSourceBindings(); }
+            catch (NotSupportedException) { refused = true; }
+            if (!refused || !world.OwnsFurnitureSeat(furniture, seat, otherActor))
+                throw new InvalidDataException("Furniture owner restoration stole an occupied source seat.");
+        }
+        finally
+        {
+            world.ReleaseFurnitureSeat(furniture, seat, otherActor);
+            actor.RestoreSourceBindings();
+        }
+        if (actor.GlobalTransform != pose || JsonSerializer.Serialize(world.Get(caller).Capture()) != before)
+            throw new InvalidDataException("Furniture owner restoration changed the live pose or continuation.");
+        GD.Print($"OPENNV_NATIVE_FURNITURE_RESERVATION_HANDOFF_PASS actor={caller} furniture={furniture} seat={seat} " +
+            "sameSourceSeat=true conflictRefused=true exactPoseAndContinuation=true");
+    }
+
+    private static void PreserveReplacementCaptureOwner(RuntimeNativeNpc actor, FalloutReferenceInstance state)
+    {
+        var pending = state.PendingPackageSelection;
+        var dialogue = state.DialogueContinuation;
+        var furniture = state.FurnitureContinuation;
+        var assignment = state.PackageAssignment;
+        var blocker = state.ProcedureCaptureBlocker;
+        Func<bool> ready = () => throw new InvalidDataException("Retiring actor queried its replacement capture owner.");
+        Func<FalloutActorPendingPackageSelection> pendingCapture = () => throw new InvalidDataException("Replacement pending capture was invoked.");
+        Func<FalloutActorDialogueContinuation?> dialogueCapture = () => throw new InvalidDataException("Replacement dialogue capture was invoked.");
+        Func<FalloutActorFurnitureContinuation?> furnitureCapture = () => throw new InvalidDataException("Replacement furniture capture was invoked.");
+        Func<FalloutFormKey?> package = () => null;
+        state.CanCapturePendingPackageSelection = state.CanCaptureDialogue = state.CanCaptureFurniture = ready;
+        state.CapturePendingPackageSelection = pendingCapture;
+        state.CaptureDialogue = dialogueCapture;
+        state.CaptureFurniture = furnitureCapture;
+        state.QueryCurrentPackage = package;
+        actor.Free();
+        if (!ReferenceEquals(state.PendingPackageSelection, pending) || !ReferenceEquals(state.DialogueContinuation, dialogue) ||
+            !ReferenceEquals(state.FurnitureContinuation, furniture) || !ReferenceEquals(state.PackageAssignment, assignment) ||
+            state.ProcedureCaptureBlocker != blocker || state.CapturePendingPackageSelection != pendingCapture ||
+            state.CaptureDialogue != dialogueCapture || state.CaptureFurniture != furnitureCapture ||
+            state.CanCapturePendingPackageSelection != ready || state.CanCaptureDialogue != ready || state.CanCaptureFurniture != ready ||
+            state.QueryCurrentPackage != package)
+            throw new InvalidDataException("Retiring actor overwrote another native owner's continuation or binding.");
+        state.CanCapturePendingPackageSelection = state.CanCaptureDialogue = state.CanCaptureFurniture = null;
+        state.CapturePendingPackageSelection = null; state.CaptureDialogue = null; state.CaptureFurniture = null;
+        state.QueryCurrentPackage = null; state.CapturePackageAssignment = null;
     }
 
     private static void NativePackageQuestRunning(RuntimeNativeNpc actor, FalloutPluginStack records,

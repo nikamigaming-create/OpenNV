@@ -137,7 +137,6 @@ internal partial class RuntimeNativeNpc
         {
             if (_selectionCaptureBlocker is not null)
                 state.RetiredSelectionCaptureDiagnostic = ReadSelectionCaptureDiagnostic(true);
-            state.ObserveSelectionCapture = null;
         }
         var authoritative = ReferenceEquals(state.CanCaptureSelectionFailure, _selectionFailureReady) &&
             ReferenceEquals(state.CaptureSelectionFailure, _selectionFailureCapture);
@@ -151,7 +150,5 @@ internal partial class RuntimeNativeNpc
             FalloutActorRetirementCandidate.Prepare(_aiStack!, state, _selectionCaptureNativeOwner,
                 CaptureSelectionFailure(allowFiniteSoundWait: true), null)?.Bind();
         }
-        if (ReferenceEquals(state.CanCaptureSelectionFailure, _selectionFailureReady)) state.CanCaptureSelectionFailure = null;
-        if (ReferenceEquals(state.CaptureSelectionFailure, _selectionFailureCapture)) state.CaptureSelectionFailure = null;
     }
 }

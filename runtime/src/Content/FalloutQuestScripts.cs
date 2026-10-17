@@ -655,6 +655,10 @@ internal sealed partial class FalloutQuestScripts
                 FalloutScriptFunction.RequireReference(receiver);
                 if (receiver.Number != 0x14) _ = _records.GetEffective(receiver.FormKey(_records));
             }
+            if (parts.Length <= 2 && operation == "placeatme")
+                return (References ?? throw new NotSupportedException("PlaceAtMe has no reference world."))
+                    .TransientExplosions.Function(() => caller?.FormKey(_records) ??
+                        (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])));
             if (parts.Length == 1 && FalloutSoundCommands.Function(_records, operation) is { } soundFunction)
                 return soundFunction;
             if (parts.Length == 1 && operation == "menumode")
@@ -878,7 +882,7 @@ internal sealed partial class FalloutQuestScripts
                 {
                     var index = arguments[1].Number;
                     if (index != Math.Truncate(index)) throw new InvalidDataException("Objective index is fractional.");
-                    return _quests.Objective(Quest(arguments[0].Identifier!).FormKey, checked((uint)index)).Displayed ? 1 : 0;
+                    return _quests.ObjectiveDisplayed(Quest(arguments[0].Identifier!).FormKey, checked((uint)index)) ? 1 : 0;
                 }),
                 "player.getactorvalue" or "player.getav" or "player.getbaseactorvalue" or "player.getbaseav" or
                     "player.getpermanentactorvalue" => new([FalloutScriptArgumentKind.Identifier], arguments =>
@@ -899,6 +903,11 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
+            if (parts.Length <= 2 && operation == "placeatme")
+            {
+                _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
+                return;
+            }
             if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);

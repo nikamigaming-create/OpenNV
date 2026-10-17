@@ -37,10 +37,7 @@ internal sealed class FalloutQuestScriptInitialization
             parents[script.FormKey] = quest;
         }
 
-        foreach (var record in records.EffectiveRecords())
-            if (record.Signature != "SCPT")
-                foreach (var header in record.ReadSubrecords().Where(field => field.Signature == "SCHR"))
-                    if (IsQuestScript(header.Data.Span)) EmbeddedQuestScripts = checked(EmbeddedQuestScripts + 1);
+        EmbeddedQuestScripts = records.CountEmbeddedQuestScripts();
 
         var ordinal = defaultDelay > 0 ? EmbeddedQuestScripts : 0;
         var definitions = new Dictionary<FalloutFormKey, FalloutQuestScriptDefinition>();
@@ -48,7 +45,7 @@ internal sealed class FalloutQuestScriptInitialization
         {
             var headers = script.ReadSubrecords().Where(field => field.Signature == "SCHR").ToArray();
             if (headers.Length != 1) throw new NotSupportedException("Standalone script header ownership is absent or ambiguous.");
-            if (!IsQuestScript(headers[0].Data.Span)) continue;
+            if (!FalloutPluginStack.IsQuestScriptHeader(headers[0].Data.Span)) continue;
             var parent = parents.GetValueOrDefault(script.FormKey);
             var delay = parent is null ? 0 : ProcessingDelay(parent);
             var phase = defaultDelay <= 0 || delay > 0 ? 0 : Phase(defaultDelay, ordinal);
@@ -57,12 +54,6 @@ internal sealed class FalloutQuestScriptInitialization
         }
         Definitions = definitions;
         Initializations = ordinal;
-    }
-
-    internal static bool IsQuestScript(ReadOnlySpan<byte> header)
-    {
-        if (header.Length != 20) throw new NotSupportedException("Script SCHR layout is unbound.");
-        return header[16] != 0;
     }
 
     internal static float ProcessingDelay(FalloutPluginRecord quest)

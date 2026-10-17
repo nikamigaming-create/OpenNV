@@ -90,6 +90,7 @@ internal partial class RuntimeNativeNpc
         if (_headCapture is null || _headReferenceState is not { } state) return;
         try
         {
+            if (!ReferenceEquals(state.CaptureHeadTracking, _headCapture)) return;
             if (_headRestore is not null) throw new NotSupportedException("Head restoration has not reached native readiness.");
             state.HeadTracking = CaptureHeadTracking().Copy();
         }

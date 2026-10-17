@@ -188,6 +188,5 @@ internal sealed partial class RuntimeNativeActorCombat
             _retiredCorpseEquipmentReady = ready; _retiredCorpseEquipmentFiniteReady = finiteReady;
             if (finiteReady) _state.CorpseEquipment = CaptureCorpseEquipment()?.Copy();
         }
-        _state.CanCaptureCorpseEquipment = null; _state.CaptureCorpseEquipment = null;
     }
 }

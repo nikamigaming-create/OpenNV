@@ -247,7 +247,7 @@ internal static class NativeNavigationContracts
         var graph = CellNavigationGraph.Load(source.RootElement, new HashSet<string> { "cell" });
         var requested = new Vector3(2.5f, 2.5f, .2f);
         var sourceSelected = new Vector3(2.5f, 2.5f, 0);
-        var region = graph.ArrivalRegion(new(-2, -2, 0), requested, sourceSelected, 2, .01f, .6f);
+        var region = graph.ArrivalRegion(new(-2, -2, 0), requested, sourceSelected, 2, .01f, .6f, out var sourceFloor);
         if (!region(new(2, 2, .01f)) || region(new(2, 2, 1)) || region(new(3.1f, 1.5f, .01f)) ||
             region(new(1, 1, 0)) || region(new(4.2f, 2, 0)))
             throw new InvalidOperationException("Source arrival changed requested radius, authored floor projection or directed reachable domain.");
@@ -255,6 +255,19 @@ internal static class NativeNavigationContracts
         try { _ = graph.ArrivalRegion(new(-2, -2, 0), requested, new(2.5f, 2.5f, 1), 2, .01f, .6f); }
         catch (InvalidDataException) { unreachable = true; }
         if (!unreachable) throw new InvalidOperationException("Source arrival accepted an unreachable selected floor.");
+        var accepted = new Vector3(2, .01f, -2);
+        bool NativeRegion(Vector3 point) => sourceFloor(new(point.X, -point.Z, point.Y));
+        var joined = NativeCapsuleNavigation.ApproachAfterProjection(accepted, accepted, new(3, 0, -3), 1, NativeRegion);
+        if (joined is not { ReferenceApproach: true, ArrivalRadius: 1 } || joined.Corridor.Count != 0 ||
+            NativeCapsuleNavigation.ApproachAfterProjection(accepted + Vector3.Right, accepted, new(3, 0, -3), 1, NativeRegion) is not null ||
+            NativeCapsuleNavigation.ApproachAfterProjection(accepted + Vector3.Up, accepted, new(3, 0, -3), 1, NativeRegion) is not null ||
+            NativeCapsuleNavigation.ApproachAfterProjection(accepted, accepted, new(3, 0, -3), 1, _ => false) is not null)
+            throw new InvalidOperationException("Projected approach lost observed endpoint arrival or its source floor authority.");
+        var boundaryAccepted = new Vector3(2.5f, 0, -.52f);
+        var observedArrival = new Vector3(2.5f, 0, -.4f);
+        if (!region(new(2.5f, .52f, 0)) || region(new(2.5f, .4f, 0)) ||
+            NativeCapsuleNavigation.ApproachAfterProjection(observedArrival, boundaryAccepted, new(3, 0, -3), 1, NativeRegion) is null)
+            throw new InvalidOperationException("Ordinary endpoint tolerance tightened the source sphere before native reference approach.");
         Console.WriteLine("OPENNV_SOURCE_ARRIVAL_CONTRACT_PASS requestedSelectedIndependent=true intermediatePrefixRetained=true portalThenRegion=true firstLongEdgeRetained=true originalRadius=true reachableFloor=true upperFloorRefused=true outsideNavmRefused=true halfSpacing=true");
     }
 

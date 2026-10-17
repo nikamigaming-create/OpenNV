@@ -289,22 +289,32 @@ internal partial class RuntimeNativeNpc
         return true;
     }
 
-    public override void _ExitTree()
+    private bool _sourceBindingsRetired;
+
+    public override void _ExitTree() => RetireSourceBindings();
+
+    internal void RetireSourceBindings()
     {
-        RetainHeadTracking();
-        RetainPendingSelection();
-        RetainBindingFailure();
-        RetainSelectionFailure();
-        RetainDialogueContinuation();
-        var retainedFurniture = RetainFurnitureContinuation();
-        ClearFurniture(retire: !retainedFurniture);
-        if (_aiReferenceState is { } furnitureState && ReferenceEquals(furnitureState.QuerySitting, _sittingQuery))
-            furnitureState.QuerySitting = null;
-        if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
+        if (_sourceBindingsRetired) return;
+        _sourceBindingsRetired = true;
+        var ownsFurniture = _furnitureCapture is not null && _aiReferenceState is { } owner &&
+            ReferenceEquals(owner.CaptureFurniture, _furnitureCapture) && ReferenceEquals(owner.CanCaptureFurniture, _furnitureCaptureReady);
+        var retainedFurniture = false;
+        try
         {
-            if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
-            state.QueryCurrentPackage = null;
-            if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
+            RetainHeadTracking();
+            RetainPendingSelection();
+            RetainBindingFailure();
+            RetainSelectionFailure();
+            RetainDialogueContinuation();
+            retainedFurniture = RetainFurnitureContinuation();
+            if (_aiReferenceState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery) && _packageEvents is not null)
+                _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
+        }
+        finally
+        {
+            ReleaseSourceBindings();
+            ClearFurniture(retire: ownsFurniture && !retainedFurniture);
         }
     }
 }

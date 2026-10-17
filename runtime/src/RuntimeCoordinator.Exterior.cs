@@ -191,6 +191,21 @@ public partial class RuntimeCoordinator
         _nativeGridRead = null;
     }
 
+    private void RetireNativeGridPreparation()
+    {
+        CancelNativeGridRead();
+        // Prepared models already own native callbacks, but are not yet in
+        // the resident presentation index. Retire them before a replacement
+        // CELL can bind the same references; deferred deletion is too late.
+        foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid))
+        {
+            NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
+            node.Free();
+        }
+        _nativeGridStaged.Clear(); _nativeGridModels.Clear();
+        _nativeGridUploads = null; _nativeGridPending = null; _nativeGridTarget = null;
+    }
+
     public override void _ExitTree()
     {
         if (_retiringNativeSession) GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=enter");

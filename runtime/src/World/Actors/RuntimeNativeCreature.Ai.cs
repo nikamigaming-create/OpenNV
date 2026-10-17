@@ -7,6 +7,7 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal sealed partial class RuntimeNativeCreature
 {
+    private const string DialogueCaptureBlocker = "Dialogue package continuation has no cold restoration owner.";
     private FalloutPluginStack? _aiRecords;
     private FalloutQuestState? _aiQuests;
     private FalloutGameTime? _aiClock;
@@ -38,6 +39,13 @@ internal sealed partial class RuntimeNativeCreature
         package = _aiPackage?.FormKey.ToString(),
         failedSelection = _failedPackage?.ToString(),
         follow = _followPackage,
+        accompanyPortal = new
+        {
+            door = _accompanyDoor?.ToString(),
+            requested = _accompanyPortalRequested,
+            transferred = _accompanyPortalTransferred,
+            wait = _accompanyPortalWait
+        },
         dialogue = _dialoguePackage,
         dialogueRequested = _dialogueRequested,
         motion = _aiState?.PackageMotion,
@@ -88,14 +96,34 @@ internal sealed partial class RuntimeNativeCreature
         _evaluateRequested = true;
     }
 
-    public override void _ExitTree()
+    private bool _sourceBindingsRetired;
+    public override void _ExitTree() => RetireSourceBindings();
+
+    internal void RetireSourceBindings()
     {
+        if (_sourceBindingsRetired) return;
+        _sourceBindingsRetired = true;
         if (_aiState is { } state && ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery))
         {
-            if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
-            state.QueryCurrentPackage = null;
-            if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
+            try
+            {
+                if (_packageEvents is not null) _aiWorld?.UnloadedPackages?.Retain(Appearance.Reference!.Value, _packageEvents);
+            }
+            finally
+            {
+                state.QueryCurrentPackage = null;
+                if (ReferenceEquals(state.CapturePackageAssignment, _packageAssignmentCapture)) state.CapturePackageAssignment = null;
+            }
         }
+    }
+
+    internal void RestoreSourceBindings()
+    {
+        if (!IsInsideTree() || _sourceBindingsRetired || _aiState is not { } state ||
+            state.QueryCurrentPackage is not null && !ReferenceEquals(state.QueryCurrentPackage, _currentPackageQuery)) return;
+        state.QueryCurrentPackage ??= _currentPackageQuery;
+        state.CapturePackageAssignment ??= _packageAssignmentCapture;
+        Combat?.RestoreSourceBindings();
     }
 
     private Func<FalloutFormKey, FalloutFormKey, double>? _aiItemCount;
@@ -121,7 +149,7 @@ internal sealed partial class RuntimeNativeCreature
             71 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1) >= 0 ? 1 : 0,
             73 => _aiWorld!.ActorFactions(Appearance.Reference!.Value).GetValueOrDefault(condition.FormArgument1, (sbyte)-1),
             56 => FalloutAiPackages.QuestRunning(condition, _aiQuests!),
-            58 or 59 or 79 or 546 => _aiQuests!.Evaluate(condition),
+            58 or 59 or 79 or 420 or 421 or 546 => _aiQuests!.Evaluate(condition),
             35 => _aiWorld!.IsEnabled(Appearance.Reference!.Value) ? 0 : 1,
             36 when condition.Argument1 == 0 => Combat!.PackagePlayer?.ModalInput == true ? 1 : 0,
             50 => FalloutAiPackages.HasTalkedToPlayer(condition, Appearance.Reference!.Value,
@@ -167,7 +195,8 @@ internal sealed partial class RuntimeNativeCreature
         var retained = !_initialPackageSelected ? _aiState!.PackageMotion : null;
         var restoreTravel = retained?.Travel is not null;
         var restoreGuard = retained?.Guard is not null;
-        var selected = restoreTravel || restoreGuard ? _aiRecords!.GetEffective(retained!.Package) :
+        var restoreAccompany = retained?.AccompanyPortal is not null;
+        var selected = restoreTravel || restoreGuard || restoreAccompany ? _aiRecords!.GetEffective(retained!.Package) :
             FalloutAiPackages.Select(_aiRecords!, Appearance.Creature, PackageCondition, _aiState!.Templates, _aiClock,
                 evaluateRunOn: true,
                 eligible: package => _aiWorld!.PackageEligible(Appearance.Reference!.Value, package, _aiClock,
@@ -185,6 +214,12 @@ internal sealed partial class RuntimeNativeCreature
         if (source is not null)
         {
             if (source.Procedure == 1) follow = FalloutFollowPackage.Read(selected!);
+            else if (source.Procedure == 7)
+            {
+                follow = FalloutFollowPackage.ReadAccompany(selected!);
+                if (follow.DefensiveCombat && _aiRecords!.RuntimeFormId(follow.Target) == 0x14)
+                    throw new NotSupportedException("Defensive Accompany of the player requires its player-hit assistance owner.");
+            }
             else if (source.Procedure == 6) travel = FalloutTravelPackage.Read(selected!);
             else if (source.Procedure == 14) guard = FalloutGuardPackage.Read(selected!);
             else if (source.Procedure == 15)
@@ -209,11 +244,17 @@ internal sealed partial class RuntimeNativeCreature
         }
         else { _guardPackage = null; _guardProgress = null; }
         _initialPackageSelected = true;
-        if (restoreTravel || restoreGuard || restoredDialogue) _packageEvents!.Restore(source!, restoreGuard ? false : restoreTravel ? _travelProgress!.Complete : true);
+        var restoreFollow = follow is not null && retained?.Package == source!.Form &&
+            _aiState!.PackageAssignment is { } followAssignment && followAssignment.Package == source.Form;
+        if (restoreTravel || restoreGuard || restoreAccompany || restoreFollow || restoredDialogue)
+            _packageEvents!.Restore(source!, restoreFollow ? _aiState!.PackageAssignment!.Done :
+                restoreGuard || restoreAccompany ? false : restoreTravel ? _travelProgress!.Complete : true);
         else _packageEvents!.Change(source);
         _aiPackage = selected; _followPackage = follow; _dialoguePackage = dialogue; _dialogueRequested = restoredDialogue;
+        _accompanyDoor = null; _accompanyDoorDestination = null; _accompanyTargetRegion = null;
+        _accompanyPortalRequested = false; _accompanyPortalTransferred = false; _accompanyPortalWait = null;
         if (travel is null && guard is null)
-            _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? "Dialogue package continuation has no cold restoration owner." : null;
+            _aiState!.ProcedureCaptureBlocker = dialogue is not null && !restoredDialogue ? DialogueCaptureBlocker : null;
         if (!restoredDialogue && _aiState!.PackageMotion is { DialogueCompleted: true } previousMotion)
             _aiState.PackageMotion = previousMotion with { DialogueCompleted = false };
         if (restoreTravel) _evaluateRequested = true;
@@ -263,6 +304,7 @@ internal sealed partial class RuntimeNativeCreature
                 _guardProgress = Combat.AdvanceGuard(_aiPackage!, guard, _guardProgress!, delta);
             else if (_followPackage is { } follow)
             {
+                if (follow.Accompany && AdvanceAccompanyPortal(follow, delta)) return;
                 var target = TargetNode(follow.Target);
                 if (target is null) { _waitingForTarget = follow.Target; return; }
                 var running = target switch
@@ -272,7 +314,8 @@ internal sealed partial class RuntimeNativeCreature
                     RuntimeNativeCreature creature => creature.Activity.Running,
                     _ => false,
                 };
-                Combat.AdvancePackageMotion(_aiPackage!, target.GlobalPosition, follow.Distance * Skeleton.UnitsToMetres, running, delta);
+                if (follow.Accompany) AdvanceAccompany(follow, target, running, delta);
+                else Combat.AdvancePackageMotion(_aiPackage!, target.GlobalPosition, follow.Distance * Skeleton.UnitsToMetres, running, delta);
             }
             else if (_dialoguePackage is { } dialogue && !_dialogueRequested)
             {
@@ -290,7 +333,9 @@ internal sealed partial class RuntimeNativeCreature
                             if (!IsInstanceValid(this) || !IsInsideTree() || !ReferenceEquals(_dialoguePackage, dialogue)) return;
                             if (dialogue.Type == 1) Combat.CompleteDialoguePackage();
                             _packageEvents!.Complete(); _evaluateRequested = true;
-                            if (ReferenceEquals(_dialoguePackage, dialogue) && dialogue.Type == 1) _aiState!.ProcedureCaptureBlocker = null;
+                            if (ReferenceEquals(_dialoguePackage, dialogue) && _packageEvents.Done &&
+                                _aiState!.ProcedureCaptureBlocker == DialogueCaptureBlocker)
+                                _aiState.ProcedureCaptureBlocker = null;
                         });
                 }
             }

@@ -23,6 +23,9 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         internal NativeNifEffectPlayback? Playback { get; } = playback;
         internal FalloutFormKey? Impact { get; } = impact;
         internal Func<Transform3D>? Follow { get; set; }
+        internal Action? Completed { get; init; }
+        internal Action<string>? Failed { get; init; }
+        internal bool Faulted { get; set; }
     }
     private readonly NativeOwnedAnimationSoundPlayer _sounds;
     private RuntimeNativeImpactDecals? _decals;
@@ -235,21 +238,32 @@ internal sealed partial class RuntimeNativeShotEffects : Node3D
         for (var i = _effects.Count - 1; i >= 0; i--)
         {
             var effect = _effects[i];
+            if (effect.Faulted) continue;
             if (effect.Follow is not null) effect.Root.Transform = effect.Follow();
-            effect.Remaining -= delta; effect.Playback?.Advance(delta);
+            try { effect.Remaining -= delta; effect.Playback?.Advance(delta); }
+            catch (Exception error) when (effect.Failed is not null)
+            {
+                effect.Faulted = true;
+                effect.Failed(error.Message);
+                GD.PushError("OPENNV_TRANSIENT_EXPLOSION_FAILED " + error.Message);
+                continue;
+            }
             if (effect.Remaining > 0 || effect.Playback is { Active: true } ||
-                effect.Root.FindChildren("*", "AudioStreamPlayer3D", true, false).OfType<AudioStreamPlayer3D>().Any(voice => voice.Playing)) continue;
+                effect.Root.FindChildren("*", "AudioStreamPlayer3D", true, false).OfType<AudioStreamPlayer3D>().Any(voice => voice.Playing) ||
+                effect.Completed is not null && !_sounds.CanRetireTransientEffect) continue;
             _effects.RemoveAt(i);
             if (effect.Impact is not null)
             {
                 _spareImpact?.Root.Free(); _spareImpact = effect;
             }
             else effect.Root.Free();
+            effect.Completed?.Invoke();
         }
     }
 
     public override void _ExitTree()
     {
+        foreach (var effect in _effects) effect.Failed?.Invoke("Explosion effect retired before natural completion.");
         _shellPrototype?.Scene.Root.Free(); _shellPrototype = null;
         _projectilePrototype?.Scene.Root.Free(); _projectilePrototype = null;
         _beamPrototype?.Scene.Root.Free(); _beamPrototype = null;

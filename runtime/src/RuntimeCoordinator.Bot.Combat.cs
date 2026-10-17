@@ -179,9 +179,7 @@ public partial class RuntimeCoordinator
         if (!float.IsFinite(range) || range <= 0) error ??= "Source weapon/projectile range is not finite and positive.";
         if (limit is null && snapshot.Drawn)
         {
-            var name = presentation.GetProperty("thirdPerson").GetBoolean() ? "NativeThirdPersonBody" : "NativeFirstPersonBody";
-            var actor = player.FindChildren("*", "", true, false).OfType<RuntimeNativePlayerActor>()
-                .SingleOrDefault(value => value.Name.ToString() == name) ??
+            var actor = player.WeaponActor ??
                 throw new InvalidOperationException("Actual held source weapon presentation is absent.");
             var transform = actor.ProjectileTransform();
             if (_nativeXr is null && !presentation.GetProperty("thirdPerson").GetBoolean())

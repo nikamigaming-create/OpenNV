@@ -45,13 +45,44 @@ internal static class QuestObjectiveProbe
             restored.Restore(saved);
             Require(JsonSerializer.Serialize(restored.Capture()) == JsonSerializer.Serialize(saved),
                 "Objective flags changed across JSON persistence.");
+            var conditionOwner = stack.GetEffective(new FalloutFormKey("Base.esm", 0x100));
+            var conditionState = new FalloutQuestState(stack);
+            conditionState.Restore(saved);
+            var displayed = new FalloutCondition(conditionOwner, 0, 1, 421, 0x100, 17, 0, 0);
+            var completed = displayed with { Function = 420 };
+            foreach (var flags in new[] { (false, false), (true, false), (true, true), (false, true) })
+            {
+                conditionState.ApplyObjective(new("ProbeQuest", 17, true, flags.Item1));
+                conditionState.ApplyObjective(new("ProbeQuest", 17, false, flags.Item2));
+                Require(conditionState.Evaluate(displayed) == (flags.Item1 ? 1 : 0) &&
+                    conditionState.Evaluate(completed) == (flags.Item2 ? 1 : 0),
+                    "Winning-owner objective conditions conflated display and completion.");
+                var cold = new FalloutQuestState(stack);
+                cold.Restore(JsonSerializer.Deserialize<FalloutQuestSnapshot[]>(JsonSerializer.Serialize(conditionState.Capture()))!);
+                Require(cold.Evaluate(displayed) == conditionState.Evaluate(displayed) &&
+                    cold.Evaluate(completed) == conditionState.Evaluate(completed),
+                    "Cold objective conditions changed their authoritative quest flags.");
+            }
             var restoredEvents = new List<FalloutQuestObjectiveChange>();
             restored.ObjectiveChanged += restoredEvents.Add;
             restored.ApplyObjective(new("ProbeQuest", 91, true, true));
             Require(restoredEvents.Count == 0, "Restore replayed a previously displayed objective.");
             Require(JsonSerializer.Serialize(restoredNotices.Capture()) == JsonSerializer.Serialize(savedNotices),
                 "Cold quest restoration duplicated or lost pending reminders.");
-            Expect<NotSupportedException>(() => state.ApplyObjective(new("ProbeQuest", 999, true, true)));
+            var beforeMissing = JsonSerializer.Serialize(state.Capture());
+            var beforeNotices = JsonSerializer.Serialize(notices.Capture());
+            var beforeRevision = state.Revision;
+            var beforeEvents = events.Count;
+            foreach (var displayFlag in new[] { false, true })
+                foreach (var value in new[] { false, true })
+                    state.ApplyObjective(new("ProbeQuest", 999, displayFlag, value));
+            Require(beforeMissing == JsonSerializer.Serialize(state.Capture()) &&
+                beforeNotices == JsonSerializer.Serialize(notices.Capture()) &&
+                beforeRevision == state.Revision && beforeEvents == events.Count &&
+                !state.ObjectiveDisplayed(conditionOwner.FormKey, 999) && !state.ObjectiveCompleted(conditionOwner.FormKey, 999) &&
+                state.Evaluate(displayed with { Argument2 = 999 }) == 0 && state.Evaluate(completed with { Argument2 = 999 }) == 0,
+                "Absent objective commands created state, emitted notifications or disagreed with condition queries.");
+            Expect<NotSupportedException>(() => state.Objective(conditionOwner.FormKey, 999));
             Expect<NotSupportedException>(() => FalloutQuestState.ReadObjectiveCommands("SetObjectiveDisplayed ProbeQuest 17 2"));
             Expect<NotSupportedException>(() => FalloutQuestState.ReadObjectiveCommands("if SomeCondition\nSetObjectiveCompleted ProbeQuest 17 1\nendif"));
             Expect<InvalidDataException>(() => new FalloutQuestState(stack).Restore([saved[0] with { Objectives = null }]));
@@ -68,7 +99,7 @@ internal static class QuestObjectiveProbe
             foreach (var name in new[] { "Base.esm", "Override.esp", "Duplicate.esm" }) File.Delete(Path.Combine(directory, name));
             Directory.Delete(directory);
         }
-        Console.WriteLine("OPENNV_QUEST_OBJECTIVES_PASS winningSource=true independentFlags=true eventOrder=true persistence=true unknownVisible=true");
+        Console.WriteLine("OPENNV_QUEST_OBJECTIVES_PASS winningSource=true independentFlags=true eventOrder=true persistence=true absentNoOp=true invalidSourceRefused=true");
     }
 
     private static byte[] Quest(string text, params uint[] indices) => Record("QUST", 0x100,

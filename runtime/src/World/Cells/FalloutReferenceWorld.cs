@@ -66,7 +66,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                         throw new InvalidDataException("Saved object animation controller is duplicated.");
                 }
             }
-            snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations);
+            try { snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations); }
+            catch (InvalidDataException error)
+            { throw new InvalidDataException($"Reference {snapshot.Reference}: {error.Message}", error); }
             snapshot.ActivationRelay?.Validate();
             snapshot.LockState?.Validate();
             snapshot.OwnershipOverride?.Validate();
@@ -435,6 +437,9 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         else Get(owner).Write(index, value);
     }
 
+    private FalloutTransientExplosions? _transientExplosions;
+    internal FalloutTransientExplosions TransientExplosions => _transientExplosions ??= new(records);
+
     internal void ValidateValueHandles()
     {
         foreach (var instance in _instances.Values)
@@ -442,6 +447,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (instance.Script is null) continue;
             foreach (var declaration in instance.Script.Declarations.Values)
             {
+                if (declaration.Kind == FalloutScriptLocalKind.Form)
+                    TransientExplosions.ValidateFormHandle(instance.Read(declaration.Index));
                 ScriptValues.ValidateLocal(declaration.Kind, instance.Read(declaration.Index),
                     $"{instance.Reference}:{declaration.Index}");
             }
@@ -558,6 +565,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
         _scriptManualSaves?.RequireCapture();
+        _transientExplosions?.RequireCapture();
         ObjectDisposedException.ThrowIf(_disposed, this);
         PlayerMoves.RequireSettled();
         if (PendingHitEventCount != 0)
@@ -832,6 +840,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             if (snapshot.PackageMotion?.Guard is { } guard)
                 FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
                     .Validate(records, validated, snapshot.Reference, guard);
+            if (snapshot.PackageMotion?.AccompanyPortal is { } accompanyPortal)
+                accompanyPortal.Validate(records, validated, snapshot.Reference, records.GetEffective(snapshot.PackageMotion.Package));
         }
         validated.PackageEvents.Restore(snapshots);
         _packageEvents = validated._packageEvents;
@@ -850,6 +860,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     public void Dispose()
     {
+        _transientExplosions?.RetirePresentation();
         UnloadedPackages = null;
         _beforeActorHit = null;
         _sounds?.Clear();

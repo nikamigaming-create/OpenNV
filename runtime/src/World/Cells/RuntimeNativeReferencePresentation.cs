@@ -29,6 +29,64 @@ internal partial class RuntimeNativeReferencePresentation : Node
     internal int WarmNodeCount => _warmNodes.Count;
     internal bool HasPrepared(FalloutFormKey key) => _nodes.ContainsKey(key) || _warmNodes.ContainsKey(key);
 
+    internal void RetireOverlappingActors(IReadOnlyList<FalloutPlacedReference> destination,
+        out IReadOnlyList<(FalloutFormKey Reference, Transform3D Pose, Vector3 Velocity)> previous)
+    {
+        previous = [];
+        var actors = destination.Select(reference => reference.FormKey).Distinct().Select(key =>
+            (Key: key, Node: _nodes.GetValueOrDefault(key) ?? _warmNodes.GetValueOrDefault(key).Node))
+            .Where(value => value.Node is OpenNV.Runtime.World.Actors.RuntimeNativeNpc or OpenNV.Runtime.World.Actors.RuntimeNativeCreature)
+            .Select(value => (value.Key, Node: (CharacterBody3D)value.Node!, Resident: _nodes.ContainsKey(value.Key))).ToArray();
+        // Validate every retained continuation before retiring any live owner.
+        // Warm actors also retain bindings, despite being outside this grid.
+        foreach (var (key, node, _) in actors)
+        {
+            if (!node.IsInsideTree() || node.IsQueuedForDeletion())
+                throw new InvalidOperationException($"Overlapping actor {key} has no live presentation to retire.");
+            _ = _world.Get(key).Capture();
+        }
+        previous = actors.Where(value => value.Resident)
+            .Select(value => (value.Key, value.Node.GlobalTransform, value.Node.Velocity)).ToArray();
+        foreach (var (key, node, _) in actors)
+        {
+            _nodes.Remove(key); _warmNodes.Remove(key);
+            UnbindObjectAnimation(key);
+            _fadeGeometry.Remove(key); _publishedOpacity.Remove(key);
+            // Free synchronously: QueueFree leaves source callbacks alive
+            // until the next frame, after the replacement factory has run.
+            NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
+            node.Free();
+        }
+    }
+
+    internal void RestoreRetiredActors(IReadOnlyList<(FalloutFormKey Reference, Transform3D Pose, Vector3 Velocity)> previous)
+    {
+        foreach (var (key, pose, velocity) in previous)
+        {
+            if (Resolve(key) is not CharacterBody3D actor)
+                throw new InvalidOperationException($"Previous resident actor {key} could not restore its retained source state.");
+            actor.GlobalTransform = pose;
+            actor.Velocity = velocity;
+        }
+    }
+
+    internal void RetireTransferredActor(FalloutFormKey key, OpenNV.Runtime.World.Actors.INativeActorPortal native)
+    {
+        var actor = native.PortalBody;
+        if (!_nodes.TryGetValue(key, out var current) || current != actor || !native.PortalTransferred)
+            throw new InvalidOperationException("NPC portal retirement does not own the committed actor.");
+        // Retain the completed transition before any replacement binds the same
+        // reference. The next residency pass materializes its actual new pose.
+        native.PortalCombat.RetireSourceBindings();
+        native.RetirePortalBindings();
+        foreach (var sound in NodeTraversal.SelfAndDescendants<NativeOwnedAnimationSoundPlayer>(actor)) sound.RetirePlayback();
+        GamebryoReferenceEnableRuntime.Apply(actor, false);
+        UnbindObjectAnimation(key);
+        _nodes.Remove(key); _fadeGeometry.Remove(key); _publishedOpacity.Remove(key);
+        actor.GetParent().RemoveChild(actor);
+        actor.QueueFree();
+    }
+
     internal void SetResidency(IReadOnlyList<FalloutPlacedReference> references, Func<FalloutPlacedReference, Node3D?> materialize,
         Func<FalloutPlacedReference, bool>? retainWarm = null)
     {
@@ -156,8 +214,16 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     private void Synchronize()
     {
-        foreach (var node in _nodes.Values)
-            foreach (var motion in node.GetChildren().OfType<RuntimeNativeDoorMotion>()) motion.Synchronize();
+        foreach (var (key, node) in _nodes)
+        {
+            // Open/Close owners are admitted from these same indexed source
+            // controllers. Static references have no native children to query
+            // for a door clock, and the returned native array needs disposal.
+            if (!_objectControllers.TryGetValue(key, out var controllers) || !RuntimeNativeDoorMotion.HasOpenClose(controllers)) continue;
+            var children = node.GetChildren();
+            using var childrenOwner = (Godot.Collections.Array)children;
+            foreach (var motion in children.OfType<RuntimeNativeDoorMotion>()) motion.Synchronize();
+        }
         foreach (var actor in Actors) SynchronizeActorAppearance?.Invoke(actor);
         foreach (var reference in _references)
         {

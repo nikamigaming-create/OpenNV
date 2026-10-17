@@ -273,8 +273,8 @@ internal partial class RuntimeNativeNpc
         var package = _aiStack!.GetEffective(assignment.Package);
         if (package.Signature != "PACK") return;
         var declaration = FalloutScriptPackage.Read(package);
-        if (declaration.Procedure != 6 || declaration.LocationType != 0 ||
-            _aiStack.GetEffective(_aiWorld!.Get(declaration.LocationReference!.Value).Base).Signature == "FURN") return;
+        if (declaration.Procedure != 6 || declaration.LocationType is not (0 or 2) ||
+            declaration.LocationType == 0 && _aiStack.GetEffective(_aiWorld!.Get(declaration.LocationReference!.Value).Base).Signature == "FURN") return;
         _ = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
         assignment.Bind(_aiStack!, _packageEvents!);
     }
@@ -384,8 +384,10 @@ internal partial class RuntimeNativeNpc
             // errors retain their separate exactly-once failure latch.
             _aiError = null; _failedPackage = null;
             if (_aiPackage?.FormKey == selected?.FormKey) return;
-            if (!forced && _nativeMarkerTravel is { } markerTravel && _nativeMarkerTravelProgress is { Complete: false } &&
-                markerTravel.MustReach && selected?.FormKey != markerTravel.Form)
+            if (_nativeMarkerTravel is { } markerTravel && _nativeMarkerTravelProgress is { } markerProgress &&
+                markerTravel.RetainsSelection(markerProgress.Complete,
+                    !forced && !markerProgress.Complete && !markerTravel.MustReach && markerTravel.ContinueIfPlayerNear && Combat!.PackagePlayerInSameCell(), forced) &&
+                selected?.FormKey != markerTravel.Form)
             {
                 _selectedSourcePackage = markerTravel.Form;
                 return;
@@ -423,6 +425,7 @@ internal partial class RuntimeNativeNpc
                 _escortPackage = null; _escortProgress = null; _escortDestination = null; _escortStatus = null;
                 _editorTravel = null; _editorTravelProgress = null; _editorTravelDestination = null; _editorTravelStatus = null;
                 _nativeMarkerTravel = null; _nativeMarkerTravelProgress = null; _nativeMarkerTravelDestination = null; _nativeMarkerTravelRestored = false;
+                _pendingCurrentLocationTravel = null;
                 if (_aiReferenceState?.ProcedureCaptureBlocker == MarkerTravelCaptureBlocker)
                     _aiReferenceState.ProcedureCaptureBlocker = null;
             }
@@ -435,6 +438,7 @@ internal partial class RuntimeNativeNpc
             if (_packageIdleSource.Procedure == 13) { BeginPatrol(selected); return; }
             if (_packageIdleSource.Procedure == 14) { BeginGuard(selected, initializing); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 3 }) { BeginEditorTravel(selected, initializing); return; }
+            if (_packageIdleSource is { Procedure: 6, LocationType: 2 }) { BeginMarkerTravel(selected, initializing); return; }
             if (_packageIdleSource is { Procedure: 6, LocationType: 0, LocationReference: { } marker } &&
                 _aiStack.GetEffective(_aiWorld!.Get(marker).Base).Signature != "FURN")
             { BeginMarkerTravel(selected, initializing); return; }
@@ -542,7 +546,7 @@ internal partial class RuntimeNativeNpc
         53 => (float)(_aiWorld ?? throw new NotSupportedException("AI script-variable query has no shared reference owner."))
             .ReadVariable(_questState!, condition.FormArgument1, condition.Argument2),
         56 => FalloutAiPackages.QuestRunning(condition, _questState!),
-        58 or 59 or 79 or 546 => _questState!.Evaluate(condition),
+        58 or 59 or 79 or 420 or 421 or 546 => _questState!.Evaluate(condition),
         63 => Activity.Attacked ? 1 : 0,
         69 => Appearance.Race == condition.FormArgument1 ? 1 : 0,
         70 => (Appearance.Female ? 1u : 0u) == condition.Argument1 ? 1 : 0,

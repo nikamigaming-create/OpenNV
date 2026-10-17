@@ -5,6 +5,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Actors;
+using OpenNV.Runtime.World.Cells;
 
 public partial class NativeNifInstanceAudit
 {
@@ -88,6 +89,8 @@ public partial class NativeNifInstanceAudit
         var reference = records.GetEffective(records.RuntimeFormKey(Convert.ToUInt32(actorHex, 16)));
         var actorBase = FalloutDialogueTopic.RequiredForm(reference, "NAME");
         var appearance = FalloutNpcAppearanceResolver.Resolve(records, actorBase, reference.FormKey);
+        using var world = new FalloutReferenceWorld(records);
+        var referenceState = world.Get(reference.FormKey);
         var actor = RuntimeNativeNpc.Create(appearance, source, 0.0142875f,
             (npc, part, nif, geometry) => NativeNpcMaterial.Resolve(npc, part, nif, geometry, records, Colors.Black));
         AddChild(actor);
@@ -95,7 +98,7 @@ public partial class NativeNifInstanceAudit
         {
             var part = FalloutBodyPartLook.Read(records.GetEffective(records.RuntimeFormKey(0x1d)))!;
             var target = Vector3.Zero;
-            actor.ConfigureHeadTracking(records, source, _ => target);
+            actor.ConfigureHeadTracking(records, source, _ => target, referenceState);
             target = actor.HeadTargetPoint!.Value + new Vector3(2, 0, -2);
             actor.ApplyHeadTrackingCommand(records.RuntimeFormKey(0x14));
             var bone = actor.Skeleton.BoneIndex(part.TargetNode);
@@ -177,8 +180,16 @@ public partial class NativeNifInstanceAudit
                 packageCommands,
                 scope = "owned-source-binding-and-physical-bone-component-not-gameplay-parity",
             }));
-            GD.Print($"OPENNV_OWNED_HEAD_TRACKING_PASS stages={stageCommands.Length} packageCommands={packageCommands.Count}");
+            var retained = actor.CaptureHeadTracking();
+            referenceState.HeadTracking = retained;
+            Func<FalloutActorHeadTrackingSnapshot> replacement = () => throw new InvalidDataException("Retiring actor invoked the replacement head owner.");
+            referenceState.CaptureHeadTracking = replacement;
+            actor.Free();
+            Require(ReferenceEquals(referenceState.HeadTracking, retained) && referenceState.CaptureHeadTracking == replacement &&
+                referenceState.HeadTrackingCaptureBlocker is null, "Retiring actor replaced another owner's head continuation or capture callback.");
+            referenceState.CaptureHeadTracking = null;
+            GD.Print($"OPENNV_OWNED_HEAD_TRACKING_PASS stages={stageCommands.Length} packageCommands={packageCommands.Count} replacementCaptureOwnerPreserved=true");
         }
-        finally { actor.Free(); }
+        finally { if (GodotObject.IsInstanceValid(actor)) actor.Free(); }
     }
 }

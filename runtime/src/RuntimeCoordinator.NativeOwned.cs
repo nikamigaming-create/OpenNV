@@ -117,7 +117,7 @@ public partial class RuntimeCoordinator
                 viewPitchRadians = _nativePlayer.ViewPitchRadians,
                 velocity = Vector(_nativePlayer.Velocity),
                 onFloor = _nativePlayer.IsOnFloor(),
-                sprinting = _nativePlayer.Sprinting,
+                running = _nativePlayer.Running,
                 jumpCount = _nativePlayer.JumpCount,
                 stepCount = _nativePlayer.StepCount,
                 stepBlocked = _nativePlayer.StepBlocked,
@@ -127,6 +127,11 @@ public partial class RuntimeCoordinator
                 collisionContacts = _nativePlayer.CollisionContacts,
                 modalInput = _nativePlayer.ModalInput,
                 input = _nativePlayer.InputState,
+                activation = detailed ? _nativePlayer.ObserveActivation(collider => new
+                {
+                    collisionReference = _nativeReferenceEvents?.CollisionReference(collider.GetInstanceId())?.ToString(),
+                    activatableReference = _nativeReferenceEvents?.AimedReference(collider)?.FormKey.ToString(),
+                }) : null,
                 furniture = _nativePlayer.FurnitureState,
                 movementEnabled = _nativePlayer.GetMeta("opennv_source_movement_enabled", false).AsBool(),
                 lookingEnabled = _nativePlayer.GetMeta("opennv_source_looking_enabled", false).AsBool(),
@@ -394,7 +399,9 @@ public partial class RuntimeCoordinator
             if (_nativeSessionTransitioning) { CancelNativeLauncherEntry(); return; }
             var stack = _nativePluginStack ??
                 throw new InvalidOperationException("Native plugin stack was not indexed.");
-            if (_nativeOpeningControls is not null) CreateNativeQuestScripts();
+            var selectedContinue = _nativeOpeningRestore is not null &&
+                (_continueAfterRestart || _launcherEntry == NativeGodotLauncherEntry.Continue);
+            if (_nativeOpeningControls is not null && !selectedContinue) CreateNativeQuestScripts();
             menu.SetReady(stack, _nativeOpeningRestore is not null);
             if (_continueAfterRestart && _nativeOpeningRestore is not null)
             {
@@ -538,6 +545,7 @@ public partial class RuntimeCoordinator
             _nativeReferences = new(stack, auxiliary: _nativeScriptStorage?.Auxiliary,
                 ini: _nativeScriptStorage?.Ini, ui: _nativeUi, controls: _nativeScriptStorage?.Controls);
             _nativeReferences.RestoreEncounterZones(restore.State.EncounterZones);
+            _nativeReferences.TransientExplosions.Restore(restore.State.TransientExplosions);
             if (restore.State.References is { } savedReferences) _nativeReferences.Restore(savedReferences);
             else SetMeta("opennv_reference_state_divergence", "Legacy save has no reference-instance state.");
             _nativeReferences.RestoreActorOverrides(restore.State.ActorOverrides);
@@ -593,7 +601,6 @@ public partial class RuntimeCoordinator
         {
             if (restore is null)
                 throw new NotSupportedException($"Saved CELL {activeCell} has no world streaming owner.");
-            activeScene = FalloutCellSceneReader.Read(stack, activeCell);
             var restored = FalloutNativeCampaignSave.RestorePlayerPosition(restore.State, _configuration.Player.SpawnCenterHeightMeters);
             var units = _configuration.World.GameUnitsToMeters;
             position = [restored[0] / units, -restored[2] / units, restored[1] / units];
@@ -860,6 +867,8 @@ public partial class RuntimeCoordinator
         }
         if (baseObject.Signature == "NPC_")
         {
+            RuntimeNativeNpc? actor = preparedNpc;
+            var previousActor = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference.FormKey);
             try
             {
                 var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
@@ -871,7 +880,7 @@ public partial class RuntimeCoordinator
                 }
                 var equippedArmor = _nativeReferences!.EquippedArmor(reference.FormKey,
                     _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1, _nativeGlobals);
-                var actor = preparedNpc ?? RuntimeNativeNpc.Create(_nativePluginStack!, source, reference,
+                actor ??= RuntimeNativeNpc.Create(_nativePluginStack!, source, reference,
                     _configuration.World.GameUnitsToMeters, (appearance, part, nif, geometry) =>
                         NativeNpcMaterial.Resolve(appearance, part, nif, geometry, _nativePluginStack!,
                             NativeAmbient(cell.Cell)), equippedArmor, selection, _nativeReferences.ActorAppearanceOverride(reference.FormKey));
@@ -916,16 +925,20 @@ public partial class RuntimeCoordinator
                 GD.Print($"OPENNV_NATIVE_NPC_READY reference={reference.FormKey} npc={reference.Base} " +
                     $"bones={actor.Skeleton.Node.GetBoneCount()} parts={actor.Parts.Count} " +
                     "animation=unresolved gameplay=unresolved parity=unmeasured");
+                actor = null;
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
             {
                 _nativeActorDivergences[reference.FormKey.ToString()] = error.Message;
                 GD.PushError($"OPENNV_NATIVE_NPC_DIVERGENCE reference={reference.FormKey}: {error.Message}");
             }
+            finally { if (actor is not null) DiscardNativeActor(actor, previousActor); }
             return;
         }
         if (baseObject.Signature == "CREA")
         {
+            RuntimeNativeCreature? actor = null;
+            var previousActor = _nativeReferencePresentation?.Nodes.GetValueOrDefault(reference.FormKey);
             try
             {
                 var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey,
@@ -935,7 +948,7 @@ public partial class RuntimeCoordinator
                     Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "source-leveled-none"));
                     return;
                 }
-                var actor = RuntimeNativeCreature.Create(_nativePluginStack!, source, reference,
+                actor = RuntimeNativeCreature.Create(_nativePluginStack!, source, reference,
                     _nativeReferences!.Get(reference.FormKey), _configuration.World.GameUnitsToMeters);
                 actor.Transform = ReferenceTransform(reference);
                 try { RuntimeNativeActorContacts.Configure(actor, actor.Skeleton, _configuration.Player.CollisionLayer); }
@@ -961,12 +974,14 @@ public partial class RuntimeCoordinator
                 Observe(parityScope, ParityIdentity(reference), NativeReferenceState(reference, baseObject, "skinned-creature-presentation"));
                 GD.Print($"OPENNV_NATIVE_CREATURE_READY reference={reference.FormKey} creature={reference.Base} " +
                     $"bones={actor.Skeleton.Node.GetBoneCount()} parts={actor.Parts.Count} idle=source-KF gameplay=unresolved parity=unmeasured");
+                actor = null;
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or FileNotFoundException)
             {
                 _nativeActorDivergences[reference.FormKey.ToString()] = error.Message;
                 GD.PushError($"OPENNV_NATIVE_CREATURE_DIVERGENCE reference={reference.FormKey}: {error.Message}");
             }
+            finally { if (actor is not null) DiscardNativeActor(actor, previousActor); }
             return;
         }
         if (baseObject.ModelPath is null)
@@ -1065,19 +1080,21 @@ public partial class RuntimeCoordinator
         var player = _nativePlayer!;
         var previousModal = player.ModalInput;
         player.SetModalInput(true);
+        var portalRequest = NativeBotPortal(reference.FormKey) is { } portal
+            ? _botInteractions.RequestPortal(reference.FormKey.ToString(), portal.DestinationCell.ToString()) : 0;
         // Activation queues streaming. A presentation failure must not become a
         // permanent source-script fault or consume the reciprocal door's state.
-        _nativeDoorRead = ConsumeNativeDoorTransition(reference, player, previousModal);
+        _nativeDoorRead = ConsumeNativeDoorTransition(reference, player, previousModal, portalRequest);
     }
 
     private async Task ConsumeNativeDoorTransition(FalloutPlacedReference reference,
-        RuntimeNativePlayer player, bool previousModal)
+        RuntimeNativePlayer player, bool previousModal, long portalRequest)
     {
         try
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (_nativeSessionTransitioning || _retiringNativeSession) throw new OperationCanceledException("Door session retired.");
-            await StreamNativeDoorTransition(reference);
+            await StreamNativeDoorTransition(reference, portalRequest);
         }
         catch (Exception error)
         {
@@ -1088,7 +1105,7 @@ public partial class RuntimeCoordinator
     }
 
     private async System.Threading.Tasks.Task StreamNativeDoorTransition(
-        FalloutPlacedReference reference)
+        FalloutPlacedReference reference, long portalRequest)
     {
         var current = _nativeCurrentCellRoot ??
             throw new InvalidOperationException("Native door activation has no current CELL root.");
@@ -1103,10 +1120,16 @@ public partial class RuntimeCoordinator
             throw new InvalidOperationException("Native door activation has no authoritative player.");
         var sky = _nativeSkyLighting ?? throw new InvalidOperationException("Door transition has no sky owner.");
         var previousSky = sky.Capture();
+        var previousMode = current.ProcessMode;
+        var scripts = _nativeQuestScripts!;
+        var previousScriptMode = scripts.ProcessMode;
         var grid = transition.DestinationScene.Cell.Worldspace is { } world ? ResolveExterior(world, entry.Position) : null;
         var targetScene = grid?.Scene ?? transition.DestinationScene;
-        var followers = BeginFollowerDoorTransfer(current, targetScene.Cell.FormKey, entry);
+        var followerEntry = new FalloutReferencePlacement(targetScene.Cell.FormKey, entry.Position, entry.RotationRadians);
+        var followers = BeginFollowerTransfer(current, followerEntry);
         Node3D? targetRoot = null;
+        var previousPresentation = _nativeReferencePresentation!;
+        IReadOnlyList<(FalloutFormKey Reference, Transform3D Pose, Vector3 Velocity)> retiredActors = [];
         (CollisionObject3D Body, CollisionObject3D.DisableModeEnum Mode)[] arrivalCollision = [];
         try
         {
@@ -1115,47 +1138,42 @@ public partial class RuntimeCoordinator
             if (grid is not null) grid = grid with { Scene = targetScene };
             sky.EnterCell(targetScene.Cell, _nativeGlobals, entry.Position);
             SetLoadingStatus("Loading the world");
+            current.ProcessMode = ProcessModeEnum.Disabled;
+            scripts.ProcessMode = ProcessModeEnum.Disabled;
+            RetireNativeGridPreparation();
+            previousPresentation.RetireOverlappingActors(targetScene.References, out retiredActors);
             targetRoot = await BuildNativeCellRootResponsive(targetScene, null, sourceSide: false);
             targetRoot.ProcessMode = ProcessModeEnum.Disabled;
             if (grid is not null) AddExteriorLandscape(targetRoot, grid);
             AddChild(targetRoot);
             if (targetScene.Cell.Lighting is not null) AddNativeCellEnvironment(targetRoot, targetScene);
             else AddExteriorEnvironment(targetRoot, targetScene.Cell);
-            if (followers.Count != 0)
-            {
-                current.ProcessMode = ProcessModeEnum.Disabled;
-                foreach (var actor in targetRoot.FindChildren("*", "", true, false).OfType<RuntimeNativeCreature>()
-                    .Where(actor => followers.Any(follower => follower.Reference == actor.Appearance.Reference)))
-                    actor.Combat!.PreparePortalArrival();
-                // Gameplay remains stopped while arrival is checked. Godot's
-                // default DisableMode removes bodies from physics as well, so
-                // explicitly retain destination collision during this query.
-                arrivalCollision = targetRoot.FindChildren("*", "", true, false).OfType<CollisionObject3D>()
-                    .Select(body => (body, body.DisableMode)).ToArray();
-                foreach (var (body, _) in arrivalCollision) body.DisableMode = CollisionObject3D.DisableModeEnum.KeepActive;
-                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-                await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
-                PlaceDoorFollowers(targetRoot, targetScene, grid?.Cells, entry, followers);
-            }
             var arrival = TeleportTransform(entry);
+            arrivalCollision = await PrepareFollowerArrival(current, targetRoot, targetScene, grid?.Cells,
+                followerEntry, arrival, followers);
             if (grid is not null)
             {
                 SetLoadingStatus("Preparing the distant world");
                 await targetRoot.GetChildren().OfType<RuntimeNativeExteriorLod>().Single().PrepareInitialSelection(arrival.Origin);
             }
             CommitNativeWorldTransfer(current, active, targetRoot, targetScene, arrival);
+            // Persistent exterior doors can be authored in a different CELL
+            // from the grid selected by their XTEL arrival coordinates.
+            _botInteractions.CommitPortal(reference.FormKey.ToString(), portalRequest, targetScene.Cell.FormKey.ToString());
         }
         catch
         {
             targetRoot?.Free();
             sky.Restore(previousSky);
-            RollbackFollowerDoorTransfer(followers);
-            current.ProcessMode = ProcessModeEnum.Inherit;
+            RollbackFollowerTransfer(followers);
+            previousPresentation.RestoreRetiredActors(retiredActors);
+            current.GetChildren().OfType<RuntimeNativeReferenceEvents>().Single().SetResidency(active, current);
+            current.ProcessMode = previousMode;
             DiscoverNativeCellReferences(active);
             ObserveNativeResidentReferences(active);
             throw;
         }
-        finally { CloseNativeLoadingScreens(); }
+        finally { scripts.ProcessMode = previousScriptMode; CloseNativeLoadingScreens(); }
         foreach (var (body, mode) in arrivalCollision) body.DisableMode = mode;
         // The destination's actors have only just entered the tree. Use the
         // shared autosave owner so their first updates can publish capturable

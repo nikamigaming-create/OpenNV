@@ -76,6 +76,9 @@ internal sealed partial class FalloutReferenceWorld
         return (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    internal FalloutReferencePlacement SpawnPlacement(FalloutFormKey reference,
+        FalloutReferencePlacement player, float unitsToMetres) => SpatialPlacement(reference, player, unitsToMetres, requireFacing: true);
+
     private FalloutReferencePlacement SpatialPlacement(FalloutFormKey reference,
         FalloutReferencePlacement? player, float unitsToMetres, bool requireFacing = false)
     {

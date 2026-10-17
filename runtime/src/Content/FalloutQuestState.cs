@@ -225,8 +225,10 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     internal void ApplyObjective(FalloutFormKey quest, uint index, bool display, bool value)
     {
         var state = Require(quest);
-        if (!state.Objectives.TryGetValue(index, out var before))
-            throw new NotSupportedException($"Quest {quest} has no declared objective {index}.");
+        // Owned commands may retain a removed objective index. The engine
+        // completes that command without creating an objective or stopping
+        // the result script; only declared objectives have mutable state.
+        if (!state.Objectives.TryGetValue(index, out var before)) return;
         var after = display ? before with { Displayed = value } : before with { Completed = value };
         if (after == before) return;
         state.Objectives[index] = after;
@@ -280,6 +282,12 @@ internal sealed class FalloutQuestState(FalloutPluginStack stack, FalloutHudNoti
     internal FalloutQuestObjectiveSnapshot Objective(FalloutFormKey quest, uint index) =>
         Require(quest).Objectives.TryGetValue(index, out var objective) ? objective :
             throw new NotSupportedException($"Quest {quest} has no declared objective {index}.");
+
+    internal bool ObjectiveDisplayed(FalloutFormKey quest, uint index) =>
+        Require(quest).Objectives.TryGetValue(index, out var objective) && objective.Displayed;
+
+    internal bool ObjectiveCompleted(FalloutFormKey quest, uint index) =>
+        Require(quest).Objectives.TryGetValue(index, out var objective) && objective.Completed;
 
     internal double Variable(FalloutFormKey quest, uint index) => Require(quest).Variables.TryGetValue(index, out var value)
         ? value : throw new NotSupportedException($"Quest {quest} has no declared variable {index}.");

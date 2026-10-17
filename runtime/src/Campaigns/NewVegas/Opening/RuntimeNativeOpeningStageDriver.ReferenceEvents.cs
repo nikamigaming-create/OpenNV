@@ -251,8 +251,8 @@ internal partial class RuntimeNativeOpeningStageDriver
     internal double ActorValue(FalloutFormKey actor, string name) => _pluginStack.RuntimeFormId(actor) == 0x14 ?
         _scriptHost.PlayerActorValue(name) : _scripts.References!.ActorValue(actor, name);
     private static bool IsSpecial(string name) => FalloutNativeVigorResolver.AttributeNames.Any(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
-    private double ReadPlayerActorValue(string name, FalloutActorValueRead kind) => IsSpecial(name)
-        ? _playerActorValues.Read(FalloutPlayerActorValues.SpecialValue(name), kind)
+    private double ReadPlayerActorValue(string name, FalloutActorValueRead kind) => FalloutPlayerActorValues.HasPool(name)
+        ? _playerActorValues.Read(FalloutPlayerActorValues.PoolValue(name), kind)
         : _playerSkills.IsSkill(name) ? _playerSkills.ReadSkill(name, kind)
         : kind == FalloutActorValueRead.Current ? _scriptHost.PlayerActorValue(name) :
             throw new NotSupportedException($"Player base/permanent value {name} has no pool/formula owner.");

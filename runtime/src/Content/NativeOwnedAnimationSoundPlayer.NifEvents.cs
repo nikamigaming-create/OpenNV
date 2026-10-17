@@ -204,8 +204,11 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
         _streams.Clear();
     }
 
-    public override void _ExitTree()
+    public override void _ExitTree() => RetirePlayback();
+
+    internal void RetirePlayback()
     {
+        if (_retired) return;
         _retired = true;
         // Only a proven finite, already-playing source generation has an
         // independent native node. Loops and other retirements still refuse.

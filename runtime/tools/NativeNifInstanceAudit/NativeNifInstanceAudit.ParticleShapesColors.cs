@@ -34,6 +34,16 @@ public partial class NativeNifInstanceAudit
             if (draw.VisibleInstanceCount != 1 || Enumerable.Range(0, 4).Any(channel =>
                 MathF.Abs(draw.Buffer[12 + channel] - expected[channel]) > .00001f))
                 throw new InvalidDataException("Native MultiMesh RGBA differs from independently interpolated source key channels.");
+            var beforeToggle = draw.Buffer;
+            var colorActivity = emitter with
+            { ControllerType = "NiPSysModifierActiveCtlr", Variable1 = "KeyColor", Variable2 = "", Interpolator = 21 };
+            first.Bind(file, colorActivity).Apply(0); first.Publish();
+            if (Enumerable.Range(0, 4).Any(channel => draw.Buffer[12 + channel] != 1))
+                throw new InvalidDataException("Disabled source color modifier still changed native particle RGBA.");
+            first.Bind(file, colorActivity with { Interpolator = 8 }).Apply(0); first.Publish();
+            if (!beforeToggle.SequenceEqual(draw.Buffer) ||
+                !state.SequenceEqual(Convert.FromBase64String(JsonSerializer.SerializeToElement(first.Observation).GetProperty("state").GetString()!)))
+                throw new InvalidDataException("Reenabled source color modifier changed simulation or failed to restore identical draw output.");
             foreach (var mode in new[] { "cycle", "manager", "radius", "data-type", "data-null", "empty-color", "spawn" })
             {
                 var invalid = FalloutNifFile.Read(ParticleShapesColorsFixture(mode: mode));
@@ -154,6 +164,7 @@ public partial class NativeNifInstanceAudit
         blocks.Add(("NiNode", sphere));
         blocks.Add(("NiColorData", ParticleColorKeysFixture(interpolation, mode == "empty-color")));
         blocks.Add(("NiColorData", Bytes(writer => writer.Write(0U))));
+        blocks.Add(("NiBoolInterpolator", Bytes(writer => { writer.Write(false); writer.Write(-1); })));
         return WriteParticleShapeColorNif(blocks, names);
     }
 
