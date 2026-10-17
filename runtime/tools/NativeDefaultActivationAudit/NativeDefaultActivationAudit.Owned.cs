@@ -44,7 +44,7 @@ public partial class NativeDefaultActivationAudit
             var quests = new FalloutQuestState(records); quests.Restore(saved.Quests);
             var globals = FalloutGlobalState.Read(records); globals.Restore(saved.Globals);
             var level = saved.Vitals.Level;
-            var sourceCell = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Placement(identity).Cell));
+            var sourceCell = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Placement(identity).Cell), .0142875f);
             var reference = sourceCell.References.Single(value => value.FormKey == identity);
             var cell = sourceCell with { References = [reference] }; world.LoadCell(cell);
             var state = world.Get(identity);

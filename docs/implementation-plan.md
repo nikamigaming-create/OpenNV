@@ -2,7 +2,7 @@
 
 ## Objective and order
 
-Restore a practical FNV Godot/OpenXR playtest for Quest 3 over Air Link, consolidate
+Repair the failed flat FNV playtest, then verify Godot/OpenXR for Quest 3 over Air Link, consolidate
 it onto clean main, then prepare one local release candidate. Continue with clean
 FO3, followed by mods, then TTW. Use source and reproduced behavior to decide what
 survives; there is no requirement to preserve an unfinished architecture.
@@ -26,6 +26,12 @@ runs, not a completed campaign. Final creature portal navigation, post-travel
 population/persistence, performance and the ED-E route remain open.
 
 ## Active loop
+
+Package f failed the user's October 17 flat test. First reproduce and repair
+Continue/spatial saves, missing quest text, absent creatures, passive human and
+creature combat, and shadow pop-in. Use the recording/log and copied save; require
+actual terrain play after component checks. See current-work.md for verified
+state. The previous headset-ready handoff is withdrawn.
 
 1. Complete compiler/format/contract checks and the owned-content audit.
 2. Export a fresh Release from a committed source tree. Use isolated vanilla
@@ -60,12 +66,11 @@ local source bundle and the accounted dirty-source snapshot; remove redundant
 branches/worktrees only after their contents are safe. Do not accumulate captures,
 build caches or duplicate packages.
 
-PR #208 completed the runtime promotion with all five CI checks passing and local
-main equal to origin/main. A clean asset-free package and dedicated Quest 3/Air
-Link launcher now use an isolated accepted save. Physical testing is next; see
-current-work.md for the exact candidate and remaining gameplay issues. Start any
-subsequent implementation on one fresh feature branch from current origin/main.
-Do not advertise unavailable FO3 VR routes or campaign completion.
+Package f from the earlier runtime promotion failed the user's flat test despite
+its narrower passing gates. Keep it as historical evidence. A replacement needs
+the repair gates and actual play observations in current-work.md before another
+headset handoff. Start subsequent work on a fresh feature branch from current
+origin/main. Do not advertise unavailable FO3 VR routes or campaign completion.
 
 ## Required checks before pushing
 

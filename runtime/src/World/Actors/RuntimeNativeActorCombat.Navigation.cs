@@ -20,6 +20,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private int _routeRefinements, _routeRefinementRequests;
     private string? _coarseRouteError;
     private NativeNavigationIntent? _routeIntent;
+    private Func<Vector3, bool>? _routeArrival;
     private int _retiredPursuitSearches;
     private NativeNavigationWorkSnapshot? _routeWork;
     private void DisposeRouteSearch()
@@ -36,10 +37,8 @@ internal sealed partial class RuntimeNativeActorCombat
         if (!_mover!.IsOnFloor() && _pursuitPath.Length == 0) return null;
         _routeClock -= delta;
         if (_routeDoor is not null && target.DistanceTo(_routeTarget) > _radius) ResetDoorNavigation();
-        if (_routeSearch is not null && target.DistanceTo(_routeTarget) > _radius)
-        {
-            DisposeRouteSearch(); _routeClock = 0;
-        }
+        // Finish this bounded query against its captured destination. Repeated
+        // target motion must not discard every query before pursuit can move.
         while (_pursuitCursor < _pursuitPath.Length)
         {
             var offset = _pursuitPath[_pursuitCursor] - _actor.GlobalPosition;
@@ -72,21 +71,26 @@ internal sealed partial class RuntimeNativeActorCombat
             _waypointDistance = float.PositiveInfinity;
             try
             {
-                var coarse = _context!.Route(_actor.GlobalPosition, target);
+                var context = _context!;
+                var source = _state.Engagement is not null
+                    ? context.RouteRegion?.Invoke(_actor.GlobalPosition, target, stoppingDistance) : null;
+                var coarse = source?.Points ?? context.Route(_actor.GlobalPosition, target);
                 if (coarse.Length == 0) throw new InvalidOperationException("No source navigation corridor.");
-                var intent = _routeIntent = NativeCapsuleNavigation.Intent(_actor.GlobalPosition, coarse, target, stoppingDistance);
+                var intent = _routeIntent = NativeCapsuleNavigation.Intent(_actor.GlobalPosition, coarse, target, stoppingDistance,
+                    projection: source?.Projection);
+                _routeArrival = intent.Projection is not null ? source?.Arrival : null;
                 _routeEnd = intent.Target;
                 _routeArrivalRadius = intent.ArrivalRadius;
                 _routeSpacing = Math.Max(.3f, _radius * 2);
                 _routeRefinements = 0;
                 _coarseRouteError = null;
                 IReadOnlyList<Vector3> prefix = intent.ReferenceApproach ? [intent.Target] : intent.Corridor;
-                _routeProbe = new(NativeCapsuleNavigation.FirstCorridorContact(_mover, _actor.GlobalPosition, prefix), _context.CollisionReference);
+                _routeProbe = new(NativeCapsuleNavigation.FirstCorridorContact(_mover, _actor.GlobalPosition, prefix), context.CollisionReference);
                 // NAVM supplies bounded intent; the complete actor capsule and
                 // ordinary support/residency queries validate every guide edge.
                 _routeSearch = NativeCapsuleNavigation.Search(_mover, _actor.GlobalPosition, intent.Target,
-                    _context.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius,
-                    intent.Corridor).GetEnumerator();
+                    context.StepHeight, _routeSpacing, context.Resident, 512, _routeProbe, _routeArrivalRadius,
+                    intent.Corridor, _routeArrival).GetEnumerator();
                 _routeClock = .5;
             }
             catch (InvalidOperationException error)
@@ -145,7 +149,7 @@ internal sealed partial class RuntimeNativeActorCombat
                 _routeRefinementRequests++;
                 _routeSearch = NativeCapsuleNavigation.Search(_mover!, _actor.GlobalPosition, _routeEnd,
                     _context!.StepHeight, _routeSpacing, _context.Resident, 512, _routeProbe, _routeArrivalRadius,
-                    _routeIntent!.Corridor).GetEnumerator();
+                    _routeIntent!.Corridor, _routeArrival).GetEnumerator();
                 return;
             }
             BeginDoorNavigation();

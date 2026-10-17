@@ -28,10 +28,17 @@ internal sealed partial class CellNavigationGraph
         {
             if (!point.IsFinite()) return false;
             var floor = NearestNode(point);
-            var horizontal = new Vector2(point.X - floor.Point.X, point.Y - floor.Point.Y);
+            // Controller roots are above the source surface by their native
+            // support margin. A perpendicular closest-point query on a slope
+            // moves sideways and falsely looks outside the source floor.
+            var plane = floor.Node.NavMesh.VerticalPlanePoint(floor.Node.TriangleIndex, point);
+            var selectedPlane = selectedFloor.Node.NavMesh.VerticalPlanePoint(selectedFloor.Node.TriangleIndex, point);
+            if (plane is null || selectedPlane is null) return false;
+            var projected = floor.Node.NavMesh.ClosestPoint(floor.Node.TriangleIndex, plane.Value);
+            var horizontal = new Vector2(point.X - projected.X, point.Y - projected.Y);
             return reached.Contains(floor.Node) && horizontal.LengthSquared() <= horizontalTolerance * horizontalTolerance &&
-                MathF.Abs(point.Z - floor.Point.Z) < heightTolerance &&
-                MathF.Abs(floor.Point.Z - selectedFloor.Point.Z) < heightTolerance;
+                MathF.Abs(point.Z - projected.Z) < heightTolerance &&
+                MathF.Abs(projected.Z - selectedPlane.Value.Z) < heightTolerance;
         }
         sourceFloor = SameFloor;
         return point => point.DistanceSquaredTo(requested) <= radius * radius && SameFloor(point);

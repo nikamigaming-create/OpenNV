@@ -1,75 +1,84 @@
 # Current work
 
-Updated 2026-10-17. The vanilla FNV local playtest is ready for the user's Quest 3
-and Air Link test. All subagents and gameplay processes are stopped. Priority
-remains FNV, standalone FO3, mods, then TTW. No campaign or physical-headset
-completion is claimed.
+Updated 2026-10-17. The user's flat playtest rejected package f: missing quest
+text, passive enemies, missing creatures and shadow pop-in. It is not an accepted
+playtest or headset candidate. Root alone owns repairs, builds, live input and
+Git. Priority remains FNV, standalone FO3, mods, then TTW.
 
-## Verified baseline
+## Confirmed failures and repairs under validation
 
-PR #207 restored the coherent runtime and consolidated the repository. PR #208
-merged the playtest changes after all five CI checks passed. Its main commit is
-e601a04a7c1dd7cdcedf1d0f58754926f526baf3. Local main matched origin/main with one
-checkout and no remaining feature branch. Unique earlier source remains preserved.
+- The quest page inserted a checkmark absent from the owned bitmap font and
+  aborted drawing. Quest state survived. Completed objectives now use a supported
+  marker; the copied user save visibly renders the completed bottle objectives
+  and active Follow Sunny objective at tutorial stage 30.
+- Exterior saves retained the streaming anchor after the player crossed cells.
+  The user's latest save reproduced a rejected Continue. Capture now resolves the
+  player's source spatial cell; loading resolves older positions in their saved
+  world. The copied save loads without changing the original.
+- Actor residency used old placement rather than authoritative package/combat
+  motion. It now uses current source-space poses, including cold restoration,
+  while honoring pending MoveTo before its native node catches up. Synthetic
+  exterior/cold/scale/MoveTo checks pass. Sunny is present in rendered continuation,
+  walks to the well and completes her conversation: tutorial stages 25 -> 30 -> 35.
+- A queued autosave could wait indefinitely for a quiet boundary among repeating
+  ambient sounds and reject every player save as concurrent. A fully admitted
+  player snapshot now fulfills that pending automatic snapshot after successful
+  writing. Actual near-Sunny F5 moved from queued-auto=true to a completed v52
+  slot and queued-auto=false after genuine finite audio completion. The slot
+  resolves spatial CELL 0e1ab6 and retains tutorial stage 35. Cold export proof
+  is next.
+- Cazador skin partition 214 was rejected. Source body regions now cover index 14
+  and corresponding caps/sections. Template flags without an actual TPLT link now
+  retain local actor fields. Owned construction, independent instances and cold
+  animation continuation pass.
+- Model-free melee weapons incorrectly required a projectile muzzle. Only ranged
+  embedded weapons require that socket. Combat now owns its script-visible
+  procedure/package before hit-reaction conditions, independently of unsupported
+  ordinary packages. Owned armed and melee Viper component checks detect, pursue,
+  retaliate and apply actual damage.
+- AIDT aggro-radius warnings were absent. Warning target, count, clocks and idle
+  identity now persist, with explicit v51 admission into v52. Owned coyotes warn
+  in the outer radius, enter combat on source timers and cause damage. Friendly
+  exclusions and confidence remain authoritative. Warning dialogue/special idles
+  remain unbound and visible in telemetry.
+- Pursuit lost source arrival-region information and could discard unfinished
+  queries when a target moved. Region ownership now reaches native capsule
+  planning. Terminal portal seeds inside the target region retain attack range.
+  Sloped source-floor admission now projects vertically rather than shifting
+  sideways. Chase and hit resolution share 3D range, preventing endless missed
+  swings uphill. Blocked-target, prefix, floor and sloped fight checks accompany the repair.
+  The copied user's actual-terrain Vulkan replay detects the player, climbs the
+  slope and lands source melee hits, reducing health from 120 to zero.
+- Exterior sunlight used Godot's default 100m shadow cutoff and unblended
+  cascades. Shadow distance now covers the resident grid with cascade blending
+  and observable settings. Owned native landscape checks pass. Building/ground
+  shadows are visible during the rendered Sunny walk with 331.048m range and
+  blended cascades. LOD shadow/filtering or retail pixel parity is not claimed.
 
-Fresh creation, Doc's exit, saloon doors, Sunny's tutorial, actual rifle hits on
-all three bottles and the next dialogue work in flat/simulator OpenXR. Earlier
-Release play killed both first-well geckos, advanced to stage 50, looted corpses,
-and used wrist-ray Pip-Boy fast travel. The newest accepted manual checkpoint is
-stage 25, after a saloon round trip. Original owned files and user saves remain
-untouched. No physical Quest 3, ED-E, campaign, FO3 VR, mod or TTW acceptance yet.
+## Verification and next owner
 
-## Integrated changes and checks
+The user's owned quest/script snapshot retains all 447 instance clocks and
+failures across cold restoration. Its audit now compares continuation collections
+structurally instead of treating newly allocated equal arrays as changed state.
+Selected owned creature, coyote warning, armed/melee NPC and landscape checks pass
+their functional checks. The two NPC fixtures retain audio playback shutdown
+warnings; those are not a leak-free-runtime claim. The complete runtime gate is
+passed after the residency/save repair, including Release/Debug, format/analyzers,
+contracts, launcher and native Godot probes. Diff checks pass. Next are cold
+loading and independent Release export acceptance. Post-fast-travel saving and
+population remain unverified.
 
-Runtime now owns source music and transient explosions, objective setters,
-movement values and fast travel policy, current-location/sneak Travel, directed
-NPC/creature portal continuations, IDLM travel destinations and Accompany.
-Cell replacement retires old active/warm/staged actor bindings before replacement
-and restores retained actors on rollback. Prepared door models retain their real
-animation clocks even when prefetch is cancelled. Unfinished NPC route searches
-persist as pending queries with their actual pose and source identity; cold
-restoration replans without inventing arrival or replaying package events.
+Original owned files, recording and user saves remain untouched. Investigation
+copies/logs stay private in ignored local storage. No repaired package is pinned.
+Package f is the historical failed candidate. Publish only after selected checks
+and the full gate pass, through a checked PR, then synchronize main and pin the
+independently tested export.
 
-Weapon observation shares the current held-weapon owner. Bot follow no longer
-starves moving-target routes, and final reference approaches retain the original
-arrival region. Source indexing/reuse, duplicate LOD texture reads, particle draw
-modifier selection and native child-array enumeration were tightened without
-excluding source references or particles.
+Cheyenne's saloon portal approach remains unaccepted. Missing SpeedTree decoding,
+unsupported packages/scripts, unloaded background simulation, campaign/ED-E,
+physical Quest 3, FO3 VR, mods and TTW remain open. Earlier bounded tutorial or
+simulator checks do not establish these capabilities. Loading is not instant.
 
-The complete Test-GodotRuntime gate and git diff --check pass for this candidate.
-Owned Travel/Accompany/movement checks and native actor overlap/rollback, pending
-route cold state, door cancellation/cold clocks, projected arrival and particle
-controller/output checks pass. The final export saved inside the saloon, loaded
-the stage-25 exterior checkpoint in a fresh process and saved again at stage 30
-with no opening-driver or Sunny AI error. Both test processes quit normally.
-
-## Local handoff and remaining work
-
-The pinned asset-free package is OpenNV-fnv-playtest-20261017-f-windows-x64,
-built from clean commit 0c8b65900bb0fc8d19919fab22a204a78efc8525 (the exact tree
-merged by #208). All 207 file hashes and exported launcher identity passed.
-The ignored local release directory contains OpenNV Quest 3.cmd for Air Link,
-OpenNV Recovery Test.cmd for flat play, and headset-handoff.json with exact paths
-and hashes. Both launchers use one isolated stage-25 profile; user saves are
-untouched. Quest Link runtime/profile validation passed without launching a headset
-session. The user's physical test is next; root owns any subsequent repair alone.
-
-Automatic approval review blocked deleting the superseded package and earlier
-simulator/screenshot diagnostics. They remain inactive; do not bypass that rejection.
-
-Cheyenne still cannot reach the saloon portal: its native capsule is blocked at
-the required source-corridor endpoint before entering the final arrival region.
-Moving the player away did not resolve this. Source Travel/Accompany selection
-is admitted, but actual creature door traversal is not accepted. Fix the shared
-collision/navigation owner without bypassing walls, required route prefixes or
-door activation. Final-export fast-travel population and saving after travel
-also remain unverified; the native actor-lifetime checks alone do not close them.
-
-Loading is not instant. One prior cold exterior Continue measured 31.27s: restore
-1.12s, world 8.70s, characters/controls 9.24s, distant world 12.20s. Warm exterior
-reload measured 6.61s and saloon entry 3.25s. New performance changes need matched
-measurement. Unsupported source behavior, missing SpeedTree decoding and other
-reported divergences remain visible. ED-E/campaign and crafting need continued
-playthrough; unloaded background-cell simulation is not complete.
-
-Frame recording is off. Only root operates the game, builds and Git.
+Frame recording is off; only selected diagnostic stills are inspected.
+Automatic approval review previously blocked deletion of superseded packages and
+older diagnostics. Leave those inactive artifacts alone.

@@ -127,7 +127,7 @@ internal static class OwnedReferenceInteractionProbe
         var originalRobotCell = world.Get(repairedRobot).Cell;
         Require(!world.IsEnabled(repairedRobot), "Repair fixture lost the source working actor's initial disabled state.");
         world.MoveTo(repairedRobot, brokenRobot);
-        var repairScene = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Get(brokenRobot).Cell));
+        var repairScene = world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Get(brokenRobot).Cell), .0142875f);
         world.ReplaceResidentCell(repairScene);
         Require(world.IsResident(repairedRobot) && !world.IsEnabled(repairedRobot) && world.Get(repairedRobot).Cell == originalRobotCell &&
             repairScene.References.Single(reference => reference.FormKey == repairedRobot).Position.SequenceEqual(world.Placement(brokenRobot).Position),

@@ -512,7 +512,7 @@ internal sealed partial class NativeOwnedPipBoyMenu : Control
                 (NameOf(quest.Quest), (Action)(() => { _textOffset = 0; _quests.ForceActive(quest.Quest); Refresh(); }), quest.Active)).ToArray());
             var active = quests.FirstOrDefault(quest => quest.Active) ?? quests.FirstOrDefault();
             Text("MM_DataText", active is null ? "" : string.Join("\n\n", active.Objectives!.Where(objective => objective.Displayed)
-                .Select(objective => (objective.Completed ? "[✓] " : "[ ] ") + _quests.ObjectiveText(active.Quest, objective.Index))));
+                .Select(objective => (objective.Completed ? "[x] " : "[ ] ") + _quests.ObjectiveText(active.Quest, objective.Index))));
         }
         else if (_state.Selection == 4)
         {

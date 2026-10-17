@@ -119,6 +119,10 @@ internal static class ActorDamageContracts
             var two = limbTable with { Parts = [limbTable.Parts[0], limbTable.Parts[0] with { Type = 8, ActorValue = 30 }] };
             Check(two.CrippledMobilityCount(200, new Dictionary<byte, float> { [7] = 50, [8] = 50 }) == 2,
                 "Independent left/right mobility damage was lost.");
+            var shared = two with { Parts = [two.Parts[0], two.Parts[1] with { ActorValue = 29, HealthPercent = 50 }] };
+            Check(shared.LimbCondition(29, 200, new Dictionary<byte, float> { [7] = 12.5f, [8] = 25 }) == 50 &&
+                shared.CrippledMobilityCount(200, new Dictionary<byte, float> { [7] = 25, [8] = 50 }) == 1,
+                "Shared limb regions lost their source thresholds or counted as extra mobility actor values.");
             Reject(() => (limbTable with { Parts = [limbTable.Parts[0], limbTable.Parts[0]] })
                 .CrippledMobilityCount(200, new Dictionary<byte, float>()));
             var vitals = new GameplayVitals(1, 200, 200, 70, 70, 0, 100, RadiationRads: 12.5f).Damage(.25f);

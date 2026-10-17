@@ -79,6 +79,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private void StopCombat()
     {
+        ClearRadiusWarning();
         _routeSearch?.Dispose(); _routeSearch = null;
         _pursuitPath = []; _pursuitCursor = 0; _routeDoor = null;
         _routeClock = 0; _routeFailures = 0; _routeError = null;

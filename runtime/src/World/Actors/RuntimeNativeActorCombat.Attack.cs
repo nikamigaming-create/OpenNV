@@ -100,7 +100,7 @@ internal sealed partial class RuntimeNativeActorCombat
     {
         var state = _state.Engagement!;
         var offset = TargetPosition(player) - _actor.GlobalPosition;
-        var distance = new Vector2(offset.X, offset.Z).Length();
+        var distance = offset.Length();
         var reach = _attackRange + (Ranged ? 0 : _radius + TargetRadius(player));
         var visible = CanSeeTarget(player);
         Vector3? destination = null;

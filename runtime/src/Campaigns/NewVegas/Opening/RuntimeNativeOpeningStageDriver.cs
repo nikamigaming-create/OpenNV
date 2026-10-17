@@ -443,6 +443,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         var captured = System.Diagnostics.Stopwatch.GetTimestamp();
         FalloutNativeCampaignSave.Write(_savePath, state);
         var written = System.Diagnostics.Stopwatch.GetTimestamp();
+        _saveRequested = false;
         _activeCell = activeCell;
         GD.Print(
             $"OPENNV_NATIVE_WORLD_SAVED cell={activeCell} stage={state.QuestEditorId}:{state.Stage} " +

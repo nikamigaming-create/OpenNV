@@ -20,7 +20,8 @@ internal static class QuestScriptSaveProbe
         var restored = scripts.Capture();
         var owners = restored.Instances.ToDictionary(instance => instance.Quest);
         foreach (var original in snapshot.Instances)
-            if (!owners.TryGetValue(original.Quest, out var current) || current != original)
+            if (!owners.TryGetValue(original.Quest, out var current) ||
+                JsonSerializer.Serialize(current) != JsonSerializer.Serialize(original))
                 throw new InvalidOperationException($"Owned quest script state changed on restore: {original.Quest}.");
         var cold = Scripts(); cold.Restore(restored);
         if (JsonSerializer.Serialize(cold.Capture()) != JsonSerializer.Serialize(restored) ||

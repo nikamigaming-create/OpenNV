@@ -2,6 +2,7 @@ using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.World.Actors;
 using OpenNV.Runtime.World.Cells;
 
@@ -34,6 +35,7 @@ public partial class NativeCreatureAudit : Node3D
         var record = stack.GetEffective(key);
         var cell = FalloutCellSceneReader.Read(stack, FalloutCellSceneReader.ParentCell(record)!.Value);
         var reference = cell.References.Single(item => item.FormKey == key);
+        world.InitializeActorTemplates(key, 1, FalloutGlobalState.Read(stack));
         var actor = RuntimeNativeCreature.Create(stack, source, reference, world.Get(key), .0142875f);
         AddChild(actor); actor.SetProcess(false);
         try

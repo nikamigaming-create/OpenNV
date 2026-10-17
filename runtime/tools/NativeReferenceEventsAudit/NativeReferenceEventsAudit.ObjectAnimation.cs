@@ -21,7 +21,7 @@ public partial class NativeReferenceEventsAudit
             StringComparison.OrdinalIgnoreCase) == true).ToArray();
         Require(selected.Length > 0, "Owned checkpoint contains no selected legacy animation failures.");
         var scenes = selected.Select(state => state.Placement?.Cell ?? state.Cell).Distinct()
-            .Select(cell => world.ComposeResidency(FalloutCellSceneReader.Read(records, cell))).ToArray();
+            .Select(cell => world.ComposeResidency(FalloutCellSceneReader.Read(records, cell), .0142875f)).ToArray();
         foreach (var cell in scenes) world.LoadCell(cell);
         var selectedKeys = selected.Select(state => state.Reference).ToHashSet();
         var references = scenes.SelectMany(cell => cell.References).Where(reference => selectedKeys.Contains(reference.FormKey))

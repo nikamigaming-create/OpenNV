@@ -18,7 +18,7 @@ internal static class OwnedCompanionGameplayProbe
         world.MoveTo(actor, broken); world.InitializeActorTemplates(actor, 1, globals);
         world.Get(actor).Enabled = true;
         world.Get(actor).TalkedToPlayer = true;
-        world.LoadCell(world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Placement(actor).Cell)));
+        world.LoadCell(world.ComposeResidency(FalloutCellSceneReader.Read(records, world.Placement(actor).Cell), .0142875f));
         var effects = new List<FalloutReferenceScriptEffect>();
         var scripts = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, effects.Add, Globals: globals));
         world.Get(actor).Restrained = true;

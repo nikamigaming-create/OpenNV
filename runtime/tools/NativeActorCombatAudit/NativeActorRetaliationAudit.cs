@@ -11,7 +11,7 @@ public partial class NativeActorCombatAudit
 {
     private async Task ExerciseRetaliation(FalloutPluginStack records, RuntimeLiveContentSource content,
         FalloutGlobalState globals, string actorHex, string targetHex, bool unarmed, bool ambient, bool packageMotion = false,
-        bool hitReaction = false)
+        bool hitReaction = false, bool radiusWarning = false, bool sloped = false)
     {
         using var world = new FalloutReferenceWorld(records);
         var key = records.RuntimeFormKey(Convert.ToUInt32(actorHex, 16));
@@ -27,6 +27,7 @@ public partial class NativeActorCombatAudit
             player.SetProcess(false); player.SetPhysicsProcess(false); player.SetProcessUnhandledInput(false);
         }
         var floor = new StaticBody3D { Position = new(0, -.05f, 0) };
+        if (sloped) floor.Rotation = new(Mathf.DegToRad(30), 0, 0);
         var floorShape = new CollisionShape3D { Shape = new BoxShape3D { Size = new(40, .1f, 40) } };
         floorShape.SetMeta("opennv_havok_material", 0u);
         floor.AddChild(floorShape); AddChild(floor);
@@ -37,7 +38,9 @@ public partial class NativeActorCombatAudit
         try
         {
             var attacker = Create(key, Vector3.Zero);
-            var target = Create(targetKey, new(0, 0, -1.5f));
+            var warningRadius = radiusWarning ? FalloutActorThreat.Read(records, world.Get(key).Base, world.Get(key).Templates).Radius * .0142875f : 0;
+            var target = Create(targetKey, sloped ? new(0, 5 * Mathf.Tan(Mathf.DegToRad(30)), -5) :
+                new(0, 0, radiusWarning ? -warningRadius * .75f : -1.5f));
             await Frames(3);
             if (packageMotion)
             {
@@ -70,12 +73,44 @@ public partial class NativeActorCombatAudit
             {
                 await ExerciseHitReaction(records, world, globals, attacker, actors[0], key, targetKey);
             }
+            else if (radiusWarning)
+            {
+                var state = world.Get(key);
+                var threat = FalloutActorThreat.Read(records, state.Base, state.Templates);
+                var relation = world.ActorRelation(key, targetKey);
+                if (!threat.Warns(relation) || threat.Initiates(relation))
+                    throw new InvalidOperationException("Warning fixture requires a source radius warning without sight-attack eligibility.");
+                attacker._PhysicsProcess(1d / 60);
+                if (state.AggroWarning is not { } warning || state.Engagement is not null)
+                    throw new InvalidOperationException("Outer source radius did not enter a warning before combat.");
+                var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot>(JsonSerializer.Serialize(state.Capture()))!;
+                using (var cold = new FalloutReferenceWorld(records))
+                {
+                    cold.Restore([saved]);
+                    if (JsonSerializer.Serialize(cold.Get(key).AggroWarning) != JsonSerializer.Serialize(warning))
+                        throw new InvalidOperationException("Cold warning changed its target, count, idle identity or clocks.");
+                }
+                var interval = FalloutGameSettingFloats.Read(records, "fAITrespassWarningTimer");
+                var maximum = checked((int)FalloutGameSettingIntegers.Read(records, "iGuardWarnings"));
+                var elapsed = 0d;
+                while (state.Engagement is null && elapsed <= interval * maximum + .5)
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+                    attacker._PhysicsProcess(.25); elapsed += .25;
+                    if (attacker.EngagementError is { } error) throw new InvalidOperationException(error);
+                }
+                if (state.Engagement?.Target != targetKey || elapsed < interval * maximum - .25 || state.AggroWarning is not null)
+                    throw new InvalidOperationException("Source warning intervals did not hand off to ordinary combat exactly once.");
+                GD.Print($"OPENNV_NATIVE_RADIUS_WARNING_PASS actor={key} target={targetKey} radius={warningRadius:R} interval={interval:R} warnings={maximum} " +
+                    "outerWarning=true coldState=true timedCombat=true fixture=source-actors-synthetic-floor-and-accelerated-clock ordinaryGameplay=separate");
+            }
             else if (ambient)
             {
                 var state = world.Get(key);
                 var threat = FalloutActorThreat.Read(records, state.Base, state.Templates);
                 var relation = world.ActorRelation(key, targetKey);
-                var initiates = threat.Initiates(relation);
+                var initiates = threat.Initiates(relation) || threat.Warns(relation) &&
+                    actors[0].GlobalPosition.DistanceTo(actors[1].GlobalPosition) <= threat.Radius * .0142875f / 2;
                 GD.Print($"OPENNV_AMBIENT_SOURCE actor={key} target={targetKey} aggression={threat.Aggression} confidence={threat.Confidence} relation={relation} initiates={initiates}");
                 world.ChangeActorValue(key, "aggression", "setav", 0);
                 for (var frame = 0; frame < 30; frame++) attacker._PhysicsProcess(1d / 60);
@@ -124,6 +159,14 @@ public partial class NativeActorCombatAudit
                 attacker.Hit(contact, new(.1f, 1, 100, 1), targetKey, 1, globals);
                 if (world.Get(key).Engagement?.Target != targetKey)
                     throw new InvalidOperationException("A nonfatal hit did not provoke the actual attacking reference.");
+                if (actors[0] is RuntimeNativeNpc npc)
+                {
+                    var owner = records.GetEffective(world.Get(key).Base);
+                    var procedure = new FalloutCondition(owner, 0, 0, 143, 0, 0, 0, 0);
+                    var package = new FalloutCondition(owner, 0, 0, 110, 0, 0, 0, 0);
+                    if (npc.EvaluateAiCondition(procedure) != 13 || npc.EvaluateAiCondition(package) != 5)
+                        throw new InvalidOperationException("Combat did not own its script-visible procedure and package before reaction selection.");
+                }
             }
             for (var frame = 0; frame < 900 && world.Health(targetKey).Current == before; ++frame)
             {
@@ -134,7 +177,7 @@ public partial class NativeActorCombatAudit
             if (world.Health(targetKey).Current >= before)
                 throw new InvalidOperationException("Source actor did not retaliate through source Hit events and anatomy: " +
                     JsonSerializer.Serialize(attacker.Observation));
-            GD.Print($"OPENNV_NATIVE_{(ambient ? "AMBIENT_COMBAT" : "RETALIATION")}_PASS actor={key} target={targetKey} playerPresent={player is not null} unarmedFixture={unarmed} " +
+            GD.Print($"OPENNV_NATIVE_{(ambient ? "AMBIENT_COMBAT" : "RETALIATION")}_PASS actor={key} target={targetKey} playerPresent={player is not null} unarmedFixture={unarmed} sloped={sloped} " +
                 $"health={before:R}->{world.Health(targetKey).Current:R} sourceHit=true fixture=synthetic-floor ordinaryGameplay=separate");
         }
         finally

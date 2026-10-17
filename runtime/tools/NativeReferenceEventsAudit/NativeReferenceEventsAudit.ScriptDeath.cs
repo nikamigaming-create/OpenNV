@@ -23,7 +23,7 @@ public partial class NativeReferenceEventsAudit
             "OnLoad: Reached native script command Kill (0 arguments) has no owner.").ToArray();
         Require(selected.Length > 0, "Owned checkpoint has no selected script death failures.");
         var scenes = selected.Select(state => state.Placement?.Cell ?? state.Cell).Distinct()
-            .Select(cell => world.ComposeResidency(FalloutCellSceneReader.Read(records, cell))).ToArray();
+            .Select(cell => world.ComposeResidency(FalloutCellSceneReader.Read(records, cell), .0142875f)).ToArray();
         foreach (var cell in scenes) world.LoadCell(cell);
         var selectedKeys = selected.Select(state => state.Reference).ToHashSet();
         var references = scenes.SelectMany(cell => cell.References).DistinctBy(reference => reference.FormKey).ToArray();

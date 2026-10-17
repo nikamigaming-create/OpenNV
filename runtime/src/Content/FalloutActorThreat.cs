@@ -27,6 +27,9 @@ internal sealed record FalloutActorThreat(FalloutFormKey Owner, byte Aggression,
     internal bool Initiates(uint relation) => relation > 3 ? throw new ArgumentOutOfRangeException(nameof(relation)) :
         Confidence != 0 && (Aggression == 3 || Aggression == 2 && relation < 2 || Aggression == 1 && relation == 1);
 
+    internal bool Warns(uint relation) => relation > 3 ? throw new ArgumentOutOfRangeException(nameof(relation)) :
+        Aggression != 0 && Confidence != 0 && RadiusBehavior && Radius > 0 && relation < 2;
+
     internal static uint Relation(FalloutPluginStack records, FalloutFormKey actor, FalloutFormKey target,
         FalloutActorTemplateSelection? selection = null, FalloutActorTemplateSelection? targetSelection = null)
     {

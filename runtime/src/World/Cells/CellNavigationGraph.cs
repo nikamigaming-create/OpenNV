@@ -434,6 +434,18 @@ internal sealed partial class CellNavigationGraph
                 TriangleCentroidDivisor;
         }
 
+        internal Vector3? VerticalPlanePoint(int triangleIndex, Vector3 point)
+        {
+            var triangle = Triangles[triangleIndex];
+            var first = Vertices[triangle.VertexIndices[0]];
+            var second = Vertices[triangle.VertexIndices[1]];
+            var third = Vertices[triangle.VertexIndices[2]];
+            var normal = (second - first).Cross(third - first);
+            if (normal.Z == 0) return null;
+            var height = first.Z - ((double)normal.X * (point.X - first.X) + (double)normal.Y * (point.Y - first.Y)) / normal.Z;
+            return double.IsFinite(height) ? new(point.X, point.Y, (float)height) : null;
+        }
+
         internal Vector3 ClosestPoint(int triangleIndex, Vector3 point)
         {
             // World queries can be kilometres from a small source triangle.

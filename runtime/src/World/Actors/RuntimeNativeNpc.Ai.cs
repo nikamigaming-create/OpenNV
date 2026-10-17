@@ -55,7 +55,7 @@ internal partial class RuntimeNativeNpc
 
     // These are script-visible engine procedure codes. The currently owned
     // travel procedure ends on arrival; furniture exit has its own transition.
-    private int CurrentAiProcedure => _requestedSelection is not null || _aiError is not null
+    private int CurrentAiProcedure => Combat?.ScriptCombatProcedure ?? (_requestedSelection is not null || _aiError is not null
         ? throw new NotSupportedException("Current AI procedure has no admitted native continuation.")
         : _sitting == 2
         ? throw new NotSupportedException("Furniture entry needs its native script-visible procedure code.")
@@ -65,8 +65,8 @@ internal partial class RuntimeNativeNpc
             "ApproachTarget" => 19,
             "WaitForTarget" or "waiting-for-target-residency" => 3,
             _ => 12,
-        } : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive || _editorTravelProgress is { Complete: false } ? 0 : 17;
-    private int CurrentAiPackage => _requestedSelection is not null || _aiError is not null
+        } : _aiPackage is null ? 0 : _sitting == 4 ? 21 : _travelActive || _editorTravelProgress is { Complete: false } ? 0 : 17);
+    private int CurrentAiPackage => Combat?.ScriptCombatPackage ?? (_requestedSelection is not null || _aiError is not null
         ? throw new NotSupportedException("Current AI package code has no admitted native continuation.")
         : _packageIdleSource is null ? 0 : _packageIdleSource.Procedure switch
         {
@@ -75,7 +75,7 @@ internal partial class RuntimeNativeNpc
             6 => 14, // Source PACK travel type -> script-visible Travel package.
             13 => 37, // Fallout script-visible Patrol code (not the PACK type).
             _ => throw new NotSupportedException("Current package condition needs its active procedure owner."),
-        };
+        });
 
     internal object AiState => new
     {
@@ -119,7 +119,7 @@ internal partial class RuntimeNativeNpc
             Activity.Revision,
         },
         factions = _factions.Select(value => new { faction = value.Key.ToString(), rank = value.Value }).ToArray(),
-        currentProcedure = _sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null ? (int?)null : CurrentAiProcedure,
+        currentProcedure = Combat?.ScriptCombatProcedure ?? (_sitting == 2 || _requestedSelection is not null || _aiError is not null || _guardPackage is not null ? (int?)null : CurrentAiProcedure),
         navigation = TravelState,
         escort = EscortState,
         editorTravel = EditorTravelState,

@@ -6,9 +6,9 @@ using OpenNV.Runtime.Formats.Gamebryo;
 var decoded = (FalloutNifSkinPartition)FalloutNifFile.Read(Wrap(PartitionBytes(), "NiSkinPartition")).ReadObject(0);
 Require(FalloutNifHardwareSkin.VisibleOnIntactBody(null), "Ordinary skin was hidden.");
 Require(!FalloutNifHardwareSkin.VisibleOnIntactBody(new(0x101, 200)), "Root body cap shown on intact actor.");
-for (ushort body = 0; body <= 13; body++)
+for (ushort body = 0; body <= 14; body++)
     Require(FalloutNifHardwareSkin.VisibleOnIntactBody(new(0, body)), "Intact body part was hidden.");
-for (ushort body = 1; body <= 13; body++)
+for (ushort body = 1; body <= 14; body++)
 {
     Require(!FalloutNifHardwareSkin.VisibleOnIntactBody(new(0x101, (ushort)(100 + body))), "Section cap shown on intact actor.");
     Require(!FalloutNifHardwareSkin.VisibleOnIntactBody(new(0x101, (ushort)(200 + body))), "Torso cap shown on intact actor.");

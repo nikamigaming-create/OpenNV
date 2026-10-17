@@ -25,7 +25,7 @@ public partial class RuntimeCoordinator
             var cells = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>()
                 .Where(land => _nativeWalkableGrid.Contains(land.Source.ActiveCoordinates))
                 .Select(land => FalloutCellSceneReader.ReadDefinition(_nativePluginStack!, land.Source.ActiveCell)).ToArray();
-            var updated = world.ComposeResidency(scene, cells.Length == 0 ? null : cells);
+            var updated = world.ComposeResidency(scene, _configuration.World.GameUnitsToMeters, cells.Length == 0 ? null : cells);
             world.ReplaceResidentCell(updated);
             _nativeActiveCell = updated;
             DiscoverNativeCellReferences(updated);
