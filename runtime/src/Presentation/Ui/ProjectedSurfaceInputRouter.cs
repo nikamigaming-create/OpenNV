@@ -25,12 +25,6 @@ internal sealed class ProjectedSurfaceInputRouter
 
     internal void Forward(InputEvent input)
     {
-        if (!_mesh.IsVisibleInTree() || !_target.IsInsideTree()) return;
-        if (input is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion)
-        {
-            _target.PushInput(input, true);
-            return;
-        }
         if (input is not InputEventMouse mouse)
             return;
         if (!TryMap(mouse.Position, out var targetPosition))
@@ -44,19 +38,17 @@ internal sealed class ProjectedSurfaceInputRouter
         }
         if (!_pointerInside)
             _target.NotifyMouseEntered();
-        Push(input, targetPosition);
         _pointerInside = true;
+        _lastTargetPosition = targetPosition;
+        Push(input, targetPosition);
     }
 
     private void Push(InputEvent input, Vector2 targetPosition)
     {
-        using var forwarded = (InputEventMouse)input.Duplicate();
+        var forwarded = (InputEventMouse)input.Duplicate();
         forwarded.Position = targetPosition;
         forwarded.GlobalPosition = targetPosition;
-        if (forwarded is InputEventMouseMotion motion)
-            motion.Relative = _pointerInside ? targetPosition - _lastTargetPosition : Vector2.Zero;
         _target.PushInput(forwarded, true);
-        _lastTargetPosition = targetPosition;
     }
 
     private bool TryMap(Vector2 hostPosition, out Vector2 targetPosition)
@@ -74,51 +66,47 @@ internal sealed class ProjectedSurfaceInputRouter
             indices.Any(value => value < 0 || value >= vertices.Length))
             throw new InvalidOperationException(
                 "Projected input surface topology is incomplete.");
-        var inverse = _mesh.GlobalTransform.AffineInverse();
-        var origin = inverse * _camera.ProjectRayOrigin(hostPosition);
-        var direction = inverse.Basis * _camera.ProjectRayNormal(hostPosition);
-        var nearest = float.PositiveInfinity;
-        Vector2? picked = null;
+        var transform = _mesh.GlobalTransform;
         for (var offset = 0; offset < indices.Length; offset += 3)
         {
             var first = indices[offset];
             var second = indices[offset + 1];
             var third = indices[offset + 2];
-            if (!TryRayTriangle(origin, direction, vertices[first], vertices[second], vertices[third],
-                out var distance, out var weights) || distance >= nearest)
+            var a = _camera.UnprojectPosition(transform * vertices[first]);
+            var b = _camera.UnprojectPosition(transform * vertices[second]);
+            var c = _camera.UnprojectPosition(transform * vertices[third]);
+            if (!TryBarycentric(hostPosition, a, b, c, out var weights))
                 continue;
             var uv = textureCoordinates[first] * weights.X +
                 textureCoordinates[second] * weights.Y +
                 textureCoordinates[third] * weights.Z;
-            var point = uv * new Vector2(_target.Size.X, _target.Size.Y);
-            if (!point.IsFinite() || point.X < 0 || point.Y < 0 || point.X > _target.Size.X || point.Y > _target.Size.Y)
-                continue;
-            nearest = distance;
-            picked = point;
+            targetPosition = uv * new Vector2(_target.Size.X, _target.Size.Y);
+            return targetPosition.IsFinite() &&
+                targetPosition.X >= 0.0f && targetPosition.Y >= 0.0f &&
+                targetPosition.X <= _target.Size.X &&
+                targetPosition.Y <= _target.Size.Y;
         }
-        if (picked is not { } result) return false;
-        targetPosition = result;
-        return true;
+        return false;
     }
 
-    private static bool TryRayTriangle(Vector3 origin, Vector3 direction,
-        Vector3 a, Vector3 b, Vector3 c, out float distance, out Vector3 weights)
+    private static bool TryBarycentric(
+        Vector2 point,
+        Vector2 a,
+        Vector2 b,
+        Vector2 c,
+        out Vector3 weights)
     {
-        distance = default;
         weights = default;
-        var firstEdge = b - a;
-        var secondEdge = c - a;
-        var cross = direction.Cross(secondEdge);
-        var determinant = firstEdge.Dot(cross);
-        if (!float.IsFinite(determinant) || determinant == 0) return false;
-        var offset = origin - a;
-        var second = offset.Dot(cross) / determinant;
-        var otherCross = offset.Cross(firstEdge);
-        var third = direction.Dot(otherCross) / determinant;
-        distance = secondEdge.Dot(otherCross) / determinant;
+        var v0 = b - a;
+        var v1 = c - a;
+        var v2 = point - a;
+        var denominator = v0.X * v1.Y - v1.X * v0.Y;
+        if (!float.IsFinite(denominator) || Mathf.IsZeroApprox(denominator))
+            return false;
+        var second = (v2.X * v1.Y - v1.X * v2.Y) / denominator;
+        var third = (v0.X * v2.Y - v2.X * v0.Y) / denominator;
         var first = 1.0f - second - third;
         weights = new Vector3(first, second, third);
-        return float.IsFinite(distance) && distance >= 0 && weights.IsFinite() &&
-            first >= 0 && second >= 0 && third >= 0;
+        return first >= 0.0f && second >= 0.0f && third >= 0.0f;
     }
 }

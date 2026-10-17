@@ -35,6 +35,8 @@ internal sealed partial class NativeOwnedPipBoy : Control
     private bool _xrFocused;
     private ColorRect? _xrCursor;
     private NativeXrWristPresentation? _xrDevice;
+    internal bool InputReady => !_sourcePointerRetired && _sourcePointerFailure is null &&
+        IsInsideTree() && IsNodeReady() && IsInstanceValid(_menu) && _menu.IsNodeReady() && _menu.Error is null;
     internal object State => new
     {
         menu = _menu.State,
@@ -222,7 +224,12 @@ internal sealed partial class NativeOwnedPipBoy : Control
         if (_closing || _openSeconds < _player.PipBoyDuration) { GetViewport().SetInputAsHandled(); return; }
         if (input is InputEventMouse mouse)
         {
-            if (_buttons.Any(target => target.Button.GetGlobalRect().HasPoint(mouse.Position))) return;
+            if (_buttons.Any(target => target.Button.GetGlobalRect().HasPoint(mouse.Position)))
+            {
+                if (_flatPointerPressed && mouse is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false })
+                    CancelFlatPointer();
+                return;
+            }
             var uv = _device!.PickScreen(mouse.Position - GlobalPosition);
             // Keep a captured map drag at its last valid point when the cursor
             // leaves the physical screen. The outside sentinel is only a hover

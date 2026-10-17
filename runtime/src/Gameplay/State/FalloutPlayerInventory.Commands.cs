@@ -5,6 +5,9 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed partial class FalloutPlayerInventory
 {
+    internal bool IsEquipped(FalloutPluginStack records, FalloutFormKey item) =>
+        _equipped.Contains(records.RuntimeFormId(item));
+
     internal FalloutFormKey? EquippedObject(FalloutPluginStack records, uint slot)
     {
         var mask = slot < 20 ? 1u << (int)slot : uint.MaxValue;

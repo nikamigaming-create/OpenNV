@@ -36,6 +36,7 @@ internal readonly record struct FalloutLandscapePhysics(byte Material, byte Fric
 }
 
 internal sealed record FalloutLandscapeTransport(
+    FalloutFormKey PersistentDestinationCell,
     FalloutFormKey ActiveCell,
     (int X, int Y) ActiveCoordinates,
     FalloutFormKey Worldspace,
@@ -46,8 +47,7 @@ internal sealed record FalloutLandscapeTransport(
     byte[] Colors,
     IReadOnlyList<FalloutLandscapeLayer> BaseLayers,
     IReadOnlyList<FalloutLandscapeLayer> AlphaLayers,
-    IReadOnlyDictionary<FalloutFormKey, FalloutLandscapeTexture> Textures,
-    FalloutWorldspaceLandDefaults? HeightDefault);
+    IReadOnlyDictionary<FalloutFormKey, FalloutLandscapeTexture> Textures);
 
 internal static class FalloutLandscapeTransportResolver
 {
@@ -97,21 +97,18 @@ internal static class FalloutLandscapeTransportResolver
         return ReadLandscape(
             stack,
             landscapes[0],
+            transition.DestinationScene.Cell.FormKey,
             cell.FormKey,
             coordinates,
             transition.DestinationWorldspace, defaultTexture);
     }
 
-    internal static FalloutLandscapeTransport ResolveCell(FalloutPluginStack stack, FalloutCellDefinition cell,
+    internal static FalloutLandscapeTransport ResolveCell(FalloutPluginStack stack, FalloutCellDefinition cell, FalloutFormKey persistentCell,
         FalloutLandscapeTexture? defaultTexture = null)
     {
         var records = stack.EffectiveCellChildren(cell.FormKey, new HashSet<string> { "LAND" }).ToArray();
         if (records.Length != 1) throw new InvalidDataException($"Exterior CELL {cell.FormKey} has {records.Length} LAND records.");
-        var winning = FalloutCellSceneReader.ReadDefinition(stack, cell.FormKey);
-        if (winning.Worldspace != cell.Worldspace || winning.Coordinates != cell.Coordinates ||
-            (winning.Flags & FalloutCellSceneReader.InteriorCellFlag) != 0)
-            throw new InvalidDataException("Landscape CELL metadata differs from its winning exterior source.");
-        return ReadLandscape(stack, records[0], cell.FormKey,
+        return ReadLandscape(stack, records[0], persistentCell, cell.FormKey,
             cell.Coordinates ?? throw new InvalidDataException("Landscape CELL has no grid coordinates."),
             cell.Worldspace ?? throw new InvalidDataException("Landscape CELL has no worldspace."), defaultTexture);
     }
@@ -119,38 +116,22 @@ internal static class FalloutLandscapeTransportResolver
     private static FalloutLandscapeTransport ReadLandscape(
         FalloutPluginStack stack,
         FalloutPluginRecord record,
+        FalloutFormKey persistentDestinationCell,
         FalloutFormKey activeCell,
         (int X, int Y) coordinates,
         FalloutFormKey worldspace,
         FalloutLandscapeTexture? defaultTexture)
     {
-        if (record.Signature != "LAND" || FalloutCellSceneReader.ParentCell(record) != activeCell ||
-            FalloutCellSceneReader.ParentWorldspace(record) != worldspace)
-            throw new InvalidDataException("LAND source ancestry differs from its selected CELL/worldspace.");
         var source = record.ReadSubrecords().ToArray();
         var data = RequiredSingle(source, "DATA", record);
         if (data.Length != sizeof(uint))
             throw Error(record, "DATA must contain one uint32 flag field");
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(data.Span);
-        var heightRows = source.Where(value => value.Signature == "VHGT").ToArray();
-        var normalRows = source.Where(value => value.Signature == "VNML").ToArray();
-        if (heightRows.Length > 1 || normalRows.Length > 1)
-            throw Error(record, "duplicates a VHGT or VNML declaration");
-        if ((flags & VertexDataFlag) != 0 && (heightRows.Length != 1 || normalRows.Length != 1))
-            throw Error(record, "declares vertex data without one exact VHGT/VNML pair");
-        var heightDefault = heightRows.Length == 0 ? FalloutWorldspaceLandDefaults.Read(stack, worldspace) : null;
-        var heights = heightDefault is null ? ReadHeights(heightRows[0].Data, record) :
-            Enumerable.Repeat(heightDefault.LandHeight, VertexCount).ToArray();
-        float[] normals;
-        if (normalRows.Length == 1) normals = ReadNormals(normalRows[0].Data, record);
-        else if (heightDefault is not null)
-        {
-            // An explicitly selected constant WRLD height has the exact
-            // upward plane normal; no height or slope is guessed.
-            normals = new float[NormalBytes];
-            for (var vertex = 0; vertex < VertexCount; vertex++) normals[vertex * NormalComponentCount + 2] = 1;
-        }
-        else throw Error(record, "authored heights have no VNML normal owner");
+        if ((flags & VertexDataFlag) == 0)
+            throw new NotSupportedException(
+                $"Native LAND {record.FormKey} has no authored vertex geometry.");
+        var heights = ReadHeights(RequiredSingle(source, "VHGT", record), record);
+        var normals = ReadNormals(RequiredSingle(source, "VNML", record), record);
         var colorRows = source.Where(value => value.Signature == "VCLR").ToArray();
         if (colorRows.Length > 1)
             throw Error(record, $"contains {colorRows.Length} VCLR subrecords");
@@ -202,10 +183,11 @@ internal static class FalloutLandscapeTransportResolver
         var textures = baseLayers.Concat(alphaLayers).Select(value => value.Texture)
             .Distinct()
             .ToDictionary(key => key, key => key.ObjectId == 0
-                ? defaultTexture ?? ReadDefaultTexture(FalloutInstallationSettings.Read(stack.OwnedSource ??
-                    throw new InvalidOperationException("Default LAND texture has no exact selected owned installation.")))
+                ? defaultTexture ?? ReadDefaultTexture(FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current ??
+                    throw new InvalidOperationException("Default LAND texture has no owned installation.")))
                 : ReadTexture(stack, key));
         return new FalloutLandscapeTransport(
+            persistentDestinationCell,
             activeCell,
             coordinates,
             worldspace,
@@ -216,8 +198,7 @@ internal static class FalloutLandscapeTransportResolver
             colors,
             baseLayers.OrderBy(value => value.Quadrant).ToArray(),
             alphaLayers.OrderBy(value => value.Quadrant).ThenBy(value => value.LayerIndex).ToArray(),
-            textures,
-            heightDefault);
+            textures);
     }
 
     private static FalloutLandscapeLayer ReadLayerHeader(

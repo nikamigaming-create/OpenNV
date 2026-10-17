@@ -104,22 +104,9 @@ internal static class FalloutAiPackages
     internal static FalloutPluginRecord TemplateOwner(FalloutPluginStack stack, FalloutPluginRecord record, ushort flag)
         => FalloutActorTemplateOwner.Resolve(stack, record, flag);
 
-    internal static bool OnPriorityList(FalloutPluginStack stack, FalloutFormKey actorBase,
-        FalloutFormKey package, FalloutActorTemplateSelection? selection = null)
-    {
-        var owner = FalloutActorTemplateOwner.Resolve(stack, stack.GetEffective(actorBase), 32, selection);
-        var found = false;
-        foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "PKID"))
-        {
-            if (field.Data.Length != 4) throw new InvalidDataException("Actor package identity has an invalid extent.");
-            if (owner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span)) == package) found = true;
-        }
-        return found;
-    }
-
     internal static FalloutPluginRecord? Select(FalloutPluginStack stack, FalloutFormKey npc,
         Func<FalloutCondition, float> evaluate, FalloutActorTemplateSelection? selection = null, FalloutGameTime? clock = null,
-        bool evaluateRunOn = false, Func<FalloutPluginRecord, bool>? eligible = null, FalloutGlobalState? globals = null)
+        bool evaluateRunOn = false, Func<FalloutPluginRecord, bool>? eligible = null)
     {
         var owner = FalloutActorTemplateOwner.Resolve(stack, stack.GetEffective(npc), 32, selection);
         foreach (var field in owner.ReadSubrecords().Where(field => field.Signature == "PKID"))
@@ -131,7 +118,7 @@ internal static class FalloutAiPackages
             // inactive candidate cannot run condition queries or side effects.
             if (!FalloutPackageSchedule.Read(package).IsActive(clock)) continue;
             if (eligible?.Invoke(package) == false) continue;
-            if (!FalloutCondition.AllPass(FalloutCondition.Read(package), evaluate, evaluateRunOn, globals)) continue;
+            if (!FalloutCondition.AllPass(FalloutCondition.Read(package), evaluate, evaluateRunOn)) continue;
             return package;
         }
         return null;

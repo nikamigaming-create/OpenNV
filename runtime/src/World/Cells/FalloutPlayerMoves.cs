@@ -4,28 +4,24 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal sealed record FalloutPlayerMove(FalloutFormKey Source, FalloutFormKey Destination, float X, float Y, float Z);
 
-// Player movement owns one retained source request. Later statements still
-// observe the current world until its real source/native consumer commits.
-// Storing a request does not certify the independent immediate-mode child.
-internal sealed partial class FalloutPlayerMoves
+// Player MoveTo queues a request; subsequent source statements execute against
+// the current world. The presentation adapter drains requests after execution.
+internal sealed class FalloutPlayerMoves
 {
-    internal string? Error => SourcePending.Error;
-    internal bool Pending => SourcePending.Pending;
-    internal object State => new
-    {
-        sourceSlot = SourcePending.State,
-        originalImmediateMode = "unowned-independent-TES-byte-pair; registration-is-not-immediate-consumer-return"
-    };
+    private readonly Queue<FalloutPlayerMove> _pending = [];
+    internal string? Error { get; private set; }
+    internal bool Pending => _pending.Count != 0;
+    internal object State => new { pending = _pending.ToArray(), error = Error };
 
     internal void Enqueue(FalloutPlayerMove move)
     {
         if (Error is not null) throw new NotSupportedException($"Player movement is faulted: {Error}");
         if (!float.IsFinite(move.X) || !float.IsFinite(move.Y) || !float.IsFinite(move.Z))
             throw new InvalidDataException("Player MoveTo offset is not finite.");
-        _ = SourcePending.Store(FalloutPlayerPendingKind.MoveTo, move, null, "actual-source-Player-MoveTo-command");
+        _pending.Enqueue(move);
     }
 
-    internal FalloutPlayerMove? Next => SourcePending.Next is { Kind: FalloutPlayerPendingKind.MoveTo } request ? request.Move : null;
+    internal FalloutPlayerMove? Next => Error is null && _pending.TryPeek(out var move) ? move : null;
 
     internal static FalloutReferencePlacement Resolve(FalloutPlayerMove move, FalloutReferencePlacement destination)
     {
@@ -39,12 +35,14 @@ internal sealed partial class FalloutPlayerMoves
 
     internal void Complete(FalloutPlayerMove move)
     {
-        SourcePending.Complete(RequireMove(move), "actual-source-Player-placement-consumers-returned");
+        if (!ReferenceEquals(Next, move)) throw new InvalidOperationException("Player MoveTo completion has a different request owner.");
+        _pending.Dequeue();
     }
 
     internal void Fail(FalloutPlayerMove move, Exception error)
     {
-        SourcePending.Fail(RequireMove(move), error);
+        if (!ReferenceEquals(Next, move)) throw new InvalidOperationException("Player MoveTo failure has a different request owner.");
+        Error = error.Message;
     }
 
     internal void RequireSettled()
@@ -53,5 +51,5 @@ internal sealed partial class FalloutPlayerMoves
             throw new NotSupportedException("Saving pending or failed player movement requires its continuation state.");
     }
 
-    internal void Clear() => RetireSourcePending();
+    internal void Clear() { _pending.Clear(); Error = null; }
 }

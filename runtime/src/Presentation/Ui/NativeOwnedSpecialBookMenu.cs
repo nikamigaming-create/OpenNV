@@ -21,10 +21,9 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     private readonly Dictionary<string, int> _targetPages = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _input = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (FalloutSoundRecord Source, long Revision)> _sounds = new(StringComparer.Ordinal);
-    private long _menuSoundOccurrence;
-    private FalloutSpecialBookPageSoundsConsumer? _pageSounds;
+    private readonly FalloutSoundRandomState _soundRandom = new(BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))));
     private IReadOnlyList<int> _values = [];
-    private int _page, _index = FalloutSpecialBookPresentation.MinimumReviewIndex;
+    private int _page, _index = 1;
     private bool _turning, _submitted;
     internal string? Error { get; private set; }
     internal FalloutSpecialBookPresentation Declaration => _declaration;
@@ -43,7 +42,6 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
         permanentReadBaseWriteOwner = _session.Owner,
         textureDeclarations = _textures.Paths,
         error = Error,
-        pageSoundInputs = _pageSounds is not null ? "borrowed-selected-source-direction-inputs" : "original-unpatched-menu-binding",
         pointerGeometry = _surface.LastPicked,
         animation = _animation.Observation,
         projectionCoordinates = "surface-control-local",
@@ -60,14 +58,10 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     };
 
     internal NativeOwnedSpecialBookMenu(FalloutPluginStack records, FalloutSpecialAllocationBinding binding, int? budget,
-        Action accepted, Action<Exception> failed, FalloutSpecialBookPageSounds? pageSounds = null)
+        Action accepted, Action<Exception> failed)
     {
         try
         {
-            if (pageSounds?.FocusSource is { } focus && (focus.Selection.ReviewPage != FalloutSpecialBookPresentation.ReviewPage ||
-                focus.Selection.MinimumIndex != FalloutSpecialBookPresentation.MinimumReviewIndex || focus.Selection.MaximumIndex != FalloutSpecialAllocationSession.AttributeCount))
-                throw new NotSupportedException("Book focus source bounds differ from the actual adapter index fields.");
-            _pageSounds = pageSounds?.BorrowConsumer();
             Name = "SPECIALBookMenu"; ProcessMode = ProcessModeEnum.Always; MouseFilter = MouseFilterEnum.Stop;
             LayoutMode = 1; AnchorsPreset = (int)LayoutPreset.FullRect; AnchorRight = 1; AnchorBottom = 1;
             _records = records; _accepted = accepted; _failed = failed;
@@ -139,18 +133,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             Resized += () => Try(() => _surface.SetExtent(Size));
             Refresh();
         }
-        catch
-        {
-            try { Free(); }
-            finally { _pageSounds?.Dispose(); _pageSounds = null; }
-            throw;
-        }
-    }
-
-    public override void _ExitTree()
-    {
-        // Child voices and the NIF surface leave the tree before this parent.
-        _pageSounds?.Dispose(); _pageSounds = null;
+        catch { Free(); throw; }
     }
 
     private int CurrentAttribute => _page is > 0 and < FalloutSpecialBookPresentation.ReviewPage ? _page - 1 :
@@ -202,20 +185,15 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
     {
         var next = _page + direction;
         if (_turning || next < 0 || next > _declaration.LastPage) return;
-        _page = next; _turning = true;
-        if (_pageSounds is { } input) Play(input.ResolveCurrent(direction, _records));
-        else Play("OBJBookSpecialPageTurn");
-        _animation.PlaySourceSequence(_declaration.Transition(next, direction)); Refresh();
+        _page = next; _turning = true; _animation.PlaySourceSequence(_declaration.Transition(next, direction));
+        Play("OBJBookSpecialPageTurn"); Refresh();
     }
     private void SelectIndex(int direction)
     {
         if (_page != FalloutSpecialBookPresentation.ReviewPage) return;
-        var next = Math.Clamp(_index + direction, FalloutSpecialBookPresentation.MinimumReviewIndex, FalloutSpecialAllocationSession.AttributeCount);
+        var next = Math.Clamp(_index + direction, 1, FalloutSpecialAllocationSession.AttributeCount);
         if (_index == next) return;
-        _index = next;
-        if (_pageSounds is { } input) Play(input.ResolveFocusCurrent(direction, _records));
-        else Play("OBJBookSpecialFocus");
-        Refresh();
+        _index = next; Play("OBJBookSpecialFocus"); Refresh();
     }
     private void Change(int attribute, int direction)
     {
@@ -277,12 +255,7 @@ internal sealed partial class NativeOwnedSpecialBookMenu : Control
             var record = FalloutSoundRecordReader.Find(_records, editorId);
             entry = (FalloutSoundRecordReader.Read(_records, record.FormKey), _records.SoundPaths.Revision(record.FormKey)); _sounds[editorId] = entry;
         }
-        Play(entry.Source);
-    }
-    private void Play(FalloutSoundRecord sound)
-    {
-        var player = NativeOwnedSoundPlayback.CreateMenu(sound, _records,
-            NativeOwnedSoundPlayback.MenuCall(this, checked(++_menuSoundOccurrence), sound.FormKey));
+        var player = NativeOwnedSoundPlayback.CreateMenu(entry.Source, _records, RuntimeLiveContentSource.Current!, _soundRandom);
         AddChild(player); player.Finished += player.QueueFree; player.Play();
     }
     private void Try(Action action)

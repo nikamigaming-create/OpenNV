@@ -90,9 +90,9 @@ internal sealed partial class NativeOwnedLocalMap(World3D world, Vector3 player,
             }
             AcceptEvent();
         }
-        else if (input is InputEventMouseMotion motion && _drag is { } previous)
+        else if (input is InputEventMouseMotion motion && _drag is not null)
         {
-            var delta = (motion.Position - previous) * _span / Math.Max(1, Size.Y);
+            var delta = motion.Relative * _span / Math.Max(1, Size.Y);
             _camera.Position -= new Vector3(delta.X, 0, delta.Y);
             _drag = motion.Position; UpdateArrow(); AcceptEvent();
         }

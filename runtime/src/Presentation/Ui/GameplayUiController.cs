@@ -463,14 +463,9 @@ internal partial class GameplayUiController : CanvasLayer
         {
             Name = "OwnedPipBoyProjectedScreenInput",
             MouseFilter = Control.MouseFilterEnum.Stop,
-            FocusMode = Control.FocusModeEnum.All,
         };
         screenInput.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        screenInput.GuiInput += input =>
-        {
-            if (input is InputEventMouseButton { Pressed: true }) screenInput.GrabFocus();
-            _ownedPipBoyInput?.Forward(input);
-        };
+        screenInput.GuiInput += input => _ownedPipBoyInput?.Forward(input);
         _pipBoyPanel.AddChild(screenInput);
     }
 

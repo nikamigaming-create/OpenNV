@@ -54,10 +54,8 @@ internal static class CampaignGoalsOwnedProbe
                 conditions = target.Conditions.Select(condition => new
                 {
                     condition.Flags,
-                    comparison = !condition.UsesComparisonGlobal && float.IsFinite(condition.Comparison) ? (float?)condition.Comparison : null,
-                    comparisonBits = condition.UsesComparisonGlobal ? condition.GlobalComparison?.RawFormId :
-                        BitConverter.SingleToUInt32Bits(condition.Comparison),
-                    comparisonGlobalRaw = condition.GlobalComparison?.RawFormId,
+                    comparison = float.IsFinite(condition.Comparison) ? (float?)condition.Comparison : null,
+                    comparisonBits = BitConverter.SingleToUInt32Bits(condition.Comparison),
                     condition.Function, condition.Argument1, condition.Argument2, condition.RunOn, condition.Reference,
                     winner = condition.Owner.Plugin.Name
                 })

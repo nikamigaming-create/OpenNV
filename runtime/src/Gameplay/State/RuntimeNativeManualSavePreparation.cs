@@ -21,17 +21,12 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
     private readonly Action<Exception> _reportFailure;
     private readonly FalloutScriptManualSaveRequests? _sourceRequests;
     private readonly Func<string?>? _originalSourceBlocker;
-    private readonly Node? _driverProducer;
-    private readonly Func<RuntimeNativeSourceMainScriptCaller.SavePause>? _pauseMain;
     internal RuntimeManualSaveSourceOrder? SourceOrder { get; private set; }
     private FalloutFiniteSoundSaveDrain? _audio;
     private RuntimeNativeSaveProducerPause? _sourcePause;
-    private RuntimeNativeSaveDriverPause? _driverPause;
-    private RuntimeNativeSourceMainScriptCaller.SavePause? _mainPause;
-    private ulong _mainDrainStartedMilliseconds;
     private SceneTree? _tree;
     private Action? _releaseInput;
-    private bool _priorPaused, _begun, _finished, _treePauseAcquired, _mouseModeAcquired;
+    private bool _priorPaused, _begun, _finished;
     private Input.MouseModeEnum _priorMouse;
 
     internal RuntimeNativeManualSavePreparation(RuntimeManualSaveRequests requests, Guid session, string source,
@@ -40,8 +35,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         Action<RuntimeManualSaveReceipt> publish, Action settled,
         ulong maximumWaitMilliseconds = RuntimeManualSavePreparation.MaximumWaitMilliseconds,
         IReadOnlyList<Node>? sourceProducers = null, Action<Exception>? reportFailure = null,
-        FalloutScriptManualSaveRequests? sourceRequests = null, Func<string?>? originalSourceBlocker = null,
-        Node? driverProducer = null, Func<RuntimeNativeSourceMainScriptCaller.SavePause>? pauseMain = null)
+        FalloutScriptManualSaveRequests? sourceRequests = null, Func<string?>? originalSourceBlocker = null)
     {
         _requests = requests; _session = session; _source = source; _player = player; _sounds = sounds;
         _invalidation = invalidation; _admission = admission; _writer = writer; _publish = publish; _settled = settled;
@@ -49,8 +43,6 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         _sourceProducers = sourceProducers ?? [];
         _reportFailure = reportFailure ?? (error => GD.PushError($"OPENNV_NATIVE_MANUAL_SAVE_PREPARATION_FAILURE {error}"));
         _sourceRequests = sourceRequests; _originalSourceBlocker = originalSourceBlocker;
-        _driverProducer = driverProducer;
-        _pauseMain = pauseMain;
         Name = "ManualSavePreparation"; ProcessMode = ProcessModeEnum.Always;
     }
 
@@ -59,50 +51,31 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         if (_begun || !IsInsideTree() || !_requests.Pending)
             throw new InvalidOperationException("Native save preparation has no unique pending scene request.");
         _begun = true;
-        _tree = GetTree();
+        _tree = GetTree(); _priorPaused = _tree.Paused; _priorMouse = Input.MouseMode;
         try
         {
             if (_invalidation() is { } reason) throw new InvalidOperationException(reason);
-            if (_pauseMain is not null)
+            if (_sourceRequests is not null)
             {
-                _mainPause = _pauseMain();
-                _mainDrainStartedMilliseconds = Time.GetTicksMsec();
-                if (!_mainPause.Drained) return;
-                _mainPause.RequireReturned();
+                _requests.ObserveOrderedSourceSave(_sourceRequests.Receipt);
+                SourceOrder = new(_sourceRequests, _requests.Receipt!, Engine.GetProcessFrames());
+                _requests.ObserveOrderedSourceSave(SourceOrder.Receipt);
             }
-            PrepareReturnedMain();
+            _audio = _sounds.PrepareFiniteSaveDrain();
+            _tree.Paused = true;
+            _sourcePause = new(_sourceProducers);
+            _releaseInput = _player.AcquirePausedSaveInput();
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+            _requests.Prepare(Engine.GetProcessFrames(), Time.GetTicksMsec(), _admission(), _audio.Voices, _maximumWaitMilliseconds);
+            _audio.Activate();
+            _publish(_requests.Receipt!);
         }
         catch (Exception error)
         {
-            _requests.Fail(error.GetBaseException() == error ? error.Message : error.Message + " <- " + error.GetBaseException().Message);
+            _requests.Fail(error.Message);
             _reportFailure(error);
             Finish();
         }
-    }
-
-    private void PrepareReturnedMain()
-    {
-        _mainPause?.RequireReturned();
-        if (_sourceRequests is not null)
-        {
-            if (_driverProducer is null) throw new NotSupportedException("The shared save queue lacks its actual gameplay driver pause owner.");
-            _requests.ObserveOrderedRequests();
-            SourceOrder = new(_sourceRequests, _requests.Receipt!, Engine.GetProcessFrames());
-            _requests.ObserveOrderedRequests();
-        }
-        _audio = _sounds.PrepareFiniteSaveDrain();
-        _priorPaused = _tree!.Paused;
-        _treePauseAcquired = true;
-        _tree!.Paused = true;
-        if (_driverProducer is not null) _driverPause = new(_driverProducer);
-        _sourcePause = new(_sourceProducers);
-        _releaseInput = _player.AcquirePausedSaveInput();
-        _priorMouse = Input.MouseMode;
-        _mouseModeAcquired = true;
-        Input.MouseMode = Input.MouseModeEnum.Visible;
-        _requests.Prepare(Engine.GetProcessFrames(), Time.GetTicksMsec(), _admission(), _audio.Voices, _maximumWaitMilliseconds);
-        _audio.Activate();
-        _publish(_requests.Receipt!);
     }
 
     public override void _Process(double delta)
@@ -112,20 +85,9 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         {
             if (!_requests.Pending) return;
             if (_invalidation() is { } reason) { _requests.Cancel(reason); return; }
-            if (_audio is null)
-            {
-                if (_mainPause is null) throw new InvalidOperationException("Save preparation has no entered Main drain owner.");
-                if (Time.GetTicksMsec() - _mainDrainStartedMilliseconds > _maximumWaitMilliseconds)
-                    throw new InvalidOperationException("Manual save timed out waiting for the entered Main call to return.");
-                if (!_mainPause.Drained) return;
-                PrepareReturnedMain();
-                return;
-            }
-            _mainPause?.RequireReturned();
             if (_tree?.Paused != true || !_player.ModalInput || Input.MouseMode != Input.MouseModeEnum.Visible)
                 throw new FalloutFiniteSoundSaveDrainInvalidatedException("Manual save lost its gameplay/input pause lease.");
             _sourcePause!.Validate();
-            _driverPause?.Validate();
             SourceOrder?.Validate(_sourceRequests!, _requests.Receipt!, Engine.GetProcessFrames());
             _requests.DrainPrepared(_session, _source, Engine.GetProcessFrames(), Time.GetTicksMsec(),
                 () => _audio!.ObservePending(), _admission, WriteOrderedCheckpoint);
@@ -134,7 +96,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         catch (FalloutFiniteSoundSaveDrainInvalidatedException error) { _requests.Cancel(error.Message); }
         catch (Exception error)
         {
-            _requests.Fail(error.GetBaseException() == error ? error.Message : error.Message + " <- " + error.GetBaseException().Message);
+            _requests.Fail(error.Message);
             _reportFailure(error);
         }
         finally { if (!_requests.Pending) Finish(); }
@@ -154,8 +116,6 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
             _invalidation() is not null || _tree?.Paused != true || !_player.ModalInput ||
             Input.MouseMode != Input.MouseModeEnum.Visible) return false;
         _sourcePause!.Validate();
-        _driverPause?.Validate();
-        _mainPause?.RequireReturned();
         return source.PermitsOriginalSourceDrain(_sourceRequests!, _requests.Receipt!, Engine.GetProcessFrames()) &&
             _audio!.ObservePending().Count == 0 && _admission().Kind == RuntimeManualSaveAdmissionKind.Ready;
     }
@@ -172,17 +132,13 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
                 source.Validate(_sourceRequests!, _requests.Receipt!, Engine.GetProcessFrames());
                 _sourceRequests!.RequireCapture();
             }
-            finally { if (_requests.Pending) _requests.ObserveOrderedRequests(); }
+            finally { _requests.ObserveOrderedSourceSave(source.Receipt); }
         }
         if (_invalidation() is { } reason) throw new FalloutFiniteSoundSaveDrainInvalidatedException(reason);
         _sourcePause!.Validate();
-        _driverPause?.Validate();
-        _mainPause?.RequireReturned();
         if (_audio!.ObservePending().Count != 0 || _admission().Kind != RuntimeManualSaveAdmissionKind.Ready)
             throw new NotSupportedException("Ordered source/manual preparation lost its complete quiescent capture boundary.");
-        if (SourceOrder is null || _requests.Receipt!.Slot != id)
-            throw new NotSupportedException("Manual checkpoint has no actual shared queue/preparation order.");
-        return SourceOrder.WriteManual(_requests.Receipt, Engine.GetProcessFrames(), _writer);
+        return _writer(id);
     }
 
     private void Finish()
@@ -194,9 +150,8 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         {
             // Restore the tree while audio still has Always mode, then restore
             // each original playback flag after Godot's pause notifications.
-            try { if (_treePauseAcquired && _tree is not null && GodotObject.IsInstanceValid(_tree)) _tree.Paused = _priorPaused; }
+            try { if (_tree is not null && GodotObject.IsInstanceValid(_tree)) _tree.Paused = _priorPaused; }
             catch (Exception error) { errors.Add(error); }
-            finally { _treePauseAcquired = false; }
         }
         finally
         {
@@ -215,23 +170,13 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
                     finally
                     {
                         _sourcePause = null;
-                        try { _driverPause?.Dispose(); }
-                        catch (Exception error) { errors.Add(error); }
-                        finally { _driverPause = null; }
                         try { _releaseInput?.Invoke(); }
                         catch (Exception error) { errors.Add(error); }
                         finally
                         {
                             _releaseInput = null;
-                            try { if (_mouseModeAcquired) Input.MouseMode = _priorMouse; }
+                            try { if (_begun) Input.MouseMode = _priorMouse; }
                             catch (Exception error) { errors.Add(error); }
-                            finally
-                            {
-                                _mouseModeAcquired = false;
-                                try { _mainPause?.Dispose(); }
-                                catch (Exception error) { errors.Add(error); }
-                                finally { _mainPause = null; }
-                            }
                         }
                     }
                 }

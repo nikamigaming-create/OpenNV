@@ -7,10 +7,9 @@ internal sealed record FalloutPlacedLight(
     byte[] ColorRgb,
     float Intensity,
     float[] ShaderColorRgb,
-    FalloutFormKey? Emittance,
-    float RadiusAdjustmentGameUnits);
+    FalloutFormKey? Emittance);
 
-internal static partial class FalloutPlacedLightResolver
+internal static class FalloutPlacedLightResolver
 {
     private const int StaticDuration = -1;
     private const uint StaticPointFlags = 0;
@@ -25,11 +24,6 @@ internal static partial class FalloutPlacedLightResolver
         FalloutBaseObjectDefinition baseObject,
         FalloutPluginStack? records = null,
         Func<FalloutFormKey, float[]>? regionEmittance = null)
-        => ResolveParameters(reference, baseObject, modeled: false, records, regionEmittance);
-
-    private static FalloutPlacedLight ResolveParameters(FalloutPlacedReference reference,
-        FalloutBaseObjectDefinition baseObject, bool modeled, FalloutPluginStack? records,
-        Func<FalloutFormKey, float[]>? regionEmittance)
     {
         if (baseObject.Signature != "LIGH" || baseObject.Light is not { } source)
             throw new InvalidDataException(
@@ -37,13 +31,11 @@ internal static partial class FalloutPlacedLightResolver
         if (reference.Base != baseObject.FormKey)
             throw new InvalidDataException(
                 $"Native light reference {reference.FormKey} base identity differs.");
-        if (!float.IsFinite(reference.Scale) || reference.Scale <= 0)
-            throw new InvalidDataException($"Native light reference {reference.FormKey} has invalid XSCL.");
-        if (!modeled && reference.Scale != 1.0f)
+        if (reference.Scale != 1.0f)
             throw new NotSupportedException(
                 $"Native light reference {reference.FormKey} has unsupported XSCL {reference.Scale:R}.");
         RequireStaticPoint(source, baseObject.FormKey);
-        if (!modeled && baseObject.ModelPath is not null)
+        if (baseObject.ModelPath is not null)
             throw new NotSupportedException(
                 $"Native LIGH {baseObject.FormKey} source model {baseObject.ModelPath} requires a light/model/controller owner.");
         // XESP belongs to the shared reference world and native presentation.
@@ -61,7 +53,7 @@ internal static partial class FalloutPlacedLightResolver
             emittance = new FalloutExternalEmittance(records, form, regionEmittance).Sample();
         }
         return new FalloutPlacedLight(reference.FormKey, baseObject.FormKey, radius, source.ColorRgb,
-            source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance, adjustment);
+            source.Intensity, ModulateColor(source.ColorRgb, emittance), reference.Emittance);
     }
 
     internal static void RequireStaticPoint(FalloutLightDefinition source, FalloutFormKey form)

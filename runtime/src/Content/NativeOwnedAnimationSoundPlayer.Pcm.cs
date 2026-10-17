@@ -5,32 +5,14 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed partial class NativeOwnedAnimationSoundPlayer
 {
-    private sealed record PcmContinuationObservation(bool Ready, string? UnownedReason);
-
-    private PcmContinuationObservation ObservePcmContinuation(Node node, Voice voice)
-    {
-        // Mixer corruption is independent of emitter continuation support.
-        // Check it before an unsupported emitter can become a negative capability.
-        voice.Pcm?.RequireHealthy();
-        try
-        {
-            CapturePcmVoice(node, voice).Samples.Validate();
-            return new(true, null);
-        }
-        catch (NotSupportedException error)
-        {
-            // An unowned continuation is a negative capability. Keep its exact
-            // reason observable; querying admission must not lose the entire
-            // gameplay publication or admit that voice to a completed save.
-            return new(false, error.Message);
-        }
-    }
-
     private Exception? _pcmRestoreFailure;
     internal void RequirePcmRestored()
     {
         if (_pcmRestoreFailure is { } failure) throw new InvalidDataException("Saved audio could not be restored.", failure);
     }
+    private FalloutAnimationSoundPlaybackDiagnostic ObservePcmVoice(Node node, Voice voice) =>
+        FalloutAnimationSoundEvents.ObservePlayback(() => CapturePcmVoice(node, voice));
+
     private FalloutAnimationSoundPlaybackSnapshot CapturePcmVoice(Node node, Voice voice)
     {
         if (!_voices.TryGetValue(node, out var current) || !ReferenceEquals(current, voice) ||
@@ -42,12 +24,10 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             throw new NotSupportedException("PCM continuation lost its original native playback.");
         var path = _actor.GetPathTo(voice.Emitter).ToString();
         var bone = RuntimeNativeNifSoundEmitters.CaptureBone(_actor, voice.Emitter, _events?.Reference);
-        var sourceNode = bone is null ? _sourceNodes?.Capture(voice.Emitter) : null;
         if (bone is not null) _events!.RequireEnabledSourceEmitter();
-        else if (sourceNode is not null) _events!.RequireEnabledSourceEmitter();
         else if (RuntimeNativeNifSoundEmitters.HasAnonymousPath(path))
             throw new NotSupportedException("Anonymous source sound emitter has no typed continuation identity.");
-        return new(voice.Pcm.Capture(), path, voice.FollowEmitter, bone, sourceNode);
+        return new(voice.Pcm.Capture(), path, voice.FollowEmitter, bone);
     }
 
     public override void _Ready()
@@ -68,12 +48,6 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             {
                 _events!.RequireEnabledSourceEmitter();
                 emitter = RuntimeNativeNifSoundEmitters.RestoreBone(_actor, _events.Reference, bone, _emitters);
-            }
-            else if (saved.SourceNode is { } sourceNode)
-            {
-                _events!.RequireEnabledSourceEmitter();
-                emitter = (_sourceNodes ?? throw new NotSupportedException("Cold sound node has no fresh parsed reference model binding."))
-                    .Restore(sourceNode);
             }
             else
             {

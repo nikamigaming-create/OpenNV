@@ -45,7 +45,7 @@ public partial class RuntimeCoordinator
         _loadingStartedMilliseconds = _loadingPhaseStartedMilliseconds = Time.GetTicksMsec();
         SetLoadingStatus("Loading area");
         GetTree().Paused = true;
-        await WaitForHostFrame();
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         if (_nativeSessionTransitioning || _retiringNativeSession) throw new OperationCanceledException("Loading session retired.");
         var cell = FalloutCellSceneReader.ReadDefinition(_nativePluginStack!, destination);
         var screens = new NativeOwnedLoadingScreens(_nativePluginStack!, cell,
@@ -56,7 +56,7 @@ public partial class RuntimeCoordinator
         screens.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         GD.Print($"OPENNV_NATIVE_LOADING_SCREENS destination={destination} locationSpecificOnly={_nativeQuestScripts.Scripts.Session.LocationSpecificLoadScreensOnly} " +
             "source=winning-LSCR-and-LSCT ancillary-ui=unbound parity=unverified");
-        await WaitForHostFrame();
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         if (_nativeSessionTransitioning || _retiringNativeSession) throw new OperationCanceledException("Loading session retired.");
     }
 

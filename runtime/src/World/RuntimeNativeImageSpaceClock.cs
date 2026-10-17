@@ -1,10 +1,9 @@
 using Godot;
 using OpenNV.Runtime.Content;
-using OpenNV.Runtime.Gameplay.State;
 
 namespace OpenNV.Runtime.World;
 
-internal sealed partial class RuntimeNativeImageSpaceClock(FalloutImageSpaceState state, FalloutGameTime time, Guid process) : Node
+internal sealed partial class RuntimeNativeImageSpaceClock(FalloutImageSpaceState state) : Node
 {
     private string? _error;
     internal object State => new
@@ -24,21 +23,16 @@ internal sealed partial class RuntimeNativeImageSpaceClock(FalloutImageSpaceStat
 
     public override void _Process(double delta)
     {
-        if (_error is not null) return;
+        if (_error is not null || GetTree().Paused) return;
         try
         {
-            if (state.HasSourceMainImages) return; // Its actual Main indexed callback owns the shared cache.
-            // Source index zero reads the calendar even while simulation is
-            // paused. Draws, menu captures and save capture never write it.
-            state.SampleDoubleVisionClock(time, process);
-            if (GetTree().Paused) return;
             foreach (var expired in state.Advance(delta))
                 GD.Print($"OPENNV_NATIVE_IMAD_EXPIRED source={expired.Form} duration={expired.Duration:R} owner=gameplay-clock");
         }
-        catch (Exception error)
+        catch (Exception error) when (error is ArgumentException or InvalidDataException or InvalidOperationException)
         {
-            _error = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
-            GD.PushError("OPENNV_IMAGE_SPACE_CLOCK_FAILURE " + _error);
+            _error = error.Message;
+            GD.PushError("OPENNV_IMAGE_SPACE_CLOCK_FAILURE " + error.Message);
         }
     }
 }

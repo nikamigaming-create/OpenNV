@@ -63,9 +63,9 @@ foreach ($file in @('NOTICE.md')) {
 }
 Copy-Item -LiteralPath (Join-Path $repo 'runtime/THIRD_PARTY.md') -Destination $output
 Copy-Item -LiteralPath (Join-Path $repo 'docs/playtest-candidate.md') -Destination (Join-Path $output 'PLAYTEST.md')
-@('@echo off', 'cd /d "%~dp0"', 'start "OpenNV" "%~dp0OpenNV.exe" --xr-mode off -- --launcher --presentation first-person %*') |
+@('@echo off', 'cd /d "%~dp0"', 'start "OpenNV" "%~dp0OpenNV.exe" --xr-mode off -- --launcher --launcher-game newvegas --presentation first-person --native-plugins none --content-selection vanilla --profile-root "%APPDATA%\Godot\app_userdata\OpenNV\vanilla" %*') |
     Set-Content -LiteralPath (Join-Path $output 'OpenNV Flat.cmd') -Encoding ascii
-@('@echo off', 'cd /d "%~dp0"', 'start "OpenNV VR" "%~dp0OpenNV.exe" --xr-mode on -- --launcher --presentation openxr %*') |
+@('@echo off', 'cd /d "%~dp0"', 'start "OpenNV VR" "%~dp0OpenNV.exe" --xr-mode on -- --launcher --launcher-game newvegas --presentation openxr --native-plugins none --content-selection vanilla --profile-root "%APPDATA%\Godot\app_userdata\OpenNV\vanilla" %*') |
     Set-Content -LiteralPath (Join-Path $output 'OpenNV VR.cmd') -Encoding ascii
 $forbidden = @(Get-ChildItem -LiteralPath $output -Recurse -File | Where-Object {
     $_.Extension -match '^\.(esm|esp|bsa|nif|dds|kf|lip|fuz|fos)$' -or $_.Name -match 'Fallout(NV|3)?\.exe|save\.json|courier.*\.json'

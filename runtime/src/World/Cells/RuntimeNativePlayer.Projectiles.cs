@@ -173,7 +173,6 @@ internal partial class RuntimeNativePlayer
                 var flight = effects.PrepareProjectile(shot.Projectile,
                     _configuration.Simulation.GravityMetersPerSecondSquared,
                     origin, projectileDirection, CollisionMask | CollisionLayer, SelfQueryBodies);
-                flight.BindGameplayWorld(_playerPerceptionWorld ?? throw new InvalidOperationException("Player projectile has no current gameplay World."));
                 flight.OnContact = contact => ApplyProjectileFlightContact(shot, damage, contact);
                 if (shot.Projectile.ExplosionSource is not null)
                     flight.OnDetonate = point => ApplyProjectileFlightDetonation(shot, explosionDamage!.Value, point);

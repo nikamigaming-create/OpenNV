@@ -34,20 +34,6 @@ internal static class SoundEmitterPersistenceContracts
             bone with { SkeletonPath = "meshes\\..\\skeleton.nif" }, bone with { SkeletonPath = "sound\\skeleton.nif" },
             bone with { SkeletonSha256 = "missing" }, bone with { Block = -1 }, bone with { Name = "" }
         }) Reject(() => (saved with { Events = [saved.Events[0] with { Playback = playback with { SourceBone = invalid } }] }).Validate());
-        var node = new FalloutAnimationSoundNodeEmitterSnapshot(reference, "meshes\\fixture\\object.nif", new string('c', 64), 3, "");
-        var nodePlayback = playback with { SourceBone = null, SourceNode = node, EmitterPath = "@Node3D@1/Emitter" };
-        var nodeSaved = saved with { Events = [saved.Events[0] with { Playback = nodePlayback }] };
-        nodeSaved.Validate();
-        Require(JsonSerializer.Deserialize<FalloutAnimationSoundEventsSnapshot>(JsonSerializer.Serialize(nodeSaved))!.Events[0].Playback == nodePlayback,
-            "Typed source node identity changed across serialized sound continuation.");
-        foreach (var invalid in new[]
-        {
-            node with { Reference = new("Pose.esm", 0x902) }, node with { ModelPath = "meshes/fixture/object.nif" },
-            node with { ModelPath = "sound\\object.nif" }, node with { ModelSha256 = "missing" },
-            node with { Block = -1 }, node with { Name = null }, node with { Block = null }
-        }) Reject(() => (nodeSaved with { Events = [nodeSaved.Events[0] with { Playback = nodePlayback with { SourceNode = invalid } }] }).Validate());
-        (nodeSaved with { Events = [nodeSaved.Events[0] with { Playback = nodePlayback with { SourceNode = node with { Block = null, Name = null } } }] }).Validate();
-        Reject(() => (nodeSaved with { Events = [nodeSaved.Events[0] with { Playback = nodePlayback with { SourceBone = bone } }] }).Validate());
         // Old stable root/node paths keep their old schema shape. Anonymous
         // legacy history can still be read; its native binding stays refused.
         (saved with { Events = [saved.Events[0] with { Playback = playback with { SourceBone = null, EmitterPath = "." } }] }).Validate();
@@ -60,7 +46,7 @@ internal static class SoundEmitterPersistenceContracts
     private static void RejectLegacySchema(FalloutAnimationSoundEventsSnapshot sounds)
     {
         var validate = typeof(FalloutNativeCampaignSave).GetMethod("Validate", BindingFlags.Static | BindingFlags.NonPublic)!;
-        foreach (var schema in new[] { "opennv-native-fnv-campaign-save/v48", "opennv-native-fnv-campaign-save/v47" })
+        foreach (var schema in new[] { FalloutNativeCampaignSave.FinishedRadioSchema, FalloutNativeCampaignSave.PlayerAudioSchema })
         foreach (var player in new[] { false, true })
         {
             var state = new FalloutNativeCampaignState(schema, "", default, "", 0, "", null!, null!, [], [], [], [], [], [], [],
@@ -69,8 +55,8 @@ internal static class SoundEmitterPersistenceContracts
                     AnimationSoundEvents: sounds)],
                 PlayerPackageAudio: player ? new(sounds, 7) : null);
             try { validate.Invoke(null, [state, ""]); }
-            catch (TargetInvocationException error) when (error.InnerException is NotSupportedException rejected &&
-                rejected.Message == "Campaign state requires the current complete source-owned schema.") { continue; }
+            catch (TargetInvocationException error) when (error.InnerException is InvalidDataException rejected &&
+                rejected.Message == "Legacy campaign schema contains future source sound bone continuation.") { continue; }
             throw new InvalidDataException("Legacy campaign schema accepted future typed source emitter continuation.");
         }
     }

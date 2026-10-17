@@ -2,11 +2,10 @@ using System.Buffers.Binary;
 using System.Text;
 using OpenNV.Runtime.Content;
 
-internal static partial class ConversationContracts
+internal static class ConversationContracts
 {
     internal static void Run()
     {
-        ResultOnlyInfoContracts();
         var directory = Path.Combine(Path.GetTempPath(), "opennv-conversation-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var file = Path.Combine(directory, "Dialogue.esm");
@@ -54,10 +53,7 @@ internal static partial class ConversationContracts
                     Info(0x9a1, 0x702, 0, 1), Info(0x9a2, 0x700, 0, 1)),
                 Topic(0x817, "Scripted conversation", 0, 50, [InfoOfType(1, 0x9a3, 0x700, 0, 1)], type: 1),
                 Topic(0x818, "Immediate results", Info(0x9a4, 0x700, 9, 2)),
-                Topic(0x819, "Immediate choice", Info(0x9a5, 0x700, 0, 1, Field("TCLT", U32(0x818)))),
-                Topic(0x81a, "Admitted immediate added topic", Info(0x9a6, 0x700, 8, 1, Field("NAME", U32(0x802)))),
-                Topic(0x81b, "Admitted SayOnce choice", Info(0x9a7, 0x700, 5, 1)),
-                Topic(0x81c, "Admitted explicit choice", Info(0x9a8, 0x700, 0, 1, Field("TCLT", U32(0x81b)))));
+                Topic(0x819, "Immediate choice", Info(0x9a5, 0x700, 0, 1, Field("TCLT", U32(0x818)))));
             File.WriteAllBytes(file, data);
             using var records = FalloutPluginStack.Load(directory, ["Dialogue.esm"]);
             var quests = new FalloutQuestState(records);
@@ -100,11 +96,10 @@ internal static partial class ConversationContracts
                 "An ineligible empty INFO prevented selection or executed its result.");
             calls.Clear();
             var selectedEmpty = Create();
-            selectedEmpty.Start(Key(0x900), Key(0x813));
-            Require(selectedEmpty.Phase == "choices" && calls.SequenceEqual([(0x99au, true), (0x99au, false)]) &&
-                selectedEmpty.Response is null && selectedEmpty.ResponseGeneration == 0 && selectedEmpty.ResultOnlyCompletions == 1,
-                "Selected result-only INFO lost its effects or fabricated speech.");
-            calls.Clear();
+            Reject(() => selectedEmpty.Start(Key(0x900), Key(0x813)));
+            Require(selectedEmpty.Phase == "failed" && calls.Count == 0 && selectedEmpty.Response is null &&
+                selectedEmpty.Error!.Contains("zero-response", StringComparison.Ordinal),
+                "An unowned selected empty INFO ran effects or fabricated speech.");
             conversation.Start(Key(0x900), Key(0x800));
             Require(conversation.Info!.Record.FormKey == Key(0x910) && calls.SequenceEqual([(0x910u, true)]), "Greeting priority/start state or begin result changed.");
             conversation.CompleteResponse();
@@ -159,7 +154,6 @@ internal static partial class ConversationContracts
             Reject(() => changed.Choose(Key(0x802)));
             Require(changed.Phase == "failed", "A stale offered choice bypassed current eligibility.");
             ScriptedSelection(records);
-            GameplayAdmission(records);
             Console.WriteLine("OPENNV_CONVERSATION_CONTRACT_PASS responseOrder=true exactlyOnce=true followUps=true sourceChoices=true topLevelReturn=true topicPriority=true addedTopics=true prompts=true questPriority=true sayOnce=true orderedConditions=true changedEligibility=true explicitFailure=true");
         }
         finally { File.Delete(file); Directory.Delete(directory); }

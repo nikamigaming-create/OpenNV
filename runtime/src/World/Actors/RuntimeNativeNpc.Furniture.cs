@@ -178,7 +178,6 @@ internal partial class RuntimeNativeNpc
         else if (clip.Sequence.ControlledBlocks.Any(link => link.NodeName == clip.Sequence.TargetName))
             throw new NotSupportedException("Furniture base accumulation requires root-motion extraction.");
         var animation = new RuntimeNativeNifAnimation(clip.Nif, clip.Sequence, Skeleton, accumulationRoot: rootOwner);
-        Skeleton.RefuseUnownedLogicalPose("source-logical-scene-native-furniture-accumulation-pose-writer-unowned");
         Skeleton.Node.SetBonePose(Skeleton.BoneIndex(animation.Sequence.TargetName), Transform3D.Identity);
         animation.ApplySourceTime(animation.Sequence.StartTime);
         _baseAnimation = animation;
@@ -207,7 +206,7 @@ internal partial class RuntimeNativeNpc
         _sitting = 1;
         StartFurnitureAnimation();
         _furnitureEntry = null;
-        if (!_sandboxFurnitureAction) _packageEvents!.Complete();
+        _packageEvents!.Complete();
         GD.Print($"OPENNV_NATIVE_FURNITURE_OCCUPIED reference={Appearance.Reference} package={_aiPackage!.FormKey} " +
             $"target={_furnitureReference} marker={_seat!.MarkerId} sourceIndex={_seat.Index} " +
             $"initialPlacement={_furnitureInitialPlacement} animation={_baseAnimation!.Sequence.Name} parity=unmeasured");
@@ -231,7 +230,6 @@ internal partial class RuntimeNativeNpc
     {
         Basis = _furnitureOccupied.Basis;
         ClearFurniture();
-        if (CompleteSandboxFurnitureExit()) return;
         _packageEvents!.Change(null);
         _aiPackage = null;
         _findFurniture = null;
@@ -278,12 +276,6 @@ internal partial class RuntimeNativeNpc
         }
         else if (source.Procedure != 6 || source.LocationType != 0 || source.LocationRadius != 0 ||
             source.LocationReference != _furnitureReference) return false;
-        if (ScriptPackageAssignmentPending || _packageEvents!.Active?.Form != selected.FormKey)
-        {
-            _packageEvents!.Change(null);
-            if (_bindingScriptPackageRevision != ScriptPackageRevision || _requestedSelection is not null)
-            { _aiPollRemaining = 0; return true; }
-        }
         // A source package can enable seated conversation after occupation.
         // Its change/end events do not require leaving and re-entering the
         // same seat, and its existing animation keeps its observed phase.
@@ -299,9 +291,6 @@ internal partial class RuntimeNativeNpc
 
     public override void _ExitTree()
     {
-        RetainFollowMotion();
-        RetainSandboxCollection();
-        RetireSandboxNativeActionOnExit();
         RetainHeadTracking();
         RetainPendingSelection();
         RetainBindingFailure();

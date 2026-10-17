@@ -51,11 +51,17 @@ public partial class RuntimeCoordinator
         }
     }
 
+    private bool CanFocusNativeXrPipBoy() => _nativePlayer is { ModalInput: false, FurnitureActive: false } player &&
+        IsInstanceValid(player) && player.IsInsideTree() && player.SourceControls.PipBoy &&
+        !_nativeDoorLoading && !_nativeSessionTransitioning && !_retiringNativeSession && !GetTree().Paused &&
+        _nativeOpeningStageDriver?.PipBoy.Available == true && _nativePipBoy is { } view &&
+        IsInstanceValid(view) && view.InputReady;
+
     private void FocusNativeXrPipBoy(bool focused)
     {
         if (_nativeXr is null || _nativePipBoy is null) return;
         var wasFocused = _nativeXr.PointAtPipBoy is not null;
-        focused &= NativeWristPipBoyInputAccess() == Gameplay.State.FalloutPipBoyInputBlocker.None;
+        focused = focused && CanFocusNativeXrPipBoy();
         _nativeOpeningStageDriver!.PipBoy.SetOpen(focused);
         if (focused)
         {
@@ -65,6 +71,6 @@ public partial class RuntimeCoordinator
         }
         _nativePipBoy.SetXrFocus(focused);
         _nativeXr.PointAtPipBoy = focused ? _nativePipBoy.PointFromXr : null;
-        if (wasFocused && !focused && !_retiringNativeSession && !_nativeSessionTransitioning) RequestNativePipBoySave();
+        if (wasFocused && !focused && !_nativeSessionTransitioning && !_retiringNativeSession) SaveNativeInteraction();
     }
 }

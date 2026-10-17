@@ -6,7 +6,6 @@ TagSkillMenuContracts.Run();
 MenuPcButtonContracts.Run();
 SpecialBookMenuContracts.Run();
 MenuGeometryProjectionContracts.Run();
-PipBoyInputContracts.Run();
 
 var hash = new string('a', 64);
 var layout = new OwnedGamebryoTileLayout(

@@ -11,21 +11,14 @@ internal sealed record FalloutNpcPreparedPart(FalloutNpcAppearancePart Part, Fal
     IReadOnlyDictionary<int, IReadOnlyDictionary<string, Vector3[]>> Morphs);
 
 internal sealed record FalloutNpcPreparedGeometry(FalloutNpcAppearance Appearance, byte[] Skeleton,
-    IReadOnlyDictionary<string, FalloutNifTransform>? HeadBinds, IReadOnlyList<FalloutNpcPreparedPart> Parts,
-    FalloutActorSourceModel SourceModel)
+    IReadOnlyDictionary<string, FalloutNifTransform>? HeadBinds, IReadOnlyList<FalloutNpcPreparedPart> Parts)
 {
     internal static FalloutNpcPreparedGeometry Read(FalloutNpcAppearance appearance,
-        RuntimeLiveContentSource source, CancellationToken cancellation = default,
-        FalloutNifPhysicalModel? retainedSkeleton = null)
+        RuntimeLiveContentSource source, CancellationToken cancellation = default)
     {
         if (!appearance.CanConstruct) throw new NotSupportedException(string.Join("; ", appearance.Blockers));
         var skeleton = ReadBytes(appearance.SkeletonPath);
-        var decodedSkeleton = FalloutNifFile.Read(skeleton);
-        if (retainedSkeleton is not null && retainedSkeleton.Source.Sha256 != decodedSkeleton.Sha256)
-            throw new NotSupportedException("Retained actor skeleton differs from the selected source and requires animation/physical rebinding.");
-        var skeletonModel = retainedSkeleton ?? FalloutNifPhysicalModel.Read(decodedSkeleton, cancellation);
         var parts = new List<FalloutNpcPreparedPart>();
-        var physicalParts = new List<FalloutActorSourcePart>();
         foreach (var part in appearance.Models)
         {
             cancellation.ThrowIfCancellationRequested();
@@ -33,7 +26,6 @@ internal sealed record FalloutNpcPreparedGeometry(FalloutNpcAppearance Appearanc
             try
             {
                 var model = FalloutNifFile.Read(ReadBytes(part.ModelPath));
-                physicalParts.Add(new(part, FalloutNifPhysicalModel.Read(model, cancellation)));
                 var selected = FalloutNpcAppearanceHairShape.Select(appearance, part);
                 var morphSource = FalloutNpcAppearanceMorph.Resolve(source, part, selected);
                 var morph = morphSource is null ? null : new FalloutNpcFaceGeometry(appearance, part, morphSource.Geometry, selected);
@@ -58,8 +50,7 @@ internal sealed record FalloutNpcPreparedGeometry(FalloutNpcAppearance Appearanc
             }
         }
         var head = parts.SingleOrDefault(part => part.Part.Role == "head");
-        return new(appearance, skeleton, head is null ? null : FalloutNpcFaceAttachment.ReadHeadBinds(head.Model), parts,
-            new(appearance, skeletonModel, physicalParts));
+        return new(appearance, skeleton, head is null ? null : FalloutNpcFaceAttachment.ReadHeadBinds(head.Model), parts);
 
         byte[] ReadBytes(string path)
         {

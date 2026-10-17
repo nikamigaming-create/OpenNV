@@ -11,7 +11,6 @@ internal sealed partial class FalloutReferenceScripts
 
     internal bool CanResumeSpeechCompletion(FalloutSpeechCompletionReceipt receipt)
     {
-        if (world.FunctionalFailure is not null) return false;
         var instance = world.Retained(receipt.Speaker);
         if (instance.ScriptError is null) return false;
         var frame = instance.ScriptStoppedFrame;
@@ -37,7 +36,6 @@ internal sealed partial class FalloutReferenceScripts
 
     internal FalloutReferenceScriptEventResult ResumeSpeechCompletion(FalloutSpeechCompletionReceipt receipt)
     {
-        world.RequireNoFunctionalFailure();
         var instance = world.Retained(receipt.Speaker);
         _ = FalloutFinishedSpeechSourceBinding.Capture(records, instance, receipt);
         if (instance.ScriptStoppedFrame is not { } frame || instance.Script is null)

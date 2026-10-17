@@ -17,7 +17,7 @@ internal partial class RuntimeNativeImageSpace : Node
     internal RetailHdrCompositorEffect Effect => _effect;
 
     internal void Configure(FalloutImageSpace source, FalloutImageSpaceState state, RetailHdrCompositorEffect effect,
-        FalloutGameTime? gameTime = null, Guid? process = null)
+        FalloutGameTime? gameTime = null)
     {
         Name = "NativeImageSpace";
         ProcessMode = ProcessModeEnum.Always;
@@ -30,35 +30,20 @@ internal partial class RuntimeNativeImageSpace : Node
             SetMeta("opennv_image_space_phase_unbound", error);
             GD.PushError($"OPENNV_IMAGE_SPACE_PHASE_UNBOUND {error}");
         }
-        if (effect.DoubleVisionPhase is not null)
-            BindCurrentPhaseClock(gameTime ?? throw new NotSupportedException("Image phase presentation has no actual calendar."),
-                process ?? throw new NotSupportedException("Image phase presentation has no actual process association."));
         Publish(0);
     }
 
     // Menus pause simulation, but must still present the latest committed IMAD
     // state. Otherwise a fade applied on the menu-opening frame is never drawn.
-    public override void _Process(double delta)
-    {
-        if (UsesSourceMain)
-        {
-            // Main owns the source list, clock and publication. Presentation
-            // processing cannot run a second independent composition.
-            if (_sourceNativeFrame is not null) PublishObservation();
-            return;
-        }
-        Publish(GetTree().Paused ? 0 : delta);
-    }
+    public override void _Process(double delta) => Publish(GetTree().Paused ? 0 : delta);
 
     public override void _Notification(int what)
     {
-        if (what == NotificationPredelete) RetireIndependentImageChildren();
+        if (what == NotificationPredelete) _effect?.ReleaseRenderingResources();
     }
 
     internal IDisposable BeginMenuBackground(FalloutPluginStack records, FalloutMenuBackgroundKind kind)
     {
-        if (UsesSourceMain)
-            return BeginSourceMenuBackground(records, kind);
         if (_menuBackground is not null) throw new InvalidOperationException("Another static menu background already owns the world capture.");
         var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Menu background has no owned content source.");
         var declarations = FalloutExecutableStringTable.ReadMenuBackgroundDeclarations(source.FalloutExecutablePath);
@@ -83,27 +68,18 @@ internal partial class RuntimeNativeImageSpace : Node
         {
             var target = _owner; _owner = null;
             if (target is null || !GodotObject.IsInstanceValid(target) || serial != target._menuSerial) return;
-            if (target._headlessSourceOutput is null) target._effect.ClearMenuBackground(serial);
+            target._effect.ClearMenuBackground(serial);
             target._menuBackground = null;
             target.SetMeta("opennv_menu_background_active", false);
-            if (target.UsesSourceMain)
-            { target.Frame = target._sourceNativeFrame; target.PublishObservation(); }
-            else target.Publish(0);
+            target.Publish(0);
         }
     }
 
     private void Publish(double delta)
     {
         var gameplay = _state.Compose(_source, _gameTime?.Hour, _effect.DoubleVisionPhase);
-        PublishCurrentSkyHdr(gameplay);
         Frame = _menuBackground ?? gameplay;
         _effect.SetSourceFrame(gameplay, (float)delta);
-        PublishObservation();
-    }
-
-    private void PublishObservation()
-    {
-        if (Frame is null) return;
         SetMeta("opennv_image_space_operational", _effect.Operational);
         SetMeta("opennv_image_space_blur_radius", Frame.BlurRadius);
         SetMeta("opennv_image_space_double_vision_offset", new Vector2(Frame.DoubleVisionOffset.X, Frame.DoubleVisionOffset.Y));
@@ -112,6 +88,6 @@ internal partial class RuntimeNativeImageSpace : Node
         if (unbound == _unbound) return;
         _unbound = unbound;
         SetMeta("opennv_unbound_image_space_channels", unbound);
-        GD.Print($"OPENNV_NATIVE_IMAGE_SPACE_COVERAGE source={(UsesSourceMain ? SourceIdentity : _source.Form.ToString())} unbound={unbound} parity=unmeasured");
+        GD.Print($"OPENNV_NATIVE_IMAGE_SPACE_COVERAGE source={_source.Form} unbound={unbound} parity=unmeasured");
     }
 }

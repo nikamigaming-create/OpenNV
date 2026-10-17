@@ -38,7 +38,6 @@ internal partial class NativeOwnedGameplayHud : Control
         error = Error,
         scriptUiRevision = _uiRevision,
         sourceControls = _lastControls,
-        referenceFrame = _referenceHud?.State,
         hitPointsVisible = _hp is not null && _tiles.Number(_hp, "visible") > 0,
         actionPointsVisible = _ap is not null && _tiles.Number(_ap, "visible") > 0,
         reticleVisible = _tiles.Number(_reticle, "visible") > 0,
@@ -54,7 +53,6 @@ internal partial class NativeOwnedGameplayHud : Control
         _target = target; _shown = shown; _vitals = vitals; _ammunition = ammunition; _notice = notice;
         _scriptUi = scriptUi;
         _controls = controls ?? (() => FalloutPlayerControlState.AllEnabled);
-        CaptureStandaloneHudInput(records);
         var source = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/main/hud_main_menu.xml")).Elements("menu").Single();
         var menu = new XElement(source.Name, source.Attributes(),
             source.Elements().Where(element => element.Attribute("name") is null).Select(element => new XElement(element)));
@@ -115,11 +113,7 @@ internal partial class NativeOwnedGameplayHud : Control
     public override void _Ready() { Layout(); }
     private NativeViewportLayout? _viewportLayout;
     public override void _EnterTree() => _viewportLayout = new(this, Layout);
-    public override void _ExitTree()
-    {
-        try { _referenceHud?.Retire(); }
-        finally { _viewportLayout?.Dispose(); }
-    }
+    public override void _ExitTree() => _viewportLayout?.Dispose();
     private void Layout()
     {
         var scale = GetViewportRect().Size.Y / 960;

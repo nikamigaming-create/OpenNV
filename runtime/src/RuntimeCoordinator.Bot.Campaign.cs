@@ -58,7 +58,7 @@ public partial class RuntimeCoordinator
                     {
                         var objective = driver.Quests.Objective(quest.Quest, target.Objective);
                         if (!objective.Displayed || objective.Completed) continue;
-                        if (!FalloutCondition.AllPass(target.Conditions, driver.EvaluateMessageCondition, evaluateRunOn: true, globals: _nativeGlobals)) continue;
+                        if (!FalloutCondition.AllPass(target.Conditions, driver.EvaluateMessageCondition, evaluateRunOn: true)) continue;
                         var identity = quest.Quest + ":" + target.Objective + ":" + target.Ordinal + ":" + scene;
                         try
                         {

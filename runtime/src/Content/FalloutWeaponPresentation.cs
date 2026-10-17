@@ -67,6 +67,31 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     internal static bool IsSupportedDnamExtent(int length) => length is
         120 or 124 or 136 or 164 or 172 or 180 or 196 or 200 or 204;
 
+    internal static uint ReadScriptAnimationType(FalloutPluginRecord weapon)
+    {
+        if (weapon.Signature != "WEAP") throw new InvalidDataException("Weapon animation query requires WEAP.");
+        var data = weapon.ReadSubrecords().Single(field => field.Signature == "DNAM").Data.Span;
+        if (!IsSupportedDnamExtent(data.Length)) throw new NotSupportedException($"WEAP DNAM extent {data.Length} is unbound.");
+        return ScriptAnimationType(BinaryPrimitives.ReadUInt32LittleEndian(data));
+    }
+
+    // GetWeaponAnimType exposes the animation group, not the WEAP DNAM type.
+    internal static uint ScriptAnimationType(uint weaponType) => weaponType switch
+    {
+        0 => 1,
+        1 => 2,
+        2 => 3,
+        3 or 4 => 4,
+        5 or 7 => 5,
+        6 => 6,
+        8 => 7,
+        9 => 8,
+        10 or 13 => 9,
+        11 => 10,
+        12 => 11,
+        _ => 0,
+    };
+
     internal static FalloutWeaponPresentation Read(FalloutPluginStack records, FalloutFormKey key, bool firstPerson = true)
     {
         var weapon = records.GetEffective(key);

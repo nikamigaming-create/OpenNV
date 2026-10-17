@@ -34,9 +34,7 @@ public partial class RuntimeCoordinator
                 ["presentation"] = request.Presentation,
                 ["save-path"] = request.SavePath,
             };
-            // These belong to the living application session. A source-menu
-            // reload must keep the same profile and diagnostic input recipient.
-            foreach (var name in new[] { "profile-root", "settings-path", "live-harness", "parity-channel", "parity-capture", "perf-report", "native-plugins" })
+            foreach (var name in new[] { "profile-root", "settings-path", "live-harness", "parity-channel", "parity-capture", "perf-report", "native-plugins", "content-selection" })
                 if (sessionOptions.TryGetValue(name, out var value)) _options.Add(name, value);
             request.ModSelection?.WriteOptions(_options);
             if (request.EngineCampaign is "fallout-new-vegas" or "fallout-3")
@@ -80,20 +78,22 @@ public partial class RuntimeCoordinator
 
     private void ConfigureSelectedContent(string baseRoot, string campaign)
     {
-        var mod = FalloutModStackSelection.ReadOptions(_options)?.Resolve(baseRoot);
-        var nativeSelection = _options.GetValueOrDefault("native-plugins", "installed");
-        if (nativeSelection is not ("installed" or "none"))
-            throw new ArgumentException("Native plugin selection must be installed or none.");
-        RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), mod?.ActivePlugins, mod?.Settings,
-            nativePluginsEnabled: nativeSelection == "installed");
-        var dependency = mod?.Dependencies.SingleOrDefault(row =>
-            row.LogicalPath.Equals("nvse_1_4.dll", StringComparison.OrdinalIgnoreCase));
-        if (nativeSelection == "installed" && dependency?.SourcePath is { } host)
-        {
-            var source = RuntimeLiveContentSource.Current ??
-                throw new InvalidOperationException("Selected native dependency has no configured content owner.");
-            source.BindNativePluginHostDependency(new(host,
-                "actual-launcher-selected-stack-dependency:" + source.StackId));
-        }
+        var nativeSelection = _options.GetValueOrDefault("native-plugins", "none");
+        if (nativeSelection != "none")
+            throw new NotSupportedException("This recovery build runs with native extensions disabled. Use --native-plugins none.");
+        var selection = FalloutModStackSelection.ReadOptions(_options);
+        var contentSelection = _options.GetValueOrDefault("content-selection", selection is null ? "vanilla" : "installed");
+        if (contentSelection is not ("vanilla" or "installed"))
+            throw new ArgumentException("Content selection must be vanilla or installed.");
+        if (contentSelection == "vanilla" && selection is not null)
+            throw new InvalidOperationException("Disable selected mods for vanilla play, or explicitly select installed content.");
+        var mod = selection?.Resolve(baseRoot);
+        var vanilla = contentSelection == "vanilla";
+        var plugins = vanilla ? RuntimeLiveContentSource.ResolveVanillaPlugins(baseRoot) : mod?.ActivePlugins;
+        RuntimeLiveContentSource.Configure(baseRoot, campaign, mod?.ContentRoots.Skip(1).ToArray(), plugins, mod?.Settings,
+            includeImplicitPlugins: !vanilla);
+        var source = RuntimeLiveContentSource.Current!;
+        GD.Print($"OPENNV_CONTENT_SELECTION mode={contentSelection} nativePlugins=none " +
+            $"plugins={string.Join(',', source.PluginSources.Select(plugin => plugin.Name))} saveCompatibility={source.SaveCompatibilityId}");
     }
 }

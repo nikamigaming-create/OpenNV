@@ -5,10 +5,10 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal sealed record FalloutRegionWeatherSnapshot(FalloutFormKey Region, FalloutFormKey Weather);
 internal sealed record FalloutSkyLightingSnapshot(FalloutFormKey Climate, IReadOnlyList<FalloutRegionWeatherSnapshot> Regions,
     FalloutFormKey? ForcedWeather = null, FalloutFormKey? ExteriorWeather = null, ulong? RandomState = null,
-    FalloutFormKey? ClimateWeather = null, FalloutSkyTransferSnapshot? SourceTransfer = null, string? TransferUnowned = null, FalloutSkyMoonSnapshot? Moons = null);
+    FalloutFormKey? ClimateWeather = null);
 
 /// <summary>Shared sky/climate identity and region weather caches; renderers only sample this state.</summary>
-internal sealed partial class FalloutSkyLightingState
+internal sealed class FalloutSkyLightingState
 {
     private readonly FalloutPluginStack _records;
     private readonly Dictionary<FalloutFormKey, FalloutFormKey> _regions = [];
@@ -25,12 +25,24 @@ internal sealed partial class FalloutSkyLightingState
     internal FalloutClimateLighting Climate => _climate;
     internal float DaytimeExtension => _daytimeExtension;
     internal FalloutFormKey? ForcedWeather { get; private set; }
-    internal void ForceWeather(FalloutFormKey weather)
+    internal void ForceWeather(FalloutFormKey weather, bool overrideWeather = false)
     {
         _ = Weather(weather);
-        ForcedWeather = weather;
+        ExteriorWeather = weather;
+        ForcedWeather = overrideWeather ? weather : null;
     }
     internal void ReleaseWeatherOverride() => ForcedWeather = null;
+
+    internal static bool ReadForceWeatherOverride(IReadOnlyList<string> arguments)
+    {
+        if (arguments.Count is < 1 or > 2)
+            throw new InvalidDataException("ForceWeather requires a weather form and an optional override flag.");
+        if (arguments.Count == 1) return false;
+        if (!double.TryParse(arguments[1], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var value) || value is not (0 or 1))
+            throw new InvalidDataException("ForceWeather override flag must be zero or one.");
+        return value == 1;
+    }
 
     internal FalloutSkyLightingState(FalloutPluginStack records, float daytimeExtension)
     {
@@ -50,64 +62,33 @@ internal sealed partial class FalloutSkyLightingState
     {
         RequireBound();
         return new(_climate.Form, _regions.OrderBy(pair => pair.Key.ToString(), StringComparer.Ordinal)
-            .Select(pair => new FalloutRegionWeatherSnapshot(pair.Key, pair.Value)).ToArray(), ForcedWeather, ExteriorWeather, _random.State, _climateWeather, CaptureSourceTransfer(), CaptureSourceTransferUnowned(), CaptureSourceMoons());
+            .Select(pair => new FalloutRegionWeatherSnapshot(pair.Key, pair.Value)).ToArray(), ForcedWeather, ExteriorWeather, _random.State, _climateWeather);
     }
 
     internal void Restore(FalloutSkyLightingSnapshot snapshot)
     {
         ValidateSnapshot(_records, snapshot);
-        RestoreLightingFields(new(snapshot.Climate, snapshot.Regions, snapshot.ForcedWeather,
-            snapshot.ExteriorWeather, snapshot.RandomState ?? _random.State, snapshot.ClimateWeather));
-        RestoreSourceTransfer(snapshot);
-        RestoreSourceMoons(snapshot);
-        _unbound = null;
-    }
-
-    private void RestoreLightingFields(FalloutSkyLightingProjection projection)
-        => ApplyLightingFields(PrepareLightingFields(projection));
-
-    private sealed record PreparedLighting(FalloutClimateLighting Climate, FalloutSkyLightingProjection Fields,
-        IReadOnlyDictionary<FalloutFormKey, FalloutFormKey> Regions);
-
-    private PreparedLighting PrepareLightingFields(FalloutSkyLightingProjection projection)
-    {
-        var climate = FalloutClimateLighting.Read(_records.GetEffective(projection.Climate));
-        if (projection.Regions is null) throw new InvalidDataException("Lighting projection has no region cache collection.");
-        if (projection.ForcedWeather is { } forced) _ = Weather(forced);
-        if (projection.ExteriorWeather is { } exterior) _ = Weather(exterior);
-        if (projection.ClimateWeather is { } selected) _ = Weather(selected);
+        var climate = FalloutClimateLighting.Read(_records.GetEffective(snapshot.Climate));
         var regions = new Dictionary<FalloutFormKey, FalloutFormKey>();
-        foreach (var row in projection.Regions)
+        foreach (var row in snapshot.Regions)
         {
             RequireRegion(row.Region);
             _ = Weather(row.Weather);
             if (!regions.TryAdd(row.Region, row.Weather)) throw new InvalidDataException("Saved sky repeats a region weather cache.");
         }
-        return new(climate, projection, regions);
-    }
-
-    private void ApplyLightingFields(PreparedLighting prepared)
-    {
-        _random.Restore(prepared.Fields.RandomState);
-        _climate = prepared.Climate;
-        ForcedWeather = prepared.Fields.ForcedWeather;
-        ExteriorWeather = prepared.Fields.ExteriorWeather;
-        _climateWeather = prepared.Fields.ClimateWeather;
+        _climate = climate;
+        ForcedWeather = snapshot.ForcedWeather;
+        ExteriorWeather = snapshot.ExteriorWeather;
+        _climateWeather = snapshot.ClimateWeather;
+        if (snapshot.RandomState is { } random) _random.Restore(random);
         _regions.Clear();
-        foreach (var row in prepared.Regions) _regions.Add(row.Key, row.Value);
+        foreach (var row in regions) _regions.Add(row.Key, row.Value);
+        _unbound = null;
     }
 
     internal static void ValidateSnapshot(FalloutPluginStack records, FalloutSkyLightingSnapshot snapshot)
     {
         _ = FalloutClimateLighting.Read(records.GetEffective(snapshot.Climate));
-        ValidateSourceMoons(records, snapshot);
-        if (snapshot.SourceTransfer is { } sourceSky)
-        {
-            if (snapshot.TransferUnowned is not null) throw new InvalidDataException("Saved Sky has both an admitted owner and an unowned declaration.");
-            FalloutSkyTransferState.Validate(sourceSky, sourceSky.Source, sourceSky.Stack, records);
-        }
-        else if (string.IsNullOrWhiteSpace(snapshot.TransferUnowned))
-            throw new InvalidDataException("Saved Sky omitted the current source reset owner or its explicit unowned boundary.");
         if (snapshot.ForcedWeather is { } forced) _ = FalloutWeatherLighting.Read(records.GetEffective(forced));
         if (snapshot.ClimateWeather is { } climateWeather) _ = FalloutWeatherLighting.Read(records.GetEffective(climateWeather));
         if (snapshot.ExteriorWeather is { } exterior)
@@ -133,7 +114,6 @@ internal sealed partial class FalloutSkyLightingState
             var climate = FalloutExteriorClimate.Resolve(_records, world);
             var changed = _climate.Form != climate;
             _climate = FalloutClimateLighting.Read(_records.GetEffective(climate));
-            SourceClimateSelected();
             if (changed || _climateWeather is null)
                 _climateWeather = FalloutExteriorClimate.SelectWeather(_records, climate, globals, _random);
             ExteriorWeather = _climateWeather;
@@ -152,11 +132,7 @@ internal sealed partial class FalloutSkyLightingState
         if (fields[0].Data.Length != 4) throw new InvalidDataException("CELL climate override requires one FormID.");
         var record = _records.GetEffective(cell.FormKey);
         var form = record.Plugin.AdjustOptionalFormId(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(fields[0].Data.Span));
-        if (form is { } value)
-        {
-            _climate = FalloutClimateLighting.Read(_records.GetEffective(value));
-            SourceClimateSelected();
-        }
+        if (form is { } value) _climate = FalloutClimateLighting.Read(_records.GetEffective(value));
     }
 
     internal void MarkUnbound(string reason) => _unbound = reason;

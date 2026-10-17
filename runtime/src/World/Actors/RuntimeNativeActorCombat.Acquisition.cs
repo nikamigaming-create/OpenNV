@@ -40,7 +40,7 @@ internal sealed partial class RuntimeNativeActorCombat
             decisions.Add(new { reference = candidate.Reference, candidate.DistanceSquared, relation, eligible, visible });
             if (visible != true) continue;
             _relation = relation;
-            _world.SelectSourceCombatTarget(_state.Reference, candidate.Reference);
+            _state.Engagement = new(candidate.Reference);
             break;
         }
         _lastAcquisition = new

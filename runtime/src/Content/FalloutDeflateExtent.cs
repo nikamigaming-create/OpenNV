@@ -149,14 +149,9 @@ internal static class FalloutDeflateExtent
 
     private sealed class Huffman
     {
-        private const int MaximumCodeBits = 15;
-        private const int PrefixBits = 9;
-        private const int EntryLengthBits = 4;
-        private const int EntryLengthMask = (1 << EntryLengthBits) - 1;
-        private readonly int[] _counts = new int[MaximumCodeBits + 1];
-        private readonly int[] _firstCode = new int[MaximumCodeBits + 1];
-        private readonly int[] _firstSymbol = new int[MaximumCodeBits + 1];
-        private readonly ushort[] _prefix = new ushort[1 << PrefixBits];
+        private readonly int[] _counts = new int[16];
+        private readonly int[] _firstCode = new int[16];
+        private readonly int[] _firstSymbol = new int[16];
         private readonly int[] _symbols;
         private readonly int _maximum;
 
@@ -164,13 +159,13 @@ internal static class FalloutDeflateExtent
         {
             foreach (var length in lengths)
             {
-                if (length > MaximumCodeBits) throw new InvalidDataException("Invalid DEFLATE Huffman code length.");
+                if (length > 15) throw new InvalidDataException("Invalid DEFLATE Huffman code length.");
                 if (length == 0) continue;
                 _counts[length]++; _maximum = Math.Max(_maximum, length);
             }
             var available = 1;
             var total = 0;
-            for (var length = 1; length <= MaximumCodeBits; ++length)
+            for (var length = 1; length <= 15; ++length)
             {
                 available = available * 2 - _counts[length];
                 if (available < 0) throw new InvalidDataException("Invalid DEFLATE Huffman alphabet is oversubscribed.");
@@ -180,41 +175,16 @@ internal static class FalloutDeflateExtent
             }
             if (total == 0 && !allowEmpty) throw new InvalidDataException("Invalid DEFLATE Huffman alphabet is empty.");
             _symbols = new int[total];
-            var written = new int[MaximumCodeBits + 1];
+            var written = new int[16];
             for (var symbol = 0; symbol < lengths.Length; ++symbol)
             {
                 var length = lengths[symbol];
                 if (length != 0) _symbols[_firstSymbol[length] + written[length]++] = symbol;
             }
-            // DEFLATE transmits canonical codes in reversed bit order. Short
-            // codes fill every matching lookahead slot; long or undeclared
-            // prefixes retain the bounded canonical decoder below.
-            for (var length = 1; length <= Math.Min(_maximum, PrefixBits); ++length)
-            {
-                for (var index = 0; index < _counts[length]; ++index)
-                {
-                    var code = _firstCode[length] + index;
-                    var reversed = 0;
-                    for (var bit = 0; bit < length; ++bit)
-                    { reversed = (reversed << 1) | (code & 1); code >>= 1; }
-                    var symbol = _symbols[_firstSymbol[length] + index];
-                    var entry = checked((ushort)((symbol << EntryLengthBits) | length));
-                    for (var slot = reversed; slot < _prefix.Length; slot += 1 << length)
-                        _prefix[slot] = entry;
-                }
-            }
         }
 
         internal int Read(ref Bits input)
         {
-            var prefix = input.PeekAvailable(PrefixBits, out var available);
-            var entry = _prefix[prefix];
-            var bits = entry & EntryLengthMask;
-            if (bits != 0 && bits <= available)
-            {
-                input.Skip(bits);
-                return entry >> EntryLengthBits;
-            }
             var code = 0;
             for (var length = 1; length <= _maximum; ++length)
             {
@@ -228,54 +198,27 @@ internal static class FalloutDeflateExtent
 
     private ref struct Bits(ReadOnlySpan<byte> bytes)
     {
-        private const int BitsPerByte = 8;
-        private const int MaximumReadBits = 16;
         internal long Position { get; private set; }
         private readonly ReadOnlySpan<byte> _bytes = bytes;
-        private int _nextByte, _bufferedBits;
-        private uint _buffer;
 
         internal int Read(int count)
         {
-            var result = PeekAvailable(count, out var available);
-            if (available < count) throw Error("input ended before its final block completed");
-            Skip(count);
+            if (count > (long)_bytes.Length * 8 - Position) throw Error("input ended before its final block completed");
+            var result = 0;
+            for (var index = 0; index < count; ++index)
+            {
+                result |= ((_bytes[(int)(Position / 8)] >> (int)(Position % 8)) & 1) << index;
+                Position++;
+            }
             return result;
         }
 
-        internal int PeekAvailable(int count, out int available)
-        {
-            if (count is < 0 or > MaximumReadBits) throw new ArgumentOutOfRangeException(nameof(count));
-            // Read-ahead never changes the canonical consumed bit position.
-            // At most 23 bits are retained for the largest 16-bit field.
-            while (_bufferedBits < count && _nextByte < _bytes.Length)
-            {
-                _buffer |= (uint)_bytes[_nextByte++] << _bufferedBits;
-                _bufferedBits += BitsPerByte;
-            }
-            available = Math.Min(count, _bufferedBits);
-            return (int)(_buffer & ((1U << available) - 1));
-        }
-
-        internal void Skip(int count)
-        {
-            if (count < 0 || count > _bufferedBits)
-                throw Error("input ended before its final block completed");
-            _buffer >>= count;
-            _bufferedBits -= count;
-            Position += count;
-        }
-
-        internal void AlignByte() => Skip((int)((BitsPerByte - (Position & (BitsPerByte - 1))) & (BitsPerByte - 1)));
+        internal void AlignByte() => Position = (Position + 7) & ~7L;
 
         internal void SkipAlignedBytes(int count)
         {
             if (count > _bytes.Length - Position / 8) throw Error("stored block payload is truncated");
             Position += (long)count * 8;
-            // Stored bytes are skipped without decoding; discard any buffered
-            // lookahead and resume at the exact next source byte.
-            _nextByte = checked((int)(Position / BitsPerByte));
-            _buffer = 0; _bufferedBits = 0;
         }
 
         internal readonly InvalidDataException Error(string detail) =>

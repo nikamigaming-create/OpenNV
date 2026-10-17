@@ -13,7 +13,7 @@ internal sealed record FalloutImageSpaceModifier(
     IReadOnlyDictionary<string, FalloutImageFloatKey[]> Effects,
     FalloutImageColorKey[] Tint, FalloutImageColorKey[] Fade,
     uint RadialFlags, Vector2 RadialCenter, bool DepthUsesTarget,
-    FalloutFormKey? IntroSound, FalloutFormKey? OutroSound, byte DepthMode = 0)
+    FalloutFormKey? IntroSound, FalloutFormKey? OutroSound)
 {
     internal float NormalizedTime(double seconds) => Animated ? (float)Math.Clamp(seconds / Duration, 0, 1) : 0;
 
@@ -125,7 +125,7 @@ internal static class FalloutImageSpaceModifierReader
         var editor = fields.SingleOrDefault(field => field.Signature == "EDID");
         return new(record.FormKey, System.Text.Encoding.Latin1.GetString(editor.Data.Span).TrimEnd('\0'),
             Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant(), (flags & 1) != 0, duration,
-            multiply, add, effects, tint, fade, radialFlags, center, header[224] != 0, Sound("RDSD"), Sound("RDSI"), header[225]);
+            multiply, add, effects, tint, fade, radialFlags, center, header[224] != 0, Sound("RDSD"), Sound("RDSI"));
     }
 
     internal static FalloutImageFloatKey[] FloatCurve(ReadOnlySpan<byte> data)

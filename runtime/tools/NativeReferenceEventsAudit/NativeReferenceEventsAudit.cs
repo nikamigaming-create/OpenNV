@@ -20,29 +20,6 @@ public partial class NativeReferenceEventsAudit : Node
         RuntimeNativePlayer? player = null;
         try
         {
-            if (OS.GetCmdlineUserArgs() is ["--room-portals"])
-            {
-                await ExerciseRoomPortals(); GetTree().Quit(); return;
-            }
-            if (OS.GetCmdlineUserArgs() is ["--shaped-phantoms"])
-            {
-                await ExerciseShapePhantoms();
-                await ExerciseSerializedSourceOcclusion();
-                GetTree().Quit();
-                return;
-            }
-            if (OS.GetCmdlineUserArgs() is ["--serialized-occlusion"])
-            {
-                await ExerciseSerializedSourceOcclusion(); GetTree().Quit(); return;
-            }
-            if (OS.GetCmdlineUserArgs() is ["--compiled-opening-state"])
-            {
-                ExerciseCompiledOpeningState(); GetTree().Quit(); return;
-            }
-            if (OS.GetCmdlineUserArgs() is ["--compiled-result-authority"])
-            {
-                ExerciseCompiledResultAuthority(); GetTree().Quit(); return;
-            }
             if (OS.GetCmdlineUserArgs() is ["--image-space-clock"])
             {
                 ExerciseImageSpaceClock(); GetTree().Quit(); return;
@@ -192,12 +169,10 @@ public partial class NativeReferenceEventsAudit : Node
                 _ => Transform3D.Identity, 1, 1);
             root.AddChild(events);
             var area = root.GetChildren().OfType<Area3D>().Single();
-            using (var triggerShape = area.GetChild<CollisionShape3D>(0).Shape)
-                Require(triggerShape is BoxShape3D box && box.Size == new Vector3(8, 2, 4),
-                    "XPRM half extents or source axis conversion differ.");
+            Require(((BoxShape3D)area.GetChild<CollisionShape3D>(0).Shape).Size == new Vector3(8, 2, 4),
+                "XPRM half extents or source axis conversion differ.");
             player = new RuntimeNativePlayer { CollisionLayer = 1, CollisionMask = 1, Position = new Vector3(3, 0, 0) };
-            using (var playerShape = new SphereShape3D { Radius = 0.1f })
-                player.AddChild(new CollisionShape3D { Shape = playerShape });
+            player.AddChild(new CollisionShape3D { Shape = new SphereShape3D { Radius = 0.1f } });
             AddChild(player);
             player.SetPhysicsProcess(false);
             player.SetProcessUnhandledInput(false);
@@ -213,10 +188,7 @@ public partial class NativeReferenceEventsAudit : Node
             await Frames();
             var triggerState = world.Get(Key(0x900));
             Require(triggerState.ScriptError is null && triggerState.Read(1) == 1 && triggerState.Read(3) > 0,
-                $"Native physical overlap did not execute the model-less trigger: entered={triggerState.Read(1)} contact={triggerState.Read(3)} error={triggerState.ScriptError}; {string.Join("; ", reported)}");
-            Require(events.ObserveContactContinuation(world) == $"source-trigger-contact-membership:{Key(0x900)}" &&
-                triggerState.Read(1) == 1,
-                "Active native contact was admitted for a cold save or observation replayed its source Enter.");
+                "Native physical overlap did not execute the model-less trigger.");
             events.SetResidency(cell, root);
             await Frames();
             Require(root.GetChildren().OfType<Area3D>().Single() == area && triggerState.Read(1) == 1 &&
@@ -225,13 +197,9 @@ public partial class NativeReferenceEventsAudit : Node
             player.Position = new Vector3(10, 0, 0);
             await Frames();
             Require(triggerState.Read(2) == 1, "Native physical departure did not execute OnTriggerLeave.");
-            Require(events.ObserveContactContinuation(world) is null && triggerState.Read(2) == 1,
-                "Actual source Leave did not release the contact save blocker, or observation replayed departure.");
             player.Position = new Vector3(3, 0, 0);
             await Frames();
             Require(triggerState.Read(1) == 2, "Native trigger suppressed ordinary repeated entry.");
-            Require(events.ObserveContactContinuation(world) == $"source-trigger-contact-membership:{Key(0x900)}",
-                "A later genuine contact reused the departed save allowance.");
             Require(events.TryActivate(collider), "Native input did not admit source activation.");
             await Frames();
             Require(world.Get(Key(0x901)).Read(4) == 1 && effects.Count == 0,
@@ -377,10 +345,7 @@ public partial class NativeReferenceEventsAudit : Node
         var header = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(header, 1.34f);
         var source = "array_var shared\narray_var alias\nbegin OnTriggerEnter player\nset entered to entered + 1\nend\n" +
             "begin OnTriggerLeave player\nset departed to departed + 1\nend\n" +
-            // Contact dispatch uses the actual reference's enable state. Player
-            // sitting now requires its complete physical/body source owner,
-            // which this model-less contact fixture does not construct.
-            "begin OnTrigger player\nif GetDisabled == 0\nset contacts to contacts + 1\nendif\nend\n" +
+            "begin OnTrigger player\nif player.GetSitting == 0\nset contacts to contacts + 1\nendif\nend\n" +
             "begin OnActivate\nset activations to activations + 1\nSetNthPerkEntryValue1 NativePerk 0 activations\nif activations == 1\n" +
             "shared = Ar_List 10 \"native\"\nalias = shared\nendif\nalias[0] += 1\nend\nbegin OnLoad\nset loads to loads + 1\nend";
         var script = Record("SCPT", 0x500, Local(1, "entered"), Local(2, "departed"), Local(3, "contacts"), Local(4, "activations"), Local(5, "loads"),
@@ -424,7 +389,6 @@ public partial class NativeReferenceEventsAudit : Node
             .Concat(AnimatedActivatorRecords())
             .Concat(Record("DIAL", 0x740, Field("DATA", [0])))
             .Concat(Record("PERK", 0x705, Field("EDID", Encoding.ASCII.GetBytes("NativePerk\0")),
-                Field("DATA", [0, 1, 1, 1, 0]),
                 Field("PRKE", [2, 0, 0]), Field("DATA", [0, 3, 1]), Field("EPFT", [1]),
                 Field("EPFD", BitConverter.GetBytes(3f)), Field("PRKF", [])))
             .Concat(Record("ACTI", 0x700, Field("SCRI", BitConverter.GetBytes(0x500u))))

@@ -21,9 +21,9 @@ internal partial class RuntimeNativeSpeech
         _radioConversations.Values.All(radio => !radio.Active) &&
         _channels.Values.All(voice => voice.Info is null && !voice.Player.Playing && voice.PackageCompleted is null &&
             voice.ResponseCompleted is null && voice.NpcExchange is null && voice.Radio is null && voice.PackageEvent is null);
-    internal bool CanCaptureFinishedFailure => _references?.ScriptManualSaves.CompiledResultCaptureBlocker is null && NativeVoicesSettled && _emptyCompletions.HasCapturableFinishedFailure &&
+    internal bool CanCaptureFinishedFailure => NativeVoicesSettled && _emptyCompletions.HasCapturableFinishedFailure &&
         Error == _emptyCompletions.Error;
-    internal bool CanCaptureFinishedState => _references?.ScriptManualSaves.CompiledResultCaptureBlocker is null && NativeVoicesSettled && (!Active || CanCaptureFinishedFailure);
+    internal bool CanCaptureFinishedState => NativeVoicesSettled && (!Active || CanCaptureFinishedFailure);
 
     internal FalloutNativeFinishedSpeechSnapshot CaptureFinishedState()
     {
@@ -113,7 +113,7 @@ internal partial class RuntimeNativeSpeech
         foreach (var radio in snapshot.FinishedRadio ?? [])
         {
             var conversation = new FalloutRadioConversation(_stack, world,
-                _quests ?? throw new InvalidOperationException("Saved radio has no quest state."), EvaluateRadioCondition, _questStage, _said, _dialogueRandom, _globals);
+                _quests ?? throw new InvalidOperationException("Saved radio has no quest state."), EvaluateRadioCondition, _questStage, _said, _dialogueRandom);
             conversation.RestoreFinishedState(radio);
             _radioConversations.Add(radio.Station.Reference, conversation);
         }

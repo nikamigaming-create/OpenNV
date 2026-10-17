@@ -41,12 +41,10 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private void RetainDriverFailure(Exception error)
     {
-        ExecutionError = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
+        ExecutionError = error.Message;
         // Exact exception identity proves this failed invocation came through
         // the stage owner. An unrelated native fault with equal text is not a
         // source-stage receipt and remains an explicit save refusal.
         _stageResultDriverFailure = _stageResults?.ClosedFailureFor(error);
-        if (_stageResultDriverFailure is null)
-            _scripts.References?.RetainFunctionalFailure(error, "actual-source-Main-or-stage-driver");
     }
 }

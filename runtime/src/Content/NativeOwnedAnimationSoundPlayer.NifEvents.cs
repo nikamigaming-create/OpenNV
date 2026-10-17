@@ -81,7 +81,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer
             () => { StopVoice(voice); FinishVoice(voice, FalloutAnimationSoundEnd.Cancelled); },
             _events?.Reference, () => ReadFiniteVoice(voice, state), () => state.CompletionWait?.State,
             () => PrepareFiniteSaveDrain(voice, state),
-            pcm is null ? null : () => ObservePcmContinuation(voice, state).Ready);
+            pcm is null ? null : () => ObservePcmVoice(voice, state).Ready);
         _voices.Add(voice, state);
         // Unexpected retirement of the actual audio node remains cancellation.
         // Retiring only its finite source attachment does not emit this signal.

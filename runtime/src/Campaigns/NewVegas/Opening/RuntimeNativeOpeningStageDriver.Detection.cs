@@ -9,7 +9,6 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 internal partial class RuntimeNativeOpeningStageDriver
 {
     private FalloutNativeFinishedSpeechSnapshot? _restoreFinishedSpeech;
-    private FalloutPlayerConversationSnapshot? _restoreConversation;
     private FalloutFinishedSpeechStageScope? _restoreFinishedSpeechStage;
     private FalloutFinishedSpeechStageScope? CaptureFinishedSpeechStage()
     {
@@ -27,7 +26,14 @@ internal partial class RuntimeNativeOpeningStageDriver
         {
             var position = _player.GlobalPosition / _player.UnitsToMeters;
             return world.DetectionPlacement(reference, new(_activeCell, [position.X, -position.Z, position.Y], [0, 0, 0]), _player.UnitsToMeters);
-        }, world.ReadSourceActorProcessLevel);
+        }, actor =>
+        {
+            // The source player class owns a HighProcess. Other actor process
+            // tiers remain unknown until a separate shared process owner binds
+            // them; presentation residency cannot prove those source classes.
+            if (actor == _pluginStack.RuntimeFormKey(0x14) && _player.IsInsideTree()) return FalloutDetectionProcessLevel.High;
+            return null;
+        });
         _speech!.CanResumeSourceCompletion = receipt => _resultScripts!.CanResumeSpeechCompletion(receipt);
         _speech.ResumeSourceCompletion = receipt =>
         {
@@ -35,11 +41,6 @@ internal partial class RuntimeNativeOpeningStageDriver
             if (result.Error is { } error) throw new NotSupportedException($"Source SayToDone actor {receipt.Speaker} failed: {error}");
         };
         _speech.RestoreState(_restoreFinishedSpeech);
-        if (_restoreConversation is { } conversation)
-        {
-            _conversation!.RestoreContinuation(conversation);
-            _restoreConversation = null;
-        }
         if (_restoreFinishedSpeechStage is { } stage)
         {
             var fields = _pluginStack.GetEffective(stage.Quest).ReadSubrecords().Where(field => field.Signature == "EDID").ToArray();

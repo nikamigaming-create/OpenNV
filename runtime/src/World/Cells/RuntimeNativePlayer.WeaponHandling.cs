@@ -21,6 +21,8 @@ internal partial class RuntimeNativePlayer
     private bool _weaponTriggerHeld, _automaticFireStopped;
     private readonly SortedSet<string> _weaponUnboundEvents = new(StringComparer.Ordinal);
     internal FalloutWeaponHandlingSnapshot? CaptureWeaponHandling() => _weaponHandling?.Capture();
+    internal bool WeaponDrawn => (_weaponHandling ??
+        throw new NotSupportedException("Player weapon draw query has no handling owner.")).Drawn;
     internal NativeHudAmmo? AmmunitionHud
     {
         get
@@ -50,11 +52,6 @@ internal partial class RuntimeNativePlayer
 
     private bool WeaponInput(InputEvent input)
     {
-        if (_playerPerceptionWorld?.FunctionalFailure is not null)
-        {
-            _reloadPressed = false; _weaponTriggerHeld = false;
-            return true;
-        }
         if (!GetMeta("opennv_source_fighting_enabled", true).AsBool() || _firstPerson?.Weapon is null || _weaponHandling is null) return false;
         var bindings = _configuration.Player.DesktopInput;
         if (input.IsActionPressed(bindings.Reload.Action, allowEcho: false) || input.IsActionReleased(bindings.Reload.Action))
@@ -146,7 +143,6 @@ internal partial class RuntimeNativePlayer
 
     private void AdvanceWeaponHandling(double delta)
     {
-        if (_playerPerceptionWorld?.FunctionalFailure is not null) return;
         if (_reloadPressed && !_holdHandled && (_reloadHeld += delta) >= .5)
         {
             _holdHandled = true;

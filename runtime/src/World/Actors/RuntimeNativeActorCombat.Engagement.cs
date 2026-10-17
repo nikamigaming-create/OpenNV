@@ -11,7 +11,7 @@ internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Playe
     Action<FalloutFormKey, string>? DispatchEvent = null, Func<FalloutFormKey?>? PlayerCell = null,
     float MaximumWalkableSlopeDegrees = PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees,
     Func<FalloutFormKey, ulong, bool, NativeRouteDoorStatus>? RouteDoor = null,
-    Func<ulong, FalloutFormKey?>? CollisionReference = null, Func<string>? NavigationSourceSha256 = null);
+    Func<ulong, FalloutFormKey?>? CollisionReference = null);
 
 internal sealed partial class RuntimeNativeActorCombat
 {
@@ -82,7 +82,7 @@ internal sealed partial class RuntimeNativeActorCombat
         if (Dead || _state.Unconscious) return;
         if (_world.IgnoresFriendlyHits(_state.Reference) &&
             (attacker == _records.RuntimeFormKey(0x14) && _state.PlayerTeammate || _world.ActorRelation(_state.Reference, attacker) >= 2)) return;
-        if (_state.Engagement is null) _world.SelectSourceCombatTarget(_state.Reference, attacker);
+        _state.Engagement ??= new(attacker);
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
         NotifyAssistance(attacker);
     }
@@ -124,7 +124,7 @@ internal sealed partial class RuntimeNativeActorCombat
         var radius = ThreatRadius(threat);
         if (!float.IsFinite(radius) || radius <= 0 || _actor.GlobalPosition.DistanceTo(origin) > radius ||
             !CanSeePoint(opponent?.BodyTargetPoint() ?? player!.CombatTargetPoint, opponent)) return false;
-        _world.SelectSourceCombatTarget(_state.Reference, attacker, FalloutCombatGroupTransitionKind.AssistanceJoin, victim.Reference);
+        _state.Engagement = new(attacker);
         _assistsReceived++;
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
         _assistanceError = null;
@@ -136,7 +136,6 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _PhysicsProcess(double delta)
     {
-        if (_world.FunctionalFailure is not null) { StopPackageMotion(); return; }
         _enemyMuzzle?.Advance(delta);
         if (Dead) { RestoreDeath(); return; }
         if (_context is null || !_state.Enabled || _state.Unconscious) return;
@@ -259,12 +258,6 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _ExitTree()
     {
-        try { RetireActorPerceptionBinding(); }
-        catch (Exception error)
-        {
-            Error = string.IsNullOrWhiteSpace(error.Message) ? error.GetType().Name : error.Message;
-            GD.PushError($"OPENNV_ACTOR_PERCEPTION_RETIRE_FAILED reference={_state.Reference} {Error}");
-        }
         RetainCorpseEquipment();
         if (_state.PrepareNativeInventoryRemoval == PrepareNativeInventoryRemoval) _state.PrepareNativeInventoryRemoval = null;
         RetainStoppedPoseReadiness();

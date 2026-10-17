@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using Godot;
 using OpenNV.Runtime;
 using OpenNV.Runtime.Campaigns.NewVegas.Opening;
@@ -37,8 +38,16 @@ public partial class NativeReferenceEventsAudit
         BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), 0x800);
         BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 6); referenceBytes.CopyTo(group, 24);
         var playerStats = new byte[24]; playerStats[8] = 1;
+        byte[] Setting(uint id, string name, byte[] value) => Record("GMST", id,
+            Field("EDID", Encoding.ASCII.GetBytes(name + "\0")), Field("DATA", value));
         File.WriteAllBytes(path, Record("TES4", 0, Field("HEDR", header)).Concat(Record("ACTI", 0x700))
             .Concat(Record("NPC_", 7, Field("ACBS", playerStats), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5])))
+            .Concat(Setting(0x710, "fAVDHealthEnduranceMult", BitConverter.GetBytes(20f)))
+            .Concat(Setting(0x711, "fAVDHealthLevelMult", BitConverter.GetBytes(0f)))
+            .Concat(Setting(0x712, "fAVDActionPointsBase", BitConverter.GetBytes(65f)))
+            .Concat(Setting(0x713, "fAVDActionPointsMult", BitConverter.GetBytes(3f)))
+            .Concat(Setting(0x714, "iXPBase", BitConverter.GetBytes(200)))
+            .Concat(Setting(0x715, "iXPBumpBase", BitConverter.GetBytes(150)))
             .Concat(Record("CELL", 0x800, Field("DATA", [1]))).Concat(group).ToArray());
         using var records = FalloutPluginStack.Load(Path.GetDirectoryName(path)!, ["Contact.esm"]);
         using var world = new FalloutReferenceWorld(records);
@@ -50,27 +59,58 @@ public partial class NativeReferenceEventsAudit
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
         var owner = typeof(RuntimeNativeOpeningStageDriver);
         void Bind(string field, object value) => owner.GetField(field, flags)!.SetValue(driver, value);
+        JsonElement State() => JsonSerializer.SerializeToElement(driver.SaveRequestState);
         try
         {
             Bind("_player", player); Bind("_scripts", scripts);
+            var vitals = new FalloutPlayerVitals(records, Key(7), new(5, 5, 5, 5, 5, 5, 5));
+            Bind("_vitals", vitals);
+            var abilities = new FalloutPlayerAbilityScripts(records, () => [],
+                _ => throw new InvalidOperationException("Unexpected ability condition in save-deferral fixture."));
+            abilities.BindExecutor((_, _, _, _) => throw new InvalidOperationException("Unexpected active effect in save-deferral fixture."));
+            Bind("_playerAbilities", abilities);
+            Bind("_activeCell", Key(0x800));
+            Bind("_stageResults", new FalloutQuestStages(records, new(records),
+                (_, _, _) => throw new InvalidOperationException("Unexpected stage result in save-deferral fixture."),
+                _ => throw new InvalidOperationException("Unexpected stage condition in save-deferral fixture.")));
+            // No Aid is active and the fixture advances zero time. The real
+            // driver frame still evaluates and retains its autosave request.
+            Bind("_ingestibles", new FalloutPlayerIngestibles(records, inventory, null!, new(Key(0x702), []),
+                _ => throw new InvalidOperationException("Unexpected Aid evaluation."), _ => false, () => false));
+            Bind("_imageSpaceState", new FalloutImageSpaceState());
             var reference = world.Get(Key(0x901));
             reference.ProcedureCaptureBlocker = "First native procedure snapshot is pending.";
             var source = records.GetEffective(Key(0x700));
+            driver.ApplyNativeSourceCommand(source.FormKey, new(records, source, source, []), "AutoSave", []);
+            for (var frame = 0; frame < 3; frame++) driver._Process(0);
+            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
+                State().GetProperty("deferredBy").GetString() == "actor-procedure-initialization",
+                "A temporary procedure capture blocker consumed or permanently failed the queued autosave.");
             try
             {
-                driver.ApplyNativeSourceCommand(source.FormKey, new(records, source, source, []), "AutoSave", []);
-                throw new InvalidDataException("A diagnostic command fabricated an entered source AutoSave instruction.");
+                owner.GetMethod("CaptureCurrentState", flags)!.Invoke(driver, [Key(0x800)]);
+                throw new InvalidOperationException("Explicit capture admitted an uninitialized procedure.");
             }
-            catch (InvalidOperationException error) when (error.Message == "Source save requires an actual entered instruction.")
+            catch (TargetInvocationException error) when (error.InnerException is NotSupportedException &&
+                error.InnerException.Message.Contains("actor-procedure-initialization", StringComparison.Ordinal))
             { }
-            Require(scripts.ScriptManualSaves.Order.Requests.Count == 0 && world.PendingProcedureCaptureCount == 1 &&
-                reference.ProcedureCaptureBlocker == "First native procedure snapshot is pending.",
-                "A rejected source save created a request or consumed its independent procedure capture blocker.");
             reference.ProcedureCaptureBlocker = null;
-            Require(scripts.ScriptManualSaves.Order.Requests.Count == 0 && world.PendingProcedureCaptureCount == 0 && world.Capture().Count > 0,
-                "Settling the independent procedure capture fabricated a source autosave request.");
-            GD.Print("OPENNV_NATIVE_SAVE_DEFERRAL_PASS absentInstructionRefused=true queueUnchanged=true independentProcedureBlocker=true " +
-                "settledCapture=true actualSourceAutoSave=unexecuted");
+            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean() &&
+                State().GetProperty("deferredBy").ValueKind == JsonValueKind.Null && world.Capture().Count > 0,
+                "Settled procedure did not release the same pending autosave for normal capture.");
+            vitals.Damage(vitals.State.MaximumHitPoints);
+            driver._Process(0);
+            Require(driver.ExecutionError is null && State().GetProperty("requested").GetBoolean(),
+                "Player death consumed or permanently failed a pending autosave.");
+            try
+            {
+                owner.GetMethod("CaptureCurrentState", flags)!.Invoke(driver, [Key(0x800)]);
+                throw new InvalidOperationException("Explicit capture admitted a defeated player.");
+            }
+            catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException &&
+                error.InnerException.Message.Contains("after player death", StringComparison.Ordinal))
+            { }
+            GD.Print("OPENNV_NATIVE_SAVE_DEFERRAL_PASS sourceRequest=true transientBlockedFrames=true explicitCaptureRefused=true sameRequestEligible=true defeatedPlayerProtected=true");
         }
         finally { driver.Free(); }
     }

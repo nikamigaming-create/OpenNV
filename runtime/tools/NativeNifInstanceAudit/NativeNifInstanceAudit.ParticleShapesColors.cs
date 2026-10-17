@@ -48,6 +48,29 @@ public partial class NativeNifInstanceAudit
             Advance(mortal, 1f / 60); mortal.EmissionEnabled = false; Advance(mortal, 1.2f);
             if (mortal.ActiveCount != 0 || mortal.DeathCount != 1 || mortal.CollisionCount != 1)
                 throw new InvalidDataException("Sphere collision did not honor the source death declaration.");
+            var movingNodes = new Dictionary<int, Node3D>();
+            var moving = Create(file, movingNodes);
+            moving.Bind(file, emitter).Apply(0);
+            moving.Bind(file, emitter with { ControllerType = "NiPSysEmitterLifeSpanCtlr", Variable2 = "", Interpolator = 6 }).Apply(0);
+            Advance(moving, 1f / 60); moving.EmissionEnabled = false;
+            movingNodes[18].Position = new(10, 0, 0);
+            Advance(moving, 1.2f);
+            if (moving.CollisionCount != 0) throw new InvalidDataException("Particle collision retained a collider's old pose.");
+            movingNodes[18].Position = new(0, -2, 0);
+            Advance(moving, 1);
+            if (moving.CollisionCount != 1) throw new InvalidDataException("Particle collision did not refresh a moved collider.");
+
+            var callbackBytes = bytes.ToArray();
+            BinaryPrimitives.WriteSingleLittleEndian(callbackBytes.AsSpan(file.Blocks[7].Offset), 120);
+            var callbackFile = FalloutNifFile.Read(callbackBytes);
+            var callbackNodes = new Dictionary<int, Node3D>();
+            var callback = Create(callbackFile, callbackNodes);
+            callback.Bind(callbackFile, emitter).Apply(0);
+            callback.Bind(callbackFile, emitter with { ControllerType = "NiPSysEmitterLifeSpanCtlr", Variable2 = "", Interpolator = 6 }).Apply(0);
+            callback.LifecycleEvent += value => { if (value.Kind == "collision") callbackNodes[18].Position = new(10, 0, 0); };
+            Advance(callback, 1f / 60); callback.EmissionEnabled = false; Advance(callback, 1.2f);
+            if (callback.BirthCount != 2 || callback.CollisionCount != 1)
+                throw new InvalidDataException("Particle collision ignored a collider move during its lifecycle callback.");
             Advance(first, 4); first.ResetCompleted();
             if (first.CollisionCount != 0 || first.BirthCount != 0 || second.BirthCount != 0 ||
                 !sourceHash.AsSpan().SequenceEqual(System.Security.Cryptography.SHA256.HashData(bytes)))
@@ -58,10 +81,11 @@ public partial class NativeNifInstanceAudit
         if (Performance.GetMonitor(Performance.Monitor.ObjectOrphanNodeCount) != before)
             throw new InvalidDataException("Particle source fixture retired with orphaned native nodes.");
 
-        RuntimeNifParticleSystem Create(FalloutNifFile input)
+        RuntimeNifParticleSystem Create(FalloutNifFile input, Dictionary<int, Node3D>? nodes = null)
         {
             var runtime = new RuntimeNifParticleSystem();
-            var nodes = new Dictionary<int, Node3D> { [0] = runtime };
+            nodes ??= [];
+            nodes.Add(0, runtime);
             foreach (var index in new[] { 10, 13, 18 })
             {
                 var declaration = input.ReadNode(index);

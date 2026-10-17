@@ -30,9 +30,6 @@ public partial class RuntimeCoordinator
             () => _nativeLoadingScreens is not null || _nativeLoadingLayer is not null);
         layer.AddChild(_nativeHudMessages);
         layer.AddChild(_nativeSubtitles ?? throw new InvalidOperationException("Source subtitles were not prepared with the player.")); AddChild(layer);
-        _nativeOpeningStageDriver!.PublishStandaloneInterface(_nativeGameplayHud, NativeActiveMenus);
-        BindSourceSessionMenu(_nativeReferences!);
-        _nativeOpeningStageDriver.PublishSourceMainInterface(_nativeGameplayHud, NativeActiveMenus);
         _nativePlayer!.OpenPipBoy += OpenNativePipBoy;
         _nativePlayer.OpenPipBoyPage += page =>
         {
@@ -54,7 +51,7 @@ public partial class RuntimeCoordinator
             };
             _nativeXr.Modal = () => _nativePlayer.ModalInput || GetTree().Paused || _nativeDoorLoading;
             _nativeXr.SetPipBoyHeld = FocusNativeXrPipBoy;
-            _nativeXr.PipBoyInputAccess = NativeWristPipBoyInputAccess;
+            _nativeXr.CanFocusPipBoy = CanFocusNativeXrPipBoy;
             _nativeXr.OpenCombatWheel = OpenNativeCombatWheel;
             _nativeXr.CombatWheelOpen = () => _nativeCombatWheel is not null;
             _nativeXr.CloseCombatWheel = accept => _nativeCombatWheel?.Finish(accept);
@@ -70,19 +67,14 @@ public partial class RuntimeCoordinator
         if (_nativePipBoyLayer is not null || _nativePlayer is not { ModalInput: false } player || _nativeDoorLoading) return;
         var driver = _nativeOpeningStageDriver!;
         var state = driver.PipBoy;
-        if (NativePipBoySourceInputAccess() != Gameplay.State.FalloutPipBoyInputBlocker.None) return;
+        if (!state.Available) return;
         var wasPaused = GetTree().Paused;
         var menu = CreateNativePipBoyMenu(player);
         void Close()
         {
-            state.SetOpen(false);
-            try { _nativePipBoy?.RetireSourcePointerInput(); }
-            finally
-            {
-                _nativePipBoyLayer?.QueueFree(); _nativePipBoyLayer = null; _nativePipBoy = null;
-                GetTree().Paused = wasPaused; player.SetModalInput(false); Input.MouseMode = Input.MouseModeEnum.Captured;
-            }
-            RequestNativePipBoySave();
+            state.SetOpen(false); _nativePipBoyLayer?.QueueFree(); _nativePipBoyLayer = null; _nativePipBoy = null;
+            GetTree().Paused = wasPaused; player.SetModalInput(false); Input.MouseMode = Input.MouseModeEnum.Captured;
+            SaveNativeInteraction();
         }
         try
         {
@@ -140,6 +132,14 @@ public partial class RuntimeCoordinator
         return new(FalloutGameSettingStrings.Read(_nativePluginStack, action), name,
             locked is null ? null : FalloutGameSettingStrings.Read(_nativePluginStack, "sLocked"));
     }
+    private void SaveNativeInteraction()
+    {
+        // The source owns creation autosaves. Later interactions update that
+        // existing campaign save without manufacturing an earlier stage.
+        if (_nativeOpeningStageDriver is { HasCampaignSave: true } driver && driver.Vitals.HitPoints > 0)
+            driver.RequestWorldSave();
+    }
+
     private void ActivateNativeObject(FalloutPlacedReference reference, Node3D? node, string type, FalloutFormKey actor)
     {
         var world = _nativeReferences!;
@@ -166,7 +166,6 @@ public partial class RuntimeCoordinator
         if (type == "CONT" || type is "NPC_" or "CREA" && world.IsDead(reference.FormKey))
         {
             if (_nativeContainerLayer is not null) return;
-            _nativeOpeningStageDriver!.EnterOriginalContainerFactory(reference.FormKey);
             var inventory = world.Inventory(reference.FormKey, _nativeOpeningStageDriver!.PlayerLevel, _nativeGlobals).Contents;
             var record = _nativePluginStack!.GetEffective(reference.Base);
             var title = FalloutDialogueTopic.Text(record.ReadSubrecords().Single(field => field.Signature == "FULL").Data.Span);
@@ -177,7 +176,7 @@ public partial class RuntimeCoordinator
                     _nativeContainerLayer!.QueueFree(); _nativeContainerLayer = null;
                     _nativeContainerReference = null;
                     GetTree().Paused = wasPaused; _nativePlayer!.SetModalInput(false);
-                    Input.MouseMode = Input.MouseModeEnum.Captured; RequestNativeInteractionSave(reference.FormKey);
+                    Input.MouseMode = Input.MouseModeEnum.Captured; SaveNativeInteraction();
                 }, () => { });
             _nativePlayer!.SetModalInput(true); Input.MouseMode = Input.MouseModeEnum.Visible;
             _nativeContainerLayer = new CanvasLayer { Name = "NativeContainerLayer", Layer = 100, ProcessMode = ProcessModeEnum.Always };
@@ -197,7 +196,7 @@ public partial class RuntimeCoordinator
             return;
         }
         world.Take(reference.FormKey, _nativeInventory, _nativeOpeningStageDriver!.PlayerLevel, _nativeGlobals);
-        RequestNativeInteractionSave(reference.FormKey);
+        SaveNativeInteraction();
         GD.Print($"OPENNV_NATIVE_ITEM_TAKEN reference={reference.FormKey} base={reference.Base} retained=true");
     }
 }

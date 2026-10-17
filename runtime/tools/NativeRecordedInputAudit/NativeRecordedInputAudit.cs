@@ -16,7 +16,6 @@ public partial class NativeRecordedInputAudit : Node
         RuntimeLiveHarness? harness = null;
         try
         {
-            await ExerciseHeadlessInputOwner();
             ExerciseBotActionBindings();
             Directory.CreateDirectory(directory);
             var pluginPath = Path.Combine(directory, "Input.esm");
@@ -93,8 +92,7 @@ public partial class NativeRecordedInputAudit : Node
             await Send(new { op = "input.record.start", path = tapePath });
             await Send(new { op = "key", key = "W", pressed = true, leaseMilliseconds = 1000 });
             await Send(new { op = "key", key = "W", pressed = true, leaseMilliseconds = 1000 });
-            using var physicalPress = new InputEventKey { PhysicalKeycode = Key.A, Keycode = Key.A, Pressed = true };
-            Input.ParseInputEvent(physicalPress);
+            Input.ParseInputEvent(new InputEventKey { PhysicalKeycode = Key.A, Keycode = Key.A, Pressed = true });
             await ToSignal(GetTree().CreateTimer(.45), SceneTreeTimer.SignalName.Timeout);
             await Send(new { op = "button", path = button.GetPath().ToString() });
             await Send(new { op = "pointer", x = 60, y = 60, button = "left", pressed = true });

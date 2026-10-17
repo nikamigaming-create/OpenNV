@@ -5,13 +5,13 @@ namespace OpenNV.Runtime.Gameplay.State;
 internal static class FalloutPlayerPerkNumericEffects
 {
     internal static float Apply(byte entryPoint, float operand, IReadOnlyList<FalloutPerkEntry> entries,
-        Func<FalloutCondition, float> conditions, FalloutGlobalState? globals = null)
+        Func<FalloutCondition, float> conditions)
     {
         if (!float.IsFinite(operand)) throw new InvalidDataException("Player perk entry operand is not finite.");
         var active = entries.Where(entry => entry.Entry == entryPoint).Where(entry =>
         {
             entry.RequireActorConditionScope();
-            return FalloutCondition.AllPass(entry.Conditions, conditions, evaluateRunOn: true, globals: globals);
+            return FalloutCondition.AllPass(entry.Conditions, conditions, evaluateRunOn: true);
         }).ToArray();
         if (active.Length > 1)
             throw new NotSupportedException($"Player perk entry {entryPoint} requires the acquired entry ordering owner.");

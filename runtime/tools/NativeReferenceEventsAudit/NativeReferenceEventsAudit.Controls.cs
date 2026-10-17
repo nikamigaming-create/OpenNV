@@ -86,7 +86,6 @@ public partial class NativeReferenceEventsAudit
             catch (NotSupportedException) { }
             Require(controls.Revision == revision && controls.Get(0) == 31 && swapped.IsActionPressed(configuration.MoveForward.Action),
                 "Rejected physical key corrupted the owner or native map.");
-            InputEventPreparationLifetime(configuration);
             adapter.Free();
             Run("SetControl 0 17");
             Require(swapped.IsActionPressed(configuration.MoveForward.Action), "A retired adapter continued changing native input.");
@@ -98,36 +97,5 @@ public partial class NativeReferenceEventsAudit
             if (GodotObject.IsInstanceValid(sourceInput)) sourceInput.Free();
             DesktopInputMap.Configure(configuration);
         }
-    }
-
-    private static void InputEventPreparationLifetime(DesktopInputConfiguration configuration)
-    {
-        // The first row creates both a real key and mouse event. The next row
-        // fails before publication, exercising ownership of the prepared prefix.
-        var controls = new FalloutInputControls(name => name switch
-        {
-            "Forward" => "001100FF",
-            "Back" => "00FAFFFF",
-            _ => "00FFFFFF",
-        });
-        var adapter = new RuntimeNativeInputControls(controls, configuration, _ => false);
-        try
-        {
-            var count = Performance.GetMonitor(Performance.Monitor.ObjectCount);
-            var refused = false;
-            try { adapter._EnterTree(); } catch (NotSupportedException) { refused = true; }
-            Require(refused && Performance.GetMonitor(Performance.Monitor.ObjectCount) == count,
-                "Failed input preparation retained its created keyboard/mouse events.");
-            using var previous = new InputEventKey { PhysicalKeycode = Godot.Key.S, Pressed = true };
-            using var proposed = new InputEventKey { PhysicalKeycode = Godot.Key.W, Pressed = true };
-            Require(previous.IsActionPressed(configuration.MoveForward.Action) && !proposed.IsActionPressed(configuration.MoveForward.Action),
-                "Partially prepared input bindings changed the previously published native map.");
-            count = Performance.GetMonitor(Performance.Monitor.ObjectCount); refused = false;
-            try { using var unsupported = NativeScriptKeys.Create(FalloutInputLayout.FirstMouseButton + 5); }
-            catch (NotSupportedException) { refused = true; }
-            Require(refused && Performance.GetMonitor(Performance.Monitor.ObjectCount) == count,
-                "Unsupported native mouse factory allocated an unreleased event before validation.");
-        }
-        finally { adapter.Free(); }
     }
 }

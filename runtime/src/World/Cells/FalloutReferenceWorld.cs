@@ -34,12 +34,7 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
     FalloutHitReactionFaultsSnapshot? HitReactionFaults = null,
     FalloutActivationRelaySnapshot? ActivationRelay = null,
     FalloutActorCorpseEquipment? CorpseEquipment = null,
-    FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null,
-    IReadOnlyList<FalloutPackageResultSnapshot>? PackageResults = null,
-    FalloutActorScriptPackageSnapshot? ScriptPackage = null,
-    FalloutActorPackageChoice? PendingPackageChoice = null,
-    FalloutScriptLocalStorageSnapshot? LocalStorage = null, FalloutActorPackageCollectionContinuation? PackageCollection = null,
-    FalloutTriggerContactsSnapshot? TriggerContacts = null)
+    FalloutActorDeferredPackageContinuation? DeferredPackageContinuation = null)
 {
     internal static void Validate(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
     {
@@ -53,16 +48,9 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 snapshot.Variables.Values.Any(value => !double.IsFinite(value)) ||
                 snapshot.Deleted && snapshot.DeletePending || snapshot.DeathCount is < 0 ||
                 !float.IsFinite(snapshot.Opacity) || snapshot.Opacity is < 0 or > 1 ||
-                (snapshot.Script is null ? snapshot.ScriptSha256 is not null || snapshot.Variables.Count != 0 || snapshot.LocalStorage is not null :
-                    !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit) ||
-                    snapshot.LocalStorage is null))
+                (snapshot.Script is null ? snapshot.ScriptSha256 is not null || snapshot.Variables.Count != 0 :
+                    !ValidKey(snapshot.Script.Value) || snapshot.ScriptSha256 is not { Length: 64 } || !snapshot.ScriptSha256.All(Uri.IsHexDigit)))
                 throw new InvalidDataException("Saved reference state is invalid or duplicated.");
-            if (snapshot.LocalStorage is { } locals)
-            {
-                locals.Validate();
-                if (locals.Script != snapshot.Script || !string.Equals(locals.ScriptSha256, snapshot.ScriptSha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Saved reference local storage differs from its script identity.");
-            }
             foreach (var (name, value) in snapshot.ActorValues ?? new Dictionary<string, FalloutActorValue>())
                 if ((name is not ("health" or "aggression") && FalloutActorValue.UserSlot(name) != name) || value is null || !value.IsFinite)
                     throw new InvalidDataException("Saved actor value is invalid.");
@@ -79,9 +67,6 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 }
             }
             snapshot.DoorMotion?.Validate(snapshot.DoorOpen, snapshot.ObjectAnimations);
-            snapshot.TriggerContacts?.Validate();
-            if (snapshot.TriggerContacts is { } contacts && contacts.Reference != snapshot.Reference)
-                throw new InvalidDataException("Saved trigger membership belongs to a different reference.");
             snapshot.ActivationRelay?.Validate();
             snapshot.LockState?.Validate();
             snapshot.OwnershipOverride?.Validate();
@@ -97,11 +82,6 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
                 throw new InvalidDataException("Saved attack randomness differs between reference and active engagement.");
             snapshot.PackageMotion?.Validate();
             snapshot.PackageAssignment?.Validate();
-            snapshot.ScriptPackage?.ValidateContinuation(snapshot);
-            snapshot.PendingPackageChoice?.Validate();
-            if ((snapshot.PendingPackageChoice is { } choice && choice.Actor != snapshot.Reference) ||
-                (snapshot.PackageAssignment is { ScriptPackageRevision: > 0 } && snapshot.ScriptPackage is null))
-                throw new InvalidDataException("Actor package selection or procedure lost its exact reference epoch.");
             snapshot.DeferredPackageContinuation?.ValidateShape(snapshot);
             snapshot.PackageBindingFailure?.Validate();
             snapshot.SelectionFailure?.Validate();
@@ -135,7 +115,6 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
             foreach (var start in snapshot.PackageStarts ?? [])
                 (start ?? throw new InvalidDataException("Saved package selection time is absent.")).Validate();
             snapshot.PackageIdle?.Validate();
-            snapshot.PackageCollection?.Validate();
             snapshot.AnimationSoundEvents?.Validate();
             snapshot.HitReactionFaults?.Validate();
             if (snapshot.AnimationSoundEvents is { } sounds && sounds.Reference != snapshot.Reference ||
@@ -159,15 +138,12 @@ internal sealed record FalloutReferenceSnapshot(FalloutFormKey Reference, Fallou
 
 internal sealed class FalloutReferenceInstance
 {
-    private static readonly IReadOnlyDictionary<uint, double> EmptyVariables = new Dictionary<uint, double>();
     internal FalloutFormKey Reference { get; }
     internal FalloutFormKey Cell { get; }
     internal FalloutFormKey Base { get; }
     internal FalloutReferenceScriptDefinition? Script { get; private set; }
-    internal FalloutTriggerContacts TriggerContacts { get; }
     internal FalloutActorTemplateSelection? Templates { get; set; }
-    internal FalloutScriptLocalStorage? LocalStorage { get; private set; }
-    internal IReadOnlyDictionary<uint, double> Variables => LocalStorage is null ? EmptyVariables : LocalStorage;
+    internal Dictionary<uint, double> Variables { get; }
     internal string? ScriptError { get; set; }
     internal FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame { get; set; }
     internal FalloutReferenceScriptStoppedFrame? CompletedScriptContinuation { get; set; }
@@ -194,10 +170,7 @@ internal sealed class FalloutReferenceInstance
     internal bool? BroadcastState { get; set; }
     internal FalloutFormKey? TalkingActivatorActor { get; set; }
     internal FalloutActorPackageMotion? PackageMotion { get; set; }
-    internal Func<FalloutActorPackageMotion?>? CapturePackageMotion { get; set; }
     internal FalloutActorPackageAssignment? PackageAssignment { get; set; }
-    internal FalloutActorScriptPackageSnapshot? ScriptPackage { get; set; }
-    internal FalloutActorPackageChoice? PendingPackageChoice { get; set; }
     internal FalloutActorDeferredPackageContinuation? DeferredPackageContinuation { get; set; }
     internal Func<FalloutActorPackageAssignment?>? CapturePackageAssignment { get; set; }
     internal FalloutActorPackageBindingFailure? PackageBindingFailure { get; set; }
@@ -237,8 +210,6 @@ internal sealed class FalloutReferenceInstance
         PackageBindingFailure is { } failure && ProcedureCaptureBlocker == failure.Error;
     internal List<FalloutPackageStart> PackageStarts { get; } = [];
     internal FalloutPackageEventIdle? PackageIdle { get; set; }
-    internal FalloutActorPackageCollectionContinuation? PackageCollection { get; set; }
-    internal Func<FalloutActorPackageCollectionContinuation?>? CapturePackageCollection { get; set; }
     internal string? ProcedureCaptureBlocker { get; set; }
     internal FalloutActorHeadTrackingSnapshot? HeadTracking { get; set; }
     internal bool HeadTrackingRequired { get; set; }
@@ -278,22 +249,7 @@ internal sealed class FalloutReferenceInstance
     internal int DeathCount { get; set; }
     internal FalloutActorRagdollState? Ragdoll { get; set; }
     internal Func<FalloutActorRagdollState>? CaptureRagdoll { get; set; }
-    private FalloutActorEngagement? _engagement;
-    internal Action<FalloutActorEngagement?, FalloutActorEngagement?>? CombatGroupTargetChanged { get; set; }
-    internal FalloutActorEngagement? Engagement
-    {
-        get => _engagement;
-        set
-        {
-            var previous = _engagement;
-            _engagement = value;
-            var oldTarget = previous?.Target;
-            var newTarget = value?.Target;
-            if (oldTarget.HasValue != newTarget.HasValue || oldTarget.HasValue &&
-                !FalloutFormKeyComparer.Instance.Equals(oldTarget.GetValueOrDefault(), newTarget.GetValueOrDefault()))
-                CombatGroupTargetChanged?.Invoke(previous, value);
-        }
-    }
+    internal FalloutActorEngagement? Engagement { get; set; }
     internal Action? StopCombat { get; set; }
     internal Func<FalloutActorEngagement?>? CaptureEngagement { get; set; }
     internal FalloutActorCorpseEquipment? CorpseEquipment { get; set; }
@@ -316,12 +272,11 @@ internal sealed class FalloutReferenceInstance
     }
 
     internal FalloutReferenceInstance(FalloutPluginRecord reference, FalloutReferenceScriptDefinition? script,
-        Action<FalloutFormKey> requireTriggerReference, Func<bool>? referenceEnabled = null)
+        Func<bool>? referenceEnabled = null)
     {
-        if (!IsPlacedReferenceSignature(reference.Signature))
+        if (reference.Signature is not ("REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS"))
             throw new InvalidDataException($"{reference.FormKey} is not a placed reference.");
         Reference = reference.FormKey;
-        TriggerContacts = new(reference, requireTriggerReference);
         _referenceEnabled = referenceEnabled;
         Cell = FalloutCellSceneReader.ParentCell(reference) ??
             throw new InvalidDataException($"Reference {Reference} has no source CELL.");
@@ -330,11 +285,8 @@ internal sealed class FalloutReferenceInstance
         Enabled = (reference.Flags & 0x800) == 0;
         NoFade = (reference.Flags & 0x08000000) != 0;
         EnableParent = FalloutReferenceEnableParent.Read(reference);
-        if (script is not null) LocalStorage = new(script.Record, FalloutScriptLocalStorage.ReadInitialPayloads(script.Record));
+        Variables = script?.Locals.Values.ToDictionary(index => index, _ => 0d) ?? [];
     }
-
-    internal static bool IsPlacedReferenceSignature(string signature) =>
-        signature is "REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS";
 
     internal double Read(uint index) => Variables.TryGetValue(index, out var value) ? value :
         throw new NotSupportedException($"Reference {Reference} has no declared variable {index}.");
@@ -347,18 +299,16 @@ internal sealed class FalloutReferenceInstance
     {
         _ = Read(index);
         if (!double.IsFinite(value)) throw new InvalidDataException("Reference variable is non-finite.");
-        if (Script is { } compiled && FalloutCompiledScriptProgram.HasProgram(compiled.Record.ReadSubrecords().ToArray()))
-            FalloutScriptLocals.RequireCompiledValue(compiled.Record, index, value);
-        (LocalStorage ?? throw new InvalidDataException("Reference has no local storage owner.")).Write(index, value);
+        Variables[index] = value;
     }
 
     internal void BindTemplateScript(FalloutReferenceScriptDefinition? script)
     {
         if (Script?.Record.FormKey == script?.Record.FormKey) return;
-        if (LocalStorage?.HasMutations == true || ScriptError is not null)
+        if (Variables.Values.Any(value => value != 0) || ScriptError is not null)
             throw new InvalidDataException("Cannot replace an actor script after its execution has started.");
-        Script = script;
-        LocalStorage = script is null ? null : new(script.Record, FalloutScriptLocalStorage.ReadInitialPayloads(script.Record));
+        Script = script; Variables.Clear();
+        foreach (var index in script?.Locals.Values ?? []) Variables.Add(index, 0);
     }
 
     internal FalloutReferenceSnapshot Capture() => CaptureCore(null, null, false);
@@ -398,7 +348,7 @@ internal sealed class FalloutReferenceInstance
             _soundRandom?.State, Animation.Capture(), Unconscious, MapMarker,
             Injury is null ? null : Injury with { LimbDamage = new Dictionary<byte, float>(Injury.LimbDamage) }, CaptureRagdoll?.Invoke() ?? Ragdoll,
             CaptureEngagement?.Invoke() ?? Engagement, Templates?.Capture(), Placement?.Copy(), Restrained, PlayerTeammate,
-            TalkedToPlayer, CapturePackageMotion is { } captureMotion ? captureMotion() : PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
+            TalkedToPlayer, PackageMotion, HitReaction?.Copy(), _hitReactionRandom?.State, KnockedDown, Destruction,
             CaptureObjectAnimations?.Invoke() ?? ObjectAnimations, DoorMotion, LockState, OwnershipOverride,
             PackageStarts.Count == 0 ? null : PackageStarts.ToArray(), PackageIdle, TalkingActivatorActor,
             CapturePackageAssignment is { } captureAssignment ? captureAssignment() : PackageAssignment, bindingFailure, BroadcastState,
@@ -413,10 +363,7 @@ internal sealed class FalloutReferenceInstance
                 ? capturePending() : PendingPackageSelection?.Copy() : null,
             AnimationSoundEvents: soundEvents, HitReactionFaults: hitReactionFaults, ActivationRelay: ActivationRelay?.Copy(),
             CorpseEquipment: CaptureCorpseEquipment is { } captureEquipment ? captureEquipment() : CorpseEquipment?.Copy(),
-            DeferredPackageContinuation: DeferredPackageContinuation, ScriptPackage: ScriptPackage,
-            PendingPackageChoice: PendingPackageChoice, LocalStorage: LocalStorage?.Capture(),
-            PackageCollection: CapturePackageCollection is { } captureCollection ? captureCollection() : PackageCollection?.Copy(),
-            TriggerContacts: TriggerContacts.Capture());
+            DeferredPackageContinuation: DeferredPackageContinuation);
     }
 }
 
@@ -437,7 +384,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     FalloutScriptIniStore? ini = null, FalloutUiComponentStore? ui = null, FalloutInputControls? controls = null,
     FalloutFaceGeometryControls? faceControls = null) : IDisposable
 {
-    internal FalloutScriptValueStore ScriptValues { get; } = (scriptValues ?? new()).BindArraySource(records);
+    internal FalloutScriptValueStore ScriptValues { get; } = scriptValues ?? new();
     internal FalloutAuxiliaryStore Auxiliary { get; } = auxiliary ?? new();
     internal FalloutScriptIniStore? Ini { get; } = ini;
     internal FalloutUiComponentStore? Ui { get; } = ui;
@@ -508,7 +455,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             throw new InvalidOperationException($"Cell {scene.Cell.FormKey} is already resident.");
         var instances = scene.References.Select(reference => Get(reference.FormKey)).ToArray();
         foreach (var instance in instances.Where(instance => instance.DeletePending && !_residentReferences.ContainsKey(instance.Reference)))
-        { instance.Deleted = true; instance.DeletePending = false; RetireDeletedActorScriptPackage(instance); }
+        { instance.Deleted = true; instance.DeletePending = false; }
         // Exterior residency includes persistent references whose source parent
         // is the world cell. Source ancestry remains unchanged in every instance.
         if (instances.Where((instance, index) => instance.Cell != scene.References[index].Cell).Any() ||
@@ -529,7 +476,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             var remaining = _residentReferences[instance.Reference] - 1;
             if (remaining > 0) { _residentReferences[instance.Reference] = remaining; continue; }
             _residentReferences.Remove(instance.Reference);
-            if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; RetireDeletedActorScriptPackage(instance); }
+            if (instance.DeletePending) { instance.Deleted = true; instance.DeletePending = false; }
         }
     }
 
@@ -547,11 +494,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         FalloutReferenceScriptDefinition? definition = null;
         if (script is not null && !_definitions.TryGetValue(script.FormKey, out definition))
             _definitions.Add(script.FormKey, definition = new(script));
-        instance = new(record, definition, contact => FalloutTriggerContacts.RequireReference(records, contact), () => IsEnabled(key));
+        instance = new(record, definition, () => IsEnabled(key));
         _instances.Add(key, instance);
-        BindCombatGroupInstance(instance);
-        ConstructActualActorUpdate(instance);
-        BindActorPerceptionInstance(instance);
         return instance;
     }
 
@@ -601,8 +545,6 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         {
             reference = instance.Reference.ToString(),
             assignment = instance.PackageAssignment?.Package.ToString(),
-            scriptPackage = instance.ScriptPackage,
-            pendingPackageChoice = instance.PendingPackageChoice,
             motion = instance.PackageMotion?.Package.ToString(),
             blocker = instance.ProcedureCaptureBlocker,
             bindingCapture = instance.PackageBindingCaptureDiagnostic,
@@ -615,7 +557,6 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
 
     internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
     {
-        RequireNoFunctionalFailure();
         _scriptManualSaves?.RequireCapture();
         ObjectDisposedException.ThrowIf(_disposed, this);
         PlayerMoves.RequireSettled();
@@ -624,15 +565,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         if (_instances.Values.Any(instance => instance.DeferredPackageContinuation is not null && IsResident(instance.Reference)))
             throw new NotSupportedException("Resident deferred package requires its actual native handoff before saving.");
         foreach (var actor in _packageEvents?.PendingActors ?? []) _ = Get(actor);
-        var result = _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
+        return _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
             .Select(instance => instance.Capture() with
             {
-                PackageEvents = _packageEvents?.Capture(instance.Reference) is { Count: > 0 } events ? events : null,
-                PackageResults = CapturePackageResults(instance.Reference)
+                PackageEvents = _packageEvents?.Capture(instance.Reference) is { Count: > 0 } events ? events : null
             }).ToArray();
-        ValidateActorScriptPackageCapture(result);
-        ValidateRecordedPackageResults(records, result);
-        return result;
     }
 
     internal void Restore(IReadOnlyList<FalloutReferenceSnapshot> snapshots)
@@ -640,7 +577,6 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_instances.Count != 0 || PendingPackageEventCount != 0) throw new InvalidOperationException("Reference restoration requires a fresh world.");
         FalloutReferenceSnapshot.Validate(snapshots);
-        ValidateRecordedPackageResults(records, snapshots);
         using var validated = new FalloutReferenceWorld(records);
         foreach (var snapshot in snapshots)
         {
@@ -657,20 +593,21 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                 snapshot.ScriptSha256 != instance.Script?.Sha256 || snapshot.Variables is null ||
                 !snapshot.Variables.Keys.Order().SequenceEqual(instance.Variables.Keys.Order()))
                 throw new InvalidDataException($"Saved reference {snapshot.Reference} differs from its winning source declaration.");
-            instance.TriggerContacts.Restore(snapshot.TriggerContacts);
-            if (instance.Script is { } compiled && FalloutCompiledScriptProgram.HasProgram(compiled.Record.ReadSubrecords().ToArray()))
-            {
-                if (snapshot.ScriptStoppedFrame is not null || snapshot.CompletedScriptContinuation is not null)
-                    throw new NotSupportedException("Legacy source statement continuation has no compiled offset/ordinal authority; its prefix cannot be replayed.");
-                foreach (var (index, value) in snapshot.Variables) FalloutScriptLocals.RequireCompiledValue(compiled.Record, index, value);
-            }
-            if (instance.LocalStorage is { } locals)
-                locals.Restore(snapshot.LocalStorage ?? throw new InvalidDataException("Saved reference has no complete ordered local storage."), snapshot.Variables);
-            else if (snapshot.LocalStorage is not null)
-                throw new InvalidDataException("Saved ordered locals have no attached reference script.");
-            // The saved reached failure is part of this owner's continuation.
-            // Cold publication must retain it without retrying or clearing it.
-            instance.ScriptError = snapshot.ScriptError;
+            foreach (var (index, value) in snapshot.Variables) instance.Write(index, value);
+            // Older builds incorrectly retained failed engine default actions
+            // as source-program faults even on objects with no script.
+            // Parsing executes no source statements. Retry it after a cold
+            // load so a parser correction can recover an existing save.
+            // Reached execution failures retain their applied prefix/error.
+            // PACK result scripts belong to their package, so even an actor
+            // without an attached script can retain their reached failure.
+            var packageFault = snapshot.ScriptError is { } error &&
+                (error.StartsWith("Package POBA ", StringComparison.Ordinal) ||
+                 error.StartsWith("Package POCA ", StringComparison.Ordinal) ||
+                 error.StartsWith("Package POEA ", StringComparison.Ordinal));
+            instance.ScriptError = instance.Script is null && !packageFault ||
+                snapshot.ScriptError?.StartsWith("Parse:", StringComparison.OrdinalIgnoreCase) == true
+                ? null : snapshot.ScriptError;
             if (snapshot.ScriptStoppedFrame is not null || snapshot.CompletedScriptContinuation is not null)
             {
                 if (instance.Script is null) throw new InvalidDataException("Saved stopped frame has no source script.");
@@ -701,7 +638,6 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             instance.DeletePending = snapshot.DeletePending;
             instance.Deleted = snapshot.Deleted;
-            validated.RestoreActorScriptPackage(instance, snapshot);
             instance.Taken = snapshot.Taken;
             instance.DoorOpen = snapshot.DoorOpen;
             instance.DoorMotion = snapshot.DoorMotion;
@@ -757,8 +693,6 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                     if (package.Signature != "PACK" || !Convert.ToHexString(SHA256.HashData(package.ReadData()))
                         .Equals(motion.PackageSha256, StringComparison.OrdinalIgnoreCase))
                         throw new InvalidDataException("Saved package motion differs from the winning package.");
-                    if (motion.Follow is { } follow)
-                        FalloutFollowPackage.Read(package).ValidateContinuation(records, snapshot.Reference, follow);
                     if (motion.Patrol is { } patrol) FalloutPatrolRoute.Read(records, package, snapshot.Reference).Validate(patrol);
                     if (motion.Escort is { } escort) { _ = FalloutEscortPackage.Read(package); escort.Validate(); }
                     if (motion.EditorTravel is { } editorTravel)
@@ -781,13 +715,10 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
                         RouteTarget = travel.RouteTarget is null ? null : (float[])travel.RouteTarget.Clone(),
                         RouteWaypoints = travel.RouteWaypoints?.Select(point => (float[])point.Clone()).ToArray()
                     } : null,
-                    Guard = motion.Guard is { } guard ? guard with { Location = (float[])guard.Location.Clone() } : null,
-                    Follow = motion.Follow?.Copy(),
-                    Sandbox = motion.Sandbox?.Copy()
+                    Guard = motion.Guard is { } guard ? guard with { Location = (float[])guard.Location.Clone() } : null
                 };
             }
             validated.RestorePackageTiming(instance, snapshot);
-            validated.RestorePackageCollection(instance, snapshot);
             if (snapshot.SoundRandomState is { } soundRandom) instance.SoundRandom.Restore(soundRandom);
             if (snapshot.AnimationSoundEvents is { } soundEvents) instance.AnimationSoundEvents.Restore(soundEvents, records);
             if (snapshot.HitReactionFaults is { } hitFaults)
@@ -894,17 +825,14 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             }
             if (snapshot.PackageMotion is { } staleMotion && snapshot.PackageAssignment is { } assignment &&
                 assignment.Package != staleMotion.Package) continue;
-            validated.ValidateSandboxSources(snapshot);
             if (snapshot.PackageMotion?.Travel is { } travel)
                 FalloutTravelPackage.Read(records.GetEffective(snapshot.PackageMotion.Package),
-                    ownsIdleCollection: records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_" || snapshot.PackageCollection is not null)
+                    ownsIdleCollection: records.GetEffective(validated.Get(snapshot.Reference).Base).Signature == "NPC_")
                     .Validate(records, validated, snapshot.Reference, travel);
             if (snapshot.PackageMotion?.Guard is { } guard)
-                FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package),
-                    ownsIdleCollection: snapshot.PackageCollection is not null)
+                FalloutGuardPackage.Read(records.GetEffective(snapshot.PackageMotion.Package))
                     .Validate(records, validated, snapshot.Reference, guard);
         }
-        validated.RestorePackageResults(snapshots);
         validated.PackageEvents.Restore(snapshots);
         _packageEvents = validated._packageEvents;
         validated._packageEvents = null;
@@ -915,85 +843,31 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             instance.BindReferenceEnableQuery(() => IsEnabled(key));
             _instances.Add(key, instance);
             BindInventoryRemoval(instance);
-            BindCombatGroupInstance(instance);
-            ConstructActualActorUpdate(instance);
-            BindActorPerceptionInstance(instance);
         }
-        foreach (var (key, results) in validated._packageResults) _packageResults.Add(key, results);
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
         foreach (var (seat, actor) in validated._furnitureSeats) _furnitureSeats.Add(seat, actor);
     }
 
-    private bool _retiring;
-    private AggregateException? _retirementFailure;
-    internal string? WorldRetirementFailure => _retirementFailure?.Message;
-
     public void Dispose()
     {
-        if (_disposed)
-        {
-            if (_retirementFailure is not null) throw _retirementFailure;
-            return;
-        }
-        if (_retiring) throw new InvalidOperationException("Campaign world retirement cannot reenter.");
-        // Main can still hold callbacks into any of these source providers.
-        // Refuse before disposing the first provider, retaining all inputs.
-        RequireCampaignMainNativeDeliveryClosed();
-        _retiring = true;
-        var failures = new List<Exception>();
-        void Retire(Action action)
-        {
-            try { action(); }
-            catch (Exception failure) { failures.Add(failure); }
-        }
-        try
-        {
-            Retire(RetireStandaloneTaskManager);
-            Retire(RetireSourceProcessQueues);
-            Retire(RetireCampaignScriptContexts);
-            Retire(RetireCampaignUtilityCommands);
-            Retire(RetireCampaignMainPlayerCell);
-            Retire(() => _processRuntime?.RetireSourceMainCachedTail());
-            Retire(() => _processRuntime?.RetireSourceMainInterface());
-            Retire(RetireCampaignSourceGlobalTime);
-            Retire(RetireCampaignCachedSourceTimer);
-            Retire(RetireActorProcessGraph);
-            Retire(RetireSourceCellLinks);
-            Retire(RetireCellProcesses);
-            Retire(RetireActorUpdates);
-            Retire(RetireCombatGroups);
-            Retire(RetireCampaignIndexedInterfaceSounds);
-            Retire(RetireCampaignChallenges);
-            Retire(RetirePlayerStatistics);
-            Retire(RetireSandboxSourceProducers);
-            Retire(RetireCampaignPlayerRuntime);
-            Retire(() => _sounds?.Clear());
-            Retire(() => _pipBoyRadio?.Off());
-            Retire(() => _screenBlood?.Clear());
-            Retire(() => _packageEvents?.Clear());
-            Retire(() => _hitEvents?.Clear());
-            Retire(() => Menus.Publish(true));
-            _disposed = true;
-            if (failures.Count != 0)
-            {
-                _retirementFailure = new AggregateException("Campaign world retirement retained failed owners.", failures);
-                throw _retirementFailure;
-            }
-        }
-        finally { _retiring = false; }
         UnloadedPackages = null;
         _beforeActorHit = null;
+        _sounds?.Clear();
+        _pipBoyRadio?.Off();
+        _screenBlood?.Clear();
         PlayerMoves.Clear();
+        _packageEvents?.Clear();
+        _hitEvents?.Clear();
+        Menus.Publish(true);
         _residentCells.Clear();
         _residentReferences.Clear();
         _furnitureSeats.Clear();
         _instances.Clear();
-        _scriptPackageSources.Clear();
-        _packageResults.Clear();
         _definitions.Clear();
         _healthSources.Clear();
         _bodyParts.Clear();
         _encounterZones.Clear();
         _cellEncounterZones.Clear();
+        _disposed = true;
     }
 }

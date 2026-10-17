@@ -39,6 +39,7 @@ if ($policyViolations.Count -ne 0) {
 if (-not (Test-Path -LiteralPath $Godot -PathType Leaf)) {
     throw "Godot executable is missing: $Godot"
 }
+
 $validatedGodotVersion = Assert-OpenNVGodotVersion -Executable $Godot
 Write-Host "OPENNV_GODOT_TOOLCHAIN version=$validatedGodotVersion"
 
@@ -129,9 +130,6 @@ foreach ($configuration in @('Debug', 'Release')) {
     & dotnet run --project $domainProject --configuration $configuration -- --test-native-domain `
         (Join-Path $domainOutput 'opennv_plugin_domain.exe') (Join-Path $domainOutput 'fixtures')
     if ($LASTEXITCODE -ne 0) { throw "Native plugin execution-domain $configuration contracts failed." }
-    & dotnet run --project $domainProject --configuration $configuration -- --test-native-move-policy `
-        (Join-Path $domainOutput 'fixtures/opennv_move_file_fixture.dll')
-    if ($LASTEXITCODE -ne 0) { throw "Native paired file-move $configuration contracts failed." }
 }
 
 & npm run check --prefix (Join-Path $repository "desktop")
@@ -146,33 +144,12 @@ if ($LASTEXITCODE -ne 0 -or $text -match $godotFailurePattern) {
     throw "OpenNV Godot startup failed:`n$text"
 }
 
-$defaultLauncherOutput = & $Godot --headless --xr-mode off --quit-after 3 --path $runtime 2>&1
-$defaultLauncherText = $defaultLauncherOutput | Out-String
-if ($LASTEXITCODE -ne 0 -or $defaultLauncherText -match $godotFailurePattern -or
-    $defaultLauncherText -notmatch 'OPENNV_GODOT_LAUNCHER_READY') {
-    throw "OpenNV ordinary executable entry did not open the launcher:`n$defaultLauncherText"
-}
-Write-Output 'OPENNV_DEFAULT_LAUNCHER_ENTRY_PASS explicitGameArguments=false gameplay=false recording=false'
-
 $pcmOutput = & $Godot --headless --verbose --path $runtime res://tools/NativePcmPlaybackAudit/NativePcmPlaybackAudit.tscn 2>&1
 $pcmText = $pcmOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $pcmText -match $godotFailurePattern -or $pcmText -notmatch "OPENNV_NATIVE_PCM_PLAYBACK_PASS") {
     throw "OpenNV native PCM continuation failed:`n$pcmText"
 }
 Write-Output "OPENNV_NATIVE_PCM_PLAYBACK_PASS fractionalCold=true envelope=true mixer=true pause=true"
-
-$soundEmitterOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeNifInstanceAudit/NativeNifInstanceAudit.tscn -- --actor-sound-emitters 2>&1
-$soundEmitterText = $soundEmitterOutput | Out-String
-if ($LASTEXITCODE -ne 0 -or $soundEmitterText -match $godotFailurePattern -or
-    $soundEmitterText -notmatch 'OPENNV_NATIVE_UNOWNED_PCM_OBSERVATION_PASS' -or
-    $soundEmitterText -notmatch 'OPENNV_NATIVE_BONE_EMITTER_PERSISTENCE_PASS' -or
-    $soundEmitterText -notmatch 'OPENNV_NATIVE_NODE_EMITTER_PERSISTENCE_PASS' -or
-    $soundEmitterText -notmatch 'OPENNV_NATIVE_NODE_EMITTER_RETIREMENT_PASS' -or
-    $soundEmitterText -notmatch 'OPENNV_NATIVE_BONE_EMITTER_RETIREMENT_PASS' -or
-    $soundEmitterText -notmatch 'OPENNV_NATIVE_ACTOR_SOUND_EMITTERS_PASS') {
-    throw "OpenNV native sound continuation observation or source emitter lifetime failed:`n$soundEmitterText"
-}
-Write-Output 'OPENNV_NATIVE_SOUND_EMITTER_CONTINUATION_PASS unsupportedObservable=true checkpointRefused=true sourceBoneCold=true sourceNodeCold=true nativeRetirement=true'
 
 $menuProjectionOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeMenuGeometryProjectionAudit/NativeMenuGeometryProjectionAudit.tscn 2>&1
 $menuProjectionText = $menuProjectionOutput | Out-String
@@ -232,24 +209,6 @@ if ($LASTEXITCODE -ne 0 -or $ragdollText -match $godotFailurePattern -or
 }
 Write-Output "OPENNV_NATIVE_AUTHORED_RAGDOLL_PASS sourceFirstChild=true componentState=true"
 
-$livingOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeLivingPhysicsAudit/NativeLivingPhysicsAudit.tscn 2>&1
-$livingText = $livingOutput | Out-String
-if ($LASTEXITCODE -ne 0 -or $livingText -match $godotFailurePattern -or
-    $livingText -notmatch 'OPENNV_NATIVE_LIVING_PHYSICS_PASS' -or
-    $livingText -notmatch 'coldStructuralRegistry=true allocatorPreserved=true') {
-    throw "OpenNV living body, joint or structural world continuation failed:`n$livingText"
-}
-Write-Output 'OPENNV_NATIVE_LIVING_PHYSICS_PASS actualPhysicsServer=true sourceLinks=true currentMemberships=true coldBodies=true coldStructuralRegistry=true allocatorPreserved=true'
-
-$earlyControllerOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeEarlyControllerAudit/NativeEarlyControllerAudit.tscn 2>&1
-$earlyControllerText = $earlyControllerOutput | Out-String
-if ($LASTEXITCODE -ne 0 -or $earlyControllerText -match $godotFailurePattern -or
-    $earlyControllerText -notmatch 'OPENNV_NATIVE_EARLY_CONTROLLER_PASS' -or
-    $earlyControllerText -notmatch 'detachedNoDefaultSpace=true') {
-    throw "OpenNV early detached controller construction/reset failed:`n$earlyControllerText"
-}
-Write-Output 'OPENNV_NATIVE_EARLY_CONTROLLER_PASS actualPhysicsServer=true sourceKind16=true detachedNoDefaultSpace=true gameplay=unexecuted'
-
 $locomotionOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeLocomotionAudit/NativeLocomotionAudit.tscn 2>&1
 $locomotionText = $locomotionOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $locomotionText -match $godotFailurePattern -or
@@ -269,18 +228,9 @@ Write-Output "OPENNV_NATIVE_RENDER_TRACE_AUDIT_PASS nearPlane=clipped coverage=b
 $inputOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeRecordedInputAudit/NativeRecordedInputAudit.tscn 2>&1
 $inputText = $inputOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $inputText -match $godotFailurePattern -or
-    $inputText -notmatch "OPENNV_NATIVE_HEADLESS_INPUT_PASS" -or
     $inputText -notmatch "OPENNV_NATIVE_RECORDED_INPUT_PASS") {
     throw "OpenNV native recorded input failed:`n$inputText"
 }
 Write-Output "OPENNV_NATIVE_RECORDED_INPUT_PASS saveGuard=true sourceBound=true playback=true framesRecorded=false fixture=true campaign=false"
-
-$headlessHdrOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeSkyHdrCapabilityAudit/NativeSkyHdrCapabilityAudit.tscn 2>&1
-$headlessHdrText = $headlessHdrOutput | Out-String
-if ($LASTEXITCODE -ne 0 -or $headlessHdrText -match $godotFailurePattern -or
-    $headlessHdrText -notmatch "OPENNV_NATIVE_HEADLESS_HDR_CAPABILITY_PASS") {
-    throw "OpenNV native headless HDR capability failed:`n$headlessHdrText"
-}
-Write-Output "OPENNV_NATIVE_HEADLESS_HDR_CAPABILITY_PASS synchronous=true resources=none coldProvider=fresh retirement=true gameplay=UNEXECUTED recording=false"
 
 Write-Output "OPENNV_CSHARP_GODOT_GATE_PASS"

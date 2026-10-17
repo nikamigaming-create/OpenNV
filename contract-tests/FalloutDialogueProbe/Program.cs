@@ -5,8 +5,7 @@ using OpenNV.Runtime.Content;
 if (args is ["--head-persistence-contracts"]) { HeadTrackingProbe.Run(); return; }
 
 BitmapFontEncodingProbe.Run();
-BitmapFontMetricContracts.Run();
-if (args is ["--font-encoding-contracts"] or ["--font-metric-contracts"]) return;
+if (args is ["--font-encoding-contracts"]) return;
 
 if (args is ["--inspect-idle-tree", var treeRoot, var modelPrefix])
 {
@@ -23,11 +22,7 @@ if (args is ["--inspect-idle-tree", var treeRoot, var modelPrefix])
             record.FormKey, editorId = record.ReadSubrecords().Where(field => field.Signature == "EDID")
                 .Select(field => FalloutDialogueTopic.Text(field.Data.Span)).SingleOrDefault(),
             branch.Model, branch.Parent, branch.Previous, branch.Group,
-            conditions = branch.Conditions.Select(c => new
-            {
-                c.Function, c.Flags, comparison = c.UsesComparisonGlobal ? (float?)null : c.Comparison,
-                comparisonGlobalRaw = c.GlobalComparison?.RawFormId, c.Argument1, c.Argument2, c.RunOn, c.Reference
-            }),
+            conditions = branch.Conditions.Select(c => new { c.Function, c.Flags, c.Comparison, c.Argument1, c.Argument2, c.RunOn, c.Reference }),
         }));
     }
     return;
@@ -468,7 +463,7 @@ try
     byte[] EventPackage(uint id, byte[] scriptBytes)
     {
         var eventHeader = new byte[20];
-        var eventCode = FalloutDialogueTopic.CodeLines(FalloutDialogueTopic.ScriptText(scriptBytes)).Any() ? new byte[] { 0, 0x10, 0, 0 } : [];
+        var eventCode = FalloutDialogueTopic.CodeLines(FalloutDialogueTopic.ScriptText(scriptBytes)).Any() ? new byte[] { 0 } : [];
         BinaryPrimitives.WriteUInt32LittleEndian(eventHeader.AsSpan(8), (uint)eventCode.Length);
         return Record("PACK", id, Field("EDID", Encoding.ASCII.GetBytes("EventPackage" + id + "\0"))
             .Concat(Field("PKDT", packageData)).Concat(Field("PLDT", packageLocation))

@@ -10,8 +10,6 @@ namespace OpenNV.Runtime.Content;
 // the source menu lifetime.
 internal sealed partial class FalloutUiComponentStore
 {
-    internal Guid Factory { get; } = Guid.NewGuid();
-    internal long Epoch { get; private set; }
     private sealed class Tile
     {
         internal readonly XElement Source;
@@ -44,13 +42,11 @@ internal sealed partial class FalloutUiComponentStore
     private sealed class Menu
     {
         internal readonly Tile Root;
-        internal readonly Guid Instance = Guid.NewGuid();
         internal Menu(Tile root) => Root = root;
     }
 
     private readonly FalloutPluginStack? _records;
     private readonly Dictionary<string, Menu> _menus;
-    private readonly Dictionary<string, XElement> _menuDocuments = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, float> _floatOverrides = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _stringOverrides = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _detachedPaths = new(StringComparer.OrdinalIgnoreCase);
@@ -66,7 +62,6 @@ internal sealed partial class FalloutUiComponentStore
             var name = (string?)root.Attribute("name");
             if (string.IsNullOrWhiteSpace(name)) throw new InvalidDataException("Owned UI menu has no name.");
             if (_menus.ContainsKey(name)) throw new InvalidDataException($"Owned UI menu is duplicated: {name}.");
-            _menuDocuments.Add(name, new XElement(root));
             var tile = Build(root, null, name, 0);
             _menus.Add(name, new(tile));
         }
@@ -195,7 +190,6 @@ internal sealed partial class FalloutUiComponentStore
 
     internal void Reset()
     {
-        Epoch = checked(Epoch + 1);
         _floatOverrides.Clear();
         _stringOverrides.Clear();
         _detachedPaths.Clear();
@@ -225,7 +219,7 @@ internal sealed partial class FalloutUiComponentStore
         return tile;
     }
 
-    private static bool IsTile(XElement element) => element.Name.LocalName != "template" && element.Attribute("name") is not null;
+    private static bool IsTile(XElement element) => element.Attribute("name") is not null;
 
     private Tile? ResolveTile(IReadOnlyList<string> segments, bool alt)
     {

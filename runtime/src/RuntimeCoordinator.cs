@@ -24,7 +24,6 @@ namespace OpenNV.Runtime;
 
 public partial class RuntimeCoordinator : Node3D
 {
-    private Diagnostics.Parity.RuntimeLiveHarness? _runtimeLiveHarness;
     private const string DefaultNewVegasOpeningSavePath =
         "user://saves/new-vegas-opening-v1.json";
 
@@ -72,18 +71,8 @@ public partial class RuntimeCoordinator : Node3D
     private async void StartRuntimeAfterLoadingFrame()
     {
         if (_loadingScreen is not null)
-            await WaitForHostFrame();
-        StartRuntime();
-    }
-
-    // Presentation can yield for a visible frame. A headless host advances on
-    // its process signal and never requires a renderer to complete that wait.
-    private async Task WaitForHostFrame()
-    {
-        if (DisplayServer.GetName() == "headless")
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        else
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        StartRuntime();
     }
 
     private void StartRuntime()
@@ -92,14 +81,12 @@ public partial class RuntimeCoordinator : Node3D
         {
             _configuration = RuntimeConfiguration.Load();
             _options = _nextSessionOptions ?? ParseOptions(OS.GetCmdlineUserArgs());
-            RuntimeLaunchValidator.ValidatePreflight(_options);
-            RuntimeInputPresentationSelection.ValidateBackend(_options, DisplayServer.GetName());
+            RuntimeLaunchValidator.NormalizePresentation(_options);
             _continueAfterRestart = _nextSessionContinue;
             _pauseAfterCheckpointLoad = _nextSessionPauseAfterCheckpointLoad;
             _pendingCheckpointRestore = _nextSessionCheckpoint;
             _pendingSaveActivation = _nextSessionActivation; _nextSessionActivation = null;
             _sessionLoadFailure = _nextSessionLoadFailure; _nextSessionLoadFailure = null;
-            _nativeLoadFailureDiagnostic = _nextSessionLoadFailureDiagnostic; _nextSessionLoadFailureDiagnostic = null;
             _nextSessionOptions = null; _nextSessionContinue = false; _nextSessionPauseAfterCheckpointLoad = false;
             _nextSessionCheckpoint = null;
             if (_options.TryGetValue("parity-channel", out var parityChannel))
@@ -131,7 +118,6 @@ public partial class RuntimeCoordinator : Node3D
             if (_options.TryGetValue("live-harness", out var harnessDirectory))
             {
                 var harness = new Diagnostics.Parity.RuntimeLiveHarness();
-                _runtimeLiveHarness = harness;
                 harness.Configure(harnessDirectory, CaptureParityFrame, () => CaptureNativeDriveState(), () => _nativePluginStack,
                     () => CaptureNativeDriveState(false), () => (ParityStateKey, _parityObservations.Coverage().EventOrdinal));
                 harness.ConfigureBot(ObserveNativeBot, FindNativeNavigationRoute, _configuration.Player.MouseSensitivityRadiansPerPixel,
@@ -164,9 +150,9 @@ public partial class RuntimeCoordinator : Node3D
             if (launch.LoadingTitle is not null)
                 _loadingScreen?.SetTitle(launch.LoadingTitle);
             RuntimeLaunchValidator.ValidatePreflight(_options);
-            if (_options.ContainsKey("vr"))
+            if (_options.ContainsKey("vr") && !_options.ContainsKey("launcher"))
                 EnableOpenXr();
-            if (launch.OpensLauncher)
+            if (_options.ContainsKey("launcher"))
             {
                 LoadGodotLauncher();
                 return;
@@ -186,7 +172,9 @@ public partial class RuntimeCoordinator : Node3D
             if (TryDispatchLaunch(launch))
                 return;
 
-            throw new ArgumentException("OpenNV requires a live --data-root and --campaign.");
+            throw new ArgumentException(
+                "OpenNV requires a live --data-root and --campaign. " +
+                "OpenNV requires a live --data-root and --campaign.");
         }
         catch (Exception exception)
         {

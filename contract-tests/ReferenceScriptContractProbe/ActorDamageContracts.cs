@@ -22,7 +22,8 @@ internal static class ActorDamageContracts
             BinaryPrimitives.WriteUInt16LittleEndian(scaledAcbs.AsSpan(10), 10);
             BinaryPrimitives.WriteUInt16LittleEndian(scaledAcbs.AsSpan(12), 40);
             var entry = new byte[12]; entry[0] = 1; UInt(entry, 4, 3); entry[8] = 2;
-            var references = Join(Reference(0x91), Reference(0x92));
+            var references = Join(Reference(0x91), Reference(0x92),
+                Record("ACHR", 0x93, Field("NAME", BitConverter.GetBytes(0x12u)), Field("DATA", new byte[24])));
             var group = new byte[24 + references.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
             UInt(group, 4, (uint)group.Length); UInt(group, 8, 0x80); UInt(group, 12, 6); references.CopyTo(group, 24);
             var decal = new byte[36];
@@ -126,9 +127,24 @@ internal static class ActorDamageContracts
             Check(restoredVitals.ExactHitPoints == 199.75f && restoredVitals.RadiationRads == 12.5f,
                 "Fractional player health or radiation was lost during persistence.");
             var cell = FalloutCellSceneReader.Read(records, Key(0x80));
+            var deathCondition = new FalloutCondition(records.GetEffective(Key(1)), 0, 0, 46, 0, 0, 2, 0x91);
+            FalloutDialogueConditions DeathConditions(FalloutReferenceWorld owner) => new(records, new(records), Key(0x91),
+                new FalloutDialogueSpeaker(Key(1), Key(1), Key(0x850), "Synthetic", null, false), isDead: reference =>
+                {
+                    owner.InitializeSourceCorpse(reference);
+                    return owner.IsDead(reference);
+                });
+            using (var unloaded = new FalloutReferenceWorld(records))
+            {
+                var conditions = DeathConditions(unloaded);
+                Check(conditions.Evaluate(deathCondition) == 0 &&
+                    conditions.Evaluate(deathCondition with { Reference = 0x93 }) == 1,
+                    "Dialogue death requires presentation or ignored source-authored zero health.");
+            }
             using var world = new FalloutReferenceWorld(records);
             world.LoadCell(cell);
             Check(world.ActorValue(Key(0x91), "Health") == 50 && !world.IsDead(Key(0x91)), "Source CREA health was not initialized.");
+            Check(DeathConditions(world).Evaluate(deathCondition) == 0, "Dialogue considered a living actor dead.");
             var first = world.DamageActor(Key(0x91), Key(0x92), 0, 10, 1.5f, 1);
             Check(first is { HealthBefore: 50, HealthAfter: 40, LimbDamage: 15, Died: false } && world.Health(Key(0x92)).Current == 50,
                 "Damage pools, limb multiplier or per-reference isolation failed.");
@@ -138,6 +154,9 @@ internal static class ActorDamageContracts
             Check(world.Get(Key(0x91)).HitReaction is null, "Death retained a living hit-reaction pose owner.");
             Check(killed is { Died: true, Dead: true, HealthAfter: -10 } && world.Inventory(Key(0x91), 1).Contents.Item(Key(3))!.Count == 2,
                 "Head multiplier, death transition or source death loot failed.");
+            Check(DeathConditions(world).Evaluate(deathCondition) == 1 &&
+                DeathConditions(world).Evaluate(deathCondition with { Reference = 0x92 }) == 0,
+                "Dialogue death ignored actual damage or confused distinct actor references.");
             Check(!world.AdvanceDeathEvent(Key(0x91), .75, 2, false) &&
                 world.Get(Key(0x91)).Injury is { DeathEventPending: true, DeathEventElapsed: .75 },
                 "Death event ignored its delay or was not retained in world state.");
@@ -154,6 +173,9 @@ internal static class ActorDamageContracts
             Reject(() => invalidSever.Restore(saved.Select(value => value.Reference == Key(0x92) ?
                 value with { Injury = value.Injury! with { SeveredParts = [1] } } : value).ToArray()));
             using var cold = new FalloutReferenceWorld(records); cold.Restore(saved); cold.LoadCell(cell);
+            Check(DeathConditions(cold).Evaluate(deathCondition) == 1 &&
+                DeathConditions(cold).Evaluate(deathCondition with { Reference = 0x92 }) == 0,
+                "Dialogue death changed after cold reference restoration.");
             Check(cold.Get(Key(0x91)).Injury is { DeathEventPending: true, DeathEventElapsed: .75 } &&
                 !cold.AdvanceDeathEvent(Key(0x91), 1, 2, false) && !cold.AdvanceDeathEvent(Key(0x91), .25, 2, true) &&
                 cold.AdvanceDeathEvent(Key(0x91), 0, 2, false) && !cold.AdvanceDeathEvent(Key(0x91), 10, 2, false),

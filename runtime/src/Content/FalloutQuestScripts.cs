@@ -37,8 +37,7 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
             ConditionalButtons: fields.Any(field => field.Signature == "CTDA"));
     }
 
-    internal FalloutSourceMessage ResolveButtons(FalloutPluginStack records, Func<FalloutCondition, float> evaluate,
-        FalloutGlobalState? globals = null)
+    internal FalloutSourceMessage ResolveButtons(FalloutPluginStack records, Func<FalloutCondition, float> evaluate)
     {
         if (!ConditionalButtons) return this;
         var record = records.GetEffective(Form);
@@ -51,7 +50,7 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
             groups[^1].Add(FalloutCondition.Read(record, field.Data.Span));
         }
         if (groups.Count != Buttons.Count) throw new InvalidDataException("Message button/source count differs.");
-        var visible = Enumerable.Range(0, groups.Count).Where(index => FalloutCondition.AllPass(groups[index], evaluate, globals: globals)).ToArray();
+        var visible = Enumerable.Range(0, groups.Count).Where(index => FalloutCondition.AllPass(groups[index], evaluate)).ToArray();
         if (visible.Length == 0) throw new InvalidOperationException("Message has no eligible source buttons.");
         return this with { Buttons = visible.Select(index => Buttons[index]).ToArray(), ButtonIndices = visible };
     }
@@ -60,21 +59,17 @@ internal sealed record FalloutSourceMessage(FalloutFormKey Form, string Title, s
 internal sealed record FalloutQuestScriptSnapshot(FalloutFormKey Quest, FalloutFormKey Script,
     double Remaining, long Executions, string? Error, FalloutQuestScriptClockSnapshot? Clock = null,
     FalloutQuestScriptPendingCommand? PendingCommand = null,
-    IReadOnlyList<FalloutQuestScriptContinuationReceipt>? Continuations = null,
-    FalloutCompiledQuestSnapshot? Compiled = null);
+    IReadOnlyList<FalloutQuestScriptContinuationReceipt>? Continuations = null);
 internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScriptSnapshot> Instances,
     IReadOnlyList<FalloutMessageRequest> Messages, FalloutHudNotificationsSnapshot? Notifications = null,
     FalloutMessageResultsSnapshot? MessageResults = null, FalloutScriptSessionSnapshot? Session = null,
     IReadOnlyList<FalloutFormKey>? SaidInfos = null, int ParserVersion = 0,
     FalloutScriptValueStoreSnapshot? Values = null, FalloutAuxiliaryStoreSnapshot? Auxiliary = null,
-    FalloutChallengesSnapshot? Challenges = null, FalloutRadioStationsSnapshot? Radio = null,
-    int CompiledSchedulingVersion = 0)
+    FalloutChallengesSnapshot? Challenges = null, FalloutRadioStationsSnapshot? Radio = null)
 {
     internal void Validate()
     {
-        if (CompiledSchedulingVersion != FalloutQuestScripts.CompiledSchedulingVersion)
-            throw new NotSupportedException("Saved quest scheduling differs from the current compiled authority.");
-        if (ParserVersion != FalloutGameModeProgram.ParserVersion)
+        if (ParserVersion is < 0 or > FalloutGameModeProgram.ParserVersion)
             throw new NotSupportedException("Saved quest script parser version is unsupported.");
         if (Instances is null || Messages is null)
             throw new InvalidDataException("Saved quest script owners are missing.");
@@ -84,9 +79,6 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
         Challenges?.Validate();
         Radio?.Validate();
         Session?.NoActivationSound?.Validate();
-        if (Session?.SourceMusic is { } sourceMusic &&
-            (sourceMusic.ObjectId == 0 || string.IsNullOrWhiteSpace(sourceMusic.OwnerPlugin)))
-            throw new InvalidDataException("Saved script music has invalid source identity.");
         FalloutQuestObjectFlags.ValidateSnapshot(Session?.QuestObjects);
         if (SaidInfos is { } said && (said.Distinct().Count() != said.Count || said.Any(key => key.ObjectId == 0 || string.IsNullOrWhiteSpace(key.OwnerPlugin))))
             throw new InvalidDataException("Saved dialogue history is invalid or duplicated.");
@@ -101,7 +93,7 @@ internal sealed record FalloutQuestScriptsSnapshot(IReadOnlyList<FalloutQuestScr
             if (instance is null || !quests.Add(instance.Quest))
                 throw new InvalidDataException("Saved quest script owner is absent or duplicated.");
             if (instance.Clock is null)
-                throw new NotSupportedException("Saved quest scripts have no elapsed/cadence clock owner.");
+                throw new NotSupportedException("Legacy quest scripts have no elapsed/cadence clock owner.");
             instance.Clock.Validate();
             if (definitions.TryGetValue(instance.Script, out var clock) && !clock.HasSameBits(instance.Clock))
                 throw new InvalidDataException("Saved shared script clocks disagree.");
@@ -119,24 +111,14 @@ internal sealed record FalloutScriptSessionSnapshot(bool Hardcore, bool AutoDisp
     bool LocationSpecificLoadScreensOnly = false, bool InCharGen = false,
     FalloutPlayerScriptPackageSnapshot? PlayerPackage = null, FalloutNoActivationSoundSnapshot? NoActivationSound = null,
     bool PlayerYoung = false, bool PlayerToddler = false, float PlayerScale = 1,
-    IReadOnlyList<FalloutQuestObjectFlagSnapshot>? QuestObjects = null, FalloutFormKey? SourceMusic = null,
-    bool SceneIsComplex = false);
+    IReadOnlyList<FalloutQuestObjectFlagSnapshot>? QuestObjects = null);
 internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivationSound = null,
     FalloutQuestObjectFlags? questObjects = null)
 {
     internal bool Hardcore { get; set; }
     internal bool AutoDisplayObjectives { get; set; }
     internal bool LocationSpecificLoadScreensOnly { get; set; }
-    internal FalloutFormKey? SourceMusic { get; private set; }
-    internal void SetSourceMusic(FalloutPluginStack records, FalloutFormKey music)
-    {
-        FalloutScriptStartupCommands.RequireMusic(records.GetEffective(music));
-        SourceMusic = music;
-    }
     internal bool InCharGen { get; private set; }
-    internal bool SceneIsComplex { get; private set; }
-    internal void SetSceneIsComplex(bool enabled) => SceneIsComplex = enabled;
-    internal static bool SceneComplexityFlag(double value) => FalloutPlayerActorValues.SignedInteger(value) != 0;
     internal bool PlayerYoung { get; private set; }
     internal bool PlayerToddler { get; private set; }
     internal float PlayerScale { get; private set; } = 1;
@@ -175,12 +157,12 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         state?.Validate();
         PlayerPackage = state;
     }
-    internal static bool CharacterGenerationFlag(double value) => FalloutPlayerActorValues.SignedInteger(value) != 0;
-
-    internal void SetInCharGen(bool enabled)
+    internal void SetInCharGen(bool enabled, Action? requireLevelUpOwner)
     {
-        // The source setter publishes only this flag. Earned XP is consumed
-        // by a separately admitted player update after the script suffix.
+        // Leaving chargen consumes earned XP immediately. Never clear the flag
+        // while skipping an unsupported level-up or lacking the player owner.
+        if (!enabled)
+            (requireLevelUpOwner ?? throw new NotSupportedException("Character-generation exit has no player advancement owner."))();
         InCharGen = enabled;
     }
     private readonly HashSet<int> _achievements = [];
@@ -189,7 +171,7 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
         _achievements.Add(id);
     }
-    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung, PlayerToddler, PlayerScale, questObjects?.Capture(), SourceMusic, SceneIsComplex);
+    internal FalloutScriptSessionSnapshot Capture() => new(Hardcore, AutoDisplayObjectives, _achievements.Order().ToArray(), LocationSpecificLoadScreensOnly, InCharGen, PlayerPackage, noActivationSound?.Capture(), PlayerYoung, PlayerToddler, PlayerScale, questObjects?.Capture());
     internal void Restore(FalloutScriptSessionSnapshot state)
     {
         if (state.Achievements is null || state.Achievements.Any(id => id < 0) || state.Achievements.Distinct().Count() != state.Achievements.Count)
@@ -205,12 +187,10 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
         Hardcore = state.Hardcore; AutoDisplayObjectives = state.AutoDisplayObjectives;
         LocationSpecificLoadScreensOnly = state.LocationSpecificLoadScreensOnly;
         InCharGen = state.InCharGen;
-        SceneIsComplex = state.SceneIsComplex;
         SetPlayerYoung(state.PlayerYoung);
         SetPlayerToddler(state.PlayerToddler);
         SetPlayerScale(state.PlayerScale);
         PlayerPackage = state.PlayerPackage;
-        SourceMusic = state.SourceMusic;
         _achievements.Clear(); _achievements.UnionWith(state.Achievements);
     }
 }
@@ -218,20 +198,14 @@ internal sealed class FalloutScriptSession(FalloutNoActivationSound? noActivatio
 internal sealed record FalloutQuestScriptHost(Func<FalloutFormKey, short, Action> PrepareSetStage,
     Func<string, double> PlayerActorValue,
     Action<FalloutPluginRecord, FalloutPluginRecord, FalloutGameModeProgram, double>? ExecuteProgram = null,
-    FalloutUserFunctionInvoker? InvokeFunction = null,
+    FalloutUserFunctionInvoker? InvokeFunction = null, Action? RequireLevelUpOwner = null,
     Func<string, FalloutActorValueRead, double>? ReadPlayerActorValue = null,
     Action<string, string, double>? ChangePlayerActorValue = null, FalloutInventoryCommands? Inventory = null,
     Func<FalloutFormKey, FalloutFormKey, float>? HeadingAngle = null,
     Action? ResetPlayerHealth = null, Func<FalloutFormKey, FalloutFormKey?>? CurrentPackage = null,
     Func<FalloutFormKey, int>? Sitting = null, FalloutPlayerTagSkills? TagSkills = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? IsInCell = null, Action<double>? RewardXp = null,
-    FalloutGameTime? GameTime = null,
-    Func<FalloutPluginRecord, FalloutCompiledScriptProgram, int, FalloutCompiledExecutionCursor, double, Func<bool>, FalloutCompiledSliceReceipt>? ExecuteCompiledProgram = null,
-    Func<bool, bool>? CanContinueCompiled = null,
-    Func<bool>? IsPcSleeping = null, Func<FalloutFormKey, int>? Sleeping = null,
-    Func<FalloutFormKey, int>? KnockedState = null, FalloutSleepWait? SleepWait = null,
-    Action<FalloutRestRequest>? OpenSleepWaitMenu = null, FalloutPlayerStatistics? Statistics = null,
-    FalloutGlobalTimeState? GlobalTime = null);
+    FalloutGameTime? GameTime = null);
 
 internal sealed partial class FalloutQuestScripts
 {
@@ -255,15 +229,11 @@ internal sealed partial class FalloutQuestScripts
 
     private readonly FalloutPluginStack _records;
     private readonly FalloutQuestState _quests;
-    internal FalloutPluginStack Records => _records;
-    internal FalloutPlayerInventory PlayerInventory => _inventory;
     private readonly List<Instance> _instances = [];
-    private readonly List<FalloutQuestScriptCompiledSelection> _compiledSelections = [];
-    internal IReadOnlyList<FalloutQuestScriptCompiledSelection> CompiledSelections => _compiledSelections.AsReadOnly();
     private readonly Dictionary<FalloutFormKey, string> _unbound = [];
+    private readonly List<FalloutFormKey> _newlyParsed = [];
     private readonly FalloutPlayerInventory _inventory;
     private readonly FalloutGlobalState? _globals;
-    internal FalloutGlobalState? Globals => _globals;
     private readonly Queue<FalloutSourceMessage> _messages = [];
     private readonly FalloutQuestScriptInitialization _initialization;
     internal FalloutReferenceWorld? References { get; }
@@ -314,17 +284,7 @@ internal sealed partial class FalloutQuestScripts
             continuationError = instance.ContinuationError
         }).ToArray(),
         unbound = _unbound.Select(pair => new { quest = pair.Key.ToString(), error = pair.Value }).ToArray(),
-        compiledPrograms = _compiledSelections.Select(selection => selection.Observation).ToArray(),
-        compiledRecurrence = _compiledInstances.Select(instance => new
-        {
-            quest = instance.Quest.FormKey.ToString(),
-            instance.Executions,
-            instance.Error,
-            instance.UnownedFailure,
-            sharedClockHeldByAnotherQuest = ClockBusy(instance),
-            clock = instance.Clock.Capture(),
-            continuation = CaptureCompiled(instance)
-        }).ToArray(),
+        newlyParsedOnRestore = _newlyParsed.Select(key => key.ToString()).ToArray(),
         inventory = _inventory.Items,
         messages = _messages.ToArray(),
         messageResults = MessageResults.Capture(),
@@ -369,50 +329,43 @@ internal sealed partial class FalloutQuestScripts
     {
         ScriptManualSaves.RequireCapture();
         return new(
-        CaptureSchedule(),
+        _instances.Select(instance => new FalloutQuestScriptSnapshot(instance.Quest.FormKey, instance.Script.FormKey,
+            instance.Clock.Remaining, instance.Executions, instance.Error, instance.Clock.Capture(), instance.PendingCommand,
+            instance.Continuations.ToArray())).ToArray(),
         (displayed is null ? Enumerable.Empty<FalloutMessageRequest>() : [displayed.Request ?? throw new InvalidDataException("Displayed message has no result owner.")])
             .Concat(_messages.Select(message => message.Request!)).Where(MessageResults.IsPending).ToArray(),
         _inventory.Notifications.Capture(), MessageResults.Capture(), Session.Capture(), SaidInfos.OrderBy(key => _records.RuntimeFormId(key)).ToArray(),
-        FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent(), Challenges.Capture(), Radio?.Capture(), CompiledSchedulingVersion);
+        FalloutGameModeProgram.ParserVersion, ScriptValues.Capture(), Auxiliary.CapturePermanent(), Challenges.Capture(), Radio?.Capture());
     }
 
     internal void Restore(FalloutQuestScriptsSnapshot snapshot)
     {
-        if (_restored || _compiledExecuting || _compiledInstances.Any(instance => instance.Dispatches != 0 || instance.Clock.Invocations != 0) ||
-            _instances.Any(instance => instance.Executions != 0 || instance.Clock.Invocations != 0) || _messages.Count != 0)
+        if (_instances.Any(instance => instance.Executions != 0 || instance.Clock.Invocations != 0) || _messages.Count != 0)
             throw new InvalidOperationException("Script restoration requires a fresh owner.");
         snapshot.Validate();
-        var states = snapshot.Instances.ToDictionary(instance => instance.Quest);
-        if (_compiledSelections.Any(selection => states.TryGetValue(selection.Quest, out var state) && state.Compiled is null) ||
-            _compiledInstances.Any(instance => !states.ContainsKey(instance.Quest.FormKey)))
-            throw new NotSupportedException("Saved quest scheduling has no compiled event authority.");
-        foreach (var compiled in _compiledInstances)
-            ValidateCompiledRestore(compiled, states[compiled.Quest.FormKey], snapshot.CompiledSchedulingVersion);
-        ValidateCompiledClockGroups(states);
-        var owners = _instances.Select(instance => instance.Quest.FormKey).Concat(_compiledInstances.Select(instance => instance.Quest.FormKey)).ToHashSet();
-        if (!owners.SetEquals(states.Keys))
-            throw new InvalidDataException("Saved quest script owners differ from the winning source graph.");
-        foreach (var instance in _instances)
-        {
-            var state = states[instance.Quest.FormKey];
-            instance.Clock.Validate(state.Clock!);
-            if (state.Compiled is not null || state.Script != instance.Script.FormKey)
-                throw new InvalidDataException("Saved quest script scheduling is invalid.");
-            if (state.PendingCommand is { } pending && pending.SourceSha256 != ScriptHash(instance))
-                throw new InvalidDataException("Saved command continuation differs from its winning script source.");
-        }
-        if (snapshot.Session?.SourceMusic is { } music)
-            FalloutScriptStartupCommands.RequireMusic(_records.GetEffective(music));
-        // Authority, owner and clock refusals occur before any store is restored.
-        // A source statement cursor cannot be promoted into a byte-program site.
-        if (Challenges.Restored) Challenges.RequireContinuation(snapshot.Challenges);
-        else Challenges.Restore(snapshot.Challenges);
+        Challenges.Restore(snapshot.Challenges);
         Radio?.Restore(snapshot.Radio);
         ScriptValues.Restore(snapshot.Values);
         Auxiliary.RestorePermanent(snapshot.Auxiliary);
         ValidateValueHandles();
         References?.ValidateValueHandles();
         ScriptValues.Arrays.ValidateRestoredRoots();
+        var states = snapshot.Instances.ToDictionary(instance => instance.Quest);
+        var owners = _instances.Select(instance => instance.Quest.FormKey).ToHashSet();
+        var newlyParsed = _instances.Where(instance => !states.ContainsKey(instance.Quest.FormKey)).ToArray();
+        if (states.Keys.Any(key => !owners.Contains(key)) || newlyParsed.Any(instance =>
+            !FalloutGameModeProgram.WasRejectedByParser(FalloutDialogueTopic.ScriptText(
+                instance.Script.ReadSubrecords().Single(field => field.Signature == "SCTX").Data.Span), snapshot.ParserVersion)))
+            throw new InvalidDataException("Saved quest script owners differ from the winning source graph.");
+        foreach (var instance in _instances)
+        {
+            if (!states.TryGetValue(instance.Quest.FormKey, out var state)) continue;
+            instance.Clock.Validate(state.Clock!);
+            if (state.Script != instance.Script.FormKey)
+                throw new InvalidDataException("Saved quest script scheduling is invalid.");
+            if (state.PendingCommand is { } pending && pending.SourceSha256 != ScriptHash(instance))
+                throw new InvalidDataException("Saved command continuation differs from its winning script source.");
+        }
         var messages = snapshot.Messages.Select(request => FalloutSourceMessage.Read(_records.GetEffective(request.Form)) with { Request = request }).ToArray();
         if (messages.Any(message => !message.Modal)) throw new NotSupportedException("Saved message needs a timed HUD owner.");
         if (snapshot.Notifications is { } notifications) _inventory.Notifications.Restore(notifications);
@@ -425,7 +378,7 @@ internal sealed partial class FalloutQuestScripts
         }
         foreach (var instance in _instances)
         {
-            var state = states[instance.Quest.FormKey];
+            if (!states.TryGetValue(instance.Quest.FormKey, out var state)) continue;
             instance.Clock.Restore(state.Clock!);
             instance.Executions = state.Executions;
             instance.Error = state.Error;
@@ -433,8 +386,10 @@ internal sealed partial class FalloutQuestScripts
             instance.Continuations.AddRange(state.Continuations ?? []);
             if (state.Error is not null) _unbound[instance.Quest.FormKey] = state.Error;
         }
-        foreach (var instance in _compiledInstances) RestoreCompiled(instance, states[instance.Quest.FormKey]);
-        _restored = true;
+        // Newly supported programs had no prior invocation. Their original
+        // initialization clock is retained; quest locals/progression live in
+        // the separately restored quest state and are never reset here.
+        _newlyParsed.AddRange(newlyParsed.Select(instance => instance.Quest.FormKey));
         foreach (var message in messages) _messages.Enqueue(message);
     }
 
@@ -462,7 +417,7 @@ internal sealed partial class FalloutQuestScripts
         _inventory = inventory;
         _globals = globals;
         References = references;
-        ScriptValues = (references?.ScriptValues ?? new()).BindArraySource(records);
+        ScriptValues = references?.ScriptValues ?? new();
         Auxiliary = references?.Auxiliary ?? storage?.Auxiliary ?? auxiliary ?? new();
         Ini = references?.Ini ?? storage?.Ini;
         Controls = references?.Controls ?? storage?.Controls;
@@ -470,8 +425,7 @@ internal sealed partial class FalloutQuestScripts
         Sounds = references?.Sounds ?? new(records, Menus);
         NoActivationSound = references?.NoActivationSound ?? new(records, Sounds);
         Session = new(NoActivationSound, records.QuestObjects);
-        Challenges = references is { CampaignChallengesConfigured: true } ? references.Challenges :
-            new(records, inventory.Notifications);
+        Challenges = new(records, inventory.Notifications);
         Radio = references is null ? null : new(records, references, inventory.Notifications);
         ScreenBlood = references?.ScreenBlood ?? new(records);
         Events = events ?? new();
@@ -481,7 +435,6 @@ internal sealed partial class FalloutQuestScripts
         if (!float.IsFinite(defaultDelay)) throw new InvalidDataException("Default quest script delay is invalid.");
         _initialization = new(records, defaultDelay);
         var clocks = new Dictionary<FalloutFormKey, FalloutQuestScriptClock>();
-        var compiledPrograms = new Dictionary<FalloutFormKey, FalloutCompiledScriptProgram>();
         foreach (var quest in _initialization.QuestOrder)
         {
             var claimed = claimedQuests.Contains(quest.FormKey);
@@ -493,28 +446,15 @@ internal sealed partial class FalloutQuestScripts
                 if (!fields.Any(field => field.Signature == "SCRI")) continue;
                 var script = records.GetEffective(FalloutDialogueTopic.RequiredForm(quest, "SCRI"));
                 if (script.Signature != "SCPT") throw new InvalidDataException("Quest script is not SCPT.");
-                if (!_initialization.Definitions.TryGetValue(script.FormKey, out var definition))
-                    throw new NotSupportedException("Attached quest script has no quest-clock declaration.");
-                // Select and validate canonical compiled authority before looking
-                // at optional diagnostic text, including absent or malformed SCTX.
-                if (!compiledPrograms.TryGetValue(script.FormKey, out var compiled) &&
-                    FalloutQuestScriptAuthority.ReadCompiled(script) is { } selected)
-                    compiledPrograms.Add(script.FormKey, compiled = selected);
-                if (compiled is not null)
-                {
-                    _compiledSelections.Add(new(quest.FormKey, compiled, definition, claimed));
-                    if (!clocks.TryGetValue(script.FormKey, out var compiledClock))
-                        clocks.Add(script.FormKey, compiledClock = new(defaultDelay, definition.ProcessingDelay, definition.InitialPhase));
-                    RegisterCompiled(quest, compiled, definition, compiledClock, claimed); continue;
-                }
                 var source = script.ReadSubrecords().Where(field => field.Signature == "SCTX").ToArray();
                 if (source.Length != 1) throw new NotSupportedException("Quest script source is absent or ambiguous.");
                 var program = FalloutGameModeProgram.Read(source[0].Data.Span);
                 var menuProgram = FalloutGameModeProgram.Read(source[0].Data.Span, "MenuMode");
+                if (!_initialization.Definitions.TryGetValue(script.FormKey, out var definition))
+                    throw new NotSupportedException("Attached quest script has no quest-clock declaration.");
                 if (!clocks.TryGetValue(script.FormKey, out var clock))
                     clocks.Add(script.FormKey, clock = new(defaultDelay, definition.ProcessingDelay, definition.InitialPhase));
                 _instances.Add(new(quest, script, program, menuProgram, clock, () => new(records, quest, script, script.ReadSubrecords()), claimed));
-                _schedule.Add(_instances[^1]);
             }
             catch (Exception error) when (error is InvalidDataException or NotSupportedException or InvalidOperationException or KeyNotFoundException)
             { _unbound[quest.FormKey] = error.Message; }
@@ -524,16 +464,9 @@ internal sealed partial class FalloutQuestScripts
     internal void Advance(double seconds, bool gameMode = true, IEnumerable<uint>? menus = null, bool execute = true)
     {
         if (!double.IsFinite(seconds) || seconds < 0 || seconds > float.MaxValue) throw new ArgumentOutOfRangeException(nameof(seconds));
-        if (References?.FunctionalFailure is not null) return;
         Menus.Publish(gameMode, menus);
-        foreach (var entry in _schedule)
+        foreach (var instance in _instances)
         {
-            if (entry is CompiledInstance compiled)
-            {
-                if (!compiled.Claimed) AdvanceCompiled(compiled, seconds, gameMode, execute, Host);
-                continue;
-            }
-            var instance = (Instance)entry;
             if (instance.Claimed) continue;
             if (instance.Error is not null)
             {
@@ -560,13 +493,6 @@ internal sealed partial class FalloutQuestScripts
     internal void AdvanceClaimed(FalloutFormKey quest, double seconds, FalloutQuestScriptHost host)
     {
         if (!double.IsFinite(seconds) || seconds < 0 || seconds > float.MaxValue) throw new ArgumentOutOfRangeException(nameof(seconds));
-        if (References?.FunctionalFailure is not null) return;
-        if (_compiledInstances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) is { } compiled)
-        {
-            AdvanceCompiled(compiled, seconds, true, true, host);
-            if (compiled.Error is { } failure) throw new NotSupportedException(failure);
-            return;
-        }
         var instance = _instances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) ??
             throw new NotSupportedException($"Claimed quest {quest} has no source program: {_unbound.GetValueOrDefault(quest)}");
         if (!_quests.IsRunning(quest)) return;
@@ -592,16 +518,8 @@ internal sealed partial class FalloutQuestScripts
 
     internal void ExecuteClaimedMenu(FalloutFormKey quest, uint menu, FalloutQuestScriptHost host)
     {
-        if (References?.FunctionalFailure is not null) return;
-        if (_compiledInstances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) is { } compiled)
-        {
-            using var compiledMenuContext = Menus.Enter(menu);
-            AdvanceCompiled(compiled, 0, false, true, host, immediateMenu: true);
-            if (compiled.Error is { } failure) throw new NotSupportedException(failure);
-            return;
-        }
         var instance = _instances.SingleOrDefault(value => value.Quest.FormKey == quest && value.Claimed) ??
-            throw new NotSupportedException($"Menu event has no claimed quest script owner: {quest}; {_unbound.GetValueOrDefault(quest)}");
+            throw new NotSupportedException($"Menu event has no claimed quest script owner: {quest}");
         if (instance.Error is not null) throw new NotSupportedException(instance.Error);
         if (!_quests.IsRunning(quest)) return;
         using var context = Menus.Enter(menu);
@@ -615,9 +533,6 @@ internal sealed partial class FalloutQuestScripts
 
     private void Execute(Instance instance, FalloutQuestScriptHost? host, FalloutGameModeProgram? program = null)
     {
-        // The host is optional. Its absence cannot admit diagnostic source for
-        // a winning compiled program, nor may a custom host bypass authority.
-        FalloutQuestScriptAuthority.RequireSourceExecution(instance.Script);
         if (host?.ExecuteProgram is { } execute)
         {
             execute(instance.Quest, instance.Script, program ?? instance.Program, instance.Clock.Elapsed);
@@ -651,11 +566,7 @@ internal sealed partial class FalloutQuestScripts
             if (Global(name) is { } global) return _globals!.Get(global);
             if (TryForm(name) is { } form) return FalloutScriptValue.Form(_records.RuntimeFormId(form.FormKey));
             var key = Variable(name);
-            var owner = _records.GetEffective(key.Owner);
-            var script = FalloutScriptLocals.AttachedScript(_records, owner) ??
-                throw new InvalidDataException("Quest variable has no attached source script.");
-            return FalloutScriptLocals.ReadStorageValue(script, key.Index, instance.Bindings.VariableKind(name),
-                this.Variable(key.Owner, key.Index), ScriptValues);
+            return ScriptValues.Read(instance.Bindings.VariableKind(name), this.Variable(key.Owner, key.Index));
         }
         double Read(string name) => ReadValue(name).Number;
         void WriteValue(string name, FalloutScriptValue value)
@@ -669,11 +580,8 @@ internal sealed partial class FalloutQuestScripts
             }
             var key = Variable(name);
             var previous = this.Variable(key.Owner, key.Index);
-            var owner = _records.GetEffective(key.Owner);
-            var script = FalloutScriptLocals.AttachedScript(_records, owner) ??
-                throw new InvalidDataException("Quest variable has no attached source script.");
-            var raw = FalloutScriptLocals.WriteStorageValue(script, key.Index, instance.Bindings.VariableKind(name),
-                previous, value, ScriptValues, instance.Bindings.Source.OwnerPlugin, $"{key.Owner}:{key.Index}", name);
+            var raw = ScriptValues.Write(instance.Bindings.VariableKind(name), previous, value,
+                instance.Bindings.Source.OwnerPlugin, $"{key.Owner}:{key.Index}");
             SetVariable(key.Owner, key.Index, raw);
         }
         void DestroyString(string name)
@@ -788,21 +696,6 @@ internal sealed partial class FalloutQuestScripts
                     .GetSitting(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])),
                         host?.Sitting))
                 { ReadOnly = true };
-            if (parts.Length <= 2 && operation == "isactorsaioff")
-                return new([], _ => FalloutActorAiCommands.Query(References ??
-                    throw new NotSupportedException("IsActorsAIOff has no actual reference owner."),
-                    caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0]))))
-                { ReadOnly = true };
-            if (parts.Length <= 2 && operation is "getsleeping" or "getknockedstate")
-                return new([], _ => operation == "getsleeping"
-                    ? (References ?? throw new NotSupportedException("GetSleeping has no actual reference owner."))
-                        .GetSleeping(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])), host?.Sleeping)
-                    : (References ?? throw new NotSupportedException("GetKnockedState has no actual reference owner."))
-                        .GetKnockedState(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])), host?.KnockedState))
-                { ReadOnly = true };
-            if (parts.Length <= 2 && operation == "ispcsleeping")
-                return new([], _ => (host?.IsPcSleeping ?? throw new NotSupportedException("IsPCSleeping has no independent player sleep-clock owner."))() ? 1 : 0)
-                { ReadOnly = true };
             if (parts.Length <= 2 && operation == "gettalkedtopc")
                 return new([], _ => (References ?? throw new NotSupportedException("Talked-to-player query has no reference owner."))
                     .GetTalkedToPlayer(caller?.FormKey(_records) ?? (parts.Length == 1 ? instance.Quest.FormKey : instance.Bindings.Reference(parts[0])))
@@ -842,6 +735,22 @@ internal sealed partial class FalloutQuestScripts
                         throw new NotSupportedException("Item count has no reference world."), _inventory,
                         () => throw new NotSupportedException("NPC inventory has no player-level owner."), _globals);
                     return owner.ItemCount(target, arguments[0].Value.FormKey(_records));
+                })
+                { ReadOnly = true };
+            if (parts.Length <= 2 && operation is "isweaponout" or "getweaponanimtype" or "getequipped")
+                return new(operation == "getequipped" ? [FalloutScriptArgumentKind.Value] : [], arguments =>
+                {
+                    var target = caller?.FormKey(_records) ?? (parts.Length == 2
+                        ? instance.Bindings.Reference(parts[0]) : instance.Quest.FormKey);
+                    var owner = host?.Inventory ?? new FalloutInventoryCommands(_records, References ??
+                        throw new NotSupportedException("Equipment query has no reference world."), _inventory,
+                        () => throw new NotSupportedException("NPC inventory has no player-level owner."), _globals);
+                    return operation switch
+                    {
+                        "isweaponout" => owner.IsWeaponOut(target) ? 1 : 0,
+                        "getweaponanimtype" => owner.WeaponAnimationType(target),
+                        _ => owner.IsEquipped(target, arguments[0].Value.FormKey(_records)) ? 1 : 0,
+                    };
                 })
                 { ReadOnly = true };
             if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
@@ -911,12 +820,6 @@ internal sealed partial class FalloutQuestScripts
                 return settingFunction;
             if (parts.Length == 1 && FalloutNumericIniSettingCommands.Function(_records, operation) is { } iniSettingFunction)
                 return iniSettingFunction;
-            if (parts.Length == 1 && FalloutPlayerStatisticCommands.Function(operation, host?.Statistics) is { } statisticFunction)
-                return statisticFunction;
-            if (parts.Length == 1 && FalloutSleepWaitCommands.Function(operation, host?.SleepWait, host?.OpenSleepWaitMenu) is { } restFunction)
-                return restFunction;
-            if (parts.Length == 1 && FalloutGlobalTimeCommands.Function(operation, host?.GlobalTime) is { } globalTimeFunction)
-                return globalTimeFunction;
             if (parts.Length == 1 && FalloutGameTimeCommands.Function(operation, host?.GameTime, () => Session.Hardcore) is { } timeFunction)
                 return timeFunction;
             if (parts.Length == 1 && FalloutModQueryCommands.Function(_records, operation) is { } modQueryFunction)
@@ -996,29 +899,17 @@ internal sealed partial class FalloutQuestScripts
         {
             var parts = command.Split('.');
             var operation = parts[^1].ToLowerInvariant();
-            if (parts.Length == 1 && operation is "setglobaltimemultiplier" or "sgtm" or "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
+            if (parts.Length == 1 && operation is "setnumericgamesetting" or "setquestobject" or "setgamehour" or "getgamedayspassed" or "setonhiteventhandler")
             {
                 _ = FalloutNvseNumericExpression.EvaluateValue([command, .. rawArguments], values, Function);
                 return;
             }
             var arguments = FalloutGameModeProgram.ResolveCommandArguments(rawArguments, values, Function);
-            if (operation == "autosave")
-            {
-                if (parts.Length != 1 || arguments.Count != 0) throw new InvalidDataException("AutoSave is a global zero-argument command.");
-                ScriptManualSaves.RequestAutoSave(); return;
-            }
             if (operation == "forcesave")
             {
                 if (parts.Length != 1 || arguments.Count != 0)
                     throw new InvalidDataException("ForceSave is a global zero-argument command.");
                 ScriptManualSaves.Request((program ?? instance.Program).LastStatement);
-                return;
-            }
-            if (operation is "setactorsai" or "toggleactorsai")
-            {
-                if (parts.Length != 2) throw new InvalidDataException("Quest actor AI command requires its explicit actual reference receiver.");
-                _ = FalloutActorAiCommands.Apply(References ?? throw new NotSupportedException("Actor AI command has no current world."),
-                    instance.Quest.FormKey, instance.Bindings.Reference(parts[0]), operation, arguments.Select(NumberArgument).ToArray());
                 return;
             }
             if (operation == "setalert")
@@ -1030,7 +921,6 @@ internal sealed partial class FalloutQuestScripts
                 return;
             }
             var caller = instance.Script.FormKey.OwnerPlugin;
-            if (parts.Length == 1 && FalloutPlayerStatisticCommands.Apply(operation, arguments, host?.Statistics)) return;
             if (operation == "rewardxp")
             {
                 if (parts.Length > 2 || arguments.Count != 1)
@@ -1160,14 +1050,13 @@ internal sealed partial class FalloutQuestScripts
             if (parts.Length == 1 && operation == "setinchargen")
             {
                 if (arguments.Count != 1) throw new InvalidDataException("Character-generation policy requires one flag.");
-                var enabled = FalloutScriptSession.CharacterGenerationFlag(NumberArgument(arguments[0]));
-                Session.SetInCharGen(enabled);
-                return;
-            }
-            if (parts.Length == 1 && operation == "setsceneiscomplex")
-            {
-                if (arguments.Count != 1) throw new InvalidDataException("SetSceneIsComplex requires one integer flag.");
-                Session.SetSceneIsComplex(FalloutScriptSession.SceneComplexityFlag(NumberArgument(arguments[0])));
+                var enabled = NumberArgument(arguments[0]) switch
+                {
+                    0 => false,
+                    1 => true,
+                    _ => throw new InvalidDataException("Character-generation flag must be zero or one."),
+                };
+                Session.SetInCharGen(enabled, host?.RequireLevelUpOwner);
                 return;
             }
             if (parts.Length == 1 && operation == "setlocationspecificloadscreensonly")

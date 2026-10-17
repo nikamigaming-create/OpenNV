@@ -2,7 +2,7 @@ using Godot;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
-internal sealed partial class RuntimeNativeNifSkeleton
+internal sealed class RuntimeNativeNifSkeleton
 {
     private readonly Dictionary<string, int> _boneIndices = new(StringComparer.Ordinal);
     private readonly List<(int ParentBone, FalloutNifGeometry Geometry)> _geometryAttachments = [];
@@ -16,12 +16,8 @@ internal sealed partial class RuntimeNativeNifSkeleton
     internal NativeNifAnimationBlend AnimationBlend => _animationBlend ??= new(Node.GetBoneCount());
 
     internal RuntimeNativeNifSkeleton(FalloutNifFile source, float unitsToMetres)
-        : this(FalloutNifPhysicalModel.Read(source), unitsToMetres) { }
-
-    internal RuntimeNativeNifSkeleton(FalloutNifPhysicalModel physicalModel, float unitsToMetres)
     {
-        PhysicalModel = physicalModel;
-        var source = Source = physicalModel.Source;
+        Source = source;
         UnitsToMetres = unitsToMetres;
         Node = new Skeleton3D { Name = "NativeSkeleton" };
         Node.TreeEntered += PublishRetainedPoses;
@@ -48,7 +44,6 @@ internal sealed partial class RuntimeNativeNifSkeleton
     }
 
     internal FalloutNifFile Source { get; }
-    internal FalloutNifPhysicalModel PhysicalModel { get; }
     internal Skeleton3D Node { get; }
     internal float UnitsToMetres { get; }
     internal FalloutNifFloatExtraDataState FloatExtraData { get; } = new();

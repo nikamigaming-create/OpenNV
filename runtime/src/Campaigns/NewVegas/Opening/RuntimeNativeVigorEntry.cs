@@ -14,14 +14,15 @@ internal partial class RuntimeNativeVigorEntry : CanvasLayer
     private NativeOwnedLoveTesterMenu? _menu;
     internal object? State => _menu?.State;
 
-    internal void Configure(FalloutLoveTesterSource source, FalloutNativeSpecialAllocation contract,
-        FalloutNativeSpecialState initial, FalloutPluginStack records,
+    internal void Configure(FalloutNativeVigorContract contract, FalloutNativeSpecialState initial, FalloutPluginStack records,
         RuntimeNativeImageSpace? imageSpace = null)
     {
         ArgumentNullException.ThrowIfNull(contract); ArgumentNullException.ThrowIfNull(initial);
-        contract.Validate(initial, allowUnspent: true);
+        if (initial.Values.Any(value => value < contract.MinimumAttribute || value > contract.MaximumAttribute) ||
+            initial.Values.Sum() > contract.RequiredTotal)
+            throw new InvalidDataException("Native initial SPECIAL allocation is invalid.");
         Name = "NativeVigorEntry"; Layer = 120; ProcessMode = ProcessModeEnum.Always;
-        var menu = new NativeOwnedLoveTesterMenu(source, contract, initial, records)
+        var menu = new NativeOwnedLoveTesterMenu(contract, initial, records)
         {
             LayoutMode = 1,
             AnchorsPreset = (int)Control.LayoutPreset.FullRect,

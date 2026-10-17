@@ -79,8 +79,7 @@ internal sealed record FalloutActorDeferredPackageContinuation(FalloutFormKey Re
         if (events.Active is null || events.Done || events.Error is not null ||
             events.LastEvent != "POBA" || events.LastPackage != events.Active.Form || events.Revision <= 0 || !HasNoNativeState(actor))
             return null;
-        var assignment = actor.PackageAssignment ??
-            throw new InvalidDataException("Deferred package lost its actual assignment and script epoch.");
+        var assignment = FalloutActorPackageAssignment.Capture(records, events)!;
         var result = new FalloutActorDeferredPackageContinuation(actor.Reference, assignment, events.Revision);
         result.Validate();
         return result;

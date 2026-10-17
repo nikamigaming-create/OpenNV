@@ -10,12 +10,12 @@ internal static class LoadOrderContracts
         Directory.CreateDirectory(root);
         try
         {
-            void Plugin(string name, bool master, int seconds)
+            void Plugin(string name, bool master, int seconds, string? directory = null)
             {
                 var header = new byte[24];
                 "TES4"u8.CopyTo(header);
                 BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(8), master ? 1u : 0u);
-                var path = Path.Combine(root, name);
+                var path = Path.Combine(directory ?? root, name);
                 File.WriteAllBytes(path, header);
                 File.SetLastWriteTimeUtc(path, new DateTime(2020, 1, 1, 0, 0, seconds, DateTimeKind.Utc));
             }
@@ -60,6 +60,26 @@ internal static class LoadOrderContracts
                 "NAM activation failed to admit matching ESM/ESP files or admitted unrelated masters.");
             Require(RuntimeLiveContentSource.ResolvePluginOrder(root, NativeGame.Fallout3, profile).Count == 1,
                 "FNV NAM activation leaked into Fallout 3.");
+            Plugin("DeadMoney.esm", true, 8);
+            Plugin("HonestHearts.esm", true, 7);
+            File.WriteAllText(profile, "Implicit.esp\nLateMaster.esp\n");
+            var vanilla = RuntimeLiveContentSource.ResolveVanillaPlugins(root);
+            Require(vanilla.SequenceEqual(["FalloutNV.esm", "HonestHearts.esm", "DeadMoney.esm"]),
+                "Vanilla selection admitted a custom NAM/profile mod, omitted installed official content, or changed timestamp order.");
+            Require(RuntimeLiveContentSource.ResolveSelectedPluginOrder(new FalloutContentLayers([root]), NativeGame.FalloutNewVegas,
+                    vanilla, includeImplicitPlugins: false).Select(Path.GetFileName).SequenceEqual(vanilla),
+                "Explicit vanilla selection reacquired custom NAM plugins during runtime source opening.");
+            Require(RuntimeLiveContentSource.ResolveSelectedPluginOrder(new FalloutContentLayers([root]), NativeGame.FalloutNewVegas,
+                    vanilla).Any(path => Path.GetFileName(path) == "Implicit.esp"),
+                "Explicit vanilla selection changed the installed/modded NAM activation path.");
+            var fo3Root = Path.Combine(root, "fo3");
+            Directory.CreateDirectory(fo3Root);
+            Plugin("Fallout3.esm", true, 0, fo3Root);
+            Plugin("Zeta.esm", true, 2, fo3Root);
+            Plugin("Unselected.esp", false, 3, fo3Root);
+            File.WriteAllText(Path.Combine(fo3Root, "Unselected.nam"), string.Empty);
+            Require(RuntimeLiveContentSource.ResolveVanillaPlugins(fo3Root).SequenceEqual(["Fallout3.esm", "Zeta.esm"]),
+                "Standalone vanilla Fallout 3 selected an unrelated plugin or another game's master.");
 
             foreach (var name in new[] { "Base.bsa", "EarlyMaster.bsa", "EarlyMaster - Main.bsa", "Inactive - Main.bsa", "Unconfigured.bsa", "Update.bsa" })
                 File.WriteAllBytes(Path.Combine(root, name), []);
@@ -73,7 +93,7 @@ internal static class LoadOrderContracts
                 .Any(path => Path.GetFileName(path) == "Update.bsa"), "FNV patch policy leaked into Fallout 3.");
             File.WriteAllText(ini, "[Archive]\nsArchiveList=Missing.bsa\n");
             Fail(() => RuntimeLiveContentSource.ResolveArchiveOrder(root, sources, NativeGame.FalloutNewVegas, ini));
-            Console.WriteLine("OPENNV_ACTIVE_SOURCE_CONTRACT_PASS activation=plugins-and-nam order=header-timestamp archives=selected-only");
+            Console.WriteLine("OPENNV_ACTIVE_SOURCE_CONTRACT_PASS activation=plugins-and-nam vanilla=isolated-official order=header-timestamp archives=selected-only");
         }
         finally { Directory.Delete(root, true); }
     }
@@ -81,7 +101,10 @@ internal static class LoadOrderContracts
     internal static void Owned(string root)
     {
         using var source = RuntimeLiveContentSource.Open(root, RuntimeLiveContentSource.FalloutNewVegasGame);
+        using var vanilla = RuntimeLiveContentSource.Open(root, RuntimeLiveContentSource.FalloutNewVegasGame,
+            activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(root), includeImplicitPlugins: false);
         source.ArchiveWarmup.GetAwaiter().GetResult();
+        vanilla.ArchiveWarmup.GetAwaiter().GetResult();
         using var records = FalloutPluginStack.Load(source.PluginSources);
         Console.WriteLine(JsonSerializer.Serialize(new
         {
@@ -89,6 +112,8 @@ internal static class LoadOrderContracts
             source.SaveCompatibilityId,
             plugins = records.Plugins.Select(plugin => new { name = plugin.Plugin.Name, plugin.Sha256 }),
             archives = source.ArchivePaths.Select(Path.GetFileName),
+            vanilla = new { vanilla.SaveCompatibilityId, plugins = vanilla.PluginSources.Select(plugin => plugin.Name),
+                archives = vanilla.ArchivePaths.Select(Path.GetFileName) },
             parity = "unverified",
         }));
     }

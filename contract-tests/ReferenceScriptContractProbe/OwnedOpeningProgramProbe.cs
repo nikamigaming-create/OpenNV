@@ -99,7 +99,9 @@ internal static class OwnedOpeningProgramProbe
                     var movie = FalloutMovieCommand.FromScript(command + " " + string.Join(' ', arguments)).Single();
                     if (!content.TryResolve("video/" + movie.FileName, null, out _)) throw new FileNotFoundException("Opening movie.");
                     movies++; moviePending = true; break;
-                case "forceweather": sky.ForceWeather(bindings.Form(arguments.Single()).FormKey); break;
+                case "forceweather" or "fw":
+                    var overrideWeather = FalloutSkyLightingState.ReadForceWeatherOverride(arguments);
+                    sky.ForceWeather(bindings.Form(arguments[0]).FormKey, overrideWeather); break;
                 case "releaseweatheroverride": sky.ReleaseWeatherOverride(); break;
                 case "playmusic":
                     var music = bindings.Form(arguments.Single());

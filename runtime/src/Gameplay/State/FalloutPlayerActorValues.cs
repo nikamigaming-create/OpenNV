@@ -5,11 +5,11 @@ namespace OpenNV.Runtime.Gameplay.State;
 
 internal sealed record FalloutPlayerActorValuesSnapshot(string Schema, uint Reference, FalloutFormKey Player,
     string PlayerWinner, string PlayerSha256, FalloutFormKey StatsOwner, string StatsWinner, string StatsSha256,
-    IReadOnlyDictionary<int, FalloutActorValue> Values, FalloutPlayerStatusValuesSnapshot? StatusValues = null, FalloutPlayerMoverActorValuesSnapshot? MoverValues = null);
+    IReadOnlyDictionary<int, FalloutActorValue> Values);
 
 // Mutable engine-created player values. Source constant effects are evaluated
 // into their evidenced pools on demand; they are never saved a second time.
-internal sealed partial class FalloutPlayerActorValues
+internal sealed class FalloutPlayerActorValues
 {
     internal const string SnapshotSchema = "opennv-player-special-values/v1";
     internal const uint PlayerReference = 0x14;
@@ -22,11 +22,13 @@ internal sealed partial class FalloutPlayerActorValues
     internal FalloutPlayerActorValueSource Source => _source;
 
     internal FalloutPlayerActorValues(FalloutPluginStack records, FalloutPlayerActorValuesSnapshot? restore = null,
-        FalloutDefaultStatusActorValues? statusSource = null)
+        FalloutNativeSpecialState? legacy = null)
     {
+        if (restore is not null && legacy is not null)
+            throw new InvalidDataException("Player values have two competing restore authorities.");
         _source = FalloutPlayerActorValueSource.Read(records);
-        _values = Enumerable.Range(5, 7).ToDictionary(value => value, value => new FalloutActorValue(_source.Special[value - 5]));
-        InitializeStatusValues(records, statusSource);
+        var initial = legacy?.Values ?? _source.Special;
+        _values = Enumerable.Range(5, 7).ToDictionary(value => value, value => new FalloutActorValue(initial[value - 5]));
         if (restore is not null) Restore(restore);
     }
 
@@ -50,24 +52,17 @@ internal sealed partial class FalloutPlayerActorValues
         return slot >= 0 ? slot + 5 : throw new NotSupportedException($"Player actor value {name} has no SPECIAL pool owner.");
     }
 
-    private FalloutActorValue Value(int actorValue) => _values.TryGetValue(actorValue, out var value) ||
-        _statusValues.TryGetValue(actorValue, out value) ? value :
+    private FalloutActorValue Value(int actorValue) => _values.TryGetValue(actorValue, out var value) ? value :
         throw new NotSupportedException($"Player actor value {actorValue} has no base/formula pool owner.");
 
-    internal float ReadBase(int actorValue) => ReadMoverBase(actorValue);
-    // Source-selected consumers apply their own descriptor/getter bounds to
-    // this Float32 sum. UI/permanent reads retain their independent bounds.
-    internal float ReadRawPermanent(int actorValue) => Evaluate(actorValue, () => ReadBase(actorValue) +
-        Pool(actorValue, FalloutActorValuePool.Permanent));
-    internal float ReadPermanent(int actorValue) => actorValue is >= 5 and <= 11
-        ? Math.Clamp(ReadRawPermanent(actorValue), 1, 10)
-        : throw new NotSupportedException("Status permanent-value getter bounds remain an independent source owner.");
+    internal float ReadBase(int actorValue) => Value(actorValue).Base;
+    internal float ReadPermanent(int actorValue) => Evaluate(actorValue, () => Math.Clamp(ReadBase(actorValue) +
+        Pool(actorValue, FalloutActorValuePool.Permanent), 1, 10));
     internal float ReadCurrent(int actorValue) => Evaluate(actorValue, () =>
-        // The selected standalone getter rounds each Float32 addition. The
-        // existing New Vegas getter retains its independent wider intermediate.
-        _statusSource is not null ? ReadCurrentFloat32(actorValue) :
-            (float)((double)ReadBase(actorValue) + Pool(actorValue, FalloutActorValuePool.Temporary) +
-                Pool(actorValue, FalloutActorValuePool.Permanent) + Pool(actorValue, FalloutActorValuePool.Damage)));
+        // The native float getter sums temporary, permanent and damage pools
+        // with a wider intermediate before returning its Float32 result.
+        (float)((double)ReadBase(actorValue) + Pool(actorValue, FalloutActorValuePool.Temporary) +
+            Pool(actorValue, FalloutActorValuePool.Permanent) + Pool(actorValue, FalloutActorValuePool.Damage)));
     internal float ReadBoundedCurrent(int actorValue) => Math.Clamp(ReadCurrent(actorValue), 1, 10);
     internal float Read(int actorValue, FalloutActorValueRead kind) => kind switch
     {
@@ -87,14 +82,13 @@ internal sealed partial class FalloutPlayerActorValues
         // value while keeping the older integer view representable.
         if (value == 2147483648f) return int.MaxValue;
         if (value < int.MinValue || (double)value > int.MaxValue)
-            throw new NotSupportedException("Player base value exceeds the seven-integer SPECIAL menu view.");
+            throw new NotSupportedException("Player base value exceeds the legacy seven-integer view.");
         return checked((int)value);
     }
 
     internal FalloutSpecialAllocationBinding AllocationBinding => new("engine-player-special-pools", ReadPermanent, WriteBaseInteger);
 
-    internal void WriteBaseInteger(int actorValue, int value)
-    { MarkMoverBaseOverride(actorValue); Publish(actorValue, Value(actorValue) with { Base = value }); }
+    internal void WriteBaseInteger(int actorValue, int value) => Publish(actorValue, Value(actorValue) with { Base = value });
 
     internal void AddModifier(int actorValue, FalloutActorValuePool pool, float amount)
     {
@@ -113,9 +107,7 @@ internal sealed partial class FalloutPlayerActorValues
     internal void Change(string name, string operation, double argument)
     {
         var value = SignedInteger(argument);
-        var actorValue = IsStatusValue(name) ? StatusValue(name) : SpecialValue(name);
-        if (MoverValueHasCallback(actorValue) || _statusSource?.Values.Any(source => source.Index == actorValue && source.HasChangeCallback) == true)
-            throw new NotSupportedException("Player status command has an unbound independent source change callback: " + name);
+        var actorValue = SpecialValue(name);
         switch (operation.ToLowerInvariant())
         {
             case "setav" or "setactorvalue": WriteBaseInteger(actorValue, value); break;
@@ -138,8 +130,7 @@ internal sealed partial class FalloutPlayerActorValues
     private void Publish(int actorValue, FalloutActorValue value)
     {
         if (!value.IsFinite) throw new InvalidDataException("Player value exceeds finite Float32 storage.");
-        if (IsStatusValue(actorValue)) _statusValues[actorValue] = value;
-        else _values[actorValue] = value;
+        _values[actorValue] = value;
         Changed?.Invoke();
     }
 
@@ -177,7 +168,7 @@ internal sealed partial class FalloutPlayerActorValues
 
     internal FalloutPlayerActorValuesSnapshot Capture() => new(SnapshotSchema, PlayerReference,
         _source.Player, _source.PlayerWinner, _source.PlayerSha256, _source.StatsOwner, _source.StatsWinner, _source.StatsSha256,
-        new Dictionary<int, FalloutActorValue>(_values), CaptureStatusValues(), CaptureMoverValues());
+        new Dictionary<int, FalloutActorValue>(_values));
 
     internal void Restore(FalloutPlayerActorValuesSnapshot snapshot)
     {
@@ -185,19 +176,14 @@ internal sealed partial class FalloutPlayerActorValues
         if (snapshot.Player != _source.Player || snapshot.PlayerWinner != _source.PlayerWinner || snapshot.PlayerSha256 != _source.PlayerSha256 ||
             snapshot.StatsOwner != _source.StatsOwner || snapshot.StatsWinner != _source.StatsWinner || snapshot.StatsSha256 != _source.StatsSha256)
             throw new InvalidDataException("Saved player values differ from their winning source identity.");
-        var status = RestoreStatusValues(snapshot.StatusValues);
         var replacement = snapshot.Values.ToDictionary(pair => pair.Key, pair => pair.Value);
         _values = replacement;
-        _statusValues = status;
-        RestoreMoverValues(snapshot.MoverValues);
         Changed?.Invoke();
     }
 
     internal static void Validate(FalloutPlayerActorValuesSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.StatusValues is { } status) ValidateStatusValues(status);
-        if (snapshot.MoverValues is { } mover) ValidateMoverValues(mover);
         if (snapshot.Schema != SnapshotSchema || snapshot.Reference != PlayerReference || snapshot.Player.ObjectId == 0 ||
             snapshot.StatsOwner.ObjectId == 0 || string.IsNullOrWhiteSpace(snapshot.PlayerWinner) || string.IsNullOrWhiteSpace(snapshot.StatsWinner) ||
             !Hash(snapshot.PlayerSha256) || !Hash(snapshot.StatsSha256) || snapshot.Values is null || snapshot.Values.Count != 7 ||

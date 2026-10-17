@@ -18,7 +18,7 @@ internal partial class RuntimeNativeSpeech
                 _radioConversations.Add(station, conversation = new(_stack,
                     _references ?? throw new InvalidOperationException("Radio has no reference world."),
                     _quests ?? throw new InvalidOperationException("Radio has no quest state."), EvaluateRadioCondition,
-                    _questStage, _said, _dialogueRandom, _globals));
+                    _questStage, _said, _dialogueRandom));
             if (IsDialogueBusy(station))
                 throw new NotSupportedException("Radio interruption requires its retained result/cursor owner.");
             conversation.Start(station, topic);
@@ -35,7 +35,7 @@ internal partial class RuntimeNativeSpeech
         _stack, _quests!, station, SpeakerIdentity(station), _conditionContext, actorValue: _actorValue,
         playerFemale: _playerFemale, actorRace: _actorRace, currentPackage: _currentPackage, vampireQuery: _vampireQuery,
         itemCount: _itemCount, referenceDistance: _referenceDistance, referenceInZone: _referenceInZone,
-        sitting: _sitting, deadCount: _deadCount).Evaluate(condition);
+        sitting: _sitting, deadCount: _deadCount, isDead: _isDead).Evaluate(condition);
 
     private void BindRadioSpeaker(Voice voice, FalloutPluginRecord station, Node3D? presentation, FalloutRadioConversation radio)
     {

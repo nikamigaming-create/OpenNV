@@ -23,10 +23,6 @@ internal static partial class FalloutExecutableStringTable
 
     internal static string ReadNativeRaceMenuModel(ReadOnlyMemory<byte> source, IReadOnlyDictionary<uint, string> settings,
         Func<uint, string?> literal, int command)
-        => ReadNativeRaceMenuSelection(source, settings, literal, command).Model;
-
-    private static FalloutRaceMenuModelSelection ReadNativeRaceMenuSelection(ReadOnlyMemory<byte> source,
-        IReadOnlyDictionary<uint, string> settings, Func<uint, string?> literal, int command)
     {
         var code = source.Span;
         var constructor = CreationConstructor(code, settings);
@@ -37,7 +33,6 @@ internal static partial class FalloutExecutableStringTable
         var arm = RaceMenuModelArm(body, modes);
         body = body[arm.Start..arm.End];
         string? result = null;
-        FalloutRaceMenuModelOperand? operand = null; var directCount = 0; var inline = false;
         for (var at = 0; at <= body.Length - 7; at++)
         {
             var input = body[at..];
@@ -47,25 +42,15 @@ internal static partial class FalloutExecutableStringTable
                 input.Slice(13, 2).SequenceEqual(new byte[] { 0x81, 0xc1 }) && input[19] == 0xe8)
             {
                 var name = literal(U32(input, 3));
-                if (name?.EndsWith(".nif", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    model = MeshPath(name); ++directCount;
-                    var instruction = checked(constructor.Start + arm.Start + at + 2);
-                    var setter = checked(instruction + 22 + BinaryPrimitives.ReadInt32LittleEndian(input[20..]));
-                    var field = BinaryPrimitives.ReadInt32LittleEndian(input[15..]);
-                    if (field <= 0 || setter < 0 || setter >= code.Length)
-                        throw new InvalidDataException("Race-menu model field or string child leaves its source declaration.");
-                    operand = new(instruction, U32(input, 3), field, setter);
-                }
+                if (name?.EndsWith(".nif", StringComparison.OrdinalIgnoreCase) == true) model = MeshPath(name);
             }
             else if (input[..3].SequenceEqual(new byte[] { 0x0f, 0x10, 0x05 }))
-            { model = ReadRaceMenuVectorCopy(input, literal); inline |= model is not null; }
+                model = ReadRaceMenuVectorCopy(input, literal);
             if (model is null) continue;
             if (result is not null && result != model) throw new InvalidDataException("Race-menu creation models are ambiguous.");
             result = model;
         }
-        return new(result ?? throw new NotSupportedException("Race-menu has no admitted owned model consumer."),
-            directCount == 1 && !inline ? operand : null, modes.Order().ToArray());
+        return result ?? throw new NotSupportedException("Race-menu has no admitted owned model consumer.");
     }
 
     private static (IReadOnlySet<int> Modes, int Dispatcher) RaceMenuCommandModes(ReadOnlySpan<byte> code, int command)
@@ -253,12 +238,6 @@ internal static partial class FalloutExecutableStringTable
     internal static FalloutRaceMenuDevices ReadTtwRaceMenuAssociations(ReadOnlySpan<byte> code, uint codeBase, int command,
         Func<uint, string?> literal, Func<uint, int, bool> writable, Func<uint, int, string> initialBuffer,
         Func<uint, string?> import, ReadOnlySpan<byte> nativeCode, uint nativeBase, uint nativeHandler, Func<uint, string?> nativeLiteral)
-        => ReadRaceMenuBufferAssociation(code, codeBase, command, literal, writable, initialBuffer, import,
-            nativeCode, nativeBase, nativeHandler, nativeLiteral).Devices;
-
-    private static FalloutRaceMenuBufferAssociation ReadRaceMenuBufferAssociation(ReadOnlySpan<byte> code, uint codeBase, int command,
-        Func<uint, string?> literal, Func<uint, int, bool> writable, Func<uint, int, string> initialBuffer,
-        Func<uint, string?> import, ReadOnlySpan<byte> nativeCode, uint nativeBase, uint nativeHandler, Func<uint, string?> nativeLiteral)
     {
         var gene = ReadRaceMenuSelector(code, command, literal, writable, import);
         if (gene.Handler != nativeHandler) throw new InvalidDataException("Gene projector forwards to a foreign native command.");
@@ -284,7 +263,7 @@ internal static partial class FalloutExecutableStringTable
             throw new InvalidDataException("Race-menu selectors do not share their source buffer and command.");
         if (MeshPath(initialBuffer(gene.Buffer, gene.Capacity)) != normal.Model)
             throw new InvalidDataException("Race-menu initial buffer differs from its default selector.");
-        uint? modelOperand = null; int? selectedWriter = null; int? selectedCall = null;
+        uint? modelOperand = null;
         for (var at = 0; at <= code.Length - 15; ++at)
         {
             var patch = code[at..];
@@ -310,11 +289,10 @@ internal static partial class FalloutExecutableStringTable
                 MeshPath(nativeLiteral(U32(source, 3))) != normal.Model)
                 throw new NotSupportedException("Race-menu buffer has no admitted original model consumer.");
             if (modelOperand is not null) throw new InvalidDataException("Race-menu model consumer is ambiguous.");
-            modelOperand = operand; selectedWriter = writer; selectedCall = at + 10;
+            modelOperand = operand;
         }
         if (modelOperand is null) throw new NotSupportedException("Race-menu source buffer has no model consumer.");
-        return new(new(normal.Model, gene.Model), gene.Buffer, gene.Capacity, modelOperand.Value,
-            checked(codeBase + (uint)selectedWriter!.Value), checked(codeBase + (uint)selectedCall!.Value));
+        return new(normal.Model, gene.Model);
     }
 
     private static (string Model, uint Buffer, int Capacity, uint Copy, uint Handler) ReadRaceMenuSelector(ReadOnlySpan<byte> code,

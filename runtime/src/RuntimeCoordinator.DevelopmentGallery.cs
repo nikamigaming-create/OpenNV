@@ -4,9 +4,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Godot;
 using OpenNV.Runtime.Content;
-using OpenNV.Runtime.Diagnostics.Capture;
-using OpenNV.Runtime.Gameplay.State;
-using OpenNV.Runtime.Presentation.Rendering;
 using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime;
@@ -35,19 +32,13 @@ public partial class RuntimeCoordinator
             if (Directory.Exists(output) || File.Exists(output)) throw new IOException("Gallery output must be fresh.");
             var install = Path.GetDirectoryName(Path.GetFullPath(source.ContentRoot))! + Path.DirectorySeparatorChar;
             if (output.StartsWith(install, StringComparison.OrdinalIgnoreCase)) throw new IOException("Gallery output cannot be inside the owned installation.");
-            var recordVideo = !_options.ContainsKey("gallery-stills");
-            var encoder = string.Empty;
-            if (recordVideo)
-            {
-                encoder = Path.GetFullPath(RequireOption(_options, "gallery-ffmpeg"));
-                if (!File.Exists(encoder)) throw new FileNotFoundException("Gallery encoder is missing.", encoder);
-            }
+            var encoder = Path.GetFullPath(RequireOption(_options, "gallery-ffmpeg"));
+            if (!File.Exists(encoder)) throw new FileNotFoundException("Gallery encoder is missing.", encoder);
             Directory.CreateDirectory(output);
             GetWindow().Size = new Vector2I(1920, 1080);
             Engine.MaxFps = 30;
             await Task.Run(() => IndexNativeLiveStack(source.PluginSources));
             _nativeGameTime?.InitializeNewGame();
-            ConfigureCurrentImagePhase(null);
             DismissLoadingScreen();
             for (var index = 0; index < requested.Length; index++)
             {
@@ -78,13 +69,6 @@ public partial class RuntimeCoordinator
                     var cellKey = FalloutCellSceneReader.ParentCell(record) ?? throw new InvalidDataException("Actor has no source CELL.");
                     row["cell"] = cellKey.ToString();
                     var cell = FalloutCellSceneReader.Read(_nativePluginStack, cellKey);
-                    if (subjects[index].TryGetProperty("hour", out var requestedHour))
-                    {
-                        var hour = FalloutGameTime.SourceHour(requestedHour.GetSingle());
-                        var globals = _nativeGlobals ?? throw new InvalidOperationException("Visual capture has no actual calendar GLOBAL owner.");
-                        globals.Set(FalloutGameTimeBindings.Read(_nativePluginStack).Hour, hour);
-                        row["diagnosticHour"] = hour;
-                    }
                     row["cellEditorId"] = cell.Cell.EditorId;
                     row["sourceReferenceCount"] = cell.References.Count;
                     var reference = cell.References.Single(value => value.FormKey == requested[index]);
@@ -120,8 +104,7 @@ public partial class RuntimeCoordinator
                     else if (cell.Cell.Lighting is null)
                         throw new NotSupportedException("Interior subject has no source lighting declaration.");
                     _nativeSkyLighting?.EnterCell(cell.Cell, _nativeGlobals, reference.Position);
-                    root = BuildNativeCellRoot(cell, null, sourceSide: true,
-                        sourceCells: exterior is null ? null : exterior.Cells.Select(item => item.FormKey).Append(exterior.PersistentCell).Distinct(FalloutFormKeyComparer.Instance).ToArray());
+                    root = BuildNativeCellRoot(cell, null, sourceSide: true);
                     if (exterior is not null) AddExteriorLandscape(root, exterior);
                     AddChild(root);
                     if (exterior is null) AddNativeCellEnvironment(root, cell);
@@ -172,18 +155,16 @@ public partial class RuntimeCoordinator
                     var bestBlocked = int.MaxValue;
                     var bestPosition = target + forward * distance;
                     var selectedAngle = 0f;
-                    var visualOcclusion = GalleryVisualOcclusionIndex.Build(root, subjectNode);
                     // Move only the diagnostic camera. Occluders, actors and
                     // source geometry are never hidden or repositioned.
-                    foreach (var degrees in new[] { 0f, 30f, -30f, 60f, -60f, 90f, -90f, 120f, -120f, 150f, -150f, 180f })
+                    foreach (var degrees in new[] { 0f, 30f, -30f, 60f, -60f, 90f, -90f, 180f })
                     {
                         var candidate = target + forward.Rotated(Vector3.Up, Mathf.DegToRad(degrees)) * distance;
                         var blocked = 0;
                         foreach (var aim in new[] { target, target + Vector3.Up * radius * 0.6f, target - Vector3.Up * radius * 0.6f })
                         {
                             var query = PhysicsRayQueryParameters3D.Create(aim, candidate);
-                            if (root.GetWorld3D().DirectSpaceState.IntersectRay(query).Count != 0 ||
-                                visualOcclusion.CastSegment(aim, candidate).HitSurface) blocked++;
+                            if (root.GetWorld3D().DirectSpaceState.IntersectRay(query).Count != 0) blocked++;
                         }
                         if (blocked >= bestBlocked) continue;
                         bestBlocked = blocked; bestPosition = candidate; selectedAngle = degrees;
@@ -204,12 +185,6 @@ public partial class RuntimeCoordinator
                     // Shader warmup is outside recording. Each viewport sample
                     // goes directly into one encoder; no raw frame archive.
                     for (var warm = 0; warm < 30; warm++) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                    row["sourceSkyState"] = _nativeSkyLighting?.SourceTransferState;
-                    row["selectedLightingWeather"] = _nativeSkyLighting?.ActiveWeather.Form.ToString();
-                    row["sourceMoonState"] = _nativeSkyLighting?.SourceMoonState;
-                    row["sourceSkySaveBlocker"] = _nativeSkyLighting?.SourceTransferSaveBlocker;
-                    row["exteriorPresentation"] = root.GetChildren().OfType<RuntimeNativeExteriorEnvironment>()
-                        .Select(environment => environment.DiagnosticState).ToArray();
                     var stem = (index + 1).ToString("D2", CultureInfo.InvariantCulture);
                     var imagePath = Path.Combine(output, stem + ".png");
                     using (var image = GetViewport().GetTexture().GetImage())
@@ -217,12 +192,9 @@ public partial class RuntimeCoordinator
                         if (image.SavePng(imagePath) != Error.Ok) throw new IOException("Could not save gallery preview.");
                         row["image"] = Path.GetFileName(imagePath);
                     }
-                    if (recordVideo)
-                    {
-                        var moviePath = Path.Combine(output, stem + ".mp4");
-                        row["capture"] = await EncodeNativeGalleryClip(encoder, moviePath, camera, target);
-                        row["movie"] = Path.GetFileName(moviePath);
-                    }
+                    var moviePath = Path.Combine(output, stem + ".mp4");
+                    row["capture"] = await EncodeNativeGalleryClip(encoder, moviePath, camera, target);
+                    row["movie"] = Path.GetFileName(moviePath);
                     row["animationAfter"] = actor?.AnimationState ?? creature?.Observation;
                     row["status"] = "rendered-with-unverified-presentation";
                 }
@@ -234,13 +206,11 @@ public partial class RuntimeCoordinator
                 }
                 finally
                 {
-                    FreeNativeSourceCellRoot(root);
-                    await DrainNativeSkyHdrRetirement();
+                    if (root is not null && GodotObject.IsInstanceValid(root)) root.Free();
                     if (_nativeActiveCell is { } active) _nativeReferences?.UnloadCell(active.Cell.FormKey);
                     _nativeCurrentCellRoot = null; _nativeActiveCell = null;
                     foreach (var prototype in _nativeNifPrototypes.Values) prototype.Scene.Root.Free();
                     _nativeNifPrototypes.Clear();
-                    RetireNativeModeledLightSources();
                 }
                 WriteGalleryReport();
                 GD.Print($"OPENNV_NATIVE_GALLERY_PROGRESS completed={rows.Count} total={requested.Length} status={row["status"]}");

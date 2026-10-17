@@ -1,5 +1,4 @@
 using Godot;
-using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.InputSystem;
 
@@ -9,41 +8,26 @@ internal static class NativeScriptKeys
 {
     internal static InputEvent Create(int code)
     {
-        if (code >= FalloutInputLayout.FirstMouseButton)
-        {
-            // Validate before native allocation. An object initializer allocates
-            // its event before evaluating a fallible property value.
-            var button = code switch
+        if (code >= 256)
+            return new InputEventMouseButton
             {
-                FalloutInputLayout.MouseLeft => MouseButton.Left,
-                FalloutInputLayout.MouseRight => MouseButton.Right,
-                FalloutInputLayout.MouseMiddle => MouseButton.Middle,
-                FalloutInputLayout.MouseExtra1 => MouseButton.Xbutton1,
-                FalloutInputLayout.MouseExtra2 => MouseButton.Xbutton2,
-                FalloutInputLayout.WheelUp => MouseButton.WheelUp,
-                FalloutInputLayout.WheelDown => MouseButton.WheelDown,
-                _ => throw new NotSupportedException($"DirectInput mouse binding {code} has no native button."),
+                ButtonIndex = code switch
+                {
+                    256 => MouseButton.Left,
+                    257 => MouseButton.Right,
+                    258 => MouseButton.Middle,
+                    259 => MouseButton.Xbutton1,
+                    260 => MouseButton.Xbutton2,
+                    264 => MouseButton.WheelUp,
+                    265 => MouseButton.WheelDown,
+                    _ => throw new NotSupportedException($"DirectInput mouse binding {code} has no native button."),
+                }
             };
-            return new InputEventMouseButton { ButtonIndex = button };
-        }
         foreach (var key in Enum.GetValues<Key>().Distinct())
             foreach (var location in key is Key.Shift or Key.Ctrl or Key.Alt
                 ? new[] { KeyLocation.Left, KeyLocation.Right } : [KeyLocation.Unspecified])
                 if (Code(key, location) == code) return new InputEventKey { PhysicalKeycode = key, Location = location };
         throw new NotSupportedException($"DirectInput keyboard binding {code} has no native physical key.");
-    }
-
-    // Factory events are caller-owned. InputMap retains separate native refs;
-    // releasing these wrappers does not erase the published action bindings.
-    internal static void DisposeCreatedEvents(IEnumerable<InputEvent> events, Exception? operationFailure)
-    {
-        List<Exception>? failures = null;
-        foreach (var input in events)
-            try { input.Dispose(); }
-            catch (Exception error) { (failures ??= []).Add(error); }
-        if (failures is null) return;
-        if (operationFailure is not null) failures.Insert(0, operationFailure);
-        throw new AggregateException("Created input-event retirement failed.", failures);
     }
 
     internal static IEnumerable<(int Key, bool Down)> Read(InputEvent input)
@@ -53,18 +37,18 @@ internal static class NativeScriptKeys
         if (input is not InputEventMouseButton mouse) yield break;
         var button = mouse.ButtonIndex switch
         {
-            MouseButton.Left => FalloutInputLayout.MouseLeft,
-            MouseButton.Right => FalloutInputLayout.MouseRight,
-            MouseButton.Middle => FalloutInputLayout.MouseMiddle,
-            MouseButton.Xbutton1 => FalloutInputLayout.MouseExtra1,
-            MouseButton.Xbutton2 => FalloutInputLayout.MouseExtra2,
-            MouseButton.WheelUp => FalloutInputLayout.WheelUp,
-            MouseButton.WheelDown => FalloutInputLayout.WheelDown,
+            MouseButton.Left => 256,
+            MouseButton.Right => 257,
+            MouseButton.Middle => 258,
+            MouseButton.Xbutton1 => 259,
+            MouseButton.Xbutton2 => 260,
+            MouseButton.WheelUp => 264,
+            MouseButton.WheelDown => 265,
             _ => 0,
         };
         if (button == 0) yield break;
         yield return (button, mouse.Pressed);
-        if (button >= FalloutInputLayout.WheelUp && mouse.Pressed) yield return (button, false);
+        if (button >= 264 && mouse.Pressed) yield return (button, false);
     }
 
     internal static int? Code(Key key, KeyLocation location = KeyLocation.Unspecified) => key switch

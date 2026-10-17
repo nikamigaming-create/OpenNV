@@ -118,7 +118,6 @@ internal static class NativeFaceGenMaterial
             new Vector3(material.Specular.R, material.Specular.G, material.Specular.B));
         result.SetShaderParameter("source_glossiness", material?.Glossiness ?? 1);
         SetSourceAmbient(result, sourceAmbient);
-        if (int.TryParse(OS.GetEnvironment("OPENNV_FACE_DEBUG"), out var debug)) result.SetShaderParameter("debug_mode", debug);
         result.SetMeta("opennv_nif_shader_block", shader.Block.Index);
         result.SetMeta("opennv_nif_shader_type", shader.ShaderType);
         result.SetMeta("opennv_nif_shader_flags", shader.ShaderFlags);
@@ -166,7 +165,6 @@ internal static class NativeFaceGenMaterial
         uniform bool use_source_vertex_color;
         uniform vec3 source_specular;
         uniform float source_glossiness;
-        uniform int debug_mode = 0;
         varying float source_specular_mask;
         {{NativeNifPointLighting.ShaderSource}}
 
@@ -186,8 +184,6 @@ internal static class NativeFaceGenMaterial
             ALBEDO = face_color;
             EMISSION = face_color * (source_ambient_rgb + owned_point_irradiance(VERTEX, NORMAL, VIEW, true));
             EMISSION = owned_output_color(EMISSION);
-            if (debug_mode == 1) { ALBEDO = vec3(0.0); EMISSION = base; }
-            if (debug_mode == 2) { ALBEDO = vec3(0.0); EMISSION = NORMAL * 0.5 + vec3(0.5); }
             SPECULAR = 0.0;
         }
 

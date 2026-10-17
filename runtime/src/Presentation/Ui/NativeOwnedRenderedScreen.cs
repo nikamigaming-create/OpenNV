@@ -54,7 +54,16 @@ internal sealed partial class NativeOwnedRenderedScreen : Node
         Menu.PageChanged += page => device.SelectSection(page < 4 ? page : page is 5 or 6 or 7 ? 3 : 2);
         Menu.SetCanvas(new(1280, 960));
         ContentView.AddChild(Menu);
-        var shader = new Shader { Code = FalloutD3D9MenuSurface.SpatialShader(program) };
+        var shader = new Shader { Code = """
+            shader_type spatial;
+            render_mode unshaded, cull_back, depth_draw_opaque;
+            """ + program.GodotSource + """
+            void fragment() {
+                vec3 encoded = owned_pixel_program(UV).rgb * COLOR.rgb;
+                ALBEDO = mix(encoded / 12.92, pow((max(encoded, vec3(0.0)) + 0.055) / 1.055,
+                    vec3(2.4)), step(vec3(0.04045), encoded));
+            }
+            """ };
         var material = _material = new ShaderMaterial { Shader = shader, ResourceName = "Owned rendered-menu program" };
         material.SetShaderParameter("s0", ContentView.GetTexture());
         material.SetShaderParameter("s1", NativeOwnedMediaLoader.LoadTexture("textures/pipboy3000/PipboyDistortEffectMap.dds"));
@@ -106,7 +115,6 @@ internal sealed partial class NativeOwnedRenderedScreen : Node
 
     public override void _Input(InputEvent input)
     {
-        if (!_device.IsVisibleInTree() || !ContentView.IsInsideTree()) return;
         var focus = GetViewport().GuiGetFocusOwner();
         var externalFocus = focus is not null && _externalControls.Any(control => control == focus || control.IsAncestorOf(focus));
         if (input is InputEventMouse pointer)

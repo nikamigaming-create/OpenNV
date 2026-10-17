@@ -16,44 +16,32 @@ internal partial class NativeOwnedDialogueMenu : Control
     private int _offset;
     private int _selectedChoiceIndex;
     private int _visibleChoiceCount;
-    private bool _faulted;
-    private readonly FalloutDialogueInputPublication _inputPublication = new();
-    private FalloutDialogueInputToken? _skipPress;
-    private bool _submitted => _inputPublication.Submitted;
+    private bool _faulted, _submitted;
     private string _sourceMenuIdentity = "";
     private Func<FalloutFormKey, bool>? _isGoodbye;
 
-    internal NativeOwnedDialogueMenu(Action skip, Action<Exception> failed,
-        OpenNV.Runtime.World.Cells.RuntimeNativeStandaloneInterface? sourceManager = null)
+    internal NativeOwnedDialogueMenu(Action skip, Action<Exception> failed)
     {
         Name = "OwnedDialogue"; _failed = failed;
-        CaptureStandaloneDialogInput();
-        var menu = ReadActualDialogMenu(sourceManager);
+        var menu = FalloutMenuXml.Expand(FalloutMenuXml.Read("menus/dialog/dialog_menu.xml")).Elements("menu").Single();
         _tiles = new(menu);
         XElement Named(string name) => menu.DescendantsAndSelf().Single(element => (string?)element.Attribute("name") == name);
         _speaker = Named("DM_SpeakerNameLabel"); _response = Named("DM_SpeakerText"); _list = Named("DM_TopicList");
         _scrollbar = _list.Elements().Single(element => (string?)element.Attribute("name") == "lb_scrollbar");
         _template = new(Named("DM_TopicTemplate").Elements().Single());
         menu.Elements("template").Remove();
-        InitializeActualDialogTraits(menu);
+        _tiles.Bind(menu, "_DialogVisible", 1); _tiles.Bind(menu, "_ShowSubtitles", 1);
         _tiles.Bind(_scrollbar, "_current_value", 0);
         _tiles.Bind(_list, "_scrollbar_vis", 0);
-        _skip = new Button { Flat = true, MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.All };
+        _skip = new Button { Flat = true, MouseFilter = MouseFilterEnum.Stop, FocusMode = FocusModeEnum.None };
         _skip.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-        _skip.ButtonDown += () => _skipPress = _inputPublication.Current;
-        _skip.Pressed += () =>
-        {
-            var pressed = _skipPress; _skipPress = null;
-            if (pressed is { } view && _inputPublication.TrySubmit(view, speaking: true))
-                try { skip(); } catch (Exception error) { Fail(error); }
-        };
+        _skip.Pressed += () => { if (!_submitted) { _submitted = true; skip(); } };
         AddChild(_skip);
         SetMeta("opennv_ui_source", "menus/dialog/dialog_menu.xml");
     }
 
-    internal void Show(string speaker, FalloutConversation conversation, Action<FalloutFormKey> choose, FalloutFormKey? actualSpeaker = null)
+    internal void Show(string speaker, FalloutConversation conversation, Action<FalloutFormKey> choose)
     {
-        RequireStandaloneDialogShow(actualSpeaker);
         ClearChoices();
         _conversationChoices = conversation.Choices;
         _sourceMenuIdentity = conversation.Info?.Record.FormKey.ToString() ?? conversation.Phase;
@@ -62,8 +50,7 @@ internal partial class NativeOwnedDialogueMenu : Control
         _offset = 0;
         _selectedChoiceIndex = 0;
         _visibleChoiceCount = 0;
-        _inputPublication.Publish(conversation.Phase, conversation.ResponseGeneration);
-        _skipPress = null;
+        _submitted = false;
         _tiles.Text[_speaker] = speaker;
         var speaking = conversation.Phase == "speaking";
         _tiles.Bind(_tiles.Root, "_ShowingText", speaking ? 1 : 0);
@@ -71,23 +58,12 @@ internal partial class NativeOwnedDialogueMenu : Control
         _skip.Visible = speaking;
         Visible = true;
         Layout();
-        var sourceView = _inputPublication.Current;
-        if (speaking && !_faulted) Callable.From(() =>
-        {
-            if (_inputPublication.IsCurrent(sourceView) && GodotObject.IsInstanceValid(_skip) &&
-                IsInsideTree() && IsVisibleInTree() && _skip.Visible && !_submitted)
-                _skip.GrabFocus();
-        }).CallDeferred();
     }
 
     public override void _Ready() { Layout(); }
     private NativeViewportLayout? _viewportLayout;
     public override void _EnterTree() => _viewportLayout = new(this, Layout);
-    public override void _ExitTree()
-    {
-        _inputPublication.Retire();
-        ReleaseStandaloneDialogViewport();
-    }
+    public override void _ExitTree() => _viewportLayout?.Dispose();
     private void Select(XElement tile)
     {
         _tiles.Bind(_list, "_highlight_y", _tiles.Number(tile, "_y"));
@@ -113,8 +89,6 @@ internal partial class NativeOwnedDialogueMenu : Control
     private void BuildVisibleChoices()
     {
         ClearChoices();
-        var sourceView = _inputPublication.RebuildRows();
-        var sourceChoose = _choose;
         var sourceScrollUnit = _tiles.Number(_list, "_scroll_delta");
         if (!float.IsFinite(sourceScrollUnit) || sourceScrollUnit <= 0)
             throw new InvalidDataException("Dialogue list scroll unit is invalid.");
@@ -159,12 +133,12 @@ internal partial class NativeOwnedDialogueMenu : Control
                 (_isGoodbye ?? throw new InvalidOperationException("Dialogue topic identity owner is absent."))(choice.Topic));
             button.Pressed += () =>
             {
-                if (!_inputPublication.TrySubmit(sourceView, speaking: false)) return;
-                try { (sourceChoose ?? throw new InvalidOperationException("Dialogue choice owner is absent."))(choice.Topic); }
-                catch (Exception error) { Fail(error); }
+                if (_submitted) return;
+                _submitted = true;
+                (_choose ?? throw new InvalidOperationException("Dialogue choice owner is absent."))(choice.Topic);
             };
-            button.MouseEntered += () => { if (_inputPublication.IsCurrent(sourceView)) { _selectedChoiceIndex = index; Select(tile); } };
-            button.FocusEntered += () => { if (_inputPublication.IsCurrent(sourceView)) { _selectedChoiceIndex = index; Select(tile); } };
+            button.MouseEntered += () => { _selectedChoiceIndex = index; Select(tile); };
+            button.FocusEntered += () => { _selectedChoiceIndex = index; Select(tile); };
             AddChild(button);
             _choices.Add((tile, button));
             y += rowHeight;
@@ -189,11 +163,7 @@ internal partial class NativeOwnedDialogueMenu : Control
                 _selectedChoiceIndex = _offset;
             var selected = _choices[_selectedChoiceIndex - _offset];
             Select(selected.Tile);
-            Callable.From(() =>
-            {
-                if (_inputPublication.IsCurrent(sourceView) && GodotObject.IsInstanceValid(selected.Button) &&
-                    selected.Button.IsInsideTree() && selected.Button.IsVisibleInTree()) selected.Button.GrabFocus();
-            }).CallDeferred();
+            Callable.From(selected.Button.GrabFocus).CallDeferred();
         }
     }
 
@@ -233,7 +203,7 @@ internal partial class NativeOwnedDialogueMenu : Control
 
     public override void _Input(InputEvent inputEvent)
     {
-        if (!IsVisibleInTree() || _faulted || _submitted) return;
+        if (_submitted) return;
         if (inputEvent is InputEventKey { Pressed: true, Echo: false } key &&
             key.PhysicalKeycode is Key.Pageup or Key.Pagedown && _conversationChoices.Count > _visibleChoiceCount)
         {
@@ -254,7 +224,7 @@ internal partial class NativeOwnedDialogueMenu : Control
         }
     }
 
-    private void Fail(Exception error) { _faulted = true; _inputPublication.Retire(); _failed(error); }
+    private void Fail(Exception error) { _faulted = true; _submitted = true; _failed(error); }
     public override void _Draw()
     {
         if (_faulted) return;

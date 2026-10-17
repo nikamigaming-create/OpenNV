@@ -27,7 +27,7 @@ internal static class OwnedCharacterGenerationProbe
         var executor = new FalloutReferenceScripts(records, world, new FalloutQuestState(records), new((_, _) => false, effect =>
         {
             if (effect.Kind != FalloutReferenceEffectKind.CharacterGeneration) throw new InvalidDataException("Unexpected owned component effect.");
-            session.SetInCharGen(effect.Enable);
+            session.SetInCharGen(effect.Enable, vitals.RequireLevelUpOwner);
         }, InCharGen: () => session.InCharGen));
         var script = FalloutScriptLocals.AttachedScript(records, quest) ?? throw new InvalidDataException("Owned quest has no compiled script owner.");
         foreach (var command in commands)
@@ -38,15 +38,17 @@ internal static class OwnedCharacterGenerationProbe
         coldSession.Restore(JsonSerializer.Deserialize<FalloutScriptSessionSnapshot>(JsonSerializer.Serialize(session.Capture()))!);
         var cold = new FalloutPlayerVitals(records, player.FormKey, special,
             JsonSerializer.Deserialize<GameplayVitals>(JsonSerializer.Serialize(vitals.State))!);
-        coldSession.SetInCharGen(false);
-        if (coldSession.InCharGen || cold.State.ExperiencePoints != vitals.State.ExperiencePoints || cold.State.Level != vitals.State.Level)
-            throw new InvalidDataException("Owned character-generation publication consumed deferred XP or failed to publish its source flag.");
+        var blocked = false;
+        try { coldSession.SetInCharGen(false, cold.RequireLevelUpOwner); }
+        catch (NotSupportedException) { blocked = true; }
+        if (!blocked || !coldSession.InCharGen || cold.State.ExperiencePoints != vitals.State.ExperiencePoints)
+            throw new InvalidDataException("Owned character-generation boundary discarded deferred XP or skipped leveling.");
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             schema = "opennv-owned-character-generation-audit/v1", quest = quest.FormKey,
             winner = quest.Plugin.Name, commands = commands.Length, level = cold.State.Level,
             deferredExperience = cold.State.ExperiencePoints, nextLevelExperience = cold.State.NextLevelExperiencePoints,
-            inCharGen = coldSession.InCharGen, cold = true, advancement = "requires-later-admitted-player-update", recording = false,
+            inCharGen = coldSession.InCharGen, cold = true, levelUpGapVisible = blocked, recording = false,
             boundary = "isolated-owned-command-component; XP-rewards-leveling-and-campaign-parity-unverified"
         }));
     }

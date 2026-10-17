@@ -12,18 +12,6 @@ public partial class NativeNifInstanceAudit : Node
     {
         try
         {
-            if (OS.GetCmdlineUserArgs() is ["--node-emitter-persistence"])
-            {
-                await ExerciseNodeEmitterPersistence(); GetTree().Quit(); return;
-            }
-            if (OS.GetCmdlineUserArgs() is ["--unowned-pcm-observation"])
-            {
-                await ExerciseUnownedPcmObservation(); GetTree().Quit(); return;
-            }
-            if (OS.GetCmdlineUserArgs() is ["--modeled-light-contracts"])
-            {
-                ExerciseModeledLights(); GetTree().Quit(); return;
-            }
             if (OS.GetCmdlineUserArgs() is ["--particle-shapes-colors"])
             {
                 ExerciseParticleShapesColors(); GetTree().Quit(); return;
@@ -299,7 +287,6 @@ public partial class NativeNifInstanceAudit : Node
                 if (!source.TryRead(model, null, out var bytes, out var identity)) throw new FileNotFoundException(model);
                 Exercise(bytes, 0.0142875f, identity);
             }
-            ExerciseModeledLights();
             GD.Print("OPENNV_NIF_INSTANCE_AUDIT_PASS controllers=independent targets=instance-owned prototype=unchanged");
             GetTree().Quit();
         }

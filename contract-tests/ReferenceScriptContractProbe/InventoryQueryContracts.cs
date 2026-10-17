@@ -9,14 +9,19 @@ internal static class InventoryQueryContracts
 {
     internal static void Run()
     {
+        uint[] animationGroups = [1, 2, 3, 4, 4, 5, 6, 5, 7, 8, 9, 10, 11, 9];
+        Check(animationGroups.Select((value, type) => FalloutWeaponPresentation.ScriptAnimationType((uint)type) == value).All(value => value) &&
+            FalloutWeaponPresentation.ScriptAnimationType(uint.MaxValue) == 0, "Script animation groups were confused with raw WEAP types.");
         var directory = Directory.CreateTempSubdirectory("opennv-inventory-query-");
         try
         {
-            var scriptHeader = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(scriptHeader.AsSpan(12), 2); scriptHeader[16] = 1;
+            var scriptHeader = new byte[20]; BinaryPrimitives.WriteUInt32LittleEndian(scriptHeader.AsSpan(12), 6); scriptHeader[16] = 1;
             const string script = "short done\nshort result\nbegin GameMode\nif done == 0\n" +
-                "set result to player.GetItemCount Loot + (player).GetItemCount Gun\nset done to 1\nendif\nend";
+                "set result to player.GetItemCount Loot + (player).GetItemCount Gun\nset done to 1\nendif\n" +
+                "set drawn to player.IsWeaponOut\nset weaponType to (player).GetWeaponAnimType\n" +
+                "set equippedGun to player.GetEquipped Gun\nset equippedOther to (player).GetEquipped (OtherGun)\nend";
             File.WriteAllBytes(Path.Combine(directory.FullName, "Items.esm"), Join(Header(),
-                Item("MISC", 1, "Loot", 8), Item("WEAP", 2, "Gun", 15), Record("NOTE", 3),
+                Item("MISC", 1, "Loot", 8), Weapon(2, "Gun", 5), Record("NOTE", 3), Weapon(4, "OtherGun", 3),
                 Record("FLST", 0x120, Field("LNAM", U32(1))),
                 Record("FLST", 0x125, Field("EDID", Text("ActorList")), Field("LNAM", U32(0x100))),
                 Record("FLST", 0x126, Field("EDID", Text("ReferenceList")), Field("LNAM", U32(0x900))),
@@ -25,15 +30,17 @@ internal static class InventoryQueryContracts
                 Record("PERK", 0x130), Record("CONT", 0x110), Record("CELL", 0x800, Field("DATA", [1])),
                 Group(0x800, Join(Reference("ACHR", 0x900, 0x100, "Actor"), Reference("REFR", 0x901, 0x110, "Chest"))),
                 Record("SCPT", 0x601, Field("SCHR", scriptHeader), Local(1, "done"), Local(2, "result"),
-                    Field("SCRO", U32(0x14)), Field("SCRO", U32(1)), Field("SCRO", U32(2)), Field("SCTX", Text(script))),
+                    Local(3, "drawn"), Local(4, "weaponType"), Local(5, "equippedGun"), Local(6, "equippedOther"),
+                    Field("SCRO", U32(0x14)), Field("SCRO", U32(1)), Field("SCRO", U32(2)), Field("SCRO", U32(4)), Field("SCTX", Text(script))),
                 Record("QUST", 0x600, Field("DATA", [1, 0]), Field("SCRI", U32(0x601)),
-                    Field("SCRO", U32(0x14)), Field("SCRO", U32(1)), Field("SCRO", U32(2)),
+                    Field("SCRO", U32(0x14)), Field("SCRO", U32(1)), Field("SCRO", U32(2)), Field("SCRO", U32(4)),
                     Field("SCRO", U32(0x900)), Field("SCRO", U32(0x901)),
                     Field("SCRO", U32(0x125)), Field("SCRO", U32(0x126)), Field("SCRO", U32(0x127)))));
             File.WriteAllBytes(Path.Combine(directory.FullName, "Other.esm"), Header());
             var conditionBytes = new byte[28]; BinaryPrimitives.WriteUInt16LittleEndian(conditionBytes.AsSpan(8), 47);
             BinaryPrimitives.WriteUInt32LittleEndian(conditionBytes.AsSpan(12), 0x01000001);
             File.WriteAllBytes(Path.Combine(directory.FullName, "Queries.esp"), Join(Header("Other.esm", "Items.esm"),
+                Weapon(0x01000002, "Gun", 7),
                 Record("INFO", 0x02000810, Field("CTDA", conditionBytes)),
                 Record("FLST", 0x02000120, Field("EDID", Text("CountList")), Field("LNAM", U32(0x01000001)),
                     Field("LNAM", U32(0x01000002)), Field("LNAM", U32(0x01000001)), Field("LNAM", U32(0x01000120)),
@@ -45,7 +52,9 @@ internal static class InventoryQueryContracts
             world.LoadCell(FalloutCellSceneReader.Read(records, Key(0x800)));
             var player = new FalloutPlayerInventory(123); player.Add(records, Key(1), 2, 1, true); player.Add(records, Key(2), 1, 1, true);
             var chest = world.Inventory(Key(0x901), 1).Contents; chest.Add(records, Key(1), 4, 1, true);
-            var commands = new FalloutInventoryCommands(records, world, player, () => 1);
+            var handling = new FalloutWeaponHandling(player);
+            var commands = new FalloutInventoryCommands(records, world, player, () => 1, weaponDrawn: reference =>
+                reference == Key(0x14) ? handling.Drawn : throw new NotSupportedException("Synthetic actor has no draw owner."));
             var condition = FalloutCondition.Read(records.GetEffective(new("Queries.esp", 0x810))).Single();
             var identity = new FalloutDialogueSpeaker(Key(0x100), Key(0x100), Key(0x850), "Synthetic", null, false);
             FalloutFormKey? queried = null;
@@ -81,7 +90,8 @@ internal static class InventoryQueryContracts
             Reject(() => context.Evaluate(condition with { RunOn = 2 })); Reject(() => context.Evaluate(condition with { RunOn = 3 }));
             Reject(() => new FalloutDialogueConditions(records, new(records), Key(0x900), identity).Evaluate(condition));
             Reject(() => commands.ItemCount(Key(0x100), Key(1))); Reject(() => commands.ItemCount(Key(0x14), new("Queries.esp", 0x122)));
-            var executor = new FalloutReferenceScripts(records, world, new(records), new((_, _) => false, _ => { }, Inventory: commands));
+            var quests = new FalloutQuestState(records);
+            var executor = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ => { }, Inventory: commands));
             var quest = records.GetEffective(Key(0x600)); var fields = quest.ReadSubrecords().ToArray();
             executor.ExecuteStage(quest, fields, "if Actor.GetItemCount Loot != 3\nUnexpectedCount\nendif\n" +
                 "if (player).GetItemCount (Loot) != 2\nUnexpectedCount\nendif\nif Chest.GetItemCount Loot != 4\nUnexpectedCount\nendif");
@@ -92,10 +102,40 @@ internal static class InventoryQueryContracts
             Check(referencesBefore == JsonSerializer.Serialize(world.Capture()), "IsInList changed authoritative reference state.");
             Reject(() => executor.ExecuteStage(quest, fields, "Actor.IsInList ActorList 1"));
             Reject(() => executor.ExecuteStage(quest, fields, "Actor.IsInList Loot"));
-            var quests = new FalloutQuestState(records);
             var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), player, defaultProcessingDelay: 0, references: world);
+            scripts.Host = new((_, _) => throw new InvalidOperationException(), _ => throw new InvalidOperationException(), Inventory: commands);
             scripts.Advance(0);
             Check(quests.Variable(Key(0x600), 1) == 1 && quests.Variable(Key(0x600), 2) == 3, "Fallback/typed quest query lost its value or suffix.");
+            player.Add(records, Key(4), 1, 1, true);
+            foreach (var sharedExecutor in new[] { false, true })
+            {
+                scripts.Host = scripts.Host with { ExecuteProgram = sharedExecutor ? executor.ExecuteProgram : null };
+                foreach (var equipped in new uint[] { 2, 4, 0 })
+                {
+                    if (equipped == 0) player.Unequip(records, Key(4), force: true);
+                    else player.Equip(records, Key(equipped));
+                    foreach (var drawn in new[] { false, true })
+                    {
+                        handling.SetDrawn(drawn);
+                        var expectedType = equipped == 2 ? 5 : equipped == 4 ? 4 : 0;
+                        var inventoryBefore = JsonSerializer.Serialize(player.Capture());
+                        var handlingBefore = JsonSerializer.Serialize(handling.Capture());
+                        scripts.Advance(0);
+                        Check(quests.Variable(Key(0x600), 3) == (drawn ? 1 : 0) && quests.Variable(Key(0x600), 4) == expectedType &&
+                            quests.Variable(Key(0x600), 5) == (equipped == 2 ? 1 : 0) && quests.Variable(Key(0x600), 6) == (equipped == 4 ? 1 : 0),
+                            "Quest weapon query ignored current draw/equipment, winning weapon type or execution route.");
+                        executor.ExecuteStage(quest, fields, $"if player.IsWeaponOut != {(drawn ? 1 : 0)} || (player).GetWeaponAnimType != {expectedType}\nUnexpectedWeaponState\nendif\n" +
+                            $"if player.GetEquipped Gun != {(equipped == 2 ? 1 : 0)} || (player).GetEquipped (OtherGun) != {(equipped == 4 ? 1 : 0)}\nUnexpectedEquipment\nendif");
+                        Check(inventoryBefore == JsonSerializer.Serialize(player.Capture()) && handlingBefore == JsonSerializer.Serialize(handling.Capture()),
+                            "Weapon queries mutated inventory or weapon handling.");
+                    }
+                }
+            }
+            Reject(() => executor.ExecuteStage(quest, fields, "player.IsWeaponOut 1"));
+            Reject(() => executor.ExecuteStage(quest, fields, "player.GetWeaponAnimType 1"));
+            Reject(() => executor.ExecuteStage(quest, fields, "player.GetEquipped Gun 1"));
+            Reject(() => new FalloutInventoryCommands(records, world, player, () => 1).IsWeaponOut(Key(0x14)));
+            player.Remove(Key(4), 1, true);
             player.Remove(Key(1), 1, true);
             Check(context.Evaluate(condition with { RunOn = 1 }) == 1 && directed.Evaluate(condition with { RunOn = 1 }) == 4,
                 "Changed player inventory was stale or changed another owner.");
@@ -105,7 +145,7 @@ internal static class InventoryQueryContracts
                 "Cold query did not read retained item counts.");
             player.Add(records, Key(1), int.MaxValue - 1, 1, true);
             Check(commands.ItemCount(Key(0x14), new("Queries.esp", 0x120)) == 2d * int.MaxValue + 1, "List total overflowed the source numeric result.");
-            Console.WriteLine("OPENNV_INVENTORY_QUERY_CONTRACT_PASS self=true player=true listener=true explicit=true sourceMasters=true list=true liveChanges=true readonly=true cold=true fallback=true typed=true missingOwnerRefused=true");
+            Console.WriteLine("OPENNV_INVENTORY_QUERY_CONTRACT_PASS self=true player=true listener=true explicit=true sourceMasters=true list=true liveChanges=true readonly=true cold=true fallback=true typed=true missingOwnerRefused=true weaponDraw=true equipmentSwitch=true winningWeaponType=true");
         }
         finally { directory.Delete(true); }
     }
@@ -127,6 +167,11 @@ internal static class InventoryQueryContracts
         return Join(Field("SLSD", data), Field("SCVR", Text(name)));
     }
     private static byte[] Item(string type, uint id, string name, int extent) => Record(type, id, Field("EDID", Text(name)), Field("DATA", new byte[extent]));
+    private static byte[] Weapon(uint id, string name, uint animationType)
+    {
+        var data = new byte[120]; BinaryPrimitives.WriteUInt32LittleEndian(data, animationType);
+        return Record("WEAP", id, Field("EDID", Text(name)), Field("DATA", new byte[15]), Field("DNAM", data));
+    }
     private static byte[] Reference(string type, uint id, uint form, string name) => Record(type, id, Field("NAME", U32(form)), Field("DATA", new byte[24]), Field("EDID", Text(name)));
     private static byte[] Group(uint cell, byte[] data)
     {

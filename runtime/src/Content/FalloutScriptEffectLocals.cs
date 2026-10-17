@@ -2,7 +2,7 @@ namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutScriptEffectLocalCell(uint Index, ulong Payload, int Ordinal = 0);
 
-internal sealed partial class FalloutScriptEffectLocals
+internal sealed class FalloutScriptEffectLocals
 {
     private readonly FalloutScriptEffectLocalStorage _storage;
     internal FalloutFormKey Script => _storage.Script;

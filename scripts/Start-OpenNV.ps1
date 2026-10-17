@@ -5,7 +5,10 @@ param(
     [string]$Configuration = "Release",
     [switch]$ValidateOnly,
     [switch]$Vr,
-    [ValidateSet('installed', 'none')][string]$NativePlugins = 'installed'
+    [ValidateSet('none')][string]$NativePlugins = 'none',
+    [ValidateSet('vanilla', 'installed')][string]$ContentSelection = 'vanilla',
+    [ValidateSet('newvegas', 'fallout3', 'fallout1', 'fallout2')][string]$Game = 'newvegas',
+    [string]$ProfileRoot = ''
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,6 +59,18 @@ function Resolve-GodotExecutable {
     throw "Godot $($toolchain.release) Mono was not found. Run scripts/Install-GodotToolchain.ps1 or pass -Godot."
 }
 
+function Assert-ExportChildPath {
+    param([string]$Path, [string]$Parent)
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if (![StringComparer]::OrdinalIgnoreCase.Equals([IO.Path]::GetDirectoryName($fullPath), $Parent)) {
+        throw "Export operation escaped its workspace: $fullPath"
+    }
+    if ((Test-Path -LiteralPath $fullPath) -and
+        ((Get-Item -LiteralPath $fullPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "Export operation cannot replace a linked directory: $fullPath"
+    }
+}
+
 $godotPath = Resolve-GodotExecutable -ExplicitPath $Godot
 $versionCheckPath = $godotPath
 if (-not $versionCheckPath.EndsWith("_console.exe", [StringComparison]::OrdinalIgnoreCase)) {
@@ -89,35 +104,89 @@ foreach ($requiredFile in @(
 & (Join-Path $PSScriptRoot 'Build-NativeAudio.ps1') -Godot $versionCheckPath
 & (Join-Path $PSScriptRoot 'Build-NativePluginDomain.ps1') -Configuration Release
 
+if ([string]::IsNullOrWhiteSpace($ProfileRoot)) {
+    $ProfileRoot = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Godot/app_userdata/OpenNV/vanilla'
+}
+$ProfileRoot = [IO.Path]::GetFullPath($ProfileRoot)
+$launchArguments = @('--xr-mode', $(if ($Vr) { 'on' } else { 'off' }), '--', '--launcher',
+    '--launcher-game', $Game, '--presentation', $(if ($Vr) { 'openxr' } else { 'first-person' }),
+    '--native-plugins', $NativePlugins, '--content-selection', $ContentSelection, '--profile-root', $ProfileRoot)
+
 if ($Configuration -eq "Release") {
     # The editor's --path runner always loads Debug OpenNV and GodotSharp.
     # ExportRelease compiles both against the optimized runtime and produces
     # the single Godot product executable with the same campaigns.
-    $exportRoot = Join-Path $repoRoot "tmp\development-runtime\windows"
-    [IO.Directory]::CreateDirectory($exportRoot) | Out-Null
-    $exportExecutable = Join-Path $exportRoot "OpenNV.exe"
+    $exportParent = [IO.Path]::GetFullPath((Join-Path $repoRoot 'tmp/development-runtime'))
+    [IO.Directory]::CreateDirectory($exportParent) | Out-Null
+    $exportParent = (Resolve-Path -LiteralPath $exportParent).Path
+    $exportRoot = Join-Path $exportParent 'windows'
+    $exportStaging = Join-Path $exportParent ('windows.pending-' + [Guid]::NewGuid().ToString('N'))
+    $exportPrevious = Join-Path $exportParent ('windows.previous-' + [Guid]::NewGuid().ToString('N'))
+    foreach ($path in @($exportRoot, $exportStaging, $exportPrevious)) {
+        Assert-ExportChildPath -Path $path -Parent $exportParent
+    }
+    $exportLog = Join-Path $exportParent 'windows-export.log'
+    [IO.Directory]::CreateDirectory($exportStaging) | Out-Null
+    $stagedExecutable = Join-Path $exportStaging 'OpenNV.exe'
+    $exportPromoted = $false
     # The Windows console wrapper waits for inherited output handles. A compiler
     # server spawned by the export can retain them after the editor exits.
     $exportSharedCompilation = [Environment]::GetEnvironmentVariable('UseSharedCompilation', 'Process')
     try {
         [Environment]::SetEnvironmentVariable('UseSharedCompilation', 'false', 'Process')
-        & $versionCheckPath --headless --path $runtimeRoot --xr-mode off --export-release "Windows Experimental" $exportExecutable
+        & $versionCheckPath --headless --path $runtimeRoot --xr-mode off --export-release "Windows Experimental" $stagedExecutable 2>&1 |
+            Tee-Object -LiteralPath $exportLog | ForEach-Object { Write-Host $_ }
+        $exportExitCode = $LASTEXITCODE
+        $exportText = [IO.File]::ReadAllText($exportLog) -replace '\x1B\[[0-?]*[ -/]*[@-~]', ''
+        # Godot can report managed export failure while returning exit code zero.
+        if ($exportExitCode -ne 0 -or $exportText -match '(?im)^\s*(?:ERROR:|SCRIPT ERROR:|Build FAILED\.)|Export \.NET Project: Failed|\berror (?:MSB|NETSDK|NU|CS)\d+\s*:') {
+            throw "OpenNV release export failed (exit $exportExitCode). Inspect $exportLog"
+        }
+        foreach ($relative in @('OpenNV.exe', 'OpenNV.pck', 'opennv_audio.dll',
+            'data_OpenNV_windows_x86_64/OpenNV.dll', 'data_OpenNV_windows_x86_64/GodotSharp.dll',
+            'data_OpenNV_windows_x86_64/OpenNV.deps.json')) {
+            $file = Join-Path $exportStaging $relative
+            if (!(Test-Path -LiteralPath $file -PathType Leaf) -or (Get-Item -LiteralPath $file).Length -eq 0) {
+                throw "OpenNV release export is incomplete: $relative. Inspect $exportLog"
+            }
+        }
+        & (Join-Path $PSScriptRoot 'Stage-NativePluginDomain.ps1') `
+            -SourceDirectory (Join-Path $repoRoot 'runtime/generated/native-plugins/Release') `
+            -DestinationDirectory (Join-Path $exportStaging 'generated/native-plugins/Release')
+        $exportManifest = Get-Content -LiteralPath (Join-Path $runtimeRoot 'runtime-manifest.json') -Raw | ConvertFrom-Json
+        $exportManifest.runtime | Add-Member -NotePropertyName executables -NotePropertyValue @{ win32 = 'OpenNV.exe' } -Force
+        [IO.File]::WriteAllText((Join-Path $exportStaging 'runtime-manifest.json'),
+            ($exportManifest | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $exportRoot) {
+            Assert-ExportChildPath -Path $exportRoot -Parent $exportParent
+            Assert-ExportChildPath -Path $exportPrevious -Parent $exportParent
+            Move-Item -LiteralPath $exportRoot -Destination $exportPrevious
+        }
+        try {
+            Assert-ExportChildPath -Path $exportStaging -Parent $exportParent
+            Assert-ExportChildPath -Path $exportRoot -Parent $exportParent
+            Move-Item -LiteralPath $exportStaging -Destination $exportRoot
+            $exportPromoted = $true
+        } catch {
+            if ((Test-Path -LiteralPath $exportPrevious) -and !(Test-Path -LiteralPath $exportRoot)) {
+                Assert-ExportChildPath -Path $exportPrevious -Parent $exportParent
+                Assert-ExportChildPath -Path $exportRoot -Parent $exportParent
+                Move-Item -LiteralPath $exportPrevious -Destination $exportRoot
+            }
+            throw
+        }
     } finally {
         [Environment]::SetEnvironmentVariable('UseSharedCompilation', $exportSharedCompilation, 'Process')
+        if (Test-Path -LiteralPath $exportStaging) {
+            Assert-ExportChildPath -Path $exportStaging -Parent $exportParent
+            Remove-Item -LiteralPath $exportStaging -Recurse -Force
+        }
+        if ($exportPromoted -and (Test-Path -LiteralPath $exportPrevious)) {
+            Assert-ExportChildPath -Path $exportPrevious -Parent $exportParent
+            Remove-Item -LiteralPath $exportPrevious -Recurse -Force
+        }
     }
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $exportExecutable -PathType Leaf)) {
-        throw "OpenNV release export failed. Install the matching Godot $($toolchain.release) Mono export templates."
-    }
-    if (-not (Test-Path -LiteralPath (Join-Path $exportRoot 'opennv_audio.dll') -PathType Leaf)) {
-        throw 'Godot did not export the native audio extension.'
-    }
-    & (Join-Path $PSScriptRoot 'Stage-NativePluginDomain.ps1') `
-        -SourceDirectory (Join-Path $repoRoot 'runtime/generated/native-plugins/Release') `
-        -DestinationDirectory (Join-Path $exportRoot 'generated/native-plugins/Release')
-    $exportManifest = Get-Content -LiteralPath (Join-Path $runtimeRoot "runtime-manifest.json") -Raw | ConvertFrom-Json
-    $exportManifest.runtime | Add-Member -NotePropertyName executables -NotePropertyValue @{ win32 = "OpenNV.exe" } -Force
-    [IO.File]::WriteAllText((Join-Path $exportRoot "runtime-manifest.json"),
-        ($exportManifest | ConvertTo-Json -Depth 16), [Text.UTF8Encoding]::new($false))
+    $exportExecutable = Join-Path $exportRoot 'OpenNV.exe'
     $runtimeRoot = $exportRoot
 } else {
     & $dotnet.Source build $runtimeProject --configuration Debug
@@ -135,9 +204,9 @@ if ($ValidateOnly) {
 if ($Configuration -eq "Release") {
     # The exported Godot runtime is now the product launcher and game. The
     # selected world is entered in this same process.
-    & $exportExecutable --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher --presentation $(if ($Vr) { 'openxr' } else { 'first-person' }) --native-plugins $NativePlugins
+    & $exportExecutable @launchArguments
 } else {
-    & $godotPath --path $runtimeRoot --xr-mode $(if ($Vr) { 'on' } else { 'off' }) -- --launcher --presentation $(if ($Vr) { 'openxr' } else { 'first-person' }) --native-plugins $NativePlugins
+    & $godotPath --path $runtimeRoot @launchArguments
 }
 if ($LASTEXITCODE -ne 0) {
     throw "OpenNV Godot launcher exited with code $LASTEXITCODE."

@@ -20,7 +20,6 @@ internal sealed partial class RuntimeLiveHarness : Node
     private Task<LiveHarnessFileWrite>? _stateWrite;
     private ulong _stateWriteStartedMilliseconds;
     private bool _statePublicationRequested;
-    private bool _retired;
     private long _statePublicationDeferredRequests;
     private LiveHarnessFileWrite? _lastFileWrite;
     private long _statePublicationSharingRetries;
@@ -129,7 +128,6 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     public override void _Process(double delta)
     {
-        if (_retired) return;
         var now = Time.GetTicksMsec();
         var stop = Path.Combine(_directory, "stop.request");
         if (File.Exists(stop))
@@ -407,14 +405,7 @@ internal sealed partial class RuntimeLiveHarness : Node
             try
             {
                 AtomicWrite(Path.Combine(_directory, "state-error.json"), JsonSerializer.Serialize(new
-                {
-                    process = System.Environment.ProcessId,
-                    drawCount = Engine.GetFramesDrawn(),
-                    physicsCount = Engine.GetPhysicsFrames(),
-                    error = error.Message,
-                    exception = error.ToString(),
-                    failures = _statePublicationFailures
-                }, Json));
+                { drawCount = Engine.GetFramesDrawn(), error = error.Message, failures = _statePublicationFailures }, Json));
             }
             catch (IOException markerError)
             {
@@ -428,18 +419,6 @@ internal sealed partial class RuntimeLiveHarness : Node
         _statePublicationFailures++;
         if (_lastStatePublicationFailure != error.Message) GD.PushWarning("OPENNV_STATE_PUBLICATION_LOSS " + error.Message);
         _lastStatePublicationFailure = error.Message;
-    }
-
-    internal void PublishFinalState()
-    {
-        if (_retired) throw new InvalidOperationException("Retired diagnostics cannot read a campaign failure.");
-        // Drain the earlier immutable snapshot before capturing this final
-        // state, then finish its write before the source owners retire.
-        try { CompleteStateWrite(); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }
-        PublishState();
-        try { CompleteStateWrite(); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { ReportPublicationFailure(error); }
     }
 
     private void CompleteStateWrite()
@@ -524,10 +503,6 @@ internal sealed partial class RuntimeLiveHarness : Node
                 architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
                 renderingMethod = _renderingMethod,
                 graphicsAdapter = _graphicsAdapter,
-                textureStreamingProjectEnabled = ProjectSettings.GetSetting("rendering/textures/streaming/enabled").AsBool(),
-                totalTextureBytes = Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderTextureMemUsed),
-                streamedTextureBytes = Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderStreamingTextureMemUsed),
-                textureStreamingBudgetUsedBytes = TextureStreaming.GetMemoryBudgetBytesUsed(),
                 framesPerSecond = Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimeFps),
                 processMilliseconds = 1000 * Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimeProcess),
                 physicsMilliseconds = 1000 * Godot.Performance.GetMonitor(Godot.Performance.Monitor.TimePhysicsProcess),
@@ -577,11 +552,10 @@ internal sealed partial class RuntimeLiveHarness : Node
         _lastStateWriteMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
 
-    private void BeforeDraw() { if (!_retired) _trace?.BeforeDraw(); }
+    private void BeforeDraw() => _trace?.BeforeDraw();
 
     private void AfterDraw()
     {
-        if (_retired) return;
         _frameIntervals.Record(Stopwatch.GetTimestamp() * (1000.0 / Stopwatch.Frequency));
         if (_pendingCapture == 0 && _liveFrames is null && _trace?.Pending != true)
             return;
@@ -638,15 +612,9 @@ internal sealed partial class RuntimeLiveHarness : Node
 
     private static void AtomicWrite(string path, string text) => LiveHarnessAtomicFile.Write(path, text);
 
-    public override void _ExitTree() => Retire();
-
-    internal void Retire()
+    public override void _ExitTree()
     {
-        if (_retired) return;
-        _retired = true;
-        SetProcess(false);
         GD.Print($"OPENNV_LIVE_HARNESS_RETIRE phase=enter stateWritePending={_stateWrite is not null}");
-        _campaignBot.Stop();
         _bot?.Stop();
         _inputPlayback?.Stop("Playback ended with its runtime owner.", ReleaseAll);
         FinishReplayDeliveryJournal("Playback ended with its runtime owner.");

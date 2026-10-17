@@ -11,11 +11,10 @@ internal sealed partial class RuntimeNativePlacedLight : OmniLight3D
 
     public override void _Process(double delta)
     {
-        if (_regionColor is null && _diffuse is null) return;
+        if (_regionColor is null) return;
         try
         {
-            if (_diffuse is not null) { PublishSourceDiffuse(); return; }
-            var color = _regionColor!();
+            var color = _regionColor();
             if (_lastColor is not null && _lastColor.SequenceEqual(color)) return;
             LightColor = RetailLighting.GodotLightColor(new(color[0], color[1], color[2]));
             SetMeta("opennv_ligh_shader_rgb", color);

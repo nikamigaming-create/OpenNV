@@ -9,7 +9,6 @@
   <ItemGroup>
     <Compile Include="..\..\runtime\src\RuntimeLaunchRequest.cs" Link="RuntimeLaunchRequest.cs" />
     <Compile Include="..\..\runtime\src\RuntimeLaunchValidator.cs" Link="RuntimeLaunchValidator.cs" />
-    <Compile Include="..\..\runtime\src\RuntimeInputPresentationSelection.cs" Link="RuntimeInputPresentationSelection.cs" />
     <Compile Include="..\..\runtime\src\Content\NativeGameInstallation.cs" Link="NativeGameInstallation.cs" />
   </ItemGroup>
 </Project>

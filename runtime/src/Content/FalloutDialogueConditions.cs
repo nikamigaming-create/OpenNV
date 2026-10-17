@@ -13,7 +13,7 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
     Func<FalloutFormKey, FalloutFormKey, double>? itemCount = null,
     Func<FalloutFormKey, FalloutFormKey, float>? referenceDistance = null,
     Func<FalloutFormKey, FalloutFormKey, bool>? referenceInZone = null, Func<FalloutFormKey, int>? sitting = null,
-    Func<FalloutFormKey, int>? deadCount = null)
+    Func<FalloutFormKey, int>? deadCount = null, Func<FalloutFormKey, bool>? isDead = null)
 {
     internal FalloutDialogueConditions(FalloutPluginStack records, FalloutQuestState quests, FalloutFormKey speaker,
         FalloutNpcAppearance appearance, Func<FalloutCondition, float>? runtime = null)
@@ -24,6 +24,18 @@ internal sealed class FalloutDialogueConditions(FalloutPluginStack records, Fall
 
     internal float Evaluate(FalloutCondition condition)
     {
+        if (condition.Function == 46)
+        {
+            var subject = condition.RunOn switch
+            {
+                0 => speaker,
+                1 => Listener,
+                2 => condition.Owner.Plugin.AdjustOptionalFormId(condition.Reference)
+                    ?? throw new InvalidDataException("Dialogue death query has no explicit reference."),
+                _ => throw new NotSupportedException("Dialogue death query scope is unbound."),
+            };
+            return (isDead ?? throw new NotSupportedException("Dialogue has no shared actor death owner."))(subject) ? 1 : 0;
+        }
         if (condition.Function == 84)
             return (deadCount ?? throw new NotSupportedException("Dialogue death count has no shared death history."))(condition.FormArgument1);
         if (condition.Function == 159)

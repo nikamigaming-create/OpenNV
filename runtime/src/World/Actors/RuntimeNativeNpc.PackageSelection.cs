@@ -4,37 +4,22 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal partial class RuntimeNativeNpc
 {
-    private sealed record PackageSelection(FalloutPluginRecord? Record, FalloutScriptPackage? Declaration,
-        long OverrideRevision = 0, bool ScriptOverride = false);
+    private sealed record PackageSelection(FalloutPluginRecord? Record, FalloutScriptPackage? Declaration);
     private PackageSelection? _requestedSelection;
     private FalloutFormKey? _selectedSourcePackage;
     private bool _sourceSelectionKnown;
     private string? _selectionCaptureBlocker;
     private Func<FalloutFormKey, FalloutFormKey, double>? _aiItemCount;
 
-    private PackageSelection SelectSourcePackage(bool? reevaluateScript = null)
+    private PackageSelection SelectSourcePackage()
     {
-        if (_restoredFollowSelection is { } retained)
-        {
-            if (reevaluateScript is not null) throw new NotSupportedException("Cold Follow election must bind before a new explicit evaluation.");
-            _restoredFollowSelection = null;
-            return retained;
-        }
-        if (_restoredSandboxSelection is { } sandbox)
-        {
-            if (reevaluateScript is not null) throw new NotSupportedException("Cold Sandbox must bind before a new explicit election.");
-            _restoredSandboxSelection = null;
-            return sandbox;
-        }
         _failedSelectionCondition = null;
-        var world = _aiWorld ?? throw new NotSupportedException("NPC package selection has no reference state owner.");
-        var selected = _aiReferenceState?.PendingPackageChoice is { } choice ? choice.Bind(_aiStack!, _aiReferenceState) :
-            world.SelectActorPackage(Appearance.Reference!.Value, EvaluateSelectionCondition,
-                _templates, _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true,
-                reevaluateScript ?? !_bindingInitialBase, PackageLocationReached(_packageEvents?.Active?.Form), _aiGlobals);
+        var selected = FalloutAiPackages.Select(_aiStack!, Appearance.Npc, EvaluateSelectionCondition, _templates, _aiClock,
+                evaluateRunOn: true, eligible: package => _aiWorld?.PackageEligible(Appearance.Reference!.Value, package,
+                    _aiClock, _packageEvents?.Active?.Form, _packageEvents?.Done == true) ??
+                    throw new NotSupportedException("NPC package eligibility has no reference state owner."));
         if (_aiReferenceState is not null) _aiReferenceState.SelectionFailure = null;
-        return new(selected, selected is null ? null : FalloutScriptPackage.Read(selected), ScriptPackageRevision,
-            selected is not null && _aiReferenceState?.ScriptPackage?.Package == selected.FormKey);
+        return new(selected, selected is null ? null : FalloutScriptPackage.Read(selected));
     }
 
     internal void EvaluatePackages(bool reset)
@@ -46,7 +31,7 @@ internal partial class RuntimeNativeNpc
         // performed by the ordinary actor frame, as it is for creatures. A
         // later native procedure fault is not the result of this void command.
         // Retain the selected result so random predicates are not drawn twice.
-        var selected = SelectSourcePackage(reevaluateScript: true);
+        var selected = SelectSourcePackage();
         if (_aiReferenceState is not null) ClearBindingFailure();
         if (reset) { _aiError = null; _packageIdleError = null; }
         _requestedSelection = selected;

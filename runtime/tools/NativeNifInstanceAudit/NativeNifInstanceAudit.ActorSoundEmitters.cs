@@ -5,9 +5,7 @@ public partial class NativeNifInstanceAudit
 {
     private async Task ExerciseActorSoundEmitters()
     {
-        await ExerciseUnownedPcmObservation();
         await ExerciseSoundEmitterPersistence();
-        await ExerciseNodeEmitterPersistence();
         foreach (var joint in new[] { "Joint", "AttachSound" })
         {
             var actor = new Node3D

@@ -33,7 +33,7 @@ internal partial class RuntimeNativeOpeningStageDriver
             target => ReferencePresentation().GetOpenState(target));
         foreach (var item in saved)
             _terminalMenus.Add(item.Reference, FalloutTerminalMenu.RestoreClosed(_pluginStack, item, stages,
-                RequireTerminalAdmission, conditions.Evaluate, ExecuteTerminalSelection, _globals));
+                RequireTerminalAdmission, conditions.Evaluate, ExecuteTerminalSelection));
         _restoreTerminalResults = null;
     }
 
@@ -86,7 +86,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         var conditions = new FalloutTerminalConditions(_pluginStack, _quests, world,
             target => ReferencePresentation().GetOpenState(target));
         var menu = new FalloutTerminalMenu(_pluginStack, reference, RequireTerminalAdmission,
-            conditions.Evaluate, ExecuteTerminalSelection, _globals);
+            conditions.Evaluate, ExecuteTerminalSelection);
         _terminalMenus[reference] = menu;
         return menu;
     }
@@ -103,7 +103,6 @@ internal partial class RuntimeNativeOpeningStageDriver
 
     private void RequireTerminalAdmission(FalloutFormKey reference)
     {
-        RequireLevelUpMenuFree("Terminal menu");
         RequireTerminalReference(reference);
         if (_scripts.References!.GetLocked(reference) != 0)
             throw new InvalidOperationException("Terminal selection requires its shared access owner to be unlocked.");
@@ -117,7 +116,7 @@ internal partial class RuntimeNativeOpeningStageDriver
         // runs. The shared NOTE reader never substitutes text for other variants.
         if (selection.Entry.Note is { } note) _ = FalloutNote.Read(_pluginStack, note).RequireText();
         var scripts = _resultScripts ?? throw new InvalidOperationException("Terminal results have no shared script owner.");
-        try { _terminalMenus[selection.Reference].BindResult(selection, scripts.ExecuteTerminalResult(selection)); }
+        try { scripts.ExecuteTerminalResult(selection); }
         catch (Exception error)
         {
             if (_stageResults?.ClosedFailureFor(error) is { } stageFailure &&

@@ -93,6 +93,30 @@ internal static class DialogueSpatialContracts
             Reject(() => Zone().Evaluate(zone with { RunOn = 3 }));
             Reject(() => own.Evaluate(zone));
 
+            var deaths = new Dictionary<FalloutFormKey, bool>
+            {
+                [Key(0x900)] = false, [Key(0x902)] = true, [records.RuntimeFormKey(0x14)] = false,
+            };
+            FalloutFormKey? deathSubject = null;
+            bool IsDead(FalloutFormKey subject) { deathSubject = subject; return deaths[subject]; }
+            FalloutDialogueConditions Death(FalloutFormKey? listener = null) =>
+                new(records, new(records), Key(0x900), identity, listener: listener, isDead: IsDead);
+            var dead = condition with { Function = 46, Argument1 = 0 };
+            Check(Death().Evaluate(dead) == 0 && deathSubject == Key(0x900) &&
+                Death().Evaluate(dead with { RunOn = 1 }) == 0 && deathSubject == records.RuntimeFormKey(0x14) &&
+                Death(Key(0x902)).Evaluate(dead with { RunOn = 1 }) == 1 && deathSubject == Key(0x902) &&
+                Death().Evaluate(dead with { RunOn = 2, Reference = 0x01000902 }) == 1 && deathSubject == Key(0x902),
+                "Death query lost speaker, actual listener, explicit subject or source masters.");
+            deaths[Key(0x900)] = true;
+            deaths[records.RuntimeFormKey(0x14)] = true;
+            Check(Death().Evaluate(dead) == 1 && Death().Evaluate(dead with { RunOn = 1 }) == 1,
+                "Death query retained stale actor or player state.");
+            Reject(() => Death().Evaluate(dead with { RunOn = 2 }));
+            Reject(() => Death().Evaluate(dead with { RunOn = 2, Reference = 0x01000999 }));
+            Reject(() => Death().Evaluate(dead with { RunOn = 2, Reference = 0x01000100 }));
+            Reject(() => Death().Evaluate(dead with { RunOn = 3 }));
+            Reject(() => own.Evaluate(dead));
+
             var scriptVariable = condition with { Function = 53, Argument2 = 5 };
             FalloutFormKey? variableOwner = null; uint variableIndex = 0;
             var scriptValue = 3f;
@@ -124,7 +148,7 @@ internal static class DialogueSpatialContracts
             Reject(() => FalloutAiPackages.HasTalkedToPlayer(condition, Key(0x900), Talked));
             Console.WriteLine("OPENNV_DIALOGUE_SPATIAL_CONTRACT_PASS self=true player=true listener=true explicit=true sourceMasters=true " +
                 "liveChanges=true invalidDistanceRefused=true actualReferences=true talkedToPlayerScope=true missingOwnerRefused=true " +
-                "formListBaseMembership=true winningListMasters=true referenceAndNestedEntriesDistinct=true");
+                "formListBaseMembership=true winningListMasters=true referenceAndNestedEntriesDistinct=true deathScopes=true");
         }
         finally { directory.Delete(true); }
     }

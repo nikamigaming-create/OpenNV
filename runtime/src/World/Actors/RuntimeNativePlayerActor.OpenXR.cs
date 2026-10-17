@@ -56,7 +56,6 @@ internal sealed partial class RuntimeNativePlayerActor
     internal void EnableTrackedArms(RuntimeNativePlayerActor? firstPersonSource = null)
     {
         if (_xrLeftArm is not null) throw new InvalidOperationException("Tracked arms already have an owner.");
-        Skeleton.RefuseUnownedLogicalPose("source-logical-scene-OpenXR-native-IK-constructor-pose-writer-unowned");
         var node = Skeleton.Node;
         var torso = new SortedSet<int>();
         foreach (var name in new[] { "Bip01 L UpperArm", "Bip01 R UpperArm" })
@@ -97,7 +96,6 @@ internal sealed partial class RuntimeNativePlayerActor
         Transform3D? leftContact = null, Transform3D? rightContact = null, bool supporting = false, bool bodyPrepared = false)
     {
         if (_xrLeftArm is null || _xrRightArm is null) throw new InvalidOperationException("Tracked arms have no source binding.");
-        Skeleton.RefuseUnownedLogicalPose("source-logical-scene-OpenXR-native-IK-pose-writer-unowned");
         if (!bodyPrepared) PrepareTrackedBody(head);
         // A flat reload may move the weapon relative to its animated hand.
         // Tracking owns that hand in VR: retain its authored holding transform
@@ -117,7 +115,6 @@ internal sealed partial class RuntimeNativePlayerActor
 
     internal void PrepareTrackedBody(Transform3D head)
     {
-        Skeleton.RefuseUnownedLogicalPose("source-logical-scene-OpenXR-native-torso-pose-writer-unowned");
         Transform3D? leftFoot = null, rightFoot = null;
         Vector3? anchoredOrigin = null;
         if (_xrLeftLeg is not null && _xrGroundOrigin is { } groundOrigin && _xrBodyHeading is { } heading)
@@ -150,7 +147,6 @@ internal sealed partial class RuntimeNativePlayerActor
     internal void AdoptTrackedTorso(RuntimeNativePlayerActor body)
     {
         if (!_first || !body._trackedBodyView) throw new InvalidOperationException("Attachments require the prepared full-body torso.");
-        Skeleton.RefuseUnownedLogicalPose("source-logical-scene-OpenXR-native-body-transfer-pose-writer-unowned");
         GlobalTransform = body.GlobalTransform;
         var mapping = Skeleton.Node.GlobalTransform.AffineInverse() * body.Skeleton.Node.GlobalTransform;
         _xrTorsoSourceBones ??= _xrTorsoBones.Select(bone => body.Skeleton.TryBoneIndex(Skeleton.Node.GetBoneName(bone), out var source) ? source : -1).ToArray();

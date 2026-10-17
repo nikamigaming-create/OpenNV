@@ -123,7 +123,6 @@ internal static partial class FalloutExecutableStringTable
         if (wrappers.Length > 1) throw new InvalidDataException("Owned executable has ambiguous packed sections.");
         if (wrappers.Length == 1)
             DecodeSection(image, bytes.AsSpan(wrappers[0].PointerToRawData, wrappers[0].SizeOfRawData), section, code);
-        image.BindSectionImage(section, code);
         return (code, image);
     }
 
@@ -323,17 +322,8 @@ internal static partial class FalloutExecutableStringTable
 
     private sealed partial class Image(byte[] bytes, PEHeaders headers)
     {
-        private readonly Dictionary<int, byte[]> _sectionImages = [];
         internal uint Base { get; } = checked((uint)headers.PEHeader!.ImageBase);
         internal uint CodeBase => checked(Base + (uint)headers.SectionHeaders.Single(section => section.Name == ".text").VirtualAddress);
-
-        internal void BindSectionImage(SectionHeader section, byte[] contents)
-        {
-            if (contents.Length != section.SizeOfRawData || section.PointerToRawData < 0 ||
-                section.PointerToRawData > bytes.Length - contents.Length ||
-                !_sectionImages.TryAdd(section.VirtualAddress, contents))
-                throw new InvalidDataException("Decoded executable section has a conflicting or incomplete source extent.");
-        }
 
         internal (int Execute, int Evaluate) ReferenceConditionEntries(string name, ushort function, byte[] code)
         {
@@ -407,37 +397,11 @@ internal static partial class FalloutExecutableStringTable
             foreach (var section in headers.SectionHeaders)
             {
                 if (rva < section.VirtualAddress || (ulong)rva + (uint)count > (ulong)section.VirtualAddress + (uint)section.SizeOfRawData) continue;
-                var relativeOffset = checked((int)(rva - section.VirtualAddress));
-                var offset = checked(relativeOffset + section.PointerToRawData);
+                var offset = checked((int)(rva - section.VirtualAddress) + section.PointerToRawData);
                 if (offset > bytes.Length - count) break;
-                // Packed instruction streams and their embedded tables belong
-                // to the same decoded section. Reading a table from the raw
-                // encrypted file would corrupt an otherwise valid source graph.
-                if (_sectionImages.TryGetValue(section.VirtualAddress, out var contents))
-                    return contents.AsSpan(relativeOffset, count).ToArray();
                 return bytes.AsSpan(offset, count).ToArray();
             }
             throw new InvalidDataException("Owned executable resource is not backed by file bytes.");
-        }
-
-        // PE loader data includes the declared zero-filled virtual tail. This
-        // is a constructor input, not a read of current process memory.
-        internal byte[] ReadLoaderData(uint address, int count)
-        {
-            if (address < Base || count is <= 0 or > 64 * 1024 * 1024)
-                throw new InvalidDataException("Owned loader data extent is invalid.");
-            var rva = address - Base;
-            foreach (var section in headers.SectionHeaders)
-            {
-                if (rva < section.VirtualAddress || (ulong)rva + (uint)count >
-                    (ulong)section.VirtualAddress + (uint)Math.Max(section.VirtualSize, section.SizeOfRawData)) continue;
-                var relative = checked((int)(rva - section.VirtualAddress));
-                var result = new byte[count];
-                var backed = Math.Min(count, Math.Max(0, section.SizeOfRawData - relative));
-                if (backed != 0) Read(address, backed).CopyTo(result, 0);
-                return result;
-            }
-            throw new InvalidDataException("Owned loader data is outside every declared section extent.");
         }
 
         internal bool IsWritableObject(uint address) => IsWritableExtent(address, 12);

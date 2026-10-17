@@ -5,30 +5,22 @@ namespace OpenNV.Runtime.Content;
 internal sealed record FalloutActiveImageModifier(FalloutImageSpaceModifier Source, double ElapsedSeconds);
 internal sealed record FalloutImageSpaceFrame(float TargetLuminance, Vector4 Cinematic, Vector4 Tint, Vector4 Fade,
     IReadOnlyList<FalloutActiveImageModifier> Active, IReadOnlyList<string> UnboundChannels, float BlurRadius = 0,
-    Vector2 DoubleVisionOffset = default, IReadOnlyList<FalloutSourceSkyImageContribution>? SourceSky = null,
-    FalloutImageSpaceSkyHdr? SkyHdr = null);
+    Vector2 DoubleVisionOffset = default);
 
 /// <summary>Gameplay-clock IMAD lifetime and source IMGS/IMAD composition, independent of captured state.</summary>
-internal sealed partial class FalloutImageSpaceState
+internal sealed class FalloutImageSpaceState
 {
     // IMAD channel order differs from IMGS storage: Skin Dimmer is channel 2;
     // cinematic order is saturation, contrast, average luminance, brightness.
     private static readonly int[] TraitIndices = [0, 1, 14, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 25, 27, 26, 28];
     private readonly Dictionary<FalloutFormKey, FalloutActiveImageModifier> _active = [];
-    internal IReadOnlyCollection<FalloutActiveImageModifier> Active => !HasSourceMainImages ? _active.Values :
-        _sourceImageList.Where(identity => _sourceImageInstances[identity].Form is not null)
-            .Select(identity => new FalloutActiveImageModifier(RequireSourceImageProgram(_sourceImageInstances[identity]),
-                _sourceImageLast is null ? 0 : FalloutSourceImageSpaceFloat.Subtract(BitConverter.UInt32BitsToSingle(_sourceImageLast.ClockAfter),
-                    BitConverter.UInt32BitsToSingle(_sourceImageInstances[identity].Start)))).ToArray();
+    internal IReadOnlyCollection<FalloutActiveImageModifier> Active => _active.Values;
 
-    internal void Apply(FalloutImageSpaceModifier modifier)
-    { if (HasSourceMainImages) ApplySourceImageModifier(modifier); else _active[modifier.Form] = new(modifier, 0); }
-    internal void Remove(FalloutFormKey form)
-    { if (HasSourceMainImages) RemoveSourceImageModifier(form); else _active.Remove(form); }
+    internal void Apply(FalloutImageSpaceModifier modifier) => _active[modifier.Form] = new(modifier, 0);
+    internal void Remove(FalloutFormKey form) => _active.Remove(form);
 
     internal IReadOnlyList<FalloutImageSpaceModifier> Advance(double seconds)
     {
-        if (HasSourceMainImages) throw new InvalidOperationException("Source Main owns image-instance clocks and retirement.");
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
         var expired = new List<FalloutImageSpaceModifier>();
         foreach (var (form, active) in _active.ToArray())
@@ -47,7 +39,6 @@ internal sealed partial class FalloutImageSpaceState
     internal FalloutImageSpaceFrame Compose(FalloutImageSpace source, float? gameHour = null, FalloutDoubleVisionPhase? phase = null,
         FalloutImageSpaceModifier? presentationModifier = null)
     {
-        if (HasSourceMainImages) throw new NotSupportedException("Source Main owns image composition; a menu capture requires its actual source temporary-instance owner.");
         if (gameHour is { } hour && !float.IsFinite(hour)) throw new ArgumentOutOfRangeException(nameof(gameHour));
         // Static menu backgrounds temporarily apply an IMAD while drawing the
         // captured world. That request must never enter saved gameplay state.
@@ -75,12 +66,6 @@ internal sealed partial class FalloutImageSpaceState
         var blurRadius = 0f;
         var doubleVision = 0f;
         var unbound = new HashSet<string>(StringComparer.Ordinal);
-        var sourceSky = ReadSourceSkyContributions();
-        foreach (var contribution in sourceSky)
-            if (contribution.Failure is { } failure) unbound.Add(failure);
-        // Admitted anonymous/default and null programs are mathematically
-        // neutral. They retain real manager identity without fake FormIDs.
-        // Nonneutral source instance consumption remains explicitly unbound.
         foreach (var active in activeModifiers)
         {
             var modifier = active.Source;
@@ -123,10 +108,9 @@ internal sealed partial class FalloutImageSpaceState
         var finalFade = fadeWeight > 0 ? new Vector4(fadeNumerator / fadeWeight, strongestFade) : Vector4.Zero;
         // The original effect's rotation is one turn per game hour. It reads
         // the shared game-time global, independently of the IMAD lifetime.
-        var angle = phase is null ? 0 : DoubleVisionAngle(phase, gameHour.GetValueOrDefault());
-        var doubleVisionOffset = phase?.Offset(angle, doubleVision) ?? Vector2.Zero;
+        var angle = phase?.Angle(gameHour.GetValueOrDefault()) ?? 0;
+        var doubleVisionOffset = new Vector2((float)(Math.Cos(angle) * doubleVision), (float)(Math.Sin(angle) * doubleVision));
         return new(traits[4], new Vector4(traits[25], traits[26], traits[27], traits[28]), finalTint, finalFade,
-            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset, sourceSky,
-            ReadSkyHdrComposition(traits[8], activeModifiers, sourceSky));
+            activeModifiers, unbound.Order(StringComparer.Ordinal).ToArray(), blurRadius, doubleVisionOffset);
     }
 }
