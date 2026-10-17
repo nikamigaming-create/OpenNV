@@ -7,7 +7,7 @@ not a headset-ready handoff.
 | Area | Current state |
 | --- | --- |
 | FNV startup | Fresh character creation, Doc's farewell, flat/OpenXR exterior exit and manual saving work. Source music and timed explosion run. |
-| Gameplay | Repaired shared pursuit/range, combat condition and melee admission, plus source aggro-radius warnings. Owned armed/melee NPC and coyote functional checks cause damage. Actual copied-save cazadores pursue uphill and kill the player. Sunny's rendered package/conversation advances stages 25 -> 30 -> 35. |
+| Gameplay | Repaired shared pursuit/range, combat condition and melee admission, plus source aggro-radius warnings. Owned armed/melee NPC and coyote functional checks cause damage. Actual copied-save cazadores pursue uphill and kill the player. Exported tutorial reaches stage 50 through real gecko attacks, rifle kills and Sunny dialogue; post-fight cold save retains Sunny and both dead actors. Sunny's subsequent saloon return lacks its other-cell AI route. |
 | OpenXR | World, hands, forearms, wrist device and rifle visible in both final eyes. Movement, snap turns, wrist page/ray selection, reload/fire and real saloon doors exercised. Physical headset pending. |
 | Saves | Stale-cell Continue and moving-actor residency repaired; copied save loads. Owned quest/script clocks round-trip. A complete near-Sunny stage-35 player save fulfills a queued automatic snapshot after real audio completion. Export cold-loads Sunny and the quest state and saves again. Original user save untouched. |
 | Loading | Prior Release cold exterior Continue 31.27s, warm exterior reload 6.61s and saloon entry 3.25s. New reuse/particle changes need matched measurement; instant loading is not achieved. |

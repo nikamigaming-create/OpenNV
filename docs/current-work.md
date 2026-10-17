@@ -20,6 +20,10 @@ Git. Priority remains FNV, standalone FO3, mods, then TTW.
   while honoring pending MoveTo before its native node catches up. Synthetic
   exterior/cold/scale/MoveTo checks pass. Sunny is present in rendered continuation,
   walks to the well and completes her conversation: tutorial stages 25 -> 30 -> 35.
+  The packaged run also streams away/back, reaches stage 45, takes actual gecko
+  melee damage and kills both first-well geckos with ordinary rifle fire. Sunny's
+  post-fight conversation advances stage 50. A complete post-fight F5 slot cold-
+  loads with Sunny present, both actors dead and stage 50 retained.
 - A queued autosave could wait indefinitely for a quiet boundary among repeating
   ambient sounds and reject every player save as concurrent. A fully admitted
   player snapshot now fulfills that pending automatic snapshot after successful
@@ -66,8 +70,10 @@ their functional checks. The two NPC fixtures retain audio playback shutdown
 warnings; those are not a leak-free-runtime claim. The complete runtime gate is
 passed after the residency/save repair, including Release/Debug, format/analyzers,
 contracts, launcher and native Godot probes. Diff checks pass. Independent
-Release cold/save/UI acceptance passes. Post-fast-travel saving and population
-remain unverified.
+Release cold/save/UI and first-well combat acceptance pass. Sunny's subsequent
+editor-location return to the saloon reports its missing other-cell route owner;
+this remains visible and unaccepted. Post-fast-travel saving and population remain
+unverified.
 
 Original owned files, recording and user saves remain untouched. Investigation
 copies/logs stay private in ignored local storage. Package g,
