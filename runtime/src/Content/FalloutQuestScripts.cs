@@ -751,7 +751,8 @@ internal sealed partial class FalloutQuestScripts
                         "getweaponanimtype" => owner.WeaponAnimationType(target),
                         _ => owner.IsEquipped(target, arguments[0].Value.FormKey(_records)) ? 1 : 0,
                     };
-                }) { ReadOnly = true };
+                })
+                { ReadOnly = true };
             if (parts.Length <= 2 && operation is "getequippedobject" or "geteqobj")
                 return FalloutScriptFunction.Typed([FalloutScriptArgumentKind.Number], arguments =>
                 {

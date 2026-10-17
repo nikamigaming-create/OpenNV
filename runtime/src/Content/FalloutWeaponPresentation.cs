@@ -78,8 +78,18 @@ internal sealed record FalloutWeaponPresentation(FalloutFormKey Form, FalloutNpc
     // GetWeaponAnimType exposes the animation group, not the WEAP DNAM type.
     internal static uint ScriptAnimationType(uint weaponType) => weaponType switch
     {
-        0 => 1, 1 => 2, 2 => 3, 3 or 4 => 4, 5 or 7 => 5, 6 => 6,
-        8 => 7, 9 => 8, 10 or 13 => 9, 11 => 10, 12 => 11, _ => 0,
+        0 => 1,
+        1 => 2,
+        2 => 3,
+        3 or 4 => 4,
+        5 or 7 => 5,
+        6 => 6,
+        8 => 7,
+        9 => 8,
+        10 or 13 => 9,
+        11 => 10,
+        12 => 11,
+        _ => 0,
     };
 
     internal static FalloutWeaponPresentation Read(FalloutPluginStack records, FalloutFormKey key, bool firstPerson = true)
