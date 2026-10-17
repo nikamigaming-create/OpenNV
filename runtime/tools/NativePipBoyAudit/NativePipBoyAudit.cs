@@ -10,6 +10,39 @@ public partial class NativePipBoyAudit : Node
 {
     public override async void _Ready()
     {
+        var exitCode = 0;
+        var inputOnly = OS.GetCmdlineUserArgs().SequenceEqual(new[] { "--input-lifetime" });
+        try
+        {
+            if (inputOnly) await ExerciseNativePointerCancellation();
+            else
+            {
+                await ExerciseOwnedPages();
+                await ExerciseNativePointerCancellation();
+            }
+        }
+        catch (Exception error) { GD.PushError(error.ToString()); exitCode = 1; }
+        try
+        {
+            RuntimeLiveContentSource.Clear();
+            // Page changes queue old controls for deletion. Let them leave the tree
+            // and release the completed audit's managed resource wrappers while
+            // Godot's native object registry is still alive.
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            GC.Collect(); GC.WaitForPendingFinalizers();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        catch (Exception error) { GD.PushError("OPENNV_PIPBOY_AUDIT_CLEANUP_FAILED " + error); exitCode = 1; }
+        if (exitCode == 0)
+            GD.Print(inputOnly ? "OPENNV_NATIVE_PIPBOY_INPUT_LIFETIME_AUDIT_PASS cleanup=complete recording=off" :
+                "OPENNV_NATIVE_PIPBOY_AUDIT_PASS source-menus=true saved-items-quests-markers=true pointer-cancellation=true cleanup=complete recording=off visual-and-input-acceptance=separate");
+        GetTree().Quit(exitCode);
+    }
+
+    private async Task ExerciseOwnedPages()
+    {
+        NativeOwnedPipBoyMenu? menu = null;
         try
         {
             var cropped = NativeUiImage.Sample(new(0, 0, 123.25f, 133.4f), new(0, 0, 128, 128), 145, Vector2.Zero)!.Value;
@@ -23,7 +56,7 @@ public partial class NativePipBoyAudit : Node
             var args = OS.GetCmdlineUserArgs();
             if (args.Length != 2) throw new ArgumentException("Expected owned Data and a native campaign checkpoint.");
             RuntimeLiveContentSource.Configure(args[0], RuntimeLiveContentSource.FalloutNewVegasGame);
-            using var content = RuntimeLiveContentSource.Current!;
+            var content = RuntimeLiveContentSource.Current!;
             var childRoot = System.Xml.Linq.XElement.Parse("<menu name='Probe'><image name='divider'><alpha><copy src='child()' trait='alpha'/></alpha><rect name='meter'><alpha>123</alpha></rect></image></menu>");
             var childTree = new NativeOwnedMenuTree(childRoot);
             if (childTree.Number(childRoot.Element("image")!, "alpha") != 123)
@@ -38,7 +71,7 @@ public partial class NativePipBoyAudit : Node
             inventory.Restore(items, saved.EquippedRuntimeFormIds.ToArray(), saved.InventoryRandomState);
             var quests = new FalloutQuestState(records); quests.Restore(saved.Quests!);
             var state = new FalloutPipBoyState(records, inventory); state.SetOpen(true);
-            var menu = new NativeOwnedPipBoyMenu(records, state, inventory, quests, references, () => saved.Vitals!, () => saved.Special,
+            menu = new NativeOwnedPipBoyMenu(records, state, inventory, quests, references, () => saved.Vitals!, () => saved.Special,
                 saved.PlayerName, FalloutNativeTagSkillResolver.Resolve(records, FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"])).Skills, saved.TagSkills, saved.Traits,
                 FalloutCellSceneReader.ParentWorldspace(records.GetEffective(saved.ActiveCell)),
                 new(saved.PlayerPosition[0] / .0142875f, -saved.PlayerPosition[2] / .0142875f, saved.PlayerPosition[1] / .0142875f), 0);
@@ -54,14 +87,17 @@ public partial class NativePipBoyAudit : Node
                 menu.Select(page, index);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 if (menu.Error is { } error) { failures.Add($"{page}/{index}: {error}"); continue; }
-                var buttons = menu.GetChildren().OfType<BaseButton>().Where(button => button.Visible).ToArray();
+                using var children = menu.GetChildren();
+                var buttons = children.OfType<BaseButton>().Where(button => button.Visible).ToArray();
                 if (buttons.Any(button => button.Size.X <= 0 || button.Size.Y <= 0)) failures.Add($"{page}/{index}: empty button target");
                 GD.Print($"OPENNV_PIPBOY_PAGE_BOUND {page}/{index} buttons={buttons.Length}");
             }
             if (failures.Count != 0) throw new InvalidOperationException(string.Join("\n", failures));
-            GD.Print("OPENNV_NATIVE_PIPBOY_AUDIT_PASS source-menus=true saved-items-quests-markers=true recording=off visual-and-input-acceptance=separate");
-            menu.Free(); GetTree().Quit();
         }
-        catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
+        finally
+        {
+            if (IsInstanceValid(menu)) menu!.Free();
+            menu?.Dispose();
+        }
     }
 }
