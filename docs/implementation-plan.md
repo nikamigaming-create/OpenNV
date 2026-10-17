@@ -37,6 +37,10 @@ performance, ordinary gameplay regression and repository promotion remain.
    repair/recruit ED-E through real requirements, with combat, loot and an
    available crafting transaction. Historical checkpoints accelerate isolation;
    they do not replace fresh progression.
+   Nipton, Novac, the Strip and other towns remain on the same unrestricted
+   runtime loading path. Check missing actor construction at its shared owner.
+   Exercise fast travel through both flat and VR interfaces, including elapsed
+   time, followers, destination state and persistence.
 6. Fix the next actual blocker and repeat the affected play action. Keep one
    candidate and one integration owner. Agents may inspect distinct subsystems;
    root coordinates builds, live input and Git.

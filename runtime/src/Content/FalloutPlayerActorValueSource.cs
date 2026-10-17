@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 namespace OpenNV.Runtime.Content;
 
 internal sealed record FalloutPlayerActorValueSource(FalloutFormKey Player, string PlayerWinner, string PlayerSha256,
-    FalloutFormKey StatsOwner, string StatsWinner, string StatsSha256, IReadOnlyList<int> Special, int Level)
+    FalloutFormKey StatsOwner, string StatsWinner, string StatsSha256, IReadOnlyList<int> Special, int Level, ushort SpeedMultiplier)
 {
     internal static FalloutPlayerActorValueSource Read(FalloutPluginStack records)
     {
@@ -19,7 +19,8 @@ internal sealed record FalloutPlayerActorValueSource(FalloutFormKey Player, stri
             throw new InvalidDataException("Engine player stats have invalid DATA/ACBS extents.");
         var level = FalloutActorLevel.Resolve(acbs[0].Data.Span, null);
         return new(player.FormKey, player.Plugin.Name, Hash(player), stats.FormKey, stats.Plugin.Name, Hash(stats),
-            data[0].Data.Span[4..11].ToArray().Select(value => (int)value).ToArray(), level);
+            data[0].Data.Span[4..11].ToArray().Select(value => (int)value).ToArray(), level,
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(acbs[0].Data.Span[14..]));
     }
 
     private static string Hash(FalloutPluginRecord source) => Convert.ToHexString(SHA256.HashData(source.ReadData())).ToLowerInvariant();

@@ -1,5 +1,6 @@
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Ui;
 using OpenNV.Runtime.World.Cells;
@@ -51,13 +52,10 @@ public partial class RuntimeCoordinator
         var marker = FalloutMapMarker.Read(records.GetEffective(reference));
         string? reason = !_nativeReferences!.MapMarkerState(marker).CanTravel ? "sNoFastTravelUndiscovered" :
             _nativeActiveCell!.Cell.Worldspace is null ? "sNoFastTravelCell" :
-            !player.SourceControls.Movement || player.FurnitureActive ? "sNoFastTravelScriptBlock" :
+            !driver.FastTravel.State.CanTravel || !player.SourceControls.Movement || player.FurnitureActive ? "sNoFastTravelScriptBlock" :
             driver.IsInCombat(records.RuntimeFormKey(0x14)) ? "sNoFastTravelCombat" :
             !player.IsOnFloor() ? "sNoFastTravelInAir" : null;
-        var weight = _nativeInventory.Items.Sum(item => (item.Weight ?? 0) * item.Count);
-        var capacity = FalloutGameSettingFloats.Read(records, "fAVDCarryWeightsBase") +
-            driver.PlayerSkillValue("Strength") * FalloutGameSettingFloats.Read(records, "fAVDCarryWeightMult");
-        if (weight > capacity) reason = "sNoFastTravelOverencumbered";
+        if (player.Overencumbered) reason = "sNoFastTravelOverencumbered";
         if (reason is not null) return FalloutGameSettingStrings.Read(records, reason);
         if (driver.Vitals.HitPoints <= 0 || _nativeDoorLoading || _nativePendingFastTravel is not null || _nativeReferences.PlayerMoves.Pending)
             return "Travel is already in progress or unavailable.";
@@ -97,19 +95,27 @@ public partial class RuntimeCoordinator
     private async Task ConsumeNativeFastTravel(FalloutFormKey target)
     {
         var player = _nativePlayer!;
-        var active = _nativeActiveCell!;
         _nativeDoorLoading = true; player.SetModalInput(true);
         try
         {
             var placement = NativeFastTravelPlacement(target);
+            if (_nativeActiveCell!.Cell.Worldspace is not { } world || FalloutCellSceneReader.ReadDefinition(_nativePluginStack!, placement.Cell).Worldspace != world)
+                throw new NotSupportedException("Fast travel between disconnected coordinate spaces requires source portal-route distance.");
+            var departure = NativePipBoyMapPosition(player);
+            var destination = new Vector3(placement.Position[0], placement.Position[1], placement.Position[2]);
+            var clock = _nativeGameTime ?? throw new InvalidOperationException("Fast travel has no game clock owner.");
+            var hours = FalloutFastTravel.ElapsedHours(departure.DistanceTo(destination), player.CalculateRunSpeed(), clock.TimeScale);
+            clock.ValidateFastTravel(hours);
             var transform = new Transform3D(GamebryoCoordinate.ConvertReferenceEuler(
                 new(placement.RotationRadians[0], placement.RotationRadians[1], placement.RotationRadians[2]), 1),
                 GamebryoCoordinate.ConvertVector(new(placement.Position[0], placement.Position[1], placement.Position[2])) * player.UnitsToMeters);
             await ShowNativeLoadingScreens(placement.Cell);
-            if (placement.Cell == active.Cell.FormKey) player.Teleport(transform);
-            else await StreamNativePlayerMove(placement, transform);
+            if (placement.Cell == _nativeActiveCell!.Cell.FormKey) await MoveNativePlayerWithFollowers(placement, transform);
+            else await StreamNativePlayerMove(placement, transform, transferFollowers: true);
+            _nativeOpeningStageDriver!.FastTravel.CompleteRelocation();
+            clock.AdvanceFastTravel(hours);
             SaveNativeInteraction();
-            GD.Print($"OPENNV_FAST_TRAVEL destination={target} cell={_nativeActiveCell!.Cell.FormKey}");
+            GD.Print($"OPENNV_FAST_TRAVEL destination={target} cell={_nativeActiveCell!.Cell.FormKey} elapsedHours={hours:R}");
         }
         catch (Exception error)
         {

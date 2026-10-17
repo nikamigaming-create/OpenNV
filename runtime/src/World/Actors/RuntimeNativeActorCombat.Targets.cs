@@ -88,7 +88,9 @@ internal sealed partial class RuntimeNativeActorCombat
 
     private bool TryCompanionCombat()
     {
-        if (!_state.PlayerTeammate) return false;
+        // Defensive package target protection comes from an actual hit's
+        // assistance notification, not another actor merely choosing a target.
+        if (!_state.PlayerTeammate || !PackageAllowsUnprovokedCombat()) return false;
         var playerKey = _records.RuntimeFormKey(0x14);
         var target = CombatActors.Where(actor => actor != this && !actor.Dead && actor._state.Enabled && !actor._state.PlayerTeammate &&
                 (actor._state.Engagement?.Target == playerKey ||
@@ -126,6 +128,18 @@ internal sealed partial class RuntimeNativeActorCombat
         // Other actors and world contacts still occlude the target.
         if (actor is not null) return Find(collider) == actor;
         return _context?.Player() is { } player && (collider == player || player.IsAncestorOf(collider));
+    }
+
+    internal Vector3 InteractionOrigin
+    {
+        get
+        {
+            if (_actor is RuntimeNativeNpc npc)
+                return npc.HeadTargetPoint ?? throw new NotSupportedException("NPC portal activation has no source head pose.");
+            var head = SightBone();
+            if (head < 0) throw new NotSupportedException("Actor sight requires its source head bone.");
+            return (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(head)).Origin;
+        }
     }
 
     private Node? TargetContact(Vector3 origin)

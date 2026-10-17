@@ -10,9 +10,8 @@ namespace OpenNV.Runtime.Campaigns.NewVegas.Opening;
 
 internal partial class RuntimeNativeOpeningStageDriver
 {
-    private FalloutFormKey? _music;
     private FalloutRadioHudDeclaration? _radioHudDeclaration;
-    internal FalloutFormKey? SourceMusic => _music;
+    internal FalloutFormKey? SourceMusic => _scriptMusic?.SourceForm;
     private bool _saveRequested;
     private CanvasLayer? _recipeLayer;
     private NativeOwnedRecipeMenu? _recipeMenu;
@@ -29,10 +28,11 @@ internal partial class RuntimeNativeOpeningStageDriver
         _barterMenu is not null ? "barter-menu" :
         TerminalSaveBlocker is { } terminal ? terminal :
         _scripts.References?.PendingProcedureCaptureCount > 0 ? "actor-procedure-initialization" :
-        StageResultsSaveBlocker;
+        _scripts.References?.TransientExplosions.SaveBlocker ?? StageResultsSaveBlocker;
     internal object SaveRequestState => new
     {
         requested = _saveRequested,
+        transientExplosions = _scripts.References?.TransientExplosions.State,
         sourceManual = _scripts.ScriptManualSaves.Receipt,
         sourceManualDeferredBy = _scripts.ScriptManualSaves.DeferredBy,
         deferredBy = _scripts.References!.PlayerMoves.Pending ? "player-move" : SaveContinuationBlocker ?? SourceAnimationSoundSaveBlocker,
@@ -147,12 +147,11 @@ internal partial class RuntimeNativeOpeningStageDriver
                 }).CallDeferred());
                 AddChild(movie);
                 break;
+            case "enablefasttravel" or "enablefast" when parts.Length == 1:
+                FastTravel.Apply(arguments);
+                break;
             case "playmusic" when parts.Length == 1 && arguments.Count == 1:
-                var music = bindings.Form(arguments[0]);
-                if (music.Signature != "MUSC") throw new InvalidDataException("Script music is not MUSC.");
-                if (music.ReadSubrecords().Any(field => field.Signature != "EDID"))
-                    throw new NotSupportedException("Nonempty script music requires its streaming playback owner.");
-                _music = music.FormKey;
+                MusicPlayer.Play(bindings.Form(arguments[0]).FormKey);
                 break;
             case "forceweather" or "fw" when parts.Length == 1:
                 var overrideWeather = FalloutSkyLightingState.ReadForceWeatherOverride(arguments);
@@ -200,7 +199,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             QuestEditorId, Stage, complete, _player.ViewPitchRadians, _playerActorValues.Capture(), _tagSkills.Capture(),
             _scripts.References!.CaptureDetection(), _speech?.CaptureState(), CaptureFinishedSpeechStage(),
             CaptureStageResults(), _stageResultDriverFailure, CaptureTerminalResults(), _skillCatalog, _playerPackage!.CaptureAudio(),
-            playerSkillValues: _playerSkills.CaptureValues(), playerAbilityScripts: _playerAbilities.Capture());
+            playerSkillValues: _playerSkills.CaptureValues(), playerAbilityScripts: _playerAbilities.Capture(),
+            transientExplosions: _scripts.References.TransientExplosions.Capture(), fastTravel: FastTravel.State);
         return state with
         {
             Vitals = vitals,
@@ -209,7 +209,8 @@ internal partial class RuntimeNativeOpeningStageDriver
             ActorOverrides = _scripts.References!.CaptureActorOverrides(),
             FactionRelations = _scripts.References.CaptureFactionRelations(),
             EncounterZones = _scripts.References.CaptureEncounterZones(),
-            ExplosionExposure = _player.CaptureExplosionExposure()
+            ExplosionExposure = _player.CaptureExplosionExposure(),
+            Music = _scriptMusic?.Capture()
         };
     }
 

@@ -77,8 +77,8 @@ internal partial class RuntimeNativeNpc
     private void RetainPendingSelection()
     {
         if (_aiReferenceState is not { } state) return;
-        if (CanCapturePendingSelection()) state.PendingPackageSelection = CapturePendingSelection().Copy();
-        if (ReferenceEquals(state.CanCapturePendingPackageSelection, _pendingSelectionReady)) state.CanCapturePendingPackageSelection = null;
-        if (ReferenceEquals(state.CapturePendingPackageSelection, _pendingSelectionCapture)) state.CapturePendingPackageSelection = null;
+        if (_pendingSelectionCapture is not null && ReferenceEquals(state.CapturePendingPackageSelection, _pendingSelectionCapture) &&
+            ReferenceEquals(state.CanCapturePendingPackageSelection, _pendingSelectionReady) && CanCapturePendingSelection())
+            state.PendingPackageSelection = CapturePendingSelection().Copy();
     }
 }

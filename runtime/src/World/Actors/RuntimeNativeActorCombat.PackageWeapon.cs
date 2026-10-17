@@ -8,6 +8,7 @@ internal sealed partial class RuntimeNativeActorCombat
     private NativeActorCombatAnimation? _packageAim, _packageGrip;
     private bool _packageWeaponPrepared;
     private uint _packageWeaponType;
+    private bool _packageAimSneaking;
     private FalloutPluginRecord? _packageWeaponPolicySource;
     private bool _packageWeaponsVisible = true;
     internal uint WeaponAnimationType => _enemyWeapon?.WeaponAnimationType ?? _packageWeaponType;
@@ -22,7 +23,7 @@ internal sealed partial class RuntimeNativeActorCombat
         _packageWeaponPrepared = false;
     }
 
-    private void PreparePackageWeapon(FalloutPluginRecord package, bool drawn)
+    private void PreparePackageWeapon(FalloutPluginRecord package, bool drawn, bool sneaking)
     {
         if (OwnsPose) return;
         if (_packageWeaponPolicySource != package)
@@ -47,13 +48,19 @@ internal sealed partial class RuntimeNativeActorCombat
                 _world.Inventory(_state.Reference, _context!.Level(), _context.Globals).Contents.Equip(_records, item.FormKey);
                 _packageWeapon = new(weapon, _skeleton, _content);
                 var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
-                _packageAim = new(SelectPath(directory, weapon.AnimationGroup + "aim"), _content, _skeleton, _packageWeapon, true);
                 if (weapon.Grip != 255)
                 {
                     if (weapon.Grip is < 230 or > 235) throw new NotSupportedException("Patrol weapon grip is unbound.");
                     _packageGrip = new(SelectPath(directory, weapon.AnimationGroup + "handgrip" + (weapon.Grip - 229)), _content, _skeleton, _packageWeapon, true);
                 }
             }
+        }
+        if (_packageWeapon is not null && (_packageAim is null || _packageAimSneaking != sneaking))
+        {
+            var directory = _skeletonPath[.._skeletonPath.LastIndexOf('/')];
+            _packageAim = new(SelectPath(directory, (sneaking ? "sneak" : "") + _packageWeapon.Weapon.AnimationGroup + "aim"),
+                _content, _skeleton, _packageWeapon, true);
+            _packageAimSneaking = sneaking;
         }
         _packageWeapon?.Root.Show(); Activity.SetWeaponDrawn(_packageWeapon is not null);
     }

@@ -85,7 +85,10 @@ public partial class NativeReferenceEventsAudit
             Require(restored.Presentation.GetOpenState(key) == 2 && Pose(restored.Node) == midPose &&
                 JsonSerializer.Serialize(restored.Controller.CaptureScriptState()) == clock,
                 "Cold source door target, pose or text-key cursor changed.");
-            restored.Controller._Process(restored.Controller.FiniteEffectDuration); restored.Motion.Synchronize();
+            restored.Controller._Process(restored.Controller.FiniteEffectDuration);
+            restored.Presentation.Advance(0);
+            Require(cold.Get(key).DoorMotion is { Moving: false },
+                "Resident presentation did not synchronize its indexed Open/Close clock.");
             Require(restored.Presentation.GetOpenState(key) == 1 && CollisionPose(restored.Node) != closed,
                 "Owned opening did not complete or move its source collision.");
             var observedOpen = restored.Events.PlayerRouteDoor(key);

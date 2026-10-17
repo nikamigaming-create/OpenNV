@@ -11,15 +11,22 @@ using OpenNV.Runtime.World.Cells;
 
 public partial class NativeActorPerformanceAudit
 {
-    private void PackageEvaluation(string baseRoot, string mod, string root, string actorId,
-        string questId, short[] stages, string[] dependencies, bool stoppedFailure = false, string? expectedPackageId = null)
+    private void PackageEvaluation(string baseRoot, string? mod, string? root, string actorId,
+        string questId, short[] stages, string[] dependencies, bool stoppedFailure = false, string? expectedPackageId = null,
+        float? scheduleHour = null)
     {
         Node3D? presentation = null;
         try
         {
-            var installation = new FalloutModStackSelection([new(mod, root, dependencies)]).Resolve(baseRoot);
-            RuntimeLiveContentSource.Configure(baseRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
-                installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
+            if (mod is null)
+                RuntimeLiveContentSource.Configure(baseRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+                    activePlugins: RuntimeLiveContentSource.ResolveVanillaPlugins(baseRoot), includeImplicitPlugins: false);
+            else
+            {
+                var installation = new FalloutModStackSelection([new(mod, root!, dependencies)]).Resolve(baseRoot);
+                RuntimeLiveContentSource.Configure(baseRoot, RuntimeLiveContentSource.FalloutNewVegasGame,
+                    installation.ContentRoots.Skip(1).ToArray(), installation.ActivePlugins, installation.Settings);
+            }
             var content = RuntimeLiveContentSource.Current!;
             using var records = FalloutPluginStack.Load(content.PluginSources);
             using var world = new FalloutReferenceWorld(records);
@@ -30,6 +37,7 @@ public partial class NativeActorPerformanceAudit
             var globals = FalloutGlobalState.Read(records);
             var clock = new FalloutGameTime(globals, FalloutGameTimeBindings.Read(records),
                 FalloutCalendar.Read(Path.Combine(baseRoot, "FalloutNV.exe")));
+            if (scheduleHour is { } hour) clock.SetHour(hour);
             var quests = new FalloutQuestState(records);
             foreach (var stage in stages) quests.EnterStage(quest, stage);
             // Isolated command fixture supplies prior stage/conversation state;
@@ -57,16 +65,28 @@ public partial class NativeActorPerformanceAudit
                 var packageKey = packageOwner.Plugin.AdjustFormId(BinaryPrimitives.ReadUInt32LittleEndian(field.Data.Span));
                 world.MarkPackageStart(caller, records.GetEffective(packageKey), clock);
             }
-            presentation = new Node3D(); AddChild(presentation);
+            presentation = new Node3D();
+            if (stoppedFailure) presentation.Basis = new(Vector3.Back * 2, Vector3.Up * 2, Vector3.Left * 2);
+            AddChild(presentation);
             using var presentationLifetime = new PackageFixtureLifetime(presentation);
             var actor = RuntimeNativeNpc.Create(records, content, placed, units,
                 (_, _, _, _) => new StandardMaterial3D(), world.EquippedArmor(caller, 1), templates);
+            using var actorLifetime = new PackageFixtureLifetime(actor);
             Transform3D Placement(FalloutPlacedReference reference) => new(GamebryoCoordinate.ConvertReferenceEuler(
                 new(reference.RotationRadians[0], reference.RotationRadians[1], reference.RotationRadians[2]), reference.Scale),
                 GamebryoCoordinate.ConvertVector(new(reference.Position[0], reference.Position[1], reference.Position[2])) * units);
-            actor.Transform = Placement(placed); presentation.AddChild(actor);
+            actor.Transform = Placement(placed);
+            if (!stoppedFailure) presentation.AddChild(actor);
             actor.SetProcess(false); actor.SetPhysicsProcess(false);
             actor.ConfigureAi(records, quests, cell, Placement, clock: clock, globals: globals, world: world);
+            if (stoppedFailure)
+            {
+                if (world.Get(caller).PackageBindingFailureCaptureReady)
+                    throw new InvalidDataException("Detached binding published a global pose capture owner.");
+                try { _ = world.Get(caller).Capture(); throw new InvalidDataException("Detached binding captured Godot identity instead of source pose."); }
+                catch (NotSupportedException) { }
+                presentation.AddChild(actor);
+            }
             if (actor.AiError is null || actor.CurrentPackage is not { } selected)
                 throw new InvalidDataException("Evaluation fixture needs a selected source package with an unowned native procedure.");
             if (expectedPackages is not null && !expectedPackages.Contains(selected))
@@ -106,6 +126,13 @@ public partial class NativeActorPerformanceAudit
                 actor._Process(.25);
                 var snapshots = world.Capture();
                 var savedActor = snapshots.Single(value => value.Reference == caller);
+                var expectedGlobal = actor.GlobalTransform;
+                if (stoppedFailure && (savedActor.PackageBindingFailure is not { } captured ||
+                    !captured.Position.SequenceEqual(new[] { expectedGlobal.Origin.X, expectedGlobal.Origin.Y, expectedGlobal.Origin.Z }) ||
+                    !captured.Basis.SequenceEqual(new[] { expectedGlobal.Basis.X.X, expectedGlobal.Basis.X.Y, expectedGlobal.Basis.X.Z,
+                        expectedGlobal.Basis.Y.X, expectedGlobal.Basis.Y.Y, expectedGlobal.Basis.Y.Z,
+                        expectedGlobal.Basis.Z.X, expectedGlobal.Basis.Z.Y, expectedGlobal.Basis.Z.Z })))
+                    throw new InvalidDataException("Attached binding lost its exact nonidentity parent transform.");
                 if (savedActor.PackageBindingFailure is null || savedActor.PackageAssignment is not null ||
                     world.PendingProcedureCaptureCount != 0 || world.StoppedPackageBindingCount != 1)
                     throw new InvalidDataException("Stopped initialization has no explicit, visible save continuation.");
@@ -138,11 +165,47 @@ public partial class NativeActorPerformanceAudit
                         throw new InvalidDataException("Cold initialization diverged after resumed blink/base/poll advancement.");
                 }
                 finally { resumed.Free(); }
+                if (stoppedFailure && (cold.Get(caller).CanCapturePackageBindingFailure is not null ||
+                    cold.Get(caller).PackageBindingFailure is not { } retired ||
+                    !retired.Position.SequenceEqual(savedActor.PackageBindingFailure.Position) ||
+                    !retired.Basis.SequenceEqual(savedActor.PackageBindingFailure.Basis)))
+                    throw new InvalidDataException("Tree retirement lost the last valid binding pose.");
             }
             else
             {
                 try { _ = world.Get(caller).Capture(); throw new InvalidDataException("Unowned active continuation became saveable."); }
                 catch (NotSupportedException) { }
+            }
+
+            if (stoppedFailure)
+            {
+                var state = world.Get(caller);
+                var query = state.QueryCurrentPackage;
+                var capture = state.CapturePackageBindingFailure;
+                var ready = state.CanCapturePackageBindingFailure;
+                var assignment = state.CapturePackageAssignment;
+                var diagnostic = state.ObservePackageBindingCapture;
+                var scriptError = state.ScriptError;
+                foreach (var attached in new[] { false, true })
+                {
+                    var failedActor = RuntimeNativeNpc.Create(records, content, placed, units,
+                        (_, _, _, _) => new StandardMaterial3D(), world.EquippedArmor(caller, 1), templates);
+                    try
+                    {
+                        failedActor.Transform = Placement(placed);
+                        if (attached) presentation.AddChild(failedActor);
+                        failedActor.SetProcess(false); failedActor.SetPhysicsProcess(false);
+                        failedActor.ConfigureAi(records, quests, cell, Placement, clock: clock, globals: globals, world: world);
+                        if (ReferenceEquals(state.QueryCurrentPackage, query))
+                            throw new InvalidDataException("Failed-construction fixture did not acquire the candidate's binding.");
+                    }
+                    finally { RuntimeCoordinator.DiscardNativeActor(failedActor, actor); }
+                    if (GodotObject.IsInstanceValid(failedActor) || !actor.IsInsideTree() ||
+                        !ReferenceEquals(state.QueryCurrentPackage, query) || !ReferenceEquals(state.CapturePackageBindingFailure, capture) ||
+                        !ReferenceEquals(state.CanCapturePackageBindingFailure, ready) || !ReferenceEquals(state.CapturePackageAssignment, assignment) ||
+                        !ReferenceEquals(state.ObservePackageBindingCapture, diagnostic) || state.ScriptError != scriptError)
+                        throw new InvalidDataException("Failed actor construction leaked its subtree, erased a source fault or stranded the prior live owner.");
+                }
             }
 
             const string failure = "Synthetic retained package result failure.";
@@ -165,7 +228,7 @@ public partial class NativeActorPerformanceAudit
                 throw new InvalidDataException("Package evaluation changed source bytes, pose or its retained result failure.");
             GD.Print($"OPENNV_NATIVE_PACKAGE_EVALUATION_PASS actor={caller} package={selected} sourceSelection=true " +
                 $"evaluationCommand={evaluationCommand} queuedSelectionCold={evaluationCommand} nativeFaultVisible=true stoppedCold={stoppedCold} retainedResults=true " +
-                "sourceReadonly=true fixture=isolated-owned-command campaignAndParity=unverified recording=false");
+                $"detachedCaptureRefused={stoppedFailure} transformedParent={stoppedFailure} failedConstructionRetired={stoppedFailure} sourceReadonly=true fixture=isolated-owned-command campaignAndParity=unverified recording=false");
         }
         finally { if (GodotObject.IsInstanceValid(presentation)) presentation!.Free(); }
     }

@@ -8,6 +8,8 @@ internal partial class RuntimeNativeOpeningStageDriver
         RuntimeManualSaveReceipt? manual = null)
     {
         if (Vitals.HitPoints <= 0) return new(RuntimeManualSaveAdmissionKind.Refused, "player-defeated");
+        if (BlockingExecutionError is { } failure)
+            return new(RuntimeManualSaveAdmissionKind.Refused, $"native-driver-failure: {failure}");
         var sourceBoundary = sourceOrder is null ? RuntimeManualSaveSourceBoundary.Observe(_scripts.ScriptManualSaves) :
             sourceOrder.ObserveAdmission(_scripts.ScriptManualSaves,
                 manual ?? throw new InvalidOperationException("Ordered save admission has no original manual receipt."), Godot.Engine.GetProcessFrames());

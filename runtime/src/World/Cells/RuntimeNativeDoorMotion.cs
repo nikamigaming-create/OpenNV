@@ -1,4 +1,5 @@
 using Godot;
+using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 namespace OpenNV.Runtime.World.Cells;
@@ -9,15 +10,20 @@ internal partial class RuntimeNativeDoorMotion : Node
     private readonly Action _changed;
     private readonly RuntimeNifControllerPlayer _controller;
     private readonly string _open, _close;
+    private readonly IReadOnlyList<RuntimeNifControllerPlayer> _managed;
+    private readonly Func<IReadOnlyList<FalloutObjectAnimationSnapshot>> _capture;
+    private bool _captureBound;
     private Exception? _readyFailure;
 
     internal static bool HasOpenClose(IReadOnlyList<RuntimeNifControllerPlayer> controllers) => controllers.Any(controller =>
         controller.HasSequence("Open") || controller.HasSequence("Close"));
 
     private RuntimeNativeDoorMotion(FalloutReferenceInstance state, RuntimeNifControllerPlayer controller,
-        string open, string close, Action changed)
+        IReadOnlyList<RuntimeNifControllerPlayer> managed, string open, string close, Action changed)
     {
         _state = state; _changed = changed; _controller = controller; _open = open; _close = close;
+        _managed = managed;
+        _capture = () => managed.Select(value => value.CaptureObjectState()).OfType<FalloutObjectAnimationSnapshot>().ToArray();
     }
 
     internal static RuntimeNativeDoorMotion Attach(Node parent, FalloutReferenceInstance state,
@@ -41,7 +47,10 @@ internal partial class RuntimeNativeDoorMotion : Node
         controller.RequireManagedFiniteSequence(open);
         controller.RequireManagedFiniteSequence(close);
         RequireSavedSourceMatch(state, controller);
-        var motion = new RuntimeNativeDoorMotion(state, controller, open, close, changed);
+        var managed = controllers.Where(value => value.SourceController >= 0).ToArray();
+        if (managed.GroupBy(value => (value.SourceSha256, value.SourceController)).Any(group => group.Count() != 1))
+            throw new NotSupportedException($"Reference {state.Reference} has ambiguous source animation controllers.");
+        var motion = new RuntimeNativeDoorMotion(state, controller, managed, open, close, changed);
         try
         {
             parent.AddChild(motion);
@@ -78,8 +87,35 @@ internal partial class RuntimeNativeDoorMotion : Node
     }
     public override void _Ready()
     {
-        try { InitializeAtReady(); }
+        try
+        {
+            // A model can own other clocks beside Open/Close. Preserve every
+            // saved controller before this full-model capture becomes current.
+            var saved = _state.CaptureObjectAnimations?.Invoke() ?? _state.ObjectAnimations ?? [];
+            var restored = saved.Select(clock =>
+            {
+                var controller = _managed.SingleOrDefault(value => value.SourceController == clock.Controller &&
+                    value.SourceSha256.Equals(clock.Sha256, StringComparison.OrdinalIgnoreCase)) ??
+                    throw new NotSupportedException($"Reference {_state.Reference} saved animation differs from its winning model.");
+                controller.ValidateObjectState(clock);
+                return (Controller: controller, Clock: clock);
+            }).ToArray();
+            foreach (var (controller, clock) in restored) controller.RestoreObjectState(clock);
+            InitializeAtReady();
+            // Exterior prefetch enters the tree before presentation residency.
+            // Publishing DoorMotion therefore owns its real clocks even when
+            // that prepared model is cancelled without ever being registered.
+            _state.BindObjectAnimationCapture(_capture);
+            _captureBound = true;
+        }
         catch (Exception error) { _readyFailure = error; throw; }
+    }
+
+    public override void _ExitTree()
+    {
+        if (!_captureBound) return;
+        _state.UnbindObjectAnimationCapture(_capture);
+        _captureBound = false;
     }
 
     private void InitializeAtReady()

@@ -52,7 +52,10 @@ internal sealed record FalloutNativeCampaignState(
     IReadOnlyList<FalloutTerminalClosedSnapshot>? TerminalResults = null,
     FalloutPlayerPackageAudioSnapshot? PlayerPackageAudio = null,
     FalloutPlayerSkillValuesSnapshot? PlayerSkillValues = null,
-    FalloutPlayerAbilityScriptsSnapshot? PlayerAbilityScripts = null);
+    FalloutPlayerAbilityScriptsSnapshot? PlayerAbilityScripts = null,
+    FalloutMusicPlaybackSnapshot? Music = null,
+    FalloutTransientExplosionsSnapshot? TransientExplosions = null,
+    FalloutFastTravelSnapshot? FastTravel = null);
 
 internal sealed record FalloutNativeCampaignRestore(
     FalloutNativeCampaignState State,
@@ -61,7 +64,8 @@ internal sealed record FalloutNativeCampaignRestore(
 
 internal static class FalloutNativeCampaignSave
 {
-    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v50";
+    internal const string ExpectedSchema = "opennv-native-fnv-campaign-save/v51";
+    internal const string BeforeTransientExplosionsSchema = "opennv-native-fnv-campaign-save/v50";
     internal const string BeforeAbilityScriptsSchema = "opennv-native-fnv-campaign-save/v49";
     internal const string FinishedRadioSchema = "opennv-native-fnv-campaign-save/v48";
     internal const string PlayerAudioSchema = "opennv-native-fnv-campaign-save/v47";
@@ -149,7 +153,9 @@ internal static class FalloutNativeCampaignSave
         IReadOnlyList<FalloutNativeSkillIdentity>? skillCatalog = null,
         FalloutPlayerPackageAudioSnapshot? playerPackageAudio = null,
         FalloutPlayerSkillValuesSnapshot? playerSkillValues = null,
-        FalloutPlayerAbilityScriptsSnapshot? playerAbilityScripts = null)
+        FalloutPlayerAbilityScriptsSnapshot? playerAbilityScripts = null,
+        FalloutTransientExplosionsSnapshot? transientExplosions = null,
+        FalloutFastTravelSnapshot? fastTravel = null)
     {
         ArgumentNullException.ThrowIfNull(grant);
         if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract ??
@@ -197,7 +203,9 @@ internal static class FalloutNativeCampaignSave
             TagSkillSlots: tagSkillSlots, FactionRelations: [], DetectionEvents: detectionEvents, FinishedSpeech: finishedSpeech,
             FinishedSpeechStage: finishedSpeechStage, QuestStageResults: questStageResults, StageResultFailure: stageResultFailure,
             TerminalResults: references is null ? terminalResults : terminalResults ?? [], PlayerPackageAudio: playerPackageAudio,
-            PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts);
+            PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts,
+            TransientExplosions: transientExplosions,
+            FastTravel: references is not null && playerPackageAudio is not null ? fastTravel ?? FalloutFastTravelSnapshot.Initial : null);
         Validate(state, saveCompatibilityId);
         return state;
     }
@@ -226,6 +234,7 @@ internal static class FalloutNativeCampaignSave
         var state = JsonSerializer.Deserialize<FalloutNativeCampaignState>(
                 File.ReadAllText(fullPath)) ??
             throw new InvalidDataException($"Native campaign save is empty: {fullPath}");
+        state = AdmitPreviousOwnerSchema(state);
         var originalAbilityAdmission = FalloutPlayerAbilitySaveAdmission.FromOriginalHeader(state);
         if (originalAbilityAdmission is not null)
         {
@@ -306,6 +315,8 @@ internal static class FalloutNativeCampaignSave
                 .SequenceEqual(expectedGrant!.EquippedRuntimeFormIds.Order())))
             throw new InvalidDataException(
                 "Native campaign save loadout differs from the live farewell/tag-skill contract.");
+        var transientExplosions = new FalloutTransientExplosions(stack);
+        transientExplosions.Restore(state.TransientExplosions);
         FalloutQuestState? validatedQuests = null;
         FalloutScriptValueStore? validatedValues = null;
         if (state.Quests is not null)
@@ -331,13 +342,15 @@ internal static class FalloutNativeCampaignSave
             validatedValues = new FalloutScriptValueStore();
             validatedValues.Restore(savedScripts.Values);
             if (state.Quests is not null)
-                ValidateQuestValueHandles(stack, state.Quests, validatedValues);
+                ValidateQuestValueHandles(stack, state.Quests, validatedValues, transientExplosions);
         }
         if (state.Globals is not null) FalloutGlobalState.Read(stack).Restore(state.Globals);
         if (state.SkyLighting is not null) FalloutSkyLightingState.ValidateSnapshot(stack, state.SkyLighting);
+        if (state.Music is not null) _ = FalloutMusicType.ValidateSnapshot(stack, state.Music);
         if (state.References is not null)
         {
             using var references = new FalloutReferenceWorld(stack, validatedValues);
+            references.TransientExplosions.Restore(state.TransientExplosions);
             references.RestoreEncounterZones(state.EncounterZones);
             references.Restore(state.References);
             references.RestoreDetection(state.DetectionEvents);
@@ -348,7 +361,7 @@ internal static class FalloutNativeCampaignSave
         }
         validatedValues?.Arrays.ValidateRestoredRoots();
         foreach (var form in validatedValues?.Arrays.Forms ?? [])
-            if (form is not (0 or 0x14)) _ = stack.GetEffective(stack.RuntimeFormKey(form));
+            transientExplosions.ValidateFormHandle(form);
         if (state.Schema is CorpseTransferSchema or ActivationRelaySchema or NativeSoundHistorySchema or TerminalResultsSchema or ClosedStageSchema or FinishedSpeechSchema or OccupiedIdleSchema or FactionRelationSchema) state = state with { Schema = ObjectPcmSchema };
         if (state.Schema is not (ExpectedSchema or ObjectPcmSchema) && state.References is not null)
             state = state with
@@ -359,7 +372,8 @@ internal static class FalloutNativeCampaignSave
             };
         if (state.Schema is ExpectedSchema or ObjectPcmSchema && state.References is not null)
             state = state with { QuestStageResults = state.QuestStageResults ?? [], TerminalResults = state.TerminalResults ?? [] };
-        if (originalAbilityAdmission is not null) state = originalAbilityAdmission.CompleteOriginalRead(state, stack);
+        if (originalAbilityAdmission is not null)
+            state = originalAbilityAdmission.CompleteOriginalRead(state, stack) with { TransientExplosions = new(0, []), FastTravel = FalloutFastTravelSnapshot.Initial };
         Validate(state, expectedSaveCompatibilityId);
         return new FalloutNativeCampaignRestore(state, inventory, originalAbilityAdmission);
     }
@@ -375,7 +389,7 @@ internal static class FalloutNativeCampaignSave
         { DeathCount = reference.Injury?.DeathInventoryGranted == true ? 1 : null }).ToArray();
 
     private static void ValidateQuestValueHandles(FalloutPluginStack stack,
-        IReadOnlyList<FalloutQuestSnapshot> snapshots, FalloutScriptValueStore values)
+        IReadOnlyList<FalloutQuestSnapshot> snapshots, FalloutScriptValueStore values, FalloutTransientExplosions transientExplosions)
     {
         foreach (var snapshot in snapshots)
         {
@@ -384,9 +398,10 @@ internal static class FalloutNativeCampaignSave
             if (script is null) continue;
             foreach (var declaration in FalloutScriptLocals.ReadDeclarations(script).Values)
             {
-                if (declaration.Kind is not (FalloutScriptLocalKind.String or FalloutScriptLocalKind.Array)) continue;
+                if (declaration.Kind is not (FalloutScriptLocalKind.String or FalloutScriptLocalKind.Array or FalloutScriptLocalKind.Form)) continue;
                 if (!snapshot.Variables.TryGetValue(declaration.Index, out var raw))
                     throw new InvalidDataException("Saved quest value local is absent from its winning declaration.");
+                if (declaration.Kind == FalloutScriptLocalKind.Form) transientExplosions.ValidateFormHandle(raw);
                 values.ValidateLocal(declaration.Kind, raw, $"{snapshot.Quest}:{declaration.Index}");
             }
         }
@@ -451,6 +466,13 @@ internal static class FalloutNativeCampaignSave
             state.PlayerControls[SneakingControlIndex]);
     }
 
+    internal static FalloutNativeCampaignState AdmitPreviousOwnerSchema(FalloutNativeCampaignState state)
+    {
+        if (state.Schema != ExpectedSchema && (state.Music is not null || state.TransientExplosions is not null || state.FastTravel is not null))
+            throw new InvalidDataException("Earlier campaign schemas cannot own music, transient explosion or travel policy state.");
+        return state.Schema == BeforeTransientExplosionsSchema ? state with { Schema = ExpectedSchema, TransientExplosions = new(0, []), FastTravel = FalloutFastTravelSnapshot.Initial } : state;
+    }
+
     private static void Validate(
         FalloutNativeCampaignState state,
         string expectedSaveCompatibilityId) => ValidateCore(state, expectedSaveCompatibilityId, null);
@@ -460,6 +482,13 @@ internal static class FalloutNativeCampaignSave
         string expectedSaveCompatibilityId,
         FalloutPlayerAbilitySaveAdmission? originalAbilityAdmission)
     {
+        if (state.Schema != ExpectedSchema && (state.Music is not null || state.TransientExplosions is not null || state.FastTravel is not null))
+            throw new InvalidDataException("Music, transient explosions and travel policy require the current campaign schema.");
+        if (state.Schema == ExpectedSchema && state.TransientExplosions is null && originalAbilityAdmission is null)
+            throw new InvalidDataException("Current campaign save is missing its transient explosion allocator.");
+        if (state.Schema == ExpectedSchema && state.FastTravel is null && originalAbilityAdmission is null)
+            throw new InvalidDataException("Current campaign save is missing its travel policy.");
+        if (state.TransientExplosions is { } transientExplosions) FalloutTransientExplosions.ValidateSnapshot(transientExplosions);
         var abilityAuthorityState = state;
         if (state.Inventory is null) throw new InvalidDataException("Saved campaign inventory is absent.");
         if (state.Schema != ExpectedSchema && state.FinishedSpeech?.ActiveRadio is not null)

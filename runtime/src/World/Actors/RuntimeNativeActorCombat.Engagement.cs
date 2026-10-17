@@ -11,7 +11,9 @@ internal sealed record NativeActorCombatContext(Func<RuntimeNativePlayer?> Playe
     Action<FalloutFormKey, string>? DispatchEvent = null, Func<FalloutFormKey?>? PlayerCell = null,
     float MaximumWalkableSlopeDegrees = PlayerConfiguration.DefaultMaximumWalkableSlopeDegrees,
     Func<FalloutFormKey, ulong, bool, NativeRouteDoorStatus>? RouteDoor = null,
-    Func<ulong, FalloutFormKey?>? CollisionReference = null);
+    Func<ulong, FalloutFormKey?>? CollisionReference = null,
+    Func<FalloutFormKey, FalloutFormKey, bool>? RequestPortal = null,
+    float? ActivationDistanceMeters = null);
 
 internal sealed partial class RuntimeNativeActorCombat
 {
@@ -33,6 +35,8 @@ internal sealed partial class RuntimeNativeActorCombat
     private FalloutActorActivityState Activity => _actor is RuntimeNativeNpc npc ? npc.Activity : ((RuntimeNativeCreature)_actor).Activity;
     internal bool OwnsPose => _state.KnockedDown || _context is not null && (_state.Engagement is not null || ReactingToHit);
     internal bool Restrained => _state.Restrained;
+    private bool PackageAllowsUnprovokedCombat(FalloutFormKey? attackedTarget = null) =>
+        _actor is not RuntimeNativeCreature creature || creature.PackageAllowsUnprovokedCombat(attackedTarget);
     private object EngagementObservation => new
     {
         state = _state.Engagement,
@@ -84,10 +88,10 @@ internal sealed partial class RuntimeNativeActorCombat
             (attacker == _records.RuntimeFormKey(0x14) && _state.PlayerTeammate || _world.ActorRelation(_state.Reference, attacker) >= 2)) return;
         _state.Engagement ??= new(attacker);
         Activity.RecordAttack(); Activity.SetAlerted(true); Activity.SetCombat(true);
-        NotifyAssistance(attacker);
+        NotifyAssistance(attacker, attacked: true);
     }
 
-    private void NotifyAssistance(FalloutFormKey attacker)
+    private void NotifyAssistance(FalloutFormKey attacker, bool attacked = false)
     {
         if (_context is null) return;
         var player = _context.Player();
@@ -95,14 +99,14 @@ internal sealed partial class RuntimeNativeActorCombat
             CombatActors.SingleOrDefault(actor => actor._state.Reference == attacker);
         if (opponent is null && (attacker != _records.RuntimeFormKey(0x14) || player is not { CollisionResident: true })) return;
         var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
-        if (threat.Aggression == 3) return;
         foreach (var candidate in _actor.GetTree().GetNodesInGroup(CombatActorsGroup).OfType<RuntimeNativeActorCombat>())
         {
             if (candidate == this || !ReferenceEquals(candidate._world, _world) ||
                 !ReferenceEquals(candidate._context, _context)) continue;
             try
             {
-                candidate.TryAssist(_state, _actor.GlobalPosition, attacker, player, opponent);
+                candidate.TryAssist(_state, _actor.GlobalPosition, attacker, player, opponent,
+                    attacked, threat.Aggression != 3);
             }
             catch (Exception error)
             {
@@ -113,14 +117,20 @@ internal sealed partial class RuntimeNativeActorCombat
     }
 
     private bool TryAssist(FalloutReferenceInstance victim, Vector3 origin, FalloutFormKey attacker,
-        RuntimeNativePlayer? player, RuntimeNativeActorCombat? opponent)
+        RuntimeNativePlayer? player, RuntimeNativeActorCombat? opponent, bool attacked, bool factionAssistance)
     {
         if (attacker == _state.Reference || Dead || !_state.Enabled || _state.Unconscious || _state.Restrained || _state.Engagement is not null ||
             _engagementError is not null || !_context!.Resident(_actor.GlobalPosition)) return false;
+        var passiveCombat = PackageAllowsUnprovokedCombat();
+        if (!PackageAllowsUnprovokedCombat(attacked ? victim.Reference : null)) return false;
+        var defendingPackageTarget = attacked && !passiveCombat;
         var threat = _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
-        if (threat.Aggression == 3 || threat.Assistance == 0) return false;
-        var relation = _world.ActorRelation(_state.Reference, victim.Reference);
-        if (relation != 2 && !(threat.Assistance == 2 && relation == 3)) return false;
+        if (!defendingPackageTarget)
+        {
+            if (!factionAssistance || threat.Aggression == 3 || threat.Assistance == 0) return false;
+            var relation = _world.ActorRelation(_state.Reference, victim.Reference);
+            if (relation != 2 && !(threat.Assistance == 2 && relation == 3)) return false;
+        }
         var radius = ThreatRadius(threat);
         if (!float.IsFinite(radius) || radius <= 0 || _actor.GlobalPosition.DistanceTo(origin) > radius ||
             !CanSeePoint(opponent?.BodyTargetPoint() ?? player!.CombatTargetPoint, opponent)) return false;
@@ -143,7 +153,11 @@ internal sealed partial class RuntimeNativeActorCombat
         if (!_context.Resident(_actor.GlobalPosition)) return;
         if (ReactingToHit && !_engagementPrepared && _state.Engagement is not null)
         {
-            try { PrepareCombatPresentation(); }
+            try
+            {
+                if (_actor is RuntimeNativeNpc npc) npc.RequireTravelCombatContinuation();
+                PrepareCombatPresentation();
+            }
             catch (Exception error)
             {
                 if (_engagementError != error.Message) GD.PushError($"OPENNV_ACTOR_COMBAT_UNBOUND reference={_state.Reference} {error.Message}");
@@ -162,9 +176,13 @@ internal sealed partial class RuntimeNativeActorCombat
                 var aggression = _world.ActorValue(_state.Reference, "aggression");
                 if (aggression != Math.Truncate(aggression) || aggression is < 0 or > 3) throw new InvalidDataException("Actor aggression is invalid.");
                 _threat = _threat with { Aggression = (byte)aggression };
-                if (_state.PlayerTeammate || _threat.Aggression == 0 || _threat.Confidence == 0 || !TryAcquireThreat(player)) return;
+                if (!PackageAllowsUnprovokedCombat() || _state.PlayerTeammate || _threat.Aggression == 0 || _threat.Confidence == 0 || !TryAcquireThreat(player)) return;
                 NotifyAssistance(_state.Engagement!.Target);
             }
+            // The package's destination cannot be silently replaced by enemy
+            // pursuit. Continue During Combat needs simultaneous route and
+            // firing ownership; refuse that phase before either advances.
+            if (_actor is RuntimeNativeNpc npc) npc.RequireTravelCombatContinuation();
             if (!ResolveTarget(player)) return;
             StopPackageMotion(); _enemyObject?.Root.Show();
             _threat ??= FalloutActorThreat.Read(_records, _state.Base, _state.Templates);
@@ -256,20 +274,42 @@ internal sealed partial class RuntimeNativeActorCombat
         _state.Engagement = state with { Seconds = next, StartPending = false };
     }
 
-    public override void _ExitTree()
+    private bool _sourceBindingsRetired;
+    public override void _ExitTree() => RetireSourceBindings();
+
+    internal void RetireSourceBindings()
     {
-        RetainCorpseEquipment();
-        if (_state.PrepareNativeInventoryRemoval == PrepareNativeInventoryRemoval) _state.PrepareNativeInventoryRemoval = null;
-        RetainStoppedPoseReadiness();
-        if (_state.StopCombat == StopCombat) _state.StopCombat = null;
-        if (_state.QuerySpatialPlacement == CaptureSpatialPlacement) _state.QuerySpatialPlacement = null;
-        DisposeRouteSearch();
-        // A door can materialize the same reference in its destination before
-        // the previous presentation leaves the tree. Only the current binding
-        // may capture a pose or release the shared save callback.
-        if (_state.CaptureEngagement == CaptureEngagement)
+        if (_sourceBindingsRetired) return;
+        _sourceBindingsRetired = true;
+        try
         {
-            CaptureEngagement(); _state.CaptureEngagement = null;
+            RetainCorpseEquipment();
+            RetainStoppedPoseReadiness();
+            // A destination can already own the same reference. Only the
+            // current binding may retain its pose during retirement.
+            if (_state.CaptureEngagement == CaptureEngagement) CaptureEngagement();
         }
+        finally
+        {
+            if (_state.PrepareNativeInventoryRemoval == PrepareNativeInventoryRemoval) _state.PrepareNativeInventoryRemoval = null;
+            if (_state.StopCombat == StopCombat) _state.StopCombat = null;
+            if (_state.QuerySpatialPlacement == CaptureSpatialPlacement) _state.QuerySpatialPlacement = null;
+            if (_state.CaptureEngagement == CaptureEngagement) _state.CaptureEngagement = null;
+            if (_state.CanCaptureCorpseEquipment == CorpseEquipmentCaptureReady) _state.CanCaptureCorpseEquipment = null;
+            if (_state.CaptureCorpseEquipment == CaptureCorpseEquipment) _state.CaptureCorpseEquipment = null;
+            DisposeRouteSearch();
+        }
+    }
+
+    internal void RestoreSourceBindings()
+    {
+        if (!IsInsideTree() || _sourceBindingsRetired ||
+            _state.QuerySpatialPlacement is not null && _state.QuerySpatialPlacement != CaptureSpatialPlacement) return;
+        _state.QuerySpatialPlacement ??= CaptureSpatialPlacement;
+        _state.StopCombat ??= StopCombat;
+        _state.CaptureEngagement ??= CaptureEngagement;
+        _state.CanCaptureCorpseEquipment ??= CorpseEquipmentCaptureReady;
+        _state.CaptureCorpseEquipment ??= CaptureCorpseEquipment;
+        _state.PrepareNativeInventoryRemoval ??= PrepareNativeInventoryRemoval;
     }
 }

@@ -537,6 +537,11 @@ internal sealed class FalloutPlugin : IDisposable
         }
     }
 
+    internal void ValidateReadSource()
+    {
+        lock (_recordDataGate) EnsureUnchanged();
+    }
+
     private void EnsureUnchanged()
     {
         if (RandomAccess.GetLength(_handle) != _length)

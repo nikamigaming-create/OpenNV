@@ -201,6 +201,14 @@ if ($LASTEXITCODE -ne 0 -or $activationText -match $godotFailurePattern -or
 }
 Write-Output "OPENNV_NATIVE_DEFAULT_ACTIVATION_PASS retainedFault=true queuedOnce=true availabilityGuarded=true"
 
+$targetOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeReferenceTargetAudit/NativeReferenceTargetAudit.tscn 2>&1
+$targetText = $targetOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $targetText -match $godotFailurePattern -or
+    $targetText -notmatch "OPENNV_NATIVE_REFERENCE_GEOMETRY_PASS" -or $targetText -notmatch "wristOrigin=true") {
+    throw "OpenNV shared flat/XR activation targeting failed:`n$targetText"
+}
+Write-Output "OPENNV_NATIVE_REFERENCE_GEOMETRY_PASS wristOrigin=true ordinaryRayAndRange=true xrOcclusionRefused=true"
+
 $ragdollOutput = & $Godot --headless --verbose --path $runtime res://tools/NativeAuthoredRagdollAudit/NativeAuthoredRagdollAudit.tscn 2>&1
 $ragdollText = $ragdollOutput | Out-String
 if ($LASTEXITCODE -ne 0 -or $ragdollText -match $godotFailurePattern -or

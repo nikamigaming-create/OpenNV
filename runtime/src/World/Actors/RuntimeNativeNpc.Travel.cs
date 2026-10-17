@@ -8,14 +8,16 @@ namespace OpenNV.Runtime.World.Actors;
 
 internal partial class RuntimeNativeNpc
 {
-    private const string MarkerTravelCaptureBlocker = "Marker Travel has started but its native capsule route snapshot is not initialized.";
+    private const string MarkerTravelCaptureBlocker = "Marker Travel native route or portal retirement is not ready for capture.";
     private CellNavigationGraph? _navigation;
     private GamebryoRootMotionTravel? _travelProgress;
     private FalloutTravelPackage? _nativeMarkerTravel;
     private FalloutTravelProgress? _nativeMarkerTravelProgress;
     private Vector3? _nativeMarkerTravelDestination;
     private bool _nativeMarkerTravelRestored;
-    private bool _travelActive => _travelProgress?.Active == true || _nativeMarkerTravelProgress is { Complete: false };
+    private (FalloutPluginRecord Package, bool Initializing)? _pendingCurrentLocationTravel;
+    private bool _travelActive => _travelProgress?.Active == true || _nativeMarkerTravelProgress is { Complete: false } ||
+        _pendingCurrentLocationTravel is not null;
     private Transform3D _travelDestination;
     private double _baseElapsedSeconds;
     private float _travelPublishedDistance;
@@ -47,12 +49,21 @@ internal partial class RuntimeNativeNpc
             progress = _nativeMarkerTravelProgress,
             projectedEndpoint = _nativeMarkerTravelDestination is { } endpoint ? new[] { endpoint.X, endpoint.Y, endpoint.Z } : null,
             restored = _nativeMarkerTravelRestored,
+            portalRetirementWait = _markerPortalRetirementWait,
+            portalRangeOwner = "validated-configured-interaction-range",
+            _nativeMarkerTravel.ContinueCombat,
+            _nativeMarkerTravel.NoCombatAlert,
+            combatBoundary = "no-partial-detection-search; concurrent-travel-firing-explicitly-unbound",
+            navigationDoorAssociationErrors = _navigation?.DoorAssociationErrors,
             owner = "source-navm-native-capsule-and-package-kf",
         },
         rootCycleDistance = _travelCycleDistance,
         source = "winning-navm-and-kf-accumulation",
         unbound = new[] { "dynamic-obstacle-avoidance", "turn-blending", "retail-path-costs" },
     };
+
+    internal void RequireTravelCombatContinuation() => _nativeMarkerTravel?.RequireCombatContinuation(
+        _aiReferenceState?.Engagement is not null, _nativeMarkerTravelProgress?.Complete == true);
 
     private void StartTravel(FalloutPluginRecord package, FalloutPlacedReference target, Transform3D? furnitureApproach = null,
         int destinationRadiusGameUnits = 0)
@@ -68,8 +79,8 @@ internal partial class RuntimeNativeNpc
     {
         var world = _aiWorld ?? throw new NotSupportedException("Marker Travel has no shared reference owner.");
         var source = FalloutTravelPackage.Read(package, ownsIdleCollection: true);
-        if (source.LocationType != 0)
-            throw new NotSupportedException("Legacy marker Travel requires its reference-location owner.");
+        if (source.LocationType is not (0 or 2))
+            throw new NotSupportedException("Native marker Travel requires its reference or current-location owner.");
         var actor = Appearance.Reference!.Value;
         var state = world.Get(actor);
         var retainedMotion = state.PackageMotion is { } motion && motion.Package == package.FormKey ? motion : null;
@@ -80,10 +91,30 @@ internal partial class RuntimeNativeNpc
             throw new NotSupportedException("Saved active marker Travel lacks its native route cursor and source animation continuation.");
         if (restored is not null && retainedAssignment is not null && restored.Complete != retainedAssignment.Done)
             throw new InvalidDataException("Saved marker Travel arrival differs from its package event lifecycle.");
-
-        var progress = restored ?? source.Start(_aiStack!, world, actor);
         var completedFromLifecycle = initializing && restored is null && retainedAssignment is { Done: true } &&
             _packageEvents is { Done: true, Active: { Form: var activeForm } } && activeForm == package.FormKey;
+        if (completedFromLifecycle && source.LocationType == 2)
+            throw new NotSupportedException("Saved completed current-location Travel lacks its retained start anchor.");
+
+        if (restored is null && source.LocationType == 2 && !IsInsideTree())
+        {
+            // The combat child's Ready restores the saved global pose after
+            // attachment. Capture this new package's anchor only afterward,
+            // when the actual parent coordinate frame is also available.
+            _pendingCurrentLocationTravel = (package, initializing);
+            _aiPackage = package;
+            state.ProcedureCaptureBlocker = MarkerTravelCaptureBlocker;
+            return;
+        }
+        float[]? currentLocation = null;
+        if (restored is null && source.LocationType == 2)
+        {
+            // Travel.Location is in the native cell parent's source frame;
+            // AdvanceMarkerTravel applies that parent's transform once.
+            var position = Position / Skeleton.UnitsToMetres;
+            currentLocation = [position.X, -position.Z, position.Y];
+        }
+        var progress = restored ?? source.Start(_aiStack!, world, actor, currentLocation);
         if (completedFromLifecycle)
         {
             if (retainedMotion is null)
@@ -101,19 +132,29 @@ internal partial class RuntimeNativeNpc
             progress = progress with { Complete = true };
         }
         if (restored is not null) source.Validate(_aiStack!, world, actor, restored);
-        if (progress.Cell != _aiCell!.Cell.FormKey)
-            throw new NotSupportedException("Marker Travel destination requires its other-cell route owner.");
-        _navigation = CellNavigationGraph.LoadOwned(_aiStack!, progress.Cell);
-        if (restored is not null && (restored.NavigationSha256 is not { } navigationSha256 ||
+        var arrival = progress.PortalArrival is not null;
+        var routeCell = progress.RouteCell ?? _aiCell!.Cell.FormKey;
+        _navigation = restored is { RouteCell: null, PortalArrival: null }
+            ? CellNavigationGraph.LoadOwned(_aiStack!, progress.Cell) : world.TravelNavigation(routeCell);
+        if (restored is not null && !arrival && (restored.NavigationSha256 is not { } navigationSha256 ||
             !navigationSha256.Equals(_navigation.SourceSha256, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException("Saved marker Travel route differs from its winning NAVM source.");
-        if (restored is null)
-            progress = progress with { NavigationSha256 = _navigation.SourceSha256 };
+        if (restored is null || arrival)
+            progress = progress with
+            {
+                NavigationSha256 = _navigation.SourceSha256,
+                RouteCell = routeCell,
+                PortalDoor = progress.Complete ? null : world.TravelPortal(actor, progress.Cell),
+                PortalArrival = null
+            };
 
         _nativeMarkerTravel = source;
         _nativeMarkerTravelProgress = progress;
         _nativeMarkerTravelDestination = null;
         _nativeMarkerTravelRestored = restored is not null;
+        _markerPortalRequested = false;
+        _markerPortalRetirementWait = null;
+        MarkerPortalTransferred = false;
         _aiPackage = package;
         _travelProgress?.Cancel();
         if (_packageEvents!.Active is null)
@@ -128,7 +169,7 @@ internal partial class RuntimeNativeNpc
         else if (initializing && restored is null && !_packageEvents.Done)
             throw new NotSupportedException("Saved active marker Travel lifecycle has no native route continuation.");
 
-        state.ProcedureCaptureBlocker = restored is null && !completedFromLifecycle
+        state.ProcedureCaptureBlocker = (restored is null || arrival) && !completedFromLifecycle
             ? MarkerTravelCaptureBlocker : null;
         GD.Print($"OPENNV_NATIVE_MARKER_TRAVEL_READY reference={actor} package={package.FormKey} " +
             $"navigation={_navigation.SourceSha256} restored={restored is not null} complete={progress.Complete}");
@@ -136,30 +177,42 @@ internal partial class RuntimeNativeNpc
 
     private void AdvanceMarkerTravel(double delta)
     {
-        if (_nativeMarkerTravel is not { } source || Combat is null || _aiError is not null || Combat.OwnsPose ||
+        if ((_nativeMarkerTravel is null && _pendingCurrentLocationTravel is null) || Combat is null || _aiError is not null || Combat.OwnsPose ||
             !Combat.PackageMovementReady || _conversationTarget is not null) return;
         try
         {
+            if (_pendingCurrentLocationTravel is { } pending)
+            {
+                _pendingCurrentLocationTravel = null;
+                BeginMarkerTravel(pending.Package, pending.Initializing);
+            }
+            var source = _nativeMarkerTravel ?? throw new InvalidOperationException("Current-location Travel did not acquire its native start anchor.");
             var progress = _nativeMarkerTravelProgress!;
-            var authored = GetParent<Node3D>().ToGlobal(new Vector3(progress.Location[0], progress.Location[2], -progress.Location[1]) * Skeleton.UnitsToMetres);
+            if (MarkerPortalTransferred || _markerPortalRequested) return;
+            var location = progress.PortalDoor is { } portal ? _aiWorld!.Placement(portal).Position : progress.Location;
+            var authored = GetParent<Node3D>().ToGlobal(new Vector3(location[0], location[2], -location[1]) * Skeleton.UnitsToMetres);
             var destination = _nativeMarkerTravelDestination ??= Combat.ProjectPackageDestination(authored);
             if (progress.RouteTarget is { } retainedTarget)
             {
                 var retained = new Vector3(retainedTarget[0], retainedTarget[1], retainedTarget[2]);
-                if (retained.DistanceTo(destination) > Math.Max(source.Radius * Skeleton.UnitsToMetres, .25f) + .1f)
+                if (retained.DistanceTo(destination) > MarkerTravelRadius(progress) + .1f)
                     throw new InvalidDataException("Saved marker Travel endpoint differs from its projected source destination.");
             }
-            var radius = Math.Max(source.Radius * Skeleton.UnitsToMetres, .25f);
+            var radius = MarkerTravelRadius(progress);
             var reached = IsOnFloor() && GlobalPosition.DistanceTo(destination) <= radius + .1f;
-            var completedNow = reached && !progress.Complete;
+            var completedNow = reached && !progress.Complete && progress.PortalDoor is null &&
+                !source.HoldsForPlayer(source.ContinueIfPlayerNear && Combat.PackagePlayerInSameCell());
             progress = progress with
             {
                 NavigationSha256 = _navigation!.SourceSha256,
                 RouteTarget = [destination.X, destination.Y, destination.Z],
             };
             Combat.AdvancePackageMotion(_aiPackage!, progress.Complete ? GlobalPosition : destination,
-                progress.Complete ? 0 : radius, source.Running, delta, requireArrivalHeight: true);
-            if (Combat.PackageRouteRestorable || Combat.PackageRouteFailure is not null || reached)
+                progress.Complete ? 0 : radius, source.Running, delta, source.WeaponDrawn, requireArrivalHeight: true, sneaking: source.Sneaking);
+            if (reached && !completedNow && !progress.Complete && progress.PortalDoor is null)
+                Combat.ObservePackageArrival(destination, radius + .1f);
+            var routePublished = Combat.PackageRouteRestorable || Combat.PackageRoutePending || Combat.PackageRouteFailure is not null || reached;
+            if (routePublished)
                 Combat.SetTravelProgress(progress);
             if (completedNow)
             {
@@ -168,18 +221,34 @@ internal partial class RuntimeNativeNpc
                 Combat.SetTravelProgress(progress);
                 _packageEvents!.Complete();
             }
-            else _nativeMarkerTravelProgress = Combat.PackageMotion?.Travel ?? progress;
+            // Until this leg publishes a route, retained motion still owns
+            // the preceding committed portal receipt. Reading it back here
+            // would replace the new pending leg and attach its future route
+            // to that already completed transition.
+            else _nativeMarkerTravelProgress = routePublished ? Combat.PackageMotion!.Travel! : progress;
 
             var state = _aiWorld!.Get(Appearance.Reference!.Value);
-            if (progress.Complete || Combat.PackageRouteRestorable || Combat.PackageRouteFailure is not null)
+            if (progress.Complete || Combat.PackageRouteRestorable || Combat.PackageRoutePending || Combat.PackageRouteFailure is not null)
                 state.ProcedureCaptureBlocker = null;
             else state.ProcedureCaptureBlocker = MarkerTravelCaptureBlocker;
             _nativeMarkerTravelRestored = true;
+            if (reached && progress.PortalDoor is { } door)
+            {
+                // Keep publishing the ordinary idle clock while finite source
+                // audio retires. No event or placement is admitted early.
+                if (PortalPlaybackReady())
+                {
+                    _markerPortalRequested = Combat.RequestPackagePortal(door);
+                    if (_markerPortalRequested) state.ProcedureCaptureBlocker = PendingMarkerPortalCaptureBlocker;
+                }
+                else state.ProcedureCaptureBlocker = MarkerTravelCaptureBlocker;
+                return;
+            }
             if (progress.Complete)
             {
                 // Keep the package KF clock and final physical pose in the same
                 // shared snapshot after the source completion event is consumed.
-                Combat.AdvancePackageMotion(_aiPackage!, GlobalPosition, 0, source.Running, 0, requireArrivalHeight: true);
+                Combat.AdvancePackageMotion(_aiPackage!, GlobalPosition, 0, source.Running, 0, source.WeaponDrawn, requireArrivalHeight: true, sneaking: source.Sneaking);
                 Combat.SetTravelProgress(progress);
             }
             if (completedNow) GD.Print($"OPENNV_NATIVE_MARKER_TRAVEL_ARRIVAL reference={Appearance.Reference} package={source.Form} " +

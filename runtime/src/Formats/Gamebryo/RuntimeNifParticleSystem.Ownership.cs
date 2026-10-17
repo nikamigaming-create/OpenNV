@@ -31,7 +31,7 @@ internal sealed partial class RuntimeNifParticleSystem
             _turbulence?.Dispose(); _turbulence = null;
             _active.Clear(); _rates.Clear(); _speeds.Clear(); _lifespans.Clear(); _remainders.Clear();
             _meshes.Clear(); _colliders.Clear(); _keyColors.Clear(); _spawnOwners.Clear(); _particleIndices.Clear();
-            _particles = []; _drawBuffer = []; _modifiers = []; _colliderPoses = [];
+            _particles = []; _drawBuffer = []; _modifiers = []; _drawModifiers = []; _activeDrawModifiers = []; _colliderPoses = [];
             _source = null!; _data = null!; _nodes = null!;
             _sourceFile = null;
             throw;

@@ -252,7 +252,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
                 RequireRouteDoor(binding, actor);
                 if (_world.GetLocked(reference) != 0) throw new NotSupportedException("Activation-parent door retains its source lock.");
             }
-            else RequireNpcDoor(binding, actor);
+            else RequireNpcDoor(binding, actor, portal: binding.Reference.Teleport is not null);
         }
         _world.ArmActivationChildren(reference, actor);
         QueueActivationRelays(0);
@@ -369,6 +369,9 @@ internal partial class RuntimeNativeReferenceEvents : Node
             var events = new List<FalloutReferenceScriptEvent>();
             var playerInput = false;
             var relay = binding.PendingRelay;
+            var npcPortalActor = binding.Reference.Teleport is not null && binding.PendingActivation is { } portalActor &&
+                portalActor != _records.RuntimeFormKey(0x14) && _bindings.GetValueOrDefault(portalActor)?.Node is INativeActorPortal portalNpc
+                ? portalNpc : null;
             if (binding.PendingActivation is { } actor)
             {
                 events.Add(new("OnActivate", actor));
@@ -408,6 +411,8 @@ internal partial class RuntimeNativeReferenceEvents : Node
             if (relay is not null) _world.ConsumeActivationRelay(relay);
             if (playerInput) ObservePlayerActivationFinished?.Invoke(binding.Reference.FormKey,
                 results.Single(result => result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase)).Error is null);
+            npcPortalActor?.FinishPortalAttempt(binding.Reference.FormKey,
+                results.Single(result => result.Event.Equals("OnActivate", StringComparison.OrdinalIgnoreCase)).Error);
             // Source faults retain their executed prefix on the actual instance.
             // Consume this admission once while preserving marks produced by it.
             if (hasPackageEvents) _world.PackageEvents.Consume(packageBatch!);

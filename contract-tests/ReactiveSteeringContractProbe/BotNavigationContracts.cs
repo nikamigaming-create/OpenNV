@@ -12,9 +12,30 @@ internal static class BotNavigationContracts
         MovingTargetEndpoints();
         ClosingAndStationaryBounds();
         QueuedPlanning();
+        MovingTargetQueuedSegments();
         RouteDoors();
         RefinementProvenance();
+        ObservedProjectionHandoff();
         Console.WriteLine("Reference bot navigation: short/inside endpoints, partial corridors, projection refinement, moving-target endpoints, queued/stale planning, ordinary route doors, ray result, closing progress and stationary bounds PASS.");
+    }
+
+    private static void ObservedProjectionHandoff()
+    {
+        var observation = Observation(6);
+        var arrivals = 0;
+        var bot = new ReactiveReferenceBot(_ => observation, (_, end, _) =>
+            new([new(0, 0, 2), Vector3.Zero], end, Vector3.Zero, true,
+                ObserveArrival: _ => arrivals++), (_, _) => { });
+        bot.Start("reference", "approach", 1); bot.Tick(.016f);
+        Require(arrivals == 0, "A folded route whose endpoint is near its start published arrival before traversing the prefix.");
+        bot.Stop();
+        Require(arrivals == 0, "Cancelling a planned route published projected arrival.");
+        bot.Start("reference", "approach", 1); bot.Tick(.016f);
+        observation = Move(observation, 2); bot.Tick(.016f);
+        Require(arrivals == 0, "An intermediate waypoint published final projected arrival.");
+        observation = Move(observation, 0); bot.Tick(.016f);
+        Require(arrivals == 1 && Phase(bot) == "replanning-endpoint",
+            "Observed full waypoint consumption did not publish the projection handoff before the final approach replan.");
     }
 
     private static void RefinementProvenance()
@@ -77,6 +98,53 @@ internal static class BotNavigationContracts
         Require(cancellations > beforeScene && Phase(bot) == "planning", "Cell transfer retained an obsolete query.");
         observation = observation with { Paused = true }; bot.Tick(1f / 60);
         Require(requestStart is null && input == default, "A modal pause retained a pending native query.");
+        bot.Stop();
+    }
+
+    private static void MovingTargetQueuedSegments()
+    {
+        var observation = Observation(6);
+        SteeringIntent input = default;
+        (Vector3 Start, Vector3 End, Vector3 Target)? pending = null;
+        var requests = new List<Vector3>();
+        var polls = 0;
+        var bot = new ReactiveReferenceBot(_ => observation,
+            (_, _, _) => throw new InvalidOperationException("Async follow used a synchronous fallback."),
+            (intent, _) => input = intent,
+            (start, end, target, _, _) =>
+            {
+                if (pending is null) { pending = (start, end, target); polls = 0; requests.Add(target); }
+                Require(pending == (start, end, target), "Moving follow replaced its pending native query.");
+                if (++polls < 16) return null;
+                return new([start + Vector3.UnitZ], end, end, false);
+            }, () => pending = null);
+        bot.Start("actor", "follow", 1.5f);
+        for (var frame = 0; frame < 16; frame++)
+        {
+            observation = observation with { Target = new(0, 0, 6 + frame * .1f), Aim = new(0, 1, 6 + frame * .1f) };
+            bot.Tick(1f / 60);
+        }
+        Require(requests.Count == 1 && input.Forward && Phase(bot) == "approaching",
+            "Target drift starved an asynchronous follow query before movement.");
+        for (var frame = 1; frame < 8; frame++)
+        {
+            observation = Move(observation, frame * .1f) with
+            { Target = observation.Target + Vector3.UnitZ * .1f, Aim = observation.Aim + Vector3.UnitZ * .1f };
+            bot.Tick(1f / 60);
+            Require(requests.Count == 1 && input.Forward, "Target drift discarded a verified follow segment before arrival.");
+        }
+        observation = Move(observation, .85f); bot.Tick(1f / 60);
+        Require(Phase(bot) == "replanning-segment" && input == default,
+            "Follow crossed a verified segment boundary without a fresh route.");
+        var nextTarget = observation.Target;
+        bot.Tick(1f / 60);
+        Require(requests.Count == 2 && requests[1] == nextTarget && Phase(bot) == "planning",
+            "Follow did not refresh the live target after observed segment arrival.");
+        observation = observation with { Target = observation.Position + Vector3.UnitZ, Aim = observation.Camera + Vector3.UnitZ };
+        bot.Tick(1f / 60);
+        Require(Phase(bot) == "following-at-distance" && pending is null && !input.Forward &&
+            input.Combat is null && !input.Pause && input.AimAt == observation.Aim,
+            "An approaching actor did not cancel the pending route at the live follow distance.");
         bot.Stop();
     }
 

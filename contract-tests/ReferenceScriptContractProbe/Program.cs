@@ -4,6 +4,63 @@ using System.Text.Json;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.World.Cells;
 
+if (args is ["--follow-package-contracts"])
+{
+    FollowPackageContracts.Run();
+    return;
+}
+if (args is ["--audit-accompany-package", var accompanyData])
+{
+    OwnedCompanionPackageProbe.RunAccompany(accompanyData);
+    return;
+}
+
+if (args is ["--audit-objective-continuation", var objectiveData])
+{
+    OwnedObjectiveContinuationProbe.Run(objectiveData);
+    return;
+}
+
+if (args is ["--movement-speed-contracts"])
+{
+    MovementSpeedContracts.Run();
+    PlayerActorValueContracts.Run();
+    return;
+}
+if (args is ["--audit-movement-speed", var movementData])
+{
+    MovementSpeedContracts.RunOwned(movementData);
+    return;
+}
+
+if (args is ["--fast-travel-contracts"])
+{
+    FastTravelContracts.Run();
+    return;
+}
+if (args is ["--audit-fast-travel", var travelData])
+{
+    FastTravelContracts.RunOwned(travelData);
+    return;
+}
+
+if (args is ["--transient-explosion-contracts"])
+{
+    TransientExplosionContracts.Run();
+    return;
+}
+if (args is ["--audit-transient-explosion", var explosionData])
+{
+    TransientExplosionContracts.RunOwned(explosionData);
+    return;
+}
+
+if (args is ["--music-type-contracts"])
+{
+    MusicTypeContracts.Run();
+    return;
+}
+
 if (args is ["--weather-command-contracts"])
 {
     WeatherCommandContracts.Run();
@@ -336,6 +393,11 @@ if (args is ["--travel-contracts"])
     TravelContracts.Run();
     return;
 }
+if (args is ["--audit-current-location-travel", var currentLocationData])
+{
+    TravelContracts.RunOwnedCurrentLocation(currentLocationData);
+    return;
+}
 if (args is ["--furniture-contracts"])
 {
     FurnitureContracts.Run();
@@ -584,6 +646,10 @@ if (args.Length >= 5 && args[0] == "--audit-numeric-settings")
     OwnedNumericGameSettingProbe.Run(args[1], args[2], args[3], args[4], args[5..]);
     return;
 }
+MusicTypeContracts.Run();
+TransientExplosionContracts.Run();
+MovementSpeedContracts.Run();
+FastTravelContracts.Run();
 Directory.CreateDirectory(directory);
 try
 {
@@ -908,6 +974,10 @@ DialoguePackageContracts.Run();
 DialogueSpatialContracts.Run();
 HeadingQueryContracts.Run();
 WeatherCommandContracts.Run();
+MovementSpeedContracts.Run();
+FastTravelContracts.Run();
+MusicTypeContracts.Run();
+TransientExplosionContracts.Run();
 CellQueryContracts.Run();
 NpcDialogueLinkContracts.Run();
 RadioContracts.Run();

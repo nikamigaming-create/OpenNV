@@ -1,82 +1,56 @@
 # Current work
 
-Updated 2026-10-17. One integration owner is recovering a playable Godot/OpenXR
-FNV candidate for Quest 3 over Air Link. Delivery order remains **vanilla FNV,
-vanilla FO3, mods, then TTW**. Existing gameplay is a regression requirement.
+Updated 2026-10-17. Root alone integrates the vanilla FNV local playtest for Quest 3
+and Air Link; all subagents are stopped at the user's request. Priority remains
+FNV, standalone FO3, mods, then TTW. No campaign or physical-headset completion
+is claimed.
 
-## Current implementation
+## Verified baseline
 
-The October 9 gameplay implementation at 03c3d23a is restored as one coherent
-runtime/native/tools/test boundary. Godot 4.8-dev7 and .NET 10 remain pinned.
-Recent source work is retained in normal Git history at 17a56554. The incomplete
-mandatory Main/Player integration is removed, not bypassed with success stubs.
+PR #207 restored the coherent runtime and consolidated the repository. Main was
+synchronized; obsolete task branches and worktrees were removed after preserving
+unique source. One checkout contains the current codex/fnv-playable-release work.
 
-Independent retained fixes cover signed font advances, compiler compatibility,
-isolated launcher profiles, explicit official-content selection, OpenXR launch
-selection, wrist pointer cancellation and input release, and player visibility.
-Native extension modules are disabled. FO3/mod/TTW expansion is deferred.
+Fresh creation, Doc's exit, saloon doors, Sunny's tutorial, actual rifle hits on
+all three bottles and the next dialogue work in flat/simulator OpenXR. Earlier
+Release play killed both first-well geckos, advanced to stage 50, looted corpses,
+and used wrist-ray Pip-Boy fast travel. The newest accepted manual checkpoint is
+stage 25, after a saloon round trip. Original owned files and user saves remain
+untouched. No physical Quest 3, ED-E, campaign, FO3 VR, mod or TTW acceptance yet.
 
-## Executed checks
+## Integrated changes and checks
 
-- Fresh pre-recovery New Game failed constructing the player in Doc Mitchell's
-  house: source-Player-post-null-distinct-manager-word-constructor-and-writers-unowned.
-- Historical executable loaded a copied save, moved and opened its actual Pip-Boy.
-- Restored Debug and Release compile without warnings. The complete required
-  runtime gate passed, including native Godot loading and navigation checks.
-- Restored Debug simulator loaded Goodsprings through the actual game save menu.
-  Both eyes show the world, hands, wrist device and equipped laser pistol.
-  Controller locomotion moved the player. Ordinary Quit completed.
-- A fresh exported Release loaded the same copied save and accepted controller
-  movement. Automatic diagnostic frame readback inflated its frame time; with
-  readback disabled, settled outdoor median draw interval was about 33 ms.
-- Sampling identified repeated particle-collider matrix work and source-record
-  decompression. Per-pass collider poses and bounded in-process record reuse are
-  implemented; focused moving-collider, callback, cache and compression checks pass.
-- The local simulator's action binding resolver and expiring controller leases
-  are repaired. Fresh Release input exercised wrist opening, ray selection of
-  ITEMS, input release, reload, firing, snap turns and walking through the actual
-  Prospector Saloon door. Initial outdoor median is about 14 ms; settled measurement
-  and physical-headset acceptance remain pending. The full runtime gate passed.
-- Actual Sunny activation exposed an unbound GetDead condition. It now uses the
-  shared actor death owner with source scopes and reference adjustment. Synthetic,
-  vanilla-owned and cold-state checks pass. Actual Sunny conversation now opens
-  and completes without that error.
-- Door autosave ran before destination actor initialization completed. Both
-  interaction and door autosaves now use the existing readiness queue, retaining
-  capture guards and rechecking player health before writing. The saloon autosave
-  was written and loaded in a fresh process with its cell and player state intact.
-- Rendered FO3 New Game reaches its birth quest, but an anonymous sound emitter
-  broke telemetry publication. Readiness now reports that per-voice error without
-  throwing away controls; persistence still refuses an unowned continuation.
-  A fresh rendered replay reaches character selection/stage22 and quits normally.
-- Fresh FNV character creation passed name, appearance, SPECIAL, couch dialogue,
-  tags and traits with ordinary input. A new manual save was written inside Doc's
-  house. The original copied save retains an earlier Doc-exit script failure:
-  the two-argument ForceWeather command stopped before resetting VCG02.
-  Its optional override flag is now implemented and source-audited. Fresh exit
-  passed that command, then exposed the next unimplemented command, PlayMusic
-  with a nonempty MUSC record. This still prevents the tutorial reset. Old faults
-  are retained; retry from the fresh indoor save after fixing the command.
-- Fresh exterior actors have correct source positions and capturable furniture
-  state. The older save's Easy Pete binding-failure snapshot contains world origin,
-  causing its later furniture/save blocker. No named-actor repair is applied.
-- Tutorial weapon queries now share live equipment/drawn state and the documented
-  script animation-category mapping. Owned bottle-script hits advance the objective;
-  actual tutorial shooting remains pending. Controller-ray 9mm equip, reload and
-  firing worked in the exported simulator, alongside the earlier laser-pistol check.
-- Original user save hash remained unchanged. Tests use separate copied saves.
+Runtime now owns source music and transient explosions, objective setters,
+movement values and fast travel policy, current-location/sneak Travel, directed
+NPC/creature portal continuations, IDLM travel destinations and Accompany.
+Cell replacement retires old active/warm/staged actor bindings before replacement
+and restores retained actors on rollback. Prepared door models retain their real
+animation clocks even when prefetch is cancelled. Unfinished NPC route searches
+persist as pending queries with their actual pose and source identity; cold
+restoration replans without inventing arrival or replaying package events.
 
-## Next work
+Weapon observation shares the current held-weapon owner. Bot follow no longer
+starves moving-target routes, and final reference approaches retain the original
+arrival region. Source indexing/reuse, duplicate LOD texture reads, particle draw
+modifier selection and native child-array enumeration were tightened without
+excluding source references or particles.
 
-Finish the checked recovery baseline on main, then fix script music and retry
-Doc's exit and Sunny's tutorial on one fresh release branch. Repeat the full gate; the prior run exposed an
-uninitialized vitals owner in the save-deferral fixture, now corrected with a real
-owner and defeated-player coverage. Measure settled performance, then exercise
-loot and cold saves with ordinary inputs. Continue
-the Goodsprings/Primm/ED-E regression route without forced quests or entities.
+The complete Test-GodotRuntime gate and git diff --check pass for this candidate.
+Owned Travel/Accompany/movement checks and native actor overlap/rollback, pending
+route cold state, door cancellation/cold clocks, projected arrival and particle
+controller/output checks pass. Exported final live acceptance is in progress.
 
-Complete checked PR #207, synchronize main, and retire accounted branches and
-worktrees. Source reconciliation has preserved dirty source and identified
-superseded experiments; cleanup is pending. Then use one fresh release branch
-for the local handoff. Root owns builds, live input and Git integration; agents
-review gameplay, launcher and source reconciliation. Frame recording is off.
+## Remaining work
+
+Confirm exported creature door traversal, ordinary save/cold continuation and
+fast-travel population. Then merge the checked release PR, verify clean local
+main equals origin/main, and pin one asset-free local Quest 3 launcher.
+
+Loading is not instant. One prior cold exterior Continue measured 31.27s: restore
+1.12s, world 8.70s, characters/controls 9.24s, distant world 12.20s. Warm exterior
+reload measured 6.61s and saloon entry 3.25s. New performance changes need matched
+measurement. Unsupported source behavior, missing SpeedTree decoding and other
+reported divergences remain visible. ED-E/campaign and crafting need continued
+playthrough; unloaded background-cell simulation is not complete.
+
+Frame recording is off. Only root operates the game, builds and Git.

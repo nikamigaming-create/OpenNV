@@ -8,6 +8,10 @@ internal sealed partial class CellNavigationGraph
     // Native support is still mandatory; this predicate cannot create it.
     internal Func<Vector3, bool> ArrivalRegion(Vector3 start, Vector3 requested, Vector3 selected,
         float radius, float horizontalTolerance, float heightTolerance)
+        => ArrivalRegion(start, requested, selected, radius, horizontalTolerance, heightTolerance, out _);
+
+    internal Func<Vector3, bool> ArrivalRegion(Vector3 start, Vector3 requested, Vector3 selected,
+        float radius, float horizontalTolerance, float heightTolerance, out Func<Vector3, bool> sourceFloor)
     {
         if (!start.IsFinite() || !requested.IsFinite() || !selected.IsFinite() ||
             !float.IsFinite(radius) || radius <= 0 || !float.IsFinite(horizontalTolerance) || horizontalTolerance < 0 ||
@@ -20,14 +24,16 @@ internal sealed partial class CellNavigationGraph
         var selectedFloor = NearestNode(selected);
         if (!reached.Contains(selectedFloor.Node) || selected.DistanceSquaredTo(requested) > radius * radius)
             throw new InvalidDataException("Selected source endpoint lies outside its reachable requested region.");
-        return point =>
+        bool SameFloor(Vector3 point)
         {
-            if (!point.IsFinite() || point.DistanceSquaredTo(requested) > radius * radius) return false;
+            if (!point.IsFinite()) return false;
             var floor = NearestNode(point);
             var horizontal = new Vector2(point.X - floor.Point.X, point.Y - floor.Point.Y);
             return reached.Contains(floor.Node) && horizontal.LengthSquared() <= horizontalTolerance * horizontalTolerance &&
                 MathF.Abs(point.Z - floor.Point.Z) < heightTolerance &&
                 MathF.Abs(floor.Point.Z - selectedFloor.Point.Z) < heightTolerance;
-        };
+        }
+        sourceFloor = SameFloor;
+        return point => point.DistanceSquaredTo(requested) <= radius * radius && SameFloor(point);
     }
 }

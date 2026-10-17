@@ -144,7 +144,7 @@ public partial class RuntimeCoordinator
     {
         var world = _nativeReferences!;
         var player = actor == _nativePluginStack!.RuntimeFormKey(0x14);
-        if (!player && (type != "DOOR" || reference.Teleport is not null || !world.CanNpcOpenDoor(reference.FormKey, actor)))
+        if (!player && (type != "DOOR" || !world.CanNpcOpenDoor(reference.FormKey, actor)))
             throw new NotSupportedException($"Default interaction by {actor} requires an ordinary door admitting that NPC.");
         if (player && type is "DOOR" or "CONT" or "TERM" && !world.UnlockWithKey(reference.FormKey, _nativeInventory))
         {
@@ -153,6 +153,14 @@ public partial class RuntimeCoordinator
         }
         if (type == "DOOR")
         {
+            if (!player && reference.Teleport is not null)
+            {
+                var npc = _nativeReferencePresentation!.Nodes.GetValueOrDefault(actor) as INativeActorPortal ??
+                    throw new NotSupportedException("Portal has no current native actor owner.");
+                npc.CommitPortal(reference.FormKey);
+                _nativeReferencePresentation.RetireTransferredActor(actor, npc);
+                return;
+            }
             if (node?.GetChildren().OfType<RuntimeNativeDoorPortal>().SingleOrDefault() is { } portal) portal.Activate();
             else (node?.GetChildren().OfType<RuntimeNativeDoorMotion>().SingleOrDefault() ??
                 throw new NotSupportedException("Door has no source animation owner.")).Activate();

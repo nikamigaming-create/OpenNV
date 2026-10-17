@@ -34,6 +34,8 @@ internal sealed record BotInteractionSnapshot(string TargetState, string? Target
 
 internal enum BotInteractionOutcomeKind { Other, Portal, Furniture }
 
+internal sealed record BotPortalObservation(string Destination, long Ordinal, bool Settled);
+
 internal readonly record struct BotInteractionObservation(long Revision, bool SettledPortal, bool PendingFurniture = false)
 {
     // Loading suspends native queries; a consumed portal can complete without
@@ -46,10 +48,30 @@ internal sealed class BotInteractionEvidence
     private sealed record Pending(BotInteractionSnapshot Before, BotInteractionSnapshot? BlockBefore,
         bool Result, bool Dispatched, string? DeferredOutcome = null,
         BotInteractionOutcomeKind DeferredOutcomeKind = BotInteractionOutcomeKind.Other,
-        string? ResultPortalOutcome = null, long DeferredRequestOrdinal = 0);
-    private sealed record Completion(long Revision, string? PortalOutcome);
+        string? ResultPortalOutcome = null, long DeferredRequestOrdinal = 0, long ResultPortalOrdinal = 0);
+    private sealed record Completion(long Revision, string? PortalOutcome, long PortalOrdinal);
+    private sealed record PortalRequest(string Destination, long Ordinal, string? CommittedCell = null);
     private readonly Dictionary<string, Pending> _pending = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Completion> _outcomes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PortalRequest> _portals = new(StringComparer.Ordinal);
+    private long _portalOrdinal;
+
+    internal long RequestPortal(string reference, string destination)
+    {
+        var ordinal = checked(++_portalOrdinal);
+        _portals[reference] = new(destination, ordinal);
+        return ordinal;
+    }
+
+    internal void CommitPortal(string reference, long ordinal, string cell)
+    {
+        if (_portals.TryGetValue(reference, out var request) && request.Ordinal == ordinal)
+            _portals[reference] = request with { CommittedCell = cell };
+    }
+
+    internal BotPortalObservation? ObservePortal(string reference, string? activeCell, bool loading, bool collisionResident) =>
+        _portals.TryGetValue(reference, out var request) ? new(request.Destination, request.Ordinal,
+            request.CommittedCell is not null && request.CommittedCell == activeCell && !loading && collisionResident) : null;
 
     internal void Begin(string reference, BotInteractionSnapshot before) =>
         _pending[reference] = _pending.TryGetValue(reference, out var prior) && !prior.Dispatched
@@ -73,7 +95,9 @@ internal sealed class BotInteractionEvidence
             DeferredOutcomeKind = newRequest ? after.RequestedOutcomeKind : pending.DeferredOutcomeKind,
             DeferredRequestOrdinal = newRequest ? after.RequestOrdinal : pending.DeferredRequestOrdinal,
             ResultPortalOutcome = newOutcome && after.TargetOutcomeKind == BotInteractionOutcomeKind.Portal
-                ? after.TargetOutcome : pending.ResultPortalOutcome
+                ? after.TargetOutcome : pending.ResultPortalOutcome,
+            ResultPortalOrdinal = newOutcome && after.TargetOutcomeKind == BotInteractionOutcomeKind.Portal
+                ? after.TargetOutcomeOrdinal : pending.ResultPortalOrdinal
         };
     }
 
@@ -81,7 +105,7 @@ internal sealed class BotInteractionEvidence
     {
         if (!_pending.TryGetValue(reference, out var pending)) return;
         if (!successful || pending.BlockBefore is not null) { _pending.Remove(reference); return; }
-        if (pending.Result) Complete(reference, pending.ResultPortalOutcome);
+        if (pending.Result) Complete(reference, pending.ResultPortalOutcome, pending.ResultPortalOrdinal);
         else _pending[reference] = pending with { Dispatched = true };
     }
 
@@ -96,9 +120,10 @@ internal sealed class BotInteractionEvidence
         if (_pending.TryGetValue(reference, out var pending) && pending.Dispatched && pending.DeferredOutcome is not null &&
             current.TargetOutcome == pending.DeferredOutcome && current.TargetOutcomeKind == pending.DeferredOutcomeKind &&
             NewTargetOutcome(pending.Before, current) &&
-            (pending.DeferredOutcomeKind != BotInteractionOutcomeKind.Furniture ||
+            (pending.DeferredOutcomeKind is not (BotInteractionOutcomeKind.Furniture or BotInteractionOutcomeKind.Portal) ||
                 pending.DeferredRequestOrdinal > 0 && current.TargetOutcomeOrdinal == pending.DeferredRequestOrdinal))
-            Complete(reference, current.TargetOutcomeKind == BotInteractionOutcomeKind.Portal ? current.TargetOutcome : null);
+            Complete(reference, current.TargetOutcomeKind == BotInteractionOutcomeKind.Portal ? current.TargetOutcome : null,
+                current.TargetOutcomeOrdinal);
         // A reservation belongs to the deferred activation; it is progress
         // that permits waiting, never a completed interaction. Do not borrow a
         // different reference, old request, or replacement activation's lease.
@@ -109,15 +134,17 @@ internal sealed class BotInteractionEvidence
             current.RequestOrdinal == pending.DeferredRequestOrdinal;
         var completion = _outcomes.GetValueOrDefault(reference);
         return new(completion?.Revision ?? 0, completion?.PortalOutcome is { } portal &&
-            current.TargetOutcomeKind == BotInteractionOutcomeKind.Portal && current.TargetOutcome == portal, pendingFurniture);
+            current.TargetOutcomeKind == BotInteractionOutcomeKind.Portal && current.TargetOutcome == portal &&
+            current.TargetOutcomeOrdinal == completion.PortalOrdinal, pendingFurniture);
     }
 
     internal void Forget(string reference) => _pending.Remove(reference);
     private static bool NewTargetOutcome(BotInteractionSnapshot before, BotInteractionSnapshot after) =>
-        after.TargetOutcome is not null && after.TargetOutcome != before.TargetOutcome;
-    private void Complete(string reference, string? portalOutcome)
+        after.TargetOutcome is not null && (after.TargetOutcome != before.TargetOutcome ||
+            after.TargetOutcomeKind != before.TargetOutcomeKind || after.TargetOutcomeOrdinal != before.TargetOutcomeOrdinal);
+    private void Complete(string reference, string? portalOutcome, long portalOrdinal)
     {
-        _outcomes[reference] = new(checked((_outcomes.GetValueOrDefault(reference)?.Revision ?? 0) + 1), portalOutcome);
+        _outcomes[reference] = new(checked((_outcomes.GetValueOrDefault(reference)?.Revision ?? 0) + 1), portalOutcome, portalOrdinal);
         _pending.Remove(reference);
     }
 }

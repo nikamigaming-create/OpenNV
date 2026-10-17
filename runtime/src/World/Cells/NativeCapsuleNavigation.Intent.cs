@@ -9,6 +9,18 @@ internal sealed record NativeNavigationProjectionRegion(Vector3 Requested, Vecto
 
 internal static partial class NativeCapsuleNavigation
 {
+    internal static NativeNavigationIntent? ApproachAfterProjection(Vector3 start, Vector3 accepted,
+        Vector3 reference, float radius, Func<Vector3, bool> sourceFloor)
+    {
+        if (!start.IsFinite() || !accepted.IsFinite() || !reference.IsFinite() || !float.IsFinite(radius) || radius <= 0)
+            throw new InvalidDataException("Projected reference approach requires finite observed poses and a positive radius.");
+        // The steering owner must have walked the complete verified prefix.
+        // A point elsewhere in the source region cannot consume that route.
+        if (new Vector2(start.X - accepted.X, start.Z - accepted.Z).Length() > .2f ||
+            Math.Abs(start.Y - accepted.Y) >= SourceHeightTolerance || !sourceFloor(start)) return null;
+        return new(reference, 1, radius, true, []);
+    }
+
     // A nearby reference can still sit across a wall or another floor. Follow
     // required source portals before refining its reference region. A final
     // source segment that ends at that same goal retains the caller's radius;

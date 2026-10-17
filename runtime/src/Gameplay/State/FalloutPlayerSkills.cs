@@ -56,7 +56,11 @@ internal sealed partial class FalloutPlayerSkills
 
     internal float Value(string name)
     {
+        if (name.Equals("CarryWeight", StringComparison.OrdinalIgnoreCase)) return Value(13);
+        if (name.Equals("InventoryWeight", StringComparison.OrdinalIgnoreCase)) return Value(46);
         if (name.Equals("RadResist", StringComparison.OrdinalIgnoreCase) || name.Equals("RadiationResist", StringComparison.OrdinalIgnoreCase)) return Value(20);
+        if (name.Equals("SpeedMult", StringComparison.OrdinalIgnoreCase)) return Value(21);
+        if (name.Equals("IgnoreCrippledLimbs", StringComparison.OrdinalIgnoreCase)) return Value(72);
         var attribute = FalloutNativeVigorResolver.AttributeNames.ToList().FindIndex(value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (attribute >= 0) return Value(attribute + 5);
         var skill = _skills.SingleOrDefault(skill => skill.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -66,7 +70,8 @@ internal sealed partial class FalloutPlayerSkills
     internal float Value(int value)
     {
         SynchronizeAbilityScripts();
-        if (value is >= 5 and <= 11 && _actorValues is not null) return _actorValues.ReadBoundedCurrent(value);
+        if (_actorValues is not null && FalloutPlayerActorValues.HasPool(value))
+            return value is >= 5 and <= 11 ? _actorValues.ReadBoundedCurrent(value) : _actorValues.ReadCurrent(value);
         if (_skills.Any(skill => skill.Value == value)) return Math.Clamp(ReadSkill(value, FalloutActorValueRead.Current), 0, 100);
         if (!_evaluating.Add(value)) throw new NotSupportedException("Actor ability conditions have a recursive value dependency.");
         try
@@ -81,6 +86,14 @@ internal sealed partial class FalloutPlayerSkills
                     _weightQuestObjectRevision = _records.QuestObjects.Revision;
                 }
                 return _carriedWeight;
+            }
+            if (value == 13)
+            {
+                var basis = (float)(Setting("fAVDCarryWeightsBase") + (double)Value(5) * Setting("fAVDCarryWeightMult"));
+                var capacity = (float)((double)basis + Modifiers(13, FalloutActorValuePool.Temporary).Sum(effect => effect.Amount) +
+                    Modifiers(13, FalloutActorValuePool.Permanent).Sum(effect => effect.Amount) +
+                    Modifiers(13, FalloutActorValuePool.Damage).Sum(effect => effect.Amount));
+                return float.IsFinite(capacity) ? capacity : throw new InvalidDataException("Player carry capacity is not finite.");
             }
             float initial;
             if (value is >= 5 and <= 11) initial = _special().Values[value - 5];
@@ -146,7 +159,7 @@ internal sealed partial class FalloutPlayerSkills
         ? throw new NotSupportedException($"Ability condition run-on {condition.RunOn} is unbound.") : condition.Function switch
         {
             74 => (_globals ?? throw new InvalidOperationException("Ability has no global state owner.")).Get(condition.FormArgument1),
-            14 => condition.Argument1 is >= 5 and <= 11 && _actorValues is not null
+            14 => FalloutPlayerActorValues.HasPool(checked((int)condition.Argument1)) && _actorValues is not null
                 ? _actorValues.ReadCurrent(checked((int)condition.Argument1)) : Value(checked((int)condition.Argument1)),
             _ => throw new NotSupportedException($"Ability condition {condition.Owner.FormKey}/{condition.Function} is unbound.")
         };

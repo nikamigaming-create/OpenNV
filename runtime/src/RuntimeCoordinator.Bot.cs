@@ -16,9 +16,7 @@ public partial class RuntimeCoordinator
     private Node3D? _botBoundsOwner;
     private Aabb _botLocalBounds;
     private RuntimeSimulatorBotInput? _botSimulatorInput;
-    private readonly Dictionary<FalloutFormKey, Vector3> _botAuthoredDestinations = [];
     private readonly BotInteractionEvidence _botInteractions = new();
-    private readonly Dictionary<FalloutFormKey, FalloutFormKey> _botPortalDestinations = [];
 
     private bool NativeBotLoading(FalloutReferenceWorld world) =>
         _nativeDoorLoading || _nativeSessionTransitioning || _retiringNativeSession || world.PlayerMoves.Pending ||
@@ -35,8 +33,6 @@ public partial class RuntimeCoordinator
     {
         try
         {
-            if (NativeBotPortal(reference) is { } portal)
-                _botPortalDestinations[reference] = portal.DestinationCell;
             _botInteractions.Begin(reference.ToString(), NativeBotInteractionSnapshot(reference));
         }
         catch (Exception error)
@@ -64,26 +60,26 @@ public partial class RuntimeCoordinator
         var linked = world.GetLinkedRef(reference);
         var target = BotInteractionSourceState.StableEffects(NativeBotSourceState(state),
             linked is { } linkedReference ? NativeBotSourceState(world.Get(linkedReference)) : null);
-        var settledPortal = _botPortalDestinations.TryGetValue(reference, out var destination) &&
-            _nativeActiveCell?.Cell.FormKey == destination && !NativeBotLoading(world) &&
-            _nativePlayer?.CollisionResident == true;
+        var portal = _botInteractions.ObservePortal(reference.ToString(), _nativeActiveCell?.Cell.FormKey.ToString(),
+            NativeBotLoading(world), _nativePlayer?.CollisionResident == true);
+        var settledPortal = portal?.Settled == true;
         string? outcome = _nativeContainerLayer is not null && _nativeContainerReference == reference ? "container" :
             _nativeTerminalLayer is not null && _nativeTerminalReference == reference && _nativeTerminalMenu?.Error is null ? "terminal" :
             _nativeOpeningStageDriver?.PresentedConversationSpeaker == reference ? "conversation" :
             _nativePlayer?.CurrentFurniture == reference ? "furniture" :
-            settledPortal ? "portal:" + destination : null;
-        var portal = NativeBotPortal(reference);
+            settledPortal ? "portal:" + portal!.Destination : null;
         var requested = _nativeOpeningStageDriver?.PendingConversationSpeaker == reference ? "conversation" :
             furniture?.Reference == reference ? "furniture" :
-            portal is { ActivationRequests: > 0 } ? "portal:" + portal.DestinationCell : null;
+            portal is not null ? "portal:" + portal.Destination : null;
         return new(target, outcome, _nativeOpeningStageDriver?.ActiveMenus().Order().ToArray() ?? [], requested,
             requested == "furniture" ? furniture!.Ordinal :
-                requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? portal!.ActivationRequests : 0,
+                requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? portal!.Ordinal : 0,
             outcome == "furniture" ? BotInteractionOutcomeKind.Furniture :
-                settledPortal && outcome == "portal:" + destination ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
+                settledPortal && outcome == "portal:" + portal!.Destination ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
             requested == "furniture" ? BotInteractionOutcomeKind.Furniture :
                 requested?.StartsWith("portal:", StringComparison.Ordinal) == true ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
-            requested == "furniture" && furniture!.Pending, outcome == "furniture" ? furniture!.Ordinal : 0);
+            requested == "furniture" && furniture!.Pending, outcome == "furniture" ? furniture!.Ordinal :
+                settledPortal && outcome == "portal:" + portal!.Destination ? portal.Ordinal : 0);
     }
 
     internal static BotInteractionSourceState NativeBotSourceState(FalloutReferenceInstance state) =>
@@ -153,19 +149,17 @@ public partial class RuntimeCoordinator
             _nativePluginStack.GetEffective(referenceState.Base).Signature == "STAT";
         var target = resident ? node!.GlobalPosition : Vector3.Zero;
         var travelReady = false;
-        if (!resident && _nativeActiveCell?.Cell.Worldspace is { } worldspace &&
-            _nativePluginStack!.GetEffective(key).Signature == "REFR" &&
-            FalloutCellSceneReader.ParentWorldspace(_nativePluginStack.GetEffective(referenceState.Cell)) == worldspace)
+        if (!resident && _nativeActiveCell?.Cell.Worldspace is { } worldspace)
         {
-            if (!_botAuthoredDestinations.TryGetValue(key, out target))
+            var targetPlacement = world.Placement(key);
+            if (FalloutCellSceneReader.ParentWorldspace(_nativePluginStack!.GetEffective(targetPlacement.Cell)) == worldspace)
             {
-                var placement = FalloutCellSceneReader.Read(_nativePluginStack, referenceState.Cell).References.Single(value => value.FormKey == key);
-                target = new Vector3(placement.Position[0], placement.Position[2], -placement.Position[1]) * _configuration.World.GameUnitsToMeters;
-                _botAuthoredDestinations.Add(key, target);
+                target = new Vector3(targetPlacement.Position[0], targetPlacement.Position[2], -targetPlacement.Position[1]) * _configuration.World.GameUnitsToMeters;
+                travelReady = !loading && player.CollisionResident;
             }
-            travelReady = !loading && player.CollisionResident;
         }
         var aim = target;
+        var activationOrigin = player.ActivationOrigin;
         if (resident && geometryRequired && !sourcePoint)
         {
             if (RuntimeNativeActorCombat.Find(node) is { Dead: true } combat)
@@ -173,14 +167,14 @@ public partial class RuntimeCoordinator
                 var points = combat.CorpseAimPoints.ToArray();
                 if (points.Length == 0) throw new NotSupportedException("Corpse has no live physical pose for aiming.");
                 aim = points[0];
-                using var query = PhysicsRayQueryParameters3D.Create(player.Camera.GlobalPosition, aim, player.CollisionMask | player.CollisionLayer);
+                using var query = PhysicsRayQueryParameters3D.Create(activationOrigin, aim, player.CollisionMask | player.CollisionLayer);
                 query.CollideWithAreas = true;
                 query.HitBackFaces = false;
                 query.Exclude = new Godot.Collections.Array<Rid>(player.CombatCollisionRids);
                 foreach (var point in points)
                 {
                     query.To = point;
-                    var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
+                    using var hit = player.GetWorld3D().DirectSpaceState.IntersectRay(query);
                     if (!hit.TryGetValue("collider", out var value) || value.AsGodotObject() is not Node contact ||
                         _nativeReferenceEvents?.AimedReference(contact)?.FormKey != key) continue;
                     aim = point; break;
@@ -189,12 +183,12 @@ public partial class RuntimeCoordinator
             else if (node is RuntimeNativeNpc actor)
                 aim = actor.Skeleton.Node.GlobalTransform * actor.Skeleton.Node.GetBoneGlobalPose(actor.Skeleton.BoneIndex("Bip01 Head")).Origin;
             else if (_nativePluginStack!.GetEffective(referenceState.Base).Signature == "DOOR")
-                aim = NativeReferenceGeometryTarget.ObserveSurface(node!, player, player.Camera.GlobalPosition,
+                aim = NativeReferenceGeometryTarget.ObserveSurface(node!, player, activationOrigin,
                     player.CombatCollisionRids, contact => _nativeReferenceEvents?.CollisionReference(contact.GetInstanceId()) == key,
                     NativeCollisionResident).Aim;
             else if (node is not RuntimeNativeCreature)
             {
-                var geometry = NativeReferenceGeometryTarget.Observe(node!, player, player.Camera.GlobalPosition,
+                var geometry = NativeReferenceGeometryTarget.Observe(node!, player, activationOrigin,
                     player.CombatCollisionRids, contact => _nativeReferenceEvents?.CollisionReference(contact.GetInstanceId()) == key,
                     NativeCollisionResident, (_configuration.Player.ActivationDistanceMeters +
                         _configuration.Player.CapsuleHeightMeters + _configuration.Player.StepHeightMeters) * player.GlobalBasis.Y.Length());
@@ -214,7 +208,7 @@ public partial class RuntimeCoordinator
                 aim = node!.GlobalTransform * _botLocalBounds.GetCenter();
             }
         }
-        var aimed = geometryRequired && player.AimedObject() is { } collider
+        var aimed = geometryRequired && player.ActivationObject() is { } collider
             ? _nativeReferenceEvents?.AimedReference(collider)?.FormKey.ToString() : null;
         BotDoorObservation? door = null;
         if (geometryRequired && _nativePluginStack!.GetEffective(referenceState.Base).Signature == "DOOR")

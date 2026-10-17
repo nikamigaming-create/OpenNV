@@ -39,10 +39,10 @@ internal static class NativeNifLodMaterial
         Texture2D Texture(string path)
         {
             path = FalloutNifSurfaceInputs.TexturePath(path);
-            if (!source.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException(path);
+            if (!source.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException(path);
             textureBytes += bytes.Length;
             if (cache.TryGetValue(path, out var weak) && weak.TryGetTarget(out var existing) && GodotObject.IsInstanceValid(existing)) return existing;
-            var loaded = NativeOwnedMediaLoader.LoadTexture(path);
+            var loaded = NativeDdsTexture.Load(bytes, identity);
             cache[path] = new(loaded); return loaded;
         }
         material.SetShaderParameter("base_map", Texture(textures.Textures[0]));

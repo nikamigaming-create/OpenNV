@@ -47,6 +47,11 @@ if (args is ["--test-record-cache"])
     QuestGraphAuditContracts.RecordCache();
     return;
 }
+if (args is ["--test-script-initialization-cache"])
+{
+    QuestGraphAuditContracts.EmbeddedScriptCount();
+    return;
+}
 if (args.Length > 0 && args[0] == "--test-owned-bsa-encodings")
 {
     QuestGraphAuditContracts.RunOwnedBsaEncodingAdmission(args[1..]);
@@ -166,6 +171,7 @@ PlacedLightEnableContracts.Run();
 CellGraphAuditContracts.Run();
 QuestGraphAuditContracts.Run();
 QuestGraphAuditContracts.RecordCache();
+QuestGraphAuditContracts.EmbeddedScriptCount();
 WindForceProbe.Run();
 ContentWorkerProbe.Run();
 
@@ -1474,9 +1480,12 @@ try
     var centeredRestore = FalloutNativeCampaignSave.Read(syntheticSavePath,
         syntheticSaveCompatibilityId, cellStack, syntheticVigor, syntheticTagSkills,
         syntheticOpeningGrant, syntheticTraitFarewell);
-    Require(centeredRestore.State.PlayerActorValues is { } migratedPlayer && migratedPlayer.Values.Count == 7 &&
-        migratedPlayer.Values.All(pair => pair.Value.Base == centeredState.Special.Values[pair.Key - 5] &&
-            pair.Value.Permanent == 0 && pair.Value.Temporary == 0 && pair.Value.Damage == 0),
+    Require(centeredRestore.State.PlayerActorValues is { } migratedPlayer && migratedPlayer.Values.Count == 9 &&
+        migratedPlayer.Values.Where(pair => pair.Key is >= 5 and <= 11)
+            .All(pair => pair.Value.Base == centeredState.Special.Values[pair.Key - 5]) &&
+        migratedPlayer.Values[21].Base == FalloutPlayerActorValueSource.Read(cellStack).SpeedMultiplier &&
+        migratedPlayer.Values[72].Base == 0 &&
+        migratedPlayer.Values.Values.All(value => value.Permanent == 0 && value.Temporary == 0 && value.Damage == 0),
         "Legacy campaign SPECIAL did not migrate into source-bound BASE pools with zero runtime modifiers.");
     var playerValues = new FalloutPlayerActorValues(cellStack, legacy: syntheticSpecial);
     playerValues.BindConstantModifiers((_, _) => []);
@@ -1541,6 +1550,8 @@ try
     var playerAudioSave = referenceSave with
     {
         Schema = FalloutNativeCampaignSave.ExpectedSchema,
+        TransientExplosions = new(0, []),
+        FastTravel = FalloutFastTravelSnapshot.Initial,
         PlayerPackageAudio = new(playerSounds.Capture(), 1234567),
         PlayerSkillValues = sourcePlayerSkills.CaptureValues(),
         PlayerAbilityScripts = sourcePlayerEffects.Capture()
@@ -1550,10 +1561,21 @@ try
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
     Require(JsonSerializer.Serialize(playerAudioRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio),
         "Ended player package lost its persistent sound fault or RNG state cold.");
+    Require(playerAudioRestore.State.FastTravel == FalloutFastTravelSnapshot.Initial, "Current campaign lost travel policy.");
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { FastTravel = null }), "missing its travel policy");
+    File.WriteAllText(syntheticSavePath, JsonSerializer.Serialize(playerAudioSave with
+    { Schema = FalloutNativeCampaignSave.BeforeTransientExplosionsSchema, TransientExplosions = null, FastTravel = null }));
+    var priorTransientRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
+        cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
+    Require(priorTransientRestore.State.Schema == FalloutNativeCampaignSave.ExpectedSchema &&
+        priorTransientRestore.State.TransientExplosions is { LastId: 0, Retired.Count: 0 } &&
+        priorTransientRestore.State.FastTravel == FalloutFastTravelSnapshot.Initial &&
+        JsonSerializer.Serialize(priorTransientRestore.State.PlayerPackageAudio) == JsonSerializer.Serialize(playerAudioSave.PlayerPackageAudio),
+        "Prior campaign owner admission lost audio authority or invented explosion history.");
     var priorPlayerAudioSave = playerAudioSave with
-    { Schema = FalloutNativeCampaignSave.PlayerAudioSchema, PlayerSkillValues = null, PlayerAbilityScripts = null };
+    { Schema = FalloutNativeCampaignSave.PlayerAudioSchema, PlayerSkillValues = null, PlayerAbilityScripts = null, TransientExplosions = null, FastTravel = null };
     var priorRadioSave = playerAudioSave with
-    { Schema = FalloutNativeCampaignSave.FinishedRadioSchema, PlayerSkillValues = null, PlayerAbilityScripts = null };
+    { Schema = FalloutNativeCampaignSave.FinishedRadioSchema, PlayerSkillValues = null, PlayerAbilityScripts = null, TransientExplosions = null, FastTravel = null };
     FalloutNativeCampaignSave.Write(syntheticSavePath, priorRadioSave);
     var priorRadioRestore = FalloutNativeCampaignSave.Read(syntheticSavePath, syntheticSaveCompatibilityId,
         cellStack, syntheticVigor, syntheticTagSkills, syntheticOpeningGrant, syntheticTraitFarewell);
@@ -1585,7 +1607,7 @@ try
     }), "future ended radio history");
     ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { PlayerPackageAudio = null }),
         "player package sound owner");
-    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { Schema = FalloutNativeCampaignSave.ObjectPcmSchema }),
+    ExpectFailure(() => FalloutNativeCampaignSave.Write(syntheticSavePath, playerAudioSave with { Schema = FalloutNativeCampaignSave.ObjectPcmSchema, TransientExplosions = null, FastTravel = null }),
         "future player package sound history");
     var mismatchedPlayerPackage = new FalloutPlayerScriptPackageSnapshot(new("Synthetic.esm", 1), new string('a', 64),
         null, null, 0, false, true, 0, 0, SoundRandomState: 7654321);
@@ -2876,11 +2898,12 @@ static void ExpectFailure(Action action, string messageFragment)
     try
     {
         action();
-        throw new InvalidOperationException($"Expected failure containing '{messageFragment}' was not raised.");
     }
     catch (Exception error) when (error.Message.Contains(messageFragment, StringComparison.OrdinalIgnoreCase))
     {
+        return;
     }
+    throw new InvalidOperationException($"Expected failure containing '{messageFragment}' was not raised.");
 }
 
 static byte[] Record(string signature, uint formId, uint flags, byte[] data)

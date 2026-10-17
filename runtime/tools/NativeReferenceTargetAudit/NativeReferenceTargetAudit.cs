@@ -5,6 +5,7 @@ using Godot;
 using OpenNV.Runtime;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
+using OpenNV.Runtime.Presentation.OpenXR;
 using OpenNV.Runtime.World.Cells;
 
 public partial class NativeReferenceTargetAudit : Node3D
@@ -50,11 +51,11 @@ public partial class NativeReferenceTargetAudit : Node3D
         NativeReferenceGeometryObservation result;
         if (doorApproach)
         {
-            var surface = NativeReferenceGeometryTarget.ObserveSurface(target, player, player.Camera.GlobalPosition,
+            var surface = NativeReferenceGeometryTarget.ObserveSurface(target, player, player.ActivationOrigin,
                 player.CombatCollisionRids, collider => target.IsAncestorOf(collider), _ => true);
             result = new(target.GlobalPosition, surface.Aim, surface.Bounds, surface.Collider, surface.Shape, 0, -1);
         }
-        else result = NativeReferenceGeometryTarget.Observe(target, player, player.Camera.GlobalPosition,
+        else result = NativeReferenceGeometryTarget.Observe(target, player, player.ActivationOrigin,
             player.CombatCollisionRids, collider => target.IsAncestorOf(collider), _ => true,
             configuration.Player.ActivationDistanceMeters + configuration.Player.CapsuleHeightMeters + configuration.Player.StepHeightMeters);
         Require(player.GlobalTransform == original && target.GlobalTransform == placed,
@@ -158,11 +159,102 @@ public partial class NativeReferenceTargetAudit : Node3D
             }
             catch (InvalidOperationException) { refused = true; }
             Require(refused, "Authored door approach bypassed the independent native floor owner.");
+            await SyntheticXrActivation();
             GD.Print($"OPENNV_NATIVE_REFERENCE_GEOMETRY_PASS runtimeMvid={typeof(RuntimeConfiguration).Assembly.ManifestModule.ModuleVersionId} " +
                 "offsetMesh=true actualFloor=true actualCapsuleApproach=true ordinaryRayAndRange=true occlusionRefused=true childMotion=true " +
-                "queryNoMutation=true missingFloorRefused=true embeddedObjectFloor=true embeddedDoorApproach=true doorFloorStillRequired=true fixture=synthetic campaign=false parity=false recording=false");
+                "queryNoMutation=true missingFloorRefused=true embeddedObjectFloor=true embeddedDoorApproach=true doorFloorStillRequired=true " +
+                "wristOrigin=true xrVisualRangeDistinct=true remotePickupPreserved=true xrOcclusionRefused=true fixture=synthetic campaign=false parity=false recording=false");
         }
         finally { fixture.Free(); }
+    }
+
+    private async Task SyntheticXrActivation()
+    {
+        var fixture = new Node3D(); AddChild(fixture);
+        var trackers = new List<XRPositionalTracker>();
+        try
+        {
+            var configuration = RuntimeConfiguration.Load();
+            XRPositionalTracker Tracker(string name, XRServer.TrackerType type)
+            {
+                Require(XRServer.GetTracker(name) is null, "Synthetic XR fixture cannot replace an existing tracker.");
+                XRPositionalTracker tracker = type == XRServer.TrackerType.Controller ? new XRControllerTracker() : new XRPositionalTracker();
+                tracker.Name = name; tracker.Type = type;
+                if (tracker is XRControllerTracker controller)
+                {
+                    // Pinned 4.8-dev7 exposes native set_input on controller trackers,
+                    // but its C# method is inherited from the deprecated positional wrapper.
+                    foreach (var input in new[] { "grab", "reload", "menu", "jump", "sprint" }) controller.Call("set_input", input, false);
+                    foreach (var input in new[] { "fire", "activate", "pipboy", "finger_trigger", "thumb_touch" }) controller.Call("set_input", input, 0f);
+                    controller.Call("set_input", "move", Vector2.Zero); controller.Call("set_input", "turn", Vector2.Zero);
+                }
+                XRServer.AddTracker(tracker); trackers.Add(tracker); return tracker;
+            }
+            void Pose(XRPositionalTracker tracker, Transform3D transform)
+            {
+                foreach (var name in new[] { "default", "grip", "aim" })
+                    tracker.SetPose(name, transform, Vector3.Zero, Vector3.Zero, XRPose.TrackingConfidenceEnum.High);
+            }
+            var head = Tracker("head", XRServer.TrackerType.Camera);
+            var left = Tracker("left_hand", XRServer.TrackerType.Controller);
+            var right = (XRControllerTracker)Tracker("right_hand", XRServer.TrackerType.Controller);
+            var player = Player(fixture, new(50, 0, 0), new(70, 1));
+            var rig = new NativeXrRig(configuration) { Modal = () => false };
+            rig.Camera.Current = false; fixture.AddChild(rig);
+            player.AttachXr(rig);
+            // Track real XR poses without rendering an XR camera: this headless
+            // physics fixture has no OpenXR interface or eye projection owner.
+            rig.Camera.ClearCurrent(false);
+            rig.SetProcess(false); player.SetProcess(false); player.SetPhysicsProcess(false);
+            Pose(head, new(Basis.Identity, new(0, 1.7f, 0)));
+            Pose(left, new(Basis.Identity, new(-.3f, 1.35f, 0)));
+            var wrist = new Vector3(.6f, 1.35f, 0);
+            var target = new Node3D { Position = new(50, 1.35f, -configuration.Player.ActivationDistanceMeters - 2) }; fixture.AddChild(target);
+            var bodies = new List<StaticBody3D>();
+            foreach (var x in new[] { -.3f, .3f })
+            {
+                target.AddChild(new MeshInstance3D { Position = Vector3.Right * x, Mesh = new BoxMesh { Size = Vector3.One * .4f } });
+                bodies.Add(Box(target, Vector3.Right * x, Vector3.One * .4f));
+            }
+            void Aim(Vector3 point) => Pose(right, new(Basis.LookingAt(rig.Origin.ToLocal(point) - wrist), wrist));
+            var remotePickup = false;
+            player.ResolveXrTarget = collider => target.IsAncestorOf(collider) ? new(target, "Synthetic target", remotePickup) : null;
+            var activated = 0; var rejected = 0;
+            player.ActivateReference = collider => { if (!target.IsAncestorOf(collider)) return false; activated++; return true; };
+            player.NoActivationFeedback = () => rejected++;
+            Aim(bodies[1].GlobalPosition); right.Call("set_input", "activate", 1f);
+            await Sync(); rig._Process(1.0 / 60);
+            Require(rig.WorldPointer && player.ActivationOrigin.IsEqualApprox(rig.RightAim.GlobalPosition) &&
+                player.ActivationOrigin.DistanceTo(player.Camera.GlobalPosition) > .5f,
+                "Synthetic XR device separation or world pointer was not admitted.");
+            Require(player.AimedObject() is { } far && target.IsAncestorOf(far) && player.ActivationObject() is null,
+                "Extended XR visual hit granted an out-of-range ordinary activation.");
+            player.XrActivate();
+            Require(activated == 0 && rejected == 1, "Out-of-range XR input reached the gameplay activation owner.");
+            remotePickup = true;
+            Require(player.ActivationObject() is { } pickup && target.IsAncestorOf(pickup), "Source remote pickup lost extended reach.");
+            player.XrActivate(); Require(activated == 1 && rejected == 1, "Remote pickup did not retain its ordinary activation path.");
+            remotePickup = false;
+            target.Position = new(50, 1.35f, -Math.Min(1, configuration.Player.ActivationDistanceMeters * .5f));
+            await Sync();
+            var headSurface = NativeReferenceGeometryTarget.ObserveSurface(target, player, player.Camera.GlobalPosition,
+                player.CombatCollisionRids, collider => target.IsAncestorOf(collider), _ => true);
+            var wristSurface = Observe(target, player, true);
+            Require(headSurface.Collider == bodies[0].GetInstanceId() && wristSurface.AimCollider == bodies[1].GetInstanceId(),
+                "Separated head and wrist queries selected geometry from the same wrong origin.");
+            Aim(wristSurface.Aim); await Sync();
+            Require(player.ActivationObject() == bodies[1], "The real XR activation ray did not hit the wrist-selected surface.");
+            player.XrActivate(); Require(activated == 2 && rejected == 1, "In-range XR reference did not activate normally.");
+            var blocker = Box(fixture, player.ActivationOrigin.Lerp(wristSurface.Aim, .5f), Vector3.One * .1f);
+            await Sync();
+            Require(player.ActivationObject() == blocker, "XR wrist targeting bypassed an actual native occluder.");
+            player.XrActivate(); Require(activated == 2 && rejected == 2, "An occluded XR target acquired gameplay activation.");
+        }
+        finally
+        {
+            fixture.Free();
+            foreach (var tracker in trackers) { XRServer.RemoveTracker(tracker); tracker.Dispose(); }
+        }
     }
 
     private async Task Owned(string game, string mod, string root, string identity, Vector3 from, string[] dependencies, bool doorGeometry = false)

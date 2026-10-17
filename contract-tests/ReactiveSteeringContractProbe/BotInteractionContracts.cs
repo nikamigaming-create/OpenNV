@@ -43,7 +43,8 @@ internal static partial class BotInteractionContracts
         Require(evidence.Observe("door", closed) == 0 &&
             evidence.Observe("door", closed with
             {
-                TargetOutcome = "portal:source-destination", TargetOutcomeKind = BotInteractionOutcomeKind.Portal
+                TargetOutcome = "portal:source-destination", TargetOutcomeKind = BotInteractionOutcomeKind.Portal,
+                TargetOutcomeOrdinal = 1
             }) == 1,
             "Source portal admission and observed destination arrival were conflated.");
         evidence.Begin("item", closed); evidence.End("item", closed with { TargetState = "taken" }, true);
@@ -70,6 +71,7 @@ internal static partial class BotInteractionContracts
         CheckSourceLinkedEffects();
         CheckBotResponse();
         CheckPortalObservation();
+        CheckCommittedPortalRequest();
         CheckDefeatedObservation();
         CheckDeferredFurnitureObservation();
         Console.WriteLine("Reference bot interaction evidence: source-target results, actual book menu, unrelated stage/timer/pause/menu rejection, other-target isolation, failed prefix and deferred target UI PASS.");
@@ -181,7 +183,8 @@ internal static partial class BotInteractionContracts
             evidence.ObserveInteraction("door", wrong).RequiresNativeGeometry(false),
             "A different settled destination suppressed geometry or completed the requested portal.");
         loading = false;
-        snapshot = snapshot with { TargetOutcome = "portal:destination", TargetOutcomeKind = BotInteractionOutcomeKind.Portal };
+        snapshot = snapshot with { TargetOutcome = "portal:destination", TargetOutcomeKind = BotInteractionOutcomeKind.Portal,
+            TargetOutcomeOrdinal = activations };
         bot.Tick(.016f);
         Require(Phase(bot) == "interaction-observed" && activations == 1 && input == default && geometryQueries == 1 &&
             evidence.ObserveInteraction("door", snapshot) is { Revision: 1, SettledPortal: true } &&
@@ -216,6 +219,57 @@ internal static partial class BotInteractionContracts
                 state.RootElement.GetProperty("error").GetString()!.Contains(executionFault, StringComparison.Ordinal),
                 "Loading, stale geometry or an earlier portal result concealed a known source execution fault.");
         Console.WriteLine("Reference bot portal observation: ordinary activation, loading suspension, exact typed settled destination, retired geometry, duplicate/wrong/failed/old request and source fault PASS.");
+    }
+
+    private static void CheckCommittedPortalRequest()
+    {
+        var evidence = new BotInteractionEvidence();
+        const string reference = "source-door", destination = "authored-persistent-cell", grid = "actual-arrival-grid-cell";
+        BotInteractionSnapshot Snapshot(string active, bool loading = false, bool resident = true)
+        {
+            var portal = evidence.ObservePortal(reference, active, loading, resident);
+            return new("unchanged", portal?.Settled == true ? "portal:" + portal.Destination : null, [],
+                portal is null ? null : "portal:" + portal.Destination, portal?.Ordinal ?? 0,
+                portal?.Settled == true ? BotInteractionOutcomeKind.Portal : BotInteractionOutcomeKind.Other,
+                portal is null ? BotInteractionOutcomeKind.Other : BotInteractionOutcomeKind.Portal,
+                TargetOutcomeOrdinal: portal?.Settled == true ? portal.Ordinal : 0);
+        }
+        evidence.Begin(reference, Snapshot("origin"));
+        var request = evidence.RequestPortal(reference, destination);
+        evidence.End(reference, Snapshot("origin", loading: true), true);
+        evidence.Finish(reference, true);
+        Require(evidence.Observe(reference, Snapshot(grid)) == 0,
+            "A changed exterior grid without a committed source request completed the portal.");
+        evidence.CommitPortal("other-door", request, grid);
+        evidence.CommitPortal(reference, request + 1, grid);
+        Require(evidence.Observe(reference, Snapshot(grid)) == 0,
+            "Another door or request supplied the portal's commit receipt.");
+        evidence.CommitPortal(reference, request, grid);
+        foreach (var blocked in new[] { Snapshot(destination), Snapshot(grid, loading: true), Snapshot(grid, resident: false) })
+            Require(evidence.Observe(reference, blocked) == 0,
+                "An authored cell, loading destination or absent collision completed the portal.");
+        Require(evidence.ObserveInteraction(reference, Snapshot(grid)) is { Revision: 1, SettledPortal: true } &&
+            evidence.ObserveInteraction(reference, Snapshot(grid)) is { Revision: 1, SettledPortal: true },
+            "The actual committed exterior grid did not complete its source portal exactly once.");
+
+        // A rebuilt native door has a new request even if its source identity
+        // and committed CELL are unchanged. The old receipt cannot satisfy it.
+        evidence.Begin(reference, Snapshot(grid));
+        var next = evidence.RequestPortal(reference, destination);
+        evidence.End(reference, Snapshot(grid, loading: true), true); evidence.Finish(reference, true);
+        evidence.CommitPortal(reference, request, grid);
+        Require(evidence.ObserveInteraction(reference, Snapshot(grid)) is { Revision: 1, SettledPortal: false },
+            "A retired native door request completed a later activation.");
+        evidence.CommitPortal(reference, next, grid);
+        Require(evidence.ObserveInteraction(reference, Snapshot(grid)) is { Revision: 2, SettledPortal: true },
+            "A new committed request in the same destination lost its actual result.");
+        evidence.Begin(reference, Snapshot("origin"));
+        var failed = evidence.RequestPortal(reference, destination);
+        evidence.End(reference, Snapshot("origin"), true); evidence.Finish(reference, false);
+        evidence.CommitPortal(reference, failed, grid);
+        Require(evidence.ObserveInteraction(reference, Snapshot(grid)) is { Revision: 2, SettledPortal: false },
+            "A failed source activation borrowed a subsequent committed portal result.");
+        Console.WriteLine("Portal request/commit join: persistent versus arrival CELL, exact door/request, collision/loading, rebuild and failed activation PASS.");
     }
 
     private static void CheckDefeatedObservation()

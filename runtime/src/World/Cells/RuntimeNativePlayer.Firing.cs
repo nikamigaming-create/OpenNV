@@ -8,6 +8,8 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal partial class RuntimeNativePlayer
 {
+    internal RuntimeNativePlayerActor? WeaponActor => _xr is null && _thirdPersonMode ? _thirdPerson : _firstPerson;
+
     private FalloutWeaponShot? _shot;
     private int _pendingShotCount;
     private long _shotsFired, _emptyTriggers;
@@ -40,6 +42,7 @@ internal partial class RuntimeNativePlayer
         _damageSelf = damageSelf;
         _combatGlobals = globals;
         _combatLevel = level;
+        _movementSpeed = new(records, _presentationInventory!);
     }
     private readonly Dictionary<string, string> _shotEffectErrors = new(StringComparer.Ordinal);
     internal object FiringState => new
@@ -74,7 +77,7 @@ internal partial class RuntimeNativePlayer
         var actorValue = _combatActorValue ?? throw new InvalidOperationException("Player actor-value owner is absent.");
         return (_weaponSpread ??= new(_presentationRecords ?? throw new InvalidOperationException("Weapon source records are absent.")))
             .PlayerMedianDeviationDegrees(shot, actorValue(shot.SkillActorValue), actorValue(5), aiming,
-                moving, Sprinting, sneaking: false, leftArmCrippled: arms.Left, rightArmCrippled: arms.Right,
+                moving, Running, sneaking: Activity.Sneaking, leftArmCrippled: arms.Left, rightArmCrippled: arms.Right,
                 (_combatPerks ?? throw new InvalidOperationException("Player perk owner is absent."))(),
                 _combatCondition ?? throw new InvalidOperationException("Player condition owner is absent."));
     }
@@ -186,7 +189,7 @@ internal partial class RuntimeNativePlayer
             try
             {
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
-                var actor = _xr is null && _thirdPersonMode ? _thirdPerson! : _firstPerson;
+                var actor = WeaponActor ?? throw new InvalidOperationException("Actual held source weapon presentation is absent.");
                 var muzzle = actor.ProjectileTransform();
                 if (_xr is null && !_thirdPersonMode)
                     muzzle = _camera.GlobalTransform * _firstPerson.SourceCamera.AffineInverse() * muzzle;

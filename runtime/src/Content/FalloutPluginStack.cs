@@ -80,6 +80,8 @@ internal sealed class FalloutPluginStack : IDisposable
     private readonly Dictionary<string, IReadOnlyList<FalloutPluginRecord>> _registrationBySignature =
         new(StringComparer.Ordinal);
     private readonly int _effectiveRecordCount;
+    private readonly object _embeddedQuestScriptsGate = new();
+    private long? _embeddedQuestScripts;
     private FalloutSoundVoices? _soundVoices;
     internal FalloutSoundVoices SoundVoices => _soundVoices ??= new(this);
     internal FalloutSoundPaths SoundPaths { get; }
@@ -394,6 +396,30 @@ internal sealed class FalloutPluginStack : IDisposable
             .Select(pair => pair.Value)
             .ToArray();
 
+    internal long CountEmbeddedQuestScripts()
+    {
+        lock (_embeddedQuestScriptsGate)
+        {
+            // This source-only scalar is shared by independently owned menu and
+            // restored script clocks. Reuse never outlives the original files.
+            foreach (var context in _plugins) context.Plugin.ValidateReadSource();
+            if (_embeddedQuestScripts is { } cached) return cached;
+            var count = 0L;
+            foreach (var record in EffectiveRecords())
+                if (record.Signature != "SCPT")
+                    foreach (var header in record.ReadSubrecords().Where(field => field.Signature == "SCHR"))
+                        if (IsQuestScriptHeader(header.Data.Span)) count = checked(count + 1);
+            _embeddedQuestScripts = count;
+            return count;
+        }
+    }
+
+    internal static bool IsQuestScriptHeader(ReadOnlySpan<byte> header)
+    {
+        if (header.Length != 20) throw new NotSupportedException("Script SCHR layout is unbound.");
+        return header[16] != 0;
+    }
+
     internal bool TryGetEffective(FalloutFormKey key, out FalloutPluginRecord record)
     {
         if (_winners.TryGetValue(key, out record!) && !record.IsDeleted)
@@ -435,7 +461,11 @@ internal sealed class FalloutPluginStack : IDisposable
         try { _soundVoices?.Retire(); }
         finally
         {
-            foreach (var context in _plugins) context.Plugin.Dispose();
+            lock (_embeddedQuestScriptsGate)
+            {
+                _embeddedQuestScripts = null;
+                foreach (var context in _plugins) context.Plugin.Dispose();
+            }
         }
     }
 

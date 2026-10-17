@@ -27,9 +27,12 @@ internal sealed partial class NativeOwnedWorldMap : Control
             marker.Marker.Name,
             x = marker.Point.X,
             y = marker.Point.Y,
+            pixel = new[] { Position.X + _offset.X + marker.Point.X * Extent.X,
+                Position.Y + _offset.Y + marker.Point.Y * Extent.Y },
             canTravel = marker.Travel
         }).ToArray(),
         player = new[] { _player.X, _player.Y },
+        rect = new[] { Position.X, Position.Y, Size.X, Size.Y },
         zoom = _zoom
     };
 

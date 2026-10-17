@@ -71,8 +71,8 @@ internal partial class RuntimeNativeNpc
     private void RetainDialogueContinuation()
     {
         if (_aiReferenceState is not { } state) return;
-        if (CanCaptureDialogueContinuation()) state.DialogueContinuation = CaptureDialogueContinuation();
-        if (ReferenceEquals(state.CanCaptureDialogue, _dialogueCaptureReady)) state.CanCaptureDialogue = null;
-        if (ReferenceEquals(state.CaptureDialogue, _dialogueCapture)) state.CaptureDialogue = null;
+        if (_dialogueCapture is not null && ReferenceEquals(state.CaptureDialogue, _dialogueCapture) &&
+            ReferenceEquals(state.CanCaptureDialogue, _dialogueCaptureReady) && CanCaptureDialogueContinuation())
+            state.DialogueContinuation = CaptureDialogueContinuation();
     }
 }

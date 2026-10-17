@@ -67,9 +67,13 @@ internal readonly record struct FalloutScriptValue
 
     internal static FalloutScriptValue String(string value) => value;
 
-    internal FalloutFormKey FormKey(FalloutPluginStack records) => Kind == FalloutScriptValueKind.Form
-        ? records.RuntimeFormKey((uint)_number)
-        : throw new InvalidDataException("Script argument has no typed form identity.");
+    internal FalloutFormKey FormKey(FalloutPluginStack records)
+    {
+        if (Kind != FalloutScriptValueKind.Form) throw new InvalidDataException("Script argument has no typed form identity.");
+        if (((uint)_number & 0xff000000) == 0xff000000 && records.Plugins.Count < 256)
+            throw new NotSupportedException("This operation has no transient runtime reference owner.");
+        return records.RuntimeFormKey((uint)_number);
+    }
 
     internal static FalloutScriptValue Array(double value)
     {

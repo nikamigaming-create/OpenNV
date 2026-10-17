@@ -26,7 +26,9 @@ internal static class PlayerActorValueContracts
             inventory.Add(records, Key(23), 1, 1, true); inventory.Equip(records, Key(23));
             Require(owner.ReadCurrent(6) == 8 && owner.ReadPermanent(6) == 5 && skills.Value("Perception") == 8,
                 "Apparel was included in permanent SPECIAL or omitted from the current skill consumer.");
+            Require(skills.Value(13) == 290, "Inactive carry effect altered source capacity.");
             globals.Set(Key(19), 1);
+            Require(skills.Value(13) == 340, "Active carry effect did not change source capacity.");
             Require(owner.ReadCurrent(10) == 6 && owner.ReadPermanent(10) == 5 && skills.Value("Guns") == 17 &&
                 vitals.State.MaximumActionPoints == 83 && vitals.State.MaximumHitPoints == 200,
                 "Conditional ability, live skill or current-Agility AP derivation failed.");
@@ -55,6 +57,7 @@ internal static class PlayerActorValueContracts
             owner.WriteBaseInteger(10, 6);
             Require(skills.Value("Guns") == 19 && vitals.State.MaximumActionPoints == 86 && vitals.State.ActionPoints == 79,
                 "Immediate base edit was not shared by skills and AP or lost the spent-AP deficit.");
+            VerifyMovementValues(records);
             VerifyScripts(records);
             VerifyCold(records, owner, inventory, globals, vitals);
             VerifyTemplate(directory);
@@ -83,22 +86,24 @@ internal static class PlayerActorValueContracts
             using var world = new FalloutReferenceWorld(records);
             var quests = new FalloutQuestState(records);
             var executor = new FalloutReferenceScripts(records, world, quests, new((_, _) => false, _ => throw new InvalidDataException("Unexpected player effect."),
-                ReadActorValue: (actor, name, kind) => actor == Key(0x14) ? owner.Read(FalloutPlayerActorValues.SpecialValue(name), kind) :
+                ReadActorValue: (actor, name, kind) => actor == Key(0x14) ? owner.Read(FalloutPlayerActorValues.PoolValue(name), kind) :
                     throw new InvalidDataException("Player values fabricated a placed reference."),
                 ChangeActorValue: (actor, name, operation, value) =>
                 {
                     Require(actor == Key(0x14), "Source player write had a different receiver."); owner.Change(name, operation, value);
                 }, ResetPlayerHealth: vitals.ResetHealth));
             var scripts = new FalloutQuestScripts(records, quests, new HashSet<FalloutFormKey>(), new FalloutPlayerInventory(), defaultProcessingDelay: 0);
-            scripts.Host = new((_, _) => throw new InvalidOperationException("Unexpected player stage."), name => owner.ReadCurrent(FalloutPlayerActorValues.SpecialValue(name)),
+            scripts.Host = new((_, _) => throw new InvalidOperationException("Unexpected player stage."), name => owner.ReadCurrent(FalloutPlayerActorValues.PoolValue(name)),
                 shared ? executor.ExecuteProgram : null,
-                ReadPlayerActorValue: (name, kind) => owner.Read(FalloutPlayerActorValues.SpecialValue(name), kind), ChangePlayerActorValue: owner.Change,
+                ReadPlayerActorValue: (name, kind) => owner.Read(FalloutPlayerActorValues.PoolValue(name), kind), ChangePlayerActorValue: owner.Change,
                 ResetPlayerHealth: vitals.ResetHealth);
             scripts.Advance(0);
             Require(scripts.Capture().Instances.Single() is { Error: null } && quests.Variable(Key(0x501), 1) == 14 &&
                 quests.Variable(Key(0x501), 2) == 10 && quests.Variable(Key(0x501), 3) == 20 && owner.ReadBase(5) == 14 &&
                 owner.ReadCurrent(5) == 20 && owner.ReadPermanent(5) == 10 && world.InstanceCount == 0,
                 "Shared/fallback scripts did not preserve raw current, bounded permanent or BASE/ModAV/ForceAV authority.");
+            Require(owner.ReadCurrent(21) == 130 && owner.ReadCurrent(72) == 1,
+                "Shared/fallback scripts did not mutate the saved movement actor-value pools.");
             Require(vitals.State.ExactHitPoints == vitals.State.MaximumHitPoints && vitals.State.LimbDamage is null &&
                 vitals.State.ActionPoints == 3 && vitals.State.ExperiencePoints == 17 && vitals.State.RadiationRads == 75,
                 "Shared/fallback ResetHealth failed to cure HP and limbs or altered AP, XP or radiation.");
@@ -118,6 +123,28 @@ internal static class PlayerActorValueContracts
             Require(owner.ReadBase(5) == 6 && owner.Capture().Values[5].Permanent == 6,
                 "Unsupported integer coercion replayed or rolled back the executed base prefix.");
         }
+    }
+
+    private static void VerifyMovementValues(FalloutPluginStack records)
+    {
+        var owner = new FalloutPlayerActorValues(records); owner.BindConstantModifiers((_, _) => []);
+        Require(owner.ReadBase(21) == 100 && owner.ReadCurrent(72) == 0, "Movement defaults ignored ACBS or invented an ignore-limb flag.");
+        owner.Change("SpeedMult", "setav", 125); owner.AddModifier(21, FalloutActorValuePool.Temporary, -3.5f);
+        owner.Change("IgnoreCrippledLimbs", "modav", 1);
+        var saved = owner.Capture();
+        var cold = new FalloutPlayerActorValues(records,
+            JsonSerializer.Deserialize<FalloutPlayerActorValuesSnapshot>(JsonSerializer.Serialize(saved))!);
+        cold.BindConstantModifiers((_, _) => []);
+        Require(cold.ReadCurrent(21) == 121.5f && cold.ReadPermanent(21) == 125 && cold.ReadCurrent(72) == 1,
+            "Cold movement values lost their distinct saved pools or inherited a SPECIAL clamp.");
+        var old = saved with { Schema = FalloutPlayerActorValues.SpecialOnlySchema,
+            Values = saved.Values.Where(pair => pair.Key is >= 5 and <= 11).ToDictionary() };
+        var migrated = new FalloutPlayerActorValues(records, old); migrated.BindConstantModifiers((_, _) => []);
+        Require(migrated.ReadCurrent(21) == 100 && migrated.ReadCurrent(72) == 0 &&
+            old.Values.All(pair => migrated.Capture().Values[pair.Key] == pair.Value),
+            "Seven-pool migration lost old values or guessed newly supported movement values.");
+        Reject(() => new FalloutPlayerActorValues(records, saved with { Schema = FalloutPlayerActorValues.SpecialOnlySchema }));
+        Reject(() => new FalloutPlayerActorValues(records, old with { StatsSha256 = new string('0', 64) }));
     }
 
     private static void VerifyCold(FalloutPluginStack records, FalloutPlayerActorValues owner, FalloutPlayerInventory inventory,
@@ -183,21 +210,22 @@ internal static class PlayerActorValueContracts
         var header = new byte[20]; UInt(header, 12, 3); header[16] = 1;
         var script = "short first\nshort second\nshort third\nbegin GameMode\nplayer.SetAV Strength 14\nplayer.ModAV Strength 2\n" +
             "set first to player.GetBaseAV Strength\nset second to player.GetPermanentActorValue Strength\n" +
-            "player.ForceAV Strength 20\nset third to player.GetAV Strength\nplayer.ResetHealth\nend";
+            "player.ForceAV Strength 20\nset third to player.GetAV Strength\nplayer.ResetHealth\nplayer.SetAV SpeedMult 137\nplayer.ModAV SpeedMult -7\nplayer.SetAV IgnoreCrippledLimbs 1\nend";
         return Join(Header(), Record("NPC_", 7, Field("ACBS", Actor()), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5]),
                 Field("SPLO", BitConverter.GetBytes(21u)), Field("SPLO", BitConverter.GetBytes(24u))), Record("RACE", 10),
             Record("NPC_", 28, Field("ACBS", Actor()), Field("DATA", [100, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5])),
             Record("GLOB", 19, Field("EDID", Text("Switch")), Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(0f))),
-            Modifier(16, 5), Modifier(17, 6), Modifier(18, 10),
+            Modifier(16, 5), Modifier(17, 6), Modifier(18, 10), Modifier(29, 13),
             Record("SPEL", 21, Field("SPIT", Declaration(4)), Effect(16, 2)),
             Record("SPEL", 24, Field("SPIT", Declaration(4)), Effect(18, 1), Field("CTDA", condition)),
-            Record("ENCH", 22, Field("ENIT", Declaration(3)), Effect(17, 3)),
+            Record("ENCH", 22, Field("ENIT", Declaration(3)), Effect(17, 3), Effect(29, 50), Field("CTDA", condition)),
             Record("ARMO", 23, Field("EDID", Text("Outfit")), Field("DATA", new byte[12]),
                 Field("BMDT", [4, 0, 0, 0, 0, 0, 0, 0]), Field("EITM", BitConverter.GetBytes(22u))),
             Setting(100, "fAVDHealthEnduranceOffset", 5), Setting(101, "fAVDHealthEnduranceMult", 20), Setting(102, "fAVDHealthLevelMult", 5),
             Setting(103, "fAVDActionPointsBase", 65), Setting(104, "fAVDActionPointsMult", 3),
             Record("GMST", 105, Field("EDID", Text("iXPBase")), Field("DATA", BitConverter.GetBytes(200))),
             Record("GMST", 106, Field("EDID", Text("iXPBumpBase")), Field("DATA", BitConverter.GetBytes(150))),
+            Setting(110, "fAVDCarryWeightsBase", 150), Setting(111, "fAVDCarryWeightMult", 20),
             Setting(107, "fAVDSkillSmallGunsBase", 2), Setting(108, "fAVDSkillPrimaryBonusMult", 2), Setting(109, "fAVDSkillLuckBonusMult", .5f),
             Record("SCPT", 0x500, Field("SCHR", header), Local(1, "first"), Local(2, "second"), Local(3, "third"),
                 Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Text(script))),
@@ -206,7 +234,7 @@ internal static class PlayerActorValueContracts
 
     private static byte[] Header(string? master = null) => Record("TES4", 0, Field("HEDR", new byte[12]),
         master is null ? [] : Join(Field("MAST", Text(master)), Field("DATA", new byte[8])));
-    private static byte[] Actor() { var result = new byte[24]; result[8] = 1; return result; }
+    private static byte[] Actor() { var result = new byte[24]; result[8] = 1; result[14] = 100; return result; }
     private static byte[] Declaration(uint type) { var result = new byte[16]; UInt(result, 0, type); return result; }
     private static byte[] Modifier(uint id, uint value) { var result = new byte[72]; UInt(result, 0, 2); UInt(result, 68, value); return Record("MGEF", id, Field("DATA", result)); }
     private static byte[] Effect(uint id, uint magnitude) { var result = new byte[20]; UInt(result, 0, magnitude); return Join(Field("EFID", BitConverter.GetBytes(id)), Field("EFIT", result)); }

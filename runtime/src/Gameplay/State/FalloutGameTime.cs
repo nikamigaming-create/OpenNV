@@ -142,6 +142,34 @@ internal sealed class FalloutGameTime
         _previousHour = hour; _reconcileDaysPassed = false;
     }
 
+    internal void ValidateFastTravel(float hours)
+    {
+        var globals = new FalloutGlobalState(_globals.Sources);
+        globals.Restore(_globals.Capture());
+        var preview = new FalloutGameTime(globals, _forms, _calendar);
+        preview.Restore(Capture());
+        preview.AdvanceFastTravel(hours);
+    }
+
+    internal void AdvanceFastTravel(float hours)
+    {
+        if (!float.IsFinite(hours) || hours < 0 || (double)hours > int.MaxValue || TimeScale <= 0 ||
+            hours >= 1 && hours != MathF.Truncate(hours))
+            throw new InvalidDataException("Fast-travel hours have no source clock representation.");
+        var previousGlobals = _globals.Capture();
+        var previousClock = Capture();
+        try
+        {
+            if (hours < 1) AdvanceSimulation(hours * 3600 / TimeScale);
+            else
+                for (var hour = 0; hour < (int)hours; hour++) AdvanceSimulation(3600 / TimeScale);
+        }
+        catch
+        {
+            _globals.Restore(previousGlobals); Restore(previousClock); throw;
+        }
+    }
+
     private void Validate()
     {
         var month = _globals.Get(_forms.Month);

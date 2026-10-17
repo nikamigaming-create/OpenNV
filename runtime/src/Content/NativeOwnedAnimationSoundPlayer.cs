@@ -30,6 +30,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         !_events.CanCapture || _unbound.Except(_events.OwnedLanes, StringComparer.Ordinal).Any();
     internal bool CanCaptureSilent => !_lostCaptureAtRetirement &&
         _voices.Values.All(voice => voice.Pcm is not null && voice.Completed is null) && !HasUnreceiptedFault;
+    internal bool CanRetireTransientEffect => _spatial.Count == 0 && _voices.Count == 0 && CanCaptureSilent;
     internal IReadOnlyCollection<string> Unbound => _unbound;
     internal IEnumerable<FalloutSoundRecord> Sources => _descriptors.Values.Select(entry => entry.Source);
     internal static Action<object>? SoundObserver { get; set; }

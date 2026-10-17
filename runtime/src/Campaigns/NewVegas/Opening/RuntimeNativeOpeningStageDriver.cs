@@ -86,6 +86,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
     internal IReadOnlyCollection<string> PendingBlockers => _machine?.PendingBlockers ?? [];
     private FalloutPlayerControlState PlayerControls => _machine?.ControlState ?? _sourceControls;
     internal FalloutFormKey ActiveCell => _activeCell;
+    internal FalloutFastTravel FastTravel { get; } = new();
     internal void EnterWorldCell(FalloutFormKey cell) => _activeCell = cell;
     internal void RequestWorldSave() => _saveRequested = true;
     internal bool HasCampaignSave => File.Exists(_savePath);
@@ -260,6 +261,8 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         if (controls.Quests.TryGetValue(_sourceQuestEditorId, out var initialStages) && initialStages.ContainsKey(restore?.State.Stage ?? initialStage))
             _machine = new(_transitions, controls, _sourceQuestEditorId, restore?.State.Stage ?? initialStage, _sourceControls);
         Name = "NativeOpeningStageDriver";
+        if (restore?.State.FastTravel is { } travel) FastTravel.Restore(travel);
+        if (restore?.State.Music is { } music) MusicPlayer.Restore(music);
         Synchronize();
     }
 
@@ -330,6 +333,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     internal void InitializeOwnedState()
     {
+        ConfigureScriptExplosions();
         _playerPackage = new RuntimeNativePlayerPackage(_pluginStack, _player, _scripts.Session, _scripts.References!, () => _activeCell,
             _restorePlayerPackageAudio);
         _scripts.References!.UnloadedPackages = new(_pluginStack, _scripts.References, _quests, _gameTime,
