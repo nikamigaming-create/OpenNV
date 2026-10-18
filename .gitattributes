@@ -11,6 +11,7 @@
 *.json text eol=lf
 *.md text eol=lf
 *.mjs text eol=lf
+*.patch text eol=lf
 *.ps1 text eol=lf
 *.py text eol=lf
 *.sln text eol=crlf

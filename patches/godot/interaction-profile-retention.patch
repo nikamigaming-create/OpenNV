@@ -1,0 +1,9 @@
+diff --git a/modules/openxr/openxr_interface.cpp b/modules/openxr/openxr_interface.cpp
+index 290257e..d8aa87a 100644
+--- a/modules/openxr/openxr_interface.cpp
++++ b/modules/openxr/openxr_interface.cpp
+@@ -389,2 +389,2 @@ void OpenXRInterface::_load_action_map() {
+-				if (interaction_profile_array.has(ip)) {
+-					interaction_profile_array.push_back(ip);
++				if (!interaction_profiles.has(ip)) {
++					interaction_profiles.push_back(ip);

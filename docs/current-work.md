@@ -9,12 +9,41 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Branch codex/xr-session-retirement starts from verified main/origin/main
-2fca344b735aed1b087abd5c03f670ab5b5fc8b4, with no open task PR at branch creation.
-The navigation repair and owned rig diagnostic are integrated and passed their
-complete local and hosted checks. This block repairs source-proven XR viewport
-transitions; the full implementation is described in
-[xr-session-lifetime.md](xr-session-lifetime.md).
+Next owner: the measured player-presentation/material loading stall and combat
+frame pacing. Start the next block on a fresh codex branch from verified
+main/origin/main after checked publication of the dependency repair below. The
+navigation, rig diagnostic and XR viewport-transition repairs are integrated;
+the viewport contract is described in [xr-session-lifetime.md](xr-session-lifetime.md).
+
+The pinned Godot profile leak is repaired in a separately identified experimental
+source template. The reviewed patch records created RIDs once in the interface's
+member cleanup collection. The exact source pin is
+c971f93e7e76b0ef919bf6009e7b868bea04db7f and the build name is
+opennv_xr_profile_fix1. Public builder/fixture instructions and boundaries are in
+[godot-xr-profile-fix.md](godot-xr-profile-fix.md). Synthetic normal/shared-path
+fixtures report zero leaks and no other errors; the official template reports
+one leak in each negative. Distinct resources with the same path exercise RID
+reuse, rather than a repeated resource removed by action-map deduplication.
+Actual optimized owned direct and launcher Continue checks also exit zero with
+readers drained, no startup/exit draw errors, zero profile leaks and an unchanged
+original checkpoint. Flat Vulkan Continue/main-menu/Continue/quit also passes
+with the original unchanged. Overall XR acceptance remains false. The final
+complete official-editor runtime gate passes, as does diff checking. One earlier
+gate attempt failed the recorded-input fixture while other fixture work was
+running. Its isolated recheck and the full uncontended rerun pass; the cause of
+that first failure has not been isolated.
+
+The product's official SDK/editor/template pin and installed tools remain intact.
+The source template has distinct source/patch/dependency/binary provenance and
+uses the matching official editor's glue and existing managed assemblies. Its
+isolated AccessKit headers match the source; older installed headers failed the
+first build. No private engine access or diagnostic suppression is used. This
+experimental template is not a distributed package or a physical candidate;
+distributionReady is explicitly false. The full gameplay, performance and
+physical acceptance inventory below remains open. The official-generated core
+glue hash is 889748612; the release template's native ClassDB hash has not been
+independently measured. Native hash verification, complete distribution licensing
+and package/toolchain integration remain required before promoting this template.
 
 Two optimized baseline launcher sessions render the world, hands and weapon in
 both submitted eyes. Ordinary XR session-menu Create New Save completes after
@@ -141,4 +170,6 @@ caches/proof archives. Earlier cleanup of superseded packages/diagnostics was
 rejected by automatic approval review as "blocked by policy"; those artifacts
 remain and must not be retried. Automatic approval review separately rejected
 cleanup of the original video review's temporary frames/clips; do not retry that
-deletion either. The requested edit and original recording are preserved.
+deletion either. Cleanup of the new tmp/godot-xr-profile-exit duplicate exports
+was also rejected as "blocked by policy"; none were deleted and that cleanup must
+not be retried. The requested edit and original recording are preserved.
