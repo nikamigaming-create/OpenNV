@@ -54,9 +54,12 @@ One OpenXR interaction-profile RID still leaks with either application teardown
 order. The pinned Godot c971f93e7 action-map loader checks a local resource array
 for RID membership instead of recording created RIDs in the member cleanup
 collection; its free routine therefore does not see them. See the pinned
-[profile registration](https://github.com/godotengine/godot/blob/c971f93e7/modules/openxr/openxr_interface.cpp#L303-L349)
-and [cleanup](https://github.com/godotengine/godot/blob/c971f93e7/modules/openxr/openxr_interface.cpp#L606-L613).
-That dependency defect remains visible and open. Do not free engine-owned RIDs
-through private memory access, suppress the diagnostic, or describe this repair
-as leak-free XR shutdown. The pinned engine also documents process-owned final
-[driver cleanup](https://github.com/godotengine/godot/blob/c971f93e7/modules/openxr/openxr_interface.cpp#L670-L690).
+[profile registration](https://github.com/godotengine/godot/blob/c971f93e7/modules/openxr/openxr_interface.cpp#L380-L393)
+and [cleanup](https://github.com/godotengine/godot/blob/c971f93e7/modules/openxr/openxr_interface.cpp#L674-L682).
+The [experimental dependency repair](godot-xr-profile-fix.md) records created RIDs
+once in the actual cleanup collection. Its synthetic normal/shared-path and owned
+direct/launcher checks report zero profile leaks. The original official template
+retains its defect and the product toolchain pin is unchanged. Do not free
+engine-owned RIDs through private memory access or suppress the diagnostic.
+The pinned engine also documents process-owned final
+[driver cleanup](https://github.com/godotengine/godot/blob/c971f93e7/modules/openxr/openxr_interface.cpp#L744-L772).
