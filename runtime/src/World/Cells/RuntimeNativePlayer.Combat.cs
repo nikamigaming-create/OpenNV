@@ -9,6 +9,20 @@ internal partial class RuntimeNativePlayer
     private readonly Dictionary<string, byte> _combatHitParts = new(StringComparer.Ordinal);
     internal IReadOnlyList<Rid> CombatCollisionRids => SelfQueryBodies.ToArray();
 
+    private Vector3 SourceCombatTargetPoint()
+    {
+        // Before presentation exists the locomotion capsule is the only body.
+        // Once bound, targeting must follow the same posed anatomy as damage,
+        // including flat crouching and XR room-scale displacement.
+        if (_thirdPerson is not { } actor)
+            return GlobalPosition + Vector3.Up * _configuration.Player.SpawnCenterHeightMeters;
+        var torso = BodyParts().Parts.Single(part => part.Type == 0);
+        var name = string.IsNullOrEmpty(torso.Target) ? torso.Node : torso.Target;
+        var bone = actor.Skeleton.BoneIndex(name);
+        if (bone < 0) throw new NotSupportedException("Player combat target lacks its source torso bone.");
+        return (actor.Skeleton.Node.GlobalTransform * actor.Skeleton.Node.GetBoneGlobalPose(bone)).Origin;
+    }
+
     internal byte CombatHitPart(Node collider)
     {
         if (collider == this) return 0;

@@ -16,6 +16,7 @@ internal partial class RuntimeNativePlayer
             _shot = FalloutWeaponShot.Read(_presentationRecords!, weapon.Form,
                 _weaponHandling!.Ammunition(weapon), weapon.HasAmmunitionSource);
             _shot.RequireRuntimeAttackOwner();
+            PrepareAutoAimShapes(_shot);
             _ = PrepareAttackVariants(weapon, weapon.AttackGroup);
             PrepareWeaponMuzzle(_shot.Projectile);
             // Visual-only fixtures may omit the campaign audio owner. Firing

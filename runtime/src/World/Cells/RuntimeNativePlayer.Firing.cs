@@ -67,6 +67,7 @@ internal partial class RuntimeNativePlayer
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
         resourcePreparation = _weaponResourcePreparation,
+        autoAimShapeCreations = _autoAimShapeCreations,
         unbound = "auto-aim-screen-percentage-target-ranking-and-retail-correction,encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-audio,supersonic-projectile-audio-and-retail-parity,continuous-beam,tracers,beam-visuals-and-retail-parity,explosion-distance-attenuation,force,radiation-and-retail-parity"
     };
 
@@ -378,22 +379,9 @@ internal partial class RuntimeNativePlayer
     {
         if (maxDegrees <= 0f || maxRange <= 0f) return null;
         var halfAngleRad = Mathf.DegToRad(maxDegrees);
-        const int sides = 16;
         var startRadius = 0.2f;
         var tanHalf = MathF.Tan(halfAngleRad);
-        var endRadius = startRadius + maxRange * tanHalf / MathF.Cos(MathF.PI / sides);
-        using var shape = new ConvexPolygonShape3D
-        {
-            Points = Enumerable.Range(0, sides).Select(index => new Vector3(
-                    startRadius * MathF.Cos(index * MathF.Tau / sides),
-                    startRadius * MathF.Sin(index * MathF.Tau / sides),
-                    0f))
-                .Concat(Enumerable.Range(0, sides).Select(index => new Vector3(
-                    endRadius * MathF.Cos(index * MathF.Tau / sides),
-                    endRadius * MathF.Sin(index * MathF.Tau / sides),
-                    -maxRange)))
-                .ToArray()
-        };
+        var shape = AutoAimShape(maxRange, maxDegrees);
         var up = MathF.Abs(direction.Dot(Vector3.Up)) < .99f ? Vector3.Up : Vector3.Right;
         using var query = new PhysicsShapeQueryParameters3D
         {

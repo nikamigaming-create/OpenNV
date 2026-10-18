@@ -49,11 +49,12 @@ internal sealed class FalloutWeaponSpread
         if (!oneHanded && !twoHanded)
             throw new NotSupportedException($"Weapon animation type {shot.WeaponAnimationType} has no source spread hand rule.");
 
+        // One-arm and both-arm settings are alternative states, not additive
+        // penalties. This owner serves both player modes and NPC weapons.
+        var bothArms = leftArmCrippled && rightArmCrippled;
         var armPenalty = oneHanded
-            ? (rightArmCrippled ? CrippledArmOneHanded : 0) +
-                (leftArmCrippled && rightArmCrippled ? CrippledArmsOneHanded : 0)
-            : (leftArmCrippled || rightArmCrippled ? CrippledArmTwoHanded : 0) +
-                (leftArmCrippled && rightArmCrippled ? CrippledArmsTwoHanded : 0);
+            ? bothArms ? CrippledArmsOneHanded : rightArmCrippled ? CrippledArmOneHanded : 0
+            : bothArms ? CrippledArmsTwoHanded : leftArmCrippled || rightArmCrippled ? CrippledArmTwoHanded : 0;
         var movementPenalty = moving ? running ? RunningPenalty : WalkingPenalty : 0;
         var skillMultiplier = 1 - WobbleToSkill * Math.Min(skill, 100) / 100;
         var strengthPenalty = Math.Max(0, shot.StrengthRequirement - Math.Min(strength, 10)) * StrengthRequirementPenalty;
