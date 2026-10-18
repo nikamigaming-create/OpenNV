@@ -17,12 +17,18 @@ internal partial class RuntimeNativeReferencePresentation : Node
     private readonly Dictionary<FalloutFormKey, Node3D> _nodes = [];
     private readonly Dictionary<FalloutFormKey, (FalloutPlacedReference Source, Node3D Node)> _warmNodes = [];
     private readonly Dictionary<FalloutFormKey, bool> _enabled;
+    private long _publishedStateRevision = -1, _publishedAppearanceRevision = -1;
     private readonly Dictionary<FalloutFormKey, GeometryInstance3D[]> _fadeGeometry = [];
     private readonly Dictionary<FalloutFormKey, float> _publishedOpacity = [];
     private readonly FalloutReferenceFadeSettings _fadeSettings;
     private readonly Dictionary<string, Texture2D> _textures = new(StringComparer.OrdinalIgnoreCase);
     internal event Action<FalloutFormKey, Node3D>? Materialized;
-    internal Action<OpenNV.Runtime.World.Actors.RuntimeNativeNpc>? SynchronizeActorAppearance { get; set; }
+    private Action<OpenNV.Runtime.World.Actors.RuntimeNativeNpc>? _synchronizeActorAppearance;
+    internal Action<OpenNV.Runtime.World.Actors.RuntimeNativeNpc>? SynchronizeActorAppearance
+    {
+        get => _synchronizeActorAppearance;
+        set { _synchronizeActorAppearance = value; _publishedAppearanceRevision = -1; }
+    }
     internal string? Error { get; private set; }
     internal IEnumerable<OpenNV.Runtime.World.Actors.RuntimeNativeNpc> Actors => _nodes.Values.OfType<OpenNV.Runtime.World.Actors.RuntimeNativeNpc>();
     internal IReadOnlyDictionary<FalloutFormKey, Node3D> Nodes => _nodes;
@@ -125,6 +131,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
             if (!_enabled.ContainsKey(reference.FormKey))
                 _enabled.Add(reference.FormKey, _world.IsEnabled(reference.FormKey));
         _references = references; _materialize = materialize;
+        _publishedStateRevision = -1; _publishedAppearanceRevision = -1;
     }
 
     internal RuntimeNativeReferencePresentation(FalloutReferenceWorld world, IReadOnlyList<FalloutPlacedReference> references,
@@ -139,6 +146,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     internal void Register(FalloutFormKey key, Node3D node)
     {
+        _publishedAppearanceRevision = -1;
         if (_nodes.ContainsKey(key)) throw new InvalidOperationException($"Reference {key} is already registered.");
         RefreshGeometry(key, node);
         _nodes.Add(key, node);
@@ -217,17 +225,20 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     private void Synchronize()
     {
-        foreach (var (key, node) in _nodes)
+        foreach (var node in _doorNodes.Values)
         {
-            // Open/Close owners are admitted from these same indexed source
-            // controllers. Static references have no native children to query
-            // for a door clock, and the returned native array needs disposal.
-            if (!_objectControllers.TryGetValue(key, out var controllers) || !RuntimeNativeDoorMotion.HasOpenClose(controllers)) continue;
             var children = node.GetChildren();
             using var childrenOwner = (Godot.Collections.Array)children;
             foreach (var motion in children.OfType<RuntimeNativeDoorMotion>()) motion.Synchronize();
         }
-        foreach (var actor in Actors) SynchronizeActorAppearance?.Invoke(actor);
+        var appearanceRevision = _world.AppearanceRevision;
+        if (_publishedAppearanceRevision != appearanceRevision)
+        {
+            foreach (var actor in Actors) SynchronizeActorAppearance?.Invoke(actor);
+            _publishedAppearanceRevision = appearanceRevision;
+        }
+        var stateRevision = _world.PresentationRevision;
+        if (_publishedStateRevision == stateRevision) return;
         foreach (var reference in _references)
         {
             var enabled = _world.IsEnabled(reference.FormKey);
@@ -241,6 +252,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
             _enabled[reference.FormKey] = enabled;
             PublishOpacity(reference.FormKey);
         }
+        _publishedStateRevision = stateRevision;
     }
 
     private void PublishOpacity(FalloutFormKey key)

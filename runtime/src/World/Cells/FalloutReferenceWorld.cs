@@ -153,18 +153,55 @@ internal sealed class FalloutReferenceInstance
     internal string? ScriptError { get; set; }
     internal FalloutReferenceScriptStoppedFrame? ScriptStoppedFrame { get; set; }
     internal FalloutReferenceScriptStoppedFrame? CompletedScriptContinuation { get; set; }
-    internal bool Enabled { get; set; }
-    internal FalloutReferenceEnableRequest? EnableRequest { get; set; }
-    internal float Opacity { get; set; } = 1;
+    private Action<FalloutReferenceInstance, bool>? _stateChanged;
+    internal long WorldRegistrationOrder { get; private set; }
+    internal void BindStateChanges(long order, Action<FalloutReferenceInstance, bool> changed)
+    {
+        WorldRegistrationOrder = order;
+        _stateChanged = changed;
+        changed(this, true);
+    }
+    private bool _enabled;
+    internal bool Enabled
+    {
+        get => _enabled;
+        set { if (_enabled == value) return; _enabled = value; _stateChanged?.Invoke(this, true); }
+    }
+    private FalloutReferenceEnableRequest? _enableRequest;
+    internal FalloutReferenceEnableRequest? EnableRequest
+    {
+        get => _enableRequest;
+        set { if (_enableRequest == value) return; _enableRequest = value; _stateChanged?.Invoke(this, false); }
+    }
+    private float _opacity = 1;
+    internal float Opacity
+    {
+        get => _opacity;
+        set { if (_opacity == value) return; _opacity = value; _stateChanged?.Invoke(this, true); }
+    }
     internal bool NoFade { get; set; }
     internal bool Destroyed { get; set; }
     internal FalloutDestructionState? Destruction { get; set; }
     internal bool DeletePending { get; set; }
-    internal bool Deleted { get; set; }
-    internal bool Taken { get; set; }
+    private bool _deleted, _taken;
+    internal bool Deleted
+    {
+        get => _deleted;
+        set { if (_deleted == value) return; _deleted = value; _stateChanged?.Invoke(this, true); }
+    }
+    internal bool Taken
+    {
+        get => _taken;
+        set { if (_taken == value) return; _taken = value; _stateChanged?.Invoke(this, true); }
+    }
     internal bool DoorOpen { get; set; }
     internal FalloutDoorMotionState? DoorMotion { get; set; }
-    internal FalloutActivationRelaySnapshot? ActivationRelay { get; set; }
+    private FalloutActivationRelaySnapshot? _activationRelay;
+    internal FalloutActivationRelaySnapshot? ActivationRelay
+    {
+        get => _activationRelay;
+        set { if (_activationRelay == value) return; _activationRelay = value; _stateChanged?.Invoke(this, false); }
+    }
     internal bool Unlocked { get; set; }
     internal FalloutReferenceLockState? LockState { get; set; }
     internal FalloutReferenceOwnershipOverride? OwnershipOverride { get; set; }
@@ -508,6 +545,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             _definitions.Add(script.FormKey, definition = new(script));
         instance = new(record, definition, () => IsEnabled(key));
         _instances.Add(key, instance);
+        instance.BindStateChanges(_instances.Count, TrackReferenceWork);
         return instance;
     }
 
@@ -870,6 +908,7 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
             // query the destination owner after the successful atomic transfer.
             instance.BindReferenceEnableQuery(() => IsEnabled(key));
             _instances.Add(key, instance);
+            instance.BindStateChanges(_instances.Count, TrackReferenceWork);
             BindInventoryRemoval(instance);
         }
         foreach (var (key, definition) in validated._definitions) _definitions.Add(key, definition);
@@ -892,6 +931,8 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         _residentReferences.Clear();
         _furnitureSeats.Clear();
         _instances.Clear();
+        _enableWork.Clear();
+        _activationWork.Clear();
         _definitions.Clear();
         _healthSources.Clear();
         _bodyParts.Clear();

@@ -72,6 +72,18 @@ public partial class NativeReferencePresentationAudit : Node3D
             projection.Apply(new(FalloutReferenceEffectKind.ReferenceEnable, cards[0].FormKey, cards[0].FormKey, Enable: true));
             projection.Advance(0);
             if (!first.Visible || !second.Visible || materializations != 1) throw new InvalidOperationException("Enabling a reference rebuilt it or changed the control instance.");
+            var stableRevision = world.PresentationRevision;
+            for (var frame = 0; frame < 120; ++frame) projection.Advance(1d / 144);
+            if (!first.Visible || world.PresentationRevision != stableRevision || world.PendingEnableWorkCount != 0)
+                throw new InvalidOperationException("Unchanged presentation generated visibility work.");
+            var state = world.Get(cards[0].FormKey);
+            state.Taken = true; projection.Advance(0);
+            if (first.Visible) throw new InvalidOperationException("Pickup failed to invalidate native visibility.");
+            state.Taken = false; projection.Advance(0);
+            state.Enabled = false; projection.Advance(0);
+            if (first.Visible) throw new InvalidOperationException("Direct destruction disable failed to invalidate native visibility.");
+            state.Enabled = true; projection.Advance(0);
+            if (!first.Visible) throw new InvalidOperationException("Direct enable failed to restore native visibility.");
             world.SetEnabled(cards[0].FormKey, false, true);
             projection.Advance(.1);
             if (!first.Visible || !world.IsEnabled(cards[0].FormKey) || Target(first).Transparency <= 0 || Target(second).Transparency != 0)

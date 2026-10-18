@@ -9,9 +9,32 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Current owner: codex/particle-render-order, based on main/origin/main
-5806430723dadbc571a4ada2b840bbe25874eab7. PR #228 is merged with all
-hosted checks passing. The active block separates particle draw sorting from
+Current owner: codex/reference-presentation-work, based on main/origin/main
+f2999a1cc2f4db7bed7809162f78cd279545caa7. The verified change replaces idle
+enable/fade and activation-relay scans with ordered pending work, and skips native
+visibility publication until authoritative state changes. Property invalidation
+covers destruction, pickup, deletion and cold state transfer. Native door clock
+candidates are indexed at binding; actor appearance follows the world revision.
+The final full Godot gate and owned reference-presentation audit pass, including
+fade reversal, cold pending work, direct pickup/destruction and warm residency.
+
+The final exported Vulkan idle sample reduced reference-presentation work from
+1.3515 to 0.0715 ms per frame (about 95%). Activation indexing has no separately
+established timing improvement. Final intervals were 15.60 ms median, 24.24 ms p95
+and 58.08 ms maximum. Other games were active during measurement, so whole-frame
+before/after differences cannot be attributed solely to this patch. Continue took
+29.18 seconds with a 520.76 ms worst observed loading interval. Ordinary firing
+completed its measured path in 5.47 ms and F5 completed, but the shot missed and
+is not hit-reaction coverage. The short eastward walk stopped at the visible
+saloon porch railing with the matching collision normal; it does not establish
+boundary-streaming coverage. The final session quit normally and the original
+checkpoint hash is unchanged. A single temporary diagnostic frame was inspected
+and deleted; recording remains off. An intermediate run reported one overdue
+state publication; the final run reported none. 144 Hz and headset acceptance
+remain unverified. Next owner: measured reference-event and animation work,
+then controlled idle/combat and physical-headset acceptance.
+
+The preceding block separates particle draw sorting from
 simulation storage, reuses radio reception until exact player/placement/applied
 enable inputs change, and moves full actor/presentation/light snapshots to the
 explicit detailed diagnostic request. Direct cumulative owner and particle-stage

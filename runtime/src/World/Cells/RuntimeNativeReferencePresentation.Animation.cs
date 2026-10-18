@@ -9,6 +9,7 @@ namespace OpenNV.Runtime.World.Cells;
 internal partial class RuntimeNativeReferencePresentation
 {
     private readonly Dictionary<FalloutFormKey, RuntimeNifControllerPlayer[]> _objectControllers = [];
+    private readonly Dictionary<FalloutFormKey, Node3D> _doorNodes = [];
     private readonly Dictionary<FalloutFormKey, FalloutReferenceInstance> _animationInstances = [];
     private readonly Dictionary<FalloutFormKey, Func<IReadOnlyList<FalloutObjectAnimationSnapshot>>> _animationCaptures = [];
 
@@ -36,6 +37,7 @@ internal partial class RuntimeNativeReferencePresentation
         }).ToArray();
         foreach (var (controller, state) in restored) controller.RestoreObjectState(state);
         _objectControllers[key] = controllers;
+        if (RuntimeNativeDoorMotion.HasOpenClose(controllers)) _doorNodes.Add(key, node);
         _animationInstances[key] = instance;
         if (managed.Length != 0)
         {
@@ -48,6 +50,7 @@ internal partial class RuntimeNativeReferencePresentation
 
     private void UnbindObjectAnimation(FalloutFormKey key)
     {
+        _doorNodes.Remove(key);
         if (!_objectControllers.Remove(key)) return;
         var instance = _animationInstances[key];
         _animationInstances.Remove(key);

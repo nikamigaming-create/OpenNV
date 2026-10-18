@@ -63,6 +63,8 @@ internal static class FalloutActivationParents
 
 internal sealed partial class FalloutReferenceWorld
 {
+    private readonly SortedDictionary<long, FalloutReferenceInstance> _activationWork = [];
+    internal int PendingActivationWorkCount => _activationWork.Count;
     private IReadOnlyDictionary<FalloutFormKey, IReadOnlyList<(FalloutFormKey Child, float Delay)>>? _activationChildren;
     private IReadOnlyList<FalloutActivationParentIssue> _activationParentIssues = [];
     private IReadOnlyDictionary<FalloutFormKey, IReadOnlyList<(FalloutFormKey Child, float Delay)>> ActivationChildren
@@ -84,7 +86,7 @@ internal sealed partial class FalloutReferenceWorld
         FalloutActivationParents.Read(records.GetEffective(child)).Any(value => value.Parent == parent);
     internal bool AllowsActivation(FalloutFormKey child, FalloutFormKey action) =>
         !FalloutActivationParents.ParentOnly(records.GetEffective(child)) || IsActivationParent(child, action);
-    internal object ActivationRelayState => _instances.Values.Where(instance => instance.ActivationRelay is { Children.Count: > 0 })
+    internal object ActivationRelayState => _activationWork.Values
         .Select(instance => new { parent = instance.Reference.ToString(), state = instance.ActivationRelay }).ToArray();
     internal void ArmActivationChildren(FalloutFormKey parent, FalloutFormKey action)
     {
@@ -125,8 +127,9 @@ internal sealed partial class FalloutReferenceWorld
     internal IReadOnlyList<FalloutActivationRelayDelivery> AdvanceActivationRelays(float seconds)
     {
         if (!float.IsFinite(seconds) || seconds < 0) throw new InvalidDataException("Activation-parent simulation delta is invalid.");
+        if (_activationWork.Count == 0) return [];
         var deliveries = new List<FalloutActivationRelayDelivery>();
-        foreach (var parent in _instances.Values.Where(instance => instance.ActivationRelay is { Children.Count: > 0 }).ToArray())
+        foreach (var parent in _activationWork.Values.ToArray())
         {
             if (!IsResident(parent.Reference)) continue;
             var previous = parent.ActivationRelay!;
