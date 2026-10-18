@@ -67,7 +67,8 @@ public partial class RuntimeCoordinator
             var preparation = new RuntimeNativeManualSavePreparation(_nativeManualSaves, _nativeManualSaveSession, identity,
                 player, records.SoundVoices, Invalidation, Admission, CreateNativeCheckpoint,
                 PublishNativeManualSave, () => _nativeManualSavePreparation = null, sourceProducers: [scripts],
-                sourceRequests: driver.ManualSourceSaveRequests, originalSourceBlocker: driver.ObserveOriginalSourceManualSaveBlocker);
+                sourceRequests: driver.ManualSourceSaveRequests, originalSourceBlocker: driver.ObserveOriginalSourceManualSaveBlocker,
+                backgroundWriter: CreateNativeCheckpointBackground);
             _nativeManualSavePreparation = preparation;
             AddChild(preparation);
             preparation.Begin();
@@ -85,6 +86,8 @@ public partial class RuntimeCoordinator
     private void PublishNativeManualSave(RuntimeManualSaveReceipt receipt)
     {
         if (_publishedNativeManualSave == receipt) return;
+        if (receipt.Disposition == "completed" && _publishedNativeManualSave?.Disposition != "completed")
+            _nativeOpeningStageDriver!.AcknowledgeCheckpoint(_nativeActiveCell!.Cell.FormKey);
         var prior = _publishedNativeManualSave;
         _publishedNativeManualSave = receipt;
         if (_nativeSessionMenu is null)
@@ -106,7 +109,11 @@ public partial class RuntimeCoordinator
         }
     }
 
-    private void CancelNativeManualSaveFromInput() => CancelNativeManualSave("Player cancelled save preparation; the previous Continue save is retained.");
+    private void CancelNativeManualSaveFromInput()
+    {
+        if (!_nativeManualSaves.Writing)
+            CancelNativeManualSave("Player cancelled save preparation; the previous Continue save is retained.");
+    }
 
     private void CancelNativeManualSave(string reason)
     {

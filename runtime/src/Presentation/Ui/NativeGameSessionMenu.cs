@@ -126,8 +126,9 @@ internal sealed partial class NativeGameSessionMenu : Control
         }
         if (_cancelSaveButton is { } cancel)
         {
-            cancel.Visible = _saving; cancel.Disabled = !_saving;
-            if (_saving && !cancel.HasFocus()) cancel.GrabFocus();
+            cancel.Visible = _saving;
+            cancel.Disabled = !_saving || receipt.Preparation?.Phase == RuntimeManualSavePreparationPhase.Writing;
+            if (_saving && !cancel.Disabled && !cancel.HasFocus()) cancel.GrabFocus();
         }
         _status.Text = RuntimeManualSaveFeedback.Describe(receipt);
     }

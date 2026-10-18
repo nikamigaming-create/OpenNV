@@ -52,6 +52,7 @@ public partial class NativePlayerPresentationAudit
 
     private async Task CheckAimPreparation(RuntimeNativePlayer player, FalloutPluginStack records)
     {
+        await CheckDirectObjectAim(player);
         var shape = player.AutoAimShape(20, 3);
         var identity = shape.GetRid();
         var points = shape.Points;
@@ -90,6 +91,30 @@ public partial class NativePlayerPresentationAudit
         }
         finally { body.GlobalTransform = original; }
         GD.Print("OPENNV_SHARED_AIM_PREPARATION_PASS retainedHull=true changedSettings=true invalidAtomic=true displacedBodyTarget=true cameraIndependent=true anatomicalRayHit=true");
+    }
+
+    private async Task CheckDirectObjectAim(RuntimeNativePlayer player)
+    {
+        var reference = new Node3D { Position = new Vector3(100, 10, 100) };
+        reference.SetMeta("opennv_reference_form_key", "AimFixture.esm:000001");
+        var body = new StaticBody3D { CollisionLayer = player.CollisionMask | player.CollisionLayer };
+        body.AddChild(new CollisionShape3D { Shape = new CylinderShape3D { Radius = .035f, Height = .2f } });
+        reference.AddChild(body); AddChild(reference);
+        try
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            var origin = reference.GlobalPosition + Vector3.Back * 3;
+            // A malformed assist cone would throw if assistance were consulted.
+            // A direct reference contact needs no actor query in either mode.
+            var point = player.ResolveShotAimPoint(origin, Vector3.Forward, 20, 20, float.NaN);
+            if (point is null || point.Value.DistanceTo(reference.GlobalPosition + Vector3.Back * .035f) > .002f)
+                throw new InvalidOperationException("A directly aimed small object lost its native contact to actor assistance.");
+            if (player.ResolveShotAimPoint(origin + Vector3.Right, Vector3.Forward, 20, 0, 0) is not null)
+                throw new InvalidOperationException("An empty aim ray invented an object contact.");
+            GD.Print("OPENNV_DIRECT_OBJECT_AIM_PASS nativeRay=true smallTarget=true parentReference=true actorAssistBypassed=true sharedFlatXr=true fixture=synthetic");
+        }
+        finally { reference.Free(); }
     }
 
     private static void CheckArmSpread(FalloutPluginStack records, FalloutWeaponShot source)

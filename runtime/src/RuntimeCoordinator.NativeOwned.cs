@@ -781,6 +781,9 @@ public partial class RuntimeCoordinator
         FalloutFormKey? maximumReference = null;
         try
         {
+            var preparedModels = await PrepareStaticModels(cell, RuntimeLiveContentSource.Current!,
+                _nativeNifPrototypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+                _configuration.World.GameUnitsToMeters, _nativeIndexCancellation.Token);
             BeginNativeCellRoot(cell);
             foreach (var reference in cell.References)
             {
@@ -788,7 +791,8 @@ public partial class RuntimeCoordinator
                     throw new OperationCanceledException("CELL construction session retired.");
                 referenceWatch.Restart();
                 maximumStepMilliseconds = Math.Max(maximumStepMilliseconds,
-                    await PlaceNativeCellReferenceResponsive(root, cell, reference));
+                    await PlaceNativeCellReferenceResponsive(root, cell, reference,
+                        cell.BaseObjects[reference.Base].ModelPath is { } path ? preparedModels.GetValueOrDefault(path) : null));
                 referenceWatch.Stop();
                 if (referenceWatch.Elapsed.TotalMilliseconds > maximumReferenceMilliseconds)
                 {
@@ -831,10 +835,11 @@ public partial class RuntimeCoordinator
         _nativeReferenceDivergences.Clear();
     }
 
-    private void PlaceNativeCellReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference)
+    private void PlaceNativeCellReference(Node3D root, FalloutCellScene cell, FalloutPlacedReference reference,
+        FalloutNifFile? preparedModel = null)
     {
         var previousChildren = root.GetChildCount();
-        try { PlaceNativeReference(root, cell, reference); }
+        try { PlaceNativeReference(root, cell, reference, preparedModel: preparedModel); }
         catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
         {
             // Reject the whole failed reference. Other source references

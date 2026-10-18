@@ -14,6 +14,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
     private readonly Func<string?> _invalidation;
     private readonly Func<RuntimeManualSaveAdmission> _admission;
     private readonly Func<Guid, RuntimeSaveSlotMetadata> _writer;
+    private readonly Func<Guid, RuntimeManualSaveWork>? _backgroundWriter;
     private readonly Action<RuntimeManualSaveReceipt> _publish;
     private readonly Action _settled;
     private readonly ulong _maximumWaitMilliseconds;
@@ -35,7 +36,8 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         Action<RuntimeManualSaveReceipt> publish, Action settled,
         ulong maximumWaitMilliseconds = RuntimeManualSavePreparation.MaximumWaitMilliseconds,
         IReadOnlyList<Node>? sourceProducers = null, Action<Exception>? reportFailure = null,
-        FalloutScriptManualSaveRequests? sourceRequests = null, Func<string?>? originalSourceBlocker = null)
+        FalloutScriptManualSaveRequests? sourceRequests = null, Func<string?>? originalSourceBlocker = null,
+        Func<Guid, RuntimeManualSaveWork>? backgroundWriter = null)
     {
         _requests = requests; _session = session; _source = source; _player = player; _sounds = sounds;
         _invalidation = invalidation; _admission = admission; _writer = writer; _publish = publish; _settled = settled;
@@ -43,6 +45,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         _sourceProducers = sourceProducers ?? [];
         _reportFailure = reportFailure ?? (error => GD.PushError($"OPENNV_NATIVE_MANUAL_SAVE_PREPARATION_FAILURE {error}"));
         _sourceRequests = sourceRequests; _originalSourceBlocker = originalSourceBlocker;
+        _backgroundWriter = backgroundWriter;
         Name = "ManualSavePreparation"; ProcessMode = ProcessModeEnum.Always;
     }
 
@@ -84,12 +87,13 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         try
         {
             if (!_requests.Pending) return;
+            if (_requests.Writing) { _requests.CompletePendingWrite(); return; }
             if (_invalidation() is { } reason) { _requests.Cancel(reason); return; }
             if (_tree?.Paused != true || !_player.ModalInput || Input.MouseMode != Input.MouseModeEnum.Visible)
                 throw new FalloutFiniteSoundSaveDrainInvalidatedException("Manual save lost its gameplay/input pause lease.");
             _sourcePause!.Validate();
             SourceOrder?.Validate(_sourceRequests!, _requests.Receipt!, Engine.GetProcessFrames());
-            _requests.DrainPrepared(_session, _source, Engine.GetProcessFrames(), Time.GetTicksMsec(),
+            _requests.DrainPreparedWork(_session, _source, Engine.GetProcessFrames(), Time.GetTicksMsec(),
                 () => _audio!.ObservePending(), _admission, WriteOrderedCheckpoint);
             if (_requests.Pending) _publish(_requests.Receipt!);
         }
@@ -105,6 +109,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
     internal void Cancel(string reason)
     {
         if (_finished) return;
+        if (_requests.Writing) _requests.CompletePendingWrite(wait: true);
         _requests.Cancel(reason);
         Finish();
     }
@@ -120,7 +125,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
             _audio!.ObservePending().Count == 0 && _admission().Kind == RuntimeManualSaveAdmissionKind.Ready;
     }
 
-    private RuntimeSaveSlotMetadata WriteOrderedCheckpoint(Guid id)
+    private RuntimeManualSaveWork WriteOrderedCheckpoint(Guid id)
     {
         if (SourceOrder is { } source)
         {
@@ -138,7 +143,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
         _sourcePause!.Validate();
         if (_audio!.ObservePending().Count != 0 || _admission().Kind != RuntimeManualSaveAdmissionKind.Ready)
             throw new NotSupportedException("Ordered source/manual preparation lost its complete quiescent capture boundary.");
-        return _writer(id);
+        return _backgroundWriter is { } writer ? writer(id) : new(() => true, () => Task.FromResult(_writer(id)));
     }
 
     private void Finish()
@@ -210,6 +215,7 @@ internal sealed partial class RuntimeNativeManualSavePreparation : Node
     public override void _ExitTree()
     {
         if (_finished || !_begun) return;
+        if (_requests.Writing) _requests.CompletePendingWrite(wait: true);
         _requests.Cancel("Native save-preparation owner retired before its complete checkpoint committed.");
         Finish();
     }

@@ -616,8 +616,8 @@ after reload, equip and holster animations.
 Weapon action completion now leaves updated ammunition, condition and random
 state with the shared gameplay owner. Existing explicit, scripted and transition
 save actions capture that state. A save is no longer requested by animation
-completion. This removes the repeated save trigger; explicit save capture and
-writing remain synchronous and can still pause the game.
+completion. This removes the repeated save trigger; manual capture still pauses gameplay; validation and transactional slot
+publication now run on a managed worker while engine frames continue.
 
 Fresh ordinary flat and Elliott Tate controller runs each fire four shots and
 reload without changing the saved file. Explicit saving persists the final
@@ -662,3 +662,41 @@ these checks do not establish broad session stability or retail parity. One
 repeated reload also crashed during native triangle-mesh construction before
 resuming gameplay; a later complete audit passed. The intermittent construction
 failure remains open.
+
+## Manual commit and static geometry preparation
+
+Manual F5 and session-menu saves capture at the existing quiescent boundary,
+then validate, serialize and commit on a worker. Reference capture yields after
+a two-millisecond batch, keeping native callbacks on their engine thread. A
+single callback may exceed that budget; telemetry reports the actual maximum.
+Spatial cell lookup reuses the immutable source-stack coordinate index already
+built by streaming instead of rebuilding it on the first save. The native preparation owner
+retains its producer/input/audio leases until completion. Ordinary frames poll;
+retirement joins the writer before releasing the snapshot lifetime. Failed
+writes retain catalog rollback and a visible failure receipt. Source-requested
+saves retain their ordered synchronous implementation. UTF-8 serialization
+writes directly to a byte stream instead of building a full UTF-16 JSON string.
+
+Static NIF coordinate, normal, tangent, color, UV, morph-height and winding
+conversion runs during managed resource preparation. Initial cell construction,
+exterior streaming and distant geometry share this preparation. Converted
+arrays follow decoded-source lifetime; no transformed launch assets are saved.
+Godot arrays, meshes, materials, collision shapes and GPU publication remain
+on the engine owner. Native upload/cooking time is not covered by the worker
+change and remains visible in frame measurements. Owned distant terrain and
+building audits compare all mesh arrays and transforms against direct builds.
+
+Direct source-reference contacts take priority over actor auto-aim in both
+flat and XR. This prevents assistance from replacing an aimed prop with a
+nearby actor. Weapon spread remains separately applied; this change does not
+claim retail spread parity or physical bottle-range acceptance.
+
+The updated official Vulkan export captures 7,322 references in seven and six
+slices. Maximum measured reference slices are 4.42 and 6.49 ms; final remaining
+capture is 17.35 and 15.76 ms. Both combat shots hit, both saves complete and
+ordinary quit exits zero with the original checkpoint unchanged. The earlier
+unsliced capture measured 122.41/20.70 ms. These are bounded samples with SWG
+also running, not a controlled frame-rate comparison or 144 Hz acceptance.
+Cold Continue of the newly committed save preserves the complete weapon-handling
+snapshot (including ammunition and shot randomness), limb damage and actor death.
+The new process quits normally with exit zero and the original save unchanged.

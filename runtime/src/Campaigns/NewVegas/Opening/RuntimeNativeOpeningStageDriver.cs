@@ -453,6 +453,18 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
         return state;
     }
 
+    // The complete snapshot is validated by the writer, after the final player
+    // and world fields have been attached. Avoid validating its partial prefix
+    // on the frame thread as well.
+    internal FalloutNativeCampaignState CaptureCheckpoint(FalloutFormKey activeCell, IReadOnlyList<FalloutReferenceSnapshot> references) =>
+        CaptureCurrentStateCore(activeCell, validate: false, references);
+
+    internal void AcknowledgeCheckpoint(FalloutFormKey activeCell)
+    {
+        _saveRequested = false;
+        _activeCell = activeCell;
+    }
+
     private void SynchronizeNameEntry(bool sourceRequested = false)
     {
         var pending = sourceRequested || PendingBlockers.Contains("getplayername", StringComparer.OrdinalIgnoreCase);

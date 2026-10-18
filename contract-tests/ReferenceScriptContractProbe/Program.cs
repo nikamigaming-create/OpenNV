@@ -115,6 +115,7 @@ if (args is ["--corpse-equipped-loot-contracts"])
 }
 if (args is ["--manual-save-preparation-contracts"])
 {
+    ManualSaveQueueContracts.Run();
     StoppedPoseContracts.Run(savePreparationOnly: true);
     return;
 }

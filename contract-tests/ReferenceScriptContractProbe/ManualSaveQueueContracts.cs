@@ -9,6 +9,7 @@ internal static class ManualSaveQueueContracts
         Directory.CreateDirectory(directory);
         try
         {
+            BackgroundCommit(directory);
             var session = Guid.NewGuid(); const string source = "synthetic-owned-source-stack";
             var queue = new RuntimeManualSaveRequests(); var request = queue.Request(session, source, 20);
             var coalesced = queue.Request(session, source, 21);
@@ -65,6 +66,56 @@ internal static class ManualSaveQueueContracts
             Console.WriteLine("OPENNV_MANUAL_SAVE_QUEUE_CONTRACT_PASS phase=true knownFiniteAudioOnly=true laterCompleteState=true retainedSlot=true once=true independentRefused=true death=true sourceSessionCancel=true history=true writerFailure=true campaignAndParity=unverified");
         }
         finally { Directory.Delete(directory, true); }
+    }
+
+    private static void BackgroundCommit(string directory)
+    {
+        var queue = new RuntimeManualSaveRequests();
+        var session = Guid.NewGuid();
+        var request = queue.Request(session, "background", 1);
+        queue.Prepare(1, 1, new(RuntimeManualSaveAdmissionKind.Ready), []);
+        var completion = new TaskCompletionSource<RuntimeSaveSlotMetadata>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var captures = 0;
+        Require(!queue.DrainPreparedBackground(session, "background", 2, 2, () => [],
+            () => new(RuntimeManualSaveAdmissionKind.Ready), _ => { captures++; return completion.Task; }) &&
+            queue.Pending && queue.Writing && captures == 1, "Background commit blocked or published before completion.");
+        for (var frame = 0; frame < 100; frame++)
+            Require(!queue.CompletePendingWrite() && queue.Pending, "An unfinished writer blocked or falsely completed.");
+        var path = Path.Combine(directory, request.Slot.ToString("N") + ".json");
+        File.WriteAllText(path, "committed");
+        completion.SetResult(new(request.Slot.ToString("N"), path, "synthetic", null, null, null, DateTime.UtcNow));
+        Require(queue.CompletePendingWrite() && !queue.Writing && !queue.Pending && captures == 1,
+            "Background commit did not publish exactly once on its owner.");
+        queue.Request(session, "background", 3);
+        queue.Prepare(3, 3, new(RuntimeManualSaveAdmissionKind.Ready), []);
+        var failed = new TaskCompletionSource<RuntimeSaveSlotMetadata>();
+        queue.DrainPreparedBackground(session, "background", 4, 4, () => [],
+            () => new(RuntimeManualSaveAdmissionKind.Ready), _ => failed.Task);
+        failed.SetException(new IOException("background write failed"));
+        Require(!queue.CompletePendingWrite(wait: true) && !queue.Writing &&
+            queue.Receipt!.Disposition == "failed" && queue.Receipt.Error == "background write failed",
+            "Writer failure or retirement join lost its terminal receipt.");
+        request = queue.Request(session, "background", 5);
+        queue.Prepare(5, 5, new(RuntimeManualSaveAdmissionKind.Ready), []);
+        var steps = 0;
+        var commits = 0;
+        RuntimeManualSaveWork Work(Guid id) => new(() => ++steps == 4, () =>
+        {
+            commits++;
+            var destination = Path.Combine(directory, id.ToString("N") + ".json");
+            File.WriteAllText(destination, "sliced");
+            return Task.FromResult(new RuntimeSaveSlotMetadata(id.ToString("N"), destination,
+                "synthetic", null, null, null, DateTime.UtcNow));
+        });
+        Require(!queue.DrainPreparedWork(session, "background", 6, 6, () => [],
+            () => new(RuntimeManualSaveAdmissionKind.Ready), Work) && steps == 1 && commits == 0,
+            "Capture ignored its first frame boundary.");
+        Require(queue.Request(session, "background", 6).Slot == request.Slot &&
+            !queue.CompletePendingWrite() && steps == 2 && commits == 0,
+            "A coalesced request restarted the paused capture.");
+        Require(queue.CompletePendingWrite(wait: true) && steps == 4 && commits == 1 && !queue.Writing,
+            "Retirement failed to finish capture on its owner before joining the commit.");
+        Console.WriteLine("OPENNV_BACKGROUND_SAVE_CONTRACT_PASS nonblocking=true captureOnce=true ownerCompletion=true failure=true retirementJoin=true");
     }
 
     private static void Require(bool value, string message) { if (!value) throw new InvalidDataException(message); }
