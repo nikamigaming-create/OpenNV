@@ -19,6 +19,14 @@ internal static class AnimationResourceContracts
             [first + "/2hrhandgrip4_a.kf"] = ["OtherGroup_A"],
             [first + "/2hrhandgrip5_a.kf"] = ["HandGrip5_A", "HandGrip5_A"],
             [first + "/2hrhandgrip6_a.kf"] = [],
+            [first + "/h2hattackleft_a.kf"] = ["AttackLeft"],
+            [first + "/h2hattackleft_b.kf"] = ["AttackLeft"],
+            [first + "/h2hattackright_a.kf"] = ["AttackRight", "A"],
+            [first + "/h2hattackpower_a.kf"] = ["AttackPower", "AttackPower_A"],
+            [first + "/h2hattackleft0_a.kf"] = ["AttackLeft"],
+            [first + "/h2hattackforward_a.kf"] = ["AttackForward", "Forward"],
+            [first + "/h2hattackcustom_a.kf"] = ["AttackCustom"],
+            [first + "/h2hattackcustom_b.kf"] = ["Idle"],
         };
         var enumerations = 0; var reads = 0;
         var owner = new FalloutActorAnimationResources(files.ContainsKey, folder =>
@@ -59,7 +67,22 @@ internal static class AnimationResourceContracts
             Require(error.Message.Contains("2hrhandgrip7", StringComparison.Ordinal) && error.FileName!.Contains("2hrhandgrip7", StringComparison.Ordinal),
                 "Missing-group telemetry discarded its logical path.");
         }
-        Console.WriteLine("OPENNV_ACTOR_ANIMATION_RESOURCE_PASS authoredVariants=true exportedGroups=true exactPriority=true folderIsolation=true caseInsensitive=true cached=true ambiguousRefused=true malformedRefused=true missingPath=true");
+        var baseGroups = owner.Variants(first, "h2hattackleft");
+        Require(baseGroups.Count == 2 && baseGroups.All(path => owner.SelectedGroup(path) == "AttackLeft"),
+            "Authored suffixed files lost their uniquely exported base action group.");
+        Reject(() => owner.Find(first, "h2hattackleft"));
+        var mixedGroups = owner.Variants(first, "h2hattackright");
+        Require(mixedGroups.Count == 1 && owner.SelectedGroup(mixedGroups[0].ToUpperInvariant()) == "AttackRight",
+            "A filename suffix selected an unrelated group instead of the catalog's compatible base group.");
+        var exactGroup = owner.Variants(first, "h2hattackpower");
+        Require(owner.SelectedGroup(exactGroup.Single()) == "AttackPower_A",
+            "Exact exported variant did not retain priority over its base group.");
+        Reject(() => owner.Variants(first, "h2hattackleft0"));
+        Reject(() => owner.Variants(first, "h2hattackforward"));
+        Reject(() => owner.Variants(first, "h2hattackcustom"));
+        Require(owner.SelectedGroup(first + "/h2hattackcustom_a.kf") is null,
+            "Failed catalog validation published a partial sequence binding.");
+        Console.WriteLine("OPENNV_ACTOR_ANIMATION_RESOURCE_PASS authoredVariants=true exportedGroups=true exactPriority=true folderIsolation=true caseInsensitive=true cached=true ambiguousRefused=true malformedRefused=true missingPath=true baseGroupVariants=true exactVariantPriority=true explicitGroupBinding=true partialCatalogRefused=true");
     }
 
     private static void Require(bool valid, string error) { if (!valid) throw new InvalidDataException(error); }

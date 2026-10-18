@@ -13,6 +13,7 @@ internal sealed class FalloutActorAnimationResources
     private readonly Dictionary<string, string?> _resolved = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IReadOnlyList<string>> _variants = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IReadOnlyList<string>> _exportedGroups = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _selectedGroups = new(StringComparer.OrdinalIgnoreCase);
 
     internal FalloutActorAnimationResources(RuntimeLiveContentSource content) : this(
         path => content.TryResolve(path, null, out _), content.ResourcePathsUnder, path =>
@@ -49,6 +50,8 @@ internal sealed class FalloutActorAnimationResources
         return candidates;
     }
 
+    internal string? SelectedGroup(string path) => _selectedGroups.GetValueOrDefault(Canonical(path));
+
     private IReadOnlyList<string> Candidates(string requested, bool includeExact)
     {
         var split = requested.LastIndexOf('/');
@@ -63,21 +66,32 @@ internal sealed class FalloutActorAnimationResources
         if (includeExact && _exists(requested) && !candidates.Contains(requested, StringComparer.OrdinalIgnoreCase))
             candidates.Add(requested);
         candidates.Sort(StringComparer.OrdinalIgnoreCase);
+        var selectedGroups = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in candidates)
         {
             var variant = path[(split + 1)..^3];
             if (!_exportedGroups.TryGetValue(path, out var names))
                 _exportedGroups.Add(path, names = _groups(path).ToArray());
-            var matching = names.Count(name =>
+            var compatible = names.Where(name =>
             {
                 var suffix = name.IndexOf('_');
                 return !string.IsNullOrEmpty(name) && (suffix > 0
                     ? stem.EndsWith(name[..suffix], StringComparison.OrdinalIgnoreCase)
-                    : stem.EndsWith(name, StringComparison.OrdinalIgnoreCase)) &&
-                    variant.EndsWith(name, StringComparison.OrdinalIgnoreCase);
-            });
-            if (matching != 1) throw new InvalidDataException($"Source animation variant {path} has no unique compatible exported group for {requested}.");
+                    : stem.EndsWith(name, StringComparison.OrdinalIgnoreCase));
+            }).ToArray();
+            var matching = compatible.Where(name => variant.EndsWith(name, StringComparison.OrdinalIgnoreCase)).ToArray();
+            // A variant filename can export its unsuffixed action group. Prefer
+            // an exact variant group when both are present, then require one
+            // compatible base group. The catalog never selects an action/RNG.
+            if (matching.Length == 0 && variant.StartsWith(stem + "_", StringComparison.OrdinalIgnoreCase))
+                matching = compatible.Where(name => !name.Contains('_')).ToArray();
+            if (matching.Length != 1) throw new InvalidDataException($"Source animation variant {path} has no unique compatible exported group for {requested}.");
+            selectedGroups.Add(path, matching[0]);
         }
+        foreach (var (path, group) in selectedGroups)
+            if (_selectedGroups.TryGetValue(path, out var prior) && !prior.Equals(group, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Source animation {path} resolves to incompatible exported groups.");
+        foreach (var (path, group) in selectedGroups) _selectedGroups[path] = group;
         return Array.AsReadOnly(candidates.ToArray());
     }
 

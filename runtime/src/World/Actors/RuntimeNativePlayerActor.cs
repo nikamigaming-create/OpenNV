@@ -171,10 +171,13 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
         var source = FalloutNifFile.Read(Read(path));
         var sequences = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         var requestedGroup = Path.GetFileNameWithoutExtension(path);
-        // A KF may export several groups. Its requested resource name selects
-        // the matching named sequence, after the weapon/locomotion prefix.
-        var matching = sequences.Where(value => requestedGroup.EndsWith(value.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
-        var sequence = sequences.Length == 1 ? sequences[0] : matching.Length == 1 ? matching[0] :
+        // Use the catalog's validated exported group for suffixed variants.
+        // Other direct resources retain their unique filename/sequence binding.
+        var declared = _content.ActorAnimations.SelectedGroup(path);
+        var matching = sequences.Where(value => declared is not null
+            ? value.Name.Equals(declared, StringComparison.OrdinalIgnoreCase)
+            : requestedGroup.EndsWith(value.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var sequence = declared is null && sequences.Length == 1 ? sequences[0] : matching.Length == 1 ? matching[0] :
             throw new NotSupportedException($"Player source {path} has no unique group among: " + string.Join(", ", sequences.Select(value => value.Name)));
         Action<float>? Other(FalloutNifControllerLink link)
         {

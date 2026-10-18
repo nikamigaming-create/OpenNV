@@ -6,10 +6,21 @@ extents; active notes still require a playback owner and remain refused. Fresh
 owned dog checks pass qualifying limb damage, changed bone poses, serialized
 cold resumption, finite completion and subsequent combat. Player weapon/effect
 audio now belongs to the persistent engine-player sound ledger and participates
-in finite save preparation. An ordinary damaged-coyote combat save cold-loads
-with retained injury and health and the coyote attacks again. That ordinary shot
-hit the torso; ordinary F5 during the qualifying stream-27 limb reaction remains
-separate, uncompleted acceptance work.
+in finite save preparation. A fresh ordinary-input run from a copy of the user
+checkpoint crosses streamed terrain and lands a part-7 foreleg shot on resident
+169b7a. F5 completes during the qualifying stream-27 reaction at
+0.08888888888888889 seconds, retaining 14.400001 limb damage and 15.599999 health.
+A separate optimized process uses Continue and reports native resumption from
+that exact saved phase; its first paused observation is 0.17777777777777773
+seconds. The reaction then completes and returns to the combat owner without a
+reaction error. The original checkpoint hash remains unchanged. This is bounded
+flat gameplay/persistence evidence, not physical VR or matched retail acceptance.
+
+An older investigation checkpoint already retained four active off-cell
+dust-devil loops without native capture owners before the shot. That checkpoint
+still refuses animation-sound continuation. A fresh run starts without those
+unsettled histories and retains ready audio capture after the streamed approach.
+Older off-cell continuation remains a separate visible failure to repair.
 
 Health damage previously reached `FalloutReferenceWorld.DamageActor`, and lethal
 hits activated the source ragdoll. Nonfatal hits only provoked combat. No owner
