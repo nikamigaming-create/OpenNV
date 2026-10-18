@@ -18,12 +18,14 @@ internal sealed record ClassicDoorPose(bool Open, bool Locked, int Frame, int Di
 internal sealed record ClassicDoorSave(string Map, string MapSha256, int Serial, int Pid, string Identity,
     ClassicDoorPose Pose, ClassicIntProcedureState? ScriptState, string? Failure);
 internal sealed record ClassicDoorWorldSave(ClassicDoorSave[] Doors, IReadOnlyDictionary<string, int> Externals,
-    IReadOnlyDictionary<int, int> Globals, IReadOnlyDictionary<string, Dictionary<int, int>> MapVariables);
+    IReadOnlyDictionary<int, int> Globals, IReadOnlyDictionary<string, Dictionary<int, int>> MapVariables,
+    ClassicDoorClockSave? Clock = null);
 
 /// <summary>Live source doors, their INT events and FRM clock. No donor collision or animation owns passage.</summary>
-internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
+internal sealed partial class ClassicDoorWorld(ClassicPlayerSession player)
 {
     private sealed record Entry(ClassicDoorDefinition Definition, ClassicDoorPose Pose, ClassicIntProcedureState? State, string? Failure);
+    private sealed record Execution(ClassicIntProcedureResult Result, IReadOnlyDictionary<string, ClassicIntProcedureState> States);
     private readonly Dictionary<string, Entry> _entries = [];
     private readonly ClassicNativeScriptMessages _messages = new(path => player.Catalog.Read(path, out _));
     private readonly Queue<string> _pendingMessages = [];
@@ -34,7 +36,8 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
         ? new(StringComparer.Ordinal) { [player.Initialization.Map] = new(initial.MapVariables) } : new(StringComparer.Ordinal);
     internal event Action<int>? FrameChanged;
     internal event Action? PassageChanged;
-    internal IReadOnlyList<string> Failures => Current.Where(row => row.Failure is not null).Select(row => row.Failure!).ToArray();
+    internal IReadOnlyList<string> Failures => Current.Where(row => row.Failure is not null).Select(row => row.Failure!)
+        .Concat(_timerFailure is null ? [] : new[] { _timerFailure }).ToArray();
     private IEnumerable<Entry> Current => _entries.Values.Where(row => row.Definition.Level.Path == player.MapPath && row.Definition.Object.Elevation == player.Elevation);
     internal IReadOnlyList<int> Serials => Current.Select(row => row.Definition.Object.Serial).ToArray();
     internal static bool IsDoor(Fallout1NativeMapObject row) => row.Prototype is { ObjectType: 2, Subtype: 0 };
@@ -75,13 +78,12 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
             {
                 var state = InitialState(definition);
                 var result = Execute(entry with { State = state }, definition.Program.StartupProcedure!, 0);
-                Validate(result);
+                Validate(result.Result, level.Path);
                 // Validate startup and entry together before publishing either.
-                var startup = entry with { State = result.State };
+                var startup = entry with { State = result.Result.State };
                 var entered = definition.Program.Procedures.ContainsKey("map_enter_p_proc")
-                    ? Execute(startup, "map_enter_p_proc", 15, result.WorldObjects, result.ExternalVariables) : result;
-                Validate(entered);
-                if (!ReferenceEquals(entered, result)) entered = entered with { MessageEffects = result.MessageEffects.Concat(entered.MessageEffects).ToArray() };
+                    ? Execute(startup, "map_enter_p_proc", 15, result) : result;
+                Validate(entered.Result, level.Path);
                 Commit(entry, entered);
             }
             catch (Exception error) when (error is InvalidOperationException or InvalidDataException or NotSupportedException or FileNotFoundException)
@@ -133,8 +135,8 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
         return new(definition.Program!.InitialVariables, new Dictionary<int, int>(), locals, variables, _globals, [], null);
     }
 
-    private ClassicIntProcedureResult Execute(Entry entry, string procedure, int action,
-        ClassicIntWorldObjectState? prior = null, IReadOnlyDictionary<string, int>? externals = null)
+    private Execution Execute(Entry entry, string procedure, int action, Execution? prior = null,
+        ClassicIntTimerState? timerState = null, int? fixedParameter = null, int budget = 100000)
     {
         var level = entry.Definition.Level;
         var objects = level.Objects.TopLevelObjects.ToDictionary(row => row.Serial + 1,
@@ -143,35 +145,61 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
         objects.Add(dude, new(dude, 0x01000000, player.Tile, player.Elevation, true));
         var doors = _entries.Values.Where(row => row.Definition.Level.Path == level.Path).ToDictionary(row => row.Definition.Object.Serial + 1,
             row => new ClassicIntDoorObjectState(row.Pose.Open, row.Pose.Locked));
-        var world = prior ?? ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors };
-        var state = entry.State! with { GlobalVariables = _globals!, MapVariables = _mapVariables[level.Path] };
-        if (prior is not null) state = entry.State!;
+        var world = prior?.Result.WorldObjects ?? ClassicIntWorldObjectState.Empty with { Objects = objects, Doors = doors, Timers = timerState ?? _timers };
+        var state = entry.State! with
+        {
+            GlobalVariables = prior?.Result.State.GlobalVariables ?? _globals,
+            MapVariables = prior?.Result.State.MapVariables ?? _mapVariables[level.Path]
+        };
+        var transaction = new UseTransaction(this, level.Path, prior?.States);
+        var result = Invoke(entry with { State = state }, procedure, action, world,
+            prior?.Result.ExternalVariables ?? _externals, transaction, fixedParameter, action == 22 ? 0 : dude, budget);
+        if (prior is not null) result = result with
+        {
+            MessageEffects = prior.Result.MessageEffects.Concat(result.MessageEffects).ToArray(),
+            SoundEffects = prior.Result.SoundEffects.Concat(result.SoundEffects).ToArray()
+        };
+        if (!result.WorldObjects.Objects.OrderBy(row => row.Key).SequenceEqual(world.Objects.OrderBy(row => row.Key)))
+            throw new NotSupportedException("Door event changes a world object's placement or visibility without its runtime owner.");
+        return new(result, transaction.States);
+    }
+
+    private ClassicIntProcedureResult Invoke(Entry entry, string procedure, int action, ClassicIntWorldObjectState world,
+        IReadOnlyDictionary<string, int> externals, UseTransaction transaction, int? fixedParameter, int sourceObject, int budget)
+    {
+        const int dude = int.MaxValue;
+        var state = entry.State!;
+        var level = entry.Definition.Level;
         var stats = Enumerable.Range(0, 7).ToDictionary(stat => (dude, stat), stat => player.Stats.Special[stat]);
         stats[(dude, 34)] = player.Choice.Character.Female ? 1 : 0;
         var game = new ClassicIntExpressionContext(state.ProgramVariables, state.LocalVariables, state.ScriptLocalVariables,
             state.MapVariables, state.GlobalVariables, dude, entry.Definition.Object.Serial + 1, null, null,
             stats, new Dictionary<(int, int), int>(), new Dictionary<int, int>(),
-            new Dictionary<(int, int), int>(), externals ?? _externals, null, null, null,
-            new ClassicIntObjectHandleTable(new Dictionary<ClassicIntObjectCreation, int>()), SourceObject: dude,
-            CurrentMapIndex: level.Map.MapIndex, ScriptAction: action, MessageSource: _messages);
-        var result = ClassicIntProcedureVm.Execute(entry.Definition.Program!, procedure, state, game, world, null, 100000);
-        if (!result.WorldObjects.Objects.OrderBy(row => row.Key).SequenceEqual(world.Objects.OrderBy(row => row.Key)))
-            throw new NotSupportedException("Door event changes a world object's placement or visibility without its runtime owner.");
+            new Dictionary<(int, int), int>(), externals, TimerContract is null ? null : world.Timers.CurrentTick, null, null,
+            new ClassicIntObjectHandleTable(new Dictionary<ClassicIntObjectCreation, int>()), SourceObject: sourceObject,
+            TimerContract: TimerContract, FixedParameter: fixedParameter,
+            CurrentMapIndex: level.Map.MapIndex, ScriptAction: action, MessageSource: _messages, ObjectUse: transaction);
+        var result = ClassicIntProcedureVm.Execute(entry.Definition.Program!, procedure, state, game, world, null, budget);
+        transaction.States[Key(level.Path, entry.Definition.Object.Serial)] = result.State;
         return result;
     }
 
-    private static void Validate(ClassicIntProcedureResult result)
+    private void Validate(ClassicIntProcedureResult result, string map)
     {
         var world = result.WorldObjects;
         if (result.State.ValueStack.Count != 0 || result.MessageEffects.Any(row => row.Text is null || row.ObjectHandle is not null || row.Color is not null) || result.SoundEffects.Count != 0 ||
             world.CreatedObjects.Count != 0 || world.Inventory.Count != 0 || world.MapStartOverride is not null ||
             world.AttackRequests.Count != 0 || world.Movements.Count != 0 || world.TraitAssignments.Count != 0 ||
-            world.Timers.Pending.Count != 0 || world.DialogueSystemEntered || world.DialogueStart is not null || world.LightLevel is not null)
+            world.DialogueSystemEntered || world.DialogueStart is not null || world.LightLevel is not null)
             throw new NotSupportedException("Door event reached an effect whose runtime owner is still unavailable.");
+        foreach (var pending in world.Timers.Pending)
+            if (!_entries.TryGetValue(Key(map, pending.TargetHandle - 1), out var target) || target.Definition.Program is null)
+                throw new NotSupportedException("Script timer target has no native event owner.");
     }
 
-    private void Commit(Entry entry, ClassicIntProcedureResult result)
+    private void Commit(Entry entry, Execution execution)
     {
+        var result = execution.Result;
         // A script is one transaction: validate every target before applying
         // its locals, locks, map/global writes and open/close requests.
         var updates = new List<(string Key, Entry Entry)>();
@@ -185,8 +213,9 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
             updates.Add((key, target with { Pose = pose }));
         }
         foreach (var (key, update) in updates) _entries[key] = update;
-        var sourceKey = Key(entry.Definition.Level.Path, entry.Definition.Object.Serial);
-        _entries[sourceKey] = _entries[sourceKey] with { State = result.State, Failure = null };
+        foreach (var (key, state) in execution.States)
+            _entries[key] = _entries[key] with { State = state, Failure = null };
+        _timers = result.WorldObjects.Timers;
         _globals = new(result.State.GlobalVariables); _mapVariables[entry.Definition.Level.Path] = new(result.State.MapVariables);
         _externals = new(result.ExternalVariables, StringComparer.Ordinal);
         foreach (var message in result.MessageEffects) _pendingMessages.Enqueue(message.Text!);
@@ -195,6 +224,7 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
 
     internal void Use(int serial)
     {
+        if (_timerFailure is not null) throw new NotSupportedException(_timerFailure);
         var entry = Get(serial); var source = entry.Definition.Object;
         if (player.Moving || source.Elevation != player.Elevation || ClassicHexGrid.Distance(player.Tile, source.Tile) > 1 || (source.Flags & 1) != 0)
             throw new InvalidOperationException("Move next to the door first.");
@@ -202,8 +232,8 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
         if (entry.Pose.Direction != 0) throw new InvalidOperationException("The door is moving.");
         if (entry.Definition.Program is { } program && program.Procedures.ContainsKey("use_p_proc"))
         {
-            var result = Execute(entry, "use_p_proc", 6); Validate(result); Commit(entry, result);
-            if (result.WorldObjects.ScriptOverrides) return;
+            var result = Execute(entry, "use_p_proc", 6); Validate(result.Result, player.MapPath); Commit(entry, result);
+            if (result.Result.WorldObjects.ScriptOverrides) return;
             entry = Get(serial);
         }
         if (!entry.Definition.CanUse) throw new InvalidOperationException("This door requires its control or another source interaction.");
@@ -221,8 +251,8 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
         if (entry.Failure is not null) throw new NotSupportedException(entry.Failure);
         if (entry.Definition.Program is { } program && program.Procedures.ContainsKey("description_p_proc"))
         {
-            var result = Execute(entry, "description_p_proc", 3); Validate(result); Commit(entry, result);
-            if (result.WorldObjects.ScriptOverrides) return;
+            var result = Execute(entry, "description_p_proc", 3); Validate(result.Result, player.MapPath); Commit(entry, result);
+            if (result.Result.WorldObjects.ScriptOverrides) return;
         }
         var pro = player.Catalog.Read(source.Prototype.LogicalPath!, out _);
         var id = BinaryPrimitives.ReadInt32BigEndian(pro.AsSpan(4));
@@ -256,11 +286,12 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
             if (frame != pose.Frame) FrameChanged?.Invoke(entry.Definition.Object.Serial);
             if (pose.Blocked(entry.Definition) != next.Blocked(entry.Definition)) PassageChanged?.Invoke();
         }
+        AdvanceScriptTime(delta);
     }
 
     internal ClassicDoorWorldSave Save() => new(_entries.Values.Select(row => new ClassicDoorSave(row.Definition.Level.Path,
         row.Definition.Level.Sha256, row.Definition.Object.Serial, row.Definition.Object.Pid, row.Definition.Identity, row.Pose, row.State, row.Failure)).ToArray(),
-        _externals, _globals, _mapVariables);
+        _externals, _globals, _mapVariables, SaveClock());
 
     internal void Restore(ClassicDoorWorldSave save)
     {
@@ -283,6 +314,7 @@ internal sealed class ClassicDoorWorld(ClassicPlayerSession player)
         _entries.Clear(); foreach (var (key, entry) in restored) _entries.Add(key, entry);
         _externals = new(save.Externals, StringComparer.Ordinal); _globals = new(save.Globals);
         _mapVariables = save.MapVariables.ToDictionary(row => row.Key, row => new Dictionary<int, int>(row.Value), StringComparer.Ordinal);
+        RestoreClock(save.Clock);
         Enter(); PassageChanged?.Invoke();
     }
 }

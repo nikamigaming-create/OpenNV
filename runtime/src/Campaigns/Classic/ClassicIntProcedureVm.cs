@@ -507,6 +507,7 @@ internal static class ClassicIntProcedureVm
     private const ushort GameTimeHour = 0x80F6;
     private const ushort AddTimerEvent = 0x80F0;
     private const ushort RemoveTimerEvent = 0x80F1;
+    private const ushort UseObject = 0x80DB;
     private const ushort GameTicks = 0x80F2;
     private const ushort FixedParameter = 0x80F7;
     private const ushort DialogueSystemEnter = 0x80F9;
@@ -901,6 +902,46 @@ internal static class ClassicIntProcedureVm
                 case ScriptOverrides:
                     scriptOverrides = true;
                     break;
+                case UseObject:
+                    {
+                        var target = Pop(stack, program, procedure, offset);
+                        _ = WorldObject(target);
+                        var dispatcher = game.ObjectUse ?? throw Failure(
+                            program, procedure, offset, "missing-object-use-owner");
+                        var used = dispatcher.Use(game.SelfObject, target, Result(), instructionBudget - executed);
+                        if (used.ExecutedInstructions < executed || used.ExecutedInstructions > instructionBudget)
+                            throw Failure(program, procedure, offset, "nested-use-instruction-budget");
+                        executed = used.ExecutedInstructions;
+                        // Nested procedures share program/script/world state, but
+                        // cannot replace the suspended caller's local frame or
+                        // value stack. Their override applies to their own use.
+                        programVariables = new(used.State.ProgramVariables);
+                        scriptLocals = new(used.State.ScriptLocalVariables);
+                        mapVariables = new(used.State.MapVariables);
+                        globals = new(used.State.GlobalVariables);
+                        random = used.State.RandomState;
+                        externalVariables = new(used.ExternalVariables, StringComparer.Ordinal);
+                        messageEffects = used.MessageEffects.ToList();
+                        soundEffects = used.SoundEffects.ToList();
+                        var changed = used.WorldObjects;
+                        doors = new(changed.Doors);
+                        lightLevel = changed.LightLevel;
+                        createdObjects = new(changed.CreatedObjects);
+                        inventory = changed.Inventory.ToList();
+                        mapStartOverride = changed.MapStartOverride;
+                        attackRequests = changed.AttackRequests.ToList();
+                        objects = new(changed.Objects);
+                        movements = changed.Movements.ToList();
+                        traitAssignments = changed.TraitAssignments.ToDictionary(row => (row.ObjectHandle, row.TraitType, row.Trait));
+                        timers = changed.Timers;
+                        timers.Validate();
+                        dialogueSystemEntered = changed.DialogueSystemEntered;
+                        dialogueStart = changed.DialogueStart;
+                        dialogueReplies = changed.DialogueReplies.ToList();
+                        dialogueOptions = changed.DialogueOptions.ToList();
+                        dialogueReady = changed.DialogueReady;
+                        break;
+                    }
                 case PlaySound:
                     {
                         var reference = Pop(stack, program, procedure, offset);

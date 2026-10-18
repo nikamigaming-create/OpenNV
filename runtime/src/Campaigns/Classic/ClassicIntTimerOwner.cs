@@ -42,7 +42,7 @@ internal sealed record ClassicIntTimerState(
     {
         if (CurrentTick < 0 || NextSequence < 0 || Pending.Any(row =>
                 row.Sequence < 0 || row.Sequence >= NextSequence ||
-                row.TargetHandle == 0 || row.DueTick < CurrentTick) ||
+                row.TargetHandle == 0 || row.DueTick < 0) ||
             Pending.Select(row => row.Sequence).Distinct().Count() != Pending.Count ||
             !Pending.SequenceEqual(Pending.OrderBy(row => row.DueTick)
                 .ThenBy(row => row.Sequence)))
@@ -70,10 +70,7 @@ internal static class ClassicIntTimerOwner
         ClassicIntTimerContract contract,
         int seconds)
     {
-        if (seconds < 0)
-            throw new InvalidOperationException(
-                "Classic INT game_ticks seconds are negative.");
-        return checked(seconds * contract.TicksPerSecond);
+        return checked(Math.Max(seconds, 0) * contract.TicksPerSecond);
     }
 
     internal static ClassicIntTimerState Schedule(
@@ -113,7 +110,9 @@ internal static class ClassicIntTimerOwner
         var next = source.Pending[0];
         var result = source with
         {
-            CurrentTick = next.DueTick,
+            // Late callbacks observe dispatch time. Remaining due entries may
+            // still have older deadlines until this dispatch batch drains.
+            CurrentTick = throughTick,
             Pending = source.Pending.Skip(1).ToArray(),
         };
         result.Validate();
