@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Checkpoint,
     [string]$Executable = "",
     [ValidateSet("d3d12", "vulkan")][string]$RenderingDriver = "d3d12",
-    [ValidateSet("continue-reload-quit", "fresh-title-quit", "window-close", "loading-window-close")]
+    [ValidateSet("continue-reload-quit", "fresh-title-quit", "window-close", "loading-window-close", "index-window-close")]
     [string[]]$Cases = @("continue-reload-quit", "fresh-title-quit", "window-close"),
     [int]$TimeoutSeconds = 240
 )
@@ -58,7 +58,7 @@ foreach ($scenario in $Cases) {
     $inputRoot = Join-Path $privateRun "input"
     [IO.Directory]::CreateDirectory($inputRoot) | Out-Null
     $save = Join-Path $privateRun "save.json"
-    if ($scenario -in @("continue-reload-quit", "loading-window-close")) { Copy-Item -LiteralPath $Checkpoint -Destination $save }
+    if ($scenario -in @("continue-reload-quit", "loading-window-close", "index-window-close")) { Copy-Item -LiteralPath $Checkpoint -Destination $save }
     $stdout = Join-Path $diagnostics "$scenario.stdout.log"
     $stderr = Join-Path $diagnostics "$scenario.stderr.log"
     $game = $null
@@ -118,6 +118,11 @@ foreach ($scenario in $Cases) {
             Send-Input @{ op = "key"; key = "Escape"; pressed = $true; leaseMilliseconds = 50 }
             Press-Button "QUIT GAME"
             Press-Button "YES"
+        } elseif ($scenario -eq "index-window-close") {
+            $null = Wait-State { param($value) (Read-RunningOutput).Contains("OPENNV_NATIVE_SCRIPT_INDEX_PREPARING") }
+            if (![OpenNV.Diagnostics.SessionWindow]::RequestClose([OpenNV.Diagnostics.SessionWindow]::Find($game.Id))) {
+                throw "The indexing window rejected its close request."
+            }
         } elseif ($scenario -eq "loading-window-close") {
             Press-Button "Continue"
             $null = Wait-State { param($value) (Read-RunningOutput).Contains("OPENNV_NATIVE_NPC_PREPARING") }
@@ -148,6 +153,12 @@ foreach ($scenario in $Cases) {
             ($output -notmatch "OPENNV_NATIVE_MENU_LOAD_CANCELLED" -or
                 $errors -match "OPENNV_NATIVE_LOAD_REJECTED|ObjectDisposedException")) {
             throw "Cancelled loading became a load failure or outlived its source handles; inspect $stdout and $stderr."
+        }
+        if ($scenario -eq "index-window-close" -and
+            ($output -notmatch "OPENNV_NATIVE_MENU_INDEX_CANCELLED" -or
+                $output -match "OPENNV_NATIVE_SCRIPT_INDEX_READY" -or
+                $errors -match "OPENNV_NATIVE_LOAD_REJECTED|ObjectDisposedException")) {
+            throw "Cancelled indexing published an incomplete result or outlived its source handles; inspect $stdout and $stderr."
         }
         $results += [ordered]@{ scenario = $scenario; exitCode = $game.ExitCode; sourceReadersDrained = $true }
         Write-Output "OPENNV_NATIVE_SESSION_CASE_PASS scenario=$scenario exit=0 sourceReaders=drained"

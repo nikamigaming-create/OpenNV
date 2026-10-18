@@ -380,6 +380,14 @@ public partial class RuntimeCoordinator
         var archiveWarmupWait = Stopwatch.StartNew();
         content.ArchiveWarmup.GetAwaiter().GetResult();
         archiveWarmupWait.Stop();
+        // This complete source-only scan used to run inside the scene-thread
+        // quest host constructor. Warm the same stack-owned index while loading
+        // UI can draw; no script clocks or gameplay state execute on the worker.
+        var scriptIndexStarted = Stopwatch.GetTimestamp();
+        GD.Print("OPENNV_NATIVE_SCRIPT_INDEX_PREPARING source=stack-index-worker denominator=all-winning-records");
+        var embeddedScripts = _nativePluginStack.CountEmbeddedQuestScripts(_nativeIndexCancellation.Token);
+        GD.Print($"OPENNV_NATIVE_SCRIPT_INDEX_READY embedded={embeddedScripts} " +
+            $"elapsedMs={Stopwatch.GetElapsedTime(scriptIndexStarted).TotalMilliseconds:F1} source=stack-index-worker");
         GD.Print(
             $"OPENNV_NATIVE_STACK_READY edition={content.Edition} campaign={content.Campaign} " +
             $"game={content.Game} plugins={_nativePluginStack.Plugins.Count} " +
@@ -422,6 +430,10 @@ public partial class RuntimeCoordinator
                 }
                 else ConsumeNativeLauncherEntry(menu);
             }
+        }
+        catch (OperationCanceledException) when (_nativeSessionTransitioning || _retiringNativeSession)
+        {
+            GD.Print("OPENNV_NATIVE_MENU_INDEX_CANCELLED owner=session-retirement sourceReaders=draining");
         }
         catch (Exception exception)
         {

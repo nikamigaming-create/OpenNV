@@ -227,6 +227,7 @@ public partial class RuntimeCoordinator
         _nativeNifPrototypes.Clear();
         _nativePrewarmedInitialCellRoot?.Free(); _nativePrewarmedInitialCellRoot = null;
         _nativeReferences?.Dispose(); _nativePluginStack?.Dispose();
+        _nativeIndexCancellation.Dispose();
         GD.Print("OPENNV_NATIVE_SESSION_RETIRE phase=source-owners-disposed");
     }
 
