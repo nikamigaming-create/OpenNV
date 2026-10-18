@@ -678,14 +678,16 @@ public partial class RuntimeCoordinator
                 throw new OperationCanceledException("Initial CELL session retired.");
             }
             if (grid is not null) await AddExteriorLandscapeResponsive(root, grid);
-            AddChild(root);
+            MeasureNativeLoadStep("publish-cell-tree", () => AddChild(root));
+            await YieldNativeLoadingFrame();
             foreach (var sounds in root.FindChildren("*", "", true, false).OfType<NativeOwnedAnimationSoundPlayer>())
                 sounds.RequirePcmRestored();
             if (restore is null || restore.State.Scripts is not null)
             {
                 // New Game retains the timers already running behind StartMenu.
                 // Continue replaces that menu session with the saved clocks.
-                if (restore is not null || _nativeQuestScripts is null) CreateNativeQuestScripts(restore?.State.Scripts);
+                if (restore is not null || _nativeQuestScripts is null)
+                    MeasureNativeLoadStep("restore-quest-scripts", () => CreateNativeQuestScripts(restore?.State.Scripts));
             }
             else if (_nativeQuestScripts is not null)
             {
@@ -693,18 +695,21 @@ public partial class RuntimeCoordinator
                 _nativeQuestScripts.QueueFree();
                 _nativeQuestScripts = null;
             }
+            await YieldNativeLoadingFrame();
             if (activeScene.Cell.Lighting is not null)
-                AddNativeCellEnvironment(root, activeScene);
+                MeasureNativeLoadStep("interior-environment", () => AddNativeCellEnvironment(root, activeScene));
             else if (grid is not null)
-                AddExteriorEnvironment(root, activeScene.Cell);
-            AddNativePlayer(cell, startupPlacement);
-            SetNativeActiveCell(root, activeScene);
+                MeasureNativeLoadStep("exterior-environment", () => AddExteriorEnvironment(root, activeScene.Cell));
+            await YieldNativeLoadingFrame();
+            MeasureNativeLoadStep("player-and-state", () => AddNativePlayer(cell, startupPlacement));
+            MeasureNativeLoadStep("activate-cell", () => SetNativeActiveCell(root, activeScene));
             _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
             if (_nativeQuestScripts is not null) _nativeQuestScripts.ActivateWorld(restore is not null);
             if (startupPlacement is not null)
                 _nativeReferences.PlayerMoves.Complete(_nativeReferences.PlayerMoves.Next ??
                     throw new InvalidOperationException("Initial player placement lost its queued source request."));
-            AddNativeGameplayHud();
+            await YieldNativeLoadingFrame();
+            MeasureNativeLoadStep("gameplay-hud", AddNativeGameplayHud);
             if (grid is not null)
             {
                 SetLoadingStatus("Preparing the distant world");
@@ -725,8 +730,10 @@ public partial class RuntimeCoordinator
     private void CreateNativeQuestScripts(FalloutQuestScriptsSnapshot? restore = null)
     {
         var claimed = _nativeOpeningControls!.Quests.Values.Select(stages => stages.Values.First().Quest).ToHashSet();
-        var scripts = new RuntimeNativeQuestScripts(_nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals,
-            _nativeReferences, NativeScriptEvents(), _nativeScriptStorage);
+        RuntimeNativeQuestScripts scripts = null!;
+        MeasureNativeLoadStep("script-owner-construction", () => scripts = new RuntimeNativeQuestScripts(
+            _nativePluginStack!, _nativeQuestState!, claimed, _nativeInventory, _nativeGlobals,
+            _nativeReferences, NativeScriptEvents(), _nativeScriptStorage));
         scripts.EvaluateMessageCondition = condition => (_nativeOpeningStageDriver ??
             throw new InvalidOperationException("Message conditions have no player gameplay owner.")).EvaluateMessageCondition(condition);
         scripts.ActiveMenus = NativeActiveMenus;
@@ -734,14 +741,14 @@ public partial class RuntimeCoordinator
         scripts.SoundReference = reference => _nativePluginStack!.RuntimeFormId(reference) == 0x14 ? _nativePlayer :
             (_nativeReferencePresentation ?? throw new NotSupportedException("Script sound world presentation is not resident."))
                 .Nodes.GetValueOrDefault(reference);
-        if (restore is not null) scripts.Scripts.Restore(restore);
+        if (restore is not null) MeasureNativeLoadStep("script-state-restoration", () => scripts.Scripts.Restore(restore));
         if (_nativeQuestScripts is not null)
         {
             RemoveChild(_nativeQuestScripts);
             _nativeQuestScripts.QueueFree();
         }
         _nativeQuestScripts = scripts;
-        AddChild(scripts);
+        MeasureNativeLoadStep("script-presentation-publication", () => AddChild(scripts));
     }
 
     private Node3D BuildNativeCellRoot(

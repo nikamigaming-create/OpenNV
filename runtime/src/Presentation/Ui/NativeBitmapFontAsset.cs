@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -7,6 +9,7 @@ namespace OpenNV.Runtime.Presentation.Ui;
 
 internal sealed record NativeBitmapFontAsset(FalloutBitmapFont Font, Texture2D Atlas)
 {
+    private static readonly ConditionalWeakTable<RuntimeLiveContentSource, Dictionary<string, (string Hash, NativeBitmapFontAsset Asset)>> Assets = new();
     internal FontFile CreateFontFile()
     {
         var size = Mathf.RoundToInt(Font.SourceSize);
@@ -40,17 +43,30 @@ internal sealed record NativeBitmapFontAsset(FalloutBitmapFont Font, Texture2D A
 
     internal static NativeBitmapFontAsset Read(FalloutInstallationSettings settings, int id)
     {
-        static byte[] Owned(string path) => RuntimeLiveContentSource.Current!.TryRead(path, null, out var bytes, out _)
+        var source = RuntimeLiveContentSource.Current ?? throw new InvalidOperationException("Owned font source is absent.");
+        byte[] Owned(string path) => source.TryRead(path, null, out var bytes, out _)
             ? bytes : throw new FileNotFoundException("Missing owned bitmap font resource.", path);
-        var font = FalloutBitmapFont.Read(Owned(settings.Require("Fonts", $"sFontFile_{id}")));
+        var path = settings.Require("Fonts", $"sFontFile_{id}").Replace('\\', '/');
+        var declaration = Owned(path);
+        var font = FalloutBitmapFont.Read(declaration);
         var tex = Owned("textures\\fonts\\" + font.TextureName + ".tex");
+        var cache = Assets.GetValue(source, owner =>
+        {
+            var entries = new Dictionary<string, (string Hash, NativeBitmapFontAsset Asset)>(StringComparer.OrdinalIgnoreCase);
+            owner.RegisterRetirement(entries.Clear);
+            return entries;
+        });
+        var hash = Convert.ToHexString(SHA256.HashData(declaration)) + Convert.ToHexString(SHA256.HashData(tex));
+        if (cache.TryGetValue(path, out var cached) && cached.Hash == hash) return cached.Asset;
         if (tex.Length < 8) throw new InvalidDataException("Font TEX header is truncated.");
         var width = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(tex));
         var height = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(tex.AsSpan(4)));
         if (width <= 0 || height <= 0 || tex.Length != checked(8 + width * height * 4))
             throw new InvalidDataException("Font TEX dimensions do not match its original RGBA bytes.");
         using var image = Image.CreateFromData(width, height, false, Image.Format.Rgba8, tex.AsSpan(8).ToArray());
-        return new NativeBitmapFontAsset(font, ImageTexture.CreateFromImage(image));
+        var asset = new NativeBitmapFontAsset(font, ImageTexture.CreateFromImage(image));
+        cache[path] = (hash, asset);
+        return asset;
     }
 
     internal void Draw(CanvasItem canvas, Vector2 origin, string text, Color color, float? baseline = null, Rect2? clip = null)
