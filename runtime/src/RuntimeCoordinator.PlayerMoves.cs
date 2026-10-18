@@ -75,7 +75,7 @@ public partial class RuntimeCoordinator
             previousPresentation.RetireOverlappingActors(scene.References, out retiredActors);
             root = await BuildNativeCellRootResponsive(scene, null, sourceSide: false);
             root.ProcessMode = ProcessModeEnum.Disabled;
-            if (grid is not null) AddExteriorLandscape(root, grid);
+            if (grid is not null) await AddExteriorLandscapeResponsive(root, grid);
             AddChild(root);
             if (scene.Cell.Lighting is not null) AddNativeCellEnvironment(root, scene);
             else AddExteriorEnvironment(root, scene.Cell);

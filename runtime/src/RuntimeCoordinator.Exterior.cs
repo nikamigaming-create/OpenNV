@@ -267,7 +267,7 @@ public partial class RuntimeCoordinator
                             // Bound both jobs and completed bodies awaiting GPU
                             // publication; worker slots alone do not bound memory.
                             if (_nativeGridNpcPreparations.Count >= FalloutContentWorkers.Concurrency) return false;
-                            npc = PrepareExteriorNpc(reference);
+                            npc = PrepareExteriorNpc(reference, _nativeGridReadCancellation!.Token);
                         }
                         if (npc is not null)
                         {
@@ -428,6 +428,11 @@ public partial class RuntimeCoordinator
             root.AddChild(RuntimeNativeLandscapeTransportBuilder.Build(
                 FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, grid.PersistentCell),
                 _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures));
+        CompleteExteriorLandscape(root, grid);
+    }
+
+    private void CompleteExteriorLandscape(Node3D root, FalloutExteriorGridScene grid)
+    {
         root.SetMeta("opennv_exterior_grid_cells", grid.Cells.Count);
         root.SetMeta("opennv_exterior_grid_radius", grid.Radius);
         var lod = new RuntimeNativeExteriorLod();

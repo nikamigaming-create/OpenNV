@@ -82,6 +82,36 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
     internal string DispatchSound(FalloutFormKey form, Node3D? emitter = null, Action? completed = null) =>
         Dispatch("SOUN:" + form, emitter ?? this, ownsLoopStop: true, form, completed);
 
+    internal void PrepareSound(FalloutFormKey form)
+    {
+        // No variant selection, event generation, RNG advance or playback.
+        foreach (var path in Descriptor(form.ToString(), form).Variants) _ = PrepareStream(path);
+    }
+
+    private (FalloutSoundRecord Source, IReadOnlyList<string> Variants, long Revision) Descriptor(string editorId, FalloutFormKey? form)
+    {
+        if (!_descriptors.TryGetValue(editorId, out var entry) || entry.Revision != _records.SoundPaths.Revision(entry.Source.FormKey))
+        {
+            var key = form ?? FalloutSoundRecordReader.Find(_records, editorId).FormKey;
+            var path = _records.SoundPaths.Read(key);
+            var source = FalloutSoundRecordReader.Read(_records, key);
+            entry = (source, FalloutAnimationSound.Variants(source, source.HasExactFile ? [] : _content.ResourcePathsUnder(source.LogicalPath)), path.Revision);
+            _descriptors[editorId] = entry;
+        }
+        return entry;
+    }
+
+    private AudioStream PrepareStream(string path)
+    {
+        if (!_streams.TryGetValue(path, out var stream))
+        {
+            stream = NativeOwnedMediaLoader.LoadAudio(path);
+            if (stream is AudioStreamWav wav) wav.LoopMode = AudioStreamWav.LoopModeEnum.Disabled;
+            _streams.Add(path, stream);
+        }
+        return stream;
+    }
+
     private string Dispatch(string textKey, Node3D emitter, bool ownsLoopStop, FalloutFormKey? form = null, Action? completed = null, bool followEmitter = true)
     {
         LastEvent = null;
@@ -90,14 +120,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
         {
             var editorId = form?.ToString() ?? FalloutAnimationSound.EditorId(textKey);
             if (editorId is null) return "unbound-runtime-event";
-            if (!_descriptors.TryGetValue(editorId, out var entry) || entry.Revision != _records.SoundPaths.Revision(entry.Source.FormKey))
-            {
-                var key = form ?? FalloutSoundRecordReader.Find(_records, editorId).FormKey;
-                var path = _records.SoundPaths.Read(key);
-                var source = FalloutSoundRecordReader.Read(_records, key);
-                entry = (source, FalloutAnimationSound.Variants(source, source.HasExactFile ? [] : _content.ResourcePathsUnder(source.LogicalPath)), path.Revision);
-                _descriptors[editorId] = entry;
-            }
+            var entry = Descriptor(editorId, form);
             var stereoOutput = AudioServer.GetSpeakerMode() == AudioServer.SpeakerMode.ModeStereo;
             var selected = FalloutAnimationSound.Select(entry.Source, entry.Variants, _random, ownsLoopStop, stereoOutput);
             generation = _events?.Begin(_records, selected, textKey, stereoOutput, entry.Variants);
@@ -107,12 +130,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
             NativeOwnedPcmStream? pcm = null;
             if (selected.Play)
             {
-                if (!_streams.TryGetValue(selected.Path!, out stream))
-                {
-                    stream = NativeOwnedMediaLoader.LoadAudio(selected.Path!);
-                    if (stream is AudioStreamWav wav) wav.LoopMode = AudioStreamWav.LoopModeEnum.Disabled;
-                    _streams.Add(selected.Path!, stream);
-                }
+                stream = PrepareStream(selected.Path!);
                 if (generation is { } mediaGeneration)
                     _events!.BindMedia(mediaGeneration, stream!.GetMeta("opennv_owned_media_sha256").AsString());
                 var loop = FalloutSoundLoop.Read(selected.Source);

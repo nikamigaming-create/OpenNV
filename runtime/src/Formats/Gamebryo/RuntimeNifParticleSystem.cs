@@ -554,8 +554,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
                 else if (modifier is FalloutNifParticleColorKeys keys)
                     color = ToColor(_keyColors[keys.Block.Index].Sample(particle.Age / particle.Life));
             }
-            var transform = new Transform3D(basis * new Basis(Vector3.Back, particle.Angle) *
-                Basis.FromScale(Vector3.One * radius), particle.Position);
+            var transform = NativeParticleDrawBuffer.Billboard(basis, particle.Angle, radius, particle.Position);
             var extent = transform.Basis.X.Abs() + transform.Basis.Y.Abs();
             minimum = minimum.Min(particle.Position - extent); maximum = maximum.Max(particle.Position + extent);
             var uv = _data.Subtextures.Length == 0 ? new FalloutNifVector4(0, 1, 0, 1) : _data.Subtextures[particle.Texture];

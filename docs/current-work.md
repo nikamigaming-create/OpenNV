@@ -42,9 +42,23 @@ same firing/save sequence. A later genuine shot damaged the resident coyote by
 selected owned layout/reaction gates pass. These are bounded flat/component
 results, not physical VR acceptance.
 
-Next owner: split the largest measured loading/publication operations and remove
-native wrapper churn, then repeat recording-free loading and genuine combat
-timings. The selected approach recorded a 203.19 ms streaming upload and an
+Next owner: codex/loading-combat-stalls, based on merged repair PR #212. The
+active changes reuse incremental NPC preparation during loading, prepare terrain
+on bounded workers and yield native cell publication, prepare equipped weapon
+resources before input, and reduce particle matrix work and native-array churn.
+The native Vulkan particle-buffer check and two owned weapon checks pass; the
+latter retain ammunition, RNG and audio history with no shots, visible muzzle
+or particle births. Closing during active NPC preparation drains readers and
+exits normally without changing the original checkpoint. The optimized first
+trigger's preparation falls from 90.18 to 2.23 ms and publication from 36.10 to
+15.49 ms; a later 179.35 ms interval remains unexplained. Repeated Continue takes
+36.30 wall seconds, settled rolling p95 is 24.43 ms, and F5 completes but still
+stalls (109.03 ms capture, 121.05 ms writing). Loading retains a roughly one-second
+main-thread step. The final complete runtime gate and selected owned/native
+checks pass. Checked publication is next.
+These changes have not been published or accepted as a playable VR build.
+
+The selected approach recorded a 203.19 ms streaming upload and an
 82.84 ms commit, including 33.86 ms reference publication. Settled optimized flat
 rolling p95 remains roughly 26-29 ms. Managed samples identify particle work and
 substantial wrapper finalization; all-thread percentages include sleeping workers.
@@ -67,9 +81,10 @@ performance, FO3 VR, mods and TTW remain unaccepted.
 
 Package g pins source 92148ee84f3643f1b11b93f90fcd1942bdcb896f; its previous
 asset-free package/hash validation does not establish playability. Repair PR #210
-is integrated into main. The active repair branch is codex/hit-reaction-save,
-based on current origin/main. Publish the checked repair before starting the next
-fresh feature branch; do not change package g's manifest to imply acceptance.
+is integrated into main. PR #212 passed all hosted checks and merged at
+4592c4aedb0e8c0b606cf51f67731d636733c2d1. Local main was verified equal to
+origin/main with no open task PR before starting the current feature branch.
+Do not change package g's manifest to imply acceptance.
 
 Recording is off for development and checks. Keep only requested deliverables
 and diagnostics still needed for the active investigation. Earlier cleanup of

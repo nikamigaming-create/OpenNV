@@ -31,6 +31,7 @@ internal partial class RuntimeNativePlayer
     private object? _lastExplosion;
     private double _firePreparationMilliseconds;
     private object? _firePreparationTiming;
+    private object? _weaponResourcePreparation;
     internal void ConfigureCombat(FalloutPluginStack records, FalloutGlobalState globals, Func<int> level,
         Func<int, float> actorValue, Func<IReadOnlyList<FalloutPerkEntry>> perks,
         Func<FalloutCondition, float> evaluateCondition, Action<FalloutWeaponDamage, byte> damageSelf)
@@ -65,6 +66,7 @@ internal partial class RuntimeNativePlayer
         lastExplosion = _lastExplosion,
         preparationMilliseconds = _firePreparationMilliseconds,
         preparationTiming = _firePreparationTiming,
+        resourcePreparation = _weaponResourcePreparation,
         unbound = "auto-aim-screen-percentage-target-ranking-and-retail-correction,encounter-leveled-NPC-health,conditional-resistance,armor-wear,crouch-and-aiming-move-speed-perks,weapon-mod-spread,critical,sneak,weapon-wear,missile-lobber-timing-and-retail-parity,flame-audio,supersonic-projectile-audio-and-retail-parity,continuous-beam,tracers,beam-visuals-and-retail-parity,explosion-distance-attenuation,force,radiation-and-retail-parity"
     };
 
@@ -119,25 +121,9 @@ internal partial class RuntimeNativePlayer
             var casingDone = System.Diagnostics.Stopwatch.GetTimestamp();
             if (!float.IsFinite(weapon.AttackMultiplier) || weapon.AttackMultiplier <= 0)
                 throw new InvalidDataException("WEAP attack multiplier is invalid.");
-            var clip = _firstPerson.PrepareAction(weapon.AttackGroup);
-            var hitEvents = clip.TextKeys
-                .SelectMany(key => key.Value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-                .Count(FalloutWeaponAnimationTimeline.DischargesWeapon);
-            if (hitEvents == 0 && !(weapon.Automatic && weapon.AttackAnimation == 74 && clip.Sequence.CycleType == 0))
-                throw new NotSupportedException("Weapon attack needs its source Hit, Fire or Release event count.");
+            _ = PrepareAttackVariants(weapon, weapon.AttackGroup);
             var clipDone = System.Diagnostics.Stopwatch.GetTimestamp();
-            if (_muzzleOwner != _firstPerson.GetInstanceId() || _muzzleProjectile != _shot.Projectile.Form)
-            {
-                _muzzleOwner = _firstPerson.GetInstanceId(); _muzzleProjectile = _shot.Projectile.Form; _muzzleError = null;
-                try { _firstPerson.PrepareMuzzle(_shot.Projectile); _thirdPerson?.PrepareMuzzle(_shot.Projectile); }
-                catch (Exception error)
-                {
-                    // Presentation failure does not turn a valid source shot
-                    // into an empty magazine or silently accept the missing FX.
-                    _muzzleError = error.Message;
-                    GD.PushError("OPENNV_MUZZLE_PRESENTATION_UNBOUND " + error.Message);
-                }
-            }
+            PrepareWeaponMuzzle(_shot.Projectile);
             var muzzleDone = System.Diagnostics.Stopwatch.GetTimestamp();
             _firePreparationError = null;
             RequestWeaponAction(weapon.AttackGroup);

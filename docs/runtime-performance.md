@@ -39,6 +39,54 @@ GPU timings. Next repairs must measure individual publication/activation steps,
 reduce wrapper churn, and bound loading work without deleting source entities,
 events, particle behavior or saved state. Physical-headset timing remains open.
 
+A follow-up optimized run isolates first firing without a detailed state request,
+build, bot or recording. Preparation takes 90.18 ms: 59.05 ms for muzzle resources
+and 21.57 ms for the animation clip. Shot publication takes another 36.10 ms,
+including 20.97 ms audio work and 11.19 ms collision work. The first draw window
+peaks at 182.97 ms. Four subsequent preparations take 0.54-1.43 ms; their shot
+publication takes 2.26-6.43 ms. This is firing into the ordinary starting view,
+not a damage/range acceptance encounter. It identifies cold resource work to
+move into equipped-resource preparation without selecting an attack variant,
+advancing random state, consuming ammunition or starting a voice/effect.
+
+The subsequent optimized repair moves 121.64 ms of selected weapon-resource
+preparation into equipment construction before gameplay input. In the same
+five-shot protocol, first-trigger preparation is 2.23 ms and shot publication
+15.49 ms, including 0.88 ms audio and 11.33 ms collision. The first rolling draw
+window peaks at 38.01 ms. Later preparation is 0.65-1.21 ms and publication
+2.09-2.85 ms. A later rolling window still contains a 179.35 ms interval;
+the small weapon timers do not explain it. This is one ordered pair, not
+an encounter or headset-performance pass. Owned preparation checks preserve
+ammunition, handling/random state and audio history, with no native voices,
+shots, visible muzzle or particle births before input.
+
+Loading now reuses detached incremental NPC assembly, bounds landscape source
+reads with the shared worker budget and yields between native publication
+steps. One optimized Continue reports 29.52 seconds internally; cell construction
+still includes a 1,015.6 ms main-thread step and terrain a 49.8 ms cell. These
+remain stalls, and the loading changes do not establish a uniformly responsive
+loading screen. Closing during active NPC preparation exits with code zero,
+drains source readers, and leaves the original checkpoint unchanged; expected
+session cancellation is distinguished from a failed load. This is a scoped
+cancellation test, not whole-session resource acceptance.
+
+Repeating the earlier firing/save protocol on this export observes Continue
+readiness after 36.30 wall seconds (28.47 seconds inside the load timer). Settled
+rolling-window median is 15.98 ms and median p95 is 24.43 ms; firing median p95
+is 25.08 ms. These are overlapping windows and the firing sequence still follows
+a detailed snapshot and obstructed aiming, so they do not isolate combat speed.
+F5 completes, spending 109.03 ms capturing and 121.05 ms writing state, with a
+345.79 ms largest save-window interval. Explicit saving remains a measured stall.
+
+Selected native checks use `NativeNifInstanceAudit.tscn --particle-buffer` with
+Vulkan (the dummy headless renderer cannot validate GPU buffer readback), and
+`NativePlayerPresentationAudit.tscn <owned-Data> <checkpoint> --weapon-preparation`.
+The latter covers owned weapons 1735d4 and 08f21e without firing. Source-worker
+retirement during initial loading is covered by
+`Test-NativeSessionRetirement.ps1 -Cases loading-window-close`; the normal cases
+remain the default. Run these alongside the complete runtime gate, with recording
+off, and measure optimized exports separately from builds and diagnostic fixtures.
+
 ## Current engine and streaming boundary
 
 The selected engine is official Godot 4.8-dev7 Mono

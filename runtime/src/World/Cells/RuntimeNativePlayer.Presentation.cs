@@ -282,6 +282,7 @@ internal partial class RuntimeNativePlayer
                 _thirdPerson.ShowTrackedBody(_firstPerson);
                 BindXrContacts();
             }
+            PrepareWeaponResources();
             PresentationChanged?.Invoke();
             Activity.SetWeaponDrawn(weapon is not null && _weaponHandling.Drawn);
         }
