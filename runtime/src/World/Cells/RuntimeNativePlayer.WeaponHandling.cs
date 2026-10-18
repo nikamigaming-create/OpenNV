@@ -100,16 +100,7 @@ internal partial class RuntimeNativePlayer
             int? variant = null;
             if (attack)
             {
-                var first = _firstPerson.ActionVariants(group);
-                var third = _thirdPerson?.ActionVariants(group);
-                if (third is not null && (first.Count != third.Count || first.Where((path, index) =>
-                    !Path.GetFileName(path).Equals(Path.GetFileName(third[index]), StringComparison.OrdinalIgnoreCase)).Any()))
-                    throw new NotSupportedException("Player attack views have different source variant catalogs; their mapping is unbound.");
-                for (var index = 0; index < first.Count; index++)
-                {
-                    _ = ActionTimeline(_firstPerson.PrepareAction(group, index), weapon, attack: true);
-                    if (_thirdPerson is not null) _ = ActionTimeline(_thirdPerson.PrepareAction(group, index), weapon, attack: true);
-                }
+                var first = PrepareAttackVariants(weapon, group);
                 variant = FalloutAttackAnimationSelection.Index(first.Count, _weaponHandling!.NextAttackRandomUInt32);
             }
             var clip = _firstPerson.PrepareAction(group, variant);
@@ -140,6 +131,21 @@ internal partial class RuntimeNativePlayer
         if (sequence.CycleType != 2 && !(attack && weapon.Automatic && sequence.CycleType == 0))
             throw new NotSupportedException("A weapon action needs a clamped sequence or an automatic attack loop.");
         return timeline;
+    }
+
+    private IReadOnlyList<string> PrepareAttackVariants(FalloutWeaponPresentation weapon, string group)
+    {
+        var first = _firstPerson!.ActionVariants(group);
+        var third = _thirdPerson?.ActionVariants(group);
+        if (third is not null && (first.Count != third.Count || first.Where((path, index) =>
+            !Path.GetFileName(path).Equals(Path.GetFileName(third[index]), StringComparison.OrdinalIgnoreCase)).Any()))
+            throw new NotSupportedException("Player attack views have different source variant catalogs; their mapping is unbound.");
+        for (var index = 0; index < first.Count; index++)
+        {
+            _ = ActionTimeline(_firstPerson.PrepareAction(group, index), weapon, attack: true);
+            if (_thirdPerson is not null) _ = ActionTimeline(_thirdPerson.PrepareAction(group, index), weapon, attack: true);
+        }
+        return first;
     }
 
     private void AdvanceWeaponHandling(double delta)

@@ -13,10 +13,8 @@ internal static class NodeTraversal
     {
         ArgumentNullException.ThrowIfNull(root);
 
-        var children = root.GetChildren();
-        var pending = new Stack<Node>(children.Count);
-        for (var index = children.Count - 1; index >= 0; index--)
-            pending.Push(children[index]);
+        var pending = new Stack<Node>();
+        PushChildren(root, pending);
 
         while (pending.TryPop(out var node))
         {
@@ -26,10 +24,18 @@ internal static class NodeTraversal
             if (node is T match)
                 yield return match;
 
-            children = node.GetChildren();
-            for (var index = children.Count - 1; index >= 0; index--)
-                pending.Push(children[index]);
+            PushChildren(node, pending);
         }
+    }
+
+    private static void PushChildren(Node parent, Stack<Node> pending)
+    {
+        var children = parent.GetChildren();
+        // The pending managed references own the traversal snapshot. Release
+        // the temporary native array before yielding, including partial walks.
+        using var owner = (Godot.Collections.Array)children;
+        for (var index = children.Count - 1; index >= 0; index--)
+            pending.Push(children[index]);
     }
 
     internal static IEnumerable<T> SelfAndDescendants<T>(Node root)

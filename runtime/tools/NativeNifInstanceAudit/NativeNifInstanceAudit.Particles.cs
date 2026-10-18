@@ -6,6 +6,23 @@ public partial class NativeNifInstanceAudit
 {
     private static void ExerciseParticleBuffer()
     {
+        var random = new Random(73);
+        for (var index = 0; index < 1000; index++)
+        {
+            // Local-space systems can inherit a nonuniform parent basis.
+            var camera = Basis.FromEuler(new((float)random.NextDouble() * 6,
+                (float)random.NextDouble() * 6, (float)random.NextDouble() * 6))
+                .Scaled(new((float)random.NextDouble() + .2f, (float)random.NextDouble() + .2f,
+                    (float)random.NextDouble() + .2f));
+            var angle = (float)random.NextDouble() * 80 - 40;
+            var radius = (float)random.NextDouble() * 12;
+            var position = new Vector3(-index, 2, 4);
+            var expectedPose = new Transform3D(camera * new Basis(Vector3.Back, angle) *
+                Basis.FromScale(Vector3.One * radius), position);
+            var pose = NativeParticleDrawBuffer.Billboard(camera, angle, radius, position);
+            if (pose != expectedPose)
+                throw new InvalidOperationException("Expanded billboard columns differ from the source matrix composition.");
+        }
         using var quad = new QuadMesh();
         using var scalar = new MultiMesh
         {
@@ -37,7 +54,7 @@ public partial class NativeNifInstanceAudit
         var observed = System.Runtime.InteropServices.MemoryMarshal.AsBytes(bulk.Buffer.AsSpan());
         if (expected.Length != buffer.Length * sizeof(float) || !expected.SequenceEqual(observed))
             throw new InvalidOperationException("Batched particle bytes differ from Godot's scalar transform/color/atlas setters.");
-        GD.Print("OPENNV_PARTICLE_BUFFER_PASS nativeScalarBytes=exact transforms=3 nonuniformScale=true rotation=true colors=true atlas=true");
+        GD.Print("OPENNV_PARTICLE_BUFFER_PASS nativeScalarBytes=exact transforms=3 billboardPoses=1000 nonuniformScale=true rotation=true colors=true atlas=true");
     }
 
     private async Task ExerciseParticles(string root, string model, bool checkBounds = false)

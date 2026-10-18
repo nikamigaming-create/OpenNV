@@ -14,6 +14,7 @@ public partial class RuntimeCoordinator
         private readonly CancellationTokenSource _cancellation;
         private readonly Task<FalloutNpcPreparedGeometry> _read;
         private RuntimeNativeNpc.Assembly? _assembly;
+        private bool _disposed;
         internal FalloutNpcAppearance Appearance { get; }
         internal Task ReadTask => _read;
 
@@ -27,6 +28,7 @@ public partial class RuntimeCoordinator
 
         internal bool Advance(RuntimeCoordinator owner, FalloutCellScene cell, out RuntimeNativeNpc? actor)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             actor = null;
             if (!_read.IsCompleted) return false;
             _assembly ??= new(_read.GetAwaiter().GetResult(), RuntimeLiveContentSource.Current!,
@@ -39,6 +41,8 @@ public partial class RuntimeCoordinator
 
         public void Dispose()
         {
+            if (_disposed) return;
+            _disposed = true;
             _cancellation.Cancel(); _cancellation.Dispose();
             _assembly?.Dispose();
             _ = _read.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None,
@@ -46,7 +50,7 @@ public partial class RuntimeCoordinator
         }
     }
 
-    private ExteriorNpcPreparation? PrepareExteriorNpc(FalloutPlacedReference reference)
+    private ExteriorNpcPreparation? PrepareExteriorNpc(FalloutPlacedReference reference, CancellationToken cancellation = default)
     {
         var level = _nativeOpeningStageDriver?.PlayerLevel ?? _nativeOpeningRestore?.State.Vitals?.Level ?? 1;
         var selection = _nativeReferences!.InitializeActorTemplates(reference.FormKey, level, _nativeGlobals);
@@ -54,7 +58,7 @@ public partial class RuntimeCoordinator
         var armor = _nativeReferences.EquippedArmor(reference.FormKey, level, _nativeGlobals);
         var appearance = FalloutNpcAppearanceResolver.Resolve(_nativePluginStack!, reference.Base, reference.FormKey, armor,
             _nativeReferences.ActorAppearanceOverride(reference.FormKey), selection);
-        var preparation = new ExteriorNpcPreparation(appearance, RuntimeLiveContentSource.Current!, _nativeGridReadCancellation!.Token);
+        var preparation = new ExteriorNpcPreparation(appearance, RuntimeLiveContentSource.Current!, cancellation);
         _nativeGridNpcPreparations.Add(preparation);
         return preparation;
     }

@@ -6,6 +6,16 @@ internal static class NativeParticleDrawBuffer
 {
     // MultiMesh 3D rows, RGBA, then the four source atlas coordinates.
     internal const int Stride = 20;
+
+    internal static Transform3D Billboard(Basis camera, float angle, float radius, Vector3 position)
+    {
+        var (sin, cos) = MathF.SinCos(angle);
+        // camera * Z-rotation * uniform-scale, expanded by columns without
+        // two general matrix products for every live particle.
+        return new(new Basis((camera.X * cos + camera.Y * sin) * radius,
+            (camera.Y * cos - camera.X * sin) * radius, camera.Z * radius), position);
+    }
+
     internal static void Write(Span<float> output, Transform3D transform, Color color, Color atlas)
     {
         var basis = transform.Basis; var origin = transform.Origin;

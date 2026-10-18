@@ -59,6 +59,7 @@ public partial class RuntimeCoordinator
         static object? MovieField(Node movie, string key) => movie.HasMeta(key) ? movie.GetMeta(key).Obj : null;
         var camera = GetViewport().GetCamera3D();
         var cellChildren = _nativeCurrentCellRoot?.GetChildren();
+        using var cellChildrenOwner = cellChildren is null ? null : (Godot.Collections.Array)cellChildren;
         var cellNodes = cellChildren?.ToArray() ?? [];
         return new
         {
@@ -481,6 +482,10 @@ public partial class RuntimeCoordinator
             await LoadNativeInitialCell();
             layer.QueueFree();
         }
+        catch (OperationCanceledException) when (_nativeSessionTransitioning || _retiringNativeSession)
+        {
+            GD.Print("OPENNV_NATIVE_MENU_LOAD_CANCELLED owner=session-retirement sourceReaders=draining");
+        }
         catch (Exception error)
         {
             _nextSessionLoadFailure = RejectNativePendingLoad(error);
@@ -623,51 +628,59 @@ public partial class RuntimeCoordinator
             ? _nativePrewarmedInitialCellRoot
             : await BuildNativeCellRootResponsive(activeScene, transition, sourceSide);
         _nativePrewarmedInitialCellRoot = null;
-        SetLoadingStatus("Preparing characters and controls");
-        if (DisplayServer.GetName() != "headless")
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        if (_nativeSessionTransitioning || _retiringNativeSession)
+        try
         {
-            root.Free();
-            throw new OperationCanceledException("Initial CELL session retired.");
+            SetLoadingStatus("Preparing characters and controls");
+            if (DisplayServer.GetName() != "headless")
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            if (_nativeSessionTransitioning || _retiringNativeSession)
+            {
+                root.Free();
+                throw new OperationCanceledException("Initial CELL session retired.");
+            }
+            if (grid is not null) await AddExteriorLandscapeResponsive(root, grid);
+            AddChild(root);
+            foreach (var sounds in root.FindChildren("*", "", true, false).OfType<NativeOwnedAnimationSoundPlayer>())
+                sounds.RequirePcmRestored();
+            if (restore is null || restore.State.Scripts is not null)
+            {
+                // New Game retains the timers already running behind StartMenu.
+                // Continue replaces that menu session with the saved clocks.
+                if (restore is not null || _nativeQuestScripts is null) CreateNativeQuestScripts(restore?.State.Scripts);
+            }
+            else if (_nativeQuestScripts is not null)
+            {
+                RemoveChild(_nativeQuestScripts);
+                _nativeQuestScripts.QueueFree();
+                _nativeQuestScripts = null;
+            }
+            if (activeScene.Cell.Lighting is not null)
+                AddNativeCellEnvironment(root, activeScene);
+            else if (grid is not null)
+                AddExteriorEnvironment(root, activeScene.Cell);
+            AddNativePlayer(cell, startupPlacement);
+            SetNativeActiveCell(root, activeScene);
+            _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
+            if (_nativeQuestScripts is not null) _nativeQuestScripts.ActivateWorld(restore is not null);
+            if (startupPlacement is not null)
+                _nativeReferences.PlayerMoves.Complete(_nativeReferences.PlayerMoves.Next ??
+                    throw new InvalidOperationException("Initial player placement lost its queued source request."));
+            AddNativeGameplayHud();
+            if (grid is not null)
+            {
+                SetLoadingStatus("Preparing the distant world");
+                await root.GetChildren().OfType<RuntimeNativeExteriorLod>().Single()
+                    .PrepareInitialSelection(GetViewport().GetCamera3D().GlobalPosition);
+            }
+            GD.Print(
+                $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
+                $"restored={(restore is not null)} sourceSide={sourceSide}");
         }
-        if (grid is not null) AddExteriorLandscape(root, grid);
-        AddChild(root);
-        foreach (var sounds in root.FindChildren("*", "", true, false).OfType<NativeOwnedAnimationSoundPlayer>())
-            sounds.RequirePcmRestored();
-        if (restore is null || restore.State.Scripts is not null)
+        catch
         {
-            // New Game retains the timers already running behind StartMenu.
-            // Continue replaces that menu session with the saved clocks.
-            if (restore is not null || _nativeQuestScripts is null) CreateNativeQuestScripts(restore?.State.Scripts);
+            if (GodotObject.IsInstanceValid(root) && root.GetParent() is null) root.Free();
+            throw;
         }
-        else if (_nativeQuestScripts is not null)
-        {
-            RemoveChild(_nativeQuestScripts);
-            _nativeQuestScripts.QueueFree();
-            _nativeQuestScripts = null;
-        }
-        if (activeScene.Cell.Lighting is not null)
-            AddNativeCellEnvironment(root, activeScene);
-        else if (grid is not null)
-            AddExteriorEnvironment(root, activeScene.Cell);
-        AddNativePlayer(cell, startupPlacement);
-        SetNativeActiveCell(root, activeScene);
-        _nativeBootstrap?.AttachPlayerPackages(_nativeOpeningStageDriver!.AttachBootstrapPlayerPackage);
-        if (_nativeQuestScripts is not null) _nativeQuestScripts.ActivateWorld(restore is not null);
-        if (startupPlacement is not null)
-            _nativeReferences.PlayerMoves.Complete(_nativeReferences.PlayerMoves.Next ??
-                throw new InvalidOperationException("Initial player placement lost its queued source request."));
-        AddNativeGameplayHud();
-        if (grid is not null)
-        {
-            SetLoadingStatus("Preparing the distant world");
-            await root.GetChildren().OfType<RuntimeNativeExteriorLod>().Single()
-                .PrepareInitialSelection(GetViewport().GetCamera3D().GlobalPosition);
-        }
-        GD.Print(
-            $"OPENNV_NATIVE_ACTIVE_CELL cell={activeScene.Cell.FormKey} " +
-            $"restored={(restore is not null)} sourceSide={sourceSide}");
     }
 
     private void CreateNativeQuestScripts(FalloutQuestScriptsSnapshot? restore = null)
@@ -729,6 +742,7 @@ public partial class RuntimeCoordinator
         var referenceWatch = new Stopwatch();
         var yields = 0;
         double maximumReferenceMilliseconds = 0;
+        double maximumStepMilliseconds = 0;
         FalloutFormKey? maximumReference = null;
         try
         {
@@ -738,7 +752,8 @@ public partial class RuntimeCoordinator
                 if (_nativeSessionTransitioning || _retiringNativeSession)
                     throw new OperationCanceledException("CELL construction session retired.");
                 referenceWatch.Restart();
-                PlaceNativeCellReference(root, cell, reference);
+                maximumStepMilliseconds = Math.Max(maximumStepMilliseconds,
+                    await PlaceNativeCellReferenceResponsive(root, cell, reference));
                 referenceWatch.Stop();
                 if (referenceWatch.Elapsed.TotalMilliseconds > maximumReferenceMilliseconds)
                 {
@@ -759,7 +774,8 @@ public partial class RuntimeCoordinator
             CompleteNativeCellRoot(root, cell);
             GD.Print($"OPENNV_NATIVE_CELL_BUILD cell={cell.Cell.FormKey} references={cell.References.Count} " +
                 $"elapsedMs={total.Elapsed.TotalMilliseconds:F1} frameYields={yields} " +
-                $"maxReferenceMs={maximumReferenceMilliseconds:F1} maxReference={maximumReference}");
+                $"maxReferenceMs={maximumReferenceMilliseconds:F1} maxReference={maximumReference} " +
+                $"referenceTiming=wall-including-yields maxMainThreadStepMs={maximumStepMilliseconds:F1}");
             return root;
         }
         catch
@@ -789,9 +805,7 @@ public partial class RuntimeCoordinator
             // Reject the whole failed reference. Other source references
             // retain independent ownership; the rejected identity remains
             // missing in the parity denominator, never a substitute draw.
-            while (root.GetChildCount() > previousChildren) root.GetChild(previousChildren).Free();
-            _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
-            GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey} base={reference.Base}: {error.Message}");
+            RejectNativeCellReference(root, reference, previousChildren, error);
         }
     }
 
@@ -1147,7 +1161,7 @@ public partial class RuntimeCoordinator
             previousPresentation.RetireOverlappingActors(targetScene.References, out retiredActors);
             targetRoot = await BuildNativeCellRootResponsive(targetScene, null, sourceSide: false);
             targetRoot.ProcessMode = ProcessModeEnum.Disabled;
-            if (grid is not null) AddExteriorLandscape(targetRoot, grid);
+            if (grid is not null) await AddExteriorLandscapeResponsive(targetRoot, grid);
             AddChild(targetRoot);
             if (targetScene.Cell.Lighting is not null) AddNativeCellEnvironment(targetRoot, targetScene);
             else AddExteriorEnvironment(targetRoot, targetScene.Cell);
