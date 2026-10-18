@@ -65,10 +65,11 @@ public partial class NativeNifInstanceAudit
     private async Task DdsPixels(byte[] payload, string source)
     {
         using var image = ReadDds(payload);
-        if (image.GetFormat() != Image.Format.Dxt1) throw new InvalidOperationException("Selected DDS is not BC1.");
+        var sourceFormat = image.GetFormat();
         using var raw = ImageTexture.CreateFromImage(image);
         using var expected = (Image)image.Duplicate();
-        if (expected.Decompress() != Error.Ok) throw new InvalidOperationException("Selected DDS failed CPU decoding.");
+        if (expected.IsCompressed() && expected.Decompress() != Error.Ok) throw new InvalidOperationException("Selected DDS failed CPU decoding.");
+        expected.Convert(Image.Format.Rgba8);
         using var corrected = NativeDdsTexture.Create(image);
         var view = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
         using var shader = new Shader { Code = """
@@ -89,6 +90,7 @@ public partial class NativeNifInstanceAudit
         {
             var rgba = expected.GetData();
             long samples = 0;
+            long transparent = 0, fractional = 0;
             long rawMismatches = 0;
             for (var level = 0; level <= expected.GetMipmapCount(); level++)
             {
@@ -113,14 +115,15 @@ public partial class NativeNifInstanceAudit
                             else
                             {
                                 samples++;
+                                if (alpha == 0) transparent++; else if (alpha != 255) fractional++;
                                 if (actual != alpha) throw new InvalidOperationException($"DDS GPU alpha differs: {source}, mip={level}, pixel={x},{y}, expected={alpha}, actual={actual}.");
                             }
                         }
                     }
                 }
             }
-            if (rawMismatches == 0) throw new InvalidOperationException("The original upload did not reproduce the selected BC1 alpha failure.");
-            GD.Print($"OPENNV_DDS_GPU_PASS source={source} sha256={Convert.ToHexString(SHA256.HashData(payload))} mips={expected.GetMipmapCount() + 1} samples={samples} correctedMismatches=0 originalMismatches={rawMismatches}");
+            if (source == "synthetic" && rawMismatches == 0) throw new InvalidOperationException("The original upload did not reproduce the selected BC1 alpha failure.");
+            GD.Print($"OPENNV_DDS_GPU_PASS source={source} sha256={Convert.ToHexString(SHA256.HashData(payload))} format={sourceFormat} mips={expected.GetMipmapCount() + 1} samples={samples} transparent={transparent} fractional={fractional} correctedMismatches=0 originalMismatches={rawMismatches}");
         }
         finally { view.Free(); }
     }

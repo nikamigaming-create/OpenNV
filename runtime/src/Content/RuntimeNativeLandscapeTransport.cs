@@ -1,5 +1,7 @@
 using Godot;
 using System.Text;
+using System.Runtime.CompilerServices;
+using System.Collections.Concurrent;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Presentation.Rendering;
 
@@ -29,10 +31,25 @@ internal static class RuntimeNativeLandscapeTransportBuilder
     private const float ColorChannelMaximum = byte.MaxValue;
     private static readonly Dictionary<string, Shader> Shaders = new(StringComparer.Ordinal);
 
-    internal static RuntimeNativeLandscapeTransport Build(
-        FalloutLandscapeTransport source,
-        float gameUnitsToMeters,
-        IDictionary<string, Texture2D>? decodedTextures = null)
+    internal sealed record Quadrant(Vector3[] Vertices, Vector3[] Normals, Color[] Colors, Vector2[] Uvs, int[] Indices)
+    {
+        internal Godot.Collections.Array NativeArrays()
+        {
+            var arrays = new Godot.Collections.Array();
+            arrays.Resize((int)Mesh.ArrayType.Max);
+            arrays[(int)Mesh.ArrayType.Vertex] = Vertices;
+            arrays[(int)Mesh.ArrayType.Normal] = Normals;
+            arrays[(int)Mesh.ArrayType.Color] = Colors;
+            arrays[(int)Mesh.ArrayType.TexUV] = Uvs;
+            arrays[(int)Mesh.ArrayType.Index] = Indices;
+            return arrays;
+        }
+    }
+    internal sealed record Prepared(Quadrant[] Quadrants, Vector3[] Faces, int[] FaceMaterials);
+    private static readonly ConditionalWeakTable<FalloutLandscapeTransport, ConcurrentDictionary<float, Prepared>> PreparedMeshes = new();
+
+    // No native objects or rendering calls: this path runs on content workers.
+    internal static Prepared Prepare(FalloutLandscapeTransport source, float gameUnitsToMeters)
     {
         if (!float.IsFinite(gameUnitsToMeters) || gameUnitsToMeters <= 0.0f)
             throw new ArgumentOutOfRangeException(
@@ -42,6 +59,55 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             QuadrantSide * QuadrantSide)
             throw new NotSupportedException(
                 $"Native LAND {source.Landscape} has incomplete base-quadrant transport.");
+        return PreparedMeshes.GetOrCreateValue(source).GetOrAdd(gameUnitsToMeters, units =>
+        {
+            var quadrants = Enumerable.Range(0, 4).Select(q => BuildQuadrant(source, (byte)q, units)).ToArray();
+            var faces = new Vector3[quadrants.Sum(q => q.Indices.Length)];
+            var faceMaterials = new List<int>(faces.Length / 3);
+            var cursor = 0;
+            for (byte q = 0; q < 4; q++)
+            {
+                var quadrant = quadrants[q];
+                foreach (var index in quadrant.Indices) faces[cursor++] = quadrant.Vertices[index];
+                var layers = source.AlphaLayers.Where(layer => layer.Quadrant == q).OrderBy(layer => layer.LayerIndex).ToArray();
+                var basis = source.BaseLayers.Single(layer => layer.Quadrant == q);
+                var materials = new[] { basis }.Concat(layers).Select(layer => (int?)source.Textures[layer.Texture].Physics?.Material ?? -1).ToArray();
+                faceMaterials.AddRange(FalloutLandscapeMaterialInputs.CollisionMaterials(FalloutLandscapeMaterialInputs.Weights(layers), materials, quadrant.Indices));
+            }
+            return new(quadrants, faces, faceMaterials.ToArray());
+        });
+    }
+
+    internal sealed class Assembly : IDisposable
+    {
+        private readonly IEnumerator<bool> _steps;
+        private RuntimeNativeLandscapeTransport? _result;
+        private bool _done;
+        internal Assembly(FalloutLandscapeTransport source, float units, IDictionary<string, Texture2D>? textures = null)
+        {
+            _steps = BuildSteps(source, units, textures, result => _result = result).GetEnumerator();
+        }
+        internal bool Advance() => _done || (_done = !_steps.MoveNext());
+        internal RuntimeNativeLandscapeTransport Take()
+        {
+            if (!_done || _result is null) throw new InvalidOperationException("LAND publication is incomplete.");
+            var result = _result; _result = null; return result;
+        }
+        public void Dispose() { _steps.Dispose(); _result?.Free(); _result = null; }
+    }
+
+    internal static RuntimeNativeLandscapeTransport Build(FalloutLandscapeTransport source, float units,
+        IDictionary<string, Texture2D>? textures = null)
+    {
+        using var assembly = new Assembly(source, units, textures);
+        while (!assembly.Advance()) { }
+        return assembly.Take();
+    }
+
+    private static IEnumerable<bool> BuildSteps(FalloutLandscapeTransport source, float gameUnitsToMeters,
+        IDictionary<string, Texture2D>? decodedTextures, Action<RuntimeNativeLandscapeTransport> complete)
+    {
+        var prepared = Prepare(source, gameUnitsToMeters);
         decodedTextures ??= new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
         Texture2D Texture(string path)
         {
@@ -49,33 +115,32 @@ internal static class RuntimeNativeLandscapeTransportBuilder
                 decodedTextures.Add(path, texture = NativeOwnedMediaLoader.LoadTexture(path));
             return texture;
         }
-        var textures = source.Textures.ToDictionary(
-            pair => pair.Key,
-            pair => new RuntimeLandscapeTextureResources(
-                Texture(pair.Value.DiffusePath),
-                pair.Value.NormalPath is null
-                    ? null
-                    : Texture(pair.Value.NormalPath)));
-        var mesh = new ArrayMesh();
+        foreach (var path in source.Textures.Values.SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath })
+            .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            _ = Texture(path);
+            yield return false;
+        }
+        var textures = source.Textures.ToDictionary(pair => pair.Key, pair => new RuntimeLandscapeTextureResources(
+            Texture(pair.Value.DiffusePath), pair.Value.NormalPath is null ? null : Texture(pair.Value.NormalPath)));
+        using var mesh = new ArrayMesh();
         var settings = FalloutInstallationSettings.Read(RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Landscape has no owned installation settings."));
         var tiling = settings.Number("Landscape", "fLandTextureTilingMult");
         var quadrantTiling = FalloutLandscapeMaterialInputs.QuadrantTiling(tiling);
-        var faceMaterials = new List<int>();
         for (byte quadrant = 0; quadrant < QuadrantSide * QuadrantSide; ++quadrant)
         {
-            var arrays = BuildQuadrant(source, quadrant, gameUnitsToMeters);
-            mesh.AddSurfaceFromArrays(
-                Mesh.PrimitiveType.Triangles,
-                arrays);
+            using var arrays = prepared.Quadrants[quadrant].NativeArrays();
+            using var surface = new SurfaceTool();
+            surface.CreateFromArrays(arrays);
+            surface.GenerateTangents();
+            using var tangentArrays = surface.CommitToArrays();
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, tangentArrays);
             mesh.SurfaceSetMaterial(quadrant, Material(source, quadrant, textures, quadrantTiling));
-            var layers = source.AlphaLayers.Where(layer => layer.Quadrant == quadrant).OrderBy(layer => layer.LayerIndex).ToArray();
-            var basis = source.BaseLayers.Single(layer => layer.Quadrant == quadrant);
-            var materials = new[] { basis }.Concat(layers).Select(layer => (int?)source.Textures[layer.Texture].Physics?.Material ?? -1).ToArray();
-            faceMaterials.AddRange(FalloutLandscapeMaterialInputs.CollisionMaterials(FalloutLandscapeMaterialInputs.Weights(layers),
-                materials, arrays[(int)Mesh.ArrayType.Index].AsInt32Array()));
+            yield return false;
         }
-        mesh.RegenNormalMaps();
+        using var collisionResource = new ConcavePolygonShape3D { Data = prepared.Faces };
+        yield return false;
         var geometry = new MeshInstance3D
         {
             Name = $"LAND_Geometry_{source.Landscape}",
@@ -93,20 +158,26 @@ internal static class RuntimeNativeLandscapeTransportBuilder
             Geometry = geometry,
             Textures = textures,
         };
-        root.SetMeta("opennv_land", source.Landscape.ToString());
-        root.SetMeta("opennv_land_cell", source.ActiveCell.ToString());
-        root.SetMeta("opennv_land_world", source.Worldspace.ToString());
-        root.SetMeta("opennv_land_texture_count", textures.Count);
-        root.SetMeta("opennv_source", "live-retail-files");
+        var transferred = false;
         root.AddChild(geometry);
-        var collision = new StaticBody3D { Name = "LandscapeCollision" };
-        var collisionShape = new CollisionShape3D { Shape = mesh.CreateTrimeshShape() };
-        collisionShape.SetMeta("opennv_havok_face_materials", faceMaterials.ToArray());
-        geometry.SetMeta("opennv_land_impact_unbound_triangles", faceMaterials.Count(material => material < 0));
-        collision.AddChild(collisionShape);
-        root.AddChild(collision);
-        NativeExteriorDetailBlend.Bind(root, terrain: true);
-        return root;
+        try
+        {
+            root.SetMeta("opennv_land", source.Landscape.ToString());
+            root.SetMeta("opennv_land_cell", source.ActiveCell.ToString());
+            root.SetMeta("opennv_land_world", source.Worldspace.ToString());
+            root.SetMeta("opennv_land_texture_count", textures.Count);
+            root.SetMeta("opennv_source", "live-retail-files");
+            var collision = new StaticBody3D { Name = "LandscapeCollision" };
+            var collisionShape = new CollisionShape3D { Shape = collisionResource };
+            collisionShape.SetMeta("opennv_havok_face_materials", prepared.FaceMaterials);
+            geometry.SetMeta("opennv_land_impact_unbound_triangles", prepared.FaceMaterials.Count(material => material < 0));
+            collision.AddChild(collisionShape);
+            root.AddChild(collision);
+            NativeExteriorDetailBlend.Bind(root, terrain: true);
+            complete(root);
+            transferred = true;
+        }
+        finally { if (!transferred) root.Free(); }
     }
 
     private static ShaderMaterial Material(FalloutLandscapeTransport source, byte quadrant,
@@ -185,7 +256,7 @@ internal static class RuntimeNativeLandscapeTransportBuilder
         return ImageTexture.CreateFromImage(image);
     }
 
-    private static Godot.Collections.Array BuildQuadrant(
+    private static Quadrant BuildQuadrant(
         FalloutLandscapeTransport source,
         byte quadrant,
         float gameUnitsToMeters)
@@ -252,13 +323,6 @@ internal static class RuntimeNativeLandscapeTransportBuilder
                 indices[cursor++] = upperRight;
             }
         }
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = vertices;
-        arrays[(int)Mesh.ArrayType.Normal] = normals;
-        arrays[(int)Mesh.ArrayType.Color] = colors;
-        arrays[(int)Mesh.ArrayType.TexUV] = uvs;
-        arrays[(int)Mesh.ArrayType.Index] = indices;
-        return arrays;
+        return new(vertices, normals, colors, uvs, indices);
     }
 }

@@ -112,15 +112,27 @@ internal sealed class FalloutExteriorLod
     }
 
     internal IReadOnlyList<FalloutLodBlock> PreparationOrder(IReadOnlyList<FalloutLodBlock> selected,
-        IReadOnlySet<FalloutLodBlock> available, float x, float y)
+        IReadOnlySet<FalloutLodBlock> available, float x, float y, float forwardX = 0, float forwardY = 0)
     {
         var missing = selected.Where(block => !available.Contains(block)).ToArray();
         // Establish a complete coarse cover first, then refine nearest demand.
         // A child becoming available must never erase its unloaded siblings.
         var uncovered = missing.Where(block => ResidentCover([block], available).Count == 0).ToArray();
         var roots = _roots.Where(root => uncovered.Any(root.Contains) && !available.Contains(root));
-        return roots.OrderBy(root => root.Distance(x, y)).Concat(missing.OrderBy(block => block.Distance(x, y)))
-            .Distinct().ToArray();
+        // Direction affects preparation priority only. Keep the complete
+        // surrounding cover for stereo visibility and instantaneous head turns.
+        // Apparent span (size / distance) favors detail that occupies more of
+        // the view; a conservative horizontal bound keeps edge tiles ahead.
+        float Priority(FalloutLodBlock block)
+        {
+            var size = block.Level * 4096f;
+            var dx = (block.X + block.Level * .5f) * 4096 - x;
+            var dy = (block.Y + block.Level * .5f) * 4096 - y;
+            var forwardLength = MathF.Sqrt(forwardX * forwardX + forwardY * forwardY);
+            var behind = dx * forwardX + dy * forwardY < -size * .707107f * forwardLength;
+            return Math.Max(0, block.Distance(x, y)) / size * (behind ? 2 : 1);
+        }
+        return roots.OrderBy(Priority).Concat(missing.OrderBy(Priority)).Distinct().ToArray();
     }
 
     internal static string WorldName(FalloutPluginStack records, FalloutFormKey world)

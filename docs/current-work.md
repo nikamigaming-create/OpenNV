@@ -9,33 +9,34 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Current owner: codex/save-world-frame-budget, based on main/origin/main
-fab47acdbbcc5e8c46d7b2404ce7e9070004d517. PR #224 is merged with all
-hosted checks passing. Its ReadyToRun official-engine export completed two
-nearby combat shots, both manual saves and ordinary retirement; shot-path
-samples were 3.46 and 2.07 ms, not whole-frame or headset acceptance.
+Current owner: codex/terrain-visibility-streaming, based on main/origin/main
+3a3ef697ce332cf0dffb49926dcd884bd51af731. PR #225 is merged and all
+hosted checks pass. Manual save capture is sliced; validation and transactional
+write run on a managed worker. The official export passed repeated ordinary
+combat/save and cold continuation with the original checkpoint unchanged.
 
-The current block moves manual save validation, serialization and transactional
-slot publication onto a managed worker while the existing pause boundary holds
-the captured state stable. Capture and completion remain on the gameplay owner.
-Reference capture is sliced across paused frames; exterior spatial lookup reuses
-the source-stack index already populated by streaming. Native preparation checks
-pass continued frames, frozen producer state,
-completion, failure and restored input/pause ownership. Source-requested saves
-retain their existing ordered writer. Static NIF attribute conversion now runs
-on resource workers for initial cells, streamed cells and distant geometry;
-native resources remain on their engine owner. Owned distant terrain and object
-meshes match baseline arrays and transforms exactly. Direct reference contacts
-now take priority over nearby-actor assistance in the shared flat/XR aim path.
-The updated official Vulkan export captures 7,322 references over six/seven
-slices; maximum measured slices are 4.42/6.49 ms and final capture is
-17.35/15.76 ms. Both shots hit, both saves complete, and ordinary retirement
-exits zero. Cold Continue of the new save preserves ammunition, weapon state,
-shot randomness, limb injury and death, then exits zero with the original
-checkpoint unchanged. These measurements include concurrent SWG activity and
-are not 144 Hz acceptance.
-The complete official-editor runtime gate passes on the final source. The next user-directed
-owner is grenade-launcher roll and support grips across authored gun surfaces.
+The current block replaces whole-cell LAND publication with worker-prepared
+geometry/collision faces and resumable native steps. Terrain and LOD share a
+CPU admission allowance with alternating first admission. LOD demand no longer
+freezes while source reads/uploads are pending; obsolete preparation cancels and
+forward apparent-size priority retains the surrounding cover for head turns.
+The owned 25-cell terrain audit passes collision heights and 44 face-material
+queries. Prepared faces retain source order and agree with native extraction
+within a millimetre (the native mesh path introduces floating-point rounding).
+The building atlas GPU audit preserves all 12 authored mip levels and alpha.
+Its object shader now uses the documented FNV LOD Fixes runtime cutout contract,
+not the former almost-zero alpha threshold; vanilla pixel parity is unverified.
+See [distant-world.md](distant-world.md). The exported Vulkan candidate completes
+two shots and manual saves. Ordinary boundary walks cover about 83 metres and
+exercise stream cancellation at quit. Retirement now drains cancelled reads,
+explicitly retires detached actor callbacks, and frees staged models before the
+world. Two repaired walk/quit sessions exit zero with the original checkpoint
+unchanged. The final-source full Godot gate passes, including the additional
+equipment-change cancellation drain. Publication is in progress.
+The next measured owner is reference activation and synchronous creature
+construction: a boundary commit measured 52-60 ms, and a creature upload exceeded
+38 ms. These are not terrain uploads and do not establish smooth/144 Hz play.
+Weapon roll/support and physical XR acceptance remain in the implementation plan.
 
 Use the official Godot 4.8-dev7 template and safe render-thread mode for this
 block. The separate-render-thread experiment produced a texture upload error

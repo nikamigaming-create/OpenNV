@@ -36,6 +36,12 @@ internal static class ExteriorLodProbe
             throw new InvalidOperationException("Cold LOD did not prepare complete coarse coverage before its finer demand.");
         if (lod.PreparationOrder(near, new HashSet<FalloutLodBlock> { coarse }, 0, 0).Any(block => block == coarse))
             throw new InvalidOperationException("Resident coarse coverage was read again during refinement.");
+        var directional = new FalloutExteriorLod(world, [Path(4, -12, -2), Path(4, 8, -2)], 125000, .75f, .7f);
+        var surrounding = directional.Select(0, 0);
+        var east = directional.PreparationOrder(surrounding, new HashSet<FalloutLodBlock>(), 0, 0, 1, 0);
+        var west = directional.PreparationOrder(surrounding, new HashSet<FalloutLodBlock>(), 0, 0, -1, 0);
+        if (east.Count != 2 || west.Count != 2 || east[0].X != 8 || west[0].X != -12 || !east.ToHashSet().SetEquals(west))
+            throw new InvalidOperationException("View priority lost surrounding coverage or failed to prioritize forward detail.");
         var available = new HashSet<FalloutLodBlock>();
         foreach (var block in preparation)
         {

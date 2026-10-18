@@ -115,25 +115,33 @@ public partial class RuntimeCoordinator
                             token.ThrowIfCancellationRequested();
                             _ = content.TryRead(path, null, out _, out _);
                         }
+                        RuntimeNativeLandscapeTransportBuilder.Prepare(landscape, _configuration.World.GameUnitsToMeters);
                         return landscape;
                     }, token));
                 }
                 var source = await pending.Dequeue();
                 if (_nativeSessionTransitioning || _retiringNativeSession)
                     throw new OperationCanceledException("Landscape construction session retired.");
-                var started = Stopwatch.GetTimestamp();
-                root.AddChild(RuntimeNativeLandscapeTransportBuilder.Build(source,
-                    _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures));
-                maximumCellMilliseconds = Math.Max(maximumCellMilliseconds, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-                if (Stopwatch.GetElapsedTime(slice).TotalMilliseconds < 4) continue;
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                slice = Stopwatch.GetTimestamp();
+                using var assembly = new RuntimeNativeLandscapeTransportBuilder.Assembly(source,
+                    _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures);
+                while (true)
+                {
+                    if (_nativeSessionTransitioning || _retiringNativeSession)
+                        throw new OperationCanceledException("Landscape construction session retired.");
+                    var started = Stopwatch.GetTimestamp();
+                    var complete = assembly.Advance();
+                    maximumCellMilliseconds = Math.Max(maximumCellMilliseconds, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                    if (complete) { root.AddChild(assembly.Take()); break; }
+                    if (Stopwatch.GetElapsedTime(slice).TotalMilliseconds < 2) continue;
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    slice = Stopwatch.GetTimestamp();
+                }
             }
             if (_nativeSessionTransitioning || _retiringNativeSession)
                 throw new OperationCanceledException("Landscape construction session retired.");
             CompleteExteriorLandscape(root, grid);
             GD.Print($"OPENNV_NATIVE_LAND_BUILD cells={grid.Cells.Count} elapsedMs={Stopwatch.GetElapsedTime(total).TotalMilliseconds:F1} " +
-                $"maxCellMs={maximumCellMilliseconds:F1} sourceReads=bounded-workers nativePublication=main-thread");
+                $"maxPublicationStepMs={maximumCellMilliseconds:F1} sourceReads=bounded-workers nativePublication=main-thread");
         }
         finally
         {
