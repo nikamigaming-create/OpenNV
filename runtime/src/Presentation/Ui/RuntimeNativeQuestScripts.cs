@@ -100,6 +100,7 @@ internal sealed partial class RuntimeNativeQuestScripts : Node
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.QuestScripts);
         if (_error is not null) return;
         if (!_worldActive)
         {

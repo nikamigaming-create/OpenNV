@@ -367,6 +367,7 @@ internal partial class RuntimeNativePlayer : CharacterBody3D
 
     public override void _PhysicsProcess(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PlayerPhysics);
         PublishXrPointer();
         if (_xr is not null && GetTree().Paused) return;
         AdvanceExplosionExposure(delta);

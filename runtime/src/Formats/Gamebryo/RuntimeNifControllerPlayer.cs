@@ -169,6 +169,7 @@ internal sealed partial class RuntimeNifControllerPlayer : Node
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.ObjectAnimation);
         if (_active is null)
             return;
         if (!double.IsFinite(delta) || delta < 0) throw new ArgumentOutOfRangeException(nameof(delta));

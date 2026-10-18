@@ -298,6 +298,7 @@ internal partial class RuntimeNativeOpeningStageDriver : Node
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.Opening);
         if (BlockingExecutionError is not null) return;
         try
         {

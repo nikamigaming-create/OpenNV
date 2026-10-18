@@ -45,6 +45,15 @@ internal static class RadioContracts
                 var ordinal = queue.Capture().LastOrdinal;
                 radio.Refresh(player, force: true);
                 Require(signals == 0 && queue.Capture().LastOrdinal == ordinal && radio.ForcedUpdates == 2, "Forced refresh replayed discovery effects.");
+                var unchanged = radio.Reception;
+                radio.Refresh(player);
+                Require(ReferenceEquals(unchanged, radio.Reception), "Unchanged reception rebuilt its published list.");
+                world.SetPlacement(Key(901), player with { Position = [200, 0, 0] });
+                radio.Refresh(player);
+                Require(!Available(900), "Moved transmitter anchor retained stale radius reception.");
+                world.SetPlacement(Key(901), player with { Position = [50, 0, 0] });
+                radio.Refresh(player);
+                Require(Available(900), "Returned transmitter anchor did not restore reception.");
                 radio.Refresh(player with { Position = [150, 0, 0] });
                 Require(!Available(900), "Exact radius boundary was admitted or the position reference was ignored.");
                 radio.Refresh(player with { Cell = Key(801) });

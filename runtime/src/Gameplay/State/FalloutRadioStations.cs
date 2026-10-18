@@ -29,6 +29,10 @@ internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutRe
     private readonly Dictionary<FalloutFormKey, HashSet<FalloutFormKey>> _links = [];
     private readonly HashSet<FalloutFormKey> _discovered = [];
     private bool _indexed, _linked, _initialRefresh = true;
+    private FalloutRadioStation[] _orderedStations = [];
+    private readonly Dictionary<FalloutFormKey, (ReceptionInput Input, FalloutRadioReception Reception)> _evaluated = [];
+    private readonly record struct ReceptionInput(FalloutFormKey Cell, float X, float Y, float Z,
+        long PlacementRevision, bool Enabled);
     private IReadOnlyList<FalloutRadioReception> _reception = [];
     internal IReadOnlyList<FalloutRadioReception> Reception => _reception;
     internal IReadOnlyDictionary<FalloutFormKey, string> SourceErrors => _sourceErrors;
@@ -69,6 +73,7 @@ internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutRe
         var source = records.ReadRadioStationIndex();
         _stations = source.Stations;
         _sourceErrors = source.Errors;
+        _orderedStations = _stations.Values.OrderBy(value => records.RuntimeFormId(value.Reference)).ToArray();
         _indexed = true;
     }
 
@@ -135,9 +140,8 @@ internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutRe
         return false;
     }
 
-    private FalloutRadioReception Evaluate(FalloutRadioStation station, FalloutReferencePlacement player)
+    private FalloutRadioReception Evaluate(FalloutRadioStation station, FalloutReferencePlacement player, bool enabled)
     {
-        var enabled = world.IsEnabled(station.Reference);
         if (!enabled) return new(station, false, false, null, null);
         try
         {
@@ -173,7 +177,32 @@ internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutRe
     internal void Refresh(FalloutReferencePlacement player, bool force = false, bool notify = true)
     {
         player.Validate(); _ = Cell(player.Cell); Index();
-        var reception = _stations.Values.OrderBy(value => records.RuntimeFormId(value.Reference)).Select(value => Evaluate(value, player)).ToArray();
+        // Applied enable state is observed each refresh, including parent chains.
+        // Movement invalidates exact distances immediately; no time-based throttling.
+        FalloutRadioReception[]? changed = null;
+        for (var index = 0; index < _orderedStations.Length; ++index)
+        {
+            var station = _orderedStations[index];
+            var input = new ReceptionInput(player.Cell, player.Position[0], player.Position[1], player.Position[2],
+                world.PlacementRevision, world.IsEnabled(station.Reference));
+            if (!_evaluated.TryGetValue(station.Reference, out var cached) || cached.Input != input || cached.Reception.Error is not null)
+            {
+                cached = (input, Evaluate(station, player, input.Enabled));
+                _evaluated[station.Reference] = cached;
+            }
+            if (index < _reception.Count && _reception[index] == cached.Reception) continue;
+            if (changed is null)
+            {
+                changed = new FalloutRadioReception[_orderedStations.Length];
+                for (var previous = 0; previous < index; ++previous) changed[previous] = _reception[previous];
+            }
+            changed[index] = cached.Reception;
+        }
+        // Fill unchanged entries following the first changed station.
+        if (changed is not null)
+            for (var index = 0; index < changed.Length; ++index)
+                changed[index] ??= _evaluated[_orderedStations[index].Reference].Reception;
+        IReadOnlyList<FalloutRadioReception> reception = changed ?? _reception;
         var discovered = reception.Where(value => value.Available && value.Station.PipBoy && !_discovered.Contains(value.Station.Reference))
             .Select(value => value.Station.Reference).ToArray();
         foreach (var reference in discovered)

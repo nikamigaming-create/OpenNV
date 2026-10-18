@@ -44,6 +44,21 @@ public partial class NativeNifInstanceAudit
             if (!beforeToggle.SequenceEqual(draw.Buffer) ||
                 !state.SequenceEqual(Convert.FromBase64String(JsonSerializer.SerializeToElement(first.Observation).GetProperty("state").GetString()!)))
                 throw new InvalidDataException("Reenabled source color modifier changed simulation or failed to restore identical draw output.");
+            var ordered = Create(file);
+            ordered.Bind(file, emitter).Apply(0);
+            ordered.Bind(file, emitter with { ControllerType = "NiPSysEmitterLifeSpanCtlr", Variable2 = "", Interpolator = 6 }).Apply(0);
+            Advance(ordered, .1f);
+            if (ordered.ActiveCount < 2) throw new InvalidDataException("Particle ordering fixture has no sortable population.");
+            var simulation = JsonSerializer.Serialize(ordered.Observation);
+            var camera = new Camera3D { Current = true }; fixture.AddChild(camera);
+            for (var view = 0; view < 8; view++)
+            {
+                camera.Position = new Vector3(view % 2 == 0 ? -20 : 20, view * 3, 5 - view);
+                ordered.Publish();
+                if (JsonSerializer.Serialize(ordered.Observation) != simulation)
+                    throw new InvalidDataException("Camera-dependent particle rendering mutated authoritative simulation state.");
+            }
+            camera.Free();
             foreach (var mode in new[] { "cycle", "manager", "radius", "data-type", "data-null", "empty-color", "spawn" })
             {
                 var invalid = FalloutNifFile.Read(ParticleShapesColorsFixture(mode: mode));

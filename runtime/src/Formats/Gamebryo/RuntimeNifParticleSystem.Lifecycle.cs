@@ -165,11 +165,6 @@ internal sealed partial class RuntimeNifParticleSystem
             SimulatedSeconds, particle.Position, particle.Velocity, particle.Age, particle.Life));
     }
 
-    private void ReindexParticles()
-    {
-        for (var index = 0; index < ActiveCount; index++) _particleIndices[_particles[index].Identity] = index;
-    }
-
     private void ResetLifecycle()
     {
         if (_particleIndices.Count != 0) throw new InvalidOperationException("Completed particle reset has live identity capabilities.");

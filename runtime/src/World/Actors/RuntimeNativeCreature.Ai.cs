@@ -280,6 +280,7 @@ internal sealed partial class RuntimeNativeCreature
 
     public override void _PhysicsProcess(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreaturePackages);
         Combat?.StopPackageMotion();
         _waitingForTarget = null;
         if (_aiRecords is null || Combat is null || Combat.OwnsPose ||

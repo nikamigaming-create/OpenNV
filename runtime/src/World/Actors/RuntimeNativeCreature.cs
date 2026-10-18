@@ -148,6 +148,7 @@ internal sealed partial class RuntimeNativeCreature : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.CreatureAnimation);
         if (Combat?.Dead == true || Combat?.OwnsPose == true) return;
         if (Error is not null) return;
         if (_aiState?.ScriptError is not null) return;

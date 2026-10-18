@@ -86,8 +86,28 @@ public partial class NativeNifInstanceAudit
                 if (camera is not null)
                 {
                     camera.Quaternion = Quaternion.FromEuler(new(frame * .013f, frame * .037f, frame * .021f));
-                    foreach (var particle in particles) particle._Process(0);
-                    foreach (var draw in draws) checkedQuads += CheckParticleBounds(draw.Multimesh);
+                    foreach (var particle in particles)
+                    {
+                        var simulationOrder = particle.Positions;
+                        particle.Publish();
+                        if (!simulationOrder.SequenceEqual(particle.Positions))
+                            throw new InvalidDataException("Camera publication reordered particle simulation storage.");
+                    }
+                    foreach (var draw in draws)
+                    {
+                        checkedQuads += CheckParticleBounds(draw.Multimesh);
+                        var buffer = draw.Multimesh.Buffer;
+                        var origin = draw.ToLocal(camera.GlobalPosition);
+                        var previous = float.PositiveInfinity;
+                        for (var index = 0; index < draw.Multimesh.VisibleInstanceCount; index++)
+                        {
+                            var row = index * NativeParticleDrawBuffer.Stride;
+                            var position = new Vector3(buffer[row + 3], buffer[row + 7], buffer[row + 11]);
+                            var distance = position.DistanceSquaredTo(origin);
+                            if (distance > previous) throw new InvalidDataException("Particle draw order is not back-to-front.");
+                            previous = distance;
+                        }
+                    }
                 }
             }
             var before = particles.SelectMany(value => value.Positions).ToArray();

@@ -216,6 +216,7 @@ internal partial class RuntimeNativeNpc : CharacterBody3D
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.NpcAnimation);
         if (Combat?.Dead == true || Combat?.OwnsPose == true || Combat?.Restrained == true) return;
         RestoreAuthoredHeadPose();
         if (_conversationTarget is null) AdvanceAi(delta: delta);
