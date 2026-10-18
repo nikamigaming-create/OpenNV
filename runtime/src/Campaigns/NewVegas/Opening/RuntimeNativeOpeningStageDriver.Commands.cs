@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Godot;
+using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.Gameplay.State;
@@ -178,7 +179,11 @@ internal partial class RuntimeNativeOpeningStageDriver
         GD.Print($"OPENNV_NATIVE_CAMPAIGN_SAVED quest={QuestEditorId} stage={Stage} creationComplete={state.CharacterCreationComplete} save={_savePath}");
     }
 
-    private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell)
+    private FalloutNativeCampaignState CaptureCurrentState(FalloutFormKey activeCell, bool validate = true) =>
+        CaptureCurrentStateCore(activeCell, validate, null);
+
+    private FalloutNativeCampaignState CaptureCurrentStateCore(FalloutFormKey activeCell, bool validate,
+        IReadOnlyList<FalloutReferenceSnapshot>? references)
     {
         if (Vitals.HitPoints <= 0)
             throw new InvalidOperationException("Cannot replace a playable save after player death.");
@@ -202,12 +207,12 @@ internal partial class RuntimeNativeOpeningStageDriver
         var state = FalloutNativeCampaignSave.Capture(_saveCompatibilityId, activeCell, _inventory.Capture(), _playerName, _character,
             _vigorContract, Special, _tagSkillContract, _tagSkills.Selection, _traitFarewellContract, _traits, PlayerControls,
             [transform.Origin.X, transform.Origin.Y, transform.Origin.Z], [rotation.X, rotation.Y, rotation.Z, rotation.W],
-            _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), _scripts.References?.Capture(),
+            _quests.Capture(), _captureScripts(), _globals?.Capture(), _gameTime?.Capture(), _skyLighting?.Capture(), references ?? _scripts.References?.Capture(),
             QuestEditorId, Stage, complete, _player.ViewPitchRadians, _playerActorValues.Capture(), _tagSkills.Capture(),
             _scripts.References!.CaptureDetection(), _speech?.CaptureState(), CaptureFinishedSpeechStage(),
             CaptureStageResults(), _stageResultDriverFailure, CaptureTerminalResults(), _skillCatalog, _playerPackage!.CaptureAudio(),
             playerSkillValues: _playerSkills.CaptureValues(), playerAbilityScripts: _playerAbilities.Capture(),
-            transientExplosions: _scripts.References.TransientExplosions.Capture(), fastTravel: FastTravel.State);
+            transientExplosions: _scripts.References.TransientExplosions.Capture(), fastTravel: FastTravel.State, validate: validate);
         return state with
         {
             Vitals = vitals,

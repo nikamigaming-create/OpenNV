@@ -1412,37 +1412,25 @@ internal static partial class RuntimeNativeNifMeshBuilder
                         $"NIF skin {instance.Block.Index} does not use the proven sibling-root hierarchy.");
             }
 
-            var arrays = new Godot.Collections.Array();
+            var prepared = PreparedArrays(source, data, morph, cache: source.Controller == -1 &&
+                source.SkinInstance == -1 && geometryMorph is null && _geometryOwner is null && MorphOwner is null);
+            using var arrays = new Godot.Collections.Array();
             arrays.Resize((int)Mesh.ArrayType.Max);
-            var vertices = new Vector3[data.Vertices.Length];
-            for (var index = 0; index < vertices.Length; ++index)
-                vertices[index] = ConvertVector(data.Vertices[index]) * _unitsToMetres;
+            var vertices = prepared.Vertices;
             arrays[(int)Mesh.ArrayType.Vertex] = vertices;
-            if (morph is not null) arrays[(int)Mesh.ArrayType.TexUV2] = morph.Heights.Select(height => new Vector2(height * _unitsToMetres, 0)).ToArray();
-            if (data.Normals.Length != 0)
-            {
-                var normals = new Vector3[data.Normals.Length];
-                for (var index = 0; index < normals.Length; ++index)
-                    normals[index] = ConvertVector(data.Normals[index]).Normalized();
-                arrays[(int)Mesh.ArrayType.Normal] = normals;
-            }
-            if (data.Tangents.Length != 0)
-                arrays[(int)Mesh.ArrayType.Tangent] = BuildTangents(data);
-            if (data.Colors.Length != 0)
-                arrays[(int)Mesh.ArrayType.Color] = VertexColors(source, data);
-            if (data.TextureCoordinates.Length == 1)
-                arrays[(int)Mesh.ArrayType.TexUV] =
-                    data.TextureCoordinates[0].Select(uv => new Vector2(uv.U, uv.V)).ToArray();
+            if (prepared.Normals.Length != 0) arrays[(int)Mesh.ArrayType.Normal] = prepared.Normals;
+            if (prepared.Tangents.Length != 0) arrays[(int)Mesh.ArrayType.Tangent] = prepared.Tangents;
+            if (prepared.Colors.Length != 0) arrays[(int)Mesh.ArrayType.Color] = prepared.Colors;
+            if (prepared.Uv.Length != 0) arrays[(int)Mesh.ArrayType.TexUV] = prepared.Uv;
+            if (morph is not null) arrays[(int)Mesh.ArrayType.TexUV2] = prepared.MorphHeights;
             if (skinBinding is not null)
             {
                 arrays[(int)Mesh.ArrayType.Bones] = skinBinding.BoneIndices;
                 arrays[(int)Mesh.ArrayType.Weights] = skinBinding.Weights;
             }
-
-            var indices = FalloutNifTriangleWinding.ToGodotIndices(data.Triangles);
+            var indices = prepared.Indices;
             if (indices.Length == 0)
-                throw new InvalidDataException(
-                    $"NIF geometry data {data.Block.Index} contains no non-degenerate triangles.");
+                throw new InvalidDataException($"NIF geometry data {data.Block.Index} contains no non-degenerate triangles.");
             arrays[(int)Mesh.ArrayType.Index] = indices;
             var mesh = new ArrayMesh();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays,

@@ -124,7 +124,7 @@ public partial class NativeReferenceEventsAudit
                 return pending is { Count: > 0 } ? new(RuntimeManualSaveAdmissionKind.FiniteSourceAudio, Voices: pending) :
                     new(RuntimeManualSaveAdmissionKind.Refused, "animation-sound-continuation");
             }
-            RuntimeSaveSlotMetadata CaptureComplete(Guid id)
+            Func<RuntimeSaveSlotMetadata> PrepareComplete(Guid id)
             {
                 Require(tree.Paused && nativePlayer.ModalInput && clock.ProcessTicks == priorProcess &&
                     clock.PhysicsTicks == priorPhysics && clock.Elapsed == priorClock &&
@@ -134,8 +134,17 @@ public partial class NativeReferenceEventsAudit
                         world.Get(proof.Reference).AnimationSoundEvents.Events.Single(entry => entry.Generation == proof.Generation)
                             .End == FalloutAnimationSoundEnd.NativeFinished),
                     "Writer ran before genuine Finished or replayed paused source/world producers.");
-                return catalog.Create(id, () => File.WriteAllText(canonical, JsonSerializer.Serialize(new
-                { Schema = schema, SaveCompatibilityId = compatibility, References = world.Capture() })));
+                var snapshot = world.Capture();
+                return () => catalog.Create(id, () => File.WriteAllText(canonical, JsonSerializer.Serialize(new
+                { Schema = schema, SaveCompatibilityId = compatibility, References = snapshot })));
+            }
+            RuntimeSaveSlotMetadata CaptureComplete(Guid id) => PrepareComplete(id)();
+            var useBackground = expectedDisposition is null && !orderedSource;
+            Task<RuntimeSaveSlotMetadata> WriteBackground(Guid id)
+            {
+                writes++; writerOrder.Add("ordinary-manual");
+                var commit = PrepareComplete(id);
+                return Task.Run(async () => { await Task.Delay(100); return commit(); });
             }
             RuntimeSaveSlotMetadata Write(Guid id)
             {
@@ -179,7 +188,8 @@ public partial class NativeReferenceEventsAudit
                     },
                     maximumWaitMilliseconds, sourceProducers: [clock], reportFailure: error => failureReports.Add(error.Message),
                     sourceRequests: orderedSource ? world.ScriptManualSaves : null,
-                    originalSourceBlocker: () => transaction?.PermitsOriginalSourceDrain() == true ? null : "paused");
+                    originalSourceBlocker: () => transaction?.PermitsOriginalSourceDrain() == true ? null : "paused",
+                    backgroundWriter: useBackground ? id => new(() => true, () => WriteBackground(id)) : null);
                 AddChild(transaction); transaction.Begin();
                 return requests.Receipt!;
             }
@@ -232,8 +242,13 @@ public partial class NativeReferenceEventsAudit
                 afterBegin?.Invoke(transaction!);
             }
             var timer = Stopwatch.StartNew();
+            var writingFrames = 0;
             while (requests.Pending && timer.Elapsed.TotalSeconds < 65)
+            {
+                if (requests.Writing) writingFrames++;
                 await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            }
+            Require(!useBackground || writingFrames >= 2, "Native frames did not advance while the save writer was pending.");
             Require(!requests.Pending && settled && requests.Receipt!.Disposition == (expectedDisposition ?? "completed"),
                 "Native save preparation did not settle with its actual expected receipt: " + JsonSerializer.Serialize(requests.Receipt));
             Require(tree.Paused == alreadyPaused && nativePlayer.ModalInput == priorModal && nativePlayer.Velocity == velocity &&

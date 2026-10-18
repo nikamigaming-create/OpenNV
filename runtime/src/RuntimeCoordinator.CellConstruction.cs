@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Godot;
 using OpenNV.Runtime.Content;
+using OpenNV.Runtime.Formats.Gamebryo;
 using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime;
@@ -8,14 +9,14 @@ namespace OpenNV.Runtime;
 public partial class RuntimeCoordinator
 {
     private async Task<double> PlaceNativeCellReferenceResponsive(Node3D root, FalloutCellScene cell,
-        FalloutPlacedReference reference)
+        FalloutPlacedReference reference, FalloutNifFile? preparedModel = null)
     {
         var started = Stopwatch.GetTimestamp();
         if (DisplayServer.GetName() == "headless" ||
             !cell.BaseObjects.TryGetValue(reference.Base, out var source) || source.Signature != "NPC_" ||
             !_nativeReferences!.IsEnabled(reference.FormKey))
         {
-            PlaceNativeCellReference(root, cell, reference);
+            PlaceNativeCellReference(root, cell, reference, preparedModel: preparedModel);
             return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         }
         var previousChildren = root.GetChildCount();

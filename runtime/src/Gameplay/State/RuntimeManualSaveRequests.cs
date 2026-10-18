@@ -3,6 +3,7 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Gameplay.State;
 
 internal enum RuntimeManualSaveAdmissionKind { Ready, FiniteSourceAudio, Refused }
+internal sealed record RuntimeManualSaveWork(Func<bool> CaptureStep, Func<Task<RuntimeSaveSlotMetadata>> Commit);
 internal sealed record RuntimeManualSaveAdmission(RuntimeManualSaveAdmissionKind Kind, string? Blocker = null,
     IReadOnlyList<FalloutFiniteSoundVoice>? Voices = null)
 {
@@ -38,6 +39,10 @@ internal sealed class RuntimeManualSaveRequests
     private readonly List<RuntimeManualSaveReceipt> _history = [];
     private ulong _generation;
     private bool _writing;
+    private Task<RuntimeSaveSlotMetadata>? _pendingWrite;
+    private RuntimeManualSaveWork? _pendingCapture;
+    private bool _advancingWork;
+    internal bool Writing => _writing;
     private RuntimeManualSavePreparation? _preparation;
     internal RuntimeManualSaveReceipt? Receipt => _history.LastOrDefault();
     internal IReadOnlyList<RuntimeManualSaveReceipt> History => _history.AsReadOnly();
@@ -46,7 +51,7 @@ internal sealed class RuntimeManualSaveRequests
     internal RuntimeManualSaveReceipt Request(Guid session, string sourceCompatibilityId, ulong phase,
         RuntimeManualSaveOrigin origin = RuntimeManualSaveOrigin.PlayerInput)
     {
-        if (_writing || session == Guid.Empty || string.IsNullOrWhiteSpace(sourceCompatibilityId) || !Enum.IsDefined(origin))
+        if (_advancingWork || _writing && _pendingWrite is null && _pendingCapture is null || session == Guid.Empty || string.IsNullOrWhiteSpace(sourceCompatibilityId) || !Enum.IsDefined(origin))
             throw new InvalidOperationException("Manual save has no settled engine session/source owner.");
         if (Pending)
         {
@@ -81,7 +86,19 @@ internal sealed class RuntimeManualSaveRequests
     internal bool DrainPrepared(Guid session, string sourceCompatibilityId, ulong phase, ulong milliseconds,
         Func<IReadOnlyList<FalloutFiniteSoundVoice>> nativePending,
         Func<RuntimeManualSaveAdmission> admission, Func<Guid, RuntimeSaveSlotMetadata> writer) =>
-        Drain(session, sourceCompatibilityId, phase, () =>
+        DrainPreparedBackground(session, sourceCompatibilityId, phase, milliseconds, nativePending, admission,
+            id => Task.FromResult(writer(id)));
+
+    internal bool DrainPreparedBackground(Guid session, string sourceCompatibilityId, ulong phase, ulong milliseconds,
+        Func<IReadOnlyList<FalloutFiniteSoundVoice>> nativePending,
+        Func<RuntimeManualSaveAdmission> admission, Func<Guid, Task<RuntimeSaveSlotMetadata>> writer) =>
+        DrainPreparedWork(session, sourceCompatibilityId, phase, milliseconds, nativePending, admission,
+            id => new(() => true, () => writer(id)));
+
+    internal bool DrainPreparedWork(Guid session, string sourceCompatibilityId, ulong phase, ulong milliseconds,
+        Func<IReadOnlyList<FalloutFiniteSoundVoice>> nativePending,
+        Func<RuntimeManualSaveAdmission> admission, Func<Guid, RuntimeManualSaveWork> writer) =>
+        DrainBackground(session, sourceCompatibilityId, phase, () =>
         {
             var preparation = _preparation ?? throw new InvalidOperationException("Manual save has no native preparation lease.");
             var state = preparation.Observe(phase, milliseconds, nativePending(), admission());
@@ -90,8 +107,13 @@ internal sealed class RuntimeManualSaveRequests
         }, writer);
 
     internal bool Drain(Guid session, string sourceCompatibilityId, ulong phase,
-        Func<RuntimeManualSaveAdmission> admission, Func<Guid, RuntimeSaveSlotMetadata> writer)
+        Func<RuntimeManualSaveAdmission> admission, Func<Guid, RuntimeSaveSlotMetadata> writer) =>
+        DrainBackground(session, sourceCompatibilityId, phase, admission, id => new(() => true, () => Task.FromResult(writer(id))));
+
+    private bool DrainBackground(Guid session, string sourceCompatibilityId, ulong phase,
+        Func<RuntimeManualSaveAdmission> admission, Func<Guid, RuntimeManualSaveWork> writer)
     {
+        if (_pendingWrite is not null || _pendingCapture is not null) return CompletePendingWrite();
         if (_writing) throw new InvalidOperationException("Manual slot writer is already executing.");
         if (!Pending) return false;
         var current = Receipt!;
@@ -114,19 +136,8 @@ internal sealed class RuntimeManualSaveRequests
                 return false;
             }
             _writing = true;
-            var slot = writer(current.Slot);
-            current = Receipt!;
-            if (slot.Id != current.Slot.ToString("N") || string.IsNullOrWhiteSpace(slot.Path) || !File.Exists(slot.Path))
-                throw new InvalidDataException("Manual writer returned no matching committed slot.");
-            Replace(current with
-            {
-                Disposition = "completed",
-                DeferredVoices = null,
-                CommittedSlot = slot,
-                Preparation = current.Preparation is { } preparation
-                    ? preparation with { Phase = RuntimeManualSavePreparationPhase.Completed } : null
-            });
-            return true;
+            _pendingCapture = writer(current.Slot) ?? throw new InvalidOperationException("Manual writer returned no operation.");
+            return CompletePendingWrite();
         }
         catch (FalloutFiniteSoundSaveDrainInvalidatedException error)
         {
@@ -140,7 +151,52 @@ internal sealed class RuntimeManualSaveRequests
             ReplaceFailed(error.Message);
             return false;
         }
-        finally { _writing = false; }
+        finally { _writing = _pendingWrite is not null || _pendingCapture is not null; }
+    }
+
+    // Poll on the gameplay owner. Retirement may join the managed writer before
+    // releasing the paused snapshot/source lifetime; ordinary frames never wait.
+    internal bool CompletePendingWrite(bool wait = false)
+    {
+        if (_pendingWrite is null && _pendingCapture is null) return false;
+        try
+        {
+            _advancingWork = true;
+            if (_pendingCapture is { } capture)
+            {
+                while (!capture.CaptureStep())
+                    if (!wait) return false;
+                _pendingWrite = capture.Commit() ?? throw new InvalidOperationException("Manual writer returned no operation.");
+                _pendingCapture = null;
+                if (Receipt!.Preparation is { } preparing)
+                    Replace(Receipt with { Preparation = preparing with { Phase = RuntimeManualSavePreparationPhase.Writing } });
+            }
+            var pending = _pendingWrite!;
+            if (!wait && !pending.IsCompleted) return false;
+            var slot = pending.GetAwaiter().GetResult();
+            var current = Receipt!;
+            if (slot.Id != current.Slot.ToString("N") || string.IsNullOrWhiteSpace(slot.Path) || !File.Exists(slot.Path))
+                throw new InvalidDataException("Manual writer returned no matching committed slot.");
+            Replace(current with
+            {
+                Disposition = "completed",
+                DeferredVoices = null,
+                CommittedSlot = slot,
+                Preparation = current.Preparation is { } preparation
+                    ? preparation with { Phase = RuntimeManualSavePreparationPhase.Completed } : null
+            });
+            return true;
+        }
+        catch (Exception error)
+        {
+            ReplaceFailed(error.Message);
+            return false;
+        }
+        finally
+        {
+            _advancingWork = false;
+            if (!Pending) { _pendingWrite = null; _pendingCapture = null; _writing = false; }
+        }
     }
 
     internal void Cancel(string reason)

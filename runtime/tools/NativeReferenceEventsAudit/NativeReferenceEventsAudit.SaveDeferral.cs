@@ -88,7 +88,7 @@ public partial class NativeReferenceEventsAudit
                 "A temporary procedure capture blocker consumed or permanently failed the queued autosave.");
             try
             {
-                owner.GetMethod("CaptureCurrentState", flags)!.Invoke(driver, [Key(0x800)]);
+                owner.GetMethod("CaptureCurrentState", flags)!.Invoke(driver, [Key(0x800), true]);
                 throw new InvalidOperationException("Explicit capture admitted an uninitialized procedure.");
             }
             catch (TargetInvocationException error) when (error.InnerException is NotSupportedException &&
@@ -113,7 +113,7 @@ public partial class NativeReferenceEventsAudit
                 "Player death consumed or permanently failed a pending autosave.");
             try
             {
-                owner.GetMethod("CaptureCurrentState", flags)!.Invoke(driver, [Key(0x800)]);
+                owner.GetMethod("CaptureCurrentState", flags)!.Invoke(driver, [Key(0x800), true]);
                 throw new InvalidOperationException("Explicit capture admitted a defeated player.");
             }
             catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException &&

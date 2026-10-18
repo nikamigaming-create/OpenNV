@@ -5,6 +5,19 @@ namespace OpenNV.Runtime.World.Cells;
 
 internal partial class RuntimeNativePlayer
 {
+    // Aimed world objects are deliberate targets too. Actor assistance must
+    // not redirect a ray already hitting a source reference (including props,
+    // destructibles and dead actors) toward a different nearby actor.
+    internal Vector3? ResolveShotAimPoint(Vector3 origin, Vector3 direction, float shotRange,
+        float assistRange, float assistDegrees)
+    {
+        var hit = CastShotRay(origin, origin + direction * shotRange);
+        var point = hit.TryGetValue("position", out var position) ? position.AsVector3() : (Vector3?)null;
+        var collider = hit.TryGetValue("collider", out var value) ? value.AsGodotObject() as Node : null;
+        if (point is not null && ShotReference(collider) is not null) return point;
+        return ResolveAutoAimTarget(origin, direction, assistRange, assistDegrees) ?? point;
+    }
+
     // Two resident declarations cover flat first/third person and XR. A live
     // settings or ammunition/range change replaces a shape, never its geometry
     // while a query is using it. No per-shot convex cooking is needed on hits.

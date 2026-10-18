@@ -265,7 +265,9 @@ public partial class NativeNifInstanceAudit : Node
                 AddChild(scene.Root);
                 if (unbound is not null)
                 {
-                    using var assembly = new RuntimeNativeNifMeshBuilder.LodAssembly(nif, 0.0142875f, content, unbound);
+                    var preparedSource = FalloutNifFile.Read(bytes);
+                    await Task.Run(() => RuntimeNativeNifMeshBuilder.PrepareStaticGeometry(preparedSource, 0.0142875f, CancellationToken.None));
+                    using var assembly = new RuntimeNativeNifMeshBuilder.LodAssembly(preparedSource, 0.0142875f, content, unbound);
                     var steps = 1;
                     while (!assembly.Advance()) steps++;
                     var staged = assembly.Take(); AddChild(staged.Root);

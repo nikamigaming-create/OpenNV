@@ -9,144 +9,41 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Current owner: codex/shared-aiming-contacts, from verified main/origin/main
-e611e75dfe4d153b19b8d6fd6dc23b96beef09f9 with no outstanding task PR. PR #223
-is merged and every hosted check passes. Its source-owned combat preparation,
-incremental distant publication, radial perspective fog and explicit X-button
-wrist focus pass the complete local gate and selected owned checks.
-The safe-mode optimized Vulkan export
-restores the retained reaction, resumes attack and retires normally. The fresh
-shot/save trial misses and therefore does not prove hit-stall recovery. A
-separate-render-thread trial produced a texture-upload error and was rejected.
-Active changes: exclusive arm-injury spread penalties, reusable auto-aim hulls,
-source-posed player target points shared by enemy attacks in flat/XR, and
-ReadyToRun compilation for Windows release exports.
-The owned preparation check passes retained native hull identity, changed and
-invalid declarations, displaced body targets, anatomical ray hits and injury
-states. The complete official-editor runtime gate passes. An optimized flat
-Vulkan run from the existing nearby combat save lands two shots on the source
-creature, applies damage/death, completes both F5 saves and exits zero with the
-original checkpoint unchanged. Shot paths take 15.07 and 4.41 ms; these are not
-whole-frame timings or 144 Hz acceptance. A separate cold retained-reaction
-continuation also completes and exits zero. An earlier distant-target trial
-misses/hits scenery and its helper times out while save preparation is pending;
-it is not accepted combat or retirement evidence. The nearby repeat waits for
-save completion before quitting. No frame recording was enabled.
-The same nearby-shot scenario with a ReadyToRun export records 4.27 and 2.59 ms
-shot paths, completes both saves and exits zero. Cold retained-reaction
-continuation preserves its exact saved phase and returns to attack. Observed
-error categories match the ordinary export, including existing content and AI
-divergence. These bounded samples motivate precompilation; they do not establish
-controlled loading improvement, whole-frame performance or 144 Hz acceptance.
-The complete local gate passes again with the export-property change. The
-initial hosted run fails the existing recorded-input publication-loss check;
-its diagnostic writer exceeded the publication interval. Final hosted checks
-must pass before merge; the local pass does not waive this failure.
-Bottle aiming, NPC ranged accuracy, shared shot direction and physical
-acceptance remain open. Large
-individual surface uploads, player construction, combat spikes and physical
-arm/contact acceptance remain open; 144 Hz requires a 6.94 ms frame budget.
-Body, weapon, contacts and wrist input must switch together. The navigation,
-rig diagnostic and XR viewport-transition repairs are integrated; the viewport
-contract is described in [xr-session-lifetime.md](xr-session-lifetime.md).
+Current owner: codex/save-world-frame-budget, based on main/origin/main
+fab47acdbbcc5e8c46d7b2404ce7e9070004d517. PR #224 is merged with all
+hosted checks passing. Its ReadyToRun official-engine export completed two
+nearby combat shots, both manual saves and ordinary retirement; shot-path
+samples were 3.46 and 2.07 ms, not whole-frame or headset acceptance.
 
-A fresh official-engine export binds its managed product version, runtime-tree
-hash and executable/pack/assembly digests. Keep it separate from the experimental
-source engine below for before/after comparisons. New loading investigations and
-the corrected private readiness/retirement helper are under
-local/vr-rig-repair-20261018 and local/save-combat-repair-20261017/material-source-*.
-An unrelated recording workload was observed during the newer baseline; do not
-treat that sample or a diagnostic trace as uncontended performance acceptance.
-Source-bound player material observations identify repeated DDS creation. The
-candidate source-owned image cache reduces 208 creations/uploads to 51, retaining
-the exact signature of 101 audited actor-part surface bindings. Materials remain
-independent; existing source/mip/alpha handling is preserved. The cache bounds
-retained image data to 128 MiB and releases references on source retirement while
-live material bindings remain exact. Synthetic and owned retirement checks pass.
-The ordered before/after loading pair is 30.26 versus 21.17 seconds, with maximum
-observed intervals of 1,534.66 versus 1,063.26 ms. The unrelated game workload
-precludes controlled speedup claims, and the remaining freeze is unacceptable.
-The full official-editor runtime gate passes. The updated executable cold-loads
-the previously verified qualifying reaction save at its exact retained phase,
-preserves health/injury, completes the reaction and resumes attack without a
-reaction error, then exits zero. Two new shot/save trials complete F5 but do not
-produce the qualifying limb reaction (one misses, one hits the torso), so they
-do not repeat the full hit-to-reaction-save proof. Native Continue/main-menu/
-Continue/quit also passes with readers drained, exit zero and the original
-checkpoint unchanged. Details and coverage limits are in runtime-performance.md.
+The current block moves manual save validation, serialization and transactional
+slot publication onto a managed worker while the existing pause boundary holds
+the captured state stable. Capture and completion remain on the gameplay owner.
+Reference capture is sliced across paused frames; exterior spatial lookup reuses
+the source-stack index already populated by streaming. Native preparation checks
+pass continued frames, frozen producer state,
+completion, failure and restored input/pause ownership. Source-requested saves
+retain their existing ordered writer. Static NIF attribute conversion now runs
+on resource workers for initial cells, streamed cells and distant geometry;
+native resources remain on their engine owner. Owned distant terrain and object
+meshes match baseline arrays and transforms exactly. Direct reference contacts
+now take priority over nearby-actor assistance in the shared flat/XR aim path.
+The updated official Vulkan export captures 7,322 references over six/seven
+slices; maximum measured slices are 4.42/6.49 ms and final capture is
+17.35/15.76 ms. Both shots hit, both saves complete, and ordinary retirement
+exits zero. Cold Continue of the new save preserves ammunition, weapon state,
+shot randomness, limb injury and death, then exits zero with the original
+checkpoint unchanged. These measurements include concurrent SWG activity and
+are not 144 Hz acceptance.
+The complete official-editor runtime gate passes on the final source. The next user-directed
+owner is grenade-launcher roll and support grips across authored gun surfaces.
 
-The pinned Godot profile leak is repaired in a separately identified experimental
-source template. The reviewed patch records created RIDs once in the interface's
-member cleanup collection. The exact source pin is
-c971f93e7e76b0ef919bf6009e7b868bea04db7f and the build name is
-opennv_xr_profile_fix1. Public builder/fixture instructions and boundaries are in
-[godot-xr-profile-fix.md](godot-xr-profile-fix.md). Synthetic normal/shared-path
-fixtures report zero leaks and no other errors; the official template reports
-one leak in each negative. Distinct resources with the same path exercise RID
-reuse, rather than a repeated resource removed by action-map deduplication.
-Actual optimized owned direct and launcher Continue checks also exit zero with
-readers drained, no startup/exit draw errors, zero profile leaks and an unchanged
-original checkpoint. Flat Vulkan Continue/main-menu/Continue/quit also passes
-with the original unchanged. Overall XR acceptance remains false. The final
-complete official-editor runtime gate passes, as does diff checking. One earlier
-gate attempt failed the recorded-input fixture while other fixture work was
-running. Its isolated recheck and the full uncontended rerun pass; the cause of
-that first failure has not been isolated.
-
-The product's official SDK/editor/template pin and installed tools remain intact.
-The source template has distinct source/patch/dependency/binary provenance and
-uses the matching official editor's glue and existing managed assemblies. Its
-isolated AccessKit headers match the source; older installed headers failed the
-first build. No private engine access or diagnostic suppression is used. This
-experimental template is not a distributed package or a physical candidate;
-distributionReady is explicitly false. The full gameplay, performance and
-physical acceptance inventory below remains open. The official-generated core
-glue hash is 889748612; the release template's native ClassDB hash has not been
-independently measured. Native hash verification, complete distribution licensing
-and package/toolchain integration remain required before promoting this template.
-
-Two optimized baseline launcher sessions render the world, hands and weapon in
-both submitted eyes. Ordinary XR session-menu Create New Save completes after
-awaiting three finite source voices. Capture takes 117.054 ms and writing
-120.128 ms: saving still stalls. A separate XR process Continues from that new
-save with the exact saved player position and rendered world in both eyes.
-These are bounded simulator results, not complete state parity or physical
-acceptance. The original checkpoint remains unchanged.
-
-The baselines each report a startup view-count error and, at exit, another
-view-count error, a 2D/2DArray uniform mismatch and an interaction-profile RID
-leak. Both ordinary menu Quit actions drain readers and dispose source owners;
-those private launchers did not retain exit codes. The new retirement script
-retains real process handles and compares renderer errors before/after close.
-The old optimized executable is rejected in both direct and launcher entry:
-two new draw errors appear during exit despite zero exit code and drained readers.
-Launcher entry additionally retains the startup error.
-
-The first-party candidate waits for FramePostDraw before the launcher's mono to
-stereo transition. Process exit retains the final stereo viewport/camera contract,
-releases raw hand queries while physics is alive, disables tracked input and
-leaves final driver teardown to Godot. The final Debug launcher component reaches
-the owned world, renders both submitted eyes and ordinarily quits with exit zero,
-readers drained, source owners disposed and no view-count or texture-array errors.
-One interaction-profile RID still leaks. The pinned engine's action-map loader
-fails to record created profile RIDs in its cleanup collection; that dependency
-failure remains visible and open. Do not suppress it or free engine memory through
-private access. The final full runtime gate passes. Optimized direct and launcher
-owned checks both exit zero with readers drained, the checkpoint unchanged,
-startup draw errors zero and exit draw errors zero. Both still report the profile
-leak and explicitly leave overall XR acceptance false. The old optimized build is
-a rejecting negative in both paths. The flat Vulkan Continue/main-menu/Continue/
-quit regression also passes with exit zero, drained readers and an unchanged
-checkpoint. Its readiness check now waits for loading feedback to clear and
-further drawn frames: the old player-exists check could send Escape during
-loading, where input is correctly refused. No physical or continuous final-eye
-acceptance is claimed.
-
-Private active evidence: local/vr-rig-repair-20261018 contains the owned component
-reports, selected both-eye views, simulator-results.json, exit negative results
-and candidate exit metadata. Trial profiles/logs are under the active
-local/save-combat-repair-20261017 investigation. Recording is off. The selected
-still views are insufficient for continuous stereo or source-pose/frame joins.
+Use the official Godot 4.8-dev7 template and safe render-thread mode for this
+block. The separate-render-thread experiment produced a texture upload error
+and is not accepted. The separately identified XR profile-fix source engine
+and its evidence are documented in godot-xr-profile-fix.md. Recording remains
+off. Private runtime trials use copied saves under
+local/save-combat-repair-20261017; the original user checkpoint stays unchanged.
+Physical playability and 144 Hz require measured final-eye and headset evidence.
 
 ## Verified repairs and limits
 

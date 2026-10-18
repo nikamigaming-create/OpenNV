@@ -567,7 +567,12 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
     private FalloutScriptManualSaveRequests? _scriptManualSaves;
     internal FalloutScriptManualSaveRequests ScriptManualSaves => _scriptManualSaves ??= new(records);
 
-    internal IReadOnlyList<FalloutReferenceSnapshot> Capture()
+    internal IReadOnlyList<FalloutReferenceSnapshot> Capture() => CaptureSequence().ToArray();
+
+    // The caller holds the save pause boundary for the entire enumeration.
+    // Native continuation callbacks stay on the gameplay thread, but may be
+    // distributed across frames instead of capturing every reference at once.
+    internal IEnumerable<FalloutReferenceSnapshot> CaptureSequence()
     {
         _scriptManualSaves?.RequireCapture();
         _transientExplosions?.RequireCapture();
@@ -578,11 +583,11 @@ internal sealed partial class FalloutReferenceWorld(FalloutPluginStack records,
         if (_instances.Values.Any(instance => instance.DeferredPackageContinuation is not null && IsResident(instance.Reference)))
             throw new NotSupportedException("Resident deferred package requires its actual native handoff before saving.");
         foreach (var actor in _packageEvents?.PendingActors ?? []) _ = Get(actor);
-        return _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference))
-            .Select(instance => instance.Capture() with
+        foreach (var instance in _instances.Values.OrderBy(instance => records.RuntimeFormId(instance.Reference)))
+            yield return instance.Capture() with
             {
                 PackageEvents = _packageEvents?.Capture(instance.Reference) is { Count: > 0 } events ? events : null
-            }).ToArray();
+            };
     }
 
     internal void Restore(IReadOnlyList<FalloutReferenceSnapshot> snapshots)

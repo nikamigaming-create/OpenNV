@@ -172,6 +172,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
                 {
                     if (!_source.TryRead(path, null, out bytes, out _)) throw new FileNotFoundException(path);
                     var nif = FalloutNifFile.Read(bytes);
+                    RuntimeNativeNifMeshBuilder.PrepareStaticGeometry(nif, _units, cancellation);
                     foreach (var block in nif.Blocks)
                     {
                         cancellation.ThrowIfCancellationRequested();

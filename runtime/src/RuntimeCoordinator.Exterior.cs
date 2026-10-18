@@ -144,27 +144,7 @@ public partial class RuntimeCoordinator
                     }
                     return (resolved, landscapes);
                 }, cancellation);
-                var models = new Dictionary<string, FalloutNifFile>(StringComparer.OrdinalIgnoreCase);
-                var paths = grid.Scene.References.Select(reference => grid.Scene.BaseObjects[reference.Base])
-                    .Where(model => model.Signature is not ("NPC_" or "CREA") && model.ModelPath is not null)
-                    .Select(model => model.ModelPath!).Distinct(StringComparer.OrdinalIgnoreCase).Where(path => !residentModels.Contains(path)).ToArray();
-                var prepared = await Task.WhenAll(paths.Select(path => FalloutContentWorkers.Run(() =>
-                {
-                    try
-                    {
-                        if (!content.TryRead(path, null, out var bytes, out _)) return (Path: path, Nif: (FalloutNifFile?)null);
-                        var nif = FalloutNifFile.Read(bytes);
-                        foreach (var block in nif.Blocks.Where(block => block.TypeName == "BSShaderTextureSet"))
-                            foreach (var texture in ((FalloutNifShaderTextureSet)nif.ReadObject(block.Index)).Textures.Where(texture => texture.Length != 0))
-                                _ = content.TryRead(FalloutNifSurfaceInputs.TexturePath(texture), null, out _, out _);
-                        return (Path: path, Nif: (FalloutNifFile?)nif);
-                    }
-                    // Prefetch does not admit or substitute a model. The ordinary
-                    // reference owner still reports any enabled source failure.
-                    catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException) { return (Path: path, Nif: (FalloutNifFile?)null); }
-                }, cancellation)));
-                foreach (var item in prepared)
-                    if (item.Nif is not null) models.Add(item.Path, item.Nif);
+                var models = await PrepareStaticModels(grid.Scene, content, residentModels, units, cancellation);
                 return new PreparedExteriorGrid(grid, lands, models);
             });
         }

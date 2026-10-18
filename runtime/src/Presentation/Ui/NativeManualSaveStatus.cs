@@ -39,8 +39,9 @@ internal sealed partial class NativeManualSaveStatus(Action cancel, Action dismi
         var pending = receipt.Disposition == "pending";
         _status.Text = RuntimeManualSaveFeedback.Describe(receipt) + (pending ? "" : "\nEscape: dismiss save status");
         _background.Visible = pending; _cancel.Visible = pending;
+        _cancel.Disabled = receipt.Preparation?.Phase == RuntimeManualSavePreparationPhase.Writing;
         MouseFilter = pending ? MouseFilterEnum.Stop : MouseFilterEnum.Ignore;
-        if (pending && !_cancel.HasFocus()) _cancel.GrabFocus();
+        if (pending && !_cancel.Disabled && !_cancel.HasFocus()) _cancel.GrabFocus();
         else if (!pending) _cancel.ReleaseFocus();
     }
 
@@ -49,6 +50,10 @@ internal sealed partial class NativeManualSaveStatus(Action cancel, Action dismi
         if (input is not InputEventKey { Pressed: true, Echo: false } key ||
             key.PhysicalKeycode != Key.Escape && key.Keycode != Key.Escape) return;
         GetViewport().SetInputAsHandled();
-        if (_receipt?.Disposition == "pending") cancel(); else dismiss();
+        if (_receipt?.Disposition == "pending")
+        {
+            if (_receipt.Preparation?.Phase != RuntimeManualSavePreparationPhase.Writing) cancel();
+        }
+        else dismiss();
     }
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.World.Cells;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Gameplay.State;
 using OpenNV.Runtime.Presentation.Ui;
@@ -60,14 +61,18 @@ public partial class RuntimeCoordinator
         GD.Print("OPENNV_NATIVE_PLAYER_DEFEATED health=0 owner=shared-vitals recovery=save-browser");
     }
 
-    private RuntimeSaveSlotCatalog NativeSaveSlots() => new(Path.GetFullPath(RequireOption(_options, "save-path")), root =>
+    private RuntimeSaveSlotCatalog NativeSaveSlots()
     {
-        if (!root.TryGetProperty("Schema", out var schema) || schema.ValueKind != JsonValueKind.String ||
-            !schema.GetString()!.StartsWith("opennv-native-fnv-campaign-save/", StringComparison.Ordinal) ||
-            !root.TryGetProperty("SaveCompatibilityId", out var identity) ||
-            identity.GetString() != RuntimeLiveContentSource.Current!.SaveCompatibilityId)
-            throw new InvalidDataException("This save belongs to a different game or source stack.");
-    });
+        var sourceIdentity = RuntimeLiveContentSource.Current!.SaveCompatibilityId;
+        return new(Path.GetFullPath(RequireOption(_options, "save-path")), root =>
+        {
+            if (!root.TryGetProperty("Schema", out var schema) || schema.ValueKind != JsonValueKind.String ||
+                !schema.GetString()!.StartsWith("opennv-native-fnv-campaign-save/", StringComparison.Ordinal) ||
+                !root.TryGetProperty("SaveCompatibilityId", out var identity) ||
+                identity.GetString() != sourceIdentity)
+                throw new InvalidDataException("This save belongs to a different game or source stack.");
+        });
+    }
 
     private FalloutNativeCampaignRestore ReadNativeSave(string path) => FalloutNativeCampaignSave.Read(path,
         RuntimeLiveContentSource.Current!.SaveCompatibilityId, _nativePluginStack!, _nativeVigorContract!,
@@ -81,6 +86,49 @@ public partial class RuntimeCoordinator
         var slot = NativeSaveSlots().Create(id, () => _nativeOpeningStageDriver.PersistWorldState(_nativeActiveCell.Cell.FormKey));
         GD.Print($"OPENNV_NATIVE_CHECKPOINT_CREATED id={slot.Id} save={slot.Path} owner=shared-campaign-state");
         return slot;
+    }
+
+    private RuntimeManualSaveWork CreateNativeCheckpointBackground(Guid id)
+    {
+        if (_nativeSessionTransitioning || _nativeDoorLoading || _nativePlayer is null ||
+            _nativeActiveCell is null || _nativeOpeningStageDriver is null)
+            throw new InvalidOperationException("A checkpoint requires a settled native campaign session.");
+        var driver = _nativeOpeningStageDriver;
+        var cell = _nativeActiveCell.Cell.FormKey;
+        var references = new List<FalloutReferenceSnapshot>();
+        var sequence = _nativeReferences!.CaptureSequence().GetEnumerator();
+        var catalog = NativeSaveSlots();
+        var path = Path.GetFullPath(RequireOption(_options, "save-path"));
+        double maximumSlice = 0;
+        var slices = 0;
+        bool CaptureStep()
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            try
+            {
+                do
+                {
+                    if (!sequence.MoveNext()) { sequence.Dispose(); return true; }
+                    references.Add(sequence.Current);
+                } while (System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds < 2);
+                return false;
+            }
+            catch { sequence.Dispose(); throw; }
+            finally
+            {
+                slices++;
+                maximumSlice = Math.Max(maximumSlice, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            }
+        }
+        return new(CaptureStep, () =>
+        {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var state = driver.CaptureCheckpoint(cell, references);
+            GD.Print($"OPENNV_NATIVE_SAVE_CAPTURE references={references.Count} slices={slices} maximumSliceMilliseconds={maximumSlice:F3} finalCaptureMilliseconds={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3} commit=background");
+            // The preparation owner holds gameplay/source producers paused.
+            // Native callbacks run above; commit reads only the managed snapshot.
+            return Task.Run(() => catalog.Create(id, () => FalloutNativeCampaignSave.Write(path, state)));
+        });
     }
 
     internal RuntimeSaveSlotMetadata LoadNativeCheckpoint(Guid id, bool pauseAfterLoad)

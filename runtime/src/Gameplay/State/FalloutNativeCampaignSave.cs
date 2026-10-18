@@ -158,7 +158,7 @@ internal static class FalloutNativeCampaignSave
         FalloutPlayerSkillValuesSnapshot? playerSkillValues = null,
         FalloutPlayerAbilityScriptsSnapshot? playerAbilityScripts = null,
         FalloutTransientExplosionsSnapshot? transientExplosions = null,
-        FalloutFastTravelSnapshot? fastTravel = null)
+        FalloutFastTravelSnapshot? fastTravel = null, bool validate = true)
     {
         ArgumentNullException.ThrowIfNull(grant);
         if (playerActorValues is null) FalloutNativeVigorResolver.Validate(vigorContract ??
@@ -209,7 +209,7 @@ internal static class FalloutNativeCampaignSave
             PlayerSkillValues: playerSkillValues, PlayerAbilityScripts: playerAbilityScripts,
             TransientExplosions: transientExplosions,
             FastTravel: references is not null && playerPackageAudio is not null ? fastTravel ?? FalloutFastTravelSnapshot.Initial : null);
-        Validate(state, saveCompatibilityId);
+        if (validate) Validate(state, saveCompatibilityId);
         return state;
     }
 
@@ -218,9 +218,13 @@ internal static class FalloutNativeCampaignSave
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(state);
         Validate(state, state.SaveCompatibilityId);
-        RuntimeAtomicSaveFile.Write(path, System.Text.Encoding.UTF8.GetBytes(
-            JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true }) + System.Environment.NewLine));
+        using var bytes = new MemoryStream();
+        JsonSerializer.Serialize(bytes, state, SaveJson);
+        bytes.Write(System.Text.Encoding.UTF8.GetBytes(System.Environment.NewLine));
+        RuntimeAtomicSaveFile.Write(path, bytes.GetBuffer().AsSpan(0, checked((int)bytes.Length)));
     }
+
+    private static readonly JsonSerializerOptions SaveJson = new() { WriteIndented = true };
 
     internal static FalloutNativeCampaignRestore Read(
         string path,

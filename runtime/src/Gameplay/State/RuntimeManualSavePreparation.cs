@@ -3,7 +3,7 @@ using OpenNV.Runtime.Content;
 namespace OpenNV.Runtime.Gameplay.State;
 
 internal enum RuntimeManualSaveOrigin { PlayerInput, SessionMenu }
-internal enum RuntimeManualSavePreparationPhase { DrainingFiniteNativeAudio, Capturing, Completed, Failed, Cancelled }
+internal enum RuntimeManualSavePreparationPhase { DrainingFiniteNativeAudio, Capturing, Completed, Failed, Cancelled, Writing }
 internal sealed record RuntimeManualSavePreparationReceipt(ulong StartedPhase, ulong StartedMilliseconds,
     ulong MaximumWaitMilliseconds, RuntimeManualSavePreparationPhase Phase,
     IReadOnlyList<FalloutFiniteSoundVoice> Voices, IReadOnlyList<FalloutFiniteSoundVoice> RemainingVoices);
@@ -88,6 +88,8 @@ internal static class RuntimeManualSaveFeedback
     {
         var message = receipt.Disposition switch
         {
+            "pending" when receipt.Preparation?.Phase == RuntimeManualSavePreparationPhase.Writing =>
+                "Finishing save... Gameplay will resume when the save completes.",
             "pending" => receipt.Preparation is { RemainingVoices.Count: > 0 } preparation
                 ? $"Saving... Waiting for {preparation.RemainingVoices.Count} original finite sound(s) to report native Finished. Gameplay is paused. Cancel leaves the previous Continue save intact."
                 : "Saving... Preparing a complete checkpoint. Gameplay is paused; no new save exists yet.",

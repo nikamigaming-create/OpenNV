@@ -192,41 +192,13 @@ internal partial class RuntimeNativePlayer
                     throw new InvalidDataException("Shot auto-aim settings are invalid.");
                 var autoAimRange = MathF.Min(shotRange, autoAimMaxDist);
 
-                if (_xr is null)
-                {
-                    var camPos = _camera.GlobalPosition;
-                    var camForward = -_camera.GlobalBasis.Z.Normalized();
-                    var aim = CastShotRay(camPos, camPos + camForward * shotRange);
-                    var hitCollider = aim.TryGetValue("collider", out var c) ? c.AsGodotObject() as Node : null;
-                    var directCombat = hitCollider is not null ? RuntimeNativeActorCombat.Find(hitCollider) : null;
-                    Vector3 target;
-                    if (directCombat is not null && !directCombat.Dead && aim.TryGetValue("position", out var hitPos))
-                    {
-                        target = hitPos.AsVector3();
-                    }
-                    else if (ResolveAutoAimTarget(camPos, camForward, autoAimRange, autoAimMaxDeg) is { } autoAimTarget)
-                    {
-                        target = autoAimTarget;
-                    }
-                    else
-                    {
-                        target = aim.TryGetValue("position", out var hit) ? hit.AsVector3() : camPos + camForward * shotRange;
-                    }
+                var aimOrigin = _xr is null ? _camera.GlobalPosition : from;
+                var aimDirection = _xr is null ? -_camera.GlobalBasis.Z.Normalized() : direction;
+                var aimPoint = ResolveShotAimPoint(aimOrigin, aimDirection, shotRange, autoAimRange, autoAimMaxDeg);
+                if (aimPoint is { } target)
                     direction = (target - from).Normalized();
-                }
-                else
-                {
-                    var aim = CastShotRay(from, from + direction * shotRange);
-                    var hitCollider = aim.TryGetValue("collider", out var c) ? c.AsGodotObject() as Node : null;
-                    var directCombat = hitCollider is not null ? RuntimeNativeActorCombat.Find(hitCollider) : null;
-                    if (directCombat is null || directCombat.Dead)
-                    {
-                        if (ResolveAutoAimTarget(from, direction, autoAimRange, autoAimMaxDeg) is { } autoAimTarget)
-                        {
-                            direction = (autoAimTarget - from).Normalized();
-                        }
-                    }
-                }
+                else if (_xr is null)
+                    direction = (aimOrigin + aimDirection * shotRange - from).Normalized();
                 var medianSpreadDegrees = ResolvePlayerShotSpread(_shot);
                 if (!from.IsFinite() || !direction.IsFinite() || direction.LengthSquared() < .99f)
                     throw new InvalidDataException("Source projectile transform is invalid.");

@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 namespace OpenNV.Runtime.Content;
 
@@ -10,7 +12,10 @@ internal sealed record FalloutExteriorGridScene(FalloutCellScene Scene, IReadOnl
 internal sealed class FalloutExteriorGrid(FalloutPluginStack records)
 {
     private readonly object _gate = new();
-    private readonly Dictionary<FalloutFormKey, Dictionary<(int X, int Y), FalloutFormKey>> _worlds = [];
+    // Winning cell coordinates are immutable for a loaded plugin stack. Reuse
+    // the streaming index when save capture resolves the player's spatial cell.
+    private static readonly ConditionalWeakTable<FalloutPluginStack,
+        ConcurrentDictionary<FalloutFormKey, Lazy<Dictionary<(int X, int Y), FalloutFormKey>>>> WorldIndexes = new();
     private readonly Dictionary<FalloutFormKey, (FalloutCellScene Scene, ulong Use)> _cells = [];
     private ulong _cellUse;
     private const int DecodedCellCacheCapacity = 128;
@@ -49,21 +54,21 @@ internal sealed class FalloutExteriorGrid(FalloutPluginStack records)
                 ? cell : throw new InvalidDataException("Position has no authored exterior grid cell.");
     }
 
-    private Dictionary<(int X, int Y), FalloutFormKey> WorldCells(FalloutFormKey world)
+    private Dictionary<(int X, int Y), FalloutFormKey> WorldCells(FalloutFormKey world) =>
+        WorldIndexes.GetOrCreateValue(records).GetOrAdd(world,
+            key => new(() => BuildWorldCells(key), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+
+    private Dictionary<(int X, int Y), FalloutFormKey> BuildWorldCells(FalloutFormKey world)
     {
-        if (!_worlds.TryGetValue(world, out var index))
+        var index = new Dictionary<(int X, int Y), FalloutFormKey>();
+        foreach (var record in records.EffectiveRecords("CELL"))
         {
-            index = [];
-            foreach (var record in records.EffectiveRecords("CELL"))
-            {
-                if ((record.Flags & 0x400) != 0 || FalloutCellSceneReader.ParentWorldspace(record) != world) continue;
-                var field = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "XCLC").Data;
-                if (field.IsEmpty) continue;
-                if (field.Length is not (8 or 12)) throw new InvalidDataException("Exterior CELL coordinates have an invalid extent.");
-                if (!index.TryAdd((BinaryPrimitives.ReadInt32LittleEndian(field.Span), BinaryPrimitives.ReadInt32LittleEndian(field.Span[4..])), record.FormKey))
-                    throw new InvalidDataException("Worldspace has duplicate winning grid cells.");
-            }
-            _worlds.Add(world, index);
+            if ((record.Flags & 0x400) != 0 || FalloutCellSceneReader.ParentWorldspace(record) != world) continue;
+            var field = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "XCLC").Data;
+            if (field.IsEmpty) continue;
+            if (field.Length is not (8 or 12)) throw new InvalidDataException("Exterior CELL coordinates have an invalid extent.");
+            if (!index.TryAdd((BinaryPrimitives.ReadInt32LittleEndian(field.Span), BinaryPrimitives.ReadInt32LittleEndian(field.Span[4..])), record.FormKey))
+                throw new InvalidDataException("Worldspace has duplicate winning grid cells.");
         }
         return index;
     }
