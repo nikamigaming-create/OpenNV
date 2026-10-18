@@ -22,6 +22,24 @@ internal sealed record FalloutReferenceEnableParent(FalloutFormKey Reference, bo
 internal sealed partial class FalloutReferenceWorld
 {
     private readonly FalloutFormKey _enginePlayer = records.RuntimeFormKey(0x14);
+    private readonly SortedDictionary<long, FalloutReferenceInstance> _enableWork = [];
+    internal long PresentationRevision { get; private set; }
+    internal int PendingEnableWorkCount => _enableWork.Count;
+
+    private void TrackReferenceWork(FalloutReferenceInstance instance, bool presentationChanged)
+    {
+        // Retain source registration order when requests arrive in a different
+        // order. Property notifications also cover destruction, pickup and cold
+        // restoration without relying on a particular script command path.
+        if (instance.EnableRequest is not null || instance.Opacity != 1)
+            _enableWork[instance.WorldRegistrationOrder] = instance;
+        else _enableWork.Remove(instance.WorldRegistrationOrder);
+        if (instance.ActivationRelay is { Children.Count: > 0 })
+            _activationWork[instance.WorldRegistrationOrder] = instance;
+        else _activationWork.Remove(instance.WorldRegistrationOrder);
+        if (presentationChanged) ++PresentationRevision;
+    }
+
     internal bool IsEnabled(FalloutFormKey reference)
     {
         HashSet<FalloutFormKey>? visiting = null;
@@ -68,7 +86,8 @@ internal sealed partial class FalloutReferenceWorld
         if (!double.IsFinite(seconds) || seconds < 0 || seconds > float.MaxValue)
             throw new ArgumentOutOfRangeException(nameof(seconds));
         settings.Validate();
-        var pending = _instances.Values.Where(instance => instance.EnableRequest is not null).ToArray();
+        if (_enableWork.Count == 0) return;
+        var pending = _enableWork.Values.Where(instance => instance.EnableRequest is not null).ToArray();
         void Apply(FalloutReferenceInstance instance, bool enabled, bool fade)
         {
             bool Affected(FalloutReferenceInstance value)
@@ -104,7 +123,7 @@ internal sealed partial class FalloutReferenceWorld
         // A long frame cannot jump directly through a partially completed fade.
         var fadeIn = Math.Min((float)seconds / settings.InSeconds, .1f);
         var fadeOut = Math.Min((float)seconds / settings.OutSeconds, .1f);
-        foreach (var instance in _instances.Values)
+        foreach (var instance in _enableWork.Values.ToArray())
         {
             if (instance.Opacity == 1 && instance.EnableRequest is not { Enabled: false, Fade: true }) continue;
             if (!IsEnabled(instance.Reference)) continue;

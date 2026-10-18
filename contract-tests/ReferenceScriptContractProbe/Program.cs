@@ -906,8 +906,18 @@ try
     {
         var reference = Key(0x904);
         var times = new FalloutReferenceFadeSettings(2, 4);
+        var instance = fades.Get(reference);
+        var idleRevision = fades.PresentationRevision;
+        for (var frame = 0; frame < 100; ++frame)
+            fades.AdvanceEnableChanges(.01, times, _ => throw new InvalidOperationException("Idle reference requested fade geometry."));
+        Require(fades.PresentationRevision == idleRevision && fades.PendingEnableWorkCount == 0,
+            "Idle updates changed presentation state or retained enable work.");
         fades.SetEnabled(reference, false);
+        Require(fades.PresentationRevision == idleRevision && fades.PendingEnableWorkCount == 1,
+            "Queued enable work changed applied presentation or was not retained.");
         fades.AdvanceEnableChanges(0, times, _ => true);
+        Require(fades.PresentationRevision > idleRevision && fades.PendingEnableWorkCount == 0,
+            "Completed enable work was not retired or failed to invalidate presentation.");
         fades.SetEnabled(reference, true, true);
         Require(!fades.IsEnabled(reference), "Enable bypassed the request queue.");
         fades.AdvanceEnableChanges(.1, times, _ => true);
@@ -934,7 +944,17 @@ try
         Require(fades.IsEnabled(reference) && fades.Get(reference).Opacity == .1f, "Enable did not reverse the pending fade from current opacity.");
         fades.SetEnabled(reference, false, true);
         fades.AdvanceEnableChanges(0, times, _ => false);
-        Require(!fades.IsEnabled(reference), "An unloaded fade node held an enable request forever.");
+        Require(!fades.IsEnabled(reference) && fades.PendingEnableWorkCount == 0,
+            "An unloaded fade node held an enable request forever.");
+        var changedRevision = fades.PresentationRevision;
+        instance.Enabled = true;
+        instance.Taken = true;
+        instance.Deleted = true;
+        Require(fades.PresentationRevision == changedRevision + 3,
+            "Direct destruction/pickup/deletion changes bypassed presentation invalidation.");
+        changedRevision = fades.PresentationRevision;
+        instance.Enabled = true; instance.Taken = true; instance.Deleted = true;
+        Require(fades.PresentationRevision == changedRevision, "Unchanged assignments invalidated presentation.");
         Console.WriteLine("OPENNV_REFERENCE_FADE_CONTRACT_PASS queued=true rates=true stepCeiling=true collisionLifetime=true reversal=true coldPending=true absentNode=true");
     }
     var results = new FalloutMessageResults();

@@ -27,6 +27,11 @@ internal static class ActivationParentContracts
             var cell = FalloutCellSceneReader.Read(records, Key(0x800));
             using var world = new FalloutReferenceWorld(records); world.LoadCell(cell);
             var player = records.RuntimeFormKey(0x14); var parent = Key(0x900); var child = Key(0x901);
+            var idleRevision = world.PresentationRevision;
+            for (var frame = 0; frame < 120; ++frame)
+                Require(world.AdvanceActivationRelays(1f / 144).Count == 0, "Idle world invented an activation delivery.");
+            Require(world.PendingActivationWorkCount == 0 && world.PresentationRevision == idleRevision,
+                "Idle activation work changed visibility or retained a pending parent.");
             Require(records.ReadActivationParentIndex().Children[Key(0x920)].Select(value => value.Child)
                 .SequenceEqual(new uint[] { 0x921, 0x922, 0x923, 0x924 }.Select(Key)),
                 "Source indexing omitted placed actor/projectile reference families.");
@@ -72,7 +77,7 @@ internal static class ActivationParentContracts
             var second = world.AdvanceActivationRelays(.25f).Single();
             Require(second.Child.Reference == Key(0x903), "Independent child threshold changed.");
             world.ConsumeActivationRelay(second);
-            Require(world.Get(parent).ActivationRelay is { ElapsedSeconds: 0, Children.Count: 0 } &&
+            Require(world.PendingActivationWorkCount == 0 && world.Get(parent).ActivationRelay is { ElapsedSeconds: 0, Children.Count: 0 } &&
                 world.AdvanceActivationRelays(10).Count == 0, "Settled parent clock did not reset or replayed a source activation.");
 
             world.ArmActivationChildren(parent, player); world.AdvanceActivationRelays(.25f);
@@ -82,6 +87,7 @@ internal static class ActivationParentContracts
                 "Cold loading lost the explicit source graph issues.");
             Require(JsonSerializer.Serialize(cold.Get(parent).ActivationRelay) == JsonSerializer.Serialize(world.Get(parent).ActivationRelay),
                 "Cold loading changed the authored thresholds, generation or elapsed clock.");
+            Require(cold.PendingActivationWorkCount == 1, "Cold activation work was not rebuilt after validated state transfer.");
             var coldReady = cold.AdvanceActivationRelays(.25f).Single();
             Require(coldReady.Child.ActionReference == parent && Scripts(cold).Activate(child, parent).Error is null &&
                 cold.Get(child).Read(1) == 2, "Cold delivery lost its single remaining source action.");
