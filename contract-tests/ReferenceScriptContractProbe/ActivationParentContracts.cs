@@ -15,10 +15,21 @@ internal static class ActivationParentContracts
         {
             var path = Path.Combine(directory, "Parents.esm"); File.WriteAllBytes(path, Fixture());
             var hash = SHA256.HashData(File.ReadAllBytes(path));
+            SourceIndexContracts.Verify(directory, "Parents.esm", (owner, token) => owner.ReadActivationParentIndex(token),
+                index => JsonSerializer.Serialize(new
+                {
+                    children = index.Children.Select(pair => new { parent = pair.Key, children = pair.Value.Select(value => new { value.Child, value.Delay }) }),
+                    index.Issues
+                }));
+            SourceIndexContracts.VerifyFailure(directory, Join(Fixture(), Record("REFR", 0xfff, Field("XAPR", [1]))),
+                owner => owner.ReadActivationParentIndex());
             using var records = FalloutPluginStack.Load(directory, ["Parents.esm"]);
             var cell = FalloutCellSceneReader.Read(records, Key(0x800));
             using var world = new FalloutReferenceWorld(records); world.LoadCell(cell);
             var player = records.RuntimeFormKey(0x14); var parent = Key(0x900); var child = Key(0x901);
+            Require(records.ReadActivationParentIndex().Children[Key(0x920)].Select(value => value.Child)
+                .SequenceEqual(new uint[] { 0x921, 0x922, 0x923, 0x924 }.Select(Key)),
+                "Source indexing omitted placed actor/projectile reference families.");
             Require(world.ActivationParentIssues.Count == 3 && world.ActivationParentIssues.Any(issue => issue.Error == "missing parent") &&
                 world.ActivationParentIssues.Any(issue => issue.Error == "deleted winning parent") &&
                 world.ActivationParentIssues.Any(issue => issue.Error == "parent has non-reference type ACTI"),
@@ -45,6 +56,13 @@ internal static class ActivationParentContracts
             Require(world.AdvanceActivationRelays(.25f).Count == 0, "Positive source delay delivered too early.");
             world.ArmActivationChildren(parent, player);
             var ready = world.AdvanceActivationRelays(.25f);
+            using (var independent = new FalloutReferenceWorld(records))
+            {
+                independent.LoadCell(cell);
+                Require(independent.ActivationParentIssues.Count == 3 && independent.AdvanceActivationRelays(100).Count == 0 &&
+                    independent.Get(parent).ActivationRelay is null,
+                    "Shared source declarations acquired another world's activation clock.");
+            }
             Require(ready.Count == 1 && ready[0].Child.Reference == child && ready[0].Child.ActionReference == parent &&
                 ready[0].Child.DelaySeconds == .5f, "Repeated activation duplicated or restarted the parent's shared elapsed cycle.");
             Require(scripts.Activate(child, ready[0].Child.ActionReference).Error is null && effects.Single().Argument == parent &&
@@ -91,9 +109,16 @@ internal static class ActivationParentContracts
             using var rejected = new FalloutReferenceWorld(records); Reject(() => rejected.Restore(corrupted));
             Require(rejected.InstanceCount == 0 && hash.SequenceEqual(SHA256.HashData(File.ReadAllBytes(path))),
                 "Source-drift refusal mutated the world or owned bytes.");
+            var patchHeader = new byte[12]; BinaryPrimitives.WriteSingleLittleEndian(patchHeader, 1.34f);
+            File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(
+                Record("TES4", 0, Field("HEDR", patchHeader), Field("MAST", Text("Parents.esm")), Field("DATA", new byte[8])),
+                Record("REFR", 0x901, Field("XAPR", Join(BitConverter.GetBytes(0x900u), BitConverter.GetBytes(.25f)))), Deleted(0x903)));
+            using (var patched = FalloutPluginStack.Load(directory, ["Parents.esm", "Patch.esp"]))
+                Require(patched.ReadActivationParentIndex().Children[parent] is { Count: 1 } edges && edges[0] == (child, .25f),
+                    "Source indexing lost winning delays or retained a deleted child.");
             Console.WriteLine("OPENNV_ACTIVATION_PARENT_CONTRACT_PASS sourceDelay=true parentAction=true sameCycleRearm=true " +
                 "noReplay=true newerMarkPreserved=true cold=true unloadedClockSuspended=true faultRetained=true sourceDriftRefused=true " +
-                "independentComponents=true brokenEndpointsVisible=true invalidComponentAtomic=true");
+                "independentComponents=true brokenEndpointsVisible=true invalidComponentAtomic=true workerIndex=true cancelledRetry=true immutableReuse=true independentWorlds=true");
         }
         finally { Directory.Delete(directory, true); }
     }
@@ -124,7 +149,9 @@ internal static class ActivationParentContracts
             Record("DOOR", 2, Field("SCRI", BitConverter.GetBytes(0x50u))),
             Record("SCPT", 0x50, Field("SCHR", scriptHeader), Field("SLSD", local), Field("SCVR", Text("calls")),
                 Field("SCRO", BitConverter.GetBytes(0x14u)), Field("SCTX", Text("begin OnActivate\nif IsActionRef player == 1\nelse\nset calls to calls + 1\nActivate\nendif\nend"))),
-            Record("CELL", 0x800, Field("DATA", [1])), group);
+            Record("CELL", 0x800, Field("DATA", [1])), group,
+            Record("REFR", 0x920), Record("ACHR", 0x921, Parent(0x920, 1)), Record("ACRE", 0x922, Parent(0x920, 1)),
+            Record("PGRE", 0x923, Parent(0x920, 1)), Record("PMIS", 0x924, Parent(0x920, 1)));
     }
     private static FalloutFormKey Key(uint id) => new("Parents.esm", id);
     private static byte[] Deleted(uint id)

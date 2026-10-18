@@ -25,8 +25,8 @@ internal sealed record FalloutActivationRelaySnapshot(string SourceSha256, float
 }
 internal sealed record FalloutActivationRelayDelivery(FalloutFormKey Parent, FalloutActivationRelayChild Child);
 
-// Source XAPR belongs to the child. Its reverse graph and elapsed cycle are
-// gameplay state, independent of the parent's model/controller lifetime.
+// Source XAPR belongs to the child. Its reverse declarations are immutable;
+// the elapsed cycle belongs to each world, independent of model/controller life.
 internal static class FalloutActivationParents
 {
     internal static IReadOnlyList<FalloutActivationParent> Read(FalloutPluginRecord reference)
@@ -63,30 +63,16 @@ internal static class FalloutActivationParents
 
 internal sealed partial class FalloutReferenceWorld
 {
-    private Dictionary<FalloutFormKey, List<(FalloutFormKey Child, float Delay)>>? _activationChildren;
+    private IReadOnlyDictionary<FalloutFormKey, IReadOnlyList<(FalloutFormKey Child, float Delay)>>? _activationChildren;
     private IReadOnlyList<FalloutActivationParentIssue> _activationParentIssues = [];
-    private Dictionary<FalloutFormKey, List<(FalloutFormKey Child, float Delay)>> ActivationChildren
+    private IReadOnlyDictionary<FalloutFormKey, IReadOnlyList<(FalloutFormKey Child, float Delay)>> ActivationChildren
     {
         get
         {
             if (_activationChildren is { } known) return known;
-            var children = new Dictionary<FalloutFormKey, List<(FalloutFormKey, float)>>();
-            var issues = new List<FalloutActivationParentIssue>();
-            foreach (var reference in new[] { "REFR", "ACHR", "ACRE", "PGRE", "PMIS" }.SelectMany(records.EffectiveRecords))
-            {
-                if (reference.IsDeleted) continue;
-                foreach (var declaration in FalloutActivationParents.Read(reference))
-                {
-                    var error = !records.TryGetWinner(declaration.Parent, out var parent) ? "missing parent" :
-                        parent.IsDeleted ? "deleted winning parent" :
-                        !Placed(parent) ? $"parent has non-reference type {parent.Signature}" : null;
-                    if (error is not null) issues.Add(new(reference.FormKey, declaration.Parent, error));
-                    if (!children.TryGetValue(declaration.Parent, out var values)) children.Add(declaration.Parent, values = []);
-                    values.Add((reference.FormKey, declaration.DelaySeconds));
-                }
-            }
-            _activationParentIssues = Array.AsReadOnly(issues.ToArray());
-            _activationChildren = children; return children;
+            var source = records.ReadActivationParentIndex();
+            _activationParentIssues = source.Issues;
+            return _activationChildren = source.Children;
         }
     }
     private static bool Placed(FalloutPluginRecord record) => record.Signature is "REFR" or "ACHR" or "ACRE" or "PGRE" or "PMIS";

@@ -99,11 +99,39 @@ cold attack clocks/RNG/event prefixes and both player weapon-preparation checks
 pass. The complete runtime gate and hosted checks pass. Ordinary terrain
 deathclaw combat and physical VR acceptance remain open.
 
-Next owner: codex/npc-publication-stalls, from verified main/origin/main
-8448d81be4bf05f0f6702543952d8a6655461aa4 with no open task PR. The active diagnostic
-adds a bounded post-audit hold so NPC construction profiling can collect rundown
+Next owner: codex/loading-source-indexes, from verified main/origin/main
+44623dbbd54b90f3222c7b53e66c7c3333db8fcf with no open task PR. A fresh optimized
+loading trace attributes roughly 779 ms to activation-parent source indexing and
+711 ms to source radio station indexing during script restore, inside roughly
+1,039 ms of quest-host creation. These sampled nested durations are not additive
+frame timings. The candidate prepares immutable stack-owned indexes on the
+existing loading worker before save-validation consumers; fresh worlds reuse
+declarations while keeping activation cycles, radio discovery/reception and
+saved clocks independently owned. Worker cancellation/retry, concurrent cold
+publication, malformed retries, winning/deleted records, the five placed families,
+disposed sources and existing cold gameplay contracts pass. The selected owned
+audit matches the complete previous source algorithms: 90 parents, 108 links,
+29 stations, zero issues/errors; querying source issues creates no gameplay
+instances. Ordinary window close during each real first scan exits zero with
+readers drained, no completed index and the original checkpoint unchanged.
+Optimized Continue takes 26.12 versus 23.40 wall seconds, with the largest
+observed loading interval falling from 2,449.09 to 1,368.75 ms. This ordered pair
+is not a controlled total-speedup or headset claim. A separate trace locates
+both scans on the worker and roughly 254 ms of scene-thread quest-host creation.
+The complete runtime gate passes. Material dependency preparation, native part
+publication, explicit saves and unexplained firing spikes remain open. Do not
+claim that the remaining second-scale loading freeze is fixed.
+The final trace locates roughly 1,170 ms on the scene thread inside
+FalloutReferenceWorld.Restore, including 1,068 ms validating retained travel and
+1,012 ms loading its owned navigation graph. These nested samples are not
+additive. This is the next measured loading owner: inspect source graph reuse,
+adjacency validation and preparation while preserving the saved route and exact
+source/portal/floor refusals. Player presentation also retains roughly 509 ms
+of rebuild work in that trace. Neither timing establishes headset performance.
+
+Merged PR #216 adds a bounded post-audit hold so NPC construction profiling can collect rundown
 before host exit. Resolved stacks identify source BSA inflation during material
-publication, dominated by bit-at-a-time DEFLATE validation. The candidate adds a
+publication, dominated by bit-at-a-time DEFLATE validation. The repair adds a
 bounded nine-bit Huffman lookup and byte-window reads, retaining the canonical
 long-code/tail path and strict extent policy. Selected independent vectors and
 23,200 private baseline differential cases agree. A controlled Release helper on
@@ -116,7 +144,7 @@ source vectors and cancellation checks; the worst selected part step falls from
 wall seconds, but the largest loading draw interval remains 2,457.12 versus
 2,408.73 ms. Five starting-view shots retain no handling error; later firing
 windows still exceed 100 ms. This ordered pair is not encounter/headset timing
-acceptance. The complete runtime gate passes. Short-host traces without resolved
+acceptance. The complete runtime gate and all hosted checks pass. Short-host traces without resolved
 stacks are unusable evidence. See runtime-performance.md for methods and limits.
 
 An optimized ordinary terrain run from the nearby healthy checkpoint has used
@@ -151,7 +179,7 @@ performance, FO3 VR, mods and TTW remain unaccepted.
 
 Package g pins source 92148ee84f3643f1b11b93f90fcd1942bdcb896f; its previous
 asset-free package/hash validation does not establish playability. Repair PRs
-#210, #212, #213, #214 and #215 are integrated into main. Local main was verified equal to
+#210, #212, #213, #214, #215 and #216 are integrated into main. Local main was verified equal to
 origin/main with no open task PR before starting the current feature branch.
 Do not change package g's manifest to imply acceptance.
 

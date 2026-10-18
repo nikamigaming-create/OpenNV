@@ -1,5 +1,58 @@
 # Runtime performance and CPU scheduling
 
+## Activation-parent and radio source indexes
+
+A fresh optimized loading trace after the DEFLATE repair attributes roughly
+779 ms on the scene thread to the full activation-parent reverse graph and
+711 ms to source radio station indexing during script restore. The latter sits
+inside roughly 1,039 ms of quest-host creation; nested samples are not additive
+frame durations. These declarations are immutable source data, while relay
+clocks, radio reception, discovery, notifications and tuning are gameplay state.
+
+The plugin stack now owns read-only indexes for these declarations. The existing
+loading worker prepares both before constructing save-validation consumers.
+Continue's fresh reference world and script host reuse the same source indexes,
+retaining independent gameplay state. Winning REFR/ACHR/ACRE/PGRE/PMIS declarations,
+deleted overrides, broken activation endpoints and station source errors retain
+their previous handling. Cancellation is checked between records and before
+publication. A failed/cancelled scan cannot cache a partial index; disposal uses
+the same source-index lock and existing session reader drain.
+
+Synthetic checks cover actual worker cancellation and complete retry, concurrent
+cold publication, malformed retry, disposed sources, winning delays/stations,
+deleted children/transmitters, the five existing placed-reference families and independent
+world/receiver state. Existing cold activation delivery, radio discovery,
+applied enable, range/portal and source-error tests remain in use. A private
+owned-data audit compares the complete previous algorithms with both prepared
+indexes: 90 parents, 108 activation edges and 29 stations, with no source issues
+in this installation. Every declaration and retained error agrees; two fresh
+worlds acquire no gameplay instances from querying the source issues. This
+establishes source-index equivalence, not activation/radio gameplay coverage.
+
+The `activation-index-window-close` and `radio-index-window-close` cases in
+`Test-NativeSessionRetirement.ps1` interrupt the actual first scan via ordinary
+window close. Both exit zero with source readers drained, no completed index
+for the interrupted stage and the original checkpoint unchanged. Preparing the
+indexes before save validation ensures the marker identifies real work rather
+than a later cached lookup. Recording remains off.
+
+Separate optimized Vulkan/Forward+ flat runs continue copies of the same save,
+with builds, bots, recording and detailed snapshots off. Before versus final
+candidate wall time is 26.12 versus 23.40 seconds; the largest observed loading
+draw interval falls from 2,449.09 to 1,368.75 ms. This ordered pair does not isolate
+OS/driver caching or establish a total-loading speedup. Work remains in the
+loading worker (1,049.5 ms activation and 673.1 ms radio in the final run).
+A separate profiled candidate locates both scans on the worker and observes
+roughly 254 ms inside scene-thread quest-host creation, versus 1,039 ms in the
+earlier trace. Traced timings are supporting attribution, not frame acceptance.
+The remaining second-scale freeze, native publication, explicit saves, combat
+spikes and physical-headset CPU/GPU/missed-frame budgets remain open.
+The same final trace attributes roughly 1,170 ms of scene-thread reference-world
+restore to a path containing retained travel validation (1,068 ms) and owned
+navigation-graph loading (1,012 ms). Source mesh reading and adjacency validation
+remain work inside that path. These nested samples are not additive; source
+navigation preparation/reuse and its exact refusals need the next investigation.
+
 ## October 18 source inflation hotspot
 
 Resolved managed stacks from the native appearance fixture place roughly 2.0
