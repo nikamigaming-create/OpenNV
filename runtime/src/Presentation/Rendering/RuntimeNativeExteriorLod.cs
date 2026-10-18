@@ -23,6 +23,9 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private readonly Dictionary<string, string> _errors = [];
     private IReadOnlyList<FalloutLodBlock> _selected = [];
     private Task? _read;
+    private CancellationTokenSource? _batchCancellation;
+    private bool _selectionDirty;
+    private Vector2 _forward;
     private ChannelReader<Payload>? _uploads;
     private IEnumerator<bool>? _upload;
     private readonly CancellationTokenSource _readCancellation = new();
@@ -114,6 +117,8 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         var camera = GetViewport().GetCamera3D();
         if (camera is null) return;
         camera.Far = Math.Max(camera.Far, ViewDistanceMeters);
+        var direction = -camera.GlobalBasis.Z;
+        _forward = new Vector2(direction.X, -direction.Z);
         ProcessAt(camera.GlobalPosition, delta);
     }
 
@@ -121,19 +126,42 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     {
         NativeExteriorDetailBlend.SetRegion(position, 4096 * _units, _detailRadius, _completeTerrainCover, _completeObjectCover);
         RenderingServer.GlobalShaderParameterSet("opennv_lod_camera_xz", new Vector2(position.X, position.Z));
+        _updateTime += (float)delta;
+        if (_updateTime >= .05f)
+        {
+            _updateTime = 0;
+            if (position.DistanceSquaredTo(_lastSelection) >= 64)
+            {
+                _lastSelection = position;
+                var selected = _catalog.Select(position.X / _units, -position.Z / _units);
+                if (!_selected.SequenceEqual(selected))
+                {
+                    _selected = selected;
+                    _selectionDirty = true;
+                    // Stop obsolete preparation without waiting for it on the
+                    // frame owner. Already admitted coverage remains usable.
+                    _batchCancellation?.Cancel();
+                    Commit();
+                }
+            }
+        }
         if (_read is { IsCompleted: true } read)
         {
             _read = null;
+            _batchCancellation?.Dispose(); _batchCancellation = null;
             try { read.GetAwaiter().GetResult(); }
             catch (Exception error) { Report("source-read", error); }
         }
+        NativePublicationBudget.SetPending(true, _upload is not null || (_uploads?.Count ?? 0) != 0);
         if (_uploads is { } uploads)
         {
             var started = Stopwatch.GetTimestamp();
             var changed = false;
-            while (_upload is not null || uploads.Count != 0)
+            while ((_upload is not null || uploads.Count != 0) && NativePublicationBudget.TryBegin(true, out var operationStarted))
             {
-                if (_upload is null && uploads.TryRead(out var result)) _upload = Upload(result).GetEnumerator();
+                if (_upload is null && uploads.TryRead(out var result) &&
+                    _selected.Any(block => result.Block.Contains(block) || block.Contains(result.Block)))
+                    _upload = Upload(result).GetEnumerator();
                 try
                 {
                     if (_upload is not null && !_upload.MoveNext())
@@ -141,27 +169,24 @@ internal partial class RuntimeNativeExteriorLod : Node3D
                 }
                 catch (Exception error)
                 { _upload?.Dispose(); _upload = null; Report("tile-publication", error); changed = true; }
+                finally { NativePublicationBudget.Complete(operationStarted); }
                 _lastUploadMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 _maximumUploadMilliseconds = Math.Max(_maximumUploadMilliseconds, _lastUploadMilliseconds);
-                if (_lastUploadMilliseconds >= 3) break;
             }
             if (changed) Commit();
             if (uploads.Count == 0 && _upload is null && _read is null) _uploads = null;
         }
-        _updateTime += (float)delta;
-        if (_updateTime < .05f) return;
-        _updateTime = 0;
-        if (_read is not null || _uploads is not null || position.DistanceSquaredTo(_lastSelection) < 64) return;
-        _lastSelection = position;
-        _selected = _catalog.Select(position.X / _units, -position.Z / _units);
-        var missing = _catalog.PreparationOrder(_selected, _cache.Keys.Concat(_failed).ToHashSet(), position.X / _units, -position.Z / _units);
+        if (_read is not null || _uploads is not null || !_selectionDirty) return;
+        _selectionDirty = false;
+        var missing = _catalog.PreparationOrder(_selected, _cache.Keys.Concat(_failed).ToHashSet(), position.X / _units, -position.Z / _units, _forward.X, _forward.Y);
         if (missing.Count == 0) { Commit(); return; }
         // CPU reads/decompression stay off the render thread. Uploads retain
         // the preceding complete cover until the new selection is constructed.
         var output = Channel.CreateBounded<Payload>(new BoundedChannelOptions(FalloutContentWorkers.Concurrency * 2)
         { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         _uploads = output.Reader;
-        var cancellation = _readCancellation.Token;
+        _batchCancellation = CancellationTokenSource.CreateLinkedTokenSource(_readCancellation.Token);
+        var cancellation = _batchCancellation.Token;
         _read = Task.Run(async () =>
         {
             Tile Read(string? path)
@@ -187,6 +212,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
                     }
                     return new(path, nif, bytes.Length, null);
                 }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
                 catch (Exception error) { return new(path, null, bytes?.Length ?? 0, error); }
             }
             try
@@ -205,12 +231,14 @@ internal partial class RuntimeNativeExteriorLod : Node3D
 
     public override void _ExitTree()
     {
+        NativePublicationBudget.SetPending(true, false);
         _readCancellation.Cancel();
         _upload?.Dispose(); _upload = null;
     }
 
     internal Task StopSourceReads()
     {
+        NativePublicationBudget.SetPending(true, false);
         SetProcess(false);
         _readCancellation.Cancel();
         _upload?.Dispose(); _upload = null;

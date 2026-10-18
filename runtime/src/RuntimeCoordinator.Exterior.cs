@@ -17,10 +17,12 @@ public partial class RuntimeCoordinator
     private sealed record PreparedExteriorGrid(FalloutExteriorGridScene Grid, IReadOnlyDictionary<FalloutFormKey, FalloutLandscapeTransport> Landscapes,
         IReadOnlyDictionary<string, FalloutNifFile> Models);
     private Task<PreparedExteriorGrid>? _nativeGridRead;
+    private readonly List<Task> _retiredGridReads = [];
     private CancellationTokenSource? _nativeGridReadCancellation;
     private FalloutExteriorGridScene? _nativeGridPending;
     private Queue<(string Source, Func<bool> Upload)>? _nativeGridUploads;
     private readonly List<Node3D> _nativeGridStaged = [];
+    private readonly List<RuntimeNativeLandscapeTransportBuilder.Assembly> _nativeLandPreparations = [];
     private readonly Dictionary<FalloutFormKey, Node3D> _nativeGridModels = [];
     private (int X, int Y)? _nativeGridFailed;
     private double _nativeGridUploadMilliseconds;
@@ -65,11 +67,11 @@ public partial class RuntimeCoordinator
 
     private void AdvanceNativeExteriorStreaming(double delta)
     {
+        NativePublicationBudget.SetPending(false, false);
         if (_nativeStreamRoot is not null && _nativeStreamRoot != _nativeCurrentCellRoot)
         {
-            foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
-            _nativeGridStaged.Clear(); _nativeGridModels.Clear(); _nativeGridUploads = null; _nativeGridPending = null;
-            CancelNativeGridRead(); _nativeStreamRoot = null; _nativeGridFailed = null; _nativeGridTarget = null;
+            RetireNativeGridPreparation();
+            _nativeStreamRoot = null; _nativeGridFailed = null;
             _nativeLandLastUse.Clear(); _nativeRecentModelSets.Clear();
         }
         if (_nativePlayer is not { } player || _nativeActiveCell?.Cell.Worldspace is not { } world ||
@@ -83,9 +85,7 @@ public partial class RuntimeCoordinator
             // change only after ordinary movement reaches the requested cell.
             if (_nativeGridTarget is { } requested && coordinates != requested && coordinates != _nativeActiveCell.Cell.Coordinates)
             {
-                foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
-                _nativeGridStaged.Clear(); _nativeGridModels.Clear(); _nativeGridUploads = null; _nativeGridPending = null;
-                CancelNativeGridRead(); _nativeGridTarget = null;
+                RetireNativeGridPreparation();
             }
             if (_nativeGridRead is { IsCompleted: true } read)
             {
@@ -94,17 +94,18 @@ public partial class RuntimeCoordinator
             }
             if (_nativeGridUploads is { } uploads)
             {
+                NativePublicationBudget.SetPending(false, uploads.Count != 0);
                 var started = Stopwatch.GetTimestamp();
                 // A pending decode or partial body yields. Visit each queued
                 // item at most once this frame, without waiting on a worker.
                 var remaining = uploads.Count;
-                while (remaining-- > 0 && uploads.TryDequeue(out var upload))
+                while (remaining-- > 0 && NativePublicationBudget.TryBegin(false, out var operationStarted) && uploads.TryDequeue(out var upload))
                 {
-                    if (!upload.Upload()) uploads.Enqueue(upload);
+                    try { if (!upload.Upload()) uploads.Enqueue(upload); }
+                    finally { NativePublicationBudget.Complete(operationStarted); }
                     _nativeGridUploadMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                     if (_nativeGridUploadMilliseconds > _nativeGridMaximumUploadMilliseconds)
                     { _nativeGridMaximumUploadMilliseconds = _nativeGridUploadMilliseconds; _nativeGridMaximumUploadSource = upload.Source; }
-                    if (_nativeGridUploadMilliseconds >= 3) break;
                 }
                 if (uploads.Count == 0 && coordinates == _nativeGridPending!.Scene.Cell.Coordinates) CommitNativeExteriorGrid();
                 return;
@@ -136,6 +137,11 @@ public partial class RuntimeCoordinator
                             cancellation.ThrowIfCancellationRequested();
                             return FalloutLandscapeTransportResolver.ResolveCell(_nativePluginStack!, cell, resolved.PersistentCell);
                         });
+                    foreach (var land in landscapes.Values)
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        RuntimeNativeLandscapeTransportBuilder.Prepare(land, units);
+                    }
                     foreach (var path in landscapes.Values.SelectMany(land => land.Textures.Values)
                         .SelectMany(texture => new[] { texture.DiffusePath, texture.NormalPath }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
                     {
@@ -151,23 +157,31 @@ public partial class RuntimeCoordinator
         catch (Exception error)
         {
             _nativeGridError = error.Message; _nativeGridFailed = _nativeGridTarget ?? coordinates;
-            CancelNativeGridRead(); _nativeGridUploads = null; _nativeGridPending = null;
-            _nativeGridTarget = null;
-            foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid)) node.QueueFree();
-            _nativeGridStaged.Clear(); _nativeGridModels.Clear();
+            RetireNativeGridPreparation();
             GD.PushError($"OPENNV_EXTERIOR_STREAM_FAIL cell={coordinates}: {error.Message}");
         }
     }
 
     private void CancelNativeGridRead()
     {
-        foreach (var preparation in _nativeGridNpcPreparations) preparation.Dispose();
+        NativePublicationBudget.SetPending(false, false);
+        foreach (var preparation in _nativeLandPreparations) preparation.Dispose();
+        _nativeLandPreparations.Clear();
+        _retiredGridReads.RemoveAll(task => task.IsCompleted);
+        foreach (var preparation in _nativeGridNpcPreparations)
+        {
+            _retiredGridReads.Add(preparation.ReadTask);
+            preparation.Dispose();
+        }
         _nativeGridNpcPreparations.Clear();
         _nativeGridReadCancellation?.Cancel();
         _nativeGridReadCancellation?.Dispose(); _nativeGridReadCancellation = null;
         if (_nativeGridRead is { } abandoned)
+        {
+            _retiredGridReads.Add(abandoned);
             _ = abandoned.ContinueWith(task => { _ = task.Exception; }, CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
         _nativeGridRead = null;
     }
 
@@ -179,6 +193,18 @@ public partial class RuntimeCoordinator
         // CELL can bind the same references; deferred deletion is too late.
         foreach (var node in _nativeGridStaged.Where(GodotObject.IsInstanceValid))
         {
+            // A detached actor has never entered the tree, so Free cannot
+            // deliver its normal _ExitTree binding retirement callback.
+            if (node is RuntimeNativeNpc npc)
+            {
+                npc.Combat?.RetireSourceBindings();
+                npc.RetireSourceBindings();
+            }
+            else if (node is RuntimeNativeCreature creature)
+            {
+                creature.Combat?.RetireSourceBindings();
+                creature.RetireSourceBindings();
+            }
             NativeOwnedAnimationSoundPlayer.UnloadSourceLoops(node);
             node.Free();
         }
@@ -218,14 +244,20 @@ public partial class RuntimeCoordinator
         _nativeGridPending = grid; _nativeGridUploads = new();
         var oldLand = root.GetChildren().OfType<RuntimeNativeLandscapeTransport>().Select(land => land.Source.ActiveCell).ToHashSet();
         foreach (var cell in grid.Cells.Where(cell => !oldLand.Contains(cell.FormKey)))
+        {
+            var preparation = new RuntimeNativeLandscapeTransportBuilder.Assembly(prepared.Landscapes[cell.FormKey],
+                _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures);
+            _nativeLandPreparations.Add(preparation);
             _nativeGridUploads.Enqueue((cell.FormKey.ToString(), () =>
             {
-                var land = RuntimeNativeLandscapeTransportBuilder.Build(prepared.Landscapes[cell.FormKey],
-                    _configuration.World.GameUnitsToMeters, _nativeLandscapeTextures);
+                if (!preparation.Advance()) return false;
+                var land = preparation.Take();
+                preparation.Dispose(); _nativeLandPreparations.Remove(preparation);
                 root.AddChild(land); GamebryoReferenceEnableRuntime.Apply(land, false); _nativeGridStaged.Add(land);
                 return true;
             }
             ));
+        }
         var previous = _nativeActiveCell!.References.Select(reference => reference.FormKey).ToHashSet();
         foreach (var reference in grid.Scene.References.Where(reference => !previous.Contains(reference.FormKey) &&
             _nativeReferencePresentation?.HasPrepared(reference.FormKey) != true))

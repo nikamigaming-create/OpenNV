@@ -121,7 +121,9 @@ internal partial class RuntimeNativeReferencePresentation : Node
                 warm.Node.QueueFree();
             }
         }
-        foreach (var reference in references) _enabled.TryAdd(reference.FormKey, _world.IsEnabled(reference.FormKey));
+        foreach (var reference in references)
+            if (!_enabled.ContainsKey(reference.FormKey))
+                _enabled.Add(reference.FormKey, _world.IsEnabled(reference.FormKey));
         _references = references; _materialize = materialize;
     }
 

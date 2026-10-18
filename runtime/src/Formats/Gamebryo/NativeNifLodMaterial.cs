@@ -60,7 +60,7 @@ internal static class NativeNifLodMaterial
         return material;
     }
 
-    private static Shader BuildShader(bool landscapePass)
+    internal static Shader BuildShader(bool landscapePass)
     {
         var code = new StringBuilder($$"""
             shader_type spatial;
@@ -97,9 +97,10 @@ internal static class NativeNifLodMaterial
                     texture(detail_mask, detail_uv).r > 0.5 &&
                     opennv_detail_coverage(source_world_xz, landscape) > opennv_detail_threshold(FRAGCOORD.xy)) discard;
                 vec4 atlas = texture(base_map, UV);
-                // The LOD building pass uses the atlas's transparent holes
-                // even without a NiAlphaProperty (for example tree cards).
-                if (!landscape && atlas.a < (1.0 / 255.0)) discard;
+                // Distant object alpha is a runtime pass state, absent from
+                // these NIF properties. Use the FNV LOD Fixes cutout contract
+                // (greater than byte 128); see docs/distant-world.md.
+                if (!landscape && atlas.a <= (128.0 / 255.0)) discard;
                 vec3 base = atlas.rgb * COLOR.rgb;
                 if (use_normal_map) {
                     vec3 decoded = normalize(texture(normal_map, UV).rgb * 2.0 - 1.0);

@@ -276,8 +276,15 @@ public partial class RuntimeCoordinator
         foreach (var lod in FindChildren("*", "", true, false).OfType<RuntimeNativeExteriorLod>())
             pending.Add(lod.StopSourceReads());
         CancelNativeGridRead();
+        pending.AddRange(_retiredGridReads);
         try { await Task.WhenAll(pending); }
         catch (Exception readError) { GD.Print($"OPENNV_SESSION_OLD_READ_FINISHED {readError.Message}"); }
+        // Staged actors are detached from the tree, but already own source
+        // callbacks and native resources. Scene teardown cannot retire them.
+        // Release them while the world and engine still exist, after readers
+        // stop, rather than leaving finalizers to run during engine shutdown.
+        RetireNativeGridPreparation();
+        _retiredGridReads.Clear();
     }
 
     private void OnNativeCloseRequested() => QuitNativeSession();

@@ -66,6 +66,9 @@ public partial class RuntimeCoordinator
     private void ReleaseExteriorNpc(ExteriorNpcPreparation? preparation)
     {
         if (preparation is null) return;
+        // Equipment changes can retire preparation before its worker finishes.
+        // Keep that reader in the session drain until its source access ends.
+        if (!preparation.ReadTask.IsCompleted) _retiredGridReads.Add(preparation.ReadTask);
         _nativeGridNpcPreparations.Remove(preparation);
         preparation.Dispose();
     }

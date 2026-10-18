@@ -42,6 +42,10 @@ public partial class NativeNifInstanceAudit : Node
                 await ExerciseOwnedCollisionLifetime(collisionRoot, collisionModel, collisionError, collisionOptions);
                 GetTree().Quit(); return;
             }
+            if (OS.GetCmdlineUserArgs() is ["--lod-alpha-gpu"])
+            {
+                await ExerciseLodAlphaPixels(); GetTree().Quit(); return;
+            }
             if (OS.GetCmdlineUserArgs() is ["--exterior-detail-gpu"])
             {
                 await ExerciseExteriorDetailPixels(); GetTree().Quit(); return;

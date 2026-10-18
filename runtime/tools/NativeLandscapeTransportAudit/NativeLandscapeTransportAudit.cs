@@ -50,7 +50,34 @@ public partial class NativeLandscapeTransportAudit : Node3D
             var terrain = new List<RuntimeNativeLandscapeTransport>();
             foreach (var cell in grid.Cells)
             {
-                var land = RuntimeNativeLandscapeTransportBuilder.Build(FalloutLandscapeTransportResolver.ResolveCell(records, cell, grid.PersistentCell), units, textureCache);
+                var source = FalloutLandscapeTransportResolver.ResolveCell(records, cell, grid.PersistentCell);
+                var prepared = await FalloutContentWorkers.Run(() => RuntimeNativeLandscapeTransportBuilder.Prepare(source, units));
+                using var assembly = new RuntimeNativeLandscapeTransportBuilder.Assembly(source, units, textureCache);
+                var steps = 0;
+                var maximumStep = 0d;
+                while (true)
+                {
+                    var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                    var complete = assembly.Advance();
+                    maximumStep = Math.Max(maximumStep, System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                    if (complete) break;
+                    steps++;
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                }
+                if (steps < 6) throw new InvalidOperationException("LAND publication collapsed into an atomic cell callback.");
+                var land = assembly.Take();
+                // Compare prepared collision with Godot's mesh extraction,
+                // independently of the new collision construction path.
+                using var extracted = land.Geometry.Mesh.CreateTrimeshShape();
+                if (extracted.Data.Length != prepared.Faces.Length || extracted.Data.Where((face, index) => face.DistanceTo(prepared.Faces[index]) > .001f).Any())
+                {
+                    var faces = extracted.Data;
+                    var mismatch = Enumerable.Range(0, Math.Min(faces.Length, prepared.Faces.Length)).FirstOrDefault(i => faces[i] != prepared.Faces[i], -1);
+                    var detail = mismatch < 0 ? "length" : $"index={mismatch} native={faces[mismatch]} prepared={prepared.Faces[mismatch]}";
+                    land.Free();
+                    throw new InvalidDataException($"Worker LAND faces differ native={faces.Length} prepared={prepared.Faces.Length} {detail}");
+                }
+                GD.Print($"OPENNV_LAND_PUBLICATION_PASS cell={cell.FormKey} steps={steps} maxStepMs={maximumStep:F3} workerFaces=true");
                 terrain.Add(land); AddChild(land);
                 if (!land.Geometry.Visible || Enumerable.Range(0, 4).Any(surface =>
                     land.Geometry.Mesh.SurfaceGetMaterial(surface) is not ShaderMaterial material ||
