@@ -7,7 +7,31 @@ package g remains rejected for physical VR use.
 
 ## Current owner
 
-Current owner: codex/fo1-source-art-fidelity, based on origin/main 448f71b0.
+Current owner: codex/fo1-scripted-door-use, based on origin/main 9e55b605.
+The user requires the entire FO1 game in our 3D presentation and three complete
+problem-free playthroughs before stopping. Completed qualifying playthroughs:
+**0 of 3**. Preserve separate run identities, starting character, source/build
+identity, ordinary-input progression, encountered issues, saves/cold continuations
+and ending evidence. A run with an unresolved problem does not qualify; fixes
+require renewed validation. Component tests and fixture placements never count
+as playthroughs. The full art/quest/enemy inventory remains required even when a
+particular route does not encounter it.
+
+Source metal-door use in Vault 13 previously reached unsupported INT opcode
+0x80f1. Original-binary inspection identifies object event cancellation; the
+shared C# VM now removes all represented script timers for that object without
+changing other targets, clock or insertion sequence. Synthetic checks pass for
+multiple matching events, idempotence, cold continuation and failure rollback.
+Native use now reaches the next failure, `missing-timer-contract`. Scheduling,
+delivery, source use-object effects and ordinary door play remain unfinished.
+The source-only door admission pass loads 72 maps and 392 doors, with four
+unbound initializers; those counts are not gameplay completion. Trace the opcode
+contracts and connect the shared queue to native gameplay and persistence, then
+exercise ordinary use and cold continuation. Vault entrance terminal activation
+remains a separate owner. The full local runtime gate and diff check pass for
+the timer-cancellation block; checked PR publication is next.
+
+The preceding authored-scenery repair is merged as PR #231.
 The first measured divergence is authored scenery fitting: projecting mesh
 bounding boxes includes empty corners, shrinking and shifting irregular models
 relative to their source FRMs. Static scenery now projects referenced mesh

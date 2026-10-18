@@ -57,6 +57,15 @@ internal sealed record ClassicIntTimerDelivery(
 
 internal static class ClassicIntTimerOwner
 {
+    internal static ClassicIntTimerState RemoveForObject(ClassicIntTimerState source, int targetHandle)
+    {
+        source.Validate();
+        if (targetHandle == 0) throw new InvalidOperationException("Classic INT timer target is null.");
+        var result = source with { Pending = source.Pending.Where(row => row.TargetHandle != targetHandle).ToArray() };
+        result.Validate();
+        return result;
+    }
+
     internal static int GameTicks(
         ClassicIntTimerContract contract,
         int seconds)
