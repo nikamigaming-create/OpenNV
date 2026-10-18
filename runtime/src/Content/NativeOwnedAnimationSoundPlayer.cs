@@ -205,6 +205,7 @@ internal sealed partial class NativeOwnedAnimationSoundPlayer : Node3D
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.AnimationAudio);
         foreach (var (voice, selected) in _spatial.Where(pair => _voices[pair.Key].Attachment is null)) ApplyListener(voice, selected);
     }
 

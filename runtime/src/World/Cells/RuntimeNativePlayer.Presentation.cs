@@ -115,6 +115,7 @@ internal partial class RuntimeNativePlayer
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.PlayerPresentation);
         if (!GetTree().Paused) AdvancePendingProjectileImpacts((float)delta);
         if (_presentationRecords is null) return;
         var active = !_modalInput && _sourceCamera is null && _furniturePhase == 0 && _movementEnabled;

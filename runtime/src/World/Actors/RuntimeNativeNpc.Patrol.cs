@@ -23,6 +23,7 @@ internal partial class RuntimeNativeNpc
 
     public override void _PhysicsProcess(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.NpcPackages);
         Combat?.StopPackageMotion();
         if (_findFurniture is not null) AdvanceFindFurniture(delta);
         if (_furnitureApproaching) { AdvanceFurnitureApproach(delta); return; }

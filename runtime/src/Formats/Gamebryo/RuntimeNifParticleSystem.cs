@@ -1,4 +1,5 @@
 using Godot;
+using System.Diagnostics;
 
 namespace OpenNV.Runtime.Formats.Gamebryo;
 
@@ -22,12 +23,24 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
     private FastNoiseLite? _turbulence;
     private Particle[] _particles = [];
     private float[] _drawBuffer = [];
+    private int[] _drawOrder = [];
+    private float[] _drawDistances = [];
     private MultiMesh _draw = null!;
     private MultiMeshInstance3D _visual = null!;
     private Aabb _publishedBounds;
     private double _nextBoundsRefresh;
     private int _visibleCount;
-    private readonly ParticleDistanceOrder _distanceOrder = new();
+    private ParticleDistanceOrder _distanceOrder = null!;
+    private static long _publicationCalls, _publishedParticles, _sortTicks, _packTicks, _uploadTicks;
+    internal static object PublicationTiming => new
+    {
+        scope = "process-cumulative-main-thread;upload-includes-native-call-not-GPU-execution",
+        calls = _publicationCalls,
+        particles = _publishedParticles,
+        sortMilliseconds = _sortTicks * (1000.0 / Stopwatch.Frequency),
+        packMilliseconds = _packTicks * (1000.0 / Stopwatch.Frequency),
+        uploadMilliseconds = _uploadTicks * (1000.0 / Stopwatch.Frequency)
+    };
     private float _units;
     private Transform3D _previousParent, _parent, _parentInverse;
     private float _parentSeconds;
@@ -135,11 +148,13 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         internal Color InitialColor;
     }
 
-    private sealed class ParticleDistanceOrder : IComparer<Particle>
+    private sealed class ParticleDistanceOrder(float[] distances) : IComparer<int>
     {
-        internal Vector3 Origin;
-        public int Compare(Particle a, Particle b) =>
-            b.Position.DistanceSquaredTo(Origin).CompareTo(a.Position.DistanceSquaredTo(Origin));
+        public int Compare(int a, int b)
+        {
+            var distance = distances[b].CompareTo(distances[a]);
+            return distance != 0 ? distance : a.CompareTo(b);
+        }
     }
 
     private void ConfigureSource(FalloutNifFile file, FalloutNifParticleSystem source,
@@ -226,6 +241,9 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             FalloutNifParticleGrowFade or FalloutNifParticleColor or FalloutNifParticleColorKeys).ToArray();
         _activeDrawModifiers = new FalloutNifParticleModifier[_drawModifiers.Length];
         _particles = new Particle[_data.Maximum];
+        _drawOrder = new int[_data.Maximum];
+        _drawDistances = new float[_data.Maximum];
+        _distanceOrder = new(_drawDistances);
         _drawBuffer = new float[checked(_data.Maximum * NativeParticleDrawBuffer.Stride)];
         if (material is not ShaderMaterial shader || shader.ResourceName != NativeNifEffectMaterial.ResourceIdentity)
             throw new NotSupportedException("Particle material has no admitted source shader.");
@@ -308,6 +326,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.Particle);
         BeginParentMotion(delta); Advance((float)delta); EndParentMotion();
         Publish();
     }
@@ -520,6 +539,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         if (_advancing) throw new InvalidOperationException("Particle publication cannot reenter an advancing lifetime.");
         if (_visibleCount != ActiveCount) { _draw.VisibleInstanceCount = ActiveCount; _visibleCount = ActiveCount; }
         if (ActiveCount == 0) return;
+        var sortStarted = Stopwatch.GetTimestamp();
         var camera = GetViewport().GetCamera3D();
         var basis = camera?.GlobalBasis.Orthonormalized() ?? Basis.Identity;
         if (!_source.WorldSpace) basis = GlobalBasis.Inverse() * basis;
@@ -527,10 +547,17 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
         // and blend state still determine their relationship to the world.
         if (camera is not null)
         {
-            _distanceOrder.Origin = _source.WorldSpace ? camera.GlobalPosition : ToLocal(camera.GlobalPosition);
-            Array.Sort(_particles, 0, ActiveCount, _distanceOrder);
-            ReindexParticles();
+            var origin = _source.WorldSpace ? camera.GlobalPosition : ToLocal(camera.GlobalPosition);
+            // Rendering never reorders simulation storage or its identity map.
+            // Compute each key once and sort compact, reusable draw indices.
+            for (var index = 0; index < ActiveCount; index++)
+            {
+                _drawOrder[index] = index;
+                _drawDistances[index] = _particles[index].Position.DistanceSquaredTo(origin);
+            }
+            Array.Sort(_drawOrder, 0, ActiveCount, _distanceOrder);
         }
+        var packStarted = Stopwatch.GetTimestamp();
         var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
         var maximum = -minimum;
         // Controller activity is stable during this synchronous publication.
@@ -540,7 +567,7 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             if (_active[modifier.Name]) _activeDrawModifiers[drawModifierCount++] = modifier;
         for (var i = 0; i < ActiveCount; i++)
         {
-            ref var particle = ref _particles[i];
+            ref var particle = ref _particles[camera is null ? i : _drawOrder[i]];
             var radius = particle.Radius;
             var color = particle.InitialColor;
             for (var modifierIndex = 0; modifierIndex < drawModifierCount; modifierIndex++)
@@ -571,7 +598,13 @@ internal sealed partial class RuntimeNifParticleSystem : Node3D
             _nextBoundsRefresh = SimulatedSeconds + 1;
             BoundsPublications++;
         }
+        var uploadStarted = Stopwatch.GetTimestamp();
         _draw.Buffer = _drawBuffer;
+        _sortTicks += packStarted - sortStarted;
+        _packTicks += uploadStarted - packStarted;
+        _uploadTicks += Stopwatch.GetTimestamp() - uploadStarted;
+        ++_publicationCalls;
+        _publishedParticles += ActiveCount;
     }
 
     internal static Color ParticleColor(FalloutNifParticleColor source, float fraction)

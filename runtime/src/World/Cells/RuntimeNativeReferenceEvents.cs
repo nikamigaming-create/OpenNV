@@ -337,6 +337,7 @@ internal partial class RuntimeNativeReferenceEvents : Node
 
     public override void _Process(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.ReferenceEvents);
         ++_frames;
         var tree = GetTree();
         if (!IsProcessing() || tree.Paused) return;

@@ -156,6 +156,7 @@ internal sealed partial class RuntimeNativeActorCombat
 
     public override void _PhysicsProcess(double delta)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.Combat);
         _enemyMuzzle?.Advance(delta);
         if (Dead) { RestoreDeath(); return; }
         if (_context is null || !_state.Enabled || _state.Unconscious) return;

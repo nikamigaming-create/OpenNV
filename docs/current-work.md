@@ -9,12 +9,29 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Current owner: codex/streaming-activation-budget, based on main/origin/main
-dd42e5fccd1208fe696b1e6c43ca2ade2a2142a6. PRs #226 and #227 are merged
-with hosted checks passing. The user requires worst-frame reductions across
-loading, idle, movement and fighting. Manual save capture is sliced; validation and transactional
-write run on a managed worker. The official export passed repeated ordinary
-combat/save and cold continuation with the original checkpoint unchanged.
+Current owner: codex/particle-render-order, based on main/origin/main
+5806430723dadbc571a4ada2b840bbe25874eab7. PR #228 is merged with all
+hosted checks passing. The active block separates particle draw sorting from
+simulation storage, reuses radio reception until exact player/placement/applied
+enable inputs change, and moves full actor/presentation/light snapshots to the
+explicit detailed diagnostic request. Direct cumulative owner and particle-stage
+timings distinguish managed work from native upload calls; these timings are
+inclusive, include descheduling, and must not be summed as independent costs.
+The final full runtime gate, synthetic camera-order invariance check, and owned
+240-frame smoke/bounds check pass. No whole-frame speed improvement is established.
+The earlier uncapped Vulkan idle sample measured 11.40 ms median, 19.09 ms p95,
+and 42.25 ms maximum, with roughly 0.72 ms combined viewport GPU time in its final
+snapshot. It does not meet the 6.94 ms budget for 144 Hz. A later run overlapped
+external compilation and is unsuitable for before/after performance comparison.
+Direct timings disprove the sampled trace's apparent dominance of particle
+publication. Reference presentation, particle simulation, and object animation
+remain leading measured gameplay owners. The final exported run, also overlapping external compilation, measured 13.67 ms
+median, 21.25 ms p95, 54.00 ms maximum and 6.65 ms for its last live summary.
+Continue took 30.42 seconds with a 495.74 ms worst observed loading interval.
+Ordinary firing completed its measured path in 4.38 ms and F5 completed, but the
+shot missed and provides no hit-reaction acceptance. Normal quit completed; the
+original checkpoint hash is unchanged. Loading/idle/combat/VR acceptance is
+open. Radio broadcast scheduling remains unimplemented. Recordings remain off.
 
 The merged terrain block replaces whole-cell LAND publication with worker-prepared
 geometry/collision faces and resumable native steps. Terrain and LOD share a

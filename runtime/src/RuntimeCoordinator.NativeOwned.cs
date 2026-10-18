@@ -69,7 +69,7 @@ public partial class RuntimeCoordinator
             manualSave = new { receipt = _nativeManualSaves.Receipt, history = detailed ? _nativeManualSaves.History : null },
             combatWheel = _nativeCombatWheel?.State,
             xr = _nativeXr?.State,
-            detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-reference-controller-and-quest-details",
+            detail = detailed ? "complete-runtime-snapshot" : "live-summary;request-state-for-actor-presentation-light-reference-controller-and-quest-details",
             reviewScope = !detailed || _nativeActiveCell is null ? null : new
             {
                 sourceCompatibilityId = RuntimeLiveContentSource.Current!.SaveCompatibilityId,
@@ -198,7 +198,7 @@ public partial class RuntimeCoordinator
             hudMessages = _nativeHudMessages?.State,
             subtitles = _nativeSubtitles?.State,
             pipBoy = _nativePipBoy?.State,
-            playerPresentation = _nativePlayer?.PresentationState,
+            playerPresentation = detailed ? _nativePlayer?.PresentationState : null,
             questScriptsUnbound = _nativeContinueOpening && _nativeOpeningRestore?.State.Scripts is null ? "Legacy save has no quest script state." : null,
             playerPackage = _nativeOpeningStageDriver?.PlayerPackageState,
             characterCreation = _nativeOpeningStageDriver?.CharacterCreationState,
@@ -218,7 +218,7 @@ public partial class RuntimeCoordinator
                 unbound = presenter.Frame?.UnboundChannels,
                 finalStageOperational = presenter.GetMeta("opennv_image_space_operational", false).AsBool(),
             }).ToArray(),
-            actors = _nativeReferencePresentation?.Actors
+            actors = !detailed ? null : _nativeReferencePresentation?.Actors
                 .Select(actor =>
                 {
                     var rotation = actor.GlobalBasis.GetRotationQuaternion();
@@ -230,15 +230,15 @@ public partial class RuntimeCoordinator
                         animation = actor.AnimationState,
                     };
                 }).ToArray(),
-            creatures = _nativeReferencePresentation?.Nodes.Values.OfType<RuntimeNativeCreature>()
+            creatures = !detailed ? null : _nativeReferencePresentation?.Nodes.Values.OfType<RuntimeNativeCreature>()
                 .Select(actor => new
                 {
                     position = new[] { actor.GlobalPosition.X, actor.GlobalPosition.Y, actor.GlobalPosition.Z },
                     scale = new[] { actor.Scale.X, actor.Scale.Y, actor.Scale.Z },
                     animation = actor.Observation,
                 }).ToArray(),
-            exteriorShadows = _nativeCurrentCellRoot?.GetChildren().OfType<RuntimeNativeExteriorEnvironment>().SingleOrDefault()?.ShadowState,
-            lights = cellChildren is null ? null : cellNodes.OfType<OmniLight3D>().Select(light => new
+            exteriorShadows = !detailed ? null : cellNodes.OfType<RuntimeNativeExteriorEnvironment>().SingleOrDefault()?.ShadowState,
+            lights = !detailed || cellChildren is null ? null : cellNodes.OfType<OmniLight3D>().Select(light => new
             {
                 reference = light.GetMeta("opennv_ligh_reference", "").AsString(),
                 emittance = light.GetMeta("opennv_ligh_emittance", "").AsString(),

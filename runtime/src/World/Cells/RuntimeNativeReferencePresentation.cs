@@ -200,6 +200,7 @@ internal partial class RuntimeNativeReferencePresentation : Node
 
     internal void Advance(double seconds)
     {
+        using var frameWork = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Measure(OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Owner.ReferencePresentation);
         if (Error is not null) throw new InvalidOperationException(Error);
         try
         {

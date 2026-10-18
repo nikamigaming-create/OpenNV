@@ -514,6 +514,8 @@ internal sealed partial class RuntimeLiveHarness : Node
                 previousFileRetryError = _lastFileWrite?.LastRetryError,
                 previousFileRetryFailure = _lastFileWrite?.LastRetryFailure,
                 hostDrawIntervals = _frameIntervals.Capture(),
+                particlePublication = OpenNV.Runtime.Formats.Gamebryo.RuntimeNifParticleSystem.PublicationTiming,
+                mainThreadOwners = OpenNV.Runtime.Diagnostics.RuntimeFrameWork.Capture(),
                 drawCalls = Godot.Performance.GetMonitor(Godot.Performance.Monitor.RenderTotalDrawCallsInFrame),
                 renderSetupCpuMilliseconds = renderTiming?.SetupMilliseconds,
                 renderMeasurementAgeMilliseconds = renderTiming is null ? (double?)null : Stopwatch.GetElapsedTime(renderTiming.Timestamp).TotalMilliseconds,
