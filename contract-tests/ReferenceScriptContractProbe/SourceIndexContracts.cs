@@ -3,7 +3,8 @@ using OpenNV.Runtime.Content;
 internal static class SourceIndexContracts
 {
     internal static void Verify<T>(string root, string plugin,
-        Func<FalloutPluginStack, CancellationToken, T> read, Func<T, string> describe) where T : class
+        Func<FalloutPluginStack, CancellationToken, T> read, Func<T, string> describe,
+        string observedSignature = "REFR", string? cacheReadSignature = null) where T : class
     {
         var previous = FalloutPluginRecord.ReadObserver;
         try
@@ -14,7 +15,7 @@ internal static class SourceIndexContracts
             var observed = 0;
             FalloutPluginRecord.ReadObserver = (record, _) =>
             {
-                if (record.Signature != "REFR") return;
+                if (record.Signature != observedSignature) return;
                 Require(Environment.CurrentManagedThreadId != caller, "Source preparation ran on its caller thread.");
                 if (Interlocked.Increment(ref observed) == 1) cancellation.Cancel();
             };
@@ -26,7 +27,10 @@ internal static class SourceIndexContracts
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
             Require(observed > 0, "Source cancellation was not exercised during an actual declaration read.");
             observed = 0;
-            FalloutPluginRecord.ReadObserver = (_, _) => Interlocked.Increment(ref observed);
+            FalloutPluginRecord.ReadObserver = (record, _) =>
+            {
+                if (cacheReadSignature is null || record.Signature == cacheReadSignature) Interlocked.Increment(ref observed);
+            };
             var complete = Task.Run(() => read(records, default)).GetAwaiter().GetResult();
             var afterRead = observed;
             Parallel.For(0, 16, _ => Require(ReferenceEquals(complete, read(records, default)),
@@ -48,7 +52,10 @@ internal static class SourceIndexContracts
             using (var concurrent = FalloutPluginStack.Load(root, [plugin]))
             {
                 observed = 0;
-                FalloutPluginRecord.ReadObserver = (_, _) => Interlocked.Increment(ref observed);
+                FalloutPluginRecord.ReadObserver = (record, _) =>
+                {
+                    if (cacheReadSignature is null || record.Signature == cacheReadSignature) Interlocked.Increment(ref observed);
+                };
                 var values = new T[16];
                 Parallel.For(0, values.Length, index => values[index] = read(concurrent, default));
                 Require(values.All(value => ReferenceEquals(value, values[0])) && observed == afterRead,

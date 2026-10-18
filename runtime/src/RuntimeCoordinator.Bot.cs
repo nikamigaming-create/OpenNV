@@ -246,11 +246,17 @@ public partial class RuntimeCoordinator
         var identity = (scene.Cell.Worldspace ?? scene.Cell.FormKey).ToString();
         if (_botNavigationIdentity != identity)
         {
-            var cells = scene.Cell.Worldspace is not { } worldspace ? new HashSet<FalloutFormKey> { scene.Cell.FormKey } :
-                _nativePluginStack!.EffectiveRecords("CELL").Where(record => FalloutCellSceneReader.ParentWorldspace(record) == worldspace)
-                    .Select(record => record.FormKey).ToHashSet();
-            _botNavigation = CellNavigationGraph.LoadOwned(_nativePluginStack!, cells,
-                (mesh, error) => GD.PushError($"OPENNV_BOT_NAVIGATION_UNAVAILABLE mesh={mesh} {error.Message}"));
+            var reused = FalloutNavigationSources.TryScope(_nativePluginStack!, scene.Cell.Worldspace ?? scene.Cell.FormKey, out var source);
+            if (reused) _botNavigation = source;
+            else
+            {
+                var cells = scene.Cell.Worldspace is not { } worldspace ? new HashSet<FalloutFormKey> { scene.Cell.FormKey } :
+                    _nativePluginStack!.EffectiveRecords("CELL").Where(record => FalloutCellSceneReader.ParentWorldspace(record) == worldspace)
+                        .Select(record => record.FormKey).ToHashSet();
+                _botNavigation = CellNavigationGraph.LoadOwned(_nativePluginStack!, cells,
+                    (mesh, error) => GD.PushError($"OPENNV_BOT_NAVIGATION_UNAVAILABLE mesh={mesh} {error.Message}"));
+            }
+            GD.Print($"OPENNV_NATIVE_NAVIGATION_SOURCE owner=combat-and-bot scope={identity} completeReused={reused} sourceSha256={_botNavigation!.SourceSha256}");
             _botNavigationIdentity = identity;
         }
         return identity;

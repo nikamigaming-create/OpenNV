@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Checkpoint,
     [string]$Executable = "",
     [ValidateSet("d3d12", "vulkan")][string]$RenderingDriver = "d3d12",
-    [ValidateSet("continue-reload-quit", "fresh-title-quit", "window-close", "loading-window-close", "index-window-close", "activation-index-window-close", "radio-index-window-close")]
+    [ValidateSet("continue-reload-quit", "fresh-title-quit", "window-close", "loading-window-close", "index-window-close", "activation-index-window-close", "radio-index-window-close", "navigation-index-window-close")]
     [string[]]$Cases = @("continue-reload-quit", "fresh-title-quit", "window-close"),
     [int]$TimeoutSeconds = 240
 )
@@ -58,7 +58,7 @@ foreach ($scenario in $Cases) {
     $inputRoot = Join-Path $privateRun "input"
     [IO.Directory]::CreateDirectory($inputRoot) | Out-Null
     $save = Join-Path $privateRun "save.json"
-    if ($scenario -in @("continue-reload-quit", "loading-window-close", "index-window-close", "activation-index-window-close", "radio-index-window-close")) { Copy-Item -LiteralPath $Checkpoint -Destination $save }
+    if ($scenario -in @("continue-reload-quit", "loading-window-close", "index-window-close", "activation-index-window-close", "radio-index-window-close", "navigation-index-window-close")) { Copy-Item -LiteralPath $Checkpoint -Destination $save }
     $stdout = Join-Path $diagnostics "$scenario.stdout.log"
     $stderr = Join-Path $diagnostics "$scenario.stderr.log"
     $game = $null
@@ -118,10 +118,11 @@ foreach ($scenario in $Cases) {
             Send-Input @{ op = "key"; key = "Escape"; pressed = $true; leaseMilliseconds = 50 }
             Press-Button "QUIT GAME"
             Press-Button "YES"
-        } elseif ($scenario -in @("index-window-close", "activation-index-window-close", "radio-index-window-close")) {
+        } elseif ($scenario -in @("index-window-close", "activation-index-window-close", "radio-index-window-close", "navigation-index-window-close")) {
             $indexMarker = switch ($scenario) {
                 "activation-index-window-close" { "OPENNV_NATIVE_SOURCE_INDEX_PREPARING stage=activation-parents" }
                 "radio-index-window-close" { "OPENNV_NATIVE_SOURCE_INDEX_PREPARING stage=radio-stations" }
+                "navigation-index-window-close" { "OPENNV_NATIVE_SOURCE_INDEX_PREPARING stage=saved-navigation" }
                 default { "OPENNV_NATIVE_SCRIPT_INDEX_PREPARING" }
             }
             $null = Wait-State { param($value) (Read-RunningOutput).Contains($indexMarker) }
@@ -162,9 +163,10 @@ foreach ($scenario in $Cases) {
         $completedIndex = switch ($scenario) {
             "activation-index-window-close" { "OPENNV_NATIVE_SOURCE_INDEX_READY stage=activation-parents" }
             "radio-index-window-close" { "OPENNV_NATIVE_SOURCE_INDEX_READY stage=radio-stations" }
+            "navigation-index-window-close" { "OPENNV_NATIVE_SOURCE_INDEX_READY stage=saved-navigation" }
             default { "OPENNV_NATIVE_SCRIPT_INDEX_READY" }
         }
-        if ($scenario -in @("index-window-close", "activation-index-window-close", "radio-index-window-close") -and
+        if ($scenario -in @("index-window-close", "activation-index-window-close", "radio-index-window-close", "navigation-index-window-close") -and
             ($output -notmatch "OPENNV_NATIVE_MENU_INDEX_CANCELLED" -or
                 $output.Contains($completedIndex) -or
                 $errors -match "OPENNV_NATIVE_LOAD_REJECTED|ObjectDisposedException")) {

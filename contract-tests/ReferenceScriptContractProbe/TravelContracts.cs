@@ -108,6 +108,7 @@ internal static class TravelContracts
                 GuardPackage(0x404, 0, 0x14001000, 180, 240), GuardPackage(0x405, 3, 0x10001000, 0, 0),
                 Record("IDLE", 0x500, Field("MODL", Text("actor/event.kf")), Field("DATA", [0x54, 0, 0, 0, 0, 0]))));
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Header("Base.esm"), Package(0x400, 0, 0x1404, radius: 3, legacy: true)));
+            CheckNavigationSources(directory);
             using var records = FalloutPluginStack.Load(directory, ["Base.esm", "Patch.esp"]);
             using var world = new FalloutReferenceWorld(records);
             CheckDoorAssociations(records);
@@ -329,7 +330,9 @@ internal static class TravelContracts
         }
         finally
         {
-            File.Delete(Path.Combine(directory, "Base.esm")); File.Delete(Path.Combine(directory, "Patch.esp")); Directory.Delete(directory);
+            File.Delete(Path.Combine(directory, "Base.esm")); File.Delete(Path.Combine(directory, "Patch.esp"));
+            File.Delete(Path.Combine(directory, "Malformed.esm")); File.Delete(Path.Combine(directory, "Worlds.esm"));
+            Directory.Delete(directory);
         }
     }
 
@@ -386,6 +389,7 @@ internal static class TravelContracts
         };
         var saved = JsonSerializer.Deserialize<FalloutReferenceSnapshot[]>(JsonSerializer.Serialize(world.Capture()))!;
         using var cold = new FalloutReferenceWorld(records);
+        FalloutNavigationSources.PrepareSavedTravel(records, saved, default);
         cold.Restore(saved);
         var retained = cold.Get(actor);
         Require(retained.PackageAssignment?.Done == false && retained.PackageMotion is { Seconds: 7.5, Travel.Complete: false } &&
@@ -627,6 +631,22 @@ internal static class TravelContracts
             "Cold current-location Travel recaptured its anchor or restarted its completed lifecycle.");
         Reject(() => source.Start(records, world, Key(0x900), [1, 2, 3]));
         Reject(() => source.Validate(records, world, actor, progress with { NavigationSha256 = new string('0', 64) }));
+        var invalidRoute = saved.Select(value => value.Reference == actor ? value with
+        {
+            PackageMotion = value.PackageMotion! with { Travel = progress with { RouteCell = Key(0xffff) } }
+        } : value).ToArray();
+        Reject(() => FalloutNavigationSources.PrepareSavedTravel(records, invalidRoute, default));
+        var retiredRoute = invalidRoute.Select(value => value.Reference == actor ? value with
+        {
+            PackageAssignment = value.PackageAssignment! with { Package = Key(0x400) }
+        } : value).ToArray();
+        FalloutNavigationSources.PrepareSavedTravel(records, retiredRoute, default);
+        using (var cancellation = new CancellationTokenSource())
+        {
+            cancellation.Cancel();
+            try { FalloutNavigationSources.PrepareSavedTravel(records, [], cancellation.Token); throw new InvalidDataException("Empty cancelled navigation preparation completed."); }
+            catch (OperationCanceledException) { }
+        }
         Console.WriteLine("OPENNV_CURRENT_LOCATION_TRAVEL_CONTRACT_PASS startPoseLatched=true weaponDrawn=true coldAnchorPreserved=true completedLifecyclePreserved=true unsupportedCreatureRefused=true");
     }
 
@@ -652,6 +672,70 @@ internal static class TravelContracts
     }
 
     private static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes));
+    private static void CheckNavigationSources(string directory)
+    {
+        NavigationTopologyContracts.Run();
+        FalloutFormKey Key(uint id) => new("Base.esm", id);
+        SourceIndexContracts.Verify(directory, "Base.esm", (owner, token) => FalloutNavigationSources.Region(owner, Key(0x800), token),
+            graph => graph.SourceSha256 + ":" + graph.NavMeshes + ":" + graph.Vertices + ":" + graph.Triangles,
+            observedSignature: "NAVM", cacheReadSignature: "NAVM");
+        SourceIndexContracts.VerifyFailure(directory,
+            Join(File.ReadAllBytes(Path.Combine(directory, "Base.esm")), Record("NAVM", 0x6ff, Field("DATA", [1]))),
+            owner => FalloutNavigationSources.Region(owner, new("Malformed.esm", 0x800)));
+        using (var records = FalloutPluginStack.Load(directory, ["Base.esm"]))
+        using (var first = new FalloutReferenceWorld(records))
+        using (var second = new FalloutReferenceWorld(records))
+        {
+            Require(!FalloutNavigationSources.TryScope(records, Key(0x800), out _) &&
+                !records.TryReadSourceIndex<FalloutNavigationSourceIndex>(out _, scope: Key(0x800)),
+                "A missing cached source graph was treated as complete or prepared by lookup.");
+            var prepared = Task.Run(() => FalloutNavigationSources.Region(records, Key(0x800))).GetAwaiter().GetResult();
+            Require(FalloutNavigationSources.TryScope(records, Key(0x800), out var cached) && ReferenceEquals(cached, prepared),
+                "A complete source graph could not be reused by the combat query owner.");
+            using (var cancelled = new CancellationTokenSource())
+            {
+                cancelled.Cancel();
+                try { records.TryReadSourceIndex<FalloutNavigationSourceIndex>(out _, cancelled.Token, Key(0x800)); throw new InvalidDataException("Cancelled source lookup returned a graph."); }
+                catch (OperationCanceledException) { }
+            }
+            Require(ReferenceEquals(first.TravelNavigation(Key(0x800)), prepared) &&
+                ReferenceEquals(second.TravelNavigation(Key(0x800)), prepared) &&
+                ReferenceEquals(FalloutNavigationSources.Cell(records, Key(0x800)), prepared) &&
+                !ReferenceEquals(FalloutNavigationSources.Region(records, Key(0x801)), prepared) &&
+                first.InstanceCount == 0 && second.InstanceCount == 0,
+                "Source graph reuse lost scope isolation, duplicated an interior graph or instantiated actors.");
+            var direct = CellNavigationGraph.LoadOwned(records, Key(0x802));
+            var shared = FalloutNavigationSources.Cell(records, Key(0x802));
+            Require(shared.SourceSha256 == direct.SourceSha256 && shared.DoorAssociations.SequenceEqual(direct.DoorAssociations) &&
+                shared.DoorAssociationErrors.SequenceEqual(direct.DoorAssociationErrors),
+                "Source graph reuse lost canonical bytes or retained door divergence.");
+            first.Dispose();
+            try { first.TravelNavigation(Key(0x800)); throw new InvalidDataException("Disposed world retained a route query owner."); }
+            catch (ObjectDisposedException) { }
+        }
+        byte[] Group(uint label, params byte[][] children)
+        {
+            var body = Join(children); var group = new byte[24 + body.Length]; Encoding.ASCII.GetBytes("GRUP").CopyTo(group, 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(4), (uint)group.Length);
+            BinaryPrimitives.WriteUInt32LittleEndian(group.AsSpan(8), label); BinaryPrimitives.WriteInt32LittleEndian(group.AsSpan(12), 1);
+            body.CopyTo(group, 24); return group;
+        }
+        File.WriteAllBytes(Path.Combine(directory, "Worlds.esm"), Join(Header(), Record("WRLD", 0x100),
+            Group(0x100, Record("CELL", 0x810, Field("DATA", [0]), Field("XCLC", new byte[8])),
+                Record("CELL", 0x811, Field("DATA", [0]), Field("XCLC", new byte[8]))),
+            NavigationMesh(0x610, 0x810), NavigationMesh(0x611, 0x811)));
+        using (var records = FalloutPluginStack.Load(directory, ["Worlds.esm"]))
+        {
+            var a = new FalloutFormKey("Worlds.esm", 0x810); var b = new FalloutFormKey("Worlds.esm", 0x811);
+            var region = FalloutNavigationSources.Region(records, a);
+            var cell = FalloutNavigationSources.Cell(records, a);
+            Require(region.NavMeshes == 2 && cell.NavMeshes == 1 && region.SourceSha256 != cell.SourceSha256 &&
+                ReferenceEquals(region, FalloutNavigationSources.Region(records, b)) &&
+                !ReferenceEquals(cell, region), "Exterior per-cell legacy graphs collided with whole-world travel graphs.");
+        }
+        Console.WriteLine("OPENNV_NAVIGATION_SOURCE_CACHE_PASS sourceScopes=true cellAndWorldDistinct=true independentWorlds=true immutableGraphOnly=true retainedDoors=true worker=true cancelledRetry=true nativeContacts=uninspected");
+    }
+
     private static byte[] Header(string? master = null) => Record("TES4", 0, Field("HEDR", new byte[12]),
         master is null ? [] : Join(Field("MAST", Text(master)), Field("DATA", new byte[8])));
     private static byte[] Global(uint id, float value) => Record("GLOB", id, Field("EDID", Text("Global" + id)), Field("FNAM", [(byte)'f']), Field("FLTV", BitConverter.GetBytes(value)));

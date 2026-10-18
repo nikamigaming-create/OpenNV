@@ -14,11 +14,12 @@ internal sealed record FalloutNavigationMesh(FalloutFormKey Form, FalloutFormKey
         => ReadCells(stack, new HashSet<FalloutFormKey> { cell });
 
     internal static IReadOnlyList<FalloutNavigationMesh> ReadCells(FalloutPluginStack stack, IReadOnlySet<FalloutFormKey> cells,
-        Action<FalloutFormKey, Exception>? unavailable = null)
+        Action<FalloutFormKey, Exception>? unavailable = null, CancellationToken cancellation = default)
     {
         var meshes = new List<FalloutNavigationMesh>();
         foreach (var record in stack.EffectiveRecords("NAVM"))
         {
+            cancellation.ThrowIfCancellationRequested();
             if ((record.Flags & 0x800) != 0) continue;
             var header = record.ReadSubrecords().SingleOrDefault(field => field.Signature == "DATA").Data;
             if (header.Length < 4) throw new InvalidDataException($"NAVM {record.FormKey} has no CELL identity.");
@@ -27,6 +28,7 @@ internal sealed record FalloutNavigationMesh(FalloutFormKey Form, FalloutFormKey
             catch (Exception error) when (unavailable is not null && error is InvalidDataException or NotSupportedException)
             { unavailable(record.FormKey, error); }
         }
+        cancellation.ThrowIfCancellationRequested();
         return meshes;
     }
 

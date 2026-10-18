@@ -106,7 +106,7 @@ internal sealed record FalloutTravelPackage(FalloutFormKey Form, uint Flags, int
                 progress.RouteWaypoints is not { Length: > 0 } && progress.RouteFailure is null && !progress.RoutePending)
                 throw new NotSupportedException("Saved NPC marker Travel lacks its native route cursor and source identity.");
             var navigation = progress.RouteCell is { } routeCell
-                ? world.TravelNavigation(routeCell) : CellNavigationGraph.LoadOwned(records, progress.Cell);
+                ? world.TravelNavigation(routeCell) : FalloutNavigationSources.Cell(records, progress.Cell);
             if (progress.RouteCell is { } currentCell &&
                 world.TravelRegion(currentCell) != world.TravelRegion(world.Placement(actor).Cell))
                 throw new InvalidDataException("Saved Travel route is outside the actor's authoritative placement.");

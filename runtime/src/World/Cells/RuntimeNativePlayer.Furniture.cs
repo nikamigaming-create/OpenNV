@@ -139,7 +139,7 @@ internal partial class RuntimeNativePlayer
             _furnitureMotion = NativeFurnitureRootMotion.Enter(_occupied, seat.HeadingDelta, entry.End);
             _approach = _furnitureMotion.Sample(entry.Start);
             if (!_furnitureNavigation.TryGetValue(cell, out _furnitureGraph))
-                _furnitureNavigation.Add(cell, _furnitureGraph = CellNavigationGraph.LoadOwned(records, cell));
+                _furnitureNavigation.Add(cell, _furnitureGraph = FalloutNavigationSources.Cell(records, cell));
             _furniturePath = null; _furnitureWaypoint = 0;
             if (world is not null && !world.ReserveFurnitureSeat(reference.FormKey, seat.Index, records.RuntimeFormKey(0x14)))
                 throw new InvalidOperationException("Player furniture source seat is reserved by another actor.");
