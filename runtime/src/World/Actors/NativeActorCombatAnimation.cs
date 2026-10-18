@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Godot;
 using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
@@ -19,9 +18,8 @@ internal sealed class NativeActorCombatAnimation
         NativeActorWeaponAttachment? weapon, bool loop, bool weaponCadence = false)
     {
         Path = path; _loop = loop;
-        if (!content.TryRead(path, null, out var bytes, out _)) throw new FileNotFoundException("Actor combat animation is absent.", path);
-        Hash = Convert.ToHexString(SHA256.HashData(bytes));
-        var source = FalloutNifFile.Read(bytes);
+        var source = NativeAnimationResources.For(content).Read(path);
+        Hash = source.Sha256.ToUpperInvariant();
         var sequences = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         var name = System.IO.Path.GetFileNameWithoutExtension(path);
         var declared = content.ActorAnimations.SelectedGroup(path);

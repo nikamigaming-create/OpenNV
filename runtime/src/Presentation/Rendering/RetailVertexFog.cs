@@ -1,7 +1,10 @@
 namespace OpenNV.Runtime.Presentation.Rendering;
 
-// Source vertex fog uses the length of the forward-depth clip XYZ, before
-// perspective division. Preserve that operation and interpolate its result.
+// Perspective fog is a world-distance presentation policy. Clip-space XY
+// stretches distance with FOV/aspect and asymmetric eye projections, making a
+// stationary horizon breathe when the player turns their head. View-space
+// length is rotation invariant and uses the same authored range in both modes.
+// Orthographic device previews retain their normalized projection convention.
 internal static class RetailVertexFog
 {
     internal const string ShaderSource = """
@@ -10,8 +13,9 @@ internal static class RetailVertexFog
             if (extent <= 0.0) return 0.0;
             vec4 clip = projection * view_position;
             float forward_z = (clip.w - clip.z) / (1.0 - CLIP_SPACE_FAR);
-            float distance = length(vec3(clip.xy, forward_z));
-            if (projection[3][3] == 0.0) distance *= game_units_per_meter;
+            float distance = projection[3][3] == 0.0
+                ? length(view_position.xyz) * game_units_per_meter
+                : length(vec3(clip.xy, forward_z));
             return pow(1.0 - clamp((fog.y - distance) / extent, 0.0, 1.0), fog.z);
         }
         """;

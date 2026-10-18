@@ -56,10 +56,11 @@ Escape/the center to cancel. Scroll or Page Up/Down changes pages.
 
 In OpenXR, use the thumbsticks for movement/turning and the controller
 pointer/trigger for menus. The left Menu button or right-stick click opens
-the pause menu. A short left X press saves; holding it opens the weapon
+the pause menu. A short left X press toggles enlarged Pip-Boy mode; holding it opens the weapon
 wheel. Hold the left trigger for consumables, select with the right stick and
-release to confirm. Hold the left grip to focus the Pip-Boy, then point and
-click with the right trigger; release the grip to return to gameplay. The right
+release to confirm. In Pip-Boy mode, point and click with the right trigger;
+tap X again to return to gameplay. Use the pause menu for manual saves. Left
+squeeze closes the free hand and holds the weapon support grip when nearby. The right
 trigger fires, A activates, and B reloads. The wrist device shares inventory
 and gameplay state.
 

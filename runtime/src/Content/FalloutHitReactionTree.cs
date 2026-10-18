@@ -1,36 +1,63 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+
 namespace OpenNV.Runtime.Content;
 
 /// <summary>Hit-context IDLE selection from winning records, independent of actor identity.</summary>
 internal sealed class FalloutHitReactionTree
 {
-    private readonly Dictionary<FalloutFormKey, FalloutIdleBranch> _branches;
     private readonly FalloutIdleBranch[] _roots;
-    private readonly Dictionary<string, int> _pluginOrder;
-    private readonly Dictionary<FalloutFormKey, IReadOnlyList<FalloutIdleBranch>> _children = [];
+    private readonly Dictionary<FalloutFormKey, Lazy<IReadOnlyList<FalloutIdleBranch>>> _children;
+    private sealed record Index(FalloutIdleBranch[] Roots,
+        Dictionary<FalloutFormKey, Lazy<IReadOnlyList<FalloutIdleBranch>>> Children);
+    private static readonly ConditionalWeakTable<FalloutPluginStack, ConcurrentDictionary<(string, ushort), Lazy<Index>>> Indexes = new();
     internal IReadOnlyList<FalloutFormKey> Roots => _roots.Select(value => value.Record.FormKey).ToArray();
     internal IReadOnlyList<FalloutFormKey> LastVisited { get; private set; } = [];
 
     internal FalloutHitReactionTree(FalloutPluginStack records, string skeletonPath, ushort contextFunction = 391)
     {
         var directory = skeletonPath[..skeletonPath.LastIndexOf('/')];
-        _pluginOrder = records.Plugins.ToDictionary(value => value.Plugin.Name, value => value.LoadOrderIndex, StringComparer.OrdinalIgnoreCase);
-        _branches = records.EffectiveRecords("IDLE")
+        var index = Indexes.GetOrCreateValue(records).GetOrAdd((directory.ToLowerInvariant(), contextFunction),
+            _ => new(() => BuildIndex(records, directory, contextFunction), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+        _roots = index.Roots; _children = index.Children;
+    }
+
+    private static Index BuildIndex(FalloutPluginStack records, string directory, ushort contextFunction)
+    {
+        var pluginOrder = records.Plugins.ToDictionary(value => value.Plugin.Name, value => value.LoadOrderIndex, StringComparer.OrdinalIgnoreCase);
+        var branches = records.EffectiveRecords("IDLE")
             .Where(record => record.ReadSubrecords().Any(field => field.Signature == "MODL" &&
                 ("meshes/" + FalloutDialogueTopic.Text(field.Data.Span).Replace('\\', '/')).StartsWith(directory + "/", StringComparison.OrdinalIgnoreCase)))
             .Select(FalloutFurnitureIdleTree.Read).ToDictionary(branch => branch.Record.FormKey);
         var roots = new HashSet<FalloutFormKey>();
-        foreach (var branch in _branches.Values.Where(branch => branch.Conditions.Any(condition => condition.Function == contextFunction)))
+        foreach (var branch in branches.Values.Where(branch => branch.Conditions.Any(condition => condition.Function == contextFunction)))
         {
             var current = branch;
             var seen = new HashSet<FalloutFormKey>();
             while (current.Parent is { } parent)
             {
                 if (!seen.Add(current.Record.FormKey)) throw new InvalidDataException("Hit-reaction IDLE parent cycle.");
-                current = _branches.GetValueOrDefault(parent) ?? throw new NotSupportedException("Hit-reaction IDLE parent has a different model owner.");
+                current = branches.GetValueOrDefault(parent) ?? throw new NotSupportedException("Hit-reaction IDLE parent has a different model owner.");
             }
             roots.Add(current.Record.FormKey);
         }
-        _roots = roots.Select(key => _branches[key]).ToArray();
+        var children = branches.Values.Where(branch => branch.Parent is not null).GroupBy(branch => branch.Parent!.Value)
+            .ToDictionary(group => group.Key, group => new Lazy<IReadOnlyList<FalloutIdleBranch>>(
+                () => FalloutFurnitureIdleTree.Order(group.OrderBy(child => pluginOrder[child.Record.FormKey.OwnerPlugin]).ToArray()),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+        return new(roots.Select(key => branches[key]).ToArray(), children);
+    }
+
+    internal IEnumerable<string> AnimationPaths()
+    {
+        var pending = new Stack<FalloutIdleBranch>(_roots);
+        var seen = new HashSet<FalloutFormKey>();
+        while (pending.TryPop(out var branch))
+        {
+            if (!seen.Add(branch.Record.FormKey)) throw new InvalidDataException("Hit-reaction IDLE cycle.");
+            if (branch.Model.EndsWith(".kf", StringComparison.OrdinalIgnoreCase)) yield return branch.Model;
+            else foreach (var child in _children.GetValueOrDefault(branch.Record.FormKey)?.Value ?? []) pending.Push(child);
+        }
     }
 
     internal FalloutPluginRecord? Select(Func<FalloutCondition, float> evaluate)
@@ -52,9 +79,7 @@ internal sealed class FalloutHitReactionTree
         {
             if (!ancestors.Add(branch.Record.FormKey)) throw new InvalidDataException("Hit-reaction IDLE cycle.");
             if (branch.Model.EndsWith(".kf", StringComparison.OrdinalIgnoreCase)) return branch.Record;
-            if (!_children.TryGetValue(branch.Record.FormKey, out var children))
-                _children.Add(branch.Record.FormKey, children = FalloutFurnitureIdleTree.Order(_branches.Values
-                    .Where(child => child.Parent == branch.Record.FormKey).OrderBy(child => _pluginOrder[child.Record.FormKey.OwnerPlugin]).ToArray()));
+            var children = _children.GetValueOrDefault(branch.Record.FormKey)?.Value ?? [];
             foreach (var child in children)
             {
                 if (!Pass(child)) continue;

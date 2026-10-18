@@ -9,10 +9,22 @@ physical-headset acceptance; selected component passes cannot close it.
 
 ## Current owner
 
-Current owner: codex/player-material-stall, from verified main/origin/main
-0001e5697672d7ec16c0f6038e82156b0b50ef51 with no outstanding task PR. PR #221
-passed every hosted check and is merged. Next divergence: measured player
-presentation/material loading stalls and combat frame pacing. The navigation,
+Current owner: codex/combat-resources-distance, from verified main/origin/main
+2f1896fefce36a9d08d476b5d072c78aabb4218c with no outstanding task PR. PR #222
+passed every hosted check and is merged. Active repairs: source-owned combat
+animation reuse and preparation, incremental distant-world publication,
+rotation-invariant perspective fog, and explicit X-button wrist focus with
+squeeze reserved for weapon support. Component terrain/object LOD comparisons
+preserve exact surface arrays and transforms; the Vulkan fog audit passes.
+The final full runtime gate passes. The safe-mode optimized Vulkan export
+restores the retained reaction, resumes attack and retires normally. The fresh
+shot/save trial misses and therefore does not prove hit-stall recovery. A
+separate-render-thread trial produced a texture-upload error and was rejected.
+Next: shared flat/XR shot direction, spread, per-shot physics allocation and
+enemy target/contact accuracy, followed by physical acceptance. Large
+individual surface uploads, player construction, combat spikes and physical
+arm/contact acceptance remain open; 144 Hz requires a 6.94 ms frame budget.
+Body, weapon, contacts and wrist input must switch together. The navigation,
 rig diagnostic and XR viewport-transition repairs are integrated; the viewport
 contract is described in [xr-session-lifetime.md](xr-session-lifetime.md).
 

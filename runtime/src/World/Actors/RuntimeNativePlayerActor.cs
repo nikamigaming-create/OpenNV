@@ -168,7 +168,7 @@ internal sealed partial class RuntimeNativePlayerActor : Node3D
     private RuntimeNativeNifAnimation ClipPath(string path)
     {
         if (_clips.TryGetValue(path, out var cached)) return cached;
-        var source = FalloutNifFile.Read(Read(path));
+        var source = NativeAnimationResources.For(_content).Read(path);
         var sequences = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         var requestedGroup = Path.GetFileNameWithoutExtension(path);
         // Use the catalog's validated exported group for suffixed variants.

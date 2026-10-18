@@ -1,5 +1,59 @@
 # Runtime performance and CPU scheduling
 
+## Combat resources, distant publication and XR input repair
+
+Immutable KF declarations now belong to the mounted content source, with a
+64 MiB conservative decoded-retention allowance. Hit-context IDLE indexes and
+resolved IDLE/ANIO declarations belong to the winning plugin stack. Actor
+reaction clocks, random selection and skeleton/weapon bindings remain local.
+Residency queues reachable hit-animation decoding on the bounded content worker
+pool without evaluating conditions or consuming random state. Source retirement
+cancels and drains that work. Selection still reports unsupported resources;
+preparation does not grant gameplay support. Repeated hit clips reuse the actor's
+binding until the weapon attachment changes.
+
+Distant NIF source workers decode mesh declarations and warm referenced texture
+payloads. Native publication advances one static source node at a time and
+retains the preceding complete cover until the replacement is assembled. Its
+3 ms scheduling check cannot interrupt a single native surface/texture upload;
+it is not a guaranteed frame-time ceiling. Distant textures check their live
+cache before reading source bytes and share the existing source DDS cache.
+Owned terrain and object fixtures compare complete surface array bytes and
+transforms between immediate and incremental assembly. Missing property-free
+terrain material ownership remains a reported divergence.
+
+Perspective fog uses view-space radial distance, so camera projection, yaw and
+pitch do not change fog at equal range. This is a VR comfort/rendering policy,
+not a matched retail fog claim. The native GPU fixture tests off-axis projection
+and equal-radius directions for both clip conventions. A separate render-thread
+trial produced a texture-update size error in the optimized Vulkan export and
+was rejected. The pinned engine's safe rendering mode remains in use; content
+preparation still uses workers. Engine texture lifetime must be resolved before
+enabling separate rendering. No throughput improvement is claimed from that
+trial.
+
+Left X tap explicitly toggles enlarged wrist focus, while holding X opens the
+weapon wheel. Left squeeze gates physical support-hand attachment and no longer
+opens the wrist menu. Saves remain available from the pause menu. Physical
+headset interaction, arm appearance, finger contact and 144 Hz acceptance remain
+open. The target frame budget is 6.94 ms, including combat and streaming.
+
+The safe-mode optimized Vulkan export restores the qualifying saved reaction
+at its exact 0.088888889-second phase, preserves health/injury, completes the
+reaction and returns to attack. It retires normally with exit zero and leaves
+the original checkpoint unchanged. Continue takes 23.25 seconds with a largest
+observed loading interval of 1,294 ms; this is not a controlled speedup claim.
+A fresh mouse-shot/F5 run completes saving and exits normally but misses the
+actor, so it fails the qualifying fresh-hit persistence check. Its shot lane
+takes 13.72 ms, including 10.26 ms before collision completion, already exceeding
+the target whole-frame budget. First-use/JIT and repeated-shot timing have not
+been separated. These measurements do not establish combat stall recovery.
+The owned dog reaction component test passes qualifying damage, pose change,
+repeated-hit retention, cold playback and resumed attacks. The owned XR contact
+fixture also passes sweep, weapon rotation, support and authored action-grip
+checks; controller mode transitions and physical headset appearance remain
+unverified.
+
 ## Source-scoped DDS image reuse
 
 A fresh player-material audit observes 208 DDS creations/uploads while building

@@ -337,6 +337,7 @@ internal static partial class RuntimeNativeNifMeshBuilder
         internal Transform3D? RigidFaceBind { get; set; }
         internal string? SelectedGeometryName { get; init; }
         internal Action<FalloutNifGeometry>? UnboundPropertyFreeLod { get; init; }
+        internal Action<Node3D, int, bool>? DeferStaticChild { get; init; }
         private readonly FalloutNifFile _source;
         private readonly float _unitsToMetres;
         private readonly string? _preferredTextureArchive;
@@ -561,6 +562,13 @@ internal static partial class RuntimeNativeNifMeshBuilder
             }
         }
 
+        internal Node3D BuildStaticChild(int blockIndex, bool omitEditorMarkers)
+        {
+            var inherited = _omitInheritedEditorMarkers;
+            try { _omitInheritedEditorMarkers = omitEditorMarkers; return Build(blockIndex); }
+            finally { _omitInheritedEditorMarkers = inherited; }
+        }
+
         private Node3D BuildNode(FalloutNifNode source)
         {
             if (source.MultiBound >= 0)
@@ -625,6 +633,8 @@ internal static partial class RuntimeNativeNifMeshBuilder
                             omitted.SetMeta("opennv_nif_geometry_disposition", "not-selected-by-equipment");
                             result.AddChild(omitted);
                         }
+                        else if (DeferStaticChild is { } defer)
+                            defer(result, child, omitEditorMarkers);
                         else
                             result.AddChild(Build(child));
                     }
