@@ -1,25 +1,28 @@
 # Product status
 
 Updated 2026-10-17. Priority: **vanilla FNV -> vanilla FO3 -> mods -> TTW**.
-The user's flat test rejected package f. Repairs are under validation; this is
-not a headset-ready handoff.
+The user rejected package g's physical FNV VR playtest. It is not a playable or
+headset-ready handoff. See [implementation-plan.md](implementation-plan.md) for
+the evidence-backed repair inventory and work order.
 
 | Area | Current state |
 | --- | --- |
-| FNV startup | Fresh character creation, Doc's farewell, flat/OpenXR exterior exit and manual saving work. Source music and timed explosion run. |
-| Gameplay | Repaired shared pursuit/range, combat condition and melee admission, plus source aggro-radius warnings. Owned armed/melee NPC and coyote functional checks cause damage. Actual copied-save cazadores pursue uphill and kill the player. Exported tutorial reaches stage 50 through real gecko attacks, rifle kills and Sunny dialogue; post-fight cold save retains Sunny and both dead actors. Sunny's subsequent saloon return lacks its other-cell AI route. |
-| OpenXR | World, hands, forearms, wrist device and rifle visible in both final eyes. Movement, snap turns, wrist page/ray selection, reload/fire and real saloon doors exercised. Physical headset pending. |
-| Saves | Stale-cell Continue and moving-actor residency repaired; copied save loads. Owned quest/script clocks round-trip. A complete near-Sunny stage-35 player save fulfills a queued automatic snapshot after real audio completion. Export cold-loads Sunny and the quest state and saves again. Original user save untouched. |
-| Loading | Prior Release cold exterior Continue 31.27s, warm exterior reload 6.61s and saloon entry 3.25s. New reuse/particle changes need matched measurement; instant loading is not achieved. |
-| Fast travel | Earlier actual flat and wrist-ray XR map travel arrived in Goodsprings and advanced time. Shared movement/policy/follower checks pass. Final-export population and saving after travel remain unverified. |
-| Creature doors | Cheyenne's source Travel/Accompany is admitted, but its capsule cannot reach a required saloon portal corridor endpoint. Actual creature traversal remains blocked. |
-| World | Cazador partition 214 and absent-template-link admission repaired; owned construction/cold checks pass. Quest font crash fixed and visibly renders completed objectives. Resident-grid shadow range/cascade blending bound and building/ground shadows observed during movement; retail parity unverified. Unsupported source behavior remains visible. |
-| Builds | Historical package f failed the user's playtest. Selected functional repair checks, full required runtime gate and diff check pass. Clean asset-free package g validates all 207 hashes, exported identity and actual cold/save/UI acceptance. |
-| Repository | Repair tracked in PR #210; package g pins clean runtime source 92148ee8. Next implementation starts fresh from current origin/main. |
-| Profiles | Isolated vanilla profile; native extensions disabled. Official ESM selection; installed loose assets retain normal precedence. |
-| FO3 | Rendered New Game reaches birth stage 22 with working character/menu controls. No accepted FO3 OpenXR release. |
-| Mods/TTW | Deferred until clean standalone games work. |
-| Headset | Quest 3 over Air Link remains the target. Repair the failed flat playtest before another physical test. |
+| FNV world | Exploration, interiors and some dialogue render in the user's recording. Missing vegetation/models/materials, physics and LOD behavior remain visible in diagnostics. No world/parity completion. |
+| Population | User rejects NPC behavior. Logs report missing travel, dialogue-location, patrol, AI condition and creature procedure owners. A few moving actors do not establish a functioning population. |
+| Combat | User rejects combat. Deathclaw attack variants, embedded emitters and faction assistance fail in the session log. Earlier gecko/Viper/coyote checks remain bounded only. |
+| VR rig | Visible severe rifle hand/forearm deformation around source recording 32:10-32:48. Physical VR acceptance failed. |
+| Launch/render | Visible local launcher plus Vulkan Continue recovered world output after a white D3D12 session. Shader, view-count/texture-array and XR retirement errors still require reproduction and repair. |
+| Saves | Earlier spatial/residency fixes passed selected checks; this session has an actual failed manual save from unsupported hit-reaction NIF version 27 continuation. This is the next implementation blocker. |
+| Quest/scripts | Some wrist pages and dialogue render. AddReputation, conversation conditions, script control flow, activation/trigger lookup and actor-value/effect owners fail in the session log. Campaign progression is unaccepted. |
+| Audio/UI | Wrist page changes are visible; complete interaction/input release remains unaccepted. Radio broadcast scheduling is unbound. Audio mix/sync is not certified by this review. |
+| Traversal | Cross-cell NPC/creature route owners, authored floor destinations and the prior Cheyenne saloon portal remain open. |
+| Fast travel | Earlier bounded flat/XR travel worked. Final population and saving after travel remain unaccepted. |
+| Performance | User session is rejected. Capture cadence does not prove headset frame timing; settled recording-free measurement is required. |
+| Builds | Package g passed earlier build/hash/component checks, then failed the user's playtest. The selected private 90-second development edit is not acceptance evidence. |
+| Content | Official ESM selection logged; installed loose/resource winners still need provenance review. Native extensions disabled; pristine vanilla is not established by plugin selection alone. |
+| FO3 | Earlier rendered New Game reached birth stage 22. No accepted standalone FO3 VR release. |
+| Mods/TTW | Deferred until standalone games work. |
 
-No campaign completion, complete weapon coverage, visual parity or physical-headset
-acceptance is claimed. See current-work.md for the current blocker and owner.
+No campaign completion, complete population/combat/weapon support, retail pixel
+parity or physical-headset acceptance is claimed. Original owned files, saves
+and the user's recording remain private and untouched.
