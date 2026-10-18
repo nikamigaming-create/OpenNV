@@ -87,6 +87,41 @@ retirement during initial loading is covered by
 remain the default. Run these alongside the complete runtime gate, with recording
 off, and measure optimized exports separately from builds and diagnostic fixtures.
 
+## Embedded script declarations during loading
+
+A later optimized loading trace attributes 8.31 seconds of sampled main-thread
+time to `FalloutPluginStack.CountEmbeddedQuestScripts`, called by quest-host
+construction. The complete scan is necessary: unknown winning record types can
+contain embedded script headers, and unsupported/inactive declarations still
+determine script initialization phases. It cannot be replaced by a whitelist of
+known supported records.
+
+The candidate warms that same stack-owned count inside the existing indexing
+worker, after archive warmup. It does not construct clocks or execute gameplay
+there. Session retirement cancels the scan between records, drains its task, then
+disposes source handles. Failed and cancelled scans never cache a partial count;
+synthetic checks cover unknown winners, deleted overrides, concurrent reuse,
+cancelled worker retry, independent clocks and disposed sources.
+
+Fresh optimized flat Continue runs from separate copies of the same checkpoint
+sample lightweight rolling draw intervals throughout startup and loading. Builds,
+bots, detailed snapshots and recording are off. The largest observed loading
+interval falls from 11,863.78 to 3,169.69 ms. Preparing characters and controls
+takes 11.92 versus 2.84 seconds. Full Continue wall time is 39.22 versus 36.35
+seconds; reading game data grows from 8.32 to 15.39 seconds as the 7.83-second scan
+moves there. This is a responsiveness repair, not evidence that the scan's work
+disappeared or a controlled total-loading speedup. Both hosts retain seven
+embedded declarations, 496 initializations and default delay five; those counts
+do not establish gameplay coverage. The remaining three-second stall is open.
+
+The owned `index-window-close` retirement case interrupts the active scan,
+publishes no completed index, exits zero with readers drained, and leaves the
+original checkpoint unchanged. A subsequent targeted loading trace attributes
+approximately 0.94 seconds to activation-parent indexing and 0.93 seconds to
+quest-script restore, including approximately 0.89 seconds indexing source radio
+stations. Its trace overhead and selected time window are not a
+new frame-performance benchmark; they identify the next owners to investigate.
+
 ## Current engine and streaming boundary
 
 The selected engine is official Godot 4.8-dev7 Mono

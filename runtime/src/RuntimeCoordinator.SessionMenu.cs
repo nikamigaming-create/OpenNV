@@ -26,6 +26,7 @@ public partial class RuntimeCoordinator
     private bool _retiringNativeSession;
     private bool _nativeSessionTransitioning;
     private Task? _nativeMenuRead;
+    private readonly CancellationTokenSource _nativeIndexCancellation = new();
     private CanvasLayer? _nativeSessionLayer;
     private NativeGameSessionMenu? _nativeSessionMenu;
     private bool _sessionWasPaused;
@@ -218,6 +219,7 @@ public partial class RuntimeCoordinator
     private async Task DrainNativeSourceReaders()
     {
         GetTree().Paused = true;
+        _nativeIndexCancellation.Cancel();
         var pending = _nativeGridNpcPreparations.Select(item => item.ReadTask).ToList();
         if (_nativeMenuRead is { } menuRead) pending.Add(menuRead);
         if (_nativePlayerMoveRead is { } moveRead) pending.Add(moveRead);

@@ -42,10 +42,10 @@ same firing/save sequence. A later genuine shot damaged the resident coyote by
 selected owned layout/reaction gates pass. These are bounded flat/component
 results, not physical VR acceptance.
 
-Next owner: codex/loading-combat-stalls, based on merged repair PR #212. The
-active changes reuse incremental NPC preparation during loading, prepare terrain
-on bounded workers and yield native cell publication, prepare equipped weapon
-resources before input, and reduce particle matrix work and native-array churn.
+Merged performance PR #213 reuses incremental NPC preparation during loading,
+prepares terrain on bounded workers and yields native cell publication, prepares
+equipped weapon resources before input, and reduces particle matrix work and
+native-array churn.
 The native Vulkan particle-buffer check and two owned weapon checks pass; the
 latter retain ammunition, RNG and audio history with no shots, visible muzzle
 or particle births. Closing during active NPC preparation drains readers and
@@ -54,9 +54,29 @@ trigger's preparation falls from 90.18 to 2.23 ms and publication from 36.10 to
 15.49 ms; a later 179.35 ms interval remains unexplained. Repeated Continue takes
 36.30 wall seconds, settled rolling p95 is 24.43 ms, and F5 completes but still
 stalls (109.03 ms capture, 121.05 ms writing). Loading retains a roughly one-second
-main-thread step. The final complete runtime gate and selected owned/native
-checks pass. Checked publication is next.
-These changes have not been published or accepted as a playable VR build.
+main-thread step. The complete runtime gate and selected owned/native checks
+pass, and all hosted checks passed before merge. These changes are not accepted
+as a playable VR build.
+
+Next owner: codex/script-scan-loading, from verified main/origin/main
+23c5e9080e869163c4306e02a18c3b46d2b81918 with no open task PR. A fresh optimized
+loading trace attributes 8.31 seconds of scene-thread sampled time to the full
+embedded quest-script declaration scan. A recording-free Continue interval run
+captures an 11.86-second loading draw interval; readiness takes 39.22 wall
+seconds. The source count is seven embedded declarations, 496 initializations
+and default delay five. These values are not gameplay/parity coverage.
+The active change warms the same complete source index on the indexing worker
+and cancels it during session retirement. Cancellation must never publish a
+partial count. The cancellation contract and owned index-window-close test pass;
+the latter drains readers, exits zero and preserves the checkpoint. Optimized
+Continue takes 36.35 wall seconds with a largest observed interval of 3.17
+seconds, versus 39.22 seconds and 11.86 seconds before. Initial indexing now
+includes the 7.83-second source scan; total-loading speedup is not established.
+Script initialization values are unchanged. A follow-up trace attributes roughly
+0.94 seconds to activation-parent indexing and 0.93 seconds to script restore,
+including roughly 0.89 seconds indexing source radio stations.
+The complete runtime gate passes; checked publication is next. Per-part NPC stalls, remaining quest host
+publication/restore work and explicit saves remain open.
 
 The selected approach recorded a 203.19 ms streaming upload and an
 82.84 ms commit, including 33.86 ms reference publication. Settled optimized flat
@@ -80,9 +100,8 @@ return, post-travel persistence/population, complete scripts, ED-E/campaign,
 performance, FO3 VR, mods and TTW remain unaccepted.
 
 Package g pins source 92148ee84f3643f1b11b93f90fcd1942bdcb896f; its previous
-asset-free package/hash validation does not establish playability. Repair PR #210
-is integrated into main. PR #212 passed all hosted checks and merged at
-4592c4aedb0e8c0b606cf51f67731d636733c2d1. Local main was verified equal to
+asset-free package/hash validation does not establish playability. Repair PRs
+#210, #212 and #213 are integrated into main. Local main was verified equal to
 origin/main with no open task PR before starting the current feature branch.
 Do not change package g's manifest to imply acceptance.
 

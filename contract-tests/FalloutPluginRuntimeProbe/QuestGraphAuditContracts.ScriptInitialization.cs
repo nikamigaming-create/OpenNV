@@ -42,6 +42,31 @@ internal static partial class QuestGraphAuditContracts
                 try { records.CountEmbeddedQuestScripts(); throw new InvalidDataException("Disposed source count remained usable."); }
                 catch (ObjectDisposedException) { }
             }
+            using (var records = FalloutPluginStack.Load(root, ["Source.esm"]))
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var reads = 0;
+                FalloutPluginRecord.ReadObserver = (record, _) =>
+                {
+                    if (record.Signature == "FUTR" && Interlocked.Increment(ref reads) == 1)
+                        cancellation.Cancel();
+                };
+                try
+                {
+                    _ = Task.Run(() => records.CountEmbeddedQuestScripts(cancellation.Token)).GetAwaiter().GetResult();
+                    throw new InvalidDataException("Cancelled embedded declaration scan published a partial count.");
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+                Require(Task.Run(() => records.CountEmbeddedQuestScripts()).GetAwaiter().GetResult() == 3 && reads == 3,
+                    "Cancelled source work polluted the shared count or lost an embedded declaration.");
+                try
+                {
+                    records.CountEmbeddedQuestScripts(cancellation.Token);
+                    throw new InvalidDataException("Cancelled cached declaration request returned a count.");
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+                Require(reads == 3, "Cancelled cache access reread source declarations.");
+            }
             File.WriteAllBytes(source, Join(Header(), Record("FUTR", 0x100, 0, Field("SCHR", [1]))));
             using (var records = FalloutPluginStack.Load(root, ["Source.esm"]))
             {
@@ -54,7 +79,7 @@ internal static partial class QuestGraphAuditContracts
                 }
                 Require(reads == 2, "Failed source scans published a partial cached count.");
             }
-            Console.WriteLine("OPENNV_EMBEDDED_SCRIPT_COUNT_PASS winners=true fullGraph=true concurrent=true independentClocks=true instanceOwned=true failuresRetained=true disposed=true");
+            Console.WriteLine("OPENNV_EMBEDDED_SCRIPT_COUNT_PASS winners=true fullGraph=true concurrent=true independentClocks=true instanceOwned=true failuresRetained=true disposed=true cancelledPartialNotPublished=true workerRetryComplete=true");
         }
         finally
         {

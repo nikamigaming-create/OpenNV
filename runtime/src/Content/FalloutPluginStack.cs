@@ -396,19 +396,24 @@ internal sealed class FalloutPluginStack : IDisposable
             .Select(pair => pair.Value)
             .ToArray();
 
-    internal long CountEmbeddedQuestScripts()
+    internal long CountEmbeddedQuestScripts(CancellationToken cancellation = default)
     {
         lock (_embeddedQuestScriptsGate)
         {
+            cancellation.ThrowIfCancellationRequested();
             // This source-only scalar is shared by independently owned menu and
             // restored script clocks. Reuse never outlives the original files.
             foreach (var context in _plugins) context.Plugin.ValidateReadSource();
             if (_embeddedQuestScripts is { } cached) return cached;
             var count = 0L;
             foreach (var record in EffectiveRecords())
+            {
+                cancellation.ThrowIfCancellationRequested();
                 if (record.Signature != "SCPT")
                     foreach (var header in record.ReadSubrecords().Where(field => field.Signature == "SCHR"))
                         if (IsQuestScriptHeader(header.Data.Span)) count = checked(count + 1);
+            }
+            cancellation.ThrowIfCancellationRequested();
             _embeddedQuestScripts = count;
             return count;
         }
