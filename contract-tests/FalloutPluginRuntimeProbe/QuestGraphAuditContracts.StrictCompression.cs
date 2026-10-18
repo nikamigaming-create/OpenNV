@@ -30,6 +30,19 @@ internal static partial class QuestGraphAuditContracts
         var maximumExpected = maximumHistory.Concat(Enumerable.Repeat((byte)0x5a, 258)).ToArray();
         var maximumFrame = MaximumDistanceFrame(maximumHistory);
         positives.Add(new("maximum-window-and-match", maximumFrame, maximumExpected, 2));
+        // A complete comb alphabet exercises code lengths 1..15, including
+        // the long-code fallback and a 15-bit EOB at every byte alignment.
+        for (var padding = 0; padding < 8; ++padding)
+        {
+            var body = DynamicLongCodesFrame(padding);
+            var expected = Enumerable.Repeat((byte)0, padding).Concat(Enumerable.Range(0, 15).Select(value => (byte)value)).ToArray();
+            Require(FalloutDeflateExtent.Validate(body, (uint)expected.Length).FinalBitOffset == 1241 + padding,
+                "Long-code lookup consumed padding or a following symbol.");
+            for (var end = 0; end < body.Length; ++end) RejectStrictBody(body[..end], (uint)expected.Length);
+            positives.Add(new("dynamic-long-codes-alignment-" + padding, body, expected, 1));
+            positives.Add(new("dynamic-long-distance-alignment-" + padding, DynamicLongDistanceFrame(padding),
+                Enumerable.Repeat((byte)65, 515 + padding).ToArray(), 1));
+        }
         // The .NET 10 encoder emits no stream for an empty write. Explicit
         // fixed/stored/dynamic empty controls above cover those block families.
         foreach (var data in new[] { alphabet, maximumExpected })
@@ -38,6 +51,17 @@ internal static partial class QuestGraphAuditContracts
             using (var compressor = new ZLibStream(output, CompressionLevel.Optimal, leaveOpen: true)) compressor.Write(data);
             positives.Add(new("framework-generated-" + data.Length, output.ToArray()[2..^4], data, 0));
         }
+        var random = new Random(74019);
+        foreach (var level in Enum.GetValues<CompressionLevel>())
+            for (var kind = 0; kind < 3; ++kind)
+            {
+                var data = new byte[4096]; random.NextBytes(data);
+                if (kind == 1) for (var index = 0; index < data.Length; ++index) data[index] &= 3;
+                if (kind == 2) for (var index = 113; index < data.Length; ++index) data[index] = data[index % 113];
+                using var encoded = new MemoryStream();
+                using (var compressor = new ZLibStream(encoded, level, leaveOpen: true)) compressor.Write(data);
+                positives.Add(new($"framework-{level}-{kind}", encoded.ToArray()[2..^4], data, 0));
+            }
         foreach (var test in positives)
         {
             var before = SHA256.HashData(test.Body);
@@ -231,6 +255,39 @@ internal static partial class QuestGraphAuditContracts
     private static byte[] DynamicLiteralFrame()
     {
         var writer = new CompressionBits(); DynamicLiterals(writer, true); return writer.ToArray();
+    }
+
+    private static byte[] DynamicLongCodesFrame(int padding)
+    {
+        var writer = new CompressionBits(); writer.Bits(1, 1); writer.Bits(2, 2);
+        writer.Bits(0, 5); writer.Bits(0, 5); writer.Bits(15, 4);
+        // The code-length alphabet has sixteen four-bit symbols, 0..15.
+        foreach (var symbol in new[] { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 })
+            writer.Bits(symbol < 16 ? 4 : 0, 3);
+        for (var symbol = 0; symbol <= 256; ++symbol)
+            writer.Code(symbol < 15 ? symbol + 1 : symbol == 256 ? 15 : 0, 4);
+        writer.Code(0, 4); // No distance alphabet is needed by these literals.
+        for (var index = 0; index < padding; ++index) writer.Code(0, 1);
+        for (var symbol = 0; symbol < 15; ++symbol)
+            writer.Code((1 << (symbol + 1)) - 2, symbol + 1);
+        writer.Code(32767, 15);
+        return writer.ToArray();
+    }
+
+    private static byte[] DynamicLongDistanceFrame(int padding)
+    {
+        var writer = new CompressionBits(); writer.Bits(1, 1); writer.Bits(2, 2);
+        writer.Bits(29, 5); writer.Bits(15, 5); writer.Bits(15, 4);
+        foreach (var symbol in new[] { 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 })
+            writer.Bits(symbol < 16 ? 4 : 0, 3);
+        // Literal A=0, EOB=10, length-three=110, length-258=111.
+        for (var symbol = 0; symbol < 286; ++symbol)
+            writer.Code(symbol == 65 ? 1 : symbol == 256 ? 2 : symbol is 257 or 285 ? 3 : 0, 4);
+        for (var symbol = 0; symbol < 16; ++symbol) writer.Code(Math.Min(symbol + 1, 15), 4);
+        for (var index = 0; index < 512 + padding; ++index) writer.Code(0, 1);
+        writer.Code(6, 3); writer.Code(32767, 15); writer.Bits(63, 6); // Three bytes, distance 256.
+        writer.Code(2, 2);
+        return writer.ToArray();
     }
 
     private static void DynamicLiterals(CompressionBits writer, bool final)

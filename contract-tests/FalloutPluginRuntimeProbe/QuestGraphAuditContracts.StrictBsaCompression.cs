@@ -15,7 +15,13 @@ internal static partial class QuestGraphAuditContracts
             new CompressionFrameCase("fixed-literals", FixedFrame("record"u8.ToArray()), "record"u8.ToArray(), 1),
             new CompressionFrameCase("dynamic-literals", DynamicLiteralFrame(), "ABBA"u8.ToArray(), 1),
             new CompressionFrameCase("multi-block", MultipleFrame(), "ABABBA"u8.ToArray(), 3),
-        };
+        }.Concat(Enumerable.Range(0, 8).SelectMany(padding => new[]
+        {
+            new CompressionFrameCase("long-codes-alignment-" + padding, DynamicLongCodesFrame(padding),
+                Enumerable.Repeat((byte)0, padding).Concat(Enumerable.Range(0, 15).Select(value => (byte)value)).ToArray(), 1),
+            new CompressionFrameCase("long-distance-alignment-" + padding, DynamicLongDistanceFrame(padding),
+                Enumerable.Repeat((byte)65, 515 + padding).ToArray(), 1),
+        })).ToArray();
         foreach (var test in positives)
         {
             var framed = WrapFrame(test.Body, test.Expected);

@@ -217,9 +217,17 @@ public partial class NativeActorPerformanceAudit : Node
                 GetTree().Quit();
                 return;
             }
-            if (args is ["--appearance", var appearanceRoot, .. var references])
+            if (args is [var appearanceMode, var appearanceRoot, .. var references] &&
+                appearanceMode is "--appearance" or "--appearance-profile")
             {
                 ExerciseAppearances(appearanceRoot, references);
+                if (appearanceMode == "--appearance-profile")
+                {
+                    // Keep the diagnostic host alive for trace rundown after
+                    // the audited source/native work has already completed.
+                    GD.Print("OPENNV_NPC_PROFILE_HOLD seconds=30 workComplete=true recording=false fixture=true");
+                    await Task.Delay(TimeSpan.FromSeconds(30));
+                }
                 GetTree().Quit();
                 return;
             }

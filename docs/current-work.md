@@ -77,8 +77,7 @@ including roughly 0.89 seconds indexing source radio stations.
 The complete runtime gate and hosted checks pass. Per-part NPC stalls, remaining quest host
 publication/restore work and explicit saves remain open.
 
-Next owner: codex/combat-reaction-continuation from verified main/origin/main
-6a3c0bf8867fbdedb8756e734afdf1af8c596768, with no open task PR. An ordinary
+Merged save/attack proof: an ordinary
 foreleg shot on 169b7a, reached through streamed terrain from the unchanged user
 checkpoint, selects the qualifying dog reaction. F5 completes and saves its
 0.088888889-second phase, part-7 injury and 15.599999 health. Separate-process
@@ -91,14 +90,43 @@ that continuation problem remains visible and open. A later head shot completed
 F5 but did not qualify as reaction evidence.
 
 Deathclaw attack-variant failure is independently reproduced in the native
-component test. The active catalog repair admits uniquely compatible base
+component test. Merged PR #215 admits uniquely compatible base
 groups in suffixed files, retains exact variant-group priority and supplies the
 validated group to creature/player sequence binding. Wrong families, ambiguity
 and partial failed catalogs remain refused. Synthetic contracts, Debug build,
 owned deathclaw/coyote source hits, moved-out-of-range source misses, fresh-skin
 cold attack clocks/RNG/event prefixes and both player weapon-preparation checks
-pass. The complete runtime gate passes; checked publication is next. Ordinary terrain deathclaw combat and
-physical VR acceptance remain open.
+pass. The complete runtime gate and hosted checks pass. Ordinary terrain
+deathclaw combat and physical VR acceptance remain open.
+
+Next owner: codex/npc-publication-stalls, from verified main/origin/main
+8448d81be4bf05f0f6702543952d8a6655461aa4 with no open task PR. The active diagnostic
+adds a bounded post-audit hold so NPC construction profiling can collect rundown
+before host exit. Resolved stacks identify source BSA inflation during material
+publication, dominated by bit-at-a-time DEFLATE validation. The candidate adds a
+bounded nine-bit Huffman lookup and byte-window reads, retaining the canonical
+long-code/tail path and strict extent policy. Selected independent vectors and
+23,200 private baseline differential cases agree. A controlled Release helper on
+32 owned character DDS members (27,536,230 compressed bytes) retains exact
+extents and byte-for-byte archive output; median validation time falls from
+523.77 to 194.05 ms across five alternating passes after warmup. This is a helper
+benchmark, not game/headset frame timing. Debug profiled NPC construction retains
+source vectors and cancellation checks; the worst selected part step falls from
+751.66 to 223.83 ms, still a stall. Optimized Continue takes 30.06 versus 24.46
+wall seconds, but the largest loading draw interval remains 2,457.12 versus
+2,408.73 ms. Five starting-view shots retain no handling error; later firing
+windows still exceed 100 ms. This ordered pair is not encounter/headset timing
+acceptance. The complete runtime gate passes. Short-host traces without resolved
+stacks are unusable evidence. See runtime-performance.md for methods and limits.
+
+An optimized ordinary terrain run from the nearby healthy checkpoint has used
+two Stimpaks through Pip-Boy and killed a resident attacking coyote by mouse
+firing without a combat-owner error. Travel toward 0e745f then stops roughly
+390 metres away: capsule refinement exhausts its node bound on a source corridor
+near a 0.481-metre residual, with slope/step/contact rejection evidence retained.
+The session quit normally after retaining that failure. Diagnose native movement
+support and planner/executor agreement before changing collision or claiming arrival. The route overlapped
+diagnostic/build work and is not a controlled frame-performance benchmark.
 
 The selected approach recorded a 203.19 ms streaming upload and an
 82.84 ms commit, including 33.86 ms reference publication. Settled optimized flat
@@ -123,7 +151,7 @@ performance, FO3 VR, mods and TTW remain unaccepted.
 
 Package g pins source 92148ee84f3643f1b11b93f90fcd1942bdcb896f; its previous
 asset-free package/hash validation does not establish playability. Repair PRs
-#210, #212, #213 and #214 are integrated into main. Local main was verified equal to
+#210, #212, #213, #214 and #215 are integrated into main. Local main was verified equal to
 origin/main with no open task PR before starting the current feature branch.
 Do not change package g's manifest to imply acceptance.
 

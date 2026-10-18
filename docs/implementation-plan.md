@@ -19,9 +19,12 @@ Timecodes below refer to that original recording, not the highlight edit. Sessio
 logs provide independent implementation failures; they are not synchronized to
 video frames, and repeated error lines are not distinct affected actors.
 
-A fresh selected owned construction/idle/cold audit passes for references
-169b7a and 0e745f. It does not exercise their attack or hit-reaction/save path;
-those failures remain open despite that passing component check.
+Selected native source checks now cover deathclaw/coyote attack-group binding,
+real event-key hit/miss range and retained cold attack phases. Ordinary F5 during
+a qualifying coyote limb reaction and separate-process Continue also pass, with
+the exact saved phase, injury/health and resumed combat. Ordinary terrain
+deathclaw combat, older off-cell audio continuations and physical VR acceptance
+remain open. Details and the current owner are in current-work.md.
 
 ## Evidence and repair inventory
 
