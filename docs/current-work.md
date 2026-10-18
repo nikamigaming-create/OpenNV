@@ -19,7 +19,8 @@ restores the retained reaction, resumes attack and retires normally. The fresh
 shot/save trial misses and therefore does not prove hit-stall recovery. A
 separate-render-thread trial produced a texture-upload error and was rejected.
 Active changes: exclusive arm-injury spread penalties, reusable auto-aim hulls,
-and source-posed player target points shared by enemy attacks in flat/XR.
+source-posed player target points shared by enemy attacks in flat/XR, and
+ReadyToRun compilation for Windows release exports.
 The owned preparation check passes retained native hull identity, changed and
 invalid declarations, displaced body targets, anatomical ray hits and injury
 states. The complete official-editor runtime gate passes. An optimized flat
@@ -31,6 +32,16 @@ continuation also completes and exits zero. An earlier distant-target trial
 misses/hits scenery and its helper times out while save preparation is pending;
 it is not accepted combat or retirement evidence. The nearby repeat waits for
 save completion before quitting. No frame recording was enabled.
+The same nearby-shot scenario with a ReadyToRun export records 4.27 and 2.59 ms
+shot paths, completes both saves and exits zero. Cold retained-reaction
+continuation preserves its exact saved phase and returns to attack. Observed
+error categories match the ordinary export, including existing content and AI
+divergence. These bounded samples motivate precompilation; they do not establish
+controlled loading improvement, whole-frame performance or 144 Hz acceptance.
+The complete local gate passes again with the export-property change. The
+initial hosted run fails the existing recorded-input publication-loss check;
+its diagnostic writer exceeded the publication interval. Final hosted checks
+must pass before merge; the local pass does not waive this failure.
 Bottle aiming, NPC ranged accuracy, shared shot direction and physical
 acceptance remain open. Large
 individual surface uploads, player construction, combat spikes and physical

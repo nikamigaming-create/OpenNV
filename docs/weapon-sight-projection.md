@@ -55,6 +55,16 @@ impact work and the rest of each frame. The first shot remains over the entire
 144 Hz budget. This is a bounded combat/persistence check, not bottle-range
 accuracy, enemy hit-rate, matched retail or headset acceptance.
 
+Windows ExportRelease now enables .NET ReadyToRun compilation. The assembly
+retains IL/runtime fallback; this is not NativeAOT or an engine replacement.
+Other configurations and platforms retain their existing publishing behavior.
+The same nearby combat scenario with a native-compiled export records 4.27 and
+2.59 ms shot paths, completes both saves and quits zero. A separate cold process
+resumes the retained reaction phase and returns to attack. Runtime content/AI
+error categories match the ordinary export. These samples support moving cold
+compilation out of gameplay, but neither the remaining frame work nor physical
+XR performance has been accepted.
+
 Synthetic contracts cover independent source flags, shorter admitted DNAM
 layouts, angle/time selection, reversal, mutable settings, disabled/no-zoom
 values, widening, projection conversion and invalid-state rejection. The
