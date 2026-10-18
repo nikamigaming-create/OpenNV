@@ -13,14 +13,10 @@ internal sealed partial class FalloutReferenceWorld
 
     internal CellNavigationGraph TravelNavigation(FalloutFormKey cell)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var region = TravelRegion(cell);
         if (_travelNavigation.TryGetValue(region, out var navigation)) return navigation;
-        var definition = FalloutCellSceneReader.ReadDefinition(records, cell);
-        var cells = definition.Worldspace is { } worldspace
-            ? records.EffectiveRecords("CELL").Where(record => FalloutCellSceneReader.ParentWorldspace(record) == worldspace)
-                .Select(record => record.FormKey).ToHashSet()
-            : new HashSet<FalloutFormKey> { cell };
-        _travelNavigation.Add(region, navigation = CellNavigationGraph.LoadOwned(records, cells));
+        _travelNavigation.Add(region, navigation = FalloutNavigationSources.Region(records, cell));
         return navigation;
     }
 

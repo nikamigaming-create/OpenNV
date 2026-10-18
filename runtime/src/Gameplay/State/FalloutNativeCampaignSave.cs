@@ -5,6 +5,8 @@ using OpenNV.Runtime.World.Actors;
 
 namespace OpenNV.Runtime.Gameplay.State;
 
+internal enum FalloutNativeCampaignReadPhase { NavigationPreparing, NavigationReady }
+
 internal sealed record FalloutNativeSavedItem(
     uint RuntimeFormId,
     string EditorId,
@@ -227,10 +229,12 @@ internal static class FalloutNativeCampaignSave
         FalloutNativeVigorContract? vigorContract,
         FalloutNativeTagSkillContract? tagSkillContract,
         FalloutOpeningInventoryGrant? openingGrant,
-        FalloutNativeTraitFarewellContract? traitFarewellContract)
+        FalloutNativeTraitFarewellContract? traitFarewellContract,
+        CancellationToken cancellation = default, Action<FalloutNativeCampaignReadPhase>? progress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(stack);
+        cancellation.ThrowIfCancellationRequested();
         var fullPath = Path.GetFullPath(path);
         var state = JsonSerializer.Deserialize<FalloutNativeCampaignState>(
                 File.ReadAllText(fullPath)) ??
@@ -350,6 +354,9 @@ internal static class FalloutNativeCampaignSave
         if (state.Music is not null) _ = FalloutMusicType.ValidateSnapshot(stack, state.Music);
         if (state.References is not null)
         {
+            progress?.Invoke(FalloutNativeCampaignReadPhase.NavigationPreparing);
+            FalloutNavigationSources.PrepareSavedTravel(stack, state.References, cancellation);
+            progress?.Invoke(FalloutNativeCampaignReadPhase.NavigationReady);
             using var references = new FalloutReferenceWorld(stack, validatedValues);
             references.TransientExplosions.Restore(state.TransientExplosions);
             references.RestoreEncounterZones(state.EncounterZones);
@@ -376,6 +383,7 @@ internal static class FalloutNativeCampaignSave
         if (originalAbilityAdmission is not null)
             state = originalAbilityAdmission.CompleteOriginalRead(state, stack) with { TransientExplosions = new(0, []), FastTravel = FalloutFastTravelSnapshot.Initial };
         Validate(state, expectedSaveCompatibilityId);
+        cancellation.ThrowIfCancellationRequested();
         return new FalloutNativeCampaignRestore(state, inventory, originalAbilityAdmission);
     }
 

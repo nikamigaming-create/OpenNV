@@ -27,23 +27,33 @@ internal sealed partial class CellNavigationGraph
         => LoadOwned(stack, new HashSet<FalloutFormKey> { cell });
 
     internal static CellNavigationGraph LoadOwned(FalloutPluginStack stack, IReadOnlySet<FalloutFormKey> cells,
-        Action<FalloutFormKey, Exception>? unavailable = null)
+        Action<FalloutFormKey, Exception>? unavailable = null, CancellationToken cancellation = default)
     {
-        var sources = FalloutNavigationMesh.ReadCells(stack, cells, unavailable);
-        var meshes = sources.Select(source => new NavigationMeshRecord(source.Form.ToString(), source.Cell.ToString(), source.Version,
+        cancellation.ThrowIfCancellationRequested();
+        var sources = FalloutNavigationMesh.ReadCells(stack, cells, unavailable, cancellation);
+        var meshes = sources.Select(source =>
+        {
+            cancellation.ThrowIfCancellationRequested();
+            return new NavigationMeshRecord(source.Form.ToString(), source.Cell.ToString(), source.Version,
             source.Vertices.Select(value => new Vector3(value.X, value.Y, value.Z)).ToArray(),
             source.Triangles.Select(value => new NavigationTriangle(value.Vertices.Select(index => (int)index).ToArray(),
                 value.Edges.Select(index => (int)index).ToArray(), value.Flags)).ToArray(),
-            source.Edges.Select(value => new NavigationExternalConnection(value.Mesh.ToString(), value.Triangle)).ToArray())).ToArray();
-        foreach (var mesh in meshes) mesh.ValidateAdjacency();
+            source.Edges.Select(value => new NavigationExternalConnection(value.Mesh.ToString(), value.Triangle)).ToArray());
+        }).ToArray();
+        foreach (var mesh in meshes) mesh.ValidateAdjacency(cancellation);
         var graph = new CellNavigationGraph(meshes);
         graph.DoorAssociations = sources.SelectMany(source => source.Doors.Select(door =>
             new NavigationDoorAssociation(source.Form, door, source.Triangles.Length))).ToArray();
         graph.DoorAssociationErrors = graph.DoorAssociations.Where(value => !value.Resolvable)
             .Select(value => value.Error!).ToArray();
         var sourceIdentity = string.Join("\n", sources.OrderBy(value => value.Form.ToString(), StringComparer.OrdinalIgnoreCase)
-            .Select(source => source.Form + ":" + Convert.ToHexString(SHA256.HashData(stack.GetEffective(source.Form).ReadData()))));
+            .Select(source =>
+            {
+                cancellation.ThrowIfCancellationRequested();
+                return source.Form + ":" + Convert.ToHexString(SHA256.HashData(stack.GetEffective(source.Form).ReadData()));
+            }));
         graph.SourceSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourceIdentity)));
+        cancellation.ThrowIfCancellationRequested();
         return graph;
     }
 }

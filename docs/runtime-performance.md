@@ -1,5 +1,67 @@
 # Runtime performance and CPU scheduling
 
+## Navigation source reuse during continuation
+
+The trace after PR #217 places roughly 1,170 ms of scene-thread time in
+reference-world restoration, including 1,012 ms loading navigation for retained
+travel. Restoration validates against a temporary world; that world's private
+navigation cache was then discarded. A private owned continuation probe confirms
+the real world subsequently rebuilds both retained route regions, observing
+another 6,131 and 14,203 NAVM record reads. Those are semantic read observations,
+not physical disk operations. Source hashes agree with the saved routes.
+
+Immutable navigation graphs now live in the stack's source cache, keyed by kind
+and source CELL/WRLD scope. Whole-world and legacy per-cell graphs remain
+distinct; interior requests reuse their equivalent cell graph. Fresh worlds
+retain independent actors, doors, clearance queries, route cursors and clocks.
+Save reading prepares required travel graphs with the loading worker's token
+before detached world validation. Progress markers surround that actual
+preparation, rather than a later cached request. Retired routes from a replaced
+package retain Restore's existing treatment. Unknown scopes/layouts still fail
+closed; source hashes and auxiliary door divergences remain intact.
+
+Adjacency validation retains reciprocity, internal/external flags and distinct
+shared-vertex semantics, while its boolean checks avoid LINQ intersection,
+sorting, arrays and predicate closures. Exhaustive small-domain checks compare
+15,625 vertex-pair and 12,000 edge/flag cases with the previous predicates.
+Source scanning, mesh construction, adjacency validation and hashing check
+cancellation before publishing a complete graph. Synthetic checks cover scope
+isolation, worker cancellation/retry, concurrent cold requests, failed retry,
+source lifetime and existing cold travel/portal refusals.
+
+The final private owned probe prepares the two source graphs on a worker, then
+restores all 5,965 references with zero NAVM record observations during restore
+or either subsequent query. Both hashes and all three saved travel continuations
+remain exact. This is C# continuation/source evidence without native contacts or
+gameplay execution. The exported `navigation-index-window-close` case interrupts
+the first preparation, publishes no ready result, exits zero with readers
+drained and preserves the original checkpoint. The combat/bot route adapter also
+reuses an already-complete graph for the identical CELL/WRLD scope; when none is
+cached, it retains the original loader and unavailable-mesh reporting. Native
+NPC legacy-cell and furniture queries share their matching per-cell source
+graphs. Door state and actor clearance are still live queries, not cached paths.
+Recording remains off.
+
+Optimized Vulkan/Forward+ flat processes continue separate copies of the same
+checkpoint without builds, bots, recording or detailed snapshots. Before versus
+final candidate readiness is 32.08 versus 25.15 wall seconds, and the largest
+observed loading draw interval is 1,723.47 versus 1,225.19 ms. This single ordered
+pair does not isolate cache/OS effects or establish controlled total speedup.
+A separate final trace observes roughly 136 ms in scene-thread reference-world
+restore, versus 1,170 ms earlier. It places owned graph construction on the
+worker and confirms combat routing reuses the same source hash; the earlier
+684 ms direct combat graph rebuild is absent from the captured main-thread
+path. Five starting-view shots have no handling error and 0.34-1.03 ms resource
+preparation, but later rolling firing windows still reach 123.92 ms. This is
+firing coverage, not an accepted encounter benchmark. Median settled rolling
+p95 is 18.70 ms, with overlapping windows. The second-scale loading interval,
+remaining native publication and headset frame budget are not accepted.
+A separate ordinary-input coyote regression completes F5 during a qualifying
+part-7 reaction at 0.088888889 seconds. A fresh process resumes that exact phase,
+retains 15.599999 health and 14.400001 limb damage, completes the reaction and
+returns to pursuit without reaction error. Both processes quit normally. This
+checks native persistence after navigation reuse, not physical VR acceptance.
+
 ## Activation-parent and radio source indexes
 
 A fresh optimized loading trace after the DEFLATE repair attributes roughly

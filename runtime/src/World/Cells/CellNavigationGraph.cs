@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Godot;
+using OpenNV.Runtime.Content;
 
 namespace OpenNV.Runtime.World.Cells;
 
@@ -338,10 +339,11 @@ internal sealed partial class CellNavigationGraph
         internal IReadOnlyList<NavigationTriangle> Triangles { get; }
         internal IReadOnlyList<NavigationExternalConnection> ExternalConnections { get; }
 
-        internal void ValidateAdjacency()
+        internal void ValidateAdjacency(CancellationToken cancellation = default)
         {
             for (var triangleIndex = 0; triangleIndex < Triangles.Count; triangleIndex++)
             {
+                cancellation.ThrowIfCancellationRequested();
                 var triangle = Triangles[triangleIndex];
                 if ((triangle.Flags & 8) != 0) continue;
                 for (var edge = 0; edge < TriangleEdgeCount; edge++)
@@ -419,11 +421,9 @@ internal sealed partial class CellNavigationGraph
             adjacent >= 0 &&
             adjacent < Triangles.Count &&
             adjacent != source &&
-            Enumerable.Range(0, TriangleEdgeCount).Any(edge => Triangles[source].AdjacentTriangles[edge] == adjacent &&
-                (Triangles[source].Flags & (1u << edge)) == 0) &&
-            Enumerable.Range(0, TriangleEdgeCount).Any(edge => Triangles[adjacent].AdjacentTriangles[edge] == source &&
-                (Triangles[adjacent].Flags & (1u << edge)) == 0) &&
-            SharedVertices(source, adjacent).Count == SharedEdgeVertexCount;
+            FalloutNavigationTopology.HasInternalEdge(Triangles[source].AdjacentTriangles, Triangles[source].Flags, adjacent) &&
+            FalloutNavigationTopology.HasInternalEdge(Triangles[adjacent].AdjacentTriangles, Triangles[adjacent].Flags, source) &&
+            FalloutNavigationTopology.SharedVertexCount(Triangles[source].VertexIndices, Triangles[adjacent].VertexIndices) == SharedEdgeVertexCount;
 
         internal Vector3 Centroid(int triangleIndex)
         {

@@ -85,7 +85,7 @@ internal sealed class FalloutPluginStack : IDisposable
         new(StringComparer.Ordinal);
     private readonly int _effectiveRecordCount;
     private readonly object _sourceIndexGate = new();
-    private readonly Dictionary<Type, IFalloutSourceIndex> _sourceIndexes = [];
+    private readonly Dictionary<(Type Kind, FalloutFormKey? Scope), IFalloutSourceIndex> _sourceIndexes = [];
     private long? _embeddedQuestScripts;
     private FalloutSoundVoices? _soundVoices;
     internal FalloutSoundVoices SoundVoices => _soundVoices ??= new(this);
@@ -424,16 +424,33 @@ internal sealed class FalloutPluginStack : IDisposable
     }
 
     internal T ReadSourceIndex<T>(Func<FalloutPluginStack, CancellationToken, T> prepare,
-        CancellationToken cancellation = default) where T : class, IFalloutSourceIndex
+        CancellationToken cancellation = default, FalloutFormKey? scope = null) where T : class, IFalloutSourceIndex
     {
         lock (_sourceIndexGate)
         {
             ValidateIndexSources(cancellation);
-            if (_sourceIndexes.TryGetValue(typeof(T), out var cached)) return (T)cached;
+            var key = (typeof(T), scope);
+            if (_sourceIndexes.TryGetValue(key, out var cached)) return (T)cached;
             var complete = prepare(this, cancellation) ?? throw new InvalidDataException("Source index preparation returned no declarations.");
             cancellation.ThrowIfCancellationRequested();
-            _sourceIndexes.Add(typeof(T), complete);
+            _sourceIndexes.Add(key, complete);
             return complete;
+        }
+    }
+
+    internal bool TryReadSourceIndex<T>(out T? index, CancellationToken cancellation = default,
+        FalloutFormKey? scope = null) where T : class, IFalloutSourceIndex
+    {
+        lock (_sourceIndexGate)
+        {
+            ValidateIndexSources(cancellation);
+            if (_sourceIndexes.TryGetValue((typeof(T), scope), out var cached))
+            {
+                index = (T)cached;
+                return true;
+            }
+            index = null;
+            return false;
         }
     }
 

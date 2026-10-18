@@ -135,7 +135,7 @@ internal partial class RuntimeNativeNpc
         var arrival = progress.PortalArrival is not null;
         var routeCell = progress.RouteCell ?? _aiCell!.Cell.FormKey;
         _navigation = restored is { RouteCell: null, PortalArrival: null }
-            ? CellNavigationGraph.LoadOwned(_aiStack!, progress.Cell) : world.TravelNavigation(routeCell);
+            ? FalloutNavigationSources.Cell(_aiStack!, progress.Cell) : world.TravelNavigation(routeCell);
         if (restored is not null && !arrival && (restored.NavigationSha256 is not { } navigationSha256 ||
             !navigationSha256.Equals(_navigation.SourceSha256, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException("Saved marker Travel route differs from its winning NAVM source.");
@@ -274,7 +274,7 @@ internal partial class RuntimeNativeNpc
     {
         if (destinationRadiusGameUnits < 0 || exact && destinationRadiusGameUnits != 0)
             throw new InvalidDataException("Exact actor interaction cannot use a travel location radius.");
-        _navigation ??= CellNavigationGraph.LoadOwned(_aiStack!, _aiCell!.Cell.FormKey);
+        _navigation ??= FalloutNavigationSources.Cell(_aiStack!, _aiCell!.Cell.FormKey);
         var units = Skeleton.UnitsToMetres;
         var sourceStart = new Vector3(Position.X, -Position.Z, Position.Y) / units;
         var sourceDestination = new Vector3(destination.Origin.X, -destination.Origin.Z, destination.Origin.Y) / units;
