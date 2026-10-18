@@ -64,7 +64,11 @@ internal sealed partial class NativeOwnedMessageMenu : Control
     public override void _Ready()
     {
         Layout();
-        if (!_faulted) Callable.From(_buttons[0].Button.GrabFocus).CallDeferred();
+        if (!_faulted) Callable.From(() =>
+        {
+            if (IsInstanceValid(this) && IsInsideTree() && !IsQueuedForDeletion() && !_faulted)
+                _buttons[0].Button.GrabFocus();
+        }).CallDeferred();
     }
     private NativeViewportLayout? _viewportLayout;
     public override void _EnterTree() => _viewportLayout = new(this, Layout);

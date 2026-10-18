@@ -321,6 +321,10 @@ public partial class RuntimeCoordinator
         var radio = _nativePluginStack.ReadRadioStationIndex(_nativeIndexCancellation.Token);
         GD.Print($"OPENNV_NATIVE_SOURCE_INDEX_READY stage=radio-stations stations={radio.Stations.Count} errors={radio.Errors.Count} " +
             $"elapsedMs={Stopwatch.GetElapsedTime(declarationsStarted).TotalMilliseconds:F1} source=stack-index-worker");
+        declarationsStarted = Stopwatch.GetTimestamp();
+        var markers = FalloutWorldMap.SourceMarkers(_nativePluginStack, _nativeIndexCancellation.Token);
+        GD.Print($"OPENNV_NATIVE_SOURCE_INDEX_READY stage=map-markers markers={markers.Count} " +
+            $"elapsedMs={Stopwatch.GetElapsedTime(declarationsStarted).TotalMilliseconds:F1} source=stack-index-worker");
         FalloutAddonNodes.Bind(content, _nativePluginStack);
         _nativeQuestState = new(_nativePluginStack, _nativeInventory.Notifications);
         var savePath = Path.GetFullPath(RequireOption(_options, "save-path"));

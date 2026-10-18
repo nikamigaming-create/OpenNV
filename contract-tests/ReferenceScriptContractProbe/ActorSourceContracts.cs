@@ -111,6 +111,11 @@ internal static class ActorSourceContracts
             ActorInventoryConditionContracts.Run(records);
             PackageBindingFailureContracts.Run(records);
             FalloutFormKey Key(uint id) => new("Actors.esm", id);
+            var sourceMarkers = FalloutWorldMap.SourceMarkers(records);
+            Check(sourceMarkers.Select(marker => marker.Marker.Reference).OrderBy(key => key.ObjectId)
+                    .SequenceEqual(new[] { Key(0x903), Key(0x905) }) &&
+                ReferenceEquals(sourceMarkers, FalloutWorldMap.SourceMarkers(records)),
+                "Prepared map marker identities changed or repeated access rebuilt the source index.");
             var map = FalloutWorldMap.Read(records, Key(0x8f0));
             Check(map.Width == 2048 && map.Height == 1024 && map.Project(-20 * 4096, 30 * 4096) == System.Numerics.Vector2.Zero &&
                 map.Project(40 * 4096, -10 * 4096) == System.Numerics.Vector2.One &&

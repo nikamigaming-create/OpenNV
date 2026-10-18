@@ -12,9 +12,11 @@ public partial class NativePipBoyAudit : Node
     {
         var exitCode = 0;
         var inputOnly = OS.GetCmdlineUserArgs().SequenceEqual(new[] { "--input-lifetime" });
+        var catalogOnly = OS.GetCmdlineUserArgs() is ["--radio-catalog", _];
         try
         {
-            if (inputOnly) await ExerciseNativePointerCancellation();
+            if (OS.GetCmdlineUserArgs() is ["--radio-catalog", var data]) InspectRadioCatalog(data);
+            else if (inputOnly) await ExerciseNativePointerCancellation();
             else
             {
                 await ExerciseOwnedPages();
@@ -35,7 +37,8 @@ public partial class NativePipBoyAudit : Node
         }
         catch (Exception error) { GD.PushError("OPENNV_PIPBOY_AUDIT_CLEANUP_FAILED " + error); exitCode = 1; }
         if (exitCode == 0)
-            GD.Print(inputOnly ? "OPENNV_NATIVE_PIPBOY_INPUT_LIFETIME_AUDIT_PASS cleanup=complete recording=off" :
+            GD.Print(catalogOnly ? "OPENNV_RADIO_CATALOG_COMPLETE playback=unverified" :
+                inputOnly ? "OPENNV_NATIVE_PIPBOY_INPUT_LIFETIME_AUDIT_PASS cleanup=complete recording=off" :
                 "OPENNV_NATIVE_PIPBOY_AUDIT_PASS source-menus=true saved-items-quests-markers=true pointer-cancellation=true cleanup=complete recording=off visual-and-input-acceptance=separate");
         GetTree().Quit(exitCode);
     }
@@ -62,6 +65,9 @@ public partial class NativePipBoyAudit : Node
             if (childTree.Number(childRoot.Element("image")!, "alpha") != 123)
                 throw new InvalidDataException("Unnamed child reference did not resolve its unique named tile.");
             using var records = FalloutPluginStack.Load(content.PluginSources);
+            var sourceMarkers = await Task.Run(() => FalloutWorldMap.SourceMarkers(records));
+            if (!ReferenceEquals(sourceMarkers, FalloutWorldMap.SourceMarkers(records)))
+                throw new InvalidDataException("Prepared map declarations were rebuilt on the UI thread.");
             var saved = JsonSerializer.Deserialize<FalloutNativeCampaignState>(File.ReadAllText(args[1]))!;
             using var references = new FalloutReferenceWorld(records);
             references.Restore(saved.References!);
@@ -74,14 +80,15 @@ public partial class NativePipBoyAudit : Node
             menu = new NativeOwnedPipBoyMenu(records, state, inventory, quests, references, () => saved.Vitals!, () => saved.Special,
                 saved.PlayerName, FalloutNativeTagSkillResolver.Resolve(records, FalloutOpeningPlayerControlResolver.Resolve(records, ["VCG00", "VCG01"])).Skills, saved.TagSkills, saved.Traits,
                 FalloutCellSceneReader.ParentWorldspace(records.GetEffective(saved.ActiveCell)),
-                new(saved.PlayerPosition[0] / .0142875f, -saved.PlayerPosition[2] / .0142875f, saved.PlayerPosition[1] / .0142875f), 0);
+                new(saved.PlayerPosition[0] / .0142875f, -saved.PlayerPosition[2] / .0142875f, saved.PlayerPosition[1] / .0142875f), 0)
+            { LocalMap = color => new NativeOwnedLocalMap(GetViewport().World3D, Vector3.Zero, false, color, 0) };
             AddChild(menu);
             var failures = new List<string>();
             var selections = new[] { (FalloutPipBoyPage.Stats, 0), (FalloutPipBoyPage.Stats, 1),
                 (FalloutPipBoyPage.Stats, 2), (FalloutPipBoyPage.Stats, 3), (FalloutPipBoyPage.Stats, 4),
                 (FalloutPipBoyPage.Items, 0), (FalloutPipBoyPage.Items, 1), (FalloutPipBoyPage.Items, 2),
                 (FalloutPipBoyPage.Items, 3), (FalloutPipBoyPage.Items, 4), (FalloutPipBoyPage.Data, 1), (FalloutPipBoyPage.Data, 2),
-                (FalloutPipBoyPage.Data, 3) };
+                (FalloutPipBoyPage.Data, 3), (FalloutPipBoyPage.Data, 0) };
             foreach (var (page, index) in selections)
             {
                 menu.Select(page, index);
@@ -90,9 +97,10 @@ public partial class NativePipBoyAudit : Node
                 var children = menu.GetChildren();
                 var buttons = children.OfType<BaseButton>().Where(button => button.Visible).ToArray();
                 if (buttons.Any(button => button.Size.X <= 0 || button.Size.Y <= 0)) failures.Add($"{page}/{index}: empty button target");
-                GD.Print($"OPENNV_PIPBOY_PAGE_BOUND {page}/{index} buttons={buttons.Length}");
+                GD.Print($"OPENNV_PIPBOY_PAGE_BOUND {page}/{index} buttons={buttons.Length} refreshMs={JsonSerializer.SerializeToElement(menu.State).GetProperty("refreshMilliseconds").GetDouble():F3}");
             }
             if (failures.Count != 0) throw new InvalidOperationException(string.Join("\n", failures));
+            await ExerciseNavigation(menu, records, inventory);
         }
         finally
         {
