@@ -32,6 +32,9 @@ release when a menu closes, tracking disappears or a session retires.
 
 Keep one owner per state transition and avoid parallel gameplay paths. Decode
 and reuse resources in process; transformed retail assets are not launch inputs.
+Immutable declaration indexes live with the plugin stack; fresh gameplay owners
+reuse them while retaining independent activation clocks and radio discovery.
+Source preparation is cancellable and never publishes partial indexes.
 Do not introduce named-location exceptions, proxy actors or forced quest success.
 Implement missing behavior at its real owner and keep unsupported behavior visible.
 Use bounded, relevant checks and ordinary gameplay to assess the result. Record

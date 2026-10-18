@@ -23,8 +23,8 @@ internal sealed record FalloutRadioReception(FalloutRadioStation Station, bool E
 internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutReferenceWorld world,
     FalloutHudNotifications notifications)
 {
-    private readonly Dictionary<FalloutFormKey, FalloutRadioStation> _stations = [];
-    private readonly Dictionary<FalloutFormKey, string> _sourceErrors = [];
+    private IReadOnlyDictionary<FalloutFormKey, FalloutRadioStation> _stations = new Dictionary<FalloutFormKey, FalloutRadioStation>();
+    private IReadOnlyDictionary<FalloutFormKey, string> _sourceErrors = new Dictionary<FalloutFormKey, string>();
     private readonly Dictionary<FalloutFormKey, FalloutCellDefinition> _cells = [];
     private readonly Dictionary<FalloutFormKey, HashSet<FalloutFormKey>> _links = [];
     private readonly HashSet<FalloutFormKey> _discovered = [];
@@ -66,16 +66,9 @@ internal sealed class FalloutRadioStations(FalloutPluginStack records, FalloutRe
     private void Index()
     {
         if (_indexed) return;
-        var bases = records.EffectiveRecords("TACT").Where(value => (value.Flags & 0x20000) != 0)
-            .Select(value => value.FormKey).ToHashSet();
-        if (bases.Count == 0) { _indexed = true; return; }
-        foreach (var reference in records.EffectiveRecords("REFR"))
-        {
-            if (!bases.Contains(FalloutDialogueTopic.RequiredForm(reference, "NAME"))) continue;
-            try { _stations.Add(reference.FormKey, FalloutRadioStation.Read(records, reference)); }
-            catch (Exception error) when (error is InvalidDataException or NotSupportedException or KeyNotFoundException)
-            { _sourceErrors.Add(reference.FormKey, error.Message); }
-        }
+        var source = records.ReadRadioStationIndex();
+        _stations = source.Stations;
+        _sourceErrors = source.Errors;
         _indexed = true;
     }
 

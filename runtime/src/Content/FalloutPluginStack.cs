@@ -65,6 +65,10 @@ internal sealed class FalloutPluginContext
     }
 }
 
+// Implementations contain immutable winning declarations, never gameplay clocks
+// or native presentation resources. The reader need not depend on those owners.
+internal interface IFalloutSourceIndex { }
+
 internal sealed class FalloutPluginStack : IDisposable
 {
     private const int MaximumPluginCount = 256;
@@ -80,7 +84,8 @@ internal sealed class FalloutPluginStack : IDisposable
     private readonly Dictionary<string, IReadOnlyList<FalloutPluginRecord>> _registrationBySignature =
         new(StringComparer.Ordinal);
     private readonly int _effectiveRecordCount;
-    private readonly object _embeddedQuestScriptsGate = new();
+    private readonly object _sourceIndexGate = new();
+    private readonly Dictionary<Type, IFalloutSourceIndex> _sourceIndexes = [];
     private long? _embeddedQuestScripts;
     private FalloutSoundVoices? _soundVoices;
     internal FalloutSoundVoices SoundVoices => _soundVoices ??= new(this);
@@ -398,12 +403,11 @@ internal sealed class FalloutPluginStack : IDisposable
 
     internal long CountEmbeddedQuestScripts(CancellationToken cancellation = default)
     {
-        lock (_embeddedQuestScriptsGate)
+        lock (_sourceIndexGate)
         {
-            cancellation.ThrowIfCancellationRequested();
             // This source-only scalar is shared by independently owned menu and
             // restored script clocks. Reuse never outlives the original files.
-            foreach (var context in _plugins) context.Plugin.ValidateReadSource();
+            ValidateIndexSources(cancellation);
             if (_embeddedQuestScripts is { } cached) return cached;
             var count = 0L;
             foreach (var record in EffectiveRecords())
@@ -417,6 +421,26 @@ internal sealed class FalloutPluginStack : IDisposable
             _embeddedQuestScripts = count;
             return count;
         }
+    }
+
+    internal T ReadSourceIndex<T>(Func<FalloutPluginStack, CancellationToken, T> prepare,
+        CancellationToken cancellation = default) where T : class, IFalloutSourceIndex
+    {
+        lock (_sourceIndexGate)
+        {
+            ValidateIndexSources(cancellation);
+            if (_sourceIndexes.TryGetValue(typeof(T), out var cached)) return (T)cached;
+            var complete = prepare(this, cancellation) ?? throw new InvalidDataException("Source index preparation returned no declarations.");
+            cancellation.ThrowIfCancellationRequested();
+            _sourceIndexes.Add(typeof(T), complete);
+            return complete;
+        }
+    }
+
+    private void ValidateIndexSources(CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        foreach (var context in _plugins) context.Plugin.ValidateReadSource();
     }
 
     internal static bool IsQuestScriptHeader(ReadOnlySpan<byte> header)
@@ -466,9 +490,10 @@ internal sealed class FalloutPluginStack : IDisposable
         try { _soundVoices?.Retire(); }
         finally
         {
-            lock (_embeddedQuestScriptsGate)
+            lock (_sourceIndexGate)
             {
                 _embeddedQuestScripts = null;
+                _sourceIndexes.Clear();
                 foreach (var context in _plugins) context.Plugin.Dispose();
             }
         }

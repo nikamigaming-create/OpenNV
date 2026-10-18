@@ -26,6 +26,10 @@ internal static class RadioContracts
                 Group(700, 1, Cell(804, false), Group(804, 6, Reference(902, 10, 0, Radio(2)),
                     Reference(906, 10, 0, Radio(4), Field("DATA", Position(4200))), Door(913, 912)), Cell(805, false)));
             var path = Path.Combine(directory, "Radio.esm"); File.WriteAllBytes(path, bytes);
+            SourceIndexContracts.Verify(directory, "Radio.esm", (owner, token) => owner.ReadRadioStationIndex(token),
+                index => JsonSerializer.Serialize(new { stations = index.Stations.Values, errors = index.Errors.Select(pair => new { reference = pair.Key, error = pair.Value }) }));
+            SourceIndexContracts.VerifyFailure(directory, Join(bytes, Record("REFR", 999, 0, Field("NAME", [1]))),
+                owner => owner.ReadRadioStationIndex());
             using (var records = FalloutPluginStack.Load(directory, ["Radio.esm"]))
             using (var world = new FalloutReferenceWorld(records))
             {
@@ -56,6 +60,15 @@ internal static class RadioContracts
                 world.AdvanceEnableChanges(0, new(1, 1), _ => false); radio.Refresh(player);
                 Require(Available(909), "Applied enable did not refresh radio reception.");
                 var retained = JsonSerializer.Deserialize<FalloutRadioStationsSnapshot>(JsonSerializer.Serialize(radio.Capture()))!;
+                using (var independent = new FalloutReferenceWorld(records))
+                {
+                    var freshRadio = new FalloutRadioStations(records, independent, new());
+                    Require(freshRadio.Capture().Discovered.Count == 0 && freshRadio.Reception.Count == 0,
+                        "Shared source station declarations acquired another owner's discovery/reception.");
+                    freshRadio.Restore(retained); freshRadio.Refresh(player);
+                    Require(freshRadio.Capture().Discovered.SequenceEqual(retained.Discovered),
+                        "Fresh-world radio restoration changed retained discoveries.");
+                }
                 var cold = new FalloutRadioStations(records, world, new()) { SignalDiscovered = () => throw new InvalidDataException("Cold discovery replay.") };
                 cold.Restore(retained); cold.Refresh(player);
                 Require(cold.Capture().Discovered.SequenceEqual(retained.Discovered), "Cold refresh lost discovery history.");
@@ -67,10 +80,13 @@ internal static class RadioContracts
                 Receiver(records, world, radio);
             }
             File.WriteAllBytes(Path.Combine(directory, "Patch.esp"), Join(Record("TES4", 0, 0, Field("HEDR", header), Field("MAST", Encoding.ASCII.GetBytes("Radio.esm\0")), Field("DATA", new byte[8])),
-                Group(800, 6, Reference(900, 10, 0, Radio(1)))));
+                Group(800, 6, Reference(900, 10, 0, Radio(1)), Record("REFR", 903, 0x20))));
             using var patched = FalloutPluginStack.Load(directory, ["Radio.esm", "Patch.esp"]);
             Require(FalloutRadioStation.Read(patched, patched.GetEffective(Key(900))).Range == FalloutRadioRange.Everywhere,
                 "Radio reader ignored the winning override or its master-relative base.");
+            Require(patched.ReadRadioStationIndex().Stations[Key(900)].Range == FalloutRadioRange.Everywhere &&
+                !patched.ReadRadioStationIndex().Stations.ContainsKey(Key(903)),
+                "Shared source station index ignored the winning override or retained a deleted transmitter.");
             Console.WriteLine("OPENNV_RADIO_CONTRACT_PASS winning-master range anchor enable non-pipboy discovery once-only cold malformed retained-portal-divergence hud-declarations receiver-source-off lease-retirement independent-voices last-station-cold active-save-refused unbound-tuning-atomic");
         }
         finally { Directory.Delete(directory, true); }

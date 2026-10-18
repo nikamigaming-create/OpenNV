@@ -308,6 +308,19 @@ public partial class RuntimeCoordinator
         var content = RuntimeLiveContentSource.Current ??
             throw new InvalidOperationException("Live retail source was not configured.");
         _nativePluginStack = FalloutPluginStack.Load(sources, out var loadMetrics);
+        // Source declarations can also be requested by cold-save validation.
+        // Prepare before constructing any such consumers, while this existing
+        // index worker owns the source lifetime and the loading UI can draw.
+        var declarationsStarted = Stopwatch.GetTimestamp();
+        GD.Print("OPENNV_NATIVE_SOURCE_INDEX_PREPARING stage=activation-parents source=stack-index-worker");
+        var activation = _nativePluginStack.ReadActivationParentIndex(_nativeIndexCancellation.Token);
+        GD.Print($"OPENNV_NATIVE_SOURCE_INDEX_READY stage=activation-parents parents={activation.Children.Count} issues={activation.Issues.Count} " +
+            $"elapsedMs={Stopwatch.GetElapsedTime(declarationsStarted).TotalMilliseconds:F1} source=stack-index-worker");
+        declarationsStarted = Stopwatch.GetTimestamp();
+        GD.Print("OPENNV_NATIVE_SOURCE_INDEX_PREPARING stage=radio-stations source=stack-index-worker");
+        var radio = _nativePluginStack.ReadRadioStationIndex(_nativeIndexCancellation.Token);
+        GD.Print($"OPENNV_NATIVE_SOURCE_INDEX_READY stage=radio-stations stations={radio.Stations.Count} errors={radio.Errors.Count} " +
+            $"elapsedMs={Stopwatch.GetElapsedTime(declarationsStarted).TotalMilliseconds:F1} source=stack-index-worker");
         FalloutAddonNodes.Bind(content, _nativePluginStack);
         _nativeQuestState = new(_nativePluginStack, _nativeInventory.Notifications);
         var savePath = Path.GetFullPath(RequireOption(_options, "save-path"));
