@@ -1,6 +1,6 @@
 # Current work
 
-Updated 2026-10-17. The user rejects package g after a physical FNV VR playtest:
+Updated 2026-10-18. The user rejects package g after a physical FNV VR playtest:
 NPCs do not perform their behavior, combat is poor, and the game is broadly
 broken. Package g is not an accepted playable/headset candidate. Root alone owns
 repairs, builds, live input and Git. Priority remains FNV, standalone FO3, mods,
@@ -28,8 +28,8 @@ repairs toward a playable VR build. The first repair block admits the owned
 stream-27 animation layout with exact block extents and empty BSAnimNotes;
 nonempty notes and unknown layouts still fail closed. A fresh native dog test
 passes qualifying limb damage, animated pose, serialized cold reaction phase,
-completion and return to combat. Ordinary saving during that qualifying limb
-reaction remains open; a torso hit does not close it.
+completion and return to combat. Ordinary F5 and separate-process Continue now
+also pass for the selected qualifying coyote reaction, as detailed below.
 
 Player weapon/effect audio now uses the persistent engine-player sound history
 and finite completion owner. Future-cell preparation remains detached until
@@ -58,14 +58,13 @@ main-thread step. The complete runtime gate and selected owned/native checks
 pass, and all hosted checks passed before merge. These changes are not accepted
 as a playable VR build.
 
-Next owner: codex/script-scan-loading, from verified main/origin/main
-23c5e9080e869163c4306e02a18c3b46d2b81918 with no open task PR. A fresh optimized
+Merged PR #214 moves the full script scan off the scene thread. A fresh optimized
 loading trace attributes 8.31 seconds of scene-thread sampled time to the full
 embedded quest-script declaration scan. A recording-free Continue interval run
 captures an 11.86-second loading draw interval; readiness takes 39.22 wall
 seconds. The source count is seven embedded declarations, 496 initializations
 and default delay five. These values are not gameplay/parity coverage.
-The active change warms the same complete source index on the indexing worker
+The change warms the same complete source index on the indexing worker
 and cancels it during session retirement. Cancellation must never publish a
 partial count. The cancellation contract and owned index-window-close test pass;
 the latter drains readers, exits zero and preserves the checkpoint. Optimized
@@ -75,15 +74,38 @@ includes the 7.83-second source scan; total-loading speedup is not established.
 Script initialization values are unchanged. A follow-up trace attributes roughly
 0.94 seconds to activation-parent indexing and 0.93 seconds to script restore,
 including roughly 0.89 seconds indexing source radio stations.
-The complete runtime gate passes; checked publication is next. Per-part NPC stalls, remaining quest host
+The complete runtime gate and hosted checks pass. Per-part NPC stalls, remaining quest host
 publication/restore work and explicit saves remain open.
+
+Next owner: codex/combat-reaction-continuation from verified main/origin/main
+6a3c0bf8867fbdedb8756e734afdf1af8c596768, with no open task PR. An ordinary
+foreleg shot on 169b7a, reached through streamed terrain from the unchanged user
+checkpoint, selects the qualifying dog reaction. F5 completes and saves its
+0.088888889-second phase, part-7 injury and 15.599999 health. Separate-process
+Continue resumes that exact phase; the first observed cold phase is 0.177777778
+seconds. Injury/health persist, the reaction completes and combat resumes with
+no reaction error. These are flat ordinary-input results on the merged save
+code, not physical-headset acceptance. A prior attempt used an older investigation save
+that already retained four unsettled off-cell dust-devil loops before firing;
+that continuation problem remains visible and open. A later head shot completed
+F5 but did not qualify as reaction evidence.
+
+Deathclaw attack-variant failure is independently reproduced in the native
+component test. The active catalog repair admits uniquely compatible base
+groups in suffixed files, retains exact variant-group priority and supplies the
+validated group to creature/player sequence binding. Wrong families, ambiguity
+and partial failed catalogs remain refused. Synthetic contracts, Debug build,
+owned deathclaw/coyote source hits, moved-out-of-range source misses, fresh-skin
+cold attack clocks/RNG/event prefixes and both player weapon-preparation checks
+pass. The complete runtime gate passes; checked publication is next. Ordinary terrain deathclaw combat and
+physical VR acceptance remain open.
 
 The selected approach recorded a 203.19 ms streaming upload and an
 82.84 ms commit, including 33.86 ms reference publication. Settled optimized flat
 rolling p95 remains roughly 26-29 ms. Managed samples identify particle work and
 substantial wrapper finalization; all-thread percentages include sleeping workers.
-The timing method and limits are in runtime-performance.md. Keep ordinary limb
-reaction/save proof, attack variants, assistance, population behavior, the tracked
+The timing method and limits are in runtime-performance.md. Keep older off-cell
+audio continuation, attack variants, assistance, population behavior, the tracked
 rig and session lifecycle open. Performance now accompanies each gameplay block.
 
 The local Quest 3 launcher was made visible and changed to Vulkan after a white
@@ -101,7 +123,7 @@ performance, FO3 VR, mods and TTW remain unaccepted.
 
 Package g pins source 92148ee84f3643f1b11b93f90fcd1942bdcb896f; its previous
 asset-free package/hash validation does not establish playability. Repair PRs
-#210, #212 and #213 are integrated into main. Local main was verified equal to
+#210, #212, #213 and #214 are integrated into main. Local main was verified equal to
 origin/main with no open task PR before starting the current feature branch.
 Do not change package g's manifest to imply acceptance.
 

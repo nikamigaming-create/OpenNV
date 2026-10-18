@@ -11,13 +11,13 @@ public partial class NativeActorCombatAudit
 {
     private async Task ExerciseRetaliation(FalloutPluginStack records, RuntimeLiveContentSource content,
         FalloutGlobalState globals, string actorHex, string targetHex, bool unarmed, bool ambient, bool packageMotion = false,
-        bool hitReaction = false, bool radiusWarning = false, bool sloped = false)
+        bool hitReaction = false, bool radiusWarning = false, bool sloped = false, bool attackRangeCold = false)
     {
         using var world = new FalloutReferenceWorld(records);
         var key = records.RuntimeFormKey(Convert.ToUInt32(actorHex, 16));
         var targetKey = records.RuntimeFormKey(Convert.ToUInt32(targetHex, 16));
         var actors = new List<CharacterBody3D>();
-        var loadedCells = new HashSet<FalloutFormKey>();
+        var loadedCells = new HashSet<(FalloutReferenceWorld World, FalloutFormKey Cell)>();
         RuntimeNativePlayer? player = null;
         if (!ambient)
         {
@@ -168,6 +168,8 @@ public partial class NativeActorCombatAudit
                         throw new InvalidOperationException("Combat did not own its script-visible procedure and package before reaction selection.");
                 }
             }
+            if (attackRangeCold)
+                await ExerciseAttackRangeCold(records, world, key, targetKey, attacker, actors, Create);
             for (var frame = 0; frame < 900 && world.Health(targetKey).Current == before; ++frame)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
@@ -186,19 +188,30 @@ public partial class NativeActorCombatAudit
             player?.Free(); floor.Free();
         }
 
-        RuntimeNativeActorCombat Create(FalloutFormKey reference, Vector3 position)
+        RuntimeNativeActorCombat Create(FalloutFormKey reference, Vector3 position, FalloutReferenceWorld? owner = null)
         {
+            owner ??= world;
             var cell = FalloutCellSceneReader.Read(records, FalloutCellSceneReader.ParentCell(records.GetEffective(reference))!.Value);
-            if (loadedCells.Add(cell.Cell.FormKey)) world.LoadCell(cell);
-            world.InitializeActorTemplates(reference, 1, globals);
-            var state = world.Get(reference); state.Enabled = true;
+            if (loadedCells.Add((owner, cell.Cell.FormKey))) owner.LoadCell(cell);
+            owner.InitializeActorTemplates(reference, 1, globals);
+            var state = owner.Get(reference); state.Enabled = true;
             if (unarmed && reference == key)
             {
-                var inventory = world.Inventory(reference, 1, globals).Contents;
+                var inventory = owner.Inventory(reference, 1, globals).Contents;
                 foreach (var weapon in inventory.Items.Where(item => item.RecordType == "WEAP").ToArray())
                     inventory.Remove(weapon.FormKey, weapon.Count, silent: true);
             }
             var placed = cell.References.Single(value => value.FormKey == reference);
+            GD.Print("OPENNV_NATIVE_ACTOR_SOURCE " + JsonSerializer.Serialize(new
+            {
+                reference,
+                placed.Cell,
+                placed.Base,
+                sourcePositionGameUnits = placed.Position,
+                sourceRotationRadians = placed.RotationRadians,
+                fixturePositionMeters = new[] { position.X, position.Y, position.Z },
+                fixture = "synthetic-floor;source-placement-not-used"
+            }));
             CharacterBody3D actor;
             OpenNV.Runtime.Formats.Gamebryo.RuntimeNativeNifSkeleton skeleton;
             string skeletonPath;
@@ -206,7 +219,7 @@ public partial class NativeActorCombatAudit
             {
                 var npc = RuntimeNativeNpc.Create(records, content, placed, .0142875f,
                     (appearance, part, nif, geometry) => NativeNpcMaterial.Resolve(appearance, part, nif, geometry, records, new Color(.3f, .3f, .3f)),
-                    equippedArmor: world.EquippedArmor(reference, 1, globals), selection: state.Templates);
+                    equippedArmor: owner.EquippedArmor(reference, 1, globals), selection: state.Templates);
                 actor = npc; skeleton = npc.Skeleton; skeletonPath = npc.Appearance.SkeletonPath;
             }
             else
@@ -217,7 +230,7 @@ public partial class NativeActorCombatAudit
             actors.Add(actor); actor.Position = position + Vector3.Up * .05f;
             AddChild(actor); actor.SetProcess(false); actor.SetPhysicsProcess(false);
             RuntimeNativeActorContacts.Configure(actor, skeleton, 2);
-            var combat = RuntimeNativeActorCombat.Attach(actor, skeleton, skeletonPath, world, state, records, content, 2, 3, context);
+            var combat = RuntimeNativeActorCombat.Attach(actor, skeleton, skeletonPath, owner, state, records, content, 2, 3, context);
             if (actor is RuntimeNativeNpc humanoid) humanoid.Combat = combat;
             else ((RuntimeNativeCreature)actor).Combat = combat;
             combat.SetPhysicsProcess(false);

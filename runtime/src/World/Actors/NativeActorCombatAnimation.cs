@@ -24,8 +24,11 @@ internal sealed class NativeActorCombatAnimation
         var source = FalloutNifFile.Read(bytes);
         var sequences = source.Roots.Select(source.ReadObject).OfType<FalloutNifControllerSequence>().ToArray();
         var name = System.IO.Path.GetFileNameWithoutExtension(path);
-        var matching = sequences.Where(sequence => name.EndsWith(sequence.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
-        var selected = sequences.Length == 1 ? sequences[0] : matching.Length == 1 ? matching[0] :
+        var declared = content.ActorAnimations.SelectedGroup(path);
+        var matching = sequences.Where(sequence => declared is not null
+            ? sequence.Name.Equals(declared, StringComparison.OrdinalIgnoreCase)
+            : name.EndsWith(sequence.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var selected = declared is null && sequences.Length == 1 ? sequences[0] : matching.Length == 1 ? matching[0] :
             throw new NotSupportedException("Actor combat animation has no unique requested sequence.");
         var root = selected.ControlledBlocks.SingleOrDefault(link => link.NodeName == selected.TargetName && link.ControllerType == "NiTransformController");
         _root = root is null ? null : new(source, root.Interpolator);
