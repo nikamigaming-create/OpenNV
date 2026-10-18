@@ -241,4 +241,12 @@ if ($LASTEXITCODE -ne 0 -or $inputText -match $godotFailurePattern -or
 }
 Write-Output "OPENNV_NATIVE_RECORDED_INPUT_PASS saveGuard=true sourceBound=true playback=true framesRecorded=false fixture=true campaign=false"
 
+$classicFitOutput = & $Godot --headless --path $runtime res://tools/ClassicSceneryFitAudit/ClassicSceneryFitAudit.tscn 2>&1
+$classicFitText = $classicFitOutput | Out-String
+if ($LASTEXITCODE -ne 0 -or $classicFitText -match $godotFailurePattern -or
+    $classicFitText -notmatch "OPENNV_CLASSIC_SCENERY_FIT_CONTRACT_PASS") {
+    throw "OpenNV classic scenery projection failed:`n$classicFitText"
+}
+Write-Output "OPENNV_CLASSIC_SCENERY_FIT_CONTRACT_PASS indexed=true transformed=true hiddenExcluded=true"
+
 Write-Output "OPENNV_CSHARP_GODOT_GATE_PASS"

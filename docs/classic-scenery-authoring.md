@@ -36,6 +36,24 @@ pixel offsets and rotation remain separate inputs. Vault 13 beds and tables have
 Full visual acceptance is still required, especially for sectional furniture and
 authored facing variants.
 
+Static fitting now projects the referenced mesh vertices, excluding unused
+vertices and hidden geometry. Projecting each part's bounding box still admitted
+empty corners: the owned furniture audit previously measured a limiting extent
+as low as 68.36% of the intended FRM fit at 32 pixels/metre. The repaired native
+check covers 23 furniture bindings across six directions at the production world
+scale, with maximum relative extent error 0.000000358 and center error 0.000240
+source pixels. Paint projection and art anchoring share the corrected extent.
+Skinned bounds and donor stack fitting remain separate work. These checks do not
+establish matching silhouettes, textures, shading or retail pixels.
+
+Run the source-bound check through
+`res://tools/ClassicSceneryFitAudit/ClassicSceneryFitAudit.tscn` with the owned FO1
+installation after `--`. With no arguments it runs the synthetic transformed,
+indexed, hidden-geometry check included in the full runtime gate. It records no
+frames and writes no extracted assets. The historical local Blender authoring
+helper named above is absent from the current checkout; the shipped GLBs remain
+available, but reproducible authoring still needs recovery.
+
 Rotated parts now project directly before their extents are combined; a larger
 axis-aligned box around the rotated assembly no longer causes unnecessary
 shrinking. The full bunk has a 90-degree authored correction to align its long

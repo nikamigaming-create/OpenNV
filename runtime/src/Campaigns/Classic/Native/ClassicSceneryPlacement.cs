@@ -77,11 +77,31 @@ internal static class ClassicSceneryPlacement
             var placed = parent * node.Transform;
             if (node is MeshInstance3D mesh && mesh.Mesh is not null)
             {
-                // Project each transformed part directly. Projecting a new
-                // axis-aligned box around the rotated assembly makes narrow
-                // furniture artificially wider and shrinks it to fit the FRM.
-                var rectangle = Project(MeshBounds(mesh), pixelsPerMeter, placed);
-                result = result?.Merge(rectangle) ?? rectangle;
+                if (mesh.Skin is not null)
+                {
+                    var rectangle = Project(MeshBounds(mesh), pixelsPerMeter, placed);
+                    result = result?.Merge(rectangle) ?? rectangle;
+                }
+                else
+                {
+                    // A mesh's box includes corners outside the geometry.
+                    // Project the actual static surfaces so irregular furniture
+                    // fits and anchors to the FRM without artificial shrinkage.
+                    for (var surface = 0; surface < mesh.Mesh.GetSurfaceCount(); surface++)
+                    {
+                        var arrays = mesh.Mesh.SurfaceGetArrays(surface);
+                        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                        var indices = arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+                        var count = indices.Length == 0 ? vertices.Length : indices.Length;
+                        for (var index = 0; index < count; index++)
+                        {
+                            var point = placed * vertices[indices.Length == 0 ? index : indices[index]];
+                            if (!point.IsFinite()) throw new InvalidDataException("Classic scenery has nonfinite geometry.");
+                            var pixel = new Vector2(ScreenX.Dot(point), ScreenY(pixelsPerMeter).Dot(point));
+                            result = result?.Expand(pixel) ?? new Rect2(pixel, Vector2.Zero);
+                        }
+                    }
+                }
             }
             foreach (var child in node.GetChildren().OfType<Node3D>()) Visit(child, placed);
         }
