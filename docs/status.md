@@ -1,6 +1,11 @@
 # Product status
 
-Updated 2026-10-18. Priority: **vanilla FNV -> vanilla FO3 -> mods -> TTW**.
+Updated 2026-10-18. User priority: **Fallout 1 completion and original-art fidelity**.
+FO1 remains an incomplete classic preview with selected movement, inventory,
+equipment, door and save flows. Complete campaign execution and 1:1 3D art are
+unverified. See [current-work.md](current-work.md) for the active owner.
+
+The following FNV/FO3 inventory is preserved for subsequent work.
 The user rejected package g's physical FNV VR playtest. It is not a playable or
 headset-ready handoff. See [implementation-plan.md](implementation-plan.md) for
 the evidence-backed repair inventory and work order.

@@ -1,8 +1,14 @@
 # Implementation plan
 
-Updated 2026-10-17 after the user's rejected physical FNV VR playtest of package g.
-Priority remains vanilla FNV, standalone FO3, mods, then TTW. Root works alone and
-owns code, builds, live input and Git.
+Updated 2026-10-18: the user directs Fallout 1 completion and original-art fidelity
+first. The active classic sequence is in [classic-fallout-plan.md](classic-fallout-plan.md)
+and [classic-world-realization.md](classic-world-realization.md); the verified
+owner is in [current-work.md](current-work.md). Root works alone and owns code,
+builds, live input and Git.
+
+The following inventory preserves the FNV repair requirements from the rejected
+physical VR playtest of package g. Its former FNV-first sequence is deferred
+while FO1 is the user's active priority.
 
 ## Acceptance reset
 
