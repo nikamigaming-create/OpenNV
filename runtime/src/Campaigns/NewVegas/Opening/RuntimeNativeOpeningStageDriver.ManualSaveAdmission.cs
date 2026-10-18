@@ -22,11 +22,22 @@ internal partial class RuntimeNativeOpeningStageDriver
         var blocker = SaveContinuationBlocker;
         if (blocker is not null and not "actor-procedure-initialization")
             return new(RuntimeManualSaveAdmissionKind.Refused, blocker);
-        if (_scripts.References.PendingAnimationSoundCaptureCount == 0)
+        var voices = new List<OpenNV.Runtime.Content.FalloutFiniteSoundVoice>();
+        if (_scripts.References.PendingAnimationSoundCaptureCount > 0)
+        {
+            if (_scripts.References.PendingAnimationSoundFiniteVoiceWait() is not { Count: > 0 } referenceVoices)
+                return new(RuntimeManualSaveAdmissionKind.Refused, "animation-sound-continuation");
+            voices.AddRange(referenceVoices);
+        }
+        if (_playerPackage?.AudioCaptureReady == false)
+        {
+            if (_playerPackage.PendingFiniteAudio is not { Count: > 0 } playerVoices)
+                return new(RuntimeManualSaveAdmissionKind.Refused, "player-audio-continuation");
+            voices.AddRange(playerVoices);
+        }
+        if (voices.Count == 0)
             return blocker is null ? new(RuntimeManualSaveAdmissionKind.Ready) :
                 new(RuntimeManualSaveAdmissionKind.Refused, blocker);
-        if (_scripts.References.PendingAnimationSoundFiniteVoiceWait() is not { Count: > 0 } voices)
-            return new(RuntimeManualSaveAdmissionKind.Refused, "animation-sound-continuation");
         if (blocker == "actor-procedure-initialization" &&
             (_scripts.References.PendingProcedureFiniteVoiceWait() is not { Count: > 0 } procedures ||
                 procedures.Any(voice => !voices.Contains(voice))))

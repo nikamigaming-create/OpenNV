@@ -179,7 +179,8 @@ internal partial class RuntimeNativePlayer
                     : collision.ContainsKey("collider") ? ShotMaterial(collision) : 6;
                 impact = FalloutImpact.Resolve(_presentationRecords, set.Value, material);
                 if (impact is not { } source) return;
-                _shotEffects ??= new(_presentationRecords, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask);
+                EnsureWeaponSounds();
+                _shotEffects ??= new(_presentationRecords, RuntimeLiveContentSource.Current!, UnitsToMeters, this, CollisionMask, _weaponSounds);
                 if (!_shotEffects.IsInsideTree()) AddChild(_shotEffects);
                 _shotEffects.Impact(source, point, normal, direction);
             });

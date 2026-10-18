@@ -252,7 +252,10 @@ public partial class RuntimeCoordinator
             ExteriorNpcPreparation? npc = null;
             _nativeGridUploads.Enqueue((reference.FormKey.ToString(), () =>
             {
-                var before = root.GetChildCount();
+                // Decode/upload native resources without entering the live tree.
+                // Ready callbacks can start authored sounds and gameplay bindings;
+                // they belong to committed residency, never preparation ahead.
+                var stagedReference = new Node3D();
                 RuntimeNativeNpc? preparedNpc = null;
                 try
                 {
@@ -275,26 +278,26 @@ public partial class RuntimeCoordinator
                             if (!npc.Advance(this, grid.Scene, out preparedNpc)) return false;
                         }
                     }
-                    PlaceNativeReference(root, grid.Scene, reference, observe: false,
+                    PlaceNativeReference(stagedReference, grid.Scene, reference, observe: false,
                         preparedModel: model is null ? null : prepared.Models.GetValueOrDefault(model), preparedNpc: preparedNpc);
                     if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
-                    var nodes = root.GetChildren().Skip(before).OfType<Node3D>().ToArray();
+                    var nodes = stagedReference.GetChildren().OfType<Node3D>().ToArray();
                     if (nodes.Length > 1) throw new InvalidDataException("A source reference must have one presentation root.");
                     foreach (var node in nodes)
                     {
-                        GamebryoReferenceEnableRuntime.Apply(node, false);
+                        stagedReference.RemoveChild(node);
                         _nativeGridStaged.Add(node); _nativeGridModels.Add(reference.FormKey, node);
                     }
                 }
                 catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException or InvalidOperationException)
                 {
                     if (preparedNpc is not null && GodotObject.IsInstanceValid(preparedNpc) && preparedNpc.GetParent() is null) preparedNpc.Free();
-                    while (root.GetChildCount() > before) root.GetChild(before).Free();
                     _nativeReferenceDivergences[reference.FormKey.ToString()] = error.Message;
                     if (grid.Scene.BaseObjects[reference.Base].Signature == "NPC_")
                         _nativeActorDivergences[reference.FormKey.ToString()] = error.Message;
                     GD.PushError($"OPENNV_NATIVE_REFERENCE_DIVERGENCE reference={reference.FormKey}: {error.Message}");
                 }
+                finally { stagedReference.Free(); }
                 ReleaseExteriorNpc(npc); npc = null;
                 return true;
             }
@@ -335,7 +338,11 @@ public partial class RuntimeCoordinator
             reference => Math.Abs((int)MathF.Floor(reference.Position[0] / 4096) - center.X) <= grid.Radius + 1 &&
                 Math.Abs((int)MathF.Floor(reference.Position[1] / 4096) - center.Y) <= grid.Radius + 1);
         Mark("reference-residency");
-        foreach (var (key, model) in _nativeGridModels) _nativeReferencePresentation.Register(key, model);
+        foreach (var (key, model) in _nativeGridModels)
+        {
+            root.AddChild(model);
+            _nativeReferencePresentation.Register(key, model);
+        }
         Mark("reference-publication");
         foreach (var land in root.GetChildren().OfType<RuntimeNativeLandscapeTransport>())
         {

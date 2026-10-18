@@ -25,6 +25,7 @@ internal sealed class RuntimeNativeNifAnimation
     {
         if (sequence.Weight != 1.0f)
             throw new NotSupportedException("Applying a weighted source sequence requires an animation blend owner.");
+        source.RequireNoActiveAnimationNotes(sequence);
         Source = source;
         Sequence = sequence;
         _skeleton = skeleton;

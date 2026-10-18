@@ -1,5 +1,16 @@
 # Nonfatal actor hit reactions
 
+The October 17 repair also admits owned stream-27 KF files with their four-byte
+animation-note reference. Empty BSAnimNotes records are decoded with exact
+extents; active notes still require a playback owner and remain refused. Fresh
+owned dog checks pass qualifying limb damage, changed bone poses, serialized
+cold resumption, finite completion and subsequent combat. Player weapon/effect
+audio now belongs to the persistent engine-player sound ledger and participates
+in finite save preparation. An ordinary damaged-coyote combat save cold-loads
+with retained injury and health and the coyote attacks again. That ordinary shot
+hit the torso; ordinary F5 during the qualifying stream-27 limb reaction remains
+separate, uncompleted acceptance work.
+
 Health damage previously reached `FalloutReferenceWorld.DamageActor`, and lethal
 hits activated the source ragdoll. Nonfatal hits only provoked combat. No owner
 selected the authored hit IDLE or published its animation. A creature or NPC

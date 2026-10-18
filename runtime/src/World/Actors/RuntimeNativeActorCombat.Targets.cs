@@ -20,10 +20,15 @@ internal sealed partial class RuntimeNativeActorCombat
     private Vector3 BodyTargetPoint()
     {
         var part = _world.BodyParts(_state.Reference).Parts.Single(value => value.Type == 0);
+        return BodyPartTargetPoint(part);
+    }
+
+    private Vector3 BodyPartTargetPoint(FalloutBodyPart part)
+    {
         // BPNT is the aiming target. BPNN can be a broad damage-region root
         // (for humanoid torso it is Bip01, below the visible chest).
         var bone = _skeleton.BoneIndex(string.IsNullOrEmpty(part.Target) ? part.Node : part.Target);
-        if (bone < 0) throw new NotSupportedException("Combat target has no source torso bone.");
+        if (bone < 0) throw new NotSupportedException($"Combat part {part.Type} has no source target bone.");
         return (_skeleton.Node.GlobalTransform * _skeleton.Node.GetBoneGlobalPose(bone)).Origin;
     }
 
@@ -39,6 +44,18 @@ internal sealed partial class RuntimeNativeActorCombat
                 partType = part.Type,
                 node = string.IsNullOrEmpty(part.Target) ? part.Node : part.Target,
                 position = new[] { position.X, position.Y, position.Z },
+                regions = _world.BodyParts(_state.Reference).Parts.Select(value =>
+                {
+                    var target = BodyPartTargetPoint(value);
+                    return new
+                    {
+                        partType = value.Type,
+                        actorValue = value.ActorValue,
+                        healthPercent = value.HealthPercent,
+                        node = string.IsNullOrEmpty(value.Target) ? value.Node : value.Target,
+                        position = new[] { target.X, target.Y, target.Z }
+                    };
+                }).ToArray(),
                 owner = "source-BPNT-current-skeleton-pose",
                 error = (string?)null
             };

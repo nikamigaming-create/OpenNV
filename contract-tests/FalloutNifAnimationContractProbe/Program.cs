@@ -4,6 +4,7 @@ using OpenNV.Runtime.Content;
 using OpenNV.Runtime.Formats.Gamebryo;
 
 TextKeyContracts.Run();
+AnimationNotesLayoutContracts.Run();
 TbcKeyContracts.Run(TbcTransformFixture);
 if (args.Length == 3 && args[0] == "--owned-tbc")
 {
@@ -327,7 +328,9 @@ if (args is ["--inspect-model", var modelRoot, var modelPath])
 if (args.Length is 2 or 3)
 {
     using var archive = new FalloutBsaArchive(Path.Combine(args[0], "Fallout - Meshes.bsa"));
-    var source = FalloutNifFile.Read(archive.Read(args[1]));
+    var ownedBytes = archive.Read(args[1]);
+    var source = FalloutNifFile.Read(ownedBytes);
+    if (source.UserVersion2 == 27) AnimationNotesLayoutContracts.Audit(ownedBytes);
     FalloutNifFloatExtraDataState? ownedFloats = null;
     if (args.Length == 3)
     {

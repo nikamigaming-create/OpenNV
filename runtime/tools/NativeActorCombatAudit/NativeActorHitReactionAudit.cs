@@ -13,7 +13,10 @@ public partial class NativeActorCombatAudit
         FalloutGlobalState globals, RuntimeNativeActorCombat combat, CharacterBody3D actor,
         FalloutFormKey key, FalloutFormKey target)
     {
-        var part = world.BodyParts(key).Parts.First(part => part.ActorValue == 27 && part.HealthPercent > 0);
+        // Humanoids use arm AV 27; quadrupeds use foreleg AV 29.
+        // Select the actual source limb, never assume a humanoid BPTD layout.
+        var part = world.BodyParts(key).Parts.OrderBy(part => part.ActorValue == 27 ? 0 : 1)
+            .First(part => part.ActorValue is 27 or 29 && part.HealthPercent > 0);
         var contact = actor.FindChildren("*", "Area3D", true, false).OfType<Area3D>()
             .First(area => combat.HitPart(area) == part.Type);
         var health = world.Health(key).Current;

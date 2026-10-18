@@ -45,6 +45,8 @@ public partial class NativePlayerPresentationAudit
         var player = new RuntimeNativePlayer(); player.Configure(config, Transform3D.Identity); AddChild(player);
         try
         {
+            using var audioWorld = new FalloutReferenceWorld(records);
+            _ = new RuntimeNativePlayerPackage(records, player, new FalloutScriptSession(), audioWorld, () => saved.ActiveCell);
             var playerForm = records.RuntimeFormKey(7);
             var appearance = FalloutNpcAppearanceResolver.Resolve(records, playerForm,
                 equippedArmor: saved.EquippedRuntimeFormIds.Select(records.RuntimeFormKey).Where(key => records.GetEffective(key).Signature == "ARMO").ToArray(),

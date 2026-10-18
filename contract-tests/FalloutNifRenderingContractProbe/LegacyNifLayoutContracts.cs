@@ -5,7 +5,7 @@ internal static partial class LegacyNifLayoutContracts
 {
     internal static void Run()
     {
-        foreach (var version in new uint[] { 14, 21, 26, 30, 34 })
+        foreach (var version in new uint[] { 14, 21, 26, 27, 30, 34 })
         {
             var node = Node(version);
             var material = Material(version);
@@ -88,7 +88,7 @@ internal static partial class LegacyNifLayoutContracts
         Reject(() => FalloutNifFile.Read(File(22, [("NiNode", Node(21))])));
         RunShaderLayouts();
         UnsizedNifLayoutContracts.Run();
-        Console.WriteLine("OPENNV_LEGACY_NIF_LAYOUT_CONTRACT_PASS streams=14,21,26,30,34 flagsWidths=true materialColors=true falloffGates=true phantomSourcePreserved=true malformedRejected=true");
+        Console.WriteLine("OPENNV_LEGACY_NIF_LAYOUT_CONTRACT_PASS streams=14,21,26,27,30,34 flagsWidths=true materialColors=true falloffGates=true phantomSourcePreserved=true malformedRejected=true");
     }
 
     private static byte[] Node(uint version) => Bytes(w =>
