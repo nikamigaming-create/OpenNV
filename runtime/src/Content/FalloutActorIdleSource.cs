@@ -10,6 +10,13 @@ internal sealed record FalloutActorIdleSource(FalloutFormKey Form, string Animat
         => Resolve(stack, FalloutDialogueTopic.Find(stack, "IDLE", editorId));
 
     internal static FalloutActorIdleSource Resolve(FalloutPluginStack stack, FalloutPluginRecord idle)
+        => Sources.GetOrCreateValue(stack).GetOrAdd(idle.FormKey,
+            _ => new(() => Read(stack, idle), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<FalloutPluginStack,
+        System.Collections.Concurrent.ConcurrentDictionary<FalloutFormKey, Lazy<FalloutActorIdleSource>>> Sources = new();
+
+    private static FalloutActorIdleSource Read(FalloutPluginStack stack, FalloutPluginRecord idle)
     {
         if (idle.Signature != "IDLE") throw new InvalidDataException("Selected animation record is not IDLE.");
         var objects = new List<FalloutActorAnimationObject>();

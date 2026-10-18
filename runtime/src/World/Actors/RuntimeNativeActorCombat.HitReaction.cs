@@ -14,6 +14,26 @@ internal sealed partial class RuntimeNativeActorCombat
     private string? _hitReactionError;
     private object? _lastHitReaction;
     private long _hitReactionsStarted, _hitReactionsCompleted;
+    private string? _hitPreparationError;
+    private readonly Dictionary<string, NativeActorCombatAnimation> _hitClips = new(StringComparer.OrdinalIgnoreCase);
+    private NativeActorWeaponAttachment? _hitClipWeapon;
+    private void PrepareHitReactionResources()
+    {
+        try
+        {
+            _hitReactionTree = new(_records, _skeletonPath);
+            NativeAnimationResources.For(_content).Prepare(_hitReactionTree.AnimationPaths());
+        }
+        catch (Exception error) { _hitPreparationError = error.Message; }
+    }
+
+    private NativeActorCombatAnimation HitClip(string path)
+    {
+        if (!ReferenceEquals(_hitClipWeapon, _enemyObject)) { _hitClips.Clear(); _hitClipWeapon = _enemyObject; }
+        if (!_hitClips.TryGetValue(path, out var clip))
+            _hitClips.Add(path, clip = new(path, _content, _skeleton, _enemyObject, false));
+        return clip;
+    }
     internal bool ReactingToHit => _state.HitReaction is not null;
     internal object HitReactionObservation => new
     {
@@ -22,6 +42,7 @@ internal sealed partial class RuntimeNativeActorCombat
         completed = _hitReactionsCompleted,
         last = _lastHitReaction,
         error = _hitReactionError,
+        preparationError = _hitPreparationError,
         sounds = _hitReactionSounds?.State,
         boundary = "source-IDLE-conditions-and-KF;blend-in-out-and-forced-power-attack-triggers-unmatched"
     };
@@ -69,7 +90,7 @@ internal sealed partial class RuntimeNativeActorCombat
             var timing = FalloutIdleAnimationData.Read(selected);
             if (source.Objects.Count != 0 || timing.ReplayDelaySeconds != 0 || timing.SelectAdditionalLoops(_state.HitReactionRandom.NextBounded) != 0)
                 throw new NotSupportedException("Hit reaction requires animated-object, replay-delay or repeated-idle ownership.");
-            _hitReactionClip = new(source.AnimationPath, _content, _skeleton, _enemyObject, false);
+            _hitReactionClip = HitClip(source.AnimationPath);
             if (_hitReactionClip.Animation.Sequence.CycleType != 2)
                 throw new NotSupportedException("Hit reaction requires a finite source KF.");
             var p = _actor.GlobalPosition; var q = _actor.GlobalBasis.Orthonormalized().GetRotationQuaternion();
@@ -133,7 +154,7 @@ internal sealed partial class RuntimeNativeActorCombat
             {
                 var source = FalloutActorIdleSource.Resolve(_records, _records.GetEffective(state.Idle));
                 if (source.AnimationPath != state.Animation.Resource) throw new InvalidDataException("Saved hit-reaction resource changed.");
-                _hitReactionClip = new(source.AnimationPath, _content, _skeleton, _enemyObject, false);
+                _hitReactionClip = HitClip(source.AnimationPath);
                 if (!_hitReactionClip.Hash.Equals(state.Animation.Sha256, StringComparison.OrdinalIgnoreCase) ||
                     _hitReactionClip.Animation.Sequence.CycleType != 2 || state.Animation.ElapsedSeconds >= _hitReactionClip.Duration)
                     throw new InvalidDataException("Saved hit-reaction KF or clock differs from source.");

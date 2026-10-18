@@ -10,7 +10,8 @@ internal static class NativeNifLodMaterial
 {
     internal const string ResourceIdentity = "Owned distant terrain and object lighting";
     private static readonly Dictionary<bool, Shader> Shaders = [];
-    private static readonly ConditionalWeakTable<RuntimeLiveContentSource, Dictionary<string, WeakReference<Texture2D>>> Textures = new();
+    private sealed record TextureEntry(WeakReference<Texture2D> Texture, int Bytes);
+    private static readonly ConditionalWeakTable<RuntimeLiveContentSource, Dictionary<string, TextureEntry>> Textures = new();
 
     internal static Material? TryBuild(FalloutNifFile nif, FalloutNifGeometry geometry)
     {
@@ -39,11 +40,12 @@ internal static class NativeNifLodMaterial
         Texture2D Texture(string path)
         {
             path = FalloutNifSurfaceInputs.TexturePath(path);
+            if (cache.TryGetValue(path, out var retained) && retained.Texture.TryGetTarget(out var existing) && GodotObject.IsInstanceValid(existing))
+            { textureBytes += retained.Bytes; return existing; }
             if (!source.TryRead(path, null, out var bytes, out var identity)) throw new FileNotFoundException(path);
             textureBytes += bytes.Length;
-            if (cache.TryGetValue(path, out var weak) && weak.TryGetTarget(out var existing) && GodotObject.IsInstanceValid(existing)) return existing;
-            var loaded = NativeDdsTexture.Load(bytes, identity);
-            cache[path] = new(loaded); return loaded;
+            var loaded = NativeDdsTexture.LoadCached(source, bytes, identity, logicalPath: path);
+            cache[path] = new(new(loaded), bytes.Length); return loaded;
         }
         material.SetShaderParameter("base_map", Texture(textures.Textures[0]));
         if (textures.Textures[1].Length != 0)

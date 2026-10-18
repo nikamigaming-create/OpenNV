@@ -24,6 +24,7 @@ internal partial class RuntimeNativeExteriorLod : Node3D
     private IReadOnlyList<FalloutLodBlock> _selected = [];
     private Task? _read;
     private ChannelReader<Payload>? _uploads;
+    private IEnumerator<bool>? _upload;
     private readonly CancellationTokenSource _readCancellation = new();
     private ImageTexture _mask = null!;
     private Vector4 _detailBounds;
@@ -130,17 +131,22 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         {
             var started = Stopwatch.GetTimestamp();
             var changed = false;
-            while (uploads.TryRead(out var result))
+            while (_upload is not null || uploads.Count != 0)
             {
-                try { Upload(result); }
-                catch (Exception error) { Report(result.Block.Terrain, error); }
-                changed = true;
+                if (_upload is null && uploads.TryRead(out var result)) _upload = Upload(result).GetEnumerator();
+                try
+                {
+                    if (_upload is not null && !_upload.MoveNext())
+                    { _upload.Dispose(); _upload = null; changed = true; }
+                }
+                catch (Exception error)
+                { _upload?.Dispose(); _upload = null; Report("tile-publication", error); changed = true; }
                 _lastUploadMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 _maximumUploadMilliseconds = Math.Max(_maximumUploadMilliseconds, _lastUploadMilliseconds);
                 if (_lastUploadMilliseconds >= 3) break;
             }
             if (changed) Commit();
-            if (uploads.Count == 0 && _read is null) _uploads = null;
+            if (uploads.Count == 0 && _upload is null && _read is null) _uploads = null;
         }
         _updateTime += (float)delta;
         if (_updateTime < .05f) return;
@@ -165,7 +171,20 @@ internal partial class RuntimeNativeExteriorLod : Node3D
                 try
                 {
                     if (!_source.TryRead(path, null, out bytes, out _)) throw new FileNotFoundException(path);
-                    return new(path, FalloutNifFile.Read(bytes), bytes.Length, null);
+                    var nif = FalloutNifFile.Read(bytes);
+                    foreach (var block in nif.Blocks)
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        if (block.TypeName is "NiTriShape" or "NiTriStrips" or "BSSegmentedTriShape")
+                        {
+                            var geometry = nif.ReadGeometry(block.Index);
+                            _ = nif.ReadMeshData(geometry.Data);
+                        }
+                        else if (block.TypeName == "BSShaderTextureSet")
+                            foreach (var texture in ((FalloutNifShaderTextureSet)nif.ReadObject(block.Index)).Textures.Where(value => value.Length != 0))
+                                _ = _source.TryRead(FalloutNifSurfaceInputs.TexturePath(texture), null, out _, out _);
+                    }
+                    return new(path, nif, bytes.Length, null);
                 }
                 catch (Exception error) { return new(path, null, bytes?.Length ?? 0, error); }
             }
@@ -183,45 +202,65 @@ internal partial class RuntimeNativeExteriorLod : Node3D
         });
     }
 
-    public override void _ExitTree() => _readCancellation.Cancel();
+    public override void _ExitTree()
+    {
+        _readCancellation.Cancel();
+        _upload?.Dispose(); _upload = null;
+    }
 
     internal Task StopSourceReads()
     {
         SetProcess(false);
         _readCancellation.Cancel();
+        _upload?.Dispose(); _upload = null;
         return _read ?? Task.CompletedTask;
     }
 
-    private void Upload(Payload payload)
+    private IEnumerable<bool> Upload(Payload payload)
     {
         var root = new Node3D { Name = $"LOD_{payload.Block.Level}_{payload.Block.X}_{payload.Block.Y}", Visible = false };
         var bytes = payload.Terrain.Bytes + payload.Objects.Bytes;
+        var published = false;
+        (Node3D? Root, bool Complete) terrain = (null, false), objects = (null, false);
         try
         {
-            (Node3D? Root, bool Complete) Build(Tile tile, bool terrain)
+            foreach (var (tile, isTerrain) in new[] { (payload.Terrain, true), (payload.Objects, false) })
             {
-                if (tile.Error is { } failure) { Report(tile.Path!, failure); return (null, false); }
-                if (tile.Source is null) return (null, false);
+                if (tile.Error is { } failure) { Report(tile.Path!, failure); continue; }
+                if (tile.Source is null) continue;
+                var complete = true;
+                RuntimeNativeNifMeshBuilder.LodAssembly? assembly = null;
                 try
                 {
-                    var complete = true;
-                    Action<FalloutNifGeometry>? omitted = terrain ? geometry =>
+                    Action<FalloutNifGeometry>? omitted = isTerrain ? geometry =>
                     {
                         complete = false;
                         Report($"{tile.Path}#geometry{geometry.Block.Index}",
                             new NotSupportedException("Property-free LOD geometry requires its world material owner; this draw remains missing."));
                     }
                     : null;
-                    var model = RuntimeNativeNifMeshBuilder.Build(tile.Source, _units, unboundPropertyFreeLod: omitted);
-                    if (model.Surfaces == 0) { model.Root.Free(); return (null, false); }
-                    root.AddChild(model.Root); bytes += model.Vertices * 80L;
-                    return (model.Root, complete);
+                    assembly = new(tile.Source, _units, _source, omitted);
                 }
-                catch (Exception error) { Report(tile.Path!, error); return (null, false); }
+                catch (Exception error) { Report(tile.Path!, error); }
+                if (assembly is null) continue;
+                using (assembly)
+                {
+                    var done = false;
+                    var failed = false;
+                    while (!done)
+                    {
+                        try { done = assembly.Advance(); }
+                        catch (Exception error) { Report(tile.Path!, error); failed = true; break; }
+                        yield return false;
+                    }
+                    if (failed) continue;
+                    var model = assembly.Take();
+                    if (model.Surfaces == 0) { model.Root.Free(); continue; }
+                    root.AddChild(model.Root); bytes += model.Vertices * 80L;
+                    if (isTerrain) terrain = (model.Root, complete); else objects = (model.Root, complete);
+                }
             }
-            var terrain = Build(payload.Terrain, true);
-            var objects = Build(payload.Objects, false);
-            if (terrain.Root is null && objects.Root is null) { root.Free(); _failed.Add(payload.Block); return; }
+            if (terrain.Root is null && objects.Root is null) { _failed.Add(payload.Block); yield break; }
             var meshes = root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().ToArray();
             var materials = meshes.SelectMany(mesh => Enumerable.Range(0, mesh.Mesh.GetSurfaceCount()).Select(mesh.GetActiveMaterial))
                 .OfType<ShaderMaterial>().Where(material => material.ResourceName == NativeNifLodMaterial.ResourceIdentity).Distinct().ToArray();
@@ -237,8 +276,9 @@ internal partial class RuntimeNativeExteriorLod : Node3D
             GetParent().GetChildren().OfType<RuntimeNativeExteriorEnvironment>().SingleOrDefault()?.Register(root);
             _cache.Add(payload.Block, new(root, terrain.Root, objects.Root, materials, bytes, terrain.Complete, objects.Complete));
             _residentBytes += bytes;
+            published = true;
         }
-        catch { root.Free(); throw; }
+        finally { if (!published) root.Free(); }
     }
 
     private void BindDetail(IEnumerable<ShaderMaterial> materials)

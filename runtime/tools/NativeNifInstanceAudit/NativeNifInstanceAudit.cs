@@ -263,6 +263,33 @@ public partial class NativeNifInstanceAudit : Node
                     ? geometry => GD.Print($"OPENNV_NIF_LOD_UNBOUND_DRAW geometry={geometry.Block.Index} material=world-owner-required") : null;
                 var scene = RuntimeNativeNifMeshBuilder.Build(nif, 0.0142875f, unboundPropertyFreeLod: unbound);
                 AddChild(scene.Root);
+                if (unbound is not null)
+                {
+                    using var assembly = new RuntimeNativeNifMeshBuilder.LodAssembly(nif, 0.0142875f, content, unbound);
+                    var steps = 1;
+                    while (!assembly.Advance()) steps++;
+                    var staged = assembly.Take(); AddChild(staged.Root);
+                    try
+                    {
+                        if (scene.Nodes != staged.Nodes || scene.Surfaces != staged.Surfaces || scene.Vertices != staged.Vertices || scene.Triangles != staged.Triangles)
+                            throw new InvalidOperationException("Incremental distant assembly changed source counts.");
+                        var original = scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().ToArray();
+                        var candidate = staged.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().ToArray();
+                        if (original.Length != candidate.Length) throw new InvalidOperationException("Incremental distant assembly changed mesh count.");
+                        for (var index = 0; index < original.Length; index++)
+                        {
+                            if (original[index].GlobalTransform != candidate[index].GlobalTransform ||
+                                original[index].Mesh.GetSurfaceCount() != candidate[index].Mesh.GetSurfaceCount())
+                                throw new InvalidOperationException("Incremental distant assembly changed source transforms/surfaces.");
+                            for (var surface = 0; surface < original[index].Mesh.GetSurfaceCount(); surface++)
+                                if (!GD.VarToBytes(original[index].Mesh.SurfaceGetArrays(surface))
+                                    .SequenceEqual(GD.VarToBytes(candidate[index].Mesh.SurfaceGetArrays(surface))))
+                                    throw new InvalidOperationException("Incremental distant assembly changed source mesh arrays.");
+                        }
+                        GD.Print($"OPENNV_LOD_INCREMENTAL_PASS steps={steps} meshes={original.Length} arrays=exact transforms=exact");
+                    }
+                    finally { staged.Root.Free(); }
+                }
                 Aabb? bounds = null;
                 foreach (var mesh in scene.Root.FindChildren("*", "", true, false).OfType<MeshInstance3D>().Where(mesh => mesh.Mesh is not null))
                 {

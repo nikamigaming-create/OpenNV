@@ -65,7 +65,8 @@ internal partial class RuntimeNativePlayer
             _firstPerson.XrLeftArm.HandTarget(_xrSupport.SocketPose(primary)));
         if (_xrSupport is not null && aim is not null)
             aim = _xrSupport.Advance(delta, primary, leftPose,
-                weaponHeld && leftTracked && rightTracked && !pointing && supportAction && supportReachable);
+                weaponHeld && leftTracked && rightTracked && !pointing && supportAction && supportReachable &&
+                left.GetFloat(NativeXrActions.PipBoy) >= .5f);
         else _xrSupport?.Release();
         var rightTarget = _firstPerson.XrRightArm.ConstrainHandTarget(_firstPerson.XrRightArm.HandTarget(rightPose, weaponHeld ? aim : null));
         _xrRightContact?.SetWeaponEnabled(weaponHeld);

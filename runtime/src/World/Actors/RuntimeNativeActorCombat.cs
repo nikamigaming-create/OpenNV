@@ -74,6 +74,7 @@ internal sealed partial class RuntimeNativeActorCombat : Node
             _context = context
         };
         state.QuerySpatialPlacement = owner.CaptureSpatialPlacement;
+        owner.PrepareHitReactionResources();
         actor.AddChild(owner);
         return owner;
     }

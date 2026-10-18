@@ -65,7 +65,7 @@ internal sealed partial class NativeXrRig : Node3D
         snapTurns = SnapTurns,
         maximumSnapPivotErrorMeters = MaximumSnapPivotError,
         canvas = _canvas.State,
-        pipBoyInput = new { requestedFocus = _pipBoyRequestedFocus, awaitingRelease = _pipBoyAwaitRelease, failure = _pipBoyInputFailure },
+        pipBoyInput = new { requestedFocus = _pipBoyRequestedFocus, activation = "left-X-tap-toggle", failure = _pipBoyInputFailure },
         hands = "owned-gloves-and-hand-skins; analog-grip-trigger-and-thumb-touch",
         physicalAcceptance = "pending"
     };
@@ -97,7 +97,7 @@ internal sealed partial class NativeXrRig : Node3D
     }
     public override void _EnterTree()
     {
-        _pipBoyAwaitRelease = true;
+        _pipBoyToggleRequested = false;
         _pipBoyRequestedFocus = false;
         GetTree().NodeAdded += RouteCanvas;
     }
@@ -161,7 +161,7 @@ internal sealed partial class NativeXrRig : Node3D
         Movement = tracked && _calibrated && !modal && stick.Length() >= _configuration.Xr.MovementDeadzone ? stick.LimitLength() : Vector2.Zero;
         Sprint = left && LeftGrip.IsButtonPressed(NativeXrActions.Sprint);
         JumpRequested |= Edge("jump", left && LeftGrip.IsButtonPressed(NativeXrActions.Jump)) && !modal;
-        SamplePipBoyInput(left, LeftGrip.GetFloat(NativeXrActions.PipBoy) >= _configuration.Xr.ActionThreshold);
+        SamplePipBoyInput(tracked && left);
         WorldPointer = right && !modal && PointAtPipBoy is null && RightGrip.GetFloat(NativeXrActions.Activate) >= _configuration.Xr.ActionThreshold;
         var fire = right && _rightInputReady && RightGrip.GetFloat(NativeXrActions.Fire) >= _configuration.Xr.ActionThreshold;
         _pointerPressed = fire;
@@ -199,8 +199,7 @@ internal sealed partial class NativeXrRig : Node3D
     {
         PoseWristDevice?.Invoke(Camera.GlobalTransform);
         // Script controls can change after the earlier XR input callback.
-        SamplePipBoyInput(LeftGrip.GetHasTrackingData(),
-            LeftGrip.GetFloat(NativeXrActions.PipBoy) >= _configuration.Xr.ActionThreshold);
+        SamplePipBoyInput(LeftGrip.GetHasTrackingData());
         var aim = RightAim.GlobalTransform;
         var tracked = RightGrip.GetHasTrackingData() && RightAim.GetHasTrackingData();
         if (PointAtPipBoy is { } pointAtPipBoy)

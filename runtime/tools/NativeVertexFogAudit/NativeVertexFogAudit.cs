@@ -24,7 +24,7 @@ public partial class NativeVertexFogAudit : Node
             ExerciseInstanceInventory();
             ExerciseCellEnvironment();
             ExerciseReferenceEmittance();
-            GD.Print("OPENNV_VERTEX_FOG_GPU_PASS forwardDepth=true perspective=true orthographic=true units=true boundaries=true smoothFalloff=true pixels=unverified");
+            GD.Print("OPENNV_VERTEX_FOG_GPU_PASS radialPerspective=true orthographic=true units=true rotationInvariant=true boundaries=true smoothFalloff=true pixels=unverified");
             GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
@@ -69,14 +69,19 @@ public partial class NativeVertexFogAudit : Node
                     {
                         new Vec4(0, 0, -5, 1), new Vec4(3, 4, -100, 1),
                         new Vec4(160, 90, -200, 1), new Vec4(-30, 70, -800, 1),
+                        // Same radius under yaw and pitch; projection must not
+                        // change fog even with asymmetric stereo frusta.
+                        new Vec4(0, 0, -200, 1), new Vec4(120, 0, -160, 1), new Vec4(0, 120, -160, 1),
                     })
                     {
                         var source = Projection(perspective, fov, 1);
                         var forward = Vec4.Transform(position, source);
-                        var distance = new Vec3(forward.X, forward.Y, forward.Z).Length();
+                        var distance = perspective ? new Vec3(position.X, position.Y, position.Z).Length()
+                            : new Vec3(forward.X, forward.Y, forward.Z).Length();
                         var near = perspective ? 10f : 0.01f; var far = perspective ? 500f : 1.5f;
                         expected.Add(MathF.Pow(Math.Clamp((distance - near) / (far - near), 0, 1), 0.6f));
                         var projection = Projection(perspective, fov, units);
+                        if (perspective) { projection.M31 = .23f; projection.M32 = -.17f; }
                         var scale = 1 - clipFar;
                         projection.M13 = projection.M14 - scale * projection.M13;
                         projection.M23 = projection.M24 - scale * projection.M23;

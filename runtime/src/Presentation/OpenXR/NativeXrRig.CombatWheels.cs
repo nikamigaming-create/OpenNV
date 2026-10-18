@@ -35,7 +35,7 @@ internal sealed partial class NativeXrRig
         if (!save && _saveWasHeld)
         {
             if (_heldWheel == false) { CloseCombatWheel?.Invoke(true); _heldWheel = null; _rightInputReady = false; _snapReady = false; }
-            else if (_saveHoldActive && !(Modal?.Invoke() ?? true)) _player?.SaveGame?.Invoke();
+            else if (_saveHoldActive && !(Modal?.Invoke() ?? true)) TogglePipBoyFocus();
             _saveHoldActive = false;
         }
         if (right && aid && !_aidWasHeld && !(Modal?.Invoke() ?? true))
